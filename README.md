@@ -32,6 +32,13 @@ pnpm dev:api        # → http://127.0.0.1:3001/v1/health
 pnpm test           # all suites
 ```
 
+Mobile (iOS simulator):
+
+```bash
+cd apps/mobile && npm install && (cd ios && LANG=en_US.UTF-8 pod install)
+npx react-native run-ios
+```
+
 ## Monorepo
 
 ```
@@ -42,9 +49,17 @@ packages/vision-contracts  pose/paddle/stroke/phase/ball provider interfaces
                            + FixtureVisionProvider (dev-only, production-guarded)
 packages/analysis-pipeline stroke → phases → features → score → priority orchestration
 packages/api-contracts     Zod /v1 contracts → OpenAPI 3.1
-packages/database          PostgreSQL migrations, runner, seeds
-services/api               Fastify modular monolith
-apps/ · native/ · ml/ · infra/   later stages (see IMPLEMENTATION_PLAN)
+packages/database          PostgreSQL migrations (8), runner, seeds
+packages/queue             SQS/in-memory job queue abstraction
+packages/analytics         typed event taxonomy (spec p. 43)
+services/api               Fastify modular monolith — full /v1 surface (docs/API.md)
+services/media-worker      queue consumer + §58 deletion-workflow executor
+apps/mobile                React Native 0.87 app (builds + runs; npm-managed, D-013)
+apps/admin-web             Vite React admin console (flags, model bundles, user lookup)
+native/vision-core         Swift: contracts, ApplePoseProvider, TemporalStrokeDetector
+native/camera-engine       Swift: AVFoundation 60fps capture + rolling buffer
+ml/                        annotation ontology + validator, dataset manifests, golden layout
+infra/terraform            network / compute / data / media modules + staging env
 ```
 
 ## Non-negotiables

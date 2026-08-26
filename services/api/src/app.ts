@@ -1,78 +1,80 @@
 import { randomUUID } from "node:crypto";
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import pg from "pg";
 import { buildOpenApiDocument } from "@pickle/api-contracts";
-import type { FailureKind } from "@pickle/shared-types";
+import { InMemoryJobQueue, SqsJobQueue, type IJobQueue } from "@pickle/queue";
 import type { ApiConfig } from "./config.js";
+import type { AppContext } from "./context.js";
+import { sendFailure } from "./lib/replies.js";
+import { buildVerifier } from "./auth/tokens.js";
+import { registerAuth } from "./plugins/authPlugin.js";
+import { buildObjectStore } from "./modules/media/objectStore.js";
 import { registerCatalogRoutes } from "./modules/catalog/routes.js";
+import { registerCatalogExtraRoutes } from "./modules/catalog/extraRoutes.js";
+import { registerIdentityRoutes } from "./modules/identity/routes.js";
+import { registerShotRoutes } from "./modules/shots/routes.js";
+import { registerSessionRoutes } from "./modules/sessions/routes.js";
+import { registerLibraryRoutes } from "./modules/library/routes.js";
+import { registerProgressRoutes } from "./modules/progress/routes.js";
+import { registerMediaRoutes } from "./modules/media/routes.js";
+import { registerAnalysisRoutes } from "./modules/analysis/routes.js";
+import { registerBillingRoutes } from "./modules/billing/routes.js";
+import { registerSocialRoutes } from "./modules/social/routes.js";
+import { registerPrivacyRoutes } from "./modules/privacy/routes.js";
+import { registerFlagRoutes } from "./modules/flags/routes.js";
+import { registerAdminRoutes } from "./modules/admin/routes.js";
 
 /**
- * Modular-monolith API (directive §30). Modules register their routes here;
- * cross-module calls go through typed service interfaces, not HTTP.
- *
- * Honesty rule: routes that are specified but not yet implemented return a
- * typed 501 envelope — never a fake success (directive §5).
+ * Modular-monolith API (directive §30). Modules communicate through typed
+ * in-process services, never HTTP. Honesty rule: anything not implemented
+ * returns a typed 501 envelope — never a fake success (directive §5).
  */
 
-export interface AppContext {
-  config: ApiConfig;
-  pool: pg.Pool | null;
+export interface BuildAppOptions {
+  queue?: IJobQueue;
 }
 
-export function sendFailure(
-  reply: FastifyReply,
-  request: FastifyRequest,
-  status: number,
-  kind: FailureKind,
-  code: string,
-  message: string,
-): FastifyReply {
-  return reply.status(status).send({
-    error: {
-      kind,
-      code,
-      message,
-      retryable: kind === "timeout" || kind === "retryable" || kind === "network",
-      requestId: request.id,
-    },
-  });
-}
-
-function registerNotImplemented(app: FastifyInstance, method: "GET" | "POST", url: string): void {
-  app.route({
-    method,
-    url,
-    handler: (request, reply) =>
-      sendFailure(
-        reply,
-        request,
-        501,
-        "not_implemented",
-        "api.not_implemented",
-        `${method} ${url} is specified (docs/API.md) but not implemented yet.`,
-      ),
-  });
-}
-
-export function buildApp(config: ApiConfig): FastifyInstance {
+export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): FastifyInstance {
   const app = Fastify({
     logger: config.env !== "test",
     genReqId: (req) => (req.headers["x-request-id"] as string | undefined) ?? randomUUID(),
   });
 
   const pool = config.databaseUrl ? new pg.Pool({ connectionString: config.databaseUrl }) : null;
-  const context: AppContext = { config, pool };
+  const queue =
+    options.queue ??
+    (config.sqsQueueUrl
+      ? new SqsJobQueue({
+          queueUrl: config.sqsQueueUrl,
+          region: process.env["AWS_REGION"] ?? "us-west-2",
+        })
+      : new InMemoryJobQueue());
+  const context: AppContext = {
+    config,
+    pool,
+    queue,
+    objectStore: buildObjectStore(process.env),
+  };
   app.decorate("appContext", context);
 
   app.addHook("onSend", async (request, reply) => {
     reply.header("x-request-id", request.id);
   });
-
   app.addHook("onClose", async () => {
     await pool?.end();
   });
-
   app.setErrorHandler((error, request, reply) => {
+    const statusCode = (error as { statusCode?: number }).statusCode;
+    if (statusCode === 410) {
+      return sendFailure(
+        reply,
+        request,
+        410,
+        "permanent",
+        "account.deleted",
+        "This account was deleted.",
+      );
+    }
     request.log.error({ err: error }, "unhandled error");
     return sendFailure(
       reply,
@@ -84,22 +86,32 @@ export function buildApp(config: ApiConfig): FastifyInstance {
     );
   });
 
-  // ── health ────────────────────────────────────────────────────────────────
-  app.get("/v1/health", async () => ({ status: "ok" as const, version: config.appVersion }));
+  const verifier = buildVerifier({
+    pickleEnv: config.env,
+    oidcJwksUrl: config.oidcJwksUrl,
+    oidcIssuer: config.oidcIssuer,
+    oidcAudience: config.oidcAudience,
+    devAuthSecret: config.devAuthSecret,
+  });
+  registerAuth(app, context, verifier);
 
-  // ── OpenAPI (implemented surface only) ────────────────────────────────────
+  app.get("/v1/health", async () => ({ status: "ok" as const, version: config.appVersion }));
   app.get("/v1/openapi.json", async () => buildOpenApiDocument(config.appVersion));
 
-  // ── catalog (DB-backed) ───────────────────────────────────────────────────
   registerCatalogRoutes(app, context);
-
-  // ── specified but pending (each returns a typed 501, never fake success) ──
-  registerNotImplemented(app, "POST", "/v1/account/bootstrap");
-  registerNotImplemented(app, "GET", "/v1/me");
-  registerNotImplemented(app, "POST", "/v1/shots:sync");
-  registerNotImplemented(app, "POST", "/v1/sessions");
-  registerNotImplemented(app, "POST", "/v1/media/uploads");
-  registerNotImplemented(app, "POST", "/v1/analyses");
+  registerCatalogExtraRoutes(app, context);
+  registerIdentityRoutes(app, context);
+  registerShotRoutes(app, context);
+  registerSessionRoutes(app, context);
+  registerLibraryRoutes(app, context);
+  registerProgressRoutes(app, context);
+  registerMediaRoutes(app, context);
+  registerAnalysisRoutes(app, context);
+  registerBillingRoutes(app, context);
+  registerSocialRoutes(app, context);
+  registerPrivacyRoutes(app, context);
+  registerFlagRoutes(app, context);
+  registerAdminRoutes(app, context);
 
   return app;
 }

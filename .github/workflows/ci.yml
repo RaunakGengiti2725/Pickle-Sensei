@@ -46,14 +46,47 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Unit + integration tests (DB-backed tests run against service container)
+      - name: Unit + integration tests (sequential — suites share the DB service)
         run: pnpm test
         env:
           DATABASE_URL_TEST: postgres://pickle:pickle_ci_password@localhost:5432/pickle_ci
 
-      - name: Migration apply check (fresh database)
+      - name: Migration apply + seed check (fresh database)
         run: |
           pnpm --filter @pickle/database migrate
           pnpm --filter @pickle/database seed
         env:
           DATABASE_URL: postgres://pickle:pickle_ci_password@localhost:5432/pickle_ci
+
+      - name: ML annotation validator tests
+        run: python3 -m unittest discover -s ml/scripts -p 'test_*.py'
+
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install app deps (npm-managed — see DECISIONS D-013)
+        working-directory: apps/mobile
+        run: npm ci
+      - name: Typecheck
+        working-directory: apps/mobile
+        run: npx tsc --noEmit
+      - name: Jest (logic suites)
+        working-directory: apps/mobile
+        run: npm test
+
+  containers:
+    if: github.ref == 'refs/heads/main'
+    needs: [verify]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build api image
+        run: docker build -f services/api/Dockerfile -t pickle-api:${{ github.sha }} .
+      - name: Build media-worker image
+        run: docker build -f services/media-worker/Dockerfile -t pickle-media-worker:${{ github.sha }} .
+      # Push to ECR + Terraform plan/deploy gate on AWS credentials being
+      # configured as repo secrets; see docs/DEPLOYMENT.md.

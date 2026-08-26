@@ -1,0 +1,64 @@
+const path = require('path');
+const { getDefaultConfig, mergeConfig } = require('@react-native/metro-config');
+
+const monorepoRoot = path.resolve(__dirname, '../..');
+
+/**
+ * Metro config: the app consumes shared monorepo packages (@pickle/*) directly
+ * from TypeScript source. Those packages use ESM ".js" import specifiers, so a
+ * custom resolver maps missing ".js" files to their ".ts" sources.
+ */
+const pickleAliases = {
+  '@pickle/shared-types': path.join(
+    monorepoRoot,
+    'packages/shared-types/src/index.ts',
+  ),
+  '@pickle/scoring': path.join(monorepoRoot, 'packages/scoring/src/index.ts'),
+  '@pickle/audio-coach-core': path.join(
+    monorepoRoot,
+    'packages/audio-coach-core/src/index.ts',
+  ),
+  '@pickle/vision-contracts': path.join(
+    monorepoRoot,
+    'packages/vision-contracts/src/index.ts',
+  ),
+  '@pickle/analysis-pipeline': path.join(
+    monorepoRoot,
+    'packages/analysis-pipeline/src/index.ts',
+  ),
+};
+
+const config = {
+  watchFolders: [path.join(monorepoRoot, 'packages')],
+  resolver: {
+    // Bare imports from shared packages (e.g. @babel/runtime helpers injected
+    // by the transform) resolve against the app's node_modules.
+    nodeModulesPaths: [
+      path.join(__dirname, 'node_modules'),
+      path.join(monorepoRoot, 'node_modules'),
+    ],
+    resolveRequest: (context, moduleName, platform) => {
+      if (pickleAliases[moduleName]) {
+        return { type: 'sourceFile', filePath: pickleAliases[moduleName] };
+      }
+      // ESM ".js" specifiers inside @pickle packages point at ".ts" sources.
+      if (
+        moduleName.endsWith('.js') &&
+        context.originModulePath.includes(`${path.sep}packages${path.sep}`)
+      ) {
+        const candidate = path.resolve(
+          path.dirname(context.originModulePath),
+          moduleName.replace(/\.js$/, '.ts'),
+        );
+        try {
+          return { type: 'sourceFile', filePath: candidate };
+        } catch {
+          // fall through to default resolution
+        }
+      }
+      return context.resolveRequest(context, moduleName, platform);
+    },
+  },
+};
+
+module.exports = mergeConfig(getDefaultConfig(__dirname), config);

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { CheckpointsResponse, ShotTypesResponse } from "@pickle/api-contracts";
-import type { AppContext } from "../../app.js";
-import { sendFailure } from "../../app.js";
+import type { AppContext } from "../../context.js";
+import { sendFailure } from "../../lib/replies.js";
 
 /**
  * Catalog module: public read-only shot type / checkpoint metadata.

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://picklesensei.dev/schemas/dataset-manifest/v1",
+  "title": "Dataset manifest (v1)",
+  "description": "Versioned dataset with provenance + consent tracking (directive §39). Production training runs consume manifests, never loose folders.",
+  "type": "object",
+  "required": ["dataset_id", "version", "created_at", "annotation_schema_version", "items"],
+  "additionalProperties": false,
+  "properties": {
+    "dataset_id": { "type": "string" },
+    "version": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "annotation_schema_version": { "type": "string" },
+    "description": { "type": "string" },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "clip_id",
+          "media_sha256",
+          "annotation_path",
+          "split",
+          "consent_version",
+          "source"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "clip_id": { "type": "string" },
+          "media_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "annotation_path": { "type": "string" },
+          "split": { "enum": ["train", "validation", "test", "holdout"] },
+          "consent_version": { "type": "string" },
+          "source": { "enum": ["consented_user", "commissioned_shoot", "licensed", "synthetic"] },
+          "athlete_id": { "type": ["string", "null"] },
+          "removed_at": { "type": ["string", "null"], "format": "date-time" }
+        }
+      }
+    }
+  }
+}

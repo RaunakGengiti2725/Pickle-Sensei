@@ -44,4 +44,28 @@ The eleven-checkpoint weighting matrix (spec p. 32) and per-shot metric targets 
 
 ## 2026-08-26 — D-011: Mobile app deferred to Stage 2 with RN New Architecture
 
-Directive §12. Creating the RN project requires iOS toolchain steps done interactively; Stage 1 of this build focuses on foundation packages + backend so mobile lands on stable contracts. Not a scope cut — sequencing per §59.
+Directive §12. Creating the RN project requires iOS toolchain steps done interactively; Stage 1 of this build focuses on foundation packages + backend so mobile lands on stable contracts. Not a scope cut — sequencing per §59. (Superseded same day by the all-at-once build session: RN 0.87 app created, built, and running — see D-013.)
+
+## 2026-08-26 — D-012: Migration 0007 additions beyond the spec table list
+
+`shot_rating` (user feedback per analysis), `billing_offering` (remote-configurable pricing the spec demands but did not table), `feature_flag`, `user_profile.handle` (friend discovery without phone/email), `deletion_task` (the §58 deletion workflow needs a resumable queue). Each maps to an explicit spec requirement; documented here because they extend the p. 13–17 table inventory.
+
+## 2026-08-26 — D-013: apps/mobile is npm-managed, excluded from the pnpm workspace
+
+Metro + pnpm's symlinked node_modules is a known friction source; the RN app uses npm (its lockfile committed) and consumes shared packages from TypeScript source via a metro `resolveRequest` that maps the packages' ESM ".js" specifiers to ".ts" files, plus `nodeModulesPaths` for helper resolution. Jest mirrors this with moduleNameMapper. tsconfig paths mirror it for typecheck. One convention, three configs, all committed.
+
+## 2026-08-26 — D-014: Native modules via local CocoaPod, not pbxproj editing
+
+`ios/LocalPods/PickleNative` (podspec + Swift/ObjC sources) is added by one Podfile line; `pod install` wires it into the Xcode project. Hand-editing project.pbxproj is fragile and unreviewable. First module: PickleAudioCoach (AVSpeechSynthesizer TTS). VisionCore/CameraEngine follow the same pattern when wired.
+
+## 2026-08-26 — D-015: Apple Vision body-pose as the real pose baseline
+
+Spec p. 26 allows a proven on-device baseline. `ApplePoseProvider` (VNDetectHumanBodyPoseRequest) needs no model download, runs on-device, and covers the MVP landmark set. MediaPipe/LiteRT remains the alternative if per-checkpoint validation shows Vision accuracy gaps. Not yet wired into the app loop; parse-verified source in native/vision-core.
+
+## 2026-08-26 — D-016: Store receipt validation is typed-501 until credentials exist
+
+Directive §5 forbids fake subscription validation. Offerings, entitlements (grant/check/expiry), quota gating, and audited admin grants are fully implemented and tested; the Apple/Google verification calls activate only when `APPLE_IAP_PRIVATE_KEY`/`GOOGLE_PLAY_SERVICE_ACCOUNT` are configured, and say so in their error envelopes.
+
+## 2026-08-26 — D-017: Test databases are per-suite sequential, not parallel
+
+The DB-backed suites (database, api, media-worker) each reset the schema of the test database; root `pnpm test` pins `--workspace-concurrency=1` so they serialize. CI uses one Postgres service container. Parallelization later = per-suite database names.

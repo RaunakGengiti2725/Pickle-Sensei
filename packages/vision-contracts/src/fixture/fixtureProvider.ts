@@ -33,7 +33,8 @@ import type {
 const FIXTURE_VERSION = "fixture-1";
 
 function assertNotProduction(): void {
-  const env = globalThis.process?.env?.["PICKLE_ENV"] ?? globalThis.process?.env?.["NODE_ENV"];
+  const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
+  const env = proc?.env?.["PICKLE_ENV"] ?? proc?.env?.["NODE_ENV"];
   if (env === "production") {
     throw new Error(
       "FixtureVisionProvider must never be constructed in a production build (directive §5).",

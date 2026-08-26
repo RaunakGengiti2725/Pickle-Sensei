@@ -224,4 +224,110 @@ export async function seed(pool: Pool, log: (line: string) => void = () => {}): 
     }
   }
   log("seeded dev fixture drills");
+
+  // Billing offerings — remote-configurable pricing (spec p. 55).
+  const offerings: Array<[string, string, string, number | null, string | null, number, number]> = [
+    [
+      "premium_monthly",
+      "Premium Monthly",
+      "Unlimited analyses and Live Court.",
+      1199,
+      "monthly",
+      0,
+      1,
+    ],
+    [
+      "premium_annual",
+      "Premium Annual",
+      "Unlimited, billed yearly. 7-day free trial.",
+      7999,
+      "annual",
+      7,
+      2,
+    ],
+    [
+      "founder_lifetime",
+      "Founder Lifetime",
+      "Launch-campaign lifetime access.",
+      16900,
+      "lifetime",
+      0,
+      3,
+    ],
+  ];
+  for (const [key, name, desc, cents, period, trial, order] of offerings) {
+    await pool.query(
+      `INSERT INTO billing_offering (product_key, display_name, description, price_usd_cents, period, trial_days, features, display_order, platform_product_ids)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (product_key) DO UPDATE SET price_usd_cents = EXCLUDED.price_usd_cents, trial_days = EXCLUDED.trial_days`,
+      [
+        key,
+        name,
+        desc,
+        cents,
+        period,
+        trial,
+        JSON.stringify([
+          "unlimited_analyses",
+          "unlimited_live_court",
+          "full_checkpoint_detail",
+          "all_drills",
+          "replay_overlays",
+          "progress_trends",
+          "weekly_report",
+          "cloud_sync",
+          "pro_compare",
+          "training_plans",
+          "share_cards",
+          "social",
+        ]),
+        order,
+        JSON.stringify({ apple: `com.picklesensei.${key}`, google: `${key}` }),
+      ],
+    );
+  }
+  log("seeded billing offerings");
+
+  // Feature flags (directive §36).
+  const flags: Array<[string, string, boolean, number]> = [
+    ["live_court", "Live Court mode", true, 100],
+    ["ball_tracking", "Ball tracking metrics", false, 0],
+    ["cloud_deep_analysis", "Cloud deep analysis", false, 0],
+    ["reference_comparison", "Pro reference comparison", false, 0],
+    ["social", "Friends and activity", true, 100],
+    ["leaderboards", "Friends leaderboards", true, 100],
+    ["experimental_camera_setup", "Experimental camera preflight", false, 0],
+    ["paywall_v1", "Launch paywall", true, 100],
+    ["stroke_return", "Return stroke analysis", false, 0],
+    ["stroke_backhand_drive", "Backhand drive analysis", false, 0],
+    ["stroke_volley", "Volley analysis", false, 0],
+    ["stroke_overhead", "Overhead analysis", false, 0],
+  ];
+  for (const [key, description, enabled, rollout] of flags) {
+    await pool.query(
+      `INSERT INTO feature_flag (key, description, enabled, rollout_percent)
+       VALUES ($1,$2,$3,$4) ON CONFLICT (key) DO NOTHING`,
+      [key, description, enabled, rollout],
+    );
+  }
+  log("seeded feature flags");
+
+  // Achievements (spec p. 7).
+  const achievements: Array<[string, string, string, number]> = [
+    ["first_analysis", "First Analysis", "Analyzed your first stroke.", 10],
+    ["first_8", "First 8", "Scored an 8.0 or better.", 25],
+    ["first_9", "First 9", "Scored a 9.0 or better.", 50],
+    ["hundred_dinks", "100 Dinks", "One hundred dinks analyzed.", 25],
+    ["thousand_shots", "1,000 Shots", "One thousand strokes analyzed.", 100],
+    ["streak_7", "7-Day Streak", "Practiced seven days in a row.", 30],
+    ["streak_30", "30-Day Streak", "Practiced thirty days in a row.", 100],
+  ];
+  for (const [slug, name, description, points] of achievements) {
+    await pool.query(
+      `INSERT INTO achievement (slug, name, description, points) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (slug) DO NOTHING`,
+      [slug, name, description, points],
+    );
+  }
+  log("seeded achievements");
 }

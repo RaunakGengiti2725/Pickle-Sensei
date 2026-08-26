@@ -5,6 +5,13 @@ export interface ApiConfig {
   host: string;
   appVersion: string;
   databaseUrl: string | null;
+  devAuthSecret: string | undefined;
+  oidcIssuer: string | undefined;
+  oidcAudience: string | undefined;
+  oidcJwksUrl: string | undefined;
+  sqsQueueUrl: string | undefined;
+  appleIapConfigured: boolean;
+  googlePlayConfigured: boolean;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
@@ -20,5 +27,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     host: env["HOST"] ?? "127.0.0.1",
     appVersion: env["APP_VERSION"] ?? "0.1.0",
     databaseUrl: env["DATABASE_URL"] ?? null,
+    devAuthSecret: env["DEV_AUTH_SECRET"],
+    oidcIssuer: env["OIDC_ISSUER"],
+    oidcAudience: env["OIDC_AUDIENCE"],
+    oidcJwksUrl: env["OIDC_JWKS_URL"],
+    sqsQueueUrl: env["SQS_QUEUE_URL"],
+    appleIapConfigured: Boolean(env["APPLE_IAP_PRIVATE_KEY"]),
+    googlePlayConfigured: Boolean(env["GOOGLE_PLAY_SERVICE_ACCOUNT"]),
   };
 }
