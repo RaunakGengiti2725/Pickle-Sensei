@@ -51,6 +51,38 @@ DATABASE_URL_TEST=postgres://pickle:pickle_test_password@localhost:5433/pickle_t
 
 CI always runs them against a service container (`.github/workflows/ci.yml`).
 
+## Mobile (iOS)
+
+```bash
+cd apps/mobile
+npm install
+(cd ios && LANG=en_US.UTF-8 pod install)   # UTF-8 locale required (ruby 3.4)
+npx react-native start                     # Metro, terminal 1
+npx react-native run-ios                   # build + launch simulator, terminal 2
+```
+
+### Open in Xcode
+
+Always the **workspace**, never the project:
+
+```bash
+xed apps/mobile/ios/PickleSensei.xcworkspace
+```
+
+- Scheme `PickleSensei` is shared/committed; press Run.
+- `ios/.xcode.env.local` (machine-local, gitignored) pins `NODE_BINARY` to the
+  nvm node path so Xcode's bundle phase finds node. If node moves (nvm
+  upgrade), update that file.
+- Keep Metro running in a terminal; Xcode builds the native side only.
+- Sign in with Apple: the entitlement is wired
+  (`PickleSensei/PickleSensei.entitlements`). To exercise it, pick your team
+  under Signing & Capabilities and sign the simulator into an Apple ID
+  (Settings → Sign in). Without that, the button shows a truthful
+  "not configured/available" state.
+- Google Sign-In: paste an iOS OAuth client id into
+  `src/config/authConfig.ts` and add its reversed client id as a URL scheme in
+  Info.plist. Until then the button reports "not configured" — by design.
+
 ## Environment conventions
 
 - `PICKLE_ENV`: development | test | staging | production. The FixtureVisionProvider refuses to construct when this is `production`.

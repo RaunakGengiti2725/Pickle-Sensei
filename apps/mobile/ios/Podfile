@@ -1,3 +1,9 @@
+# RN 0.87 is New-Architecture-only, but some third-party podspecs
+# (@react-native-google-signin) still gate their Fabric components on this
+# env var at pod-install time. Without it their component classes compile out
+# and the app crashes at startup resolving nil classes.
+ENV['RCT_NEW_ARCH_ENABLED'] = '1'
+
 # Resolve react_native_pods.rb with node to allow for hoisting
 require Pod::Executable.execute_command('node', ['-p',
   'require.resolve(
@@ -16,6 +22,9 @@ end
 
 target 'PickleSensei' do
   pod 'PickleNative', :path => 'LocalPods/PickleNative'
+  # Required by GoogleSignIn's Swift dependency chain under static linking.
+  pod 'GoogleUtilities', :modular_headers => true
+  pod 'RecaptchaInterop', :modular_headers => true
   config = use_native_modules!
 
   use_react_native!(
@@ -31,5 +40,8 @@ target 'PickleSensei' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # Sign in with Apple: CODE_SIGN_ENTITLEMENTS is set directly in
+    # project.pbxproj (PickleSensei/PickleSensei.entitlements, committed).
   end
 end

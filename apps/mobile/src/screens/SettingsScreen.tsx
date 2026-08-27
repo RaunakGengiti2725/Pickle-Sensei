@@ -1,8 +1,9 @@
 import React from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Card, Pill, SectionTitle } from '../design/components';
+import { Button, Card, Pill, SectionTitle } from '../design/components';
 import { color, space, type } from '../design/tokens';
 import { useAppStore } from '../state/appStore';
+import { useAuthStore } from '../auth/authStore';
 import { tts } from '../audio/tts';
 
 /** Settings + privacy center summary (spec p. 7). Server-backed toggles land with account sync. */
@@ -20,9 +21,29 @@ function Row(props: { label: string; value: string }) {
 
 export function SettingsScreen() {
   const profile = useAppStore(s => s.profile);
+  const session = useAuthStore(s => s.session);
+  const signOut = useAuthStore(s => s.signOut);
+  const accountLabel =
+    session === null
+      ? '—'
+      : session.provider === 'guest'
+        ? 'Guest (this device only)'
+        : `${session.displayName ?? session.email ?? session.subject} · ${session.provider}`;
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       <Text style={[type.h1, { color: color.ink }]}>Settings</Text>
+
+      <SectionTitle title="Account" />
+      <Card>
+        <Row label="Signed in as" value={accountLabel} />
+        <View style={{ marginTop: space.sm }}>
+          <Button
+            label="Sign out"
+            variant="ghost"
+            onPress={() => void signOut()}
+          />
+        </View>
+      </Card>
 
       <SectionTitle title="Profile" />
       <Card>
