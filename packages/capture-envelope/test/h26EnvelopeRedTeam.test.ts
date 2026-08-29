@@ -8,13 +8,13 @@ import { measureClip } from "../src/clipProbe.js";
 
 /**
  * h26-redteam-perception envelope pin (Wave H). SYNTHETIC clips generated at
- * test time. KNOWN-GAP pin in the f22 convention: whole-clip aggregation
- * hides a catastrophic temporal SEGMENT — a clip whose entire second half is
- * pitch black measures SUPPORTED on every dimension because brightness is a
- * whole-clip mean and the Laplacian median comes from the good half. A fix
- * requires per-window measurements plus labeled downstream evidence (E15
- * mandate), so the gap is pinned, not patched. If this fails because the gap
- * was FIXED, flip the pin — do not delete it.
+ * test time. Originally a KNOWN-GAP pin in the f22 convention: whole-clip
+ * aggregation hid a catastrophic temporal SEGMENT — a clip whose entire
+ * second half is pitch black measured SUPPORTED because brightness was a
+ * whole-clip mean and the Laplacian median came from the good half. The gap
+ * is now FIXED (the envelope demotes on catastrophic intra-clip brightness
+ * variance), so this pin asserts the fixed behavior: the half-black clip is
+ * NOT overall SUPPORTED. If this fails again, the regression reopened.
  */
 
 const hasFfmpeg =
@@ -25,7 +25,7 @@ function ffmpeg(args: string[]): void {
 }
 
 describe.skipIf(!hasFfmpeg)(
-  "h26-E1 (KNOWN GAP, P1): half-good/half-black clip passes the envelope",
+  "h26-E1 (FIXED): half-good/half-black clip no longer passes the envelope",
   { timeout: 120_000 },
   () => {
     let dir: string;
@@ -36,7 +36,7 @@ describe.skipIf(!hasFfmpeg)(
       rmSync(dir, { recursive: true, force: true });
     });
 
-    it("KNOWN GAP: 4s good + 4s pitch-black concat is overall SUPPORTED", () => {
+    it("FIXED: 4s good + 4s pitch-black concat is not overall SUPPORTED", () => {
       const good = join(dir, "good.mp4");
       const black = join(dir, "black.mp4");
       const split = join(dir, "split.mp4");
@@ -84,10 +84,11 @@ describe.skipIf(!hasFfmpeg)(
         split,
       ]);
       const measurements = measureClip(split);
-      // The catastrophic half IS visible in the (unused) brightness std.
+      // The catastrophic half is visible in the brightness std, which the
+      // exposure_stability dimension now demotes on.
       expect(measurements.brightnessStdLuma ?? 0).toBeGreaterThan(40);
       const verdict = evaluateCaptureEnvelope(measurements);
-      expect(verdict.overall).toBe("SUPPORTED"); // pinned gap
+      expect(verdict.overall).not.toBe("SUPPORTED"); // regression pin on the fix
     });
   },
 );

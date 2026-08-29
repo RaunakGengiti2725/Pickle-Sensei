@@ -56,7 +56,7 @@ describe("ModelRegistry", () => {
     const registry = new ModelRegistry(DEFAULT_MODEL_MANIFEST);
     const entry = registry.resolve({ task: "stroke_classification", platform: "ios" });
     expect(entry?.id).toBe("stroke.heuristic-hierarchical");
-    expect(entry?.version).toBe("stroke-heuristic-6");
+    expect(entry?.version).toBe("stroke-heuristic-7");
     expect(entry?.runtime).toBe("deterministic");
     // The notes must keep the honesty ceiling explicit: no L3 without bounce.
     expect(entry?.notes).toContain("L3 needs bounce observation");

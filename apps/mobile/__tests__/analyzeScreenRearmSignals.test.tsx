@@ -4,6 +4,7 @@
 jest.mock('../src/data/db', () => ({ getDb: jest.fn() }));
 jest.mock('../src/data/repository', () => ({
   savePendingCapture: jest.fn(() => Promise.resolve()),
+  setCaptureTargetSeed: jest.fn(() => Promise.resolve()),
   setDeclaredStroke: jest.fn(() => Promise.resolve()),
   getKv: jest.fn(() => Promise.resolve(null)),
   setKv: jest.fn(() => Promise.resolve()),

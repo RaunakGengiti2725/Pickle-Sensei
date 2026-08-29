@@ -56,9 +56,13 @@ class FakeObjectStore implements IObjectStore {
     this.objects.delete(key);
     this.deletedKeys.push(key);
   }
-  async headObject(key: string): Promise<{ sizeBytes: number } | null> {
+  async headObject(key: string): Promise<{
+    sizeBytes: number;
+    contentType: string | null;
+    checksumSha256: string | null;
+  } | null> {
     const size = this.objects.get(key);
-    return size === undefined ? null : { sizeBytes: size };
+    return size === undefined ? null : { sizeBytes: size, contentType: null, checksumSha256: null };
   }
 }
 
