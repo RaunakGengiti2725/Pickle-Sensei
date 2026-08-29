@@ -1,0 +1,51 @@
+{
+  "workstream": "e22-acquisition-wave2",
+  "wave": "wave-e",
+  "date": "2026-08-29",
+  "baseCommit": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+  "mission": "Continue lawful footage acquisition (extends wave-d2 d2-01/02/03): government/public-domain, NARA, .mil/.gov, compatible Commons. Append-only registry; unknown rights = QUARANTINE; download only clearly-licensed media with full provenance.",
+  "verdict": "GREEN",
+  "measuredOutcome": {
+    "newUsableRightsClipsAcquired": 7,
+    "breakdown": {
+      "youtubeCcBy": 5,
+      "vaPublicDomainFederalWorks": 2
+    },
+    "newQuarantineOrExclusionRecords": 1,
+    "quarantineEntriesResolved": 2,
+    "newOfficialSearchChecks": 3,
+    "newMediaBytes": 193691840,
+    "freshCandidatesTotalItems": 15,
+    "freshCandidatesTotalBytes": 521329782
+  },
+  "configuration": {
+    "tools": "yt-dlp 2026.08.19 (installed this session; YouTube access works again after wave-d2's bot-check block), ffmpeg 4.4.2, curl",
+    "acquisitionPolicy": "video stream only (no audio downloaded) to avoid embedded-music risk; YouTube CC clips trimmed to ~60s segments (libx264); VA PD videos kept full-length; SHA-256 recorded for every file; all accepted items are label-blind fresh candidates",
+    "verification": "per-video YouTube license field read via yt-dlp; full-duration ffmpeg contact-sheet frame screening of both VA videos (no third-party watermarks; VA branding only) and of the VOA Thai video (persistent AP watermark found -> excluded)"
+  },
+  "acceptedItems": [
+    "yt-o_NeuHjTEVE (BT Pickleball, CC BY, outdoor mixed doubles, 1080p30 60s)",
+    "yt-n-QrBfQVK_w (Vernonchan.com, CC BY, indoor venue mixed doubles, 1080p30 60s)",
+    "yt-94KNxpNTyCw (MR. PICKLEBALL, CC BY, indoor rec doubles, 1080p30 60s)",
+    "yt-9ru97zKV8mk (Jake John, CC BY, outdoor 3.0 doubles, 1080p30 60s)",
+    "yt-6r4fOxRuKmM (Ishan R, CC BY, singles match, 1080p60 60s)",
+    "va-6N3Yc184a_c (VA official channel, PD-USGov, 2026 Golden Age Games incl. wheelchair/adaptive play, 1080p 171.7s)",
+    "va-O1dLhGGPErc (VA official channel, PD-USGov, 2025 Golden Age Games vertical highlights, 608x1080 60.9s)"
+  ],
+  "honestNegativesAndExclusions": [
+    "voathai-7917842: only new VOA-family pickleball video found across a 24-service sweep; excluded after frame screening showed a persistent AP watermark (third-party agency footage is not PD under VOA policy).",
+    "DVIDS pickleball video search still returns exactly the 16 already-registered IDs; remains exhausted.",
+    "ShareAmerica and NPS site searches: no pickleball video results.",
+    "YouTube CC-filtered wave-2 search: ~90 unique results reviewed; TV-station uploads and fan re-uploads of NPL/MLP league broadcasts excluded as license-laundering risk despite CC flags.",
+    "qdMbEf3MvRk (license-verified CC BY) failed to download intact (ffmpeg: invalid data); left unregistered rather than accepted broken."
+  ],
+  "caveats": [
+    "YouTube CC BY acceptance carries the same residual uploader-authority caveat as the six wave-d2 CC BY candidates (channel-context assessment, not rights-holder confirmation).",
+    "VA PD-USGov basis rests on the federal-work doctrine plus official-channel provenance and clean frame screening, not per-video written confirmation; on-screen identified veterans noted as a persona-rights consideration.",
+    "All accepted items are label-blind fresh candidates; no labels exist or may be created before a future freeze."
+  ],
+  "artifacts": [
+    "datasets/pickleball/registry.json (7 freshCandidates items appended; 1 quarantine/exclusion record; 3 officialSearchChecks; 2 quarantine entries annotated as resolved)",
+    "datasets/pickleball/fresh-candidates/{yt-o_NeuHjTEVE,yt-n-QrBfQVK_w,yt-94KNxpNTyCw,yt-9ru97zKV8mk,yt-6r4fOxRuKmM,va-6N3Yc184a_c,va-O1dLhGGPErc}.mp4"
+  ]
+}
