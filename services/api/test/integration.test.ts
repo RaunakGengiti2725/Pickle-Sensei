@@ -524,6 +524,53 @@ describe.skipIf(!testUrl)("API integration (real PostgreSQL)", () => {
     expect((again.json() as { flags: Record<string, boolean> }).flags).toEqual(flags);
   });
 
+  it("flags response carries versioned flag-state provenance and every registered flag", async () => {
+    const res = await app.inject({ method: "GET", url: "/v1/flags", headers: auth(userToken) });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      flags: Record<string, boolean>;
+      flagState: {
+        registryVersion: number;
+        versions: Record<string, number>;
+        killSwitchesActive: string[];
+        fingerprint: string;
+      };
+    };
+    expect(body.flagState.registryVersion).toBeGreaterThanOrEqual(1);
+    expect(body.flagState.killSwitchesActive).toEqual([]);
+    expect(body.flagState.fingerprint).toMatch(/^[0-9a-f]{16}$/);
+    for (const [key, version] of Object.entries(body.flagState.versions)) {
+      expect(version).toBeGreaterThanOrEqual(1);
+      expect(body.flags[key]).toBeTypeOf("boolean");
+    }
+    expect(body.flags["session_processing"]).toBe(true);
+  });
+
+  it("a pulled kill switch forces the flag off and disables its server route", async () => {
+    process.env["FLAG_KILL_SESSION_PROCESSING"] = "1";
+    try {
+      const res = await app.inject({ method: "GET", url: "/v1/flags", headers: auth(userToken) });
+      const body = res.json() as {
+        flags: Record<string, boolean>;
+        flagState: { killSwitchesActive: string[] };
+      };
+      expect(body.flags["session_processing"]).toBe(false);
+      expect(body.flagState.killSwitchesActive).toEqual(["session_processing"]);
+
+      const finalize = await app.inject({
+        method: "POST",
+        url: `/v1/sessions/${randomUUID()}/finalize`,
+        headers: auth(userToken),
+      });
+      expect(finalize.statusCode).toBe(503);
+      expect(
+        (finalize.json() as { error: { code: string; retryable: boolean } }).error,
+      ).toMatchObject({ code: "api.feature_disabled", retryable: true });
+    } finally {
+      delete process.env["FLAG_KILL_SESSION_PROCESSING"];
+    }
+  });
+
   it("billing offerings come from the database (remote-configurable pricing)", async () => {
     const res = await app.inject({
       method: "GET",

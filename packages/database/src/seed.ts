@@ -51,6 +51,34 @@ const CHECKPOINT_NAMES: Record<string, { name: string; description: string }> = 
   recovery: { name: "Recovery", description: "Return to a stable ready/court position." },
 };
 
+/**
+ * Seeded feature flags: [key, description, enabled, rollout_percent].
+ * Every key must also be declared in the API's versioned flag registry
+ * (services/api/src/modules/flags/registry.ts), which carries the schema
+ * version, safe default, review-by date, and kill-switch designation — a
+ * sync test in services/api keeps the two lists identical.
+ */
+export const SEEDED_FEATURE_FLAGS: ReadonlyArray<readonly [string, string, boolean, number]> = [
+  ["live_court", "Live Court mode", true, 100],
+  ["ball_tracking", "Ball tracking metrics", false, 0],
+  ["cloud_deep_analysis", "Cloud deep analysis", false, 0],
+  ["reference_comparison", "Pro reference comparison", false, 0],
+  ["social", "Friends and activity", true, 100],
+  ["leaderboards", "Friends leaderboards", true, 100],
+  ["experimental_camera_setup", "Experimental camera preflight", false, 0],
+  ["paywall_v1", "Launch paywall", true, 100],
+  ["stroke_return", "Return stroke analysis", false, 0],
+  ["stroke_backhand_drive", "Backhand drive analysis", false, 0],
+  ["stroke_volley", "Volley analysis", false, 0],
+  ["stroke_overhead", "Overhead analysis", false, 0],
+  ["auto_detect", "New AUTO DETECT stroke resolution", true, 100],
+  ["contact_model", "Contact-moment model", true, 100],
+  ["scoring_engine", "Stroke scoring", true, 100],
+  ["drill_ranker", "Training-plan drill ranker", true, 100],
+  ["session_processing", "Server-side session finalize/summary", true, 100],
+  ["stroke_detector", "Temporal stroke detector", true, 100],
+];
+
 export async function seed(pool: Pool, log: (line: string) => void = () => {}): Promise<void> {
   // Shot types
   for (let i = 0; i < SHOT_TYPES.length; i++) {
@@ -249,21 +277,7 @@ export async function seed(pool: Pool, log: (line: string) => void = () => {}): 
   log("seeded billing offerings");
 
   // Feature flags (directive §36).
-  const flags: Array<[string, string, boolean, number]> = [
-    ["live_court", "Live Court mode", true, 100],
-    ["ball_tracking", "Ball tracking metrics", false, 0],
-    ["cloud_deep_analysis", "Cloud deep analysis", false, 0],
-    ["reference_comparison", "Pro reference comparison", false, 0],
-    ["social", "Friends and activity", true, 100],
-    ["leaderboards", "Friends leaderboards", true, 100],
-    ["experimental_camera_setup", "Experimental camera preflight", false, 0],
-    ["paywall_v1", "Launch paywall", true, 100],
-    ["stroke_return", "Return stroke analysis", false, 0],
-    ["stroke_backhand_drive", "Backhand drive analysis", false, 0],
-    ["stroke_volley", "Volley analysis", false, 0],
-    ["stroke_overhead", "Overhead analysis", false, 0],
-  ];
-  for (const [key, description, enabled, rollout] of flags) {
+  for (const [key, description, enabled, rollout] of SEEDED_FEATURE_FLAGS) {
     await pool.query(
       `INSERT INTO feature_flag (key, description, enabled, rollout_percent)
        VALUES ($1,$2,$3,$4) ON CONFLICT (key) DO NOTHING`,

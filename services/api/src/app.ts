@@ -31,6 +31,7 @@ import { registerPrivacyRoutes } from "./modules/privacy/routes.js";
 import { registerConsentRoutes } from "./modules/consent/routes.js";
 import { registerEvaluationRoutes } from "./modules/evaluation/routes.js";
 import { registerFlagRoutes } from "./modules/flags/routes.js";
+import { flagStateFingerprint } from "./modules/flags/registry.js";
 import { registerAdminRoutes } from "./modules/admin/routes.js";
 import { registerTrainingRoutes } from "./modules/training/routes.js";
 
@@ -191,6 +192,7 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
     new BufferedAnalytics(async (batch) => {
       for (const event of batch) app.log.info({ analyticsEvent: event }, "analytics");
     });
+  const flagStateHash = flagStateFingerprint(process.env);
   app.addHook("onResponse", async (request, reply) => {
     const status = reply.statusCode;
     if (status >= 500 || status === 401 || status === 403) {
@@ -202,6 +204,7 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
         method: request.method,
         statusCode: status,
         errorCode: failureCodeFor(reply) ?? "unknown",
+        flagStateHash,
       });
       await analytics.flush();
     }
