@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "afn-sasebo-rally2",
+  "annotatorId": "devin-visual-v5-waveF",
+  "createdAtIso": "2026-08-29T11:30:00.000Z",
+  "revision": 1,
+  "kind": "contact-adjudication",
+  "adjudicates": {
+    "auditFile": "datasets/paddle-bench/bundles/afn-sasebo-rally2/annotation/devin-visual-v4-waveD2-contact-audit.json",
+    "auditSummary": "datasets/experiments/wave-d2/d2-05-contact-audit-summary.json",
+    "priorLabelFile": "datasets/paddle-bench/bundles/afn-sasebo-rally2/annotation/devin-visual-v1.json"
+  },
+  "method": "Independent third pass (D2-05 method: re-derivation + documented criteria). Frames re-extracted with ffmpeg select=eq(n,IDX) (absolute CFR index) from source recording dvids-967848 (datasets/corpus/media/dvids-967848-aba9629c681d.mp4, sha256 aba9629c681d159e0560583865085b8bcceaaa850f9d81f5b26832a86fc90e3c re-verified locally this pass, 29.97fps, 1920x1080). Extracted source frames 985-1004. Ball candidates located by connected-component analysis of a green-pixel mask ((G>150) AND (G>R+20) AND (G>B+60), scipy.ndimage.label, blobs >=8px; static blobs at (914,394)/(925,394) excluded as fixed scene objects); adjudication-critical frames confirmed by eye. Contact criteria: ball-at-paddle adjacency or ball direction reversal across adjacent source frames. Clip frame n maps to source frame n+917 (registry trim 30.6-36.0s). Positions below are source-frame pixel coordinates (x,y).",
+  "adjudicationRecords": [
+    {
+      "adjudicationId": "ADJ-C4",
+      "priorContactMs": 2620,
+      "priorAnnotator": "devin-visual-v1",
+      "auditContactMs": null,
+      "disputeType": "no_contact_observed",
+      "verdict": "dispute_upheld_no_contact_observed",
+      "auditReplacementAdopted": false,
+      "evidence": "Third-pass ball track over source 987-998 is a single smooth ballistic arc with NO direction change: (920,178)@987 -> (982,170)@989 -> (1048,170)@991 -> (1120,181)@993 -> (1196,202)@995 -> (1237,219)@996 -> (1279,237)@997 -> (1323,259)@998 (x monotonically increasing ~31-44px/frame, y through a clean parabolic minimum at src989-991). The prior contact time 2620ms is clip n78.5 = source ~995.5; at src995-996 the ball is mid-flight, visually confirmed above/behind the near gray-shirt man's head with his arm raised but no paddle-ball adjacency and no deflection. The prior label's own note states the contact was interpolated from ball transit.",
+      "disposition": "No contact exists at 2620; the audit's no_contact_observed finding is upheld by an independent re-derived track. Recommendation for integrator: mark the 2620 event label (and the v1 phases block anchored on contactMs 2620) not-certifiable / exclude from contact gold; the undisputed 3834 smash event on this bundle is unaffected."
+    }
+  ],
+  "notes": "Wave F contact-dispute adjudication (third independent pass). Append-only sidecar; prior annotation files and the D2-05 audit sidecars are untouched and remain byte-identical. Media extracted locally only (gitignored path); no media committed. Adjudications reference - never rewrite - the records they adjudicate."
+}
