@@ -13,6 +13,7 @@ import {
   lockRatingAccessForAtomicWrite,
 } from "../billing/access.js";
 import { refreshSummaryIfPresent } from "../sessions/summary.js";
+import { recordInitialAnalysisRun } from "./analysisRuns.js";
 
 /**
  * Shots module: idempotent batch upsert of on-device structured results
@@ -340,6 +341,17 @@ export async function upsertShots(
             [shot.id, checkpointId, cp.score, cp.confidence, cp.band, cp.direction, cp.severity],
           );
         }
+        // Append-only run ledger entry binding this score to the scoring
+        // model version that produced it.
+        await recordInitialAnalysisRun(tx, {
+          userId,
+          shotId: shot.id,
+          scoringModelId,
+          scoringModelVersion: shot.versionVector.scoringModelVersion,
+          overallScore: shot.overallScore,
+          resultKind: shot.resultKind,
+          producedAt: shot.capturedAt,
+        });
         if (shot.sessionId) {
           await tx.query("UPDATE practice_session SET shot_count = shot_count + 1 WHERE id = $1", [
             shot.sessionId,

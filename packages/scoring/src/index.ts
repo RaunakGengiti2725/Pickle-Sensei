@@ -4,3 +4,4 @@ export * from "./priority.js";
 export * from "./config/v1.js";
 export * from "./adapters.js";
 export * from "./versioning.js";
+export * from "./versionGovernance.js";
