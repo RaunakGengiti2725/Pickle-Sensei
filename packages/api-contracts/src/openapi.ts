@@ -21,6 +21,7 @@ import {
   ConsentLedgerExportResponse,
   ConsentWithdrawRequest,
   ConsentStatusResponse,
+  QualityDashboardResponse,
 } from "./schemas.js";
 
 /**
@@ -323,6 +324,30 @@ export function buildOpenApiDocument(apiVersion: string): Record<string, unknown
               content: { "application/json": { schema: schema(RevenueCatSyncResponse) } },
             },
             "401": errorResponse,
+            "503": errorResponse,
+          },
+        },
+      },
+      "/v1/admin/quality-dashboard": {
+        get: {
+          operationId: "getQualityDashboard",
+          summary: "Aggregate production quality metrics (admin-only, audited)",
+          parameters: [
+            {
+              name: "windowDays",
+              in: "query",
+              required: false,
+              schema: { type: "integer", minimum: 1, maximum: 90, default: 7 },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Aggregate quality metrics; counts only, never raw private media",
+              content: { "application/json": { schema: schema(QualityDashboardResponse) } },
+            },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
             "503": errorResponse,
           },
         },

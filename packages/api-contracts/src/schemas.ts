@@ -468,6 +468,123 @@ export const EvaluationTrialUploadRequest = z.object({
 });
 export type EvaluationTrialUploadRequestT = z.infer<typeof EvaluationTrialUploadRequest>;
 
+/**
+ * Production quality dashboard (Wave I i33). One admin-only aggregation over
+ * server-side stores: evaluation trials (claims + abstentions, never
+ * verdicts), practice sessions, analysis jobs, deletion tasks, shot ratings,
+ * and coach-review records. Aggregate counts only — never raw private media,
+ * user identifiers, or per-user rows. Metrics the server has no evidence
+ * store for are reported `not_evaluable` with a reason instead of a number.
+ */
+export const QualityRateSchema = z.object({
+  numerator: z.number().int().nonnegative(),
+  denominator: z.number().int().nonnegative(),
+  /** numerator/denominator; null when the denominator is zero. */
+  rate: z.number().min(0).max(1).nullable(),
+});
+export type QualityRateT = z.infer<typeof QualityRateSchema>;
+
+export const QualityDistributionEntrySchema = z.object({
+  key: z.string(),
+  count: z.number().int().nonnegative(),
+});
+export type QualityDistributionEntryT = z.infer<typeof QualityDistributionEntrySchema>;
+
+export const QualityLatencyPercentilesSchema = z.object({
+  measuredCount: z.number().int().nonnegative(),
+  p50Ms: z.number().nullable(),
+  p90Ms: z.number().nullable(),
+  p99Ms: z.number().nullable(),
+});
+export type QualityLatencyPercentilesT = z.infer<typeof QualityLatencyPercentilesSchema>;
+
+export const QualityNotEvaluableSchema = z.object({
+  status: z.literal("not_evaluable"),
+  reason: z.string(),
+});
+
+export const QualityCrashFreeSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("measured") }).extend(QualityRateSchema.shape),
+  QualityNotEvaluableSchema,
+]);
+export type QualityCrashFreeT = z.infer<typeof QualityCrashFreeSchema>;
+
+export const QualityDashboardResponse = z.object({
+  schemaVersion: z.literal("quality-dashboard-v1"),
+  generatedAtIso: z.iso.datetime(),
+  windowDays: z.number().int().positive(),
+  trials: z.object({
+    /** Consented evaluation trials received in the window. */
+    attempts: z.number().int().nonnegative(),
+    outcomeCounts: z.object({
+      scored: z.number().int().nonnegative(),
+      low_confidence: z.number().int().nonnegative(),
+      unavailable: z.number().int().nonnegative(),
+      quality_blocked: z.number().int().nonnegative(),
+    }),
+    /** Trials that reached a terminal user-visible outcome (scored or an
+     * explicit low-confidence presentation) over attempts. */
+    completion: QualityRateSchema,
+    /** Trials whose outcome was a scored, user-usable Result over attempts. */
+    usableResult: QualityRateSchema,
+    /** Result-surface abstentions (explicit abstain presentation or an
+     * abstained resultScore claim) over attempts. */
+    abstention: QualityRateSchema,
+    /** UNSUPPORTED envelope verdicts over trials with a measured envelope. */
+    envelopeRejection: QualityRateSchema,
+    /** Presented target locks over trials where the lock was measured
+     * (presented or abstained; not_measured excluded from the denominator). */
+    targetLockSuccess: QualityRateSchema,
+    /** Distribution of presented stroke labels (label strings only). */
+    strokeDistribution: z.array(QualityDistributionEntrySchema),
+    /** Device-measured wall-clock analysis latency percentiles. */
+    latency: QualityLatencyPercentilesSchema,
+    /** Distribution of reported model bundle versions ("unreported" bucket
+     * for trials that carried none). */
+    modelVersionDistribution: z.array(QualityDistributionEntrySchema),
+    /** Trials where the user tapped at least one disagreement flag. Flags
+     * are candidate signals routed to labeling, never verdicts. */
+    userReportedWrongTrialCount: z.number().int().nonnegative(),
+  }),
+  sessions: z.object({
+    started: z.number().int().nonnegative(),
+    completed: z.number().int().nonnegative(),
+    completion: QualityRateSchema,
+  }),
+  /** Server-side crash telemetry store does not exist; reported honestly. */
+  crashFree: QualityCrashFreeSchema,
+  backend: z.object({
+    analysisJobs: z.object({
+      requested: z.number().int().nonnegative(),
+      failed: z.number().int().nonnegative(),
+      failureRate: QualityRateSchema,
+    }),
+    deletionTasksFailed: z.number().int().nonnegative(),
+    /** api_failure analytics events are client/edge-emitted and have no
+     * server-side store to aggregate from. */
+    apiErrors: z.union([QualityNotEvaluableSchema, QualityRateSchema]),
+  }),
+  queues: z.object({
+    analysisQueued: z.number().int().nonnegative(),
+    analysisProcessing: z.number().int().nonnegative(),
+    oldestAnalysisQueuedAgeSeconds: z.number().nonnegative().nullable(),
+    deletionQueued: z.number().int().nonnegative(),
+    deletionProcessing: z.number().int().nonnegative(),
+  }),
+  review: z.object({
+    /** shot_rating rows marked not-helpful in the window. */
+    userReportedWrongShotRatings: z.number().int().nonnegative(),
+    /** User-flagged trials in the window with no coach_review row for the
+     * trial's queue item yet — candidates awaiting qualified review. */
+    coachReviewQueueDepth: z.number().int().nonnegative(),
+    /** Subset of the coach-review queue where a scored Result was presented
+     * at normal confidence — candidate silent failures pending labeling. */
+    silentFailureQueueDepth: z.number().int().nonnegative(),
+    coachReviewsRecorded: z.number().int().nonnegative(),
+  }),
+});
+export type QualityDashboardResponseT = z.infer<typeof QualityDashboardResponse>;
+
 export const EvaluationTrialUploadResponse = z.object({
   acceptedTrialIds: z.array(z.uuid()),
   rejected: z.array(
