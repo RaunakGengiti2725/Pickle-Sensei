@@ -1,0 +1,86 @@
+{
+  "workstream": "D3-10",
+  "title": "Red-team CALIBRATION + silent-failure tooling (C11)",
+  "branch": "devin/wave-d3/d3-10-rt-calibration",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "dateUtc": "2026-08-29",
+  "method": "Adversarial probes with clearly-labeled SYNTHETIC fixtures against packages/swing-lab (calibration.ts, coverageRisk.ts, silentFailure.ts, cascadeWaterfall.ts) and packages/evaluation (metrics.ts). Every break reproduced by a probe first, then fixed, then locked with a regression test. Held-out cases wm-dink-01 and afn-vic-rally1 untouched. No Mac/iPhone/coach/Mobbin/pose/canonical-run evidence used or claimed.",
+  "breaksFound": 8,
+  "breaksFixed": 8,
+  "breaksOpen": 0,
+  "breaks": [
+    {
+      "id": "B1",
+      "area": "swing-lab calibration.ts",
+      "break": "NaN confidence leaked: NaN samples silently vanished from reliability bins while still inflating the ECE denominator, deflating ECE; Infinity landed in the last bin. Range check `c < 0 || c > 1` is false for NaN.",
+      "fix": "assertValidConfidence(): Number.isFinite + [0,1] enforced in reliabilityBins, expectedCalibrationError, and coverage-risk entry points.",
+      "regressionTest": "packages/swing-lab/test/calibration.test.ts (NaN/Infinity rejection, curve-input rejection)",
+      "status": "FIXED"
+    },
+    {
+      "id": "B2",
+      "area": "swing-lab calibration.ts",
+      "break": "expectedCalibrationError([]) returned 0 — an empty dataset printed as perfectly calibrated.",
+      "fix": "Raw ECE now throws on empty input; guarded calibrationReport() returns ece: null with an explicit flag instead.",
+      "regressionTest": "packages/swing-lab/test/calibration.test.ts",
+      "status": "FIXED"
+    },
+    {
+      "id": "B3",
+      "area": "swing-lab calibration.ts / coverageRisk.ts",
+      "break": "Tiny-n ECE printed a confident bare number with no n disclosed (W14 datasets are n=12 TA verdicts and n=31 ownership boxes).",
+      "fix": "calibrationReport() with ECE_MIN_SAMPLES=10 floor: always reports n, refuses (ece: null) below the floor with a flag; coverageRisk.ts report/console now emit the guarded report and never a bare ECE when refused. n=12/n=31 remain caveated as annotator self-report vs inter-annotator proxy, not model gold.",
+      "regressionTest": "packages/swing-lab/test/calibration.test.ts (tiny-n refusal, n disclosure)",
+      "status": "FIXED"
+    },
+    {
+      "id": "B4",
+      "area": "swing-lab calibration.ts",
+      "break": "Degenerate confidence distributions (all 1.0, all equal) produced an unflagged, meaningless-looking-precise ECE.",
+      "fix": "calibrationReport() flags degenerate all-equal / all-1.0 distributions; healthy spreads unflagged.",
+      "regressionTest": "packages/swing-lab/test/calibration.test.ts",
+      "status": "FIXED"
+    },
+    {
+      "id": "B5",
+      "area": "swing-lab coverageRisk.ts",
+      "break": "Zero-abstention coverage-risk curve: probed for degenerate output; behavior was actually sound (single full-coverage point, AURC = risk at that point) but unvalidated and untested, and NaN confidence could serialize to null in the JSON report.",
+      "fix": "Input validation added; behavior locked with explicit regression tests for the zero-abstention shape and AURC identity.",
+      "regressionTest": "packages/swing-lab/test/calibration.test.ts",
+      "status": "FIXED (validation + tests; curve math itself was correct)"
+    },
+    {
+      "id": "B6",
+      "area": "swing-lab silentFailure.ts",
+      "break": "NaN/Infinity in gold (contactMs, event bounds), predictions (estimatedContactMs, targetCoverage) or degenerate gold spans (end <= start) produced confident correct/silent_failure verdicts from comparisons that are vacuously false on NaN.",
+      "fix": "Finite guards on all compared quantities; non-finite inputs now yield status 'unverifiable' with disclosure. Exception kept deliberately: a RENDERED timeline with a non-finite boundary stays 'silent_failure' — a physically false user-visible render is a confident wrong claim.",
+      "regressionTest": "packages/swing-lab/test/silentFailure.test.ts",
+      "status": "FIXED"
+    },
+    {
+      "id": "B7",
+      "area": "swing-lab silentFailure.ts + cascadeWaterfall.ts + wavea-944403-dink annotation",
+      "break": "Disputed gold silently counted either way: C05 filed a dispute against the 21604ms contact in wavea-944403-dink (CFR review observed the later 22122-22139ms scoop instead), yet silent-failure-v1 would count a claim against that value as confidently correct or confidently wrong.",
+      "fix": "Re-versioned to silent-failure-v1.1 (silent-failure-v1 object left byte-identical; contract never weakened in place). New status 'excluded_disputed_gold': disputed contact/stroke gold is excluded-and-disclosed, counted neither as correct nor silent failure nor answered; a disputed contact also cannot rescue the EVENT claim via the contact-inside arm. The disputed annotation record was kept append-only and marked contactDisputed:true with contactDisputeRef pointing at datasets/experiments/wave-c/c05-summary.json. cascadeWaterfall now passes dispute flags through and declares v1.1.",
+      "regressionTest": "packages/swing-lab/test/silentFailure.test.ts (v1 untouched, exclude-and-disclose, no rescue, undisputed behavior unchanged)",
+      "status": "FIXED"
+    },
+    {
+      "id": "B8",
+      "area": "evaluation metrics.ts",
+      "break": "Same class of holes in packages/evaluation calibrationReport(): accepted NaN/out-of-range confidence, and reported ECE for empty/tiny-n/degenerate inputs without n or any warning.",
+      "fix": "Finite+range validation (throws), report now carries n and warnings[] (empty, below CALIBRATION_MIN_SAMPLES=10 floor, all-equal degeneracy); numeric ECE kept for compatibility but disclosed as unstable when warned.",
+      "regressionTest": "packages/evaluation/test/metrics.test.ts",
+      "status": "FIXED"
+    }
+  ],
+  "coverageDeltaNote": "No fix uses blanket abstention. silent-failure-v1.1 changes verdicts ONLY for (a) disputed gold (exactly one committed record: the 21604ms contact in wavea-944403-dink) and (b) non-finite/degenerate inputs, of which the committed corpus contains zero (propertyInvariants corpus check: 305 files, 0 violations). All undisputed, well-formed gold evaluates byte-identically to v1 (regression-tested). Calibration fixes change reporting/disclosure only, never the underlying accepted/abstained decisions, so committed-positive-gold coverage is unchanged: delta = 0.",
+  "verification": {
+    "pnpmTypecheck": "PASS (all packages)",
+    "swingLabTests": "247 passed, 4 skipped (19 files)",
+    "evaluationTests": "15 passed (2 files)",
+    "prettier": "run on all touched files",
+    "heldOutCases": "wm-dink-01, afn-vic-rally1 untouched",
+    "statusBoardHandoffDecisions": "untouched"
+  }
+}

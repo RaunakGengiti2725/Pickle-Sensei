@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   SILENT_FAILURE_CLAIMS,
   SILENT_FAILURE_CONTRACT,
+  SILENT_FAILURE_CONTRACT_V1_1,
   evaluateSilentFailure,
   type SilentFailureGold,
   type SilentFailureReportView,
@@ -164,5 +165,123 @@ describe("silent-failure-v1 contract", () => {
     );
     expect(onlyUnverifiable.answered).toBe(false);
     expect(onlyUnverifiable.silentFailure).toBe(false);
+  });
+});
+
+describe("silent-failure-v1.1 additions (D3-10 red team; all fixtures SYNTHETIC)", () => {
+  it("is re-versioned, never softened in place: v1 object untouched", () => {
+    expect(SILENT_FAILURE_CONTRACT.version).toBe("silent-failure-v1");
+    expect(SILENT_FAILURE_CONTRACT_V1_1.version).toBe("silent-failure-v1.1");
+    expect(SILENT_FAILURE_CONTRACT_V1_1.claims).toEqual(SILENT_FAILURE_CONTRACT.claims);
+    expect(SILENT_FAILURE_CONTRACT_V1_1.disputedGold).toMatch(/excluded/);
+  });
+
+  // REGRESSION (break B7): disputed gold (the C05 contact dispute pattern)
+  // used to be silently counted as if the gold were reliable — the dispute
+  // would decide the metric. It must be EXCLUDED AND DISCLOSED.
+  it("disputed gold contact is excluded-and-disclosed, counted neither way (B7)", () => {
+    const disputedGold: SilentFailureGold = { ...FIXTURE_GOLD, contactDisputed: true };
+    // A marker that would be a fabricated silent failure vs the disputed value…
+    const wouldBeFailure = evaluateSilentFailure(
+      {
+        contact: { status: "estimated", estimatedContactMs: 1750 },
+        strokePrediction: { label: null },
+      },
+      disputedGold,
+    );
+    expect(wouldBeFailure.claims.CONTACT_MARKER.status).toBe("excluded_disputed_gold");
+    expect(wouldBeFailure.claims.CONTACT_MARKER.detail).toMatch(/dispute/);
+    expect(wouldBeFailure.silentFailure).toBe(false);
+    expect(wouldBeFailure.answered).toBe(false);
+    // …and a marker that would be "correct" vs the disputed value is excluded too.
+    const wouldBeCorrect = evaluateSilentFailure(
+      {
+        contact: { status: "estimated", estimatedContactMs: 1510 },
+        strokePrediction: { label: null },
+      },
+      disputedGold,
+    );
+    expect(wouldBeCorrect.claims.CONTACT_MARKER.status).toBe("excluded_disputed_gold");
+  });
+
+  it("disputed gold contact cannot rescue the EVENT claim via the contact-inside arm", () => {
+    const verdict = evaluateSilentFailure(
+      {
+        // Selected window covers the disputed gold contact but only 5% of the gold span.
+        targetEvent: { status: "selected", event: { startMs: 1450, endMs: 1550 } },
+      },
+      { ...FIXTURE_GOLD, contactDisputed: true },
+    );
+    expect(verdict.claims.EVENT.status).toBe("silent_failure");
+  });
+
+  it("disputed gold stroke label is excluded-and-disclosed", () => {
+    const verdict = evaluateSilentFailure(
+      { strokePrediction: { label: "BACKHAND_DRIVE" } },
+      { ...FIXTURE_GOLD, strokeLabelDisputed: true },
+    );
+    expect(verdict.claims.STROKE_L1.status).toBe("excluded_disputed_gold");
+    expect(verdict.silentFailure).toBe(false);
+  });
+
+  // REGRESSION (breaks B5/B6): NaN gold used to produce CONFIDENT
+  // silent-failure verdicts ("err NaNms", "overlap NaN%"). Non-finite values
+  // must yield unverifiable-with-disclosure, never a verdict either way.
+  it("NaN gold contact / event bounds are unverifiable, not silent failures (B5/B6)", () => {
+    const nanContact = evaluateSilentFailure(
+      { contact: { status: "estimated", estimatedContactMs: 1500 } },
+      { ...FIXTURE_GOLD, contactMs: NaN },
+    );
+    expect(nanContact.claims.CONTACT_MARKER.status).toBe("unverifiable");
+    expect(nanContact.claims.CONTACT_MARKER.detail).toMatch(/non-finite/);
+
+    const nanBounds = evaluateSilentFailure(
+      { targetEvent: { status: "selected", event: { startMs: 1000, endMs: 2000 } } },
+      { ...FIXTURE_GOLD, eventStartMs: NaN, eventEndMs: NaN },
+    );
+    expect(nanBounds.claims.EVENT.status).toBe("unverifiable");
+
+    const nanEstimate = evaluateSilentFailure(
+      { contact: { status: "estimated", estimatedContactMs: NaN } },
+      FIXTURE_GOLD,
+    );
+    expect(nanEstimate.claims.CONTACT_MARKER.status).toBe("unverifiable");
+
+    const nanCoverage = evaluateSilentFailure({ player: { targetCoverage: NaN } }, FIXTURE_GOLD);
+    expect(nanCoverage.claims.TARGET_IDENTITY.status).toBe("unverifiable");
+  });
+
+  it("degenerate gold span (end <= start) is unverifiable for EVENT, not a division-by-zero verdict", () => {
+    const verdict = evaluateSilentFailure(
+      { targetEvent: { status: "selected", event: { startMs: 1000, endMs: 2000 } } },
+      { ...FIXTURE_GOLD, eventStartMs: 1500, eventEndMs: 1500 },
+    );
+    expect(verdict.claims.EVENT.status).toBe("unverifiable");
+  });
+
+  it("a rendered timeline with a non-finite boundary is a silent failure (physically false render)", () => {
+    const verdict = evaluateSilentFailure(
+      {
+        ...FIXTURE_ALL_CORRECT,
+        temporalPhasesV2: {
+          status: "segmented",
+          boundaries: { contactMs: 1530, followThroughEndMs: NaN },
+        },
+      },
+      FIXTURE_GOLD,
+    );
+    expect(verdict.claims.PHASE_RENDER.status).toBe("silent_failure");
+    expect(verdict.claims.PHASE_RENDER.detail).toMatch(/non-finite/);
+  });
+
+  it("undisputed, well-formed gold behaves exactly as v1 (no weakening)", () => {
+    const verdict = evaluateSilentFailure(FIXTURE_ALL_CORRECT, FIXTURE_GOLD);
+    expect(verdict.answered).toBe(true);
+    expect(verdict.silentFailure).toBe(false);
+    const failure = evaluateSilentFailure(
+      { ...FIXTURE_ALL_CORRECT, contact: { status: "estimated", estimatedContactMs: 1750 } },
+      FIXTURE_GOLD,
+    );
+    expect(failure.claims.CONTACT_MARKER.status).toBe("silent_failure");
   });
 });

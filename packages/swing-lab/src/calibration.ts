@@ -11,6 +11,15 @@ export interface ConfidenceSample {
   correct: boolean;
 }
 
+function assertValidConfidence(confidence: number): void {
+  if (!Number.isFinite(confidence)) {
+    throw new Error(`confidence must be a finite number, got ${confidence}`);
+  }
+  if (confidence < 0 || confidence > 1) {
+    throw new Error(`confidence out of [0,1]: ${confidence}`);
+  }
+}
+
 export interface ReliabilityBin {
   /** Inclusive lower edge; upper edge exclusive except the last bin. */
   lower: number;
@@ -32,9 +41,7 @@ export function reliabilityBins(samples: ConfidenceSample[], nBins = 10): Reliab
   }));
   const sums = bins.map(() => ({ conf: 0, correct: 0 }));
   for (const sample of samples) {
-    if (sample.confidence < 0 || sample.confidence > 1) {
-      throw new Error(`confidence out of [0,1]: ${sample.confidence}`);
-    }
+    assertValidConfidence(sample.confidence);
     const index = Math.min(nBins - 1, Math.floor(sample.confidence * nBins));
     const bin = bins[index];
     const sum = sums[index];
@@ -54,9 +61,15 @@ export function reliabilityBins(samples: ConfidenceSample[], nBins = 10): Reliab
   return bins;
 }
 
-/** Expected Calibration Error: count-weighted mean |accuracy − meanConfidence| over non-empty bins. */
+/**
+ * Expected Calibration Error: count-weighted mean |accuracy − meanConfidence|
+ * over non-empty bins. Raw primitive: throws on empty input rather than
+ * printing a confident 0 — reporting layers must go through
+ * `calibrationReport`, which refuses/flags below a sample floor.
+ */
 export function expectedCalibrationError(samples: ConfidenceSample[], nBins = 10): number {
-  if (samples.length === 0) return 0;
+  if (samples.length === 0)
+    throw new Error("ECE undefined on empty input — use calibrationReport for guarded reporting");
   const bins = reliabilityBins(samples, nBins);
   let total = 0;
   for (const bin of bins) {
@@ -65,6 +78,59 @@ export function expectedCalibrationError(samples: ConfidenceSample[], nBins = 10
     }
   }
   return total;
+}
+
+/** Default sample floor below which `calibrationReport` refuses to print an ECE. */
+export const ECE_MIN_SAMPLES = 10;
+
+export interface CalibrationReport {
+  n: number;
+  nBins: number;
+  minSamples: number;
+  /** null when refused (n below floor or n = 0). */
+  ece: number | null;
+  /** true when the number should not be quoted as a stable estimate. */
+  flagged: boolean;
+  flags: string[];
+}
+
+/**
+ * Guarded ECE for reporting: always reports n, refuses (ece = null) below the
+ * sample floor, and flags degenerate confidence distributions (all values
+ * identical / all 1.0) where a bin-based ECE is uninformative.
+ */
+export function calibrationReport(
+  samples: ConfidenceSample[],
+  options: { nBins?: number; minSamples?: number } = {},
+): CalibrationReport {
+  const nBins = options.nBins ?? 10;
+  const minSamples = options.minSamples ?? ECE_MIN_SAMPLES;
+  const flags: string[] = [];
+  const n = samples.length;
+  for (const sample of samples) assertValidConfidence(sample.confidence);
+  if (n < minSamples) {
+    flags.push(
+      n === 0
+        ? "no samples — ECE undefined"
+        : `insufficient n: ${n} < floor ${minSamples} — refusing to print a confident ECE`,
+    );
+    return { n, nBins, minSamples, ece: null, flagged: true, flags };
+  }
+  const distinct = new Set(samples.map((sample) => sample.confidence));
+  if (distinct.size === 1) {
+    const only = samples[0]?.confidence ?? 0;
+    flags.push(
+      `degenerate confidence distribution: all ${n} samples share confidence ${only} — ECE is a single-bin |accuracy − confidence|, not a calibration curve`,
+    );
+  }
+  return {
+    n,
+    nBins,
+    minSamples,
+    ece: expectedCalibrationError(samples, nBins),
+    flagged: flags.length > 0,
+    flags,
+  };
 }
 
 export interface CoverageRiskPoint {
@@ -85,6 +151,7 @@ export interface CoverageRiskPoint {
  */
 export function coverageRiskCurve(samples: ConfidenceSample[]): CoverageRiskPoint[] {
   if (samples.length === 0) return [];
+  for (const sample of samples) assertValidConfidence(sample.confidence);
   const sorted = [...samples].sort((a, b) => b.confidence - a.confidence);
   const points: CoverageRiskPoint[] = [];
   let answered = 0;

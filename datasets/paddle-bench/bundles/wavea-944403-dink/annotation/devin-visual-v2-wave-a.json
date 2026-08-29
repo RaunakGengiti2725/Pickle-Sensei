@@ -59,7 +59,9 @@
       "eventEndMs": 21958,
       "owner": "other",
       "annotator": "devin-visual-v2-wave-a",
-      "note": "near-right dink #2: paddle-drop 21500, contact bracketed 21583/21625 -> 21604, chest-front re-set 21958"
+      "note": "near-right dink #2: paddle-drop 21500, contact bracketed 21583/21625 -> 21604, chest-front re-set 21958",
+      "contactDisputed": true,
+      "contactDisputeRef": "datasets/experiments/wave-c/c05-summary.json honestNegatives: C05 CFR review shows the inbound ball continuing until the later 22122-22139ms scoop and did not reproduce 21604; value kept append-only, excluded-and-disclosed by silent-failure-v1.1"
     },
     {
       "eventStartMs": 22000,
