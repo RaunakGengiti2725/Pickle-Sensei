@@ -1,0 +1,322 @@
+{
+  "schemaVersion": 1,
+  "releaseId": "pickle-sensei-datasets@v1",
+  "datasetId": "pickle-sensei-datasets",
+  "version": "v1",
+  "createdAtIso": "2026-08-29T21:17:22.079Z",
+  "immutable": true,
+  "annotationSchemaVersion": 1,
+  "components": [
+    {
+      "componentId": "ball-bench",
+      "path": "datasets/ball-bench",
+      "description": "ball-detection benchmark: human-labeled cases + machine run results and failure exhibits",
+      "classification": "mixed_human_and_machine",
+      "notGold": false,
+      "notGoldReason": null,
+      "artifacts": [
+        {
+          "path": "datasets/releases/pickle-sensei-datasets-v1/artifacts/ball-bench/ball-bench.json",
+          "livePath": "datasets/ball-bench/ball-bench.json",
+          "sha256": "09616418e8947906b0e3557093aff8dbf902dfeb0eaba4ceb06f6b5db708ea57"
+        },
+        {
+          "path": "datasets/releases/pickle-sensei-datasets-v1/artifacts/ball-bench/baselines.json",
+          "livePath": "datasets/ball-bench/baselines.json",
+          "sha256": "bda8b6ec95a4b2149fea3057c9957cfa40e3f0f35fa1ff157fb4a5a85906a72b"
+        },
+        {
+          "path": "datasets/releases/pickle-sensei-datasets-v1/artifacts/ball-bench/failure-review.json",
+          "livePath": "datasets/ball-bench/failure-review.json",
+          "sha256": "8e8f2c7f599b42cc7d8bfc661478c63c875b0b4e2424a05a2fbadb08cac8d0a6"
+        }
+      ]
+    },
+    {
+      "componentId": "cascade",
+      "path": "datasets/cascade",
+      "description": "cascade waterfall run outputs (machine measurements over the gold cases)",
+      "classification": "run_outputs",
+      "notGold": true,
+      "notGoldReason": "machine-generated measurements; never ground truth",
+      "artifacts": []
+    },
+    {
+      "componentId": "coach-review",
+      "path": "datasets/coach-review",
+      "description": "coach review program artifacts: queue, DRAFT fault taxonomy, UNVALIDATED drill placeholders; coaches.json holds 0 real coaches",
+      "classification": "registry_metadata",
+      "notGold": true,
+      "notGoldReason": "no real coach reviews exist (recruitment BLOCKED_EXTERNAL); taxonomy is an engineering draft pending expert validation",
+      "artifacts": [
+        {
+          "path": "datasets/releases/pickle-sensei-datasets-v1/artifacts/coach-review/queue.json",
+          "livePath": "datasets/coach-review/queue.json",
+          "sha256": "1d18040150bbb2c549e5b8590a872387aaf9bb6b7f8c48a135a851e863244103"
+        },
+        {
+          "path": "datasets/releases/pickle-sensei-datasets-v1/artifacts/coach-review/coaches.json",
+          "livePath": "datasets/coach-review/coaches.json",
+          "sha256": "8579aa05b6231176a9415092c1913be525cb582d00c6059fb31fd8c039647259"
+        }
+      ]
+    },
+    {
+      "componentId": "completion-bench",
+      "path": "datasets/completion-bench",
+      "description": "capture-completion strategy benchmark run outputs",
+      "classification": "run_outputs",
+      "notGold": true,
+      "notGoldReason": "machine-generated FIXED vs ADAPTIVE measurements; never ground truth",
+      "artifacts": []
+    },
+    {
+      "componentId": "corpus-registries",
+      "path": "datasets/corpus",
+      "description": "corpus source/recording/session registries, split ladder, dedup report (human-curated governance records)",
+      "classification": "registry_metadata",
+      "notGold": false,
+      "notGoldReason": null,
+      "artifacts": [
+        {
+          "path": "datasets/releases/pickle-sensei-datasets-v1/artifacts/corpus-registries/sources.json",
+          "livePath": "datasets/corpus/sources.json",
+          "sha256": "33d87264180736e23e422364bf7541a7292a96b753949b01feac66a48f6ba6c5"
+        },
+        {
+          "path": "datasets/releases/pickle-sensei-datasets-v1/artifacts/corpus-registries/recordings.json",
+          "livePath": "datasets/corpus/recordings.json",
+          "sha256": "81b647087f1d27a69ad85f5d8063cf618e84be736571a540ca2a2ca706f1c620"
+        },
+        {
+          "path": "datasets/releases/pickle-sensei-datasets-v1/artifacts/corpus-registries/splits.json",
+          "livePath": "datasets/corpus/splits.json",
+          "sha256": "de4635d41f28da6ecdd73610c1fa2f639e414f0b4d682e06c9217497fa217772"
+        },
+        {
+          "path": "datasets/releases/pickle-sensei-datasets-v1/artifacts/corpus-registries/dedup-report.json",
+          "livePath": "datasets/corpus/dedup-report.json",
+          "sha256": "ad49de6cf91c1966b500c06bb9f5db2cea345dbf7e4651531beaa53dfbee06e8"
+        }
+      ]
+    },
+    {
+      "componentId": "corpus-mined-events",
+      "path": "datasets/corpus/events",
+      "description": "tier-C machine-mined stroke-event candidates (per-recording JSONL shards)",
+      "classification": "machine_generated",
+      "notGold": true,
+      "notGoldReason": "miner output candidates; tier C is NEVER reported as labels",
+      "artifacts": []
+    },
+    {
+      "componentId": "experiments",
+      "path": "datasets/experiments",
+      "description": "experiment records and integrity reports (machine + narrative outputs)",
+      "classification": "run_outputs",
+      "notGold": true,
+      "notGoldReason": "experiment bookkeeping, not labels",
+      "artifacts": []
+    },
+    {
+      "componentId": "mining",
+      "path": "datasets/mining",
+      "description": "scene/candidate mining outputs from DVIDS footage",
+      "classification": "machine_generated",
+      "notGold": true,
+      "notGoldReason": "miner candidates and scene scores; never human labels",
+      "artifacts": []
+    },
+    {
+      "componentId": "ood",
+      "path": "datasets/ood",
+      "description": "rights-cleared real negative clips used only to measure the pre-analysis OOD gate",
+      "classification": "media",
+      "notGold": true,
+      "notGoldReason": "negative-only media for gate measurement; carries no stroke labels",
+      "artifacts": [
+        {
+          "path": "datasets/releases/pickle-sensei-datasets-v1/artifacts/ood/registry.json",
+          "livePath": "datasets/ood/registry.json",
+          "sha256": "830e23f77a7a10f4bff5137ab80ebecc854a2b3f7848cdffd28b3f76c544bf02"
+        }
+      ]
+    },
+    {
+      "componentId": "paddle-bench",
+      "path": "datasets/paddle-bench",
+      "description": "real-video perception benchmark: registry, human GOLD annotations (single annotator), machine run artifacts",
+      "classification": "mixed_human_and_machine",
+      "notGold": false,
+      "notGoldReason": null,
+      "artifacts": [
+        {
+          "path": "datasets/releases/pickle-sensei-datasets-v1/artifacts/paddle-bench/registry.json",
+          "livePath": "datasets/paddle-bench/registry.json",
+          "sha256": "05bf22bc12d3ba1c0e6bd8dac822b60873c7b10ef1487825d7c37bcf56a2ee3d"
+        },
+        {
+          "path": "datasets/releases/pickle-sensei-datasets-v1/artifacts/paddle-bench/paddle-bench.json",
+          "livePath": "datasets/paddle-bench/paddle-bench.json",
+          "sha256": "019af88880b51ce11097e29cdc6fbf08735a5a31e371d68e5bb4797ba5133753"
+        },
+        {
+          "path": "datasets/releases/pickle-sensei-datasets-v1/artifacts/paddle-bench/stroke-gold.json",
+          "livePath": "datasets/paddle-bench/stroke-gold.json",
+          "sha256": "cb01f17a2c8e7bd5d81b0687744db4da7a2af0f8795d6ce940ed19cbd6969b0c"
+        }
+      ]
+    },
+    {
+      "componentId": "pickleball",
+      "path": "datasets/pickleball",
+      "description": "public-source registry, fresh unlabeled holdout candidates, first-party capture protocol + consent-first collection manifest schema",
+      "classification": "registry_metadata",
+      "notGold": true,
+      "notGoldReason": "source registry and unlabeled candidate media; contains no labels",
+      "artifacts": [
+        {
+          "path": "datasets/releases/pickle-sensei-datasets-v1/artifacts/pickleball/registry.json",
+          "livePath": "datasets/pickleball/registry.json",
+          "sha256": "186533735ce0de2854892f00ed4e8d7248555cb87806c4be78926d7caa269bcf"
+        },
+        {
+          "path": "datasets/releases/pickle-sensei-datasets-v1/artifacts/pickleball/collection_manifest.schema.json",
+          "livePath": "datasets/pickleball/collection_manifest.schema.json",
+          "sha256": "664769c107c471b795aeb353664ce2d8f76e89d001143cbbd556c20da0fce37a"
+        }
+      ]
+    },
+    {
+      "componentId": "releases",
+      "path": "datasets/releases",
+      "description": "prior immutable release manifests (pickle-real-v0.x, paddle-distill-v0.1)",
+      "classification": "release_snapshots",
+      "notGold": false,
+      "notGoldReason": null,
+      "artifacts": []
+    },
+    {
+      "componentId": "ta-bench",
+      "path": "datasets/ta-bench",
+      "description": "target-acquisition benchmark cases (verified cases are human-checked; proposed cases are machine candidates)",
+      "classification": "mixed_human_and_machine",
+      "notGold": false,
+      "notGoldReason": null,
+      "artifacts": [
+        {
+          "path": "datasets/releases/pickle-sensei-datasets-v1/artifacts/ta-bench/cases.json",
+          "livePath": "datasets/ta-bench/cases.json",
+          "sha256": "3d72c60553aa7ff023d0bf366081cab5938862fe06cc1e77c4339a3259abadff"
+        }
+      ]
+    }
+  ],
+  "statistics": {
+    "sources": 20,
+    "recordings": 26,
+    "rootRecordings": 17,
+    "sessions": 12,
+    "rootFootageMinutes": 62.9,
+    "annotatedCases": 5,
+    "goldTargetEvents": 10,
+    "tierCCandidateEvents": 199,
+    "goldLabelCounts": {
+      "paddleFrames": 78,
+      "otherPaddleFrames": 83,
+      "ballFrames": 22,
+      "contactEstimates": 5,
+      "strokeLabels": 5,
+      "phaseBoundaries": 25,
+      "eventLabels": 16
+    },
+    "annotators": 1,
+    "expertCoaches": 0
+  },
+  "labels": {
+    "GOLD": {
+      "definition": "human-verified ground truth (single annotator lineage devin-visual-v*; no second annotator yet)",
+      "count": 234
+    },
+    "SILVER": {
+      "definition": "verified teacher/prelabel output",
+      "count": 0,
+      "verificationNote": ""
+    },
+    "TIER_C": {
+      "definition": "machine-mined candidates; NEVER reported as labels",
+      "count": 199
+    }
+  },
+  "rights": {
+    "trainingEligibleSources": 20,
+    "rightsQuarantinedSources": 0,
+    "policy": "per-modality rights (store/analyze/annotate/train/redistribute/commercial) recorded per source with legal basis; a source enters training only when train+store+analyze are affirmative — anything unclear is quarantined"
+  },
+  "consent": {
+    "firstPartyRecordings": 0,
+    "analysisConsentRecords": 0,
+    "trainingConsentRecords": 0,
+    "policy": "consent for analysis is separate from consent for training and neither is ever implied; no first-party consent ledger records exist in this repository — first-party intake verifies an exported append-only consent ledger at runtime"
+  },
+  "splits": {
+    "policyVersion": "splits-v1",
+    "unit": "session",
+    "bySplit": {
+      "dev": {
+        "sessions": [
+          "afn-sasebo-2025-06",
+          "afn-sigonella-2025",
+          "dvids-1007845",
+          "dvids-1008415",
+          "dvids-943757",
+          "dvids-956784",
+          "dvids-957519",
+          "dvids-986421",
+          "dvids-marne-2024",
+          "dvids-warriorgames-2026",
+          "wm-tournament-2014"
+        ]
+      },
+      "locked_test": {
+        "sessions": [
+          "afn-vic-2025"
+        ]
+      },
+      "shadow": {
+        "sessions": [
+          "dvids-906546",
+          "dvids-espn-oneyearout-2026"
+        ]
+      },
+      "val": {
+        "sessions": [
+          "dvids-967848"
+        ]
+      }
+    },
+    "leakageFindings": []
+  },
+  "dedupLineage": {
+    "algo": "dhash64-9x8-gray@1fps",
+    "findings": 7,
+    "declaredLineageConfirmed": 2,
+    "mergedSessions": 3,
+    "limitations": "temporal dHash does not catch SPATIAL crops — those rely on declared lineage at registration",
+    "report": {
+      "path": "datasets/corpus/dedup-report.json",
+      "livePath": null,
+      "sha256": "ad49de6cf91c1966b500c06bb9f5db2cea345dbf7e4651531beaa53dfbee06e8"
+    }
+  },
+  "knownLimitations": [
+    "single annotator across all GOLD labels; no second-annotator agreement measurement exists",
+    "0 expert coaches — fault taxonomy and drill library are unvalidated engineering drafts",
+    "no first-party recordings and no consent records; all media is public-source under recorded rights",
+    "wm-tournament-2014 spans the paddle-bench development/held-out roles (one recording, different players) — documented in pickle-real releases; acceptable only while the corpus is tiny",
+    "tier-C mined events (199-scale) are candidates only and are never counted as labels",
+    "corpus is tiny (tens of recordings); statistics here describe availability, not model-generalization evidence"
+  ],
+  "problems": [],
+  "warnings": []
+}
