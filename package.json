@@ -26,6 +26,7 @@
     "lab:paddle-bench": "pnpm --filter @pickle/swing-lab paddle:bench",
     "lab:ball-bench": "pnpm --filter @pickle/swing-lab ball:bench",
     "lab:stroke-bench": "pnpm --filter @pickle/swing-lab stroke:bench",
+    "lab:stroke-taxonomy": "pnpm --filter @pickle/swing-lab stroke:taxonomy",
     "lab:dataset-report": "pnpm --filter @pickle/swing-lab dataset:report",
     "lab:dataset-release": "pnpm --filter @pickle/swing-lab dataset:release",
     "lab:data-gaps": "pnpm --filter @pickle/swing-lab data:gaps",
