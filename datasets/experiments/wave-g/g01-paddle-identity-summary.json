@@ -1,0 +1,68 @@
+{
+  "workstream": "g01-paddle-identity",
+  "generatedAt": "2026-08-29",
+  "mission": "F09 residual: a foreign paddle WITHIN torso-normalized reach of an IDLE target wrist yields a confident wrong contact (pinned as 'F3 residual' in packages/vision-geometry/test/contactRedTeam.test.ts). Build persistent paddle-track identity across the event — temporal paddle-to-target-hand association (ownership history before/after the contact neighborhood, motion synchrony vs non-target wrists, fragment provenance through occlusion, opponent/partner contradiction) — as a GENERAL ownership-evidence module, without tuning the reach tether or writing an F09-specific rule.",
+  "method": {
+    "module": "packages/vision-geometry/src/paddleTrackIdentity.ts (assessPaddleTrackIdentity, paddle-track-identity-1)",
+    "evidence": [
+      "whole-event speed-profile synchrony (Pearson r) between the paddle track and each target wrist trajectory, and against non-target wrist trajectories (contradiction evidence)",
+      "ownership history at activity peaks: target-hand activity (relative to that hand's own max) at the paddle's strongest peak, and the mirror check — paddle activity at the target's strongest peak",
+      "peak separation in ms (peaks < 250ms apart can never support 'foreign' — they may be one physical event)",
+      "fragment provenance: gaps > 400ms in the paddle track are counted and disclosed; speeds are measured within fragments only"
+    ],
+    "verdicts": "target_consistent | foreign | undetermined. 'foreign' requires EVERY element measured and independently contradicting ownership; any unmeasured element yields 'undetermined' — absence of measurement is never counter-evidence.",
+    "constants_provenance": "activity/quiet fractions reuse the estimator's existing motion-support and corroboration precedents (motionSupportFullFraction 0.35, corroborationFloor 0.25); no constant was tuned against the pinned F3-residual test or any locked test. The reach tether (FUSION.paddleReachFullTorso/RejectTorso) is untouched.",
+    "integration": "estimateContact gains an OPT-IN flag paddleIdentityGate (default OFF — production behavior unchanged). When ON and the paddle track is measured FOREIGN, the paddle modality is excluded (paddleCenters + paddleSpeeds), with limiting factor 'paddle_track_identity_foreign' and a gating note; all other gates unchanged."
+  },
+  "datasetScope": {
+    "ownership": "FULL dev ownership dual-label set via loadDualFrames(includeHeldOut=false, applyCorrections=true): 8 dev cases across 5 source-session groups; 5 cases have committed windowed pose (people.json). Gold-labeled paddle points per owner were linked into 17 paddle tracks (6 target-labeled, 11 other-labeled) and each track was assessed against full-frame-rate wrist trajectories from the committed people.json runs.",
+    "contact": "All 10 synthetic adversarial contact fixtures (generateAdversarialContactFixtures) run with the flag OFF vs ON, plus the F3-residual scenario and a genuine-paddle scenario (both synthetic, generateSwingSequence).",
+    "grouping": "Source-session grouping preserved (group field carried through per-track evals); no group spans dev/held-out."
+  },
+  "holdoutStatement": "Held-out cases wm-dink-01 and afn-vic-rally1 were never loaded, read, or referenced: the ownership eval calls loadDualFrames(false, ...) which excludes split=held_out. All contact-side data is synthetic. No Mac/iPhone/Apple Vision numbers are claimed (Linux-only environment).",
+  "configuration": {
+    "flag": "estimateContact({ ..., paddleIdentityGate: true }) — default false everywhere; no production call site enables it",
+    "identityConstants": {
+      "maxStepMs": 400,
+      "minSpeedSamples": 5,
+      "activePeakTorsoPerSec": 2.0,
+      "peakBandMs": 90,
+      "quietRelativeFraction": 0.35,
+      "paddleQuietRelativeFraction": 0.25,
+      "minPeakSeparationMs": 250,
+      "synchronyMinPairs": 8,
+      "synchronyConsistent": 0.6,
+      "synchronyForeignCeiling": 0.4,
+      "coMovementConsistent": 0.5
+    }
+  },
+  "measuredResults": {
+    "f3ResidualScenario": {
+      "before_flagOff": "status=estimated at 1690ms vs truth 1100ms (opponent hit 1700ms), confidence 0.78, ballConfirmed=true, paddleConfirmed=true — the confident wrong contact (unchanged; the pinned contactRedTeam 'F3 residual' test still passes verbatim)",
+      "after_flagOn": "paddle track measured FOREIGN (paddle peak 3.1 torso/s @1605ms with every target hand quiet at 0.14 relative; target peak 13.8 torso/s @1092ms with the paddle at 0.00 relative; 514ms apart; synchrony r=-0.08) → paddle modality excluded → estimator ABSTAINS (multi-modal: ball cluster ~1715ms vs wrist cluster ~1100ms) — the confident wrong contact is gone, replaced by an honest abstention, with N=1 scenario"
+    },
+    "genuinePaddleScenario_flagOn": "status=estimated, |error|=5ms from truth, paddleConfirmed=true, no foreign flag — a paddle riding the target's wrist is untouched (N=1 scenario)",
+    "adversarialContactFixtures": {
+      "N": 10,
+      "flagOff_vs_flagOn": "10/10 fixtures byte-identical outcomes (status, estimatedContactMs, confidence, ballConfirmed, paddleConfirmed) — zero regressions; pinned by test 'changes nothing on any adversarial contact fixture'",
+      "flagOff_baseline": "8 estimated / 2 abstained (edge-on-paddle-reacquire-jump, identity-swap-second-swing), same as before this change"
+    },
+    "ownershipDualLabelSet": {
+      "devCases": 8,
+      "casesWithCommittedPose": 5,
+      "labeledPaddleTracks": 17,
+      "targetTracks": { "N": 6, "target_consistent": 0, "foreign": 0, "undetermined": 6 },
+      "otherTracks": { "N": 11, "target_consistent": 0, "foreign": 0, "undetermined": 11 },
+      "reading": "Zero regressions: no target-labeled track is ever called foreign (a foreign verdict on a target track would wrongly exclude the target's own paddle). But also zero measured wins on real data: every Gold track has only 1-12 labeled points at ~250ms+ spacing (many with >400ms gaps), below the module's minimum of 5 consecutive-step speed samples, so it honestly abstains (undetermined) on all 17. Full per-track detail in datasets/experiments/wave-g/g01-paddle-identity-ownership-eval.json (regenerable via pnpm --filter @pickle/swing-lab identity:eval)."
+    },
+    "unitTests": "packages/vision-geometry/test/paddleTrackIdentity.test.ts: 11 tests (synchrony, foreign contradiction, sparse/no-wrist/degenerate-torso abstentions, fragment provenance, non-target contradiction note, F3-residual flag-on/off, genuine-paddle guard, 10-fixture no-regression sweep). Package suite 89/89 passing (was 78 before this workstream)."
+  },
+  "findings": [
+    "Temporal identity is the right general mechanism for F09: the foreign paddle is caught because it moves when every target hand is quiet AND is quiet when the target swings — event-level evidence the instantaneous reach tether cannot express. No reach constant was changed and no F09-specific rule exists; the same criteria fire on a differently-shaped foreign track in the unit tests.",
+    "The gate is fail-safe by construction: 'foreign' requires every evidence element to be measured and contradictory, so sparse, fragmented, or pose-less tracks yield 'undetermined' and production behavior is unchanged.",
+    "The real-data ownership dual-label set cannot currently exercise the module: human Gold labels are too sparse (1-12 points/track at 250ms+ spacing) to measure motion synchrony. The module abstains on all 17 real tracks — honest, zero-regression, but zero real-data wins. Measuring real-data wins requires dense paddle DETECTOR tracks for these cases (no paddle.json is committed under runs-wave-a), which is data work, not a flaw in the method.",
+    "Because the only demonstrated wins are on synthetic scenarios (F3 residual + unit-test geometries), the flag must stay OFF in production until dense real paddle tracks confirm the foreign-detection precision."
+  ],
+  "verdict": "YELLOW",
+  "rationale": "The general ownership-evidence module exists, is unit-tested, and — behind an opt-in flag — converts the F09 confident-wrong contact into an honest abstention while leaving all 10 adversarial contact fixtures byte-identical and never mis-flagging a target-labeled track on the full dev ownership set (0/6 foreign). Not PROVISIONAL_GREEN: the required 'broad independent ownership/contact improvement' is only demonstrated on synthetic data; on real Gold tracks the module can only abstain (17/17 undetermined) because labeled paddle tracks are too sparse for temporal evidence. Not RED/ORANGE: nothing regressed and the mechanism is measured, general, and fail-safe. Shipping (flag ON) is blocked on committing dense real paddle detector tracks for the dev cases."
+}

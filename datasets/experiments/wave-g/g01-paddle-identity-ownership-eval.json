@@ -1,0 +1,191 @@
+{
+  "version": "paddle-identity-eval-1",
+  "cases": 8,
+  "casesWithPose": 5,
+  "trackEvals": [
+    {
+      "caseId": "wavea-944403-dink",
+      "group": "dvids-944403",
+      "owner": "target",
+      "points": 7,
+      "verdict": "undetermined",
+      "notes": [
+        "evidence insufficient to confirm or contradict ownership"
+      ]
+    },
+    {
+      "caseId": "wavea-944403-dink",
+      "group": "dvids-944403",
+      "owner": "target",
+      "points": 5,
+      "verdict": "undetermined",
+      "notes": [
+        "paddle speed unmeasurable: 4 consecutive-step sample(s) < 5"
+      ]
+    },
+    {
+      "caseId": "wavea-944403-dink",
+      "group": "dvids-944403",
+      "owner": "other",
+      "points": 9,
+      "verdict": "undetermined",
+      "notes": [
+        "fragmented track: 1 gap(s) > 400ms (max 834ms) — speeds measured within fragments only",
+        "evidence insufficient to confirm or contradict ownership"
+      ]
+    },
+    {
+      "caseId": "wavea-944403-dink",
+      "group": "dvids-944403",
+      "owner": "other",
+      "points": 12,
+      "verdict": "undetermined",
+      "notes": [
+        "evidence insufficient to confirm or contradict ownership"
+      ]
+    },
+    {
+      "caseId": "wavea-944403-dink",
+      "group": "dvids-944403",
+      "owner": "other",
+      "points": 8,
+      "verdict": "undetermined",
+      "notes": [
+        "fragmented track: 1 gap(s) > 400ms (max 584ms) — speeds measured within fragments only",
+        "evidence insufficient to confirm or contradict ownership"
+      ]
+    },
+    {
+      "caseId": "wavea-944403-smash",
+      "group": "dvids-944403",
+      "owner": "target",
+      "points": 3,
+      "verdict": "undetermined",
+      "notes": [
+        "paddle speed unmeasurable: 1 consecutive-step sample(s) < 5"
+      ]
+    },
+    {
+      "caseId": "wavea-944403-smash",
+      "group": "dvids-944403",
+      "owner": "other",
+      "points": 3,
+      "verdict": "undetermined",
+      "notes": [
+        "paddle speed unmeasurable: 1 consecutive-step sample(s) < 5"
+      ]
+    },
+    {
+      "caseId": "wavea-944403-smash",
+      "group": "dvids-944403",
+      "owner": "other",
+      "points": 3,
+      "verdict": "undetermined",
+      "notes": [
+        "paddle speed unmeasurable: 1 consecutive-step sample(s) < 5"
+      ]
+    },
+    {
+      "caseId": "wavea-944403-smash",
+      "group": "dvids-944403",
+      "owner": "other",
+      "points": 2,
+      "verdict": "undetermined",
+      "notes": [
+        "paddle speed unmeasurable: 1 consecutive-step sample(s) < 5"
+      ]
+    },
+    {
+      "caseId": "wavea-faead-feed",
+      "group": "dvids-faead",
+      "owner": "target",
+      "points": 2,
+      "verdict": "undetermined",
+      "notes": [
+        "paddle speed unmeasurable: 1 consecutive-step sample(s) < 5"
+      ]
+    },
+    {
+      "caseId": "wavea-faead-feed",
+      "group": "dvids-faead",
+      "owner": "other",
+      "points": 2,
+      "verdict": "undetermined",
+      "notes": [
+        "paddle speed unmeasurable: 1 consecutive-step sample(s) < 5"
+      ]
+    },
+    {
+      "caseId": "wavea-faead-rally",
+      "group": "dvids-faead",
+      "owner": "target",
+      "points": 1,
+      "verdict": "undetermined",
+      "notes": [
+        "paddle speed unmeasurable: 0 consecutive-step sample(s) < 5"
+      ]
+    },
+    {
+      "caseId": "wavea-faead-rally",
+      "group": "dvids-faead",
+      "owner": "other",
+      "points": 1,
+      "verdict": "undetermined",
+      "notes": [
+        "paddle speed unmeasurable: 0 consecutive-step sample(s) < 5"
+      ]
+    },
+    {
+      "caseId": "wavea-faead-rally",
+      "group": "dvids-faead",
+      "owner": "other",
+      "points": 1,
+      "verdict": "undetermined",
+      "notes": [
+        "paddle speed unmeasurable: 0 consecutive-step sample(s) < 5"
+      ]
+    },
+    {
+      "caseId": "wavea-marne-dig",
+      "group": "dvids-marne-2024",
+      "owner": "target",
+      "points": 1,
+      "verdict": "undetermined",
+      "notes": [
+        "paddle speed unmeasurable: 0 consecutive-step sample(s) < 5"
+      ]
+    },
+    {
+      "caseId": "wavea-marne-dig",
+      "group": "dvids-marne-2024",
+      "owner": "other",
+      "points": 1,
+      "verdict": "undetermined",
+      "notes": [
+        "paddle speed unmeasurable: 0 consecutive-step sample(s) < 5"
+      ]
+    },
+    {
+      "caseId": "wavea-marne-dig",
+      "group": "dvids-marne-2024",
+      "owner": "other",
+      "points": 1,
+      "verdict": "undetermined",
+      "notes": [
+        "paddle speed unmeasurable: 0 consecutive-step sample(s) < 5"
+      ]
+    }
+  ],
+  "counts": {
+    "target": {
+      "target_consistent": 0,
+      "foreign": 0,
+      "undetermined": 6
+    },
+    "other": {
+      "target_consistent": 0,
+      "foreign": 0,
+      "undetermined": 11
+    }
+  }
+}

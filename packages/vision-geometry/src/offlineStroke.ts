@@ -2,6 +2,11 @@ import type { Result } from "@pickle/shared-types";
 import { fail, failure, ok } from "@pickle/shared-types";
 import { toLegacyPoseFrames, type BallObservation, type PoseSequence } from "@pickle/swing-domain";
 import { consecutiveSpeedSeries, median, movingAverage } from "./kinematics.js";
+import {
+  assessPaddleTrackIdentity,
+  type PaddleTrackIdentityAssessment,
+  type TimedPoint,
+} from "./paddleTrackIdentity.js";
 
 /**
  * Offline stroke-window detection for replayed videos, which have no
@@ -395,6 +400,13 @@ export function estimateContact(input: {
   strokeFamily?: StrokeFamily | null;
   /** OPTIONAL (v4): attach per-kernel fusion internals (calibration/debug). */
   includeFusionKernels?: boolean;
+  /** OPTIONAL flag (off by default): assess the paddle track's temporal
+   * identity (whole-event motion synchrony with the target's hands) and
+   * exclude the paddle modality when the track is measured FOREIGN — a
+   * track that moves when the target is idle and is idle when the target
+   * moves. Spatial reach alone cannot catch such a track when it hovers
+   * within reach of an idle wrist. */
+  paddleIdentityGate?: boolean;
 }): ContactEstimate {
   const frames = toLegacyPoseFrames(input.sequence).filter(
     (frame) => frame.timestampMs >= input.window.startMs && frame.timestampMs <= input.window.endMs,
@@ -425,7 +437,24 @@ export function estimateContact(input: {
   // and must not act as a target reference, proximity anchor, or presence.
   // No wrist measured near the moment → the center is kept (absence of
   // measurement is not counter-evidence).
-  const paddleCentersAll = input.paddleCenters ?? null;
+  let paddleIdentity: PaddleTrackIdentityAssessment | null = null;
+  if (input.paddleIdentityGate === true && input.paddleCenters && input.paddleCenters.length > 0) {
+    paddleIdentity = assessPaddleTrackIdentity({
+      paddleCenters: input.paddleCenters,
+      targetWristTracks: targetWristTracks(frames, input.targetWrists ?? null),
+      aspect,
+      torsoSpan: torso,
+    });
+  }
+  const paddleForeign = paddleIdentity !== null && paddleIdentity.verdict === "foreign";
+  if (paddleForeign) {
+    limitingFactors.push("paddle_track_identity_foreign");
+    gatingNotes.push({
+      signal: "paddle_speed_peak",
+      note: `paddle track measured FOREIGN by temporal identity (${paddleIdentity!.evidence.notes.join("; ")}) → paddle modality excluded`,
+    });
+  }
+  const paddleCentersAll = paddleForeign ? null : (input.paddleCenters ?? null);
   const paddleCenters = paddleCentersAll
     ? paddleCentersAll.filter((center) => {
         const wristDistance = nearestWristDistanceTo(
@@ -476,7 +505,7 @@ export function estimateContact(input: {
   };
 
   // ── Motion family 1: paddle speed peaks ─────────────────────────────────
-  const paddle = input.paddleSpeeds
+  const paddle = (paddleForeign ? null : input.paddleSpeeds)
     ?.filter(
       (sample) =>
         sample.timestampMs >= input.window.startMs && sample.timestampMs <= input.window.endMs,
@@ -1447,6 +1476,29 @@ function downsampleDistribution(
     });
   }
   return points;
+}
+
+/** Target wrist trajectories for identity assessment: one track per wrist
+ * landmark measured across the window's frames, plus the caller-provided
+ * targetWrists samples as their own track when present. */
+function targetWristTracks(
+  frames: ReturnType<typeof toLegacyPoseFrames>,
+  targetWrists: ReadonlyArray<{ timestampMs: number; x: number; y: number }> | null,
+): TimedPoint[][] {
+  const byName = new Map<string, TimedPoint[]>();
+  for (const frame of frames) {
+    for (const mark of frame.landmarks) {
+      if (!mark.name.endsWith("wrist") || mark.visibility < 0.2) continue;
+      const track = byName.get(mark.name) ?? [];
+      track.push({ timestampMs: frame.timestampMs, x: mark.x, y: mark.y });
+      byName.set(mark.name, track);
+    }
+  }
+  const tracks = [...byName.values()];
+  if (targetWrists && targetWrists.length > 0) {
+    tracks.push(targetWrists.map((wrist) => ({ ...wrist })));
+  }
+  return tracks;
 }
 
 function clamp01(value: number): number {

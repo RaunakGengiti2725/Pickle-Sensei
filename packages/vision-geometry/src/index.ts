@@ -42,6 +42,16 @@ export {
   type StrokeFamily,
 } from "./offlineStroke.js";
 export {
+  assessPaddleTrackIdentity,
+  IDENTITY,
+  PADDLE_TRACK_IDENTITY_VERSION,
+  type PaddleIdentityVerdict,
+  type PaddleTrackIdentityAssessment,
+  type PaddleTrackIdentityEvidence,
+  type PaddleTrackIdentityInput,
+  type TimedPoint,
+} from "./paddleTrackIdentity.js";
+export {
   classifyStroke,
   STROKE_HEURISTIC_VERSION,
   STROKE_TAXONOMY_V3,

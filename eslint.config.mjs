@@ -72,6 +72,7 @@ export default tseslint.config(
       "packages/swing-lab/src/experimentBundle.ts",
       "packages/swing-lab/src/oodNegativesMeasure.ts",
       "packages/swing-lab/src/ownershipBench.ts",
+      "packages/swing-lab/src/paddleIdentityEval.ts",
       "packages/swing-lab/src/paddleMergeSafetySweep.ts",
       "packages/swing-lab/src/detectSpanAudit.ts",
       "packages/swing-lab/src/ownershipGuardBench.ts",
