@@ -1,0 +1,1559 @@
+{
+  "reviewPack": "g08-f22-evidence review pack — Tier-C machine-proposed candidates for HUMAN capture-quality labeling of the label-dependent F22 bypass families",
+  "generatedBy": "packages/capture-envelope/src/g08MineEvidence.ts",
+  "date": "2026-08-29",
+  "commit": "104ea0f6383f5573ddc9393401700c7ecc163436",
+  "signalsVersion": "g08-bypass-resemblance-signals-v1",
+  "thresholdsVersion": "capture-envelope-thresholds-v0.3-provisional",
+  "tierStatement": "Every candidate here is a machine proposal (Tier-C). Nothing in this file is truth. Truth is exclusively human labels in g08-labels.json per g08-f22-evidence-labels-v1.",
+  "corpusScope": {
+    "clips": [
+      {
+        "clipId": "bundle:afn-sasebo-rally1",
+        "clip": "datasets/paddle-bench/bundles/afn-sasebo-rally1/clip.mp4",
+        "role": "bundle_clip"
+      },
+      {
+        "clipId": "bundle:wm-volley-02",
+        "clip": "datasets/paddle-bench/bundles/wm-volley-02/clip.mp4",
+        "role": "bundle_clip"
+      },
+      {
+        "clipId": "devpool:va-6N3Yc184a_c",
+        "clip": "datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4",
+        "role": "dev_pool"
+      },
+      {
+        "clipId": "devpool:yt-94KNxpNTyCw",
+        "clip": "datasets/pickleball/dev-pool/yt-94KNxpNTyCw.mp4",
+        "role": "dev_pool"
+      },
+      {
+        "clipId": "devpool:yt-o_NeuHjTEVE",
+        "clip": "datasets/pickleball/dev-pool/yt-o_NeuHjTEVE.mp4",
+        "role": "dev_pool"
+      },
+      {
+        "clipId": "ood:commons-ronpaul-crowd",
+        "clip": "datasets/ood/negatives/commons-ronpaul-crowd.mp4",
+        "role": "ood_negative"
+      },
+      {
+        "clipId": "ood:ia-HanfordS1957-titlecard",
+        "clip": "datasets/ood/negatives/ia-HanfordS1957-titlecard.mp4",
+        "role": "ood_negative"
+      },
+      {
+        "clipId": "ood:ia-ProfileJ26-interview",
+        "clip": "datasets/ood/negatives/ia-ProfileJ26-interview.mp4",
+        "role": "ood_negative"
+      },
+      {
+        "clipId": "ood:yt--wE27MoX2AM-tennis",
+        "clip": "datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4",
+        "role": "ood_negative"
+      },
+      {
+        "clipId": "ood:yt-2wV0Gs9r384-tabletennis",
+        "clip": "datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4",
+        "role": "ood_negative"
+      },
+      {
+        "clipId": "ood:yt-BCJGL5E9huM-tabletennis",
+        "clip": "datasets/ood/negatives/yt-BCJGL5E9huM-tabletennis.mp4",
+        "role": "ood_negative"
+      },
+      {
+        "clipId": "ood:yt-EckAW5V1wv0-racquetball",
+        "clip": "datasets/ood/negatives/yt-EckAW5V1wv0-racquetball.mp4",
+        "role": "ood_negative"
+      },
+      {
+        "clipId": "ood:yt-Iw55LinAF0U-badminton",
+        "clip": "datasets/ood/negatives/yt-Iw55LinAF0U-badminton.mp4",
+        "role": "ood_negative"
+      },
+      {
+        "clipId": "ood:yt-RpPe0h9cD5E-tennis",
+        "clip": "datasets/ood/negatives/yt-RpPe0h9cD5E-tennis.mp4",
+        "role": "ood_negative"
+      },
+      {
+        "clipId": "ood:yt-x8T5I4YAKNw-squash",
+        "clip": "datasets/ood/negatives/yt-x8T5I4YAKNw-squash.mp4",
+        "role": "ood_negative"
+      },
+      {
+        "clipId": "ood:yt-zWQs7kTKcEY-emptycourt",
+        "clip": "datasets/ood/negatives/yt-zWQs7kTKcEY-emptycourt.mp4",
+        "role": "ood_negative"
+      }
+    ],
+    "heldOutExcluded": [
+      "wm-dink-01",
+      "afn-vic-rally1"
+    ],
+    "freshCandidatesExcluded": "label-blind holdout candidates; never opened here",
+    "oodDerivedExcluded": "synthetic derivations, not natural examples",
+    "corpusRecordingsExcluded": "media absent on this machine (gitignored)"
+  },
+  "windowing": {
+    "windowMs": 4000,
+    "stepMs": 2000,
+    "note": "clips shorter than one window measured whole"
+  },
+  "ranking": {
+    "topKPerFamily": 6,
+    "maxPerClipPerFamily": 2,
+    "perFamilySignal": {
+      "blur_masked_by_noise": "ascending grainSharpnessRatio",
+      "bimodal_exposure": "descending bimodalClipScore",
+      "strobing_exposure": "descending temporalLumaStd",
+      "upscaled_content": "ascending hfEnergyRatio (display width >= 1280 only)",
+      "tiny_subject": "ascending motionHeightFraction (motionCoverage > 0.001)",
+      "camera_shake": "descending globalShakeScore"
+    }
+  },
+  "windowsMeasured": 286,
+  "candidates": [
+    {
+      "candidateId": "g08-blur_masked_by_noise-01",
+      "family": "blur_masked_by_noise",
+      "rank": 1,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "devpool:va-6N3Yc184a_c",
+      "clip": "datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4",
+      "sessionKey": "devpool-va-6N3Yc184a_c",
+      "role": "dev_pool",
+      "windowMs": {
+        "startMs": 118000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.05451632065834847,
+      "signals": {
+        "lowClipFraction": 0.30038736979166664,
+        "highClipFraction": 0.0029958767361111106,
+        "bimodalClipScore": 0.0029958767361111106,
+        "temporalLumaStd": 7.292617149461648,
+        "grainSharpnessRatio": 0.05451632065834847,
+        "hfEnergyRatio": 0.43864746613444866,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.5542881944444444,
+        "contrastNormalizedMotion": 4.517835389512421,
+        "globalShakeScore": 2.5041828208500534,
+        "meanAbsFrameDiff": 38.540412037037036,
+        "meanSpatialGradient": 8.53072516243148,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "DEGRADED",
+      "envelopeFlaggedDimensions": [
+        "camera_motion:DEGRADED"
+      ],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-01-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-01-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-01-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 118.000 -t 4.000 datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4"
+    },
+    {
+      "candidateId": "g08-blur_masked_by_noise-02",
+      "family": "blur_masked_by_noise",
+      "rank": 2,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:yt-2wV0Gs9r384-tabletennis",
+      "clip": "datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4",
+      "sessionKey": "ood-yt-2wV0Gs9r384-tabletennis",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 24000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.05642675295949297,
+      "signals": {
+        "lowClipFraction": 0.0000010850694444444444,
+        "highClipFraction": 0.04225151909722223,
+        "bimodalClipScore": 0.0000010850694444444444,
+        "temporalLumaStd": 3.008987941952001,
+        "grainSharpnessRatio": 0.05642675295949297,
+        "hfEnergyRatio": 0.3589782108157158,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.5159027777777778,
+        "contrastNormalizedMotion": 2.8178017004696185,
+        "globalShakeScore": 1.4537117244992221,
+        "meanAbsFrameDiff": 30.40035416666667,
+        "meanSpatialGradient": 10.788677628237682,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-02-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-02-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-02-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 24.000 -t 4.000 datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4"
+    },
+    {
+      "candidateId": "g08-blur_masked_by_noise-03",
+      "family": "blur_masked_by_noise",
+      "rank": 3,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "devpool:va-6N3Yc184a_c",
+      "clip": "datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4",
+      "sessionKey": "devpool-va-6N3Yc184a_c",
+      "role": "dev_pool",
+      "windowMs": {
+        "startMs": 114000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.05789253153822431,
+      "signals": {
+        "lowClipFraction": 0.221435546875,
+        "highClipFraction": 0.007979600694444445,
+        "bimodalClipScore": 0.007979600694444445,
+        "temporalLumaStd": 10.34355650949609,
+        "grainSharpnessRatio": 0.05789253153822431,
+        "hfEnergyRatio": 0.5493446144384829,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.31645833333333334,
+        "contrastNormalizedMotion": 2.9616957249167393,
+        "globalShakeScore": 0.9372532929476098,
+        "meanAbsFrameDiff": 27.367471064814815,
+        "meanSpatialGradient": 9.240473568764118,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-03-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-03-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-03-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 114.000 -t 4.000 datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4"
+    },
+    {
+      "candidateId": "g08-blur_masked_by_noise-04",
+      "family": "blur_masked_by_noise",
+      "rank": 4,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:yt-2wV0Gs9r384-tabletennis",
+      "clip": "datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4",
+      "sessionKey": "ood-yt-2wV0Gs9r384-tabletennis",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 14000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.058196463006194285,
+      "signals": {
+        "lowClipFraction": 0,
+        "highClipFraction": 0.035619574652777784,
+        "bimodalClipScore": 0,
+        "temporalLumaStd": 3.799793079977534,
+        "grainSharpnessRatio": 0.058196463006194285,
+        "hfEnergyRatio": 0.37849607726835877,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.43828125,
+        "contrastNormalizedMotion": 2.279085204592826,
+        "globalShakeScore": 0.9988803123254496,
+        "meanAbsFrameDiff": 25.95804398148148,
+        "meanSpatialGradient": 11.389676844538624,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-04-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-04-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-04-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 14.000 -t 4.000 datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4"
+    },
+    {
+      "candidateId": "g08-blur_masked_by_noise-05",
+      "family": "blur_masked_by_noise",
+      "rank": 5,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:commons-ronpaul-crowd",
+      "clip": "datasets/ood/negatives/commons-ronpaul-crowd.mp4",
+      "sessionKey": "ood-commons-ronpaul-crowd",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 20000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.05845759731525963,
+      "signals": {
+        "lowClipFraction": 0.12819905598958334,
+        "highClipFraction": 0.04271077473958333,
+        "bimodalClipScore": 0.04271077473958333,
+        "temporalLumaStd": 6.087684164858807,
+        "grainSharpnessRatio": 0.05845759731525963,
+        "hfEnergyRatio": null,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.263203125,
+        "contrastNormalizedMotion": 3.324085538763351,
+        "globalShakeScore": 0.8749097015698225,
+        "meanAbsFrameDiff": 17.724030381944445,
+        "meanSpatialGradient": 5.332001892026599,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "DEGRADED",
+      "envelopeFlaggedDimensions": [
+        "resolution:DEGRADED"
+      ],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-05-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-05-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-05-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 20.000 -t 4.000 datasets/ood/negatives/commons-ronpaul-crowd.mp4"
+    },
+    {
+      "candidateId": "g08-blur_masked_by_noise-06",
+      "family": "blur_masked_by_noise",
+      "rank": 6,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:commons-ronpaul-crowd",
+      "clip": "datasets/ood/negatives/commons-ronpaul-crowd.mp4",
+      "sessionKey": "ood-commons-ronpaul-crowd",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 22000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.06665132761561561,
+      "signals": {
+        "lowClipFraction": 0.17741943359375,
+        "highClipFraction": 0.03224772135416667,
+        "bimodalClipScore": 0.03224772135416667,
+        "temporalLumaStd": 4.828784517690938,
+        "grainSharpnessRatio": 0.06665132761561561,
+        "hfEnergyRatio": null,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.34391927083333335,
+        "contrastNormalizedMotion": 4.036890423398918,
+        "globalShakeScore": 1.3883644108494222,
+        "meanAbsFrameDiff": 20.065172743055555,
+        "meanSpatialGradient": 4.970452659986098,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "DEGRADED",
+      "envelopeFlaggedDimensions": [
+        "resolution:DEGRADED"
+      ],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-06-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-06-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-blur_masked_by_noise-06-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 22.000 -t 4.000 datasets/ood/negatives/commons-ronpaul-crowd.mp4"
+    },
+    {
+      "candidateId": "g08-bimodal_exposure-01",
+      "family": "bimodal_exposure",
+      "rank": 1,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:commons-ronpaul-crowd",
+      "clip": "datasets/ood/negatives/commons-ronpaul-crowd.mp4",
+      "sessionKey": "ood-commons-ronpaul-crowd",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 18000,
+        "durationMs": 4000
+      },
+      "rankingScore": 0.07070068359375,
+      "signals": {
+        "lowClipFraction": 0.10149332682291667,
+        "highClipFraction": 0.07070068359375,
+        "bimodalClipScore": 0.07070068359375,
+        "temporalLumaStd": 3.3403150790802933,
+        "grainSharpnessRatio": 0.07488817964075004,
+        "hfEnergyRatio": null,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.198125,
+        "contrastNormalizedMotion": 3.311261022090104,
+        "globalShakeScore": 0.6560435900016018,
+        "meanAbsFrameDiff": 14.40294010416667,
+        "meanSpatialGradient": 4.34968430700017,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "DEGRADED",
+      "envelopeFlaggedDimensions": [
+        "resolution:DEGRADED"
+      ],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-01-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-01-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-01-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 18.000 -t 4.000 datasets/ood/negatives/commons-ronpaul-crowd.mp4"
+    },
+    {
+      "candidateId": "g08-bimodal_exposure-02",
+      "family": "bimodal_exposure",
+      "rank": 2,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "devpool:va-6N3Yc184a_c",
+      "clip": "datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4",
+      "sessionKey": "devpool-va-6N3Yc184a_c",
+      "role": "dev_pool",
+      "windowMs": {
+        "startMs": 10000,
+        "durationMs": 4000
+      },
+      "rankingScore": 0.06442599826388888,
+      "signals": {
+        "lowClipFraction": 0.07405381944444446,
+        "highClipFraction": 0.06442599826388888,
+        "bimodalClipScore": 0.06442599826388888,
+        "temporalLumaStd": 1.233647151478203,
+        "grainSharpnessRatio": 0.3543656536120687,
+        "hfEnergyRatio": 0.4428057367622643,
+        "motionHeightFraction": 0.9222222222222223,
+        "motionWidthFraction": 0.965625,
+        "motionCoverage": 0.11958333333333333,
+        "contrastNormalizedMotion": 1.2061377623081189,
+        "globalShakeScore": 0.14423397407601254,
+        "meanAbsFrameDiff": 11.391431712962966,
+        "meanSpatialGradient": 9.444552744260172,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-02-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-02-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-02-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 10.000 -t 4.000 datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4"
+    },
+    {
+      "candidateId": "g08-bimodal_exposure-03",
+      "family": "bimodal_exposure",
+      "rank": 3,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:commons-ronpaul-crowd",
+      "clip": "datasets/ood/negatives/commons-ronpaul-crowd.mp4",
+      "sessionKey": "ood-commons-ronpaul-crowd",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 10000,
+        "durationMs": 4000
+      },
+      "rankingScore": 0.06262939453125,
+      "signals": {
+        "lowClipFraction": 0.2907421875,
+        "highClipFraction": 0.06262939453125,
+        "bimodalClipScore": 0.06262939453125,
+        "temporalLumaStd": 12.881565264438336,
+        "grainSharpnessRatio": 0.06812774647245153,
+        "hfEnergyRatio": null,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.273203125,
+        "contrastNormalizedMotion": 4.0455692661105935,
+        "globalShakeScore": 1.1052621659053707,
+        "meanAbsFrameDiff": 17.978030381944443,
+        "meanSpatialGradient": 4.443881490930077,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "DEGRADED",
+      "envelopeFlaggedDimensions": [
+        "resolution:DEGRADED"
+      ],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-03-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-03-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-03-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 10.000 -t 4.000 datasets/ood/negatives/commons-ronpaul-crowd.mp4"
+    },
+    {
+      "candidateId": "g08-bimodal_exposure-04",
+      "family": "bimodal_exposure",
+      "rank": 4,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "devpool:va-6N3Yc184a_c",
+      "clip": "datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4",
+      "sessionKey": "devpool-va-6N3Yc184a_c",
+      "role": "dev_pool",
+      "windowMs": {
+        "startMs": 8000,
+        "durationMs": 4000
+      },
+      "rankingScore": 0.05904079861111111,
+      "signals": {
+        "lowClipFraction": 0.09455078125000002,
+        "highClipFraction": 0.05904079861111111,
+        "bimodalClipScore": 0.05904079861111111,
+        "temporalLumaStd": 1.8162531554263641,
+        "grainSharpnessRatio": 0.3027964131815142,
+        "hfEnergyRatio": 0.4283233498977999,
+        "motionHeightFraction": 0.9222222222222223,
+        "motionWidthFraction": 0.975,
+        "motionCoverage": 0.14817708333333332,
+        "contrastNormalizedMotion": 1.7075747632858813,
+        "globalShakeScore": 0.25302344799730897,
+        "meanAbsFrameDiff": 15.431297453703703,
+        "meanSpatialGradient": 9.036967391113992,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-04-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-04-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-04-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 8.000 -t 4.000 datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4"
+    },
+    {
+      "candidateId": "g08-bimodal_exposure-05",
+      "family": "bimodal_exposure",
+      "rank": 5,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "bundle:wm-volley-02",
+      "clip": "datasets/paddle-bench/bundles/wm-volley-02/clip.mp4",
+      "sessionKey": "bundle-wm-volley-02",
+      "role": "bundle_clip",
+      "windowMs": {
+        "startMs": 4000,
+        "durationMs": 4000
+      },
+      "rankingScore": 0.04248780708092485,
+      "signals": {
+        "lowClipFraction": 0.04248780708092485,
+        "highClipFraction": 0.052181177745664734,
+        "bimodalClipScore": 0.04248780708092485,
+        "temporalLumaStd": 1.8128445381045226,
+        "grainSharpnessRatio": 0.7144552431282509,
+        "hfEnergyRatio": null,
+        "motionHeightFraction": 0.8959537572254336,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.10565390173410405,
+        "contrastNormalizedMotion": 0.7928303441330458,
+        "globalShakeScore": 0.08376561927084872,
+        "meanAbsFrameDiff": 8.245720134874759,
+        "meanSpatialGradient": 10.400358911453363,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-05-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-05-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-05-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 4.000 -t 4.000 datasets/paddle-bench/bundles/wm-volley-02/clip.mp4"
+    },
+    {
+      "candidateId": "g08-bimodal_exposure-06",
+      "family": "bimodal_exposure",
+      "rank": 6,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "bundle:wm-volley-02",
+      "clip": "datasets/paddle-bench/bundles/wm-volley-02/clip.mp4",
+      "sessionKey": "bundle-wm-volley-02",
+      "role": "bundle_clip",
+      "windowMs": {
+        "startMs": 0,
+        "durationMs": 4000
+      },
+      "rankingScore": 0.041090701770231206,
+      "signals": {
+        "lowClipFraction": 0.041090701770231206,
+        "highClipFraction": 0.05188820899566474,
+        "bimodalClipScore": 0.041090701770231206,
+        "temporalLumaStd": 0.4051590072492583,
+        "grainSharpnessRatio": 0.6874429311356034,
+        "hfEnergyRatio": null,
+        "motionHeightFraction": 0.8208092485549133,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.09884393063583816,
+        "contrastNormalizedMotion": 0.6875899958157733,
+        "globalShakeScore": 0.06796409785231054,
+        "meanAbsFrameDiff": 7.342085139691715,
+        "meanSpatialGradient": 10.67799878469856,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-06-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-06-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-bimodal_exposure-06-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 0.000 -t 4.000 datasets/paddle-bench/bundles/wm-volley-02/clip.mp4"
+    },
+    {
+      "candidateId": "g08-strobing_exposure-01",
+      "family": "strobing_exposure",
+      "rank": 1,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:ia-HanfordS1957-titlecard",
+      "clip": "datasets/ood/negatives/ia-HanfordS1957-titlecard.mp4",
+      "sessionKey": "ood-ia-HanfordS1957-titlecard",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 10000,
+        "durationMs": 4000
+      },
+      "rankingScore": 45.61430902806237,
+      "signals": {
+        "lowClipFraction": 0.05109293619791667,
+        "highClipFraction": 0.014577636718750004,
+        "bimodalClipScore": 0.014577636718750004,
+        "temporalLumaStd": 45.61430902806237,
+        "grainSharpnessRatio": 0.6684753395679134,
+        "hfEnergyRatio": null,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 0.98125,
+        "motionCoverage": 0.0607421875,
+        "contrastNormalizedMotion": 1.5116060402580427,
+        "globalShakeScore": 0.09181825752348659,
+        "meanAbsFrameDiff": 11.854175347222226,
+        "meanSpatialGradient": 7.842106363374036,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "UNSUPPORTED",
+      "envelopeFlaggedDimensions": [
+        "resolution:UNSUPPORTED"
+      ],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-01-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-01-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-01-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 10.000 -t 4.000 datasets/ood/negatives/ia-HanfordS1957-titlecard.mp4"
+    },
+    {
+      "candidateId": "g08-strobing_exposure-02",
+      "family": "strobing_exposure",
+      "rank": 2,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:ia-HanfordS1957-titlecard",
+      "clip": "datasets/ood/negatives/ia-HanfordS1957-titlecard.mp4",
+      "sessionKey": "ood-ia-HanfordS1957-titlecard",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 8000,
+        "durationMs": 4000
+      },
+      "rankingScore": 28.946808946946714,
+      "signals": {
+        "lowClipFraction": 0.016683756510416668,
+        "highClipFraction": 0.031950683593749994,
+        "bimodalClipScore": 0.016683756510416668,
+        "temporalLumaStd": 28.946808946946714,
+        "grainSharpnessRatio": 0.7198344133143812,
+        "hfEnergyRatio": null,
+        "motionHeightFraction": 0.9583333333333334,
+        "motionWidthFraction": 0.9625,
+        "motionCoverage": 0.0350390625,
+        "contrastNormalizedMotion": 1.0435691370208524,
+        "globalShakeScore": 0.036565684215144716,
+        "meanAbsFrameDiff": 10.628223090277777,
+        "meanSpatialGradient": 10.18449349759316,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "UNSUPPORTED",
+      "envelopeFlaggedDimensions": [
+        "resolution:UNSUPPORTED"
+      ],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-02-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-02-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-02-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 8.000 -t 4.000 datasets/ood/negatives/ia-HanfordS1957-titlecard.mp4"
+    },
+    {
+      "candidateId": "g08-strobing_exposure-03",
+      "family": "strobing_exposure",
+      "rank": 3,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "devpool:va-6N3Yc184a_c",
+      "clip": "datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4",
+      "sessionKey": "devpool-va-6N3Yc184a_c",
+      "role": "dev_pool",
+      "windowMs": {
+        "startMs": 26000,
+        "durationMs": 4000
+      },
+      "rankingScore": 27.861463587413823,
+      "signals": {
+        "lowClipFraction": 0.2862358940972222,
+        "highClipFraction": 0.005345052083333334,
+        "bimodalClipScore": 0.005345052083333334,
+        "temporalLumaStd": 27.861463587413823,
+        "grainSharpnessRatio": 0.10135750289941121,
+        "hfEnergyRatio": 0.598007134205595,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.23715277777777777,
+        "contrastNormalizedMotion": 2.272573171213525,
+        "globalShakeScore": 0.5389470402565408,
+        "meanAbsFrameDiff": 18.05758101851852,
+        "meanSpatialGradient": 7.945874415509359,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-03-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-03-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-03-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 26.000 -t 4.000 datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4"
+    },
+    {
+      "candidateId": "g08-strobing_exposure-04",
+      "family": "strobing_exposure",
+      "rank": 4,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "devpool:va-6N3Yc184a_c",
+      "clip": "datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4",
+      "sessionKey": "devpool-va-6N3Yc184a_c",
+      "role": "dev_pool",
+      "windowMs": {
+        "startMs": 164000,
+        "durationMs": 4000
+      },
+      "rankingScore": 26.57794426699777,
+      "signals": {
+        "lowClipFraction": 0.2608734809027778,
+        "highClipFraction": 0.022190755208333336,
+        "bimodalClipScore": 0.022190755208333336,
+        "temporalLumaStd": 26.57794426699777,
+        "grainSharpnessRatio": 0.18866792202723914,
+        "hfEnergyRatio": 0.40942240123981904,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 0.99375,
+        "motionCoverage": 0.31072916666666667,
+        "contrastNormalizedMotion": 4.081166907217552,
+        "globalShakeScore": 1.2681375921072873,
+        "meanAbsFrameDiff": 27.17404050925926,
+        "meanSpatialGradient": 6.658399699654996,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-04-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-04-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-04-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 164.000 -t 4.000 datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4"
+    },
+    {
+      "candidateId": "g08-strobing_exposure-05",
+      "family": "strobing_exposure",
+      "rank": 5,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:commons-ronpaul-crowd",
+      "clip": "datasets/ood/negatives/commons-ronpaul-crowd.mp4",
+      "sessionKey": "ood-commons-ronpaul-crowd",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 8000,
+        "durationMs": 4000
+      },
+      "rankingScore": 17.514879188437277,
+      "signals": {
+        "lowClipFraction": 0.33875,
+        "highClipFraction": 0.054491373697916665,
+        "bimodalClipScore": 0.054491373697916665,
+        "temporalLumaStd": 17.514879188437277,
+        "grainSharpnessRatio": 0.22499616433203867,
+        "hfEnergyRatio": null,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.24138020833333335,
+        "contrastNormalizedMotion": 5.972824384700974,
+        "globalShakeScore": 1.4417215943175348,
+        "meanAbsFrameDiff": 15.164864583333333,
+        "meanSpatialGradient": 2.5389771415642506,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "DEGRADED",
+      "envelopeFlaggedDimensions": [
+        "resolution:DEGRADED",
+        "motion_blur:DEGRADED"
+      ],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-05-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-05-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-05-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 8.000 -t 4.000 datasets/ood/negatives/commons-ronpaul-crowd.mp4"
+    },
+    {
+      "candidateId": "g08-strobing_exposure-06",
+      "family": "strobing_exposure",
+      "rank": 6,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:commons-ronpaul-crowd",
+      "clip": "datasets/ood/negatives/commons-ronpaul-crowd.mp4",
+      "sessionKey": "ood-commons-ronpaul-crowd",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 2000,
+        "durationMs": 4000
+      },
+      "rankingScore": 16.466415756284515,
+      "signals": {
+        "lowClipFraction": 0.3627986653645834,
+        "highClipFraction": 0.03186442057291666,
+        "bimodalClipScore": 0.03186442057291666,
+        "temporalLumaStd": 16.466415756284515,
+        "grainSharpnessRatio": 0.18344398605432838,
+        "hfEnergyRatio": null,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.3817447916666667,
+        "contrastNormalizedMotion": 12.390146262048955,
+        "globalShakeScore": 4.7298738035254075,
+        "meanAbsFrameDiff": 25.271858506944447,
+        "meanSpatialGradient": 2.039673945121391,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "UNSUPPORTED",
+      "envelopeFlaggedDimensions": [
+        "resolution:DEGRADED",
+        "motion_blur:UNSUPPORTED"
+      ],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-06-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-06-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-strobing_exposure-06-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 2.000 -t 4.000 datasets/ood/negatives/commons-ronpaul-crowd.mp4"
+    },
+    {
+      "candidateId": "g08-upscaled_content-01",
+      "family": "upscaled_content",
+      "rank": 1,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:yt-2wV0Gs9r384-tabletennis",
+      "clip": "datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4",
+      "sessionKey": "ood-yt-2wV0Gs9r384-tabletennis",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 26000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.2638615946436621,
+      "signals": {
+        "lowClipFraction": 0.000003255208333333333,
+        "highClipFraction": 0.041278211805555555,
+        "bimodalClipScore": 0.000003255208333333333,
+        "temporalLumaStd": 5.307561808982599,
+        "grainSharpnessRatio": 0.06644515348435566,
+        "hfEnergyRatio": 0.2638615946436621,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.6132638888888889,
+        "contrastNormalizedMotion": 4.373239374597316,
+        "globalShakeScore": 2.6819497859075625,
+        "meanAbsFrameDiff": 40.23132175925927,
+        "meanSpatialGradient": 9.199432803278402,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "DEGRADED",
+      "envelopeFlaggedDimensions": [
+        "camera_motion:DEGRADED"
+      ],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-01-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-01-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-01-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 26.000 -t 4.000 datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4"
+    },
+    {
+      "candidateId": "g08-upscaled_content-02",
+      "family": "upscaled_content",
+      "rank": 2,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "devpool:va-6N3Yc184a_c",
+      "clip": "datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4",
+      "sessionKey": "devpool-va-6N3Yc184a_c",
+      "role": "dev_pool",
+      "windowMs": {
+        "startMs": 46000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.3127764492485488,
+      "signals": {
+        "lowClipFraction": 0.16737630208333334,
+        "highClipFraction": 0.004204644097222222,
+        "bimodalClipScore": 0.004204644097222222,
+        "temporalLumaStd": 22.384228776169074,
+        "grainSharpnessRatio": 0.22254431176238818,
+        "hfEnergyRatio": 0.3127764492485488,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 0.984375,
+        "motionCoverage": 0.11427083333333334,
+        "contrastNormalizedMotion": 1.9793969187146092,
+        "globalShakeScore": 0.22618733539895067,
+        "meanAbsFrameDiff": 15.334351851851855,
+        "meanSpatialGradient": 7.746981773524106,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-02-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-02-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-02-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 46.000 -t 4.000 datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4"
+    },
+    {
+      "candidateId": "g08-upscaled_content-03",
+      "family": "upscaled_content",
+      "rank": 3,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "devpool:va-6N3Yc184a_c",
+      "clip": "datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4",
+      "sessionKey": "devpool-va-6N3Yc184a_c",
+      "role": "dev_pool",
+      "windowMs": {
+        "startMs": 64000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.3162495800323688,
+      "signals": {
+        "lowClipFraction": 0.04753363715277778,
+        "highClipFraction": 0.004627821180555556,
+        "bimodalClipScore": 0.004627821180555556,
+        "temporalLumaStd": 0.5313313257127716,
+        "grainSharpnessRatio": 0.237059539163548,
+        "hfEnergyRatio": 0.3162495800323688,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 0.990625,
+        "motionCoverage": 0.0740625,
+        "contrastNormalizedMotion": 0.6993470819616336,
+        "globalShakeScore": 0.05179539325778349,
+        "meanAbsFrameDiff": 4.974128472222222,
+        "meanSpatialGradient": 7.112531960911369,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-03-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-03-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-03-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 64.000 -t 4.000 datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4"
+    },
+    {
+      "candidateId": "g08-upscaled_content-04",
+      "family": "upscaled_content",
+      "rank": 4,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:yt-2wV0Gs9r384-tabletennis",
+      "clip": "datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4",
+      "sessionKey": "ood-yt-2wV0Gs9r384-tabletennis",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 16000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.35258561453297277,
+      "signals": {
+        "lowClipFraction": 0,
+        "highClipFraction": 0.034007161458333324,
+        "bimodalClipScore": 0,
+        "temporalLumaStd": 2.9383664042522963,
+        "grainSharpnessRatio": 0.06304111372284128,
+        "hfEnergyRatio": 0.35258561453297277,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.4990277777777778,
+        "contrastNormalizedMotion": 2.691960660978814,
+        "globalShakeScore": 1.3433631465134552,
+        "meanAbsFrameDiff": 29.89363773148148,
+        "meanSpatialGradient": 11.10478253445649,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-04-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-04-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-04-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 16.000 -t 4.000 datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4"
+    },
+    {
+      "candidateId": "g08-upscaled_content-05",
+      "family": "upscaled_content",
+      "rank": 5,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:yt-x8T5I4YAKNw-squash",
+      "clip": "datasets/ood/negatives/yt-x8T5I4YAKNw-squash.mp4",
+      "sessionKey": "ood-yt-x8T5I4YAKNw-squash",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 14000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.5010105432771599,
+      "signals": {
+        "lowClipFraction": 0.012248263888888888,
+        "highClipFraction": 0,
+        "bimodalClipScore": 0,
+        "temporalLumaStd": 0.5544455289681438,
+        "grainSharpnessRatio": 0.8225537023115402,
+        "hfEnergyRatio": 0.5010105432771599,
+        "motionHeightFraction": 0.65,
+        "motionWidthFraction": 0.86875,
+        "motionCoverage": 0.051875,
+        "contrastNormalizedMotion": 0.9556522482965664,
+        "globalShakeScore": 0.04957446038038438,
+        "meanAbsFrameDiff": 3.7915717592592597,
+        "meanSpatialGradient": 3.9675224602020984,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-05-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-05-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-05-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 14.000 -t 4.000 datasets/ood/negatives/yt-x8T5I4YAKNw-squash.mp4"
+    },
+    {
+      "candidateId": "g08-upscaled_content-06",
+      "family": "upscaled_content",
+      "rank": 6,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:yt-x8T5I4YAKNw-squash",
+      "clip": "datasets/ood/negatives/yt-x8T5I4YAKNw-squash.mp4",
+      "sessionKey": "ood-yt-x8T5I4YAKNw-squash",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 12000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.5058851172554426,
+      "signals": {
+        "lowClipFraction": 0.011490885416666667,
+        "highClipFraction": 0,
+        "bimodalClipScore": 0,
+        "temporalLumaStd": 0.3942060539630895,
+        "grainSharpnessRatio": 0.819938241038029,
+        "hfEnergyRatio": 0.5058851172554426,
+        "motionHeightFraction": 0.6388888888888888,
+        "motionWidthFraction": 0.80625,
+        "motionCoverage": 0.05012152777777778,
+        "contrastNormalizedMotion": 0.9136878355714149,
+        "globalShakeScore": 0.04579543023081033,
+        "meanAbsFrameDiff": 3.617304398148148,
+        "meanSpatialGradient": 3.959015603929878,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-06-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-06-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-upscaled_content-06-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 12.000 -t 4.000 datasets/ood/negatives/yt-x8T5I4YAKNw-squash.mp4"
+    },
+    {
+      "candidateId": "g08-tiny_subject-01",
+      "family": "tiny_subject",
+      "rank": 1,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "devpool:yt-94KNxpNTyCw",
+      "clip": "datasets/pickleball/dev-pool/yt-94KNxpNTyCw.mp4",
+      "sessionKey": "devpool-yt-94KNxpNTyCw",
+      "role": "dev_pool",
+      "windowMs": {
+        "startMs": 42000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.24444444444444444,
+      "signals": {
+        "lowClipFraction": 0.009673394097222222,
+        "highClipFraction": 0.006013454861111112,
+        "bimodalClipScore": 0.006013454861111112,
+        "temporalLumaStd": 0.5061839620540404,
+        "grainSharpnessRatio": 0.9265988861658909,
+        "hfEnergyRatio": 0.753301122261056,
+        "motionHeightFraction": 0.24444444444444444,
+        "motionWidthFraction": 0.553125,
+        "motionCoverage": 0.0033333333333333335,
+        "contrastNormalizedMotion": 0.15393403847228543,
+        "globalShakeScore": 0.0005131134615742848,
+        "meanAbsFrameDiff": 1.0540150462962965,
+        "meanSpatialGradient": 6.847186345247892,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-01-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-01-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-01-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 42.000 -t 4.000 datasets/pickleball/dev-pool/yt-94KNxpNTyCw.mp4"
+    },
+    {
+      "candidateId": "g08-tiny_subject-02",
+      "family": "tiny_subject",
+      "rank": 2,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "devpool:yt-94KNxpNTyCw",
+      "clip": "datasets/pickleball/dev-pool/yt-94KNxpNTyCw.mp4",
+      "sessionKey": "devpool-yt-94KNxpNTyCw",
+      "role": "dev_pool",
+      "windowMs": {
+        "startMs": 20000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.2722222222222222,
+      "signals": {
+        "lowClipFraction": 0.009852430555555555,
+        "highClipFraction": 0.0058246527777777776,
+        "bimodalClipScore": 0.0058246527777777776,
+        "temporalLumaStd": 0.13390973105655735,
+        "grainSharpnessRatio": 0.8681565487730771,
+        "hfEnergyRatio": 0.7436132983506104,
+        "motionHeightFraction": 0.2722222222222222,
+        "motionWidthFraction": 0.590625,
+        "motionCoverage": 0.01644097222222222,
+        "contrastNormalizedMotion": 0.2088870632745374,
+        "globalShakeScore": 0.003434306404878245,
+        "meanAbsFrameDiff": 1.461824074074074,
+        "meanSpatialGradient": 6.99815513300993,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-02-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-02-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-02-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 20.000 -t 4.000 datasets/pickleball/dev-pool/yt-94KNxpNTyCw.mp4"
+    },
+    {
+      "candidateId": "g08-tiny_subject-03",
+      "family": "tiny_subject",
+      "rank": 3,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:yt-EckAW5V1wv0-racquetball",
+      "clip": "datasets/ood/negatives/yt-EckAW5V1wv0-racquetball.mp4",
+      "sessionKey": "ood-yt-EckAW5V1wv0-racquetball",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 6000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.35555555555555557,
+      "signals": {
+        "lowClipFraction": 0.004742838541666667,
+        "highClipFraction": 0.00005208333333333334,
+        "bimodalClipScore": 0.00005208333333333334,
+        "temporalLumaStd": 0.6345929113312645,
+        "grainSharpnessRatio": 0.47552867616625943,
+        "hfEnergyRatio": 0.5716700709472052,
+        "motionHeightFraction": 0.35555555555555557,
+        "motionWidthFraction": 0.31875,
+        "motionCoverage": 0.01704861111111111,
+        "contrastNormalizedMotion": 0.8130094796250824,
+        "globalShakeScore": 0.013860682447774842,
+        "meanAbsFrameDiff": 1.5655497685185187,
+        "meanSpatialGradient": 1.925623018861316,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-03-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-03-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-03-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 6.000 -t 4.000 datasets/ood/negatives/yt-EckAW5V1wv0-racquetball.mp4"
+    },
+    {
+      "candidateId": "g08-tiny_subject-04",
+      "family": "tiny_subject",
+      "rank": 4,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:yt-EckAW5V1wv0-racquetball",
+      "clip": "datasets/ood/negatives/yt-EckAW5V1wv0-racquetball.mp4",
+      "sessionKey": "ood-yt-EckAW5V1wv0-racquetball",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 4000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.36666666666666664,
+      "signals": {
+        "lowClipFraction": 0.0073893229166666664,
+        "highClipFraction": 0.00005208333333333334,
+        "bimodalClipScore": 0.00005208333333333334,
+        "temporalLumaStd": 0.9901219309657041,
+        "grainSharpnessRatio": 0.4962974591455235,
+        "hfEnergyRatio": 0.5743338854962569,
+        "motionHeightFraction": 0.36666666666666664,
+        "motionWidthFraction": 0.2875,
+        "motionCoverage": 0.02109375,
+        "contrastNormalizedMotion": 1.111204309476994,
+        "globalShakeScore": 0.02343946590303034,
+        "meanAbsFrameDiff": 2.1294375,
+        "meanSpatialGradient": 1.916333010805415,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-04-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-04-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-04-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 4.000 -t 4.000 datasets/ood/negatives/yt-EckAW5V1wv0-racquetball.mp4"
+    },
+    {
+      "candidateId": "g08-tiny_subject-05",
+      "family": "tiny_subject",
+      "rank": 5,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:yt-Iw55LinAF0U-badminton",
+      "clip": "datasets/ood/negatives/yt-Iw55LinAF0U-badminton.mp4",
+      "sessionKey": "ood-yt-Iw55LinAF0U-badminton",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 10000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.48333333333333334,
+      "signals": {
+        "lowClipFraction": 0.03833441840277778,
+        "highClipFraction": 0.015371093749999998,
+        "bimodalClipScore": 0.015371093749999998,
+        "temporalLumaStd": 0.07152730594713921,
+        "grainSharpnessRatio": 0.9302410529489554,
+        "hfEnergyRatio": 0.8254311918369828,
+        "motionHeightFraction": 0.48333333333333334,
+        "motionWidthFraction": 0.6375,
+        "motionCoverage": 0.010763888888888889,
+        "contrastNormalizedMotion": 0.10286868804876101,
+        "globalShakeScore": 0.0011072671283026358,
+        "meanAbsFrameDiff": 0.8453900462962962,
+        "meanSpatialGradient": 8.21814744925658,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-05-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-05-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-05-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 10.000 -t 4.000 datasets/ood/negatives/yt-Iw55LinAF0U-badminton.mp4"
+    },
+    {
+      "candidateId": "g08-tiny_subject-06",
+      "family": "tiny_subject",
+      "rank": 6,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:yt-Iw55LinAF0U-badminton",
+      "clip": "datasets/ood/negatives/yt-Iw55LinAF0U-badminton.mp4",
+      "sessionKey": "ood-yt-Iw55LinAF0U-badminton",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 12000,
+        "durationMs": 4000
+      },
+      "rankingScore": -0.49444444444444446,
+      "signals": {
+        "lowClipFraction": 0.03885199652777777,
+        "highClipFraction": 0.015394965277777778,
+        "bimodalClipScore": 0.015394965277777778,
+        "temporalLumaStd": 0.1638702134197786,
+        "grainSharpnessRatio": 0.922870576703983,
+        "hfEnergyRatio": 0.8210670799270968,
+        "motionHeightFraction": 0.49444444444444446,
+        "motionWidthFraction": 0.634375,
+        "motionCoverage": 0.007135416666666667,
+        "contrastNormalizedMotion": 0.1186858407666378,
+        "globalShakeScore": 0.0008468729263036134,
+        "meanAbsFrameDiff": 0.9769652777777778,
+        "meanSpatialGradient": 8.231523419029438,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-06-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-06-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-tiny_subject-06-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 12.000 -t 4.000 datasets/ood/negatives/yt-Iw55LinAF0U-badminton.mp4"
+    },
+    {
+      "candidateId": "g08-camera_shake-01",
+      "family": "camera_shake",
+      "rank": 1,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:commons-ronpaul-crowd",
+      "clip": "datasets/ood/negatives/commons-ronpaul-crowd.mp4",
+      "sessionKey": "ood-commons-ronpaul-crowd",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 0,
+        "durationMs": 4000
+      },
+      "rankingScore": 13.157650244783714,
+      "signals": {
+        "lowClipFraction": 0.2115388997395833,
+        "highClipFraction": 0.019615071614583333,
+        "bimodalClipScore": 0.019615071614583333,
+        "temporalLumaStd": 14.221686251649277,
+        "grainSharpnessRatio": 0.2124901077897726,
+        "hfEnergyRatio": null,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.6731119791666667,
+        "contrastNormalizedMotion": 19.547490836626157,
+        "globalShakeScore": 13.157650244783714,
+        "meanAbsFrameDiff": 41.47452864583333,
+        "meanSpatialGradient": 2.121731581432562,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "UNSUPPORTED",
+      "envelopeFlaggedDimensions": [
+        "resolution:DEGRADED",
+        "motion_blur:UNSUPPORTED",
+        "camera_motion:DEGRADED"
+      ],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-01-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-01-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-01-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 0.000 -t 4.000 datasets/ood/negatives/commons-ronpaul-crowd.mp4"
+    },
+    {
+      "candidateId": "g08-camera_shake-02",
+      "family": "camera_shake",
+      "rank": 2,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:commons-ronpaul-crowd",
+      "clip": "datasets/ood/negatives/commons-ronpaul-crowd.mp4",
+      "sessionKey": "ood-commons-ronpaul-crowd",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 2000,
+        "durationMs": 4000
+      },
+      "rankingScore": 4.7298738035254075,
+      "signals": {
+        "lowClipFraction": 0.3627986653645834,
+        "highClipFraction": 0.03186442057291666,
+        "bimodalClipScore": 0.03186442057291666,
+        "temporalLumaStd": 16.466415756284515,
+        "grainSharpnessRatio": 0.18344398605432838,
+        "hfEnergyRatio": null,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.3817447916666667,
+        "contrastNormalizedMotion": 12.390146262048955,
+        "globalShakeScore": 4.7298738035254075,
+        "meanAbsFrameDiff": 25.271858506944447,
+        "meanSpatialGradient": 2.039673945121391,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "UNSUPPORTED",
+      "envelopeFlaggedDimensions": [
+        "resolution:DEGRADED",
+        "motion_blur:UNSUPPORTED"
+      ],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-02-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-02-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-02-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 2.000 -t 4.000 datasets/ood/negatives/commons-ronpaul-crowd.mp4"
+    },
+    {
+      "candidateId": "g08-camera_shake-03",
+      "family": "camera_shake",
+      "rank": 3,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:yt-2wV0Gs9r384-tabletennis",
+      "clip": "datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4",
+      "sessionKey": "ood-yt-2wV0Gs9r384-tabletennis",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 26000,
+        "durationMs": 4000
+      },
+      "rankingScore": 2.6819497859075625,
+      "signals": {
+        "lowClipFraction": 0.000003255208333333333,
+        "highClipFraction": 0.041278211805555555,
+        "bimodalClipScore": 0.000003255208333333333,
+        "temporalLumaStd": 5.307561808982599,
+        "grainSharpnessRatio": 0.06644515348435566,
+        "hfEnergyRatio": 0.2638615946436621,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.6132638888888889,
+        "contrastNormalizedMotion": 4.373239374597316,
+        "globalShakeScore": 2.6819497859075625,
+        "meanAbsFrameDiff": 40.23132175925927,
+        "meanSpatialGradient": 9.199432803278402,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "DEGRADED",
+      "envelopeFlaggedDimensions": [
+        "camera_motion:DEGRADED"
+      ],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-03-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-03-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-03-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 26.000 -t 4.000 datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4"
+    },
+    {
+      "candidateId": "g08-camera_shake-04",
+      "family": "camera_shake",
+      "rank": 4,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "devpool:va-6N3Yc184a_c",
+      "clip": "datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4",
+      "sessionKey": "devpool-va-6N3Yc184a_c",
+      "role": "dev_pool",
+      "windowMs": {
+        "startMs": 118000,
+        "durationMs": 4000
+      },
+      "rankingScore": 2.5041828208500534,
+      "signals": {
+        "lowClipFraction": 0.30038736979166664,
+        "highClipFraction": 0.0029958767361111106,
+        "bimodalClipScore": 0.0029958767361111106,
+        "temporalLumaStd": 7.292617149461648,
+        "grainSharpnessRatio": 0.05451632065834847,
+        "hfEnergyRatio": 0.43864746613444866,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.5542881944444444,
+        "contrastNormalizedMotion": 4.517835389512421,
+        "globalShakeScore": 2.5041828208500534,
+        "meanAbsFrameDiff": 38.540412037037036,
+        "meanSpatialGradient": 8.53072516243148,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "DEGRADED",
+      "envelopeFlaggedDimensions": [
+        "camera_motion:DEGRADED"
+      ],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-04-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-04-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-04-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 118.000 -t 4.000 datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4"
+    },
+    {
+      "candidateId": "g08-camera_shake-05",
+      "family": "camera_shake",
+      "rank": 5,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "devpool:va-6N3Yc184a_c",
+      "clip": "datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4",
+      "sessionKey": "devpool-va-6N3Yc184a_c",
+      "role": "dev_pool",
+      "windowMs": {
+        "startMs": 138000,
+        "durationMs": 4000
+      },
+      "rankingScore": 2.4404059647146665,
+      "signals": {
+        "lowClipFraction": 0.15928710937499999,
+        "highClipFraction": 0.00958984375,
+        "bimodalClipScore": 0.00958984375,
+        "temporalLumaStd": 8.09587707605559,
+        "grainSharpnessRatio": 0.062390150796913256,
+        "hfEnergyRatio": 0.48814840328403447,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.5401215277777778,
+        "contrastNormalizedMotion": 4.51825346557696,
+        "globalShakeScore": 2.4404059647146665,
+        "meanAbsFrameDiff": 38.58257291666667,
+        "meanSpatialGradient": 8.539267044359995,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "DEGRADED",
+      "envelopeFlaggedDimensions": [
+        "camera_motion:DEGRADED"
+      ],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-05-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-05-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-05-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 138.000 -t 4.000 datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4"
+    },
+    {
+      "candidateId": "g08-camera_shake-06",
+      "family": "camera_shake",
+      "rank": 6,
+      "tier": "TIER_C_MACHINE_PROPOSED",
+      "clipId": "ood:yt-2wV0Gs9r384-tabletennis",
+      "clip": "datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4",
+      "sessionKey": "ood-yt-2wV0Gs9r384-tabletennis",
+      "role": "ood_negative",
+      "windowMs": {
+        "startMs": 24000,
+        "durationMs": 4000
+      },
+      "rankingScore": 1.4537117244992221,
+      "signals": {
+        "lowClipFraction": 0.0000010850694444444444,
+        "highClipFraction": 0.04225151909722223,
+        "bimodalClipScore": 0.0000010850694444444444,
+        "temporalLumaStd": 3.008987941952001,
+        "grainSharpnessRatio": 0.05642675295949297,
+        "hfEnergyRatio": 0.3589782108157158,
+        "motionHeightFraction": 1,
+        "motionWidthFraction": 1,
+        "motionCoverage": 0.5159027777777778,
+        "contrastNormalizedMotion": 2.8178017004696185,
+        "globalShakeScore": 1.4537117244992221,
+        "meanAbsFrameDiff": 30.40035416666667,
+        "meanSpatialGradient": 10.788677628237682,
+        "sampledFrameCount": 16
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeFlaggedDimensions": [],
+      "reviewFrames": [
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-06-f1.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-06-f2.jpg",
+        "datasets/experiments/wave-g/g08-review-frames/g08-camera_shake-06-f3.jpg"
+      ],
+      "renderCommand": "ffplay -ss 24.000 -t 4.000 datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4"
+    }
+  ]
+}

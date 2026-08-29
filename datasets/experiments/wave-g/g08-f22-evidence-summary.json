@@ -1,0 +1,89 @@
+{
+  "workstream": "g08-f22-evidence",
+  "date": "2026-08-29",
+  "branch": "devin/wave-g/g08-f22-evidence",
+  "mission": "Build the complete F22 evidence-generation pipeline for the label-dependent (category D) bypasses so that ONLY the human truth is missing: mine the legal corpus for natural examples resembling each bypass family, generate review packs, define the human label schema, freeze the promotion metrics BEFORE any label exists, and ship evaluation code that runs end-to-end on the (empty) label file.",
+  "method": {
+    "mining": "packages/capture-envelope/src/g08MineEvidence.ts slides 4s windows (2s step) over every legal on-disk clip, computes six Tier-C bypass-resemblance signals (g08EvidenceSignals.ts, g08-bypass-resemblance-signals-v1), joins each window with the CURRENT envelope verdict, and ranks the top 6 windows per family (max 2 per clip) into a review pack with 3 review frames each.",
+    "signals": {
+      "blur_masked_by_noise": "grainSharpnessRatio: laplacian variance of the temporal-mean frame / median per-frame laplacian variance (temporally uncorrelated grain averages out of the numerator) — ranked ascending",
+      "bimodal_exposure": "bimodalClipScore: min(lowClipFraction, highClipFraction) at luma <=20 / >=235 — ranked descending",
+      "strobing_exposure": "temporalLumaStd: std dev of per-frame mean luma — ranked descending",
+      "upscaled_content": "hfEnergyRatio: median laplacian variance at 640w / at 320w, only for display width >=1280 — ranked ascending",
+      "tiny_subject": "motionHeightFraction: median fraction of frame height spanned by motion-active rows (coverage > 0.001) — ranked ascending",
+      "camera_shake": "globalShakeScore: (meanAbsFrameDiff / meanSpatialGradient) * motionCoverage — contrast-normalized to address the f22-B7 contrast dependence — ranked descending"
+    },
+    "labelSchema": "g08-f22-evidence-labels-v1 (g08LabelSchema.ts): capture SAFE/DEGRADED/UNSAFE/AMBIGUOUS + downstream USABLE/DEGRADED_RESULT/UNUSABLE_DISCLOSED/SILENT_FAILURE/NOT_RUN, sessionKey grouping, annotatorKind must be 'human' (machine labels rejected by validation), notes required for UNSAFE/AMBIGUOUS, append-only supersession via supersedesLabelId.",
+    "frozenGate": "g08-f22-evidence-gate-v1.0-frozen (g08Gate.ts + datasets/experiments/wave-g/g08-frozen-gate.md, sha256 e32ceb29ed9663506d17e07f579cd705217e87cec0807e052508160799052b1c pinned in code and asserted in tests). Metrics: falseSafeRate, falseRejectRate, missedDegradationRate, usableRateGivenSupported/Flagged, silentFailureRateGivenSupported — all as {numerator, denominator, rate|null}. Minimum evidence per family: >=10 labeled windows, >=5 UNSAFE+DEGRADED, >=3 SAFE, >=3 distinct sessions. Promotion: falseSafe<=0.20, falseReject<=0.20, no falseSafe regression, falseReject regression <=0.05, no silent-failure regression, one-shot evaluation per candidate.",
+    "evaluation": "pnpm --filter @pickle/capture-envelope gate:g08 (g08EvalGate.ts): verifies frozen-doc hash, validates the label file, recomputes envelope verdicts for every labeled window, writes g08-gate-report.json with counts."
+  },
+  "datasetScopeAndGrouping": {
+    "clipsMined": 16,
+    "sources": {
+      "paddleBenchBundles": 2,
+      "devPool": 3,
+      "oodNegatives": 11
+    },
+    "windowsMeasured": 286,
+    "windowing": "4000ms windows, 2000ms step; clips shorter than one window measured whole",
+    "grouping": "sessionKey per clip (afn-sasebo bundles share one session key); the gate requires >=3 distinct sessions per family because windows from one session are not independent",
+    "excluded": {
+      "heldOut": "the two held-out bench cases were never opened, measured, mined, or referenced beyond exclusion",
+      "freshCandidates": "datasets/pickleball/fresh-candidates are label-blind holdout candidates — excluded from mining",
+      "oodDerived": "synthetic derivations, not natural examples",
+      "corpusRecordings": "datasets/corpus/recordings.json media absent on this machine"
+    }
+  },
+  "holdoutStatement": "wm-dink-01 and afn-vic-rally1 were excluded by name in the miner and never opened, probed, or rendered. fresh-candidates clips were never opened. No labels exist, so no training/tuning on anything occurred; the frozen gate additionally bans re-tuning against a frozen label set (one-shot rule).",
+  "configuration": {
+    "signalsVersion": "g08-bypass-resemblance-signals-v1",
+    "labelSchemaVersion": "g08-f22-evidence-labels-v1",
+    "gateVersion": "g08-f22-evidence-gate-v1.0-frozen",
+    "thresholdsVersion": "capture-envelope-thresholds-v0.3-provisional",
+    "topKPerFamily": 6,
+    "maxPerClipPerFamily": 2,
+    "reviewFramesPerCandidate": 3
+  },
+  "measuredResults": {
+    "reviewPackCandidates": { "count": 36, "perFamily": 6, "families": 6 },
+    "candidateClipDiversity": {
+      "blur_masked_by_noise": 3,
+      "bimodal_exposure": 3,
+      "strobing_exposure": 3,
+      "upscaled_content": 3,
+      "tiny_subject": 3,
+      "camera_shake": 3
+    },
+    "gateRunOnEmptyLabelFile": {
+      "effectiveLabels": 0,
+      "familiesDecidable": "0/6",
+      "allRates": "null with numerator=0/denominator=0 (no fabricated rates)",
+      "status": "BLOCKED_EXTERNAL — completed end-to-end, every family NOT DECIDABLE"
+    },
+    "tests": "60/60 capture-envelope tests pass, including 21 new g08 tests (frozen-doc hash pin, empty-file validity, machine-label rejection, append-only supersession, zero-denominator null rates, AMBIGUOUS accounting, downstream conditioning, promotion refusal on false-safe regression)"
+  },
+  "findings": [
+    "The pipeline runs end-to-end on the empty label file and terminates in an explicit BLOCKED_EXTERNAL status, proving the human label file is the only missing input.",
+    "All 36 review-pack candidates are marked TIER_C_MACHINE_PROPOSED; the label schema structurally rejects machine-authored labels, so Tier-C cannot leak into gate metrics.",
+    "The promotion metrics, minimum-evidence bars, and one-shot rule were frozen and hash-pinned before any label exists; post-hoc metric tuning now breaks a committed test.",
+    "Natural candidates for every family were found in the legal corpus (>=3 distinct clips per family), so human review does not depend on synthetic attack clips.",
+    "No claim is made that any candidate actually IS a bypass instance — resemblance ranking is a mining heuristic, and every rate in the committed gate report is null with 0/0 counts."
+  ],
+  "verdict": "BLOCKED_EXTERNAL",
+  "rationale": "Everything except the human input is built and tested: miner, review pack (36 Tier-C candidates), label schema + validation, frozen hash-pinned gate, and an evaluator that runs end-to-end on the committed empty label file. The gate is undecidable for all 6 families solely because zero human labels exist — which is exactly the external dependency the mission scoped out. Filling datasets/experiments/wave-g/g08-labels.json (human review of g08-review-pack.json candidates) and re-running gate:g08 is the only remaining step."
+  ,
+  "artifacts": [
+    "datasets/experiments/wave-g/g08-review-pack.json",
+    "datasets/experiments/wave-g/g08-review-frames/ (108 jpgs)",
+    "datasets/experiments/wave-g/g08-labels.json (empty, human-only)",
+    "datasets/experiments/wave-g/g08-frozen-gate.md",
+    "datasets/experiments/wave-g/g08-gate-report.json",
+    "packages/capture-envelope/src/g08EvidenceSignals.ts",
+    "packages/capture-envelope/src/g08LabelSchema.ts",
+    "packages/capture-envelope/src/g08Gate.ts",
+    "packages/capture-envelope/src/g08MineEvidence.ts",
+    "packages/capture-envelope/src/g08EvalGate.ts",
+    "packages/capture-envelope/test/g08Gate.test.ts",
+    "packages/capture-envelope/test/g08EvidenceSignals.test.ts"
+  ]
+}
