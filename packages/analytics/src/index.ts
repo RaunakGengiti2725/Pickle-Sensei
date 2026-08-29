@@ -1,5 +1,7 @@
 import type { CheckpointKey, ShotTypeSlug } from "@pickle/shared-types";
 
+export * from "./drift.js";
+
 /**
  * Strongly-typed analytics events — the spec's exact taxonomy (spec p. 43).
  * Rules (directive §37): never raw video, never sensitive biomechanical data,
