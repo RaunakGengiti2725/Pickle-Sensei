@@ -500,6 +500,9 @@ importers:
       '@pickle/queue':
         specifier: workspace:*
         version: link:../../packages/queue
+      '@pickle/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
       '@pickle/slo':
         specifier: workspace:*
         version: link:../../packages/slo

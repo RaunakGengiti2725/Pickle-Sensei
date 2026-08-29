@@ -47,9 +47,11 @@ while (true) {
   // A transient failure (DB outage, queue unreachable) must not crash the
   // worker process: log loudly and keep polling.
   try {
-    const { jobs, deletions, swept } = await runOnce(deps);
-    if (jobs || deletions || swept)
-      console.error(`[media-worker] processed jobs=${jobs} deletions=${deletions} swept=${swept}`);
+    const { jobs, deletions, swept, expired } = await runOnce(deps);
+    if (jobs || deletions || swept || expired)
+      console.error(
+        `[media-worker] processed jobs=${jobs} deletions=${deletions} swept=${swept} expired=${expired}`,
+      );
   } catch (error) {
     crashCount++;
     console.error(`[media-worker] poll cycle failed (crash ${crashCount}): ${String(error)}`);

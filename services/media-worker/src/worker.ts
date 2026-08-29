@@ -2,6 +2,11 @@ import type pg from "pg";
 import type { IJobQueue, JobEnvelope } from "@pickle/queue";
 import type { IAnalyticsSink } from "@pickle/analytics";
 import type { QueueSloMonitor } from "@pickle/slo";
+import {
+  MEDIA_RETENTION_POLICY_V1,
+  type MediaRetentionPolicy,
+  type MediaRetentionRule,
+} from "@pickle/shared-types";
 
 /**
  * Media/maintenance worker (spec p. 38, directive §58).
@@ -27,6 +32,21 @@ async function deleteObjectAndDerived(store: ObjectDeleter, objectKey: string): 
   }
   await store.deleteObject(objectKey);
   return deleted + 1;
+}
+
+/**
+ * Deletion propagation to the training dataset: once a media asset is purged
+ * (or its purge is being executed), any dataset item built from it — as source
+ * clip or as derived feature asset — must stop being training-eligible.
+ * Machine bookkeeping only; consent state is untouched.
+ */
+async function removeDatasetItemsForMedia(pool: pg.Pool, mediaAssetId: string): Promise<number> {
+  const result = await pool.query(
+    `UPDATE ml_dataset_item SET removed_at = COALESCE(removed_at, now())
+     WHERE (media_asset_id = $1 OR feature_asset_id = $1) AND removed_at IS NULL`,
+    [mediaAssetId],
+  );
+  return result.rowCount ?? 0;
 }
 
 export interface WorkerDeps {
@@ -160,7 +180,11 @@ export async function handleJob(deps: WorkerDeps, job: JobEnvelope): Promise<Job
         "UPDATE media_asset SET object_key = NULL WHERE id = $1 AND deleted_at IS NOT NULL",
         [mediaAssetId],
       );
-      return { handled: true, note: `object deleted (${deleted} artifact(s) incl. derived)` };
+      const itemsRemoved = await removeDatasetItemsForMedia(deps.pool, mediaAssetId);
+      return {
+        handled: true,
+        note: `object deleted (${deleted} artifact(s) incl. derived, ${itemsRemoved} dataset item(s) removed)`,
+      };
     }
 
     case "share.render":
@@ -311,14 +335,83 @@ export async function sweepDeletedMedia(deps: WorkerDeps): Promise<number> {
       "UPDATE media_asset SET object_key = NULL WHERE id = $1 AND deleted_at IS NOT NULL",
       [row.id],
     );
+    await removeDatasetItemsForMedia(deps.pool, row.id);
     swept++;
   }
   return swept;
 }
 
+/**
+ * Retention-policy enforcement sweep. Marks assets whose retention window has
+ * elapsed as deleted; the deleted-media sweep (which runs after this in
+ * runOnce) then purges the objects and removes dependent dataset items.
+ * Precedence: an explicit per-asset expires_at always wins over the kind
+ * rule; user_controlled kinds only expire when the OWNER opted into a
+ * retention window (user_setting.local_video_retention_days > 0);
+ * until_deleted kinds are never auto-expired.
+ */
+export async function enforceMediaRetention(
+  deps: WorkerDeps,
+  policy: MediaRetentionPolicy = MEDIA_RETENTION_POLICY_V1,
+): Promise<number> {
+  const expiredIds: string[] = [];
+  const explicit = await deps.pool.query(
+    `UPDATE media_asset SET status = 'deleted', deleted_at = now()
+     WHERE deleted_at IS NULL AND expires_at IS NOT NULL AND expires_at <= now()
+     RETURNING id`,
+  );
+  for (const row of explicit.rows as Array<{ id: string }>) expiredIds.push(row.id);
+
+  const ruleEntries = Object.entries(policy.rules) as Array<[string, MediaRetentionRule]>;
+  const fixedWindowKinds = ruleEntries.filter(([, rule]) => rule.kind === "fixed_window");
+  for (const [kind, rule] of fixedWindowKinds) {
+    if (rule.kind !== "fixed_window") continue;
+    const result = await deps.pool.query(
+      `UPDATE media_asset SET status = 'deleted', deleted_at = now()
+       WHERE deleted_at IS NULL AND expires_at IS NULL AND kind = $1
+         AND created_at + make_interval(days => $2::int) <= now()
+       RETURNING id`,
+      [kind, rule.days],
+    );
+    for (const row of result.rows as Array<{ id: string }>) expiredIds.push(row.id);
+  }
+
+  const userControlledKinds = ruleEntries
+    .filter(([, rule]) => rule.kind === "user_controlled")
+    .map(([kind]) => kind);
+  if (userControlledKinds.length > 0) {
+    const result = await deps.pool.query(
+      `UPDATE media_asset ma SET status = 'deleted', deleted_at = now()
+       FROM user_setting us
+       WHERE us.user_id = ma.owner_user_id
+         AND ma.deleted_at IS NULL AND ma.expires_at IS NULL AND ma.kind = ANY($1::text[])
+         AND us.local_video_retention_days IS NOT NULL AND us.local_video_retention_days > 0
+         AND ma.created_at + make_interval(days => us.local_video_retention_days) <= now()
+       RETURNING ma.id`,
+      [userControlledKinds],
+    );
+    for (const row of result.rows as Array<{ id: string }>) expiredIds.push(row.id);
+  }
+
+  for (const id of expiredIds) {
+    await deps.pool.query(
+      `INSERT INTO audit_log (actor_service, action, target_kind, target_id, metadata)
+       VALUES ('media-worker', 'media.retention_expired', 'media_asset', $1, $2)`,
+      [id, JSON.stringify({ policyVersion: policy.version })],
+    );
+    try {
+      await deps.queue.enqueue("media.purge", { mediaAssetId: id });
+    } catch (error) {
+      // Asset is already marked deleted; the deleted-media sweep purges it.
+      deps.log(`media.purge dispatch for expired asset ${id} failed: ${String(error)}`);
+    }
+  }
+  return expiredIds.length;
+}
+
 export async function runOnce(
   deps: WorkerDeps,
-): Promise<{ jobs: number; deletions: number; swept: number }> {
+): Promise<{ jobs: number; deletions: number; swept: number; expired: number }> {
   const received = await deps.queue.receive(10);
   let jobs = 0;
   for (const { job, ack } of received) {
@@ -352,6 +445,7 @@ export async function runOnce(
     // never silently dropped.
   }
   const deletions = await processDeletionTasks(deps);
+  const expired = await enforceMediaRetention(deps);
   const swept = await sweepDeletedMedia(deps);
   const depth = await deps.queue.size();
   const oldestJobAgeMs = await deps.queue.oldestJobAgeMs();
@@ -404,7 +498,7 @@ export async function runOnce(
     }
   }
   await deps.analytics?.flush();
-  return { jobs, deletions, swept };
+  return { jobs, deletions, swept, expired };
 }
 
 /**

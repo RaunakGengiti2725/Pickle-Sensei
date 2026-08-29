@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./trainingConsent": "./src/trainingConsent.ts"
+    "./trainingConsent": "./src/trainingConsent.ts",
+    "./worker": "./src/worker.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
@@ -17,6 +18,7 @@
     "@pickle/database": "workspace:*",
     "@pickle/queue": "workspace:*",
     "@pickle/slo": "workspace:*",
+    "@pickle/shared-types": "workspace:*",
     "pg": "^8.16.3"
   },
   "devDependencies": {
