@@ -1,0 +1,119 @@
+{
+  "workstream": "wave-e/e24-data-integrity",
+  "annotatorId": "devin-audit-v1-waveE",
+  "branch": "devin/wave-e/e24-data-integrity",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "baseCommit": "8fc388e",
+  "completedAtIso": "2026-08-29",
+  "extends": "wave-d2/d2-09 (script imported as a module; all d2-09 checks re-run against the post-D/D2/D3/D4 tip, then wave-e checks layered on top)",
+  "verdict": "GREEN",
+  "deliverables": {
+    "auditScript": "datasets/experiments/wave-e/e24-data-integrity-audit.py",
+    "integrityReport": "datasets/experiments/wave-e/e24-integrity-report.json"
+  },
+  "measurements": {
+    "registry": {
+      "sources": 2,
+      "evaluatedButExcluded": 6,
+      "officialSearchChecks": 12,
+      "freshCandidates": 8,
+      "quarantinedUnknownRights": 22,
+      "freshCandidateSha256Match": "8/8",
+      "freshCandidateBytesMatch": "8/8",
+      "growthSinceD209": "freshCandidates 6→8, quarantined 13→22, searchChecks added — all new entries pass field/hash checks"
+    },
+    "ood": {
+      "items": 9,
+      "itemSha256Match": "9/9",
+      "itemBytesMatch": "9/9",
+      "quarantinedNotCommitted": 3
+    },
+    "urlProbes": {
+      "probed": 67,
+      "deadAfterPlainGetReprobe": 2,
+      "botBlocked403": 2,
+      "okOnPlainGetOnly": 2,
+      "notProbeableSearchDescriptions": 5,
+      "note": "d2-09 probed HEAD/ranged-GET only; e24 re-probes failures with plain GET (curl -g). dvidshub + voanews recover to 200; remaining dead: health.mil/search 404 (endpoint moved) and youtube.com/@VeteransAffairs 404 (handle gone; verified with browser UA)"
+    },
+    "labelSchema": {
+      "annotationFilesChecked": 59,
+      "envelope": ["schemaVersion", "captureBundle", "annotatorId", "createdAtIso", "revision"],
+      "violations": 8,
+      "detail": "8 wave-D/D2 annotation files (devin-visual-v3-waveD.json x2, v4-waveD2-ownership-audit.json x3, v4-waveD2-ta.json x3) omit 'revision'; captureBundle/annotatorId/schemaVersion/createdAtIso conform in all 59 files"
+    },
+    "sidecarConsistency": {
+      "registrySourceVideos": 13,
+      "bundleDirs": 13,
+      "orphanBundles": 0,
+      "brokenReferencedPaths": 0,
+      "note": "all paddle-bench.json / ball-bench.json / stroke-gold / event-bounds references resolve (gitignored videos/, runs/, corpus media/ excluded by design)"
+    },
+    "duplicates": {
+      "idCollectionsChecked": 8,
+      "duplicateIds": 0,
+      "registeredMediaSha256Checked": 43,
+      "sha256Duplicates": 0
+    },
+    "heldOutIsolation": {
+      "bundleAnnotations": "both held-out bundles contain only baseline devin-visual-v1.json",
+      "goldCollections": "0 held-out entries in stroke-gold (29), ta-bench cases (301), event-bounds-wave-a",
+      "textualReferences": 163,
+      "textualReferenceNote": "id mentions in bench case listings, run artifacts, QA records, registries, exclusion notes — recorded in report, not violations; no held-out label content was viewed",
+      "releaseBaselineComparison": "afn-vic-rally1 release copy byte-identical (rev 4 == rev 4); wm-dink-01 release copy rev 5 != live bundle rev 8 — ESCALATED"
+    },
+    "dataCards": {
+      "datasetDirs": 11,
+      "missingDataCards": 0,
+      "missingReferencedPaths": 0
+    },
+    "corpus": {
+      "sources": 20,
+      "recordings": 26,
+      "sessions": 12,
+      "danglingRefs": 0,
+      "staleSplitAssignmentsExplainedByDedupMerge": 3
+    },
+    "releases": {
+      "manifestSha256Match": "3/3"
+    }
+  },
+  "mechanicalFixes": [
+    "none required in dataset files themselves — all inconsistencies found were either audit-classifier staleness (fixed inside the e24 script: d2-03's two new quarantine statuses accepted as vocabulary extensions; URL probe false-negatives re-probed with plain GET/-g; prose search-log entries classified not-probeable) or semantic items escalated below"
+  ],
+  "escalations": [
+    {
+      "severity": "semantic",
+      "what": "releases/pickle-real-v0.3/annotations/wm-dink-01.json (revision 5) differs from the live held-out baseline bundles/wm-dink-01/annotation/devin-visual-v1.json (revision 8)",
+      "whyNotFixed": "releases are immutable snapshots and held-out label content must not be touched; both files date to the pre-history squash commit 52ba173 so git cannot show when/why revisions 6-8 landed. Needs integrator adjudication on whether the post-freeze baseline revisions were compliant (afn-vic-rally1 is byte-identical, so this is specific to wm-dink-01)."
+    },
+    {
+      "severity": "semantic",
+      "what": "8 wave-D/D2 annotation sidecars omit the 'revision' envelope field",
+      "whyNotFixed": "datasets are append-only and these are other annotators' files; adding revision:1 would rewrite their records. Recommend the owning annotator (or an adjudication record) adds it, or the envelope contract is versioned to make revision optional for audit/ta modalities."
+    },
+    {
+      "severity": "semantic",
+      "what": "2 genuinely dead registry search-log URLs: health.mil/search?query=pickleball (404, endpoint moved) and youtube.com/@VeteransAffairs (404 even with browser UA — handle gone)",
+      "whyNotFixed": "officialSearchChecks entries are historical search-log records; rewriting them would falsify the log. Future acquisition passes should re-derive working endpoints."
+    },
+    {
+      "severity": "semantic-known",
+      "what": "3 stale corpus split assignments (dvids-956784/957519/967848) still reference sessions merged away by phash dedup",
+      "whyNotFixed": "carried over from d2-09 unchanged; deterministic split-reuse semantics are owned by the data engine (d2-09 finding, still true post-merges)"
+    }
+  ],
+  "rules": {
+    "heldOutCasesUntouched": ["wm-dink-01", "afn-vic-rally1"],
+    "heldOutMediaOrLabelsViewed": false,
+    "labelContentModified": false,
+    "datasetFilesModified": 0,
+    "statusBoardOrHandoffModified": false
+  },
+  "findings": [
+    "Post-merge dataset tree is internally consistent: 8/8 fresh-candidate and 9/9 ood sha256+bytes match, 3/3 release manifests verify, 0 duplicate ids across 8 id collections (461 ids), 0 duplicate sha256 across 43 registered media hashes, 0 broken sidecar references, 0 orphan bundles, all 11 dataset dirs carry a DATA_CARD.md whose referenced paths all resolve.",
+    "Held-out isolation holds where it matters: both held-out bundles contain only the baseline annotation, and 0 of 29 stroke-gold labels / 301 ta-bench cases / event-bounds-wave-a cases touch held-out cases. The one exception is the wm-dink-01 release-snapshot vs live-baseline revision drift (5 vs 8), escalated for adjudication.",
+    "Wave D/D2 growth is clean but relaxed the annotation envelope: the 8 new modality sidecars (waveD contact, waveD2 ownership-audit/ta) dropped 'revision' — a contract-versioning decision, not silently fixable here.",
+    "d2-09's URL prober under-reports availability: 6 of its 11 dead_url findings were probe artifacts (ranged-GET-hostile hosts, curl globbing on [type], prose search-log entries); only 2 URLs are genuinely dead."
+  ]
+}
