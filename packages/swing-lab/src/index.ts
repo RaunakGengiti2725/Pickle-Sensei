@@ -37,12 +37,15 @@ export {
 } from "./playerTracker.js";
 export {
   buildPaddleTracks,
+  MERGE_LINK_GATES,
   PADDLE_CONFIDENCE_MODEL,
   PADDLE_TRACKER_VERSION,
   mergePaddleTracklets,
   paddleSpeedSeries,
   selectPrimaryPaddleTrack,
   TRACKER_GATES,
+  trackletLinkGate,
+  trackletTail,
   wristSeries,
   type NormalizedBox,
   type PaddleTrackCandidate,
@@ -51,6 +54,22 @@ export {
   type PaddleDetectionSource,
   type TrackedPaddleObservation,
 } from "./paddleTracker.js";
+export {
+  classifyMergeCandidate,
+  enumerateMergeCandidatePairs,
+  MERGE_SAFETY_GATES,
+  MERGE_SAFETY_VERSION,
+  sweepMergeCandidates,
+  type BridgedFrame,
+  type BridgedFrameProvenance,
+  type MergeCandidatePair,
+  type MergeCandidateSafetyReport,
+  type MergeCheckStatus,
+  type MergeSafetyCheck,
+  type MergeSafetyContext,
+  type MergeSafetySweepResult,
+  type MergeSafetyVerdict,
+} from "./paddleMergeSafety.js";
 export {
   admitCropDetections,
   bridgeTrackedEstimates,

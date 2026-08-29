@@ -38,7 +38,8 @@
     "coach:queue": "tsx src/coachReview.ts",
     "regen": "tsx src/benchRegen.ts",
     "risk:curves": "tsx src/coverageRisk.ts",
-    "invariants:corpus": "tsx src/corpusCheck.ts"
+    "invariants:corpus": "tsx src/corpusCheck.ts",
+    "merge:safety": "tsx src/paddleMergeSafetySweep.ts"
   },
   "dependencies": {
     "@pickle/analysis-pipeline": "workspace:*",
