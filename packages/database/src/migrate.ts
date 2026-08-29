@@ -34,10 +34,36 @@ export async function loadMigrations(dir: string): Promise<MigrationFile[]> {
   return files;
 }
 
+/**
+ * Advisory lock key serializing concurrent migration runners against the same
+ * database: statements like CREATE EXTENSION IF NOT EXISTS are not safe to run
+ * from two sessions at once (both can pass the IF NOT EXISTS check and one
+ * then fails with a duplicate-key error on pg_extension).
+ */
+const MIGRATION_LOCK_KEY = 0x7069636b; // "pick"
+
 export async function runMigrations(
   pool: Pool,
   dir: string,
   log: (line: string) => void = () => {},
+): Promise<{ applied: string[]; skipped: string[] }> {
+  const lockClient = await pool.connect();
+  try {
+    await lockClient.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
+    return await runMigrationsLocked(pool, dir, log);
+  } finally {
+    try {
+      await lockClient.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]);
+    } finally {
+      lockClient.release();
+    }
+  }
+}
+
+async function runMigrationsLocked(
+  pool: Pool,
+  dir: string,
+  log: (line: string) => void,
 ): Promise<{ applied: string[]; skipped: string[] }> {
   await pool.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
     name text PRIMARY KEY,
