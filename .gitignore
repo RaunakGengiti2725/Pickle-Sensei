@@ -46,3 +46,4 @@ tools/latency-bench/.venv-pose/
 tools/latency-bench/*.task
 tools/latency-bench/artifacts/f25-seeds/
 tools/latency-bench/artifacts/f25-two-pass/outputs/
+datasets/release/

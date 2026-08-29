@@ -1,4 +1,5 @@
 export { extractFrameStats, extractFrameStatsAsync } from "./frameStats.js";
+export { DRILL_LIBRARY_V0_VERSION, FAULT_TAXONOMY_V0_DRAFT_VERSION } from "./coachReview.js";
 export { checkArtifactInvariants, type InvariantViolation } from "./invariants.js";
 export { runCorpusCheck, type CorpusCheckReport, type CorpusViolation } from "./corpusCheck.js";
 export { checkProvenanceChain, PROVENANCE_CHAIN_VERSION } from "./provenanceChain.js";

@@ -51,6 +51,26 @@ const CHECKPOINT_NAMES: Record<string, { name: string; description: string }> = 
   recovery: { name: "Recovery", description: "Return to a stable ready/court position." },
 };
 
+/**
+ * Canonical feature-flag seed defaults (directive §36): [key, description,
+ * enabled, rolloutPercent]. Runtime state lives in the feature_flag table;
+ * this is the single source for what a fresh environment starts with.
+ */
+export const FEATURE_FLAG_SEED_DEFAULTS: ReadonlyArray<[string, string, boolean, number]> = [
+  ["live_court", "Live Court mode", true, 100],
+  ["ball_tracking", "Ball tracking metrics", false, 0],
+  ["cloud_deep_analysis", "Cloud deep analysis", false, 0],
+  ["reference_comparison", "Pro reference comparison", false, 0],
+  ["social", "Friends and activity", true, 100],
+  ["leaderboards", "Friends leaderboards", true, 100],
+  ["experimental_camera_setup", "Experimental camera preflight", false, 0],
+  ["paywall_v1", "Launch paywall", true, 100],
+  ["stroke_return", "Return stroke analysis", false, 0],
+  ["stroke_backhand_drive", "Backhand drive analysis", false, 0],
+  ["stroke_volley", "Volley analysis", false, 0],
+  ["stroke_overhead", "Overhead analysis", false, 0],
+];
+
 export async function seed(pool: Pool, log: (line: string) => void = () => {}): Promise<void> {
   // Shot types
   for (let i = 0; i < SHOT_TYPES.length; i++) {
@@ -249,21 +269,7 @@ export async function seed(pool: Pool, log: (line: string) => void = () => {}): 
   log("seeded billing offerings");
 
   // Feature flags (directive §36).
-  const flags: Array<[string, string, boolean, number]> = [
-    ["live_court", "Live Court mode", true, 100],
-    ["ball_tracking", "Ball tracking metrics", false, 0],
-    ["cloud_deep_analysis", "Cloud deep analysis", false, 0],
-    ["reference_comparison", "Pro reference comparison", false, 0],
-    ["social", "Friends and activity", true, 100],
-    ["leaderboards", "Friends leaderboards", true, 100],
-    ["experimental_camera_setup", "Experimental camera preflight", false, 0],
-    ["paywall_v1", "Launch paywall", true, 100],
-    ["stroke_return", "Return stroke analysis", false, 0],
-    ["stroke_backhand_drive", "Backhand drive analysis", false, 0],
-    ["stroke_volley", "Volley analysis", false, 0],
-    ["stroke_overhead", "Overhead analysis", false, 0],
-  ];
-  for (const [key, description, enabled, rollout] of flags) {
+  for (const [key, description, enabled, rollout] of FEATURE_FLAG_SEED_DEFAULTS) {
     await pool.query(
       `INSERT INTO feature_flag (key, description, enabled, rollout_percent)
        VALUES ($1,$2,$3,$4) ON CONFLICT (key) DO NOTHING`,
