@@ -17,6 +17,7 @@ import {
   importStrokeVideo,
   subscribeToCameraEvents,
   type CameraEvent,
+  type CameraReadinessState,
   type CapturedClip,
   type CaptureQualitySignalsV1,
 } from '../camera/capture';
@@ -48,6 +49,7 @@ import {
   consumeTryAgainHandoff,
   techniqueIntentFromHandoff,
 } from './tryAgainHandoff';
+import { usabilityFunnel } from '../analysis/usabilityTelemetry';
 
 type Phase =
   | { kind: 'ready' }
@@ -60,7 +62,7 @@ type Phase =
     }
   | { kind: 'error'; message: string };
 
-const READINESS_COPY: Record<string, string> = {
+export const READINESS_COPY: Record<CameraReadinessState, string> = {
   no_person: 'Step fully into frame',
   full_body_required: 'Keep your whole body visible',
   move_closer: 'Move a little closer',
@@ -169,6 +171,48 @@ function FramingPreview() {
     </View>
   );
 }
+
+/**
+ * The guided-capture walkthrough, as data so the zero-handholding protocol
+ * (docs/USABILITY_ZERO_HANDHOLDING.md) can assert every funnel task the
+ * user must perform unaided has an on-screen instruction. Order matters:
+ * it is the order the user acts in.
+ */
+export const ANALYZE_STEPS: ReadonlyArray<{
+  index: string;
+  icon: IconName;
+  title: string;
+  detail: string;
+}> = [
+  {
+    index: '01',
+    icon: 'person',
+    title: 'Step fully into frame',
+    detail:
+      'Place the phone at waist height and keep your full body inside the corners.',
+  },
+  {
+    index: '02',
+    icon: 'court',
+    title: 'Tap where you will start',
+    detail:
+      'On the live camera, tap your starting spot, then walk out to it — the person standing there is who gets analyzed.',
+  },
+  {
+    index: '03',
+    icon: 'spark',
+    title: 'Wait for Ready',
+    detail:
+      'Live pose landmarks turn the camera into an automatic trigger—no timer or shutter.',
+  },
+  {
+    index: '04',
+    icon: 'camera',
+    title: 'Make one natural stroke',
+    detail:
+      'The saved clip includes two seconds before motion and 1.5 seconds after it.',
+  },
+];
 
 const STROKE_LABELS: Record<MvpShotTypeSlug, string> = {
   forehand_drive: 'Forehand drive',
@@ -362,6 +406,13 @@ export function strokeIntentPresentation(
   }
 }
 
+/** Start-region lock outcome for the funnel's T4 (select starting location). */
+export function captureSavedDetail(clip: CapturedClip): string {
+  if (clip.captureMode !== 'automatic_pose_trigger') return 'imported';
+  if (clip.targetLock) return clip.targetLock.lockOutcome;
+  return clip.targetSeed ? 'start_tapped' : 'no_start_tap';
+}
+
 function clipTitle(clip: CapturedClip) {
   if (clip.recognition.status !== 'recognized')
     return 'Captured. Label withheld.';
@@ -421,6 +472,8 @@ export function AnalyzeScreen() {
     () =>
       subscribeToCameraEvents((event: CameraEvent) => {
         if (event.type === 'readiness') {
+          usabilityFunnel.log('readiness_state', event.state);
+          if (event.state === 'ready') usabilityFunnel.log('ready');
           lastReadiness.current = {
             state: event.state,
             jointCoverage: event.jointCoverage,
@@ -438,6 +491,7 @@ export function AnalyzeScreen() {
             liveCaptureEnvelope(lastReadiness.current, lastQuality.current),
           );
         } else if (event.type === 'stroke_detected') {
+          usabilityFunnel.log('stroke_captured');
           setCaptureEnvelope(null);
           setPhase({
             kind: 'working',
@@ -457,6 +511,13 @@ export function AnalyzeScreen() {
     [],
   );
 
+  // Zero-handholding funnel (docs/USABILITY_ZERO_HANDHOLDING.md): observe
+  // the surface, never gate it. Logged exactly once per mount.
+  useEffect(() => {
+    usabilityFunnel.log('analyze_opened', source);
+    if (rearm) usabilityFunnel.log('try_again_rearm');
+  }, []);
+
   const scoreCapture = useCallback(
     async (
       captureId: string,
@@ -473,6 +534,7 @@ export function AnalyzeScreen() {
         return;
       }
       const session = getApiSession();
+      usabilityFunnel.log('analysis_started', declaredStroke ?? 'auto');
       setPhase({
         kind: 'working',
         message: declaredStroke
@@ -510,11 +572,13 @@ export function AnalyzeScreen() {
               : null,
         });
         if (outcome.kind === 'unavailable') {
+          usabilityFunnel.log('error_shown', outcome.reason);
           setPhase({ kind: 'error', message: outcome.reason });
           return;
         }
         if (outcome.kind === 'quality_blocked') {
           // Honest abstention: nothing was analyzed or rated.
+          usabilityFunnel.log('error_shown', outcome.reason);
           setPhase({ kind: 'error', message: outcome.reason });
           return;
         }
@@ -523,6 +587,7 @@ export function AnalyzeScreen() {
         // clean declared path keeps its straight hop to the Result screen.
         const presentation = strokeIntentPresentation(outcome.record);
         if (presentation) {
+          usabilityFunnel.log('intent_outcome_shown', presentation.eyebrow);
           setPhase({
             kind: 'analyzed',
             analysisId: outcome.analysisId,
@@ -530,12 +595,12 @@ export function AnalyzeScreen() {
           });
           return;
         }
+        usabilityFunnel.log('result_opened');
         navigation.replace('Result', { analysisId: outcome.analysisId });
       } catch (error) {
-        setPhase({
-          kind: 'error',
-          message: error instanceof Error ? error.message : String(error),
-        });
+        const message = error instanceof Error ? error.message : String(error);
+        usabilityFunnel.log('error_shown', message);
+        setPhase({ kind: 'error', message });
       }
     },
     [declaredStroke, navigation, profile, techniqueIntent],
@@ -548,6 +613,7 @@ export function AnalyzeScreen() {
     // seed: both describe ONE clip and must never carry into the next one.
     setCaptureEnvelope(null);
     setTargetSeed(null);
+    if (source === 'camera') usabilityFunnel.log('camera_opened');
     setPhase({
       kind: 'working',
       message:
@@ -586,17 +652,21 @@ export function AnalyzeScreen() {
               selectedAtIso: new Date().toISOString(),
             }
           : null;
+        usabilityFunnel.log('capture_saved', captureSavedDetail(clip));
         setPhase({ kind: 'saved', clip, captureId });
         void scoreCapture(captureId, clip, liveSeed);
         return;
       }
+      usabilityFunnel.log('capture_saved', captureSavedDetail(clip));
       setPhase({ kind: 'saved', clip, captureId });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.toLowerCase().includes('cancel')) {
+        usabilityFunnel.log('attempt_abandoned');
         if (source === 'library') navigation.goBack();
         else setPhase({ kind: 'ready' });
       } else {
+        usabilityFunnel.log('error_shown', message);
         setPhase({ kind: 'error', message });
       }
     } finally {
@@ -939,6 +1009,14 @@ export function AnalyzeScreen() {
           dark
           value={techniqueIntent}
           onChange={intent => {
+            usabilityFunnel.log(
+              'intent_selected',
+              intent === null
+                ? 'cleared'
+                : intent.source === 'auto'
+                  ? 'AUTO'
+                  : (intent.canonical ?? intent.legacySlug ?? 'unknown'),
+            );
             setTechniqueIntent(intent);
             // The legacy capture/analysis chain consumes the slug; the
             // canonical intent (incl. voice provenance) rides alongside.
@@ -949,24 +1027,15 @@ export function AnalyzeScreen() {
         <FramingPreview />
 
         <View style={styles.steps}>
-          <StepRow
-            index="01"
-            icon="person"
-            title="Step fully into frame"
-            detail="Place the phone at waist height and keep your full body inside the corners."
-          />
-          <StepRow
-            index="02"
-            icon="spark"
-            title="Wait for Ready"
-            detail="Live pose landmarks turn the camera into an automatic trigger—no timer or shutter."
-          />
-          <StepRow
-            index="03"
-            icon="camera"
-            title="Make one natural stroke"
-            detail="The saved clip includes two seconds before motion and 1.5 seconds after it."
-          />
+          {ANALYZE_STEPS.map(step => (
+            <StepRow
+              key={step.index}
+              index={step.index}
+              icon={step.icon}
+              title={step.title}
+              detail={step.detail}
+            />
+          ))}
         </View>
 
         <View style={styles.trustRow}>
