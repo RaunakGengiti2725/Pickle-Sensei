@@ -1,0 +1,63 @@
+{
+  "workstream": "g02-f09-oracle",
+  "mission": "Answer 'would PERFECT paddle ownership eliminate the F09 residual?' by feeding ground-truth ownership (fixture construction + dual-labeled ownership set) into estimateContact in place of current paddle track selection, and quantifying (a) current ownership accuracy, (b) oracle ownership, (c) downstream contact error / confident-wrong rate under each, on all adversarial contact fixtures plus every replayable committed contact gold case.",
+  "branch": "devin/wave-g/g02-f09-oracle",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "method": {
+    "harness": "datasets/experiments/wave-g/g02-f09-oracle-run.ts (research-only; zero production changes)",
+    "ownershipAccuracy": "packages/swing-lab ownershipBench runBench(includeHeldOut=false, applyCorrections=true), incumbent_wrist_ratio method, source-session grouping preserved",
+    "adversarialFixtures": "All 10 generated adversarial contact fixtures (packages/evaluation adversarialContactFixtures) plus exact reconstructions of the e09 F2 (foreign paddle beyond reach) and F3 (foreign paddle within reach) red-team scenarios from packages/vision-geometry/test/contactRedTeam.test.ts. 'current' = paddle tracks as constructed (incl. foreign); 'oracle' = ground-truth ownership by construction (foreign paddle tracks removed; target-owned tracks kept).",
+    "committedGold": "Every replayable committed contact gold event via the same loader/geometry as packages/vision-geometry/eval/contactGoldReplay.ts (verified row-identical to canonical replayAll() under the current_no_paddle condition). Three ownership conditions per event: current_no_paddle (production behavior: no paddle track fed), oracle_ownership (target-labeled paddle annotation points fed as paddleCenters, speeds derived when >=2 in-window points), wrong_ownership (adversarial control: other-player paddle points fed as if target-owned).",
+    "thresholds": "strict=66ms, acceptable=132ms, confident-wrong = confidence>=0.7 AND error>132ms (fixtures: >=0.6 AND error>150ms matching contactRedTeam constants); estimator = contact-evidence-4.3 at integration head, Linux replay (non-canonical; no Mac/Apple Vision cascade, no Mac/iPhone numbers claimed)"
+  },
+  "datasetScope": {
+    "ownershipDualFrames": { "n": 39, "framesWithPose": 18, "groups": ["dvids-944403 (n=14)", "dvids-faead (n=3)", "dvids-marne-2024 (n=1)"] },
+    "adversarialFixtures": { "n": 12, "generated": 10, "redTeamReconstructions": 2 },
+    "committedGoldEvents": { "n": 15, "targetOwned": 10, "otherOwned": 5, "bundles": 8, "sessions": 5, "grouping": "by source bundle/session, no random frame splits" }
+  },
+  "holdoutStatement": "Held-out cases wm-dink-01 and afn-vic-rally1 were never read, listed, touched, or referenced; the committed-gold loader and ownership bench exclude them by construction (includeHeldOut=false).",
+  "configuration": {
+    "estimatorVersion": "contact-evidence-4.3",
+    "ownershipCorrections": "applied (dev-only corrected set)",
+    "oracleOwnershipDefinition": "gold label itself: 100% correct by construction, not a measurement"
+  },
+  "measuredResults": {
+    "a_currentOwnershipAccuracy": {
+      "poseSubset": { "scoredFrames": 18, "correct": 13, "abstained": 1, "accuracy": 0.722, "accuracyWhenAnswering": 0.765 },
+      "allDualFrames": { "scoredFrames": 39, "correct": 13, "abstained": 22, "accuracy": 0.333 },
+      "byGroup": { "dvids-944403": { "n": 14, "correct": 9, "abstained": 1 }, "dvids-faead": { "n": 3, "correct": 3 }, "dvids-marne-2024": { "n": 1, "correct": 1 } }
+    },
+    "b_oracleOwnership": "100% by construction (ground-truth labels; not a measurement)",
+    "c_adversarialFixtures": {
+      "current": { "n": 12, "estimated": 10, "abstained": 2, "confidentWrong": 1, "modalityConfirmedWrong": 1 },
+      "oracle": { "n": 12, "estimated": 9, "abstained": 3, "confidentWrong": 0, "modalityConfirmedWrong": 0 },
+      "f3Detail": "F3 (foreign-paddle-within-reach): current = confident modality-confirmed wrong (error 590ms, confidence 0.778). Oracle ownership (foreign track removed) = ABSTAIN with multi-modal reason (clusters ~1715ms vs ~1100ms, 98% as strong). Perfect ownership eliminates the confident-wrong commitment but does NOT recover a correct estimate: the ball-turn decoy near the idle target wrist keeps the evidence ambiguous."
+    },
+    "c_committedGold_allEvents_n15": {
+      "current_no_paddle": { "events": 15, "estimated": 11, "abstained": 4, "strictHits": 4, "acceptableHits": 8, "wrongMarkers": 3, "confidentWrongMarkers": 0, "medianErrorMs": 103, "p90ErrorMs": 148 },
+      "oracle_ownership": { "events": 15, "estimated": 10, "abstained": 5, "strictHits": 3, "acceptableHits": 7, "wrongMarkers": 3, "confidentWrongMarkers": 0, "medianErrorMs": 106, "p90ErrorMs": 149 },
+      "wrong_ownership": { "events": 15, "estimated": 10, "abstained": 5, "strictHits": 3, "acceptableHits": 7, "wrongMarkers": 3, "confidentWrongMarkers": 0, "medianErrorMs": 106, "p90ErrorMs": 149 }
+    },
+    "c_committedGold_targetOnly_n10": {
+      "current_no_paddle": { "events": 10, "estimated": 7, "abstained": 3, "strictHits": 4, "acceptableHits": 6, "wrongMarkers": 1, "confidentWrongMarkers": 0, "medianErrorMs": 27, "p90ErrorMs": 128 },
+      "oracle_ownership": { "events": 10, "estimated": 6, "abstained": 4, "strictHits": 3, "acceptableHits": 5, "wrongMarkers": 1, "confidentWrongMarkers": 0, "medianErrorMs": 65, "p90ErrorMs": 131 },
+      "wrong_ownership": { "events": 10, "estimated": 6, "abstained": 4, "strictHits": 3, "acceptableHits": 5, "wrongMarkers": 1, "confidentWrongMarkers": 0, "medianErrorMs": 65, "p90ErrorMs": 131 }
+    },
+    "paddlePointAvailability": {
+      "oracle_ownership": { "eventsWithAnyPaddlePoint": 5, "eventsWithZero": 10 },
+      "wrong_ownership": { "eventsWithAnyPaddlePoint": 7, "eventsWithZero": 8 },
+      "note": "committed paddle annotations are sparse (1-10 points per event window), far below a dense track"
+    }
+  },
+  "findings": [
+    "F3 synthetic residual IS upstream-attributable: with perfect ownership (foreign paddle removed) the confident modality-confirmed wrong marker (error 590ms, confidence 0.778) becomes an honest multi-modal abstention. Confident-wrong across 12 fixtures: 1 (current) -> 0 (oracle).",
+    "Perfect ownership does NOT fully solve F3: the estimator abstains rather than localizing the true contact, because the ball-turn decoy near the idle target wrist survives ownership filtering. Eliminating the confident-wrong requires ownership; recovering a correct estimate additionally requires better ball-evidence disambiguation.",
+    "On committed real gold (n=15), ownership is NOT the limiting factor: even adversarially wrong ownership (other-player paddle points fed as target's, 7/15 events affected) produces zero confident-wrong markers and metrics identical to oracle ownership, because the paddle_track_beyond_reach tether (contact-evidence-4.x) excludes off-body paddle points regardless of claimed ownership.",
+    "Sparse oracle paddle points slightly HURT committed-gold replay: one previously correct estimate (wavea-944403-dink @21113ms, error 18ms, confidence 0.782 under current_no_paddle) becomes an abstention under oracle ownership, because 5 sparse in-window paddle points redirect ball-proximity gating (ball_never_near_target_paddle) away from the wrist gate. The estimator assumes dense paddle tracks; 1-10 annotation points per window are not a usable paddle modality.",
+    "The 3 wrong markers on committed gold (155/148/144ms, all confidence < 0.7) exist in the NO-paddle condition and are unchanged by any ownership condition: they are downstream contact-evidence localization error, not ownership error.",
+    "Current frame-level ownership accuracy on the dual-labeled set: 13/18 correct on the pose subset (1 abstention), 13/39 on all dual frames (22 abstentions, mostly missing pose)."
+  ],
+  "verdict": "PROVISIONAL_GREEN",
+  "rationale": "The oracle question is answered with counts on the full in-scope evidence: perfect ownership eliminates the F09 confident-wrong residual on the adversarial fixtures (1 -> 0 of 12) by converting it to abstention, but does not recover correct localization on F3, and on all 15 replayable committed gold events ownership (perfect or adversarially wrong) changes no confident-wrong count (0 in all three conditions) because the existing reach tether already neutralizes foreign paddle tracks. Attribution: the confident-wrong failure mode is upstream (ownership), the residual localization ambiguity and the 3 low-confidence wrong markers are downstream (contact evidence). PROVISIONAL_GREEN rather than GREEN because Linux replay is non-canonical (no Mac/Apple Vision cascade), the F2/F3 scenarios are synthetic reconstructions, and committed paddle annotations are too sparse to emulate a real dense oracle paddle track.",
+  "environment": "Linux replay only; no Swift/Mac/iPhone numbers claimed or fabricated."
+}
