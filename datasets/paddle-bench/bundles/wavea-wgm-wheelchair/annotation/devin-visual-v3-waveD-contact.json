@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-wgm-wheelchair",
+  "annotatorId": "devin-visual-v3-waveD",
+  "createdAtIso": "2026-08-29T10:05:00.000Z",
+  "revision": 1,
+  "stroke": "dink",
+  "annotatedStrokeV3": "BACKHAND_DINK",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": null,
+  "contactUncertainty": "exact",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.75,
+  "notes": "Wave D contact-only independent frame pass (ffmpeg absolute-CFR extraction from registered source, select+setpts, ts=round(n*1000*fps_den/fps_num)); prior Wave A/C passes not consulted during frame reads for repeat-pass events; held-out cases untouched. 30fps CFR; independent relabel; apparent ball-near-paddle at ~182800 read as trajectory apex coincidence (no reversal), not a second contact.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T10:05:00.000Z"
+    }
+  ],
+  "eventLabels": [
+    {
+      "eventStartMs": 182400,
+      "contactMs": 182567,
+      "eventEndMs": 183067,
+      "owner": "target",
+      "annotator": "devin-visual-v3-waveD",
+      "note": "wheelchair backhand lift/dink off the bounce; direct-observed (ball at paddle face n005477 182567ms, leftward departure 182633+); contact window 182567-182600 (1 frame at 30fps), label 182567; wave-a 182583 / waveC 182584 (delta ~17ms, half frame at 30fps bracket midpoint convention)"
+    }
+  ]
+}
