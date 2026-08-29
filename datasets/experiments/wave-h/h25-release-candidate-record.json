@@ -1,0 +1,109 @@
+{
+  "artifact": "release-candidate-record",
+  "recordVersion": "rc-record-v1",
+  "workstream": "h25-release-cert",
+  "generatedAt": "2026-08-29",
+  "generatedOn": "Linux (Ubuntu, Node v20.18.1, pnpm 10.15.1) — no Mac/iPhone/Apple Vision available; nothing in this record claims new device or cascade measurements",
+  "releaseCandidate": {
+    "commitSha": "104ea0f6383f5573ddc9393401700c7ecc163436",
+    "branch": "devin/1787988068-wave-c-integration",
+    "commitSubject": "Make async frame-stat extraction fully event-loop-safe: async ffprobe, no error-shape cast; add sync/async parity test",
+    "note": "This SHA is the certified baseline for Wave H. Wave-g/g2 branches (g01–g26, h01–h09) contain fixes and evidence NOT merged into this SHA; see h25-p0p1-remaining-register.json for which fixes exist only on unmerged branches."
+  },
+  "modelAndProviderVersions": {
+    "paddleDetector": {
+      "version": "dfine-medium-coco@transformers",
+      "model": "ustc-community/dfine-medium-coco (D-FINE, Apache-2.0 code+weights, COCO-pretrained)",
+      "servingContract": "paddle-serve-v1 (persistent warm worker, default ON, --no-paddle-worker opt-out, automatic fallback to one-shot path on worker failure)",
+      "where": "tools/paddle-lab/detect_paddle.py, packages/swing-lab/src/paddleWorker.ts"
+    },
+    "poseProviders": {
+      "production": "pose.apple-vision / pose.apple-vision+player-track (apple-vision-bodypose-1) — Mac/iOS only",
+      "linuxBenchProxy": "pose.none-linux-proxy + MediaPipe (linux bench only, effectively single-person; never a production provider)"
+    }
+  },
+  "algorithmContractVersions": {
+    "targetAcquisition": { "shipped": "D-027 promoted candidate (5-frame sustained gesture, 3s ambiguity timeout, incumbent hysteresis)", "benchCandidateNotPromoted": "acquire-v4 (awaiting live tap captures + one-shot locked_test per D-027 pattern)", "replay": "ta-replay-2", "minerLiveness": "liveness-v1" },
+    "eventProposal": "stroke-event-2 (body proposes, paddle confirms; stroke-event-1 legacy-replayable)",
+    "paddleTracking": "paddle-track-2 (flip-segmentation, D-035)",
+    "ballTracking": "ball-track-2 (occlusion state machine, D-034)",
+    "contact": "contact-evidence-4.3 (target-gated KDE fusion lineage D-033)",
+    "phases": "phase.paddle-temporal.v2.4 (anchor-free; anchored path byte-identical) + phase-geometry-1",
+    "strokeHeuristic": "stroke-heuristic-6 (uncalibrated) — BOTH copies (packages/swing-lab/src/strokeHeuristic.ts and packages/vision-geometry/src/strokeHeuristicLite.ts) at v6, 19-fixture parity suite; stroke-heuristic-7 anti-flip fix exists ONLY on branch devin/wave-g/g14-h6-invariants (not in this RC)",
+    "northStarContracts": ["usable-result-v1 (packages/swing-lab/src/cascadeWaterfall.ts)", "silent-failure-v1 / silent-failure-v1.1 (packages/swing-lab/src/silentFailure.ts)"],
+    "captureEnvelope": "capture-envelope-thresholds-v0.3-provisional (packages/capture-envelope/src/thresholds.ts; dimension versions: brightness-mean-luma-v0.1, clip-duration-v0.1, frame-rate-avg-v0.2, player-mean-joint-visibility-v0.1, player-pixel-height-fraction-v0.1, resolution-short-side-v0.1, timing-stability-interval-cv-v0.2)",
+    "cropRecovery": "crop-recovery-v1 (packages/swing-lab/src/paddleCropRecovery.ts, flag OFF)"
+  },
+  "datasetVersions": {
+    "source": "e25 recount at head (datasets/experiments/wave-e/e25-docs-evidence-pack.json), reproduced in docs/HANDOFF_V4_DRAFT.md §5",
+    "taGold": { "totalPool": 301, "verified": 59, "dev": 54, "lockedTest": 5, "file": "datasets/ta-bench/cases.json" },
+    "eventLabelRecords": { "records": 62, "target": 39, "withContactMs": 59, "excludingHeldOut": 57 },
+    "uniqueContactEvents": "28 per c05 reconciliation + D04 additions (wave-d/d04-contact-gold-scale-summary.json) — separate denominator from annotation records",
+    "ballGoldFrames": { "total": 103, "visible": 86, "uncertain": 6, "notVisible": 5, "occluded": 6, "withOcclusionState": 78 },
+    "ownership": { "annotationRecordsTargetOther": "102/142", "visiblePointBasisPrimary": "85/140", "sidecarVerdicts": 100, "dualFrames": 50 },
+    "strokeGold": { "labels": 29, "cases": 11, "schemaVersion": 1, "taxonomyVersion": "pickleball-taxonomy-v2", "file": "datasets/paddle-bench/stroke-gold.json" },
+    "heldOutUntouchable": ["wm-dink-01", "afn-vic-rally1"],
+    "freshCandidatePool": "8 clips committed (C16's 6 + wave-d2's 2 voa-*) + 7 wave-e e22 clips pending intake, all rights-cleared with provenance"
+  },
+  "schemaVersions": {
+    "sharedTypes": "packages/shared-types/src (captureEnvelope, consent, domain, errors, pickleballTaxonomy, states, techniqueIntent, voiceTechniqueIntent)",
+    "strokeGoldSchema": 1,
+    "strokeTaxonomyGold": "pickleball-taxonomy-v2",
+    "strokeTaxonomyRecognition": "pickleball-stroke-taxonomy-v3",
+    "techniqueContracts": ["technique-intent-v1", "technique-profile-v1"]
+  },
+  "mobileBuildConfig": {
+    "app": "PickleSensei (apps/mobile), version 0.0.1 (pre-release; no App Store build number assigned)",
+    "nativePods": "apps/mobile/ios/LocalPods/PickleNative (Swift sources; wave-c C09 motion-stream/per-event-clip sources written but NEVER compiled — no Apple SDK on Linux fleet)",
+    "captureCompletionStrategy": "default FIXED at process start (StrokeCompletionMonitor.swift); ADAPTIVE is a measured candidate (D-029/D-043 data gate MET) NOT promoted — awaiting live-trigger replay captures",
+    "storeReceiptValidation": "typed-501 until Apple/Google credentials exist (D-016, external)"
+  },
+  "backendArtifacts": {
+    "services": [
+      { "name": "services/api", "version": "0.1.0", "artifact": "Dockerfile" },
+      { "name": "services/media-worker", "version": "0.1.0", "artifact": "Dockerfile" }
+    ],
+    "adminWeb": { "name": "apps/admin-web", "version": "0.1.0" },
+    "localInfra": "docker-compose.yml (postgres:16-alpine dev + test)",
+    "cloudInfra": "infra/terraform",
+    "runtime": { "node": ">=20 <21 (v20.18.1 pinned in fleet)", "packageManager": "pnpm@10.15.1" }
+  },
+  "featureFlagState": {
+    "analyzeVideoCliDefaults": {
+      "paddleWorker": "ON (opt-out --no-paddle-worker)",
+      "mergeTracklets": "OFF (research-only, D-042 NOT production-safe)",
+      "cropRecovery": "OFF (--crop-recovery, crop-recovery-v1; held-out effect unmeasured)",
+      "twoPass": "OFF (--two-pass; promotion negative preserved in f25)",
+      "tightWindow": "OFF (--tight-window; ignored under --full-scan/--two-pass)",
+      "pass1Roi": "OFF (--pass1-roi; no effect without --two-pass)"
+    },
+    "mobile": { "captureCompletion": "FIXED (adaptive behind runtime store, never default)" },
+    "coachValidationGates": "All three coach-validated product surfaces (technique score, fault diagnosis, drill recommendation) read RELEASE_BLOCKED / BLOCKED_ON_VALIDATION (h04 frozen gates, hash-pinned; N=0 real coach reviews)"
+  },
+  "migrationSet": {
+    "atThisSha": [
+      "0001_extensions_identity.sql", "0002_catalog_scoring.sql", "0003_media_goals_sessions.sql",
+      "0004_shots_scores.sql", "0005_progress_social_billing.sql", "0006_ml_privacy_ops.sql",
+      "0007_flags_billing_ratings.sql", "0008_progress_daily_nulls.sql", "0009_real_data_boundary.sql",
+      "0010_access_billing.sql", "0011_training_system.sql", "0012_shot_analysis_permit.sql",
+      "0013_scoring_release_evidence.sql", "0014_shot_sync_payload_integrity.sql", "0015_consent_records.sql",
+      "0016_audit_indexes_consent_hardening.sql", "0017_consent_abuse_hardening.sql"
+    ],
+    "count": 17,
+    "directory": "packages/database/migrations",
+    "notInThisRc": "0018 (least-privilege runtime/migration roles) exists only on branches devin/wave-g/g10-f23-roles and g11-f23-tests; merging it changes the deploy prerequisite: pgcrypto extension must pre-exist (admin-created) and migrations run as the migration-owner role"
+  },
+  "drillAndTaxonomyVersions": {
+    "faultTaxonomy": "fault-taxonomy-v0-draft (46 faults; fault-taxonomy.v0-draft.json, admin-web coach lab)",
+    "drillLibrary": "drill-library-v0 (drill-library.v0.json); recommendation gate provably abstains on the entire shipped library until real coach endorsements exist (h05)",
+    "strokeTaxonomy": "pickleball-taxonomy-v2 (gold) / pickleball-stroke-taxonomy-v3 (recognition)"
+  },
+  "consentVersions": {
+    "videoAnalysis": "video-analysis-v1",
+    "modelTraining": "model-training-v1 (v2 referenced in HANDOFF_V4 §6 contract table)",
+    "ledgerExport": ["consent-ledger-export-v1", "consent-ledger-export-v2 (tamper-evident keyed signature)"],
+    "where": "packages/shared-types/src/consent.ts; migrations 0015/0016/0017 (append-only ledger, immutability + abuse hardening triggers)"
+  },
+  "externalClaimGate": "FAIL — approved external language remains \"Pickle Sensei is still being validated\" (docs/CLAIM_REVIEW.md); no accuracy or coaching-quality claims are releasable",
+  "measurementBoundary": "Latest cascade north stars are Mac 2026-08-28 (STRICT 2/5, USABLE 2/5); NOT re-measured since. All Wave C+ effects on cascade numbers are unmeasured until the Mac re-measure list (docs/HANDOFF_V4_DRAFT.md §4) executes. iPhone latency has never been measured (hardware absent)."
+}
