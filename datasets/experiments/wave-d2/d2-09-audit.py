@@ -102,7 +102,9 @@ def audit_registry(report, check_urls=True):
         if missing:
             issues.append({"severity": "missing_field", "where": f"quarantinedUnknownRights[{s.get('id')}]",
                            "detail": f"missing {missing}"})
-        if s.get("status") not in {"quarantined_not_downloaded", "excluded_noncommercial"}:
+        if s.get("status") not in {"quarantined_not_downloaded", "excluded_noncommercial",
+                                   "quarantined_eval_only_not_downloaded",
+                                   "quarantined_never_eligible_license_laundering_risk"}:
             issues.append({"severity": "role_violation", "where": f"quarantinedUnknownRights[{s.get('id')}]",
                            "detail": f"unexpected status {s.get('status')}"})
 
@@ -199,6 +201,105 @@ def audit_registry(report, check_urls=True):
             "quarantinedUnknownRights": len(reg.get("quarantinedUnknownRights", [])),
         },
         "freshCandidateMediaVerification": fc_summary,
+        "urlChecks": url_checks,
+    }
+    report["issues"].extend(issues)
+
+
+def audit_ood(report, check_urls=True):
+    reg_path = os.path.join(DS, "ood", "registry.json")
+    if not os.path.isfile(reg_path):
+        report["ood"] = {"present": False}
+        return
+    reg = load("datasets/ood/registry.json")
+    issues = []
+    url_checks = []
+    results = []
+    total_bytes_actual = 0
+    required = ["id", "role", "category", "path", "sourceUrl", "title", "uploader",
+                "license", "licenseVerification", "provenanceAssessment", "rights",
+                "restrictions", "media", "sha256", "contentVerification"]
+    for item in reg.get("items", []):
+        missing = [k for k in required if k not in item]
+        if missing:
+            issues.append({"severity": "missing_field", "where": f"ood/items[{item.get('id')}]",
+                           "detail": f"missing {missing}"})
+        if item.get("role") != "ood_negative":
+            issues.append({"severity": "role_violation", "where": f"ood/items[{item.get('id')}]",
+                           "detail": f"unexpected role {item.get('role')}"})
+        path = os.path.join(ROOT, item["path"])
+        rec = {"id": item["id"], "path": item["path"]}
+        if not os.path.isfile(path):
+            rec["fileExists"] = False
+            issues.append({"severity": "count_drift", "where": f"ood/items[{item['id']}]",
+                           "detail": "registered media file missing on disk"})
+        else:
+            rec["fileExists"] = True
+            b = os.path.getsize(path)
+            total_bytes_actual += b
+            rec["bytesActual"] = b
+            rec["bytesRegistered"] = item.get("media", {}).get("bytes")
+            rec["bytesMatch"] = b == item.get("media", {}).get("bytes")
+            digest = sha256_file(path)
+            rec["sha256Actual"] = digest
+            rec["sha256Registered"] = item.get("sha256")
+            rec["sha256Match"] = digest == item.get("sha256")
+            if not rec["bytesMatch"]:
+                issues.append({"severity": "count_drift", "where": f"ood/items[{item['id']}]",
+                               "detail": f"media.bytes {item.get('media', {}).get('bytes')} != actual {b}"})
+            if not rec["sha256Match"]:
+                issues.append({"severity": "integrity", "where": f"ood/items[{item['id']}]",
+                               "detail": "sha256 mismatch between registry and on-disk media"})
+        results.append(rec)
+    if reg.get("totalBytes") != total_bytes_actual:
+        issues.append({"severity": "count_drift", "where": "ood/registry.totalBytes",
+                       "detail": f"registered {reg.get('totalBytes')} != actual {total_bytes_actual}"})
+
+    neg_dir = os.path.join(DS, "ood", "negatives")
+    on_disk = sorted(os.listdir(neg_dir)) if os.path.isdir(neg_dir) else []
+    registered_files = sorted(os.path.basename(i["path"]) for i in reg.get("items", []))
+    if on_disk != registered_files:
+        issues.append({"severity": "count_drift", "where": "ood/negatives dir",
+                       "detail": f"on disk {on_disk} vs registered {registered_files}"})
+
+    required_q = ["id", "sourceUrl", "title", "uploader", "declaredLicense", "status", "reason"]
+    for q in reg.get("quarantinedUnknownRights", []):
+        missing = [k for k in required_q if k not in q]
+        if missing:
+            issues.append({"severity": "missing_field", "where": f"ood/quarantined[{q.get('id')}]",
+                           "detail": f"missing {missing}"})
+        if q.get("status") != "quarantined_not_committed":
+            issues.append({"severity": "role_violation", "where": f"ood/quarantined[{q.get('id')}]",
+                           "detail": f"unexpected status {q.get('status')}"})
+
+    if check_urls:
+        urls = [(f"ood/items[{i['id']}]", i.get("sourceUrl")) for i in reg.get("items", [])]
+        urls += [(f"ood/quarantined[{q['id']}]", q.get("sourceUrl"))
+                 for q in reg.get("quarantinedUnknownRights", [])]
+        for where, url in urls:
+            if not url:
+                continue
+            status, method = http_status(url)
+            url_checks.append({"where": where, "url": url, "httpStatus": status, "method": method,
+                               "checkedAt": report["generatedAtIso"]})
+            if status is None or status >= 400:
+                issues.append({"severity": "dead_url", "where": where,
+                               "detail": f"HTTP {status} ({method}) for {url}"})
+
+    report["ood"] = {
+        "present": True,
+        "schemaVersion": reg.get("schemaVersion"),
+        "counts": {
+            "items": len(reg.get("items", [])),
+            "quarantinedUnknownRights": len(reg.get("quarantinedUnknownRights", [])),
+            "searchLog": len(reg.get("searchLog", [])),
+        },
+        "mediaVerification": {
+            "items": results,
+            "totalBytesRegistered": reg.get("totalBytes"),
+            "totalBytesActual": total_bytes_actual,
+            "totalBytesMatch": reg.get("totalBytes") == total_bytes_actual,
+        },
         "urlChecks": url_checks,
     }
     report["issues"].extend(issues)
@@ -438,6 +539,7 @@ def main():
         "issues": [],
     }
     audit_registry(report, check_urls=check_urls)
+    audit_ood(report, check_urls=check_urls)
     audit_paddle_bench(report)
     audit_ball_bench(report)
     audit_corpus(report)
