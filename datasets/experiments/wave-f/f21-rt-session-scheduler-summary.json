@@ -1,0 +1,66 @@
+{
+  "id": "f21-rt-session-scheduler",
+  "wave": "F",
+  "mission": "Red-team the session scheduler (packages/analysis-pipeline/src/sessionScheduler.ts, e16): event storms, suspend/resume races, retry exhaustion, drained() livelock, duplicate ids, synchronous executor throws, clock skew, memory growth.",
+  "branch": "devin/wave-f/f21-rt-session-scheduler",
+  "baseCommit": "8588ddd (origin/devin/1787988068-wave-c-integration)",
+  "honestyBoundary": "Engine and scheduler are REAL production code under test; only the analysis execution behind the executor seam is scripted (NATIVE_CLIP_EXTRACTION gap, D-040). No gold labels read, no held-out case touched, no fresh-candidate material used.",
+  "defectsFoundAndFixed": [
+    {
+      "name": "SYNC-THROW-SLOT-LEAK",
+      "severity": "high",
+      "rootCause": "dispatch() called executor.execute() bare; a synchronous throw propagated out through pump() into pushSamples()/endOfStream() AFTER inFlightIds.add() and engine.markEvent('processing'), permanently leaking the concurrency slot (event stuck in inFlightIds, engine event stuck 'processing'). With concurrency=1 the whole scheduler starves and drained() never resolves; the throw also crashes the sample-feeding path, violating 'recording never stops'.",
+      "fix": "Wrap the execute() call in try/catch and convert a synchronous throw into Promise.reject, so it flows through the existing EXECUTOR_THREW rejection path (counted, recorded, honest revert to pending, slot released).",
+      "failingTest": "sessionSchedulerRedTeam.test.ts > SYNC THROW (failed pre-fix: 'bridge init crashed synchronously' thrown out of pushSamples; passes post-fix)"
+    },
+    {
+      "name": "CLOCK-SKEW-NEGATIVE-LATENCY",
+      "severity": "medium",
+      "rootCause": "queueWaitMs, serviceMs, and totalLatencyMs were raw clock differences; the default clock is Date.now (wall clock), which can step backwards under NTP correction/device clock reset, producing negative measured durations (observed -1000ms queueWaitMs in the red-team test with a backward-stepping virtual clock).",
+      "fix": "Clamp each measured duration at 0 (Math.max(0, delta)) at all three measurement sites. Measurements stay honest: clamping never inflates, it only prevents impossible negatives.",
+      "failingTest": "sessionSchedulerRedTeam.test.ts > CLOCK SKEW (failed pre-fix: expected -1000 >= 0; passes post-fix)"
+    },
+    {
+      "name": "READMIT-EXHAUSTED-NO-BUDGET",
+      "severity": "medium",
+      "rootCause": "recoverPending({readmitExhausted:true}) documents a 'fresh attempt budget' but re-enqueued with attempt=attempts+1 while applyOutcome kept comparing against the global maxAttempts, so a readmitted event whose attempts already reached maxAttempts got exactly ONE doomed try: any retryable failure on the recovery lease was immediately terminal (retryExhausted), contradicting the documented contract.",
+      "fix": "QueuedTask carries an attemptCeiling (normal enqueue: maxAttempts; recovery lease: attempts-so-far + maxAttempts). applyOutcome retries while attempt < ceiling. Normal-path behavior is unchanged (ceiling == maxAttempts).",
+      "failingTest": "sessionSchedulerRedTeam.test.ts > RECOVERY BUDGET (failed pre-fix: ready=0, event re-exhausted after 1 recovery attempt; passes post-fix: ready after attempt 4 with maxAttempts=2)"
+    },
+    {
+      "name": "SNAPSHOT-PER-DISPATCH-QUADRATIC",
+      "severity": "low",
+      "rootCause": "dispatch() called engine.snapshot() once per task solely to read the immutable sessionId; snapshot() deep-copies EVERY event, so scheduler-side allocation over a session is O(events^2) (n dispatches x O(n) copy) — pure memory churn growth on long sessions.",
+      "fix": "Cache sessionId once in the constructor (one snapshot on an empty engine); dispatch reads the cached id. recoverPending still snapshots per call by design (it must see current event states).",
+      "failingTest": "sessionSchedulerRedTeam.test.ts > MEMORY GROWTH (failed pre-fix: 12 snapshot calls for 12 events; passes post-fix: <=2)"
+    }
+  ],
+  "provenNegatives": [
+    "STORM (40 rapid events, concurrency 2): exactly-once enqueue, strict FIFO first attempts E1..E40, maxInFlight <= 2, all terminal — no defect.",
+    "DUPLICATE RE-ADMISSION: repeated recoverPending()/recoverPending({readmitExhausted:true}) while tasks are queued/in-flight re-dispatches nothing (dispatched stays 3) — no defect.",
+    "SUSPEND/RESUME RACE: a retryable failure settling while suspended applies the honest pending revert and re-queues WITHOUT dispatching until resume(); post-resume order E1#1,E2#1,E3#1,E1#2 — no defect.",
+    "CONCURRENT drained() WAITERS across a suspend/resume cycle all resolve; no livelock — no defect (suspended busy-poll at 5ms is documented behavior, CPU-cheap).",
+    "SUSTAINED FAILURE (every attempt retryable-fails, maxAttempts=3): dispatched=9, retries=6, all 3 events retry_exhausted, engine states honestly 'pending', analysis null, 3 recorded failure reasons each — counters reconcile exactly, no fabricated outcome."
+  ],
+  "outOfBoundaryFinding": {
+    "component": "SessionEventEngine.push (packages/analysis-pipeline/src/sessionEngine.ts) — NOT modified (outside f21 ownership)",
+    "observation": "Engine-only stream feeding is superlinear in session length: 100 events -> 19.5s, 200 events -> 94.9s (tsx, this box, engineprobe with 40ms-step gaussian streams; scheduler overhead ~0 — identical timings with scheduler attached). Long live sessions will hit this before any scheduler limit.",
+    "recommendation": "Integrator: profile engine.push sample retention/rescan for O(n^2) behavior."
+  },
+  "memoryCharacterization": {
+    "measurement": "200-event session, scripted always-ready executor, concurrency 4, --expose-gc heap delta (engine+scheduler combined): 835,696 bytes total (~4.2KB/event, dominated by engine event storage incl. frozen proposals); metrics() call at 200 records: 0.13ms (linear copy).",
+    "verdict": "Scheduler per-event record retention is small and linear; records double as the exactly-once guard so eviction would weaken a contract — retained as-is, growth documented."
+  },
+  "gates": {
+    "typecheck": "PASS (@pickle/analysis-pipeline tsc)",
+    "tests": "PASS (56/56 package tests: 10 pre-existing scheduler + 9 new red-team + 37 others)",
+    "lint": "PASS (root eslint .)",
+    "formatCheck": "PASS (root prettier --check)"
+  },
+  "datasetScope": "None — synthetic gaussian wrist-speed streams only (same shape as existing scheduler unit suites). No dataset records read or written.",
+  "artifacts": [
+    "packages/analysis-pipeline/src/sessionScheduler.ts (4 fixes)",
+    "packages/analysis-pipeline/test/sessionSchedulerRedTeam.test.ts (9 tests: 4 defect regressions + 5 proven negatives)",
+    "datasets/experiments/wave-f/f21-rt-session-scheduler-summary.json"
+  ]
+}
