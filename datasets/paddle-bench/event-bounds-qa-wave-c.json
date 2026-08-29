@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "recordVersion": "event-bounds-qa-v1",
+  "workstream": "C06",
+  "reviewer": "devin-visual-adjudication-c06",
+  "reviewedAtIso": "2026-08-29T08:30:00Z",
+  "protocolStatement": "Append-only QA of all 34 committed eventLabels (18 wave-a via event-bounds-wave-a.json + 16 v1 labels in bundle annotations). No source annotation file was modified; corrections are filed here only. Every event was re-viewed as rendered frame sheets at eventStartMs, contactMs-1frame, contactMs, contactMs+1frame, eventEndMs (frame step per source fps), with extra fine scrubs and zoom crops where the first pass was inconclusive. Source media: committed bundle clips where present (afn-sasebo-rally1, wm-dink-01, wm-volley-02) plus provenance-verified downloads (dhash-per-second match against datasets/corpus/fingerprints/) for all other recordings. HELD-OUT discipline: wm-dink-01 and afn-vic-rally1 were reviewed as observation-only; no threshold, label, or pipeline iteration was performed against them.",
+  "verdictKey": {
+    "PASS_VERIFIED": "ball seen at/adjacent to the striker's paddle at contactMs +-1 frame, or the label's stated evidence convention (ball reversal / interpolation) directly reproduced",
+    "PASS_CONSISTENT": "contact frame itself occluded or below resolvable size, but ball trajectory + body kinematics across bracketing frames are consistent with the labeled bounds; no contradicting evidence",
+    "FLAG": "visual evidence contradicts the label or its evidence basis; correction filed"
+  },
+  "events": [
+    { "bundle": "wavea-marne-serve", "idx": 0, "bounds": [34017, 34689, 35433], "verdict": "PASS_VERIFIED", "evidence": "ball ON paddle at 34689 (bracket 34672/34706 rendered); address/settle bounds match" },
+    { "bundle": "wavea-marne-dig", "idx": 0, "bounds": [14042, 14188, 14333], "verdict": "PASS_VERIFIED", "evidence": "verified via the label's own ball-reversal convention (descending 14125-14167, popped upward by 14208) on an accurate-seek 14.0-14.45s frame dump; touch frame edge-cropped exactly as disclosed. NOTE: scene contains multiple simultaneous feed balls; fast-seek renders alias badly here - accurate seek required" },
+    { "bundle": "wavea-faead-feed", "idx": 0, "bounds": [33358, 33442, 34050], "verdict": "PASS_VERIFIED", "evidence": "ball at paddle at 33442 (24fps bracket rendered)" },
+    { "bundle": "wavea-faead-rally", "idx": 0, "bounds": [13417, null, 13833], "verdict": "PASS_CONSISTENT", "evidence": "contact honestly omitted (torso occlusion); coil and rear-quarter ball transit visible as described" },
+    { "bundle": "wavea-faead-rally", "idx": 1, "bounds": [13875, 14042, 14500], "verdict": "PASS_VERIFIED", "evidence": "ball at raised paddle at 14042; departs high-left by 14083" },
+    { "bundle": "wavea-944403-dink", "idx": 0, "bounds": [20125, 20354, 20700], "verdict": "PASS_VERIFIED", "evidence": "ball ON low blue paddle at 20337 (c-1) per the label's own 20333/20375 bracket" },
+    { "bundle": "wavea-944403-dink", "idx": 1, "bounds": [20700, 20804, 20950], "verdict": "PASS_VERIFIED", "evidence": "ball at far-left player's paddle at 20787-20804, moving up-left after" },
+    { "bundle": "wavea-944403-dink", "idx": 2, "bounds": [20950, 21117, 21500], "verdict": "PASS_VERIFIED", "evidence": "ball at near-left player's paddle at 21117 (partially against net background, as disclosed)" },
+    { "bundle": "wavea-944403-dink", "idx": 3, "bounds": [21500, 21604, 21958], "verdict": "PASS_VERIFIED", "evidence": "ball at low paddle at 21604; toward net by 21621" },
+    { "bundle": "wavea-944403-dink", "idx": 4, "bounds": [22000, 22125, 22333], "verdict": "PASS_VERIFIED", "evidence": "ball on low paddle at 22108-22125; airborne high by 22333 (lob)" },
+    { "bundle": "wavea-944403-smash", "idx": 0, "bounds": [3617, 3950, 4275], "verdict": "PASS_VERIFIED", "evidence": "ball at overhead paddle apex 3933-3950" },
+    { "bundle": "wavea-944403-smash", "idx": 1, "bounds": [4317, 4379, 4525], "verdict": "PASS_VERIFIED", "evidence": "zoom crop: ball adjacent to near-right player's paddle at 4379; deflected down-court by 4396" },
+    { "bundle": "wavea-wgm-wheelchair", "idx": 0, "bounds": [182400, 182583, 183067], "verdict": "PASS_VERIFIED", "evidence": "ball at teal paddle face at 182583 (bracket 182567/182600 reproduced)" },
+    { "bundle": "wavea-sasebo-volleys", "idx": 0, "bounds": [51900, 52000, 52300], "verdict": "PASS_VERIFIED", "evidence": "ball at raised lime paddle 51967-52000" },
+    { "bundle": "wavea-sasebo-volleys", "idx": 1, "bounds": [52267, 52367, 52600], "verdict": "PASS_VERIFIED", "evidence": "zoom crop: ball leaves far counter-volleyer's paddle exactly at 52367. MINOR NOTE (no correction needed for bounds): the striker's shirt reads BLUE (JP/YONEX) in the zoom, while the note says 'far white-shirt' - description nit only; owner=other is correct" },
+    { "bundle": "wavea-sasebo-volleys", "idx": 2, "bounds": [52434, 52683, 52900], "verdict": "PASS_VERIFIED", "evidence": "ball ON paddle 52650-52683" },
+    { "bundle": "wavea-sasebo-volleys", "idx": 3, "bounds": [52867, 52967, 53201], "verdict": "PASS_CONSISTENT", "evidence": "small far figure; ball reversal across 52934/53000 consistent with labeled convention" },
+    { "bundle": "wavea-sasebo-volleys", "idx": 4, "bounds": [52934, 53067, 53234], "verdict": "PASS_VERIFIED", "evidence": "zoom crop: ball at target's chest-front paddle at 53067, departing up-right at 53101" },
+    { "bundle": "afn-sasebo-rally1", "idx": 0, "bounds": [2600, 2900, 3600], "verdict": "PASS_VERIFIED", "evidence": "ball touching gray paddle at 2867, just off at 2900 - within the label's +-2 frame tolerance" },
+    { "bundle": "afn-sasebo-rally1", "idx": 1, "bounds": [3500, 3870, 4300], "verdict": "FLAG", "evidence": "HARD CAMERA CUT between 3837 and 3850 in the committed clip (close shot -> wide shot). The labeled contact 3870 and end 4300 lie on the far side of the cut, in a different camera; a 'ball turn' read across a cut is not valid contact evidence. Also contradicts recordings.json rec-21fb75446a03 derivation note 'Single continuous shot' - the source itself cuts at ~29.85s. Windowed swing onset (3500) is real in the near shot" },
+    { "bundle": "afn-sasebo-rally1", "idx": 2, "bounds": [233, 317, 500], "verdict": "PASS_CONSISTENT", "evidence": "fine scrub 233-400: ball at paddle upper edge 233, occluded behind paddle 267-334, departing right by 367; contact within stated 283/350 bracket but the touch frame itself is paddle-occluded" },
+    { "bundle": "afn-sasebo-rally1", "idx": 3, "bounds": [1017, 1117, 1284], "verdict": "PASS_VERIFIED", "evidence": "ball adjacent to paddle at 1117 (bracket 1083/1150 reproduced)" },
+    { "bundle": "afn-sasebo-rally1", "idx": 4, "bounds": [1417, 1484, 1617], "verdict": "PASS_VERIFIED", "evidence": "ball ON paddle at shin height at 1484" },
+    { "bundle": "afn-sasebo-rally1", "idx": 5, "bounds": [1651, 1717, 1818], "verdict": "PASS_VERIFIED", "evidence": "ball at paddle face, knee height, at 1717" },
+    { "bundle": "afn-sasebo-rally1", "idx": 6, "bounds": [1818, 1934, 2084], "verdict": "PASS_VERIFIED", "evidence": "partner's pink paddle with ball adjacent at 1934; lunge onset 1818 partly occluded as disclosed" },
+    { "bundle": "afn-sasebo-rally2", "idx": 0, "bounds": [2380, 2620, 3050], "verdict": "PASS_CONSISTENT", "evidence": "ball very close to blurred overhead paddle at 2620; label honestly discloses interpolation from 2500->2682 transit" },
+    { "bundle": "afn-sasebo-rally2", "idx": 1, "bounds": [3600, 3834, 4233], "verdict": "PASS_VERIFIED", "evidence": "ball at overhead paddle at 3834, moving down-left at 3867" },
+    { "bundle": "afn-vic-rally1", "idx": 0, "bounds": [450, 680, 1150], "verdict": "PASS_CONSISTENT", "evidence": "HELD-OUT, observation only: contact frame body/paddle-occluded from this angle; ball airborne toward net at 713 consistent with the label's 700ms still" },
+    { "bundle": "afn-vic-rally1", "idx": 1, "bounds": [1300, null, 1650], "verdict": "PASS_CONSISTENT", "evidence": "HELD-OUT, observation only: contactless label; far return consistent with ball at net center ~1500" },
+    { "bundle": "afn-vic-rally1", "idx": 2, "bounds": [1900, null, 2350], "verdict": "PASS_CONSISTENT", "evidence": "HELD-OUT, observation only: contactless label; green-shirt partner reach visible at 2125" },
+    { "bundle": "wm-dink-01", "idx": 0, "bounds": [1050, 1260, 1650], "verdict": "PASS_CONSISTENT", "evidence": "HELD-OUT, observation only: contact frame not directly resolvable at source resolution (paddle low, ball small); incoming/outgoing trajectory across 1220->1650 consistent with contact ~1260" },
+    { "bundle": "wm-dink-01", "idx": 1, "bounds": [4150, 4360, 4600], "verdict": "PASS_CONSISTENT", "evidence": "HELD-OUT, observation only: far small figure; pale ball blob at far player's paddle at 4360-4400, matches the label's 'verified from still' basis" },
+    { "bundle": "wm-volley-02", "idx": 0, "bounds": [6300, 6680, 7100], "verdict": "PASS_VERIFIED", "evidence": "zoom crop: ball descending onto green paddle 6640, ON paddle face 6680, just off at 6720" },
+    { "bundle": "wm-volley-02", "idx": 1, "bounds": [6240, 6400, 6560], "verdict": "PASS_CONSISTENT", "evidence": "far red-shirt figure small; ball visibly airborne off him toward near court at 6440, consistent with contact ~6400" }
+  ],
+  "corrections": [
+    {
+      "id": "CORR-C06-1",
+      "target": "afn-sasebo-rally1 eventLabels[1] (owner=other, 3500/3870/4300, annotator devin-visual-v1)",
+      "type": "evidence_invalid_across_camera_cut",
+      "detail": "The committed clip (and the source at ~29.85s) has a hard camera cut between clip-times 3837 and 3850. contactMs 3870 and eventEndMs 4300 fall after the cut in a different camera view, so the v1 'contact from ball turn' evidence is invalid. Recommended disposition for the corpus owner: either truncate the event at the cut (drop contactMs, endMs<=3837, contact evidence 'occluded/none') or drop the event; additionally fix the recordings.json rec-21fb75446a03 'Single continuous shot' derivation note. Filed append-only; source annotation NOT edited.",
+      "sourceFilesModified": false
+    }
+  ],
+  "totals": { "eventsReviewed": 34, "passVerified": 22, "passConsistent": 11, "flagged": 1 }
+}
