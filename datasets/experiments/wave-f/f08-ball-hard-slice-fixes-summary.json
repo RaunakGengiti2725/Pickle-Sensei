@@ -1,0 +1,81 @@
+{
+  "id": "f08-ball-hard-slice-fixes",
+  "wave": "F",
+  "date": "2026-08-29",
+  "branch": "devin/wave-f/f08-ball-hard-slice-fixes",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "baseCommit": "8588ddd",
+  "codeCommit": "389cf52199b45564fb857c3c29c1bf16f89d40e4",
+  "mission": "E12 (ORANGE) evaluated ball tracking on the D2-06 hard slices. Pick the worst 2 defensible failures and fix them, preserving OBSERVED\u2192OCCLUDED/PREDICTED\u2192REACQUIRED/LOST semantics. Any fix that degrades another slice must be reported and reverted.",
+  "environment": {
+    "platform": "Ubuntu, Node v20.18.1, pnpm 10.34.5",
+    "evaluator": "pnpm --filter @pickle/swing-lab ball:hardslices <out.json> (packages/swing-lab/src/ballHardSliceEval.ts, real ball-track-2 tracker over E12 Linux CPU motion candidates, empty pose, no paddle track, 40ms time tolerance, 0.05 normalized hit radius)"
+  },
+  "datasetScope": {
+    "cases": ["wm-volley-02", "afn-sasebo-rally2", "wavea-wgm-wheelchair", "wavea-sasebo-volleys"],
+    "labels": "43 E12 gold labels (39 with points; 35 OBSERVED, 3 ENTERING_OCCLUSION, 2 OCCLUDED, 1 REACQUIRED, 2 UNCERTAIN_EXCLUDED), from datasets/experiments/wave-e/e12-ball-hard-slices/",
+    "grouping": "per independent case/session as defined by the E12 manifest; no random-frame splits",
+    "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"],
+    "freshCandidatePoolTouched": false
+  },
+  "failuresSelected": [
+    {
+      "case": "wm-volley-02",
+      "slice": "netCrossing (+paddleOcclusion overlap)",
+      "baseline": "OBSERVED 0/4 hits, 4 wrongLocation: primary selection picked limb/background track t579 (31 obs, straightness 0.39, medianSpeed 0.52) over the true 9-observation transit t582 (straightness 0.95, medianSpeed 1.23) which held 4/4 gold-aligned observations.",
+      "rootCause": "Primary score saturated speed at 0.8 u/s and rewarded raw window overlap up to 1.5s, so a long slow meandering limb track out-scored a genuine brief fast straight transit.",
+      "fix": "Score rebalanced: overlap factor saturates at 600ms (a real transit through a swing window is brief), speed factor saturates at 1.2 u/s (real in-play speed), straightness enters superlinearly (pow 1.5).",
+      "after": "OBSERVED 4/4 hits, 0 wrongLocation."
+    },
+    {
+      "case": "afn-sasebo-rally2",
+      "slice": "occlusionCycle (+fastBlur/paddleOcclusion/multiBallBackground overlap)",
+      "baseline": "OBSERVED 0/9 hits (3 wrongLocation, 6 miss) and 2 semantic VIOLATIONS: decoy t333 emitted measured observations during gold OCCLUDED intervals. True-ball track t281 (8/11 gold-aligned) was rejected: its clean early segment is glued to chronically-active-cell jitter, failing the jerky/chronic gates as a whole.",
+      "rootCause": "Track association glues a genuine flight segment to chronic-background jitter; gates then judge the contaminated whole and reject it, leaving only decoys in the pool.",
+      "fix": "Chronic-boundary rescue: a gate-rejected track gets one retry with chronically-contaminated boundary observations trimmed; the remainder must independently re-pass all physics/context/coherence gates plus stricter bars (chronicFraction <= 0.2, >= 8 observations, straightness >= 0.8). Plus a general primary evidence bar of >= 8 measured observations. Observations remain measured-only; nothing is invented.",
+      "after": "OBSERVED 1/9 hits, 0 wrongLocation, 8 miss; OCCLUDED 2/2 correctly abstained; violations 2 -> 0. Partial fix: the rescued selection (t269 region) is honest (abstains rather than emitting decoy positions) but t281's own clean segment still fails the jerky gate on genuine direction reversals, so most gold points are misses rather than hits. Full recovery of t281 was not achieved without admitting decoys elsewhere \u2014 reported honestly as a partial result."
+    }
+  ],
+  "semanticContract": {
+    "predictedNeverObserved": true,
+    "verification": "BallTrack.observations built exclusively from measured candidate points (ballTracker.ts observedAll mapping unchanged); bridge points remain predicted:true only; E12 rerun reports 0 OCCLUDED violations (baseline 2); regression tests assert rescued tracks emit only the measured clean subset."
+  },
+  "perSliceQuality": {
+    "baseline": {
+      "netCrossing": { "n": 4, "hits": 2, "misses": 0, "wrongLocation": 2, "violations": 0 },
+      "paddleOcclusion": { "n": 3, "hits": 1, "misses": 1, "wrongLocation": 1, "violations": 0 },
+      "multiBallBackground": { "n": 1, "hits": 0, "misses": 1, "wrongLocation": 0, "violations": 0 },
+      "fastBlur": { "n": 6, "hits": 0, "misses": 2, "wrongLocation": 4, "violations": 0 },
+      "occlusionCycle": { "n": 4, "hits": 0, "misses": 0, "wrongLocation": 2, "violations": 2 }
+    },
+    "after": {
+      "netCrossing": { "n": 4, "hits": 3, "misses": 0, "wrongLocation": 1, "violations": 0 },
+      "paddleOcclusion": { "n": 3, "hits": 1, "misses": 1, "wrongLocation": 1, "violations": 0 },
+      "multiBallBackground": { "n": 1, "hits": 0, "misses": 1, "wrongLocation": 0, "violations": 0 },
+      "fastBlur": { "n": 6, "hits": 0, "misses": 3, "wrongLocation": 3, "violations": 0 },
+      "occlusionCycle": { "n": 4, "hits": 0, "misses": 2, "wrongLocation": 0, "violations": 0, "abstained": 2 }
+    },
+    "degradationCheck": "No slice lost hits. netCrossing +1 hit; occlusionCycle violations 2->0 (wrongLocation 2->0, now correctly abstained); paddleOcclusion and multiBallBackground identical; fastBlur hits unchanged with one wrongLocation becoming a miss (wavea-wgm-wheelchair emits fewer wrong positions: wrongLocation 8->5). Nothing to revert."
+  },
+  "aggregate": {
+    "baseline": { "OBSERVED": { "n": 35, "hits": 4, "misses": 11, "wrongLocation": 20 }, "OCCLUDED": { "n": 2, "violations": 2 }, "REACQUIRED": { "n": 1, "hits": 0, "wrongLocation": 1 } },
+    "after": { "OBSERVED": { "n": 35, "hits": 9, "misses": 16, "wrongLocation": 10 }, "OCCLUDED": { "n": 2, "violations": 0, "abstained": 2 }, "REACQUIRED": { "n": 1, "hits": 0, "misses": 1 } },
+    "note": "Same denominators as E12 (no labels added/removed/reweighted). Hits 4->9 of 35 OBSERVED; wrongLocation 20->10; semantic violations 2->0."
+  },
+  "configuration": {
+    "trackerVersion": "ball-track-2",
+    "changes": [
+      "selectPrimaryBallTrack score: windowOverlap saturation 1000ms/cap1.5 -> 600ms/cap1.0; speed saturation 0.8 -> 1.2 u/s; travelFactor straightness -> straightness^1.5",
+      "selectPrimaryBallTrack eligibility: added observations >= BALL_OCCLUSION.minPrimaryObservations (8)",
+      "buildBallTracks: chronic-boundary rescue (trimChronicBoundaries + full re-gate with chronicFraction <= maxChronicFraction/3, >= 8 obs, straightness >= BALL_RESCUE_MIN_STRAIGHTNESS 0.8)"
+    ],
+    "gatesUnchanged": "All BALL_GATES2 thresholds and BALL_OCCLUSION semantics unchanged; no thresholds weakened; occlusion state machine untouched."
+  },
+  "tests": "4 regression tests added to packages/swing-lab/test/ballTracker.test.ts (chronic-boundary rescue trims and re-gates the measured clean segment; fully-chronic track is not rescued; brief fast straight transit preferred over long meander; <8-observation streak refused as primary). Full suite: 540 tests pass (536 + 4 new, 4 skipped preexisting).",
+  "artifacts": [
+    "datasets/experiments/wave-f/f08-ball-hard-slice-fixes/e12-rerun-baseline.json",
+    "datasets/experiments/wave-f/f08-ball-hard-slice-fixes/e12-rerun-after.json"
+  ],
+  "verdict": "GREEN",
+  "verdictNote": "Both selected failures improved with measured evidence and zero slice degradation; afn-sasebo-rally2 is a partial fix (violations eliminated, honest abstention, +1 hit) with the residual limitation documented above."
+}
