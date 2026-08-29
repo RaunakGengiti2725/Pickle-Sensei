@@ -40,7 +40,7 @@ export async function loadMigrations(dir: string): Promise<MigrationFile[]> {
  * from two sessions at once (both can pass the IF NOT EXISTS check and one
  * then fails with a duplicate-key error on pg_extension).
  */
-const MIGRATION_LOCK_KEY = 0x7069636b; // "pick"
+export const MIGRATION_LOCK_KEY = 0x7069636b; // "pick"
 
 export async function runMigrations(
   pool: Pool,

@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import pg from "pg";
-import { runMigrations } from "../src/migrate.js";
+import { MIGRATION_LOCK_KEY, runMigrations } from "../src/migrate.js";
 
 /**
  * Destructive role-separation suite (g11-f23): every boundary from migration
@@ -63,11 +63,22 @@ describe.skipIf(!testUrl)("consent role separation — destructive, real login u
     // schema makes it survive; one multi-statement batch keeps it atomic.
     // (gen_random_uuid itself is a pg_catalog builtin since PostgreSQL 13, so
     // nothing resolves through the extension's schema.)
-    await adminPool.query(
-      `CREATE EXTENSION IF NOT EXISTS pgcrypto;
-       CREATE SCHEMA IF NOT EXISTS pickle_ext;
-       ALTER EXTENSION pgcrypto SET SCHEMA pickle_ext;`,
-    );
+    // CREATE EXTENSION IF NOT EXISTS still races under concurrency (two
+    // sessions can both pass the existence check and one hits 23505 on
+    // pg_extension_name_index), so serialize against concurrent migration
+    // runners using the same advisory lock key runMigrations takes.
+    const extClient = await adminPool.connect();
+    try {
+      await extClient.query("SELECT pg_advisory_lock($1)", [MIGRATION_LOCK_KEY]);
+      await extClient.query(
+        `CREATE EXTENSION IF NOT EXISTS pgcrypto;
+         CREATE SCHEMA IF NOT EXISTS pickle_ext;
+         ALTER EXTENSION pgcrypto SET SCHEMA pickle_ext;`,
+      );
+      await extClient.query("SELECT pg_advisory_unlock($1)", [MIGRATION_LOCK_KEY]);
+    } finally {
+      extClient.release();
+    }
     await adminPool.query(`CREATE SCHEMA ${schemaName} AUTHORIZATION pickle_migration_owner`);
 
     // The migrator logs in as pickle_migrator and assumes the group role for
