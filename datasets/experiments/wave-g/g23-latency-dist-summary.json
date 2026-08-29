@@ -1,0 +1,64 @@
+{
+  "id": "g23-latency-dist",
+  "wave": "G",
+  "mission": "Latency DISTRIBUTIONS for the warm paddle worker on Linux (not single runs): repeated-request P50/P90/P95 over >=100 requests, process lifetime, memory growth curve, crash/restart recovery timing, fallback (one-shot) path timing, and concurrency behavior; compared against Wave D/E baselines (d09, e17, e18) at integration head.",
+  "platform": "Linux CPU-only (Ubuntu 22.04, Node v20.18.1, Python 3.10.12, torch 2.13.0+cpu, transformers 5.16.1, ffmpeg 4.4.2, D-FINE medium COCO). These numbers are NOT Mac/MPS/ANE/iPhone numbers and must never be presented as such; Swift/Mac/iPhone remain unmeasured on this branch.",
+  "method": "New harness packages/swing-lab/src/paddleWorkerLatencyDist.ts (pnpm --filter @pickle/swing-lab worker:latency-dist) drives the REAL worker (tools/paddle-lab/detect_paddle.py --serve) and records EVERY request's latency: (1) startup: 3 cold spawn->ready timings; (2) sequential: 100 requests round-robin over 4 fixed 500ms windows, per-request client wall ms + worker-reported requestWallSec, worker VmRSS sampled from /proc after every request; (3) concurrency: 20 batches of 2 then 10 batches of 4 concurrent requests on the same worker, per-request and per-batch wall; (4) one-shot fallback path: 8 real one-shot detect_paddle.py invocations (python import + model load + inference); (5) crash/restart: 5 cycles of mid-flight SIGKILL through PaddleWorkerSupervisor + detectPaddleWindow with a REAL one-shot fallback, measuring the kill-tolerant window duration and the first post-restart request. Percentiles are nearest-rank. Raw artifacts committed under datasets/experiments/wave-g/g23-latency-dist/.",
+  "dataset_scope": {
+    "clips": ["wm-volley-02", "afn-sasebo-rally1"],
+    "grouping": "4 shapes = 2 committed dev-bundle clips x 2 windows each (wm-volley-02 5300-5800ms & 6200-6700ms; afn-sasebo-rally1 2100-2600ms & 3100-3600ms), all 500ms, stride 3, floor 0.08 — identical shapes to the e18 soak so distributions are comparable to its aggregates."
+  },
+  "holdout_statement": "The held-out cases wm-dink-01 and afn-vic-rally1 were never read, listed, referenced, or touched by the harness or any run in this workstream. Only the two committed dev bundles above were used.",
+  "configuration": {
+    "harness": "packages/swing-lab/src/paddleWorkerLatencyDist.ts",
+    "args": { "seq": 100, "startups": 3, "crashes": 5, "oneshots": 8, "concurrency": "20x batch2 + 10x batch4" },
+    "commit_measured": "head of devin/1787988068-wave-c-integration plus the one-line ffmpeg stdin fix in tools/paddle-lab/detect_paddle.py (see findings.bug)",
+    "worker": "tools/paddle-lab/.venv/bin/python tools/paddle-lab/detect_paddle.py --serve"
+  },
+  "measured_results": {
+    "startup_cold_spawn_to_ready_ms": { "n": 3, "p50": 2676, "p90": 2728, "p95": 2728, "min": 2536, "max": 2728, "mean": 2646.7 },
+    "sequential_100_requests": {
+      "requests": 100,
+      "ok": 100,
+      "failures": 0,
+      "pooled_client_wall_ms": { "n": 100, "p50": 801, "p90": 886, "p95": 907, "min": 618, "max": 2008, "mean": 799.6 },
+      "pooled_worker_wall_ms_note": "worker-reported requestWallSec distribution in raw report; client-worker overhead is single-digit ms per request",
+      "total_wall_ms": 82596
+    },
+    "memory_growth_curve": {
+      "samples": 100,
+      "worker_vmrss_kb": { "first": 652068, "last": 654288, "min": 637180, "max": 716568 },
+      "finding": "no monotonic growth over 100 requests (last-first = +2220 kB, within the 637-717 MB fluctuation band); full per-request curve in head-seq-per-request.json"
+    },
+    "concurrency_same_worker": {
+      "batch2": { "rounds": 20, "requests": 40, "ok": 40, "failures": 0, "per_request_ms": { "n": 40, "p50": 1474, "p90": 1648, "p95": 1705, "min": 784, "max": 4111, "mean": 1325.3 }, "per_batch_ms": { "n": 20, "p50": 1553, "p90": 1692, "p95": 1705, "min": 1474, "max": 4111, "mean": 1693.7 } },
+      "batch4": { "rounds": 10, "requests": 40, "ok": 40, "failures": 0, "per_request_ms": { "n": 40, "p50": 2383, "p90": 3169, "p95": 3339, "min": 781, "max": 4400, "mean": 2131.5 }, "per_batch_ms": { "n": 10, "p50": 3149, "p90": 3339, "p95": 4400, "min": 3023, "max": 4400, "mean": 3268.5 } },
+      "finding": "the worker serves requests serially, so per-request latency scales ~linearly with batch size (batch2 p50 1474ms ~ 1.8x sequential p50 801ms; batch4 p50 2383ms ~ 3x); throughput per batch stays ~batch_size x single-request time — queueing, not parallelism"
+    },
+    "worker_process_lifetime": { "lifetime_ms": 149155, "requests_served": 180, "note": "one worker process served all 100 sequential + 80 concurrent requests with zero failures" },
+    "one_shot_fallback_path_ms": { "n": 8, "p50": 3500, "p90": 3575, "p95": 3575, "min": 3476, "max": 3575, "mean": 3518.9, "note": "every fallback window pays python import + model load + inference: ~3.5s vs ~0.8s warm, a ~4.4x penalty per window" },
+    "crash_restart_recovery": {
+      "cycles": 5,
+      "restarts": 5,
+      "contract_failures": 0,
+      "steady_request_ms": { "n": 5, "p50": 773, "p90": 852, "p95": 852, "min": 618, "max": 852, "mean": 756.4 },
+      "fallback_window_total_ms": { "n": 5, "p50": 4041, "p90": 4087, "p95": 4087, "min": 3836, "max": 4087, "mean": 4006.2 },
+      "first_post_restart_request_ms": { "n": 5, "p50": 3495, "p90": 3513, "p95": 3513, "min": 3320, "max": 3513, "mean": 3441.8 },
+      "note": "all 5 mid-flight SIGKILLed windows completed via real one-shot fallback; all 5 first post-restart requests served by the respawned worker (~3.4s incl. supervisor respawn + model load, then back to ~0.8s steady state)"
+    },
+    "orphan_serve_processes_after_run": 0
+  },
+  "baseline_comparison": {
+    "d09_startup": "d09 recorded worker startup ~2663-2700 ms; head measures p50 2676 ms (n=3) — no regression.",
+    "e18_memory": "e18 (200 sequential requests) recorded worker RSS first 625984 kB, last 645304 kB, range 625984-710224 kB, slope -28.9 kB/request; head over 100 requests measures first 652068 kB, last 654288 kB, range 637180-716568 kB — same flat, non-monotonic band; no leak regression.",
+    "e18_crash_and_concurrency_contracts": "e18's restart and 40-request concurrency contracts still hold at head (5/5 crash cycles correct, 80/80 concurrent requests ok) — but ONLY after the ffmpeg stdin fix below; see findings.bug for the reproducible pre-fix stall.",
+    "e17_e2e": "e17 pooled integrated-default e2e latency (n=24, p50 15584 ms) measures the full analyzeVideo pipeline over larger windows and is a different denominator; the per-window warm-worker p50 of 801 ms (n=100) is consistent with warm windows being a small fraction of e2e cost and is not evidence about e2e latency."
+  },
+  "findings": {
+    "bug": "REAL CONCURRENCY DEFECT FOUND AT INTEGRATION HEAD: detect_paddle.py's ffmpeg decode subprocesses were spawned inheriting the worker's stdin. In --serve mode that stdin is the JSONL protocol pipe, and ffmpeg reads inherited stdin for interactive commands, so under concurrent requests ffmpeg could consume a queued protocol line — the request is lost, its client hangs forever, and ffmpeg prints 'error parsing debug value / debug=0'. Reproduced deterministically in this environment with the unmodified head script (harness stalls in the concurrency phase with the worker blocked in unix_stream_data_wait and ffmpeg emitting the debug-parse error); it is a timing race, which is consistent with e18's concurrency phase having previously passed. Fixed on this branch by spawning both ffmpeg decode paths with stdin=subprocess.DEVNULL (2-line production change). One-shot detection output was verified byte-identical (timing-stripped) before vs after the fix.",
+    "distributions": "Warm sequential per-window latency is tight: p50 801 ms / p90 886 ms / p95 907 ms over n=100 with one 2008 ms outlier; fallback one-shot path is ~3.5 s per window (n=8); crash recovery returns to steady state immediately after the first ~3.4 s post-restart request (n=5).",
+    "no_regressions": "Startup, memory behavior, restart contracts, and sequential latency show no regression vs d09/e18 baselines; concurrency is serial queueing as designed (per-request latency ~ batch_size x single-request time)."
+  },
+  "verdict": "YELLOW",
+  "rationale": "All required distribution measurements completed on the real worker with full counts (3 startups, 100/100 sequential, 80/80 concurrent, 8 one-shots, 5/5 crash cycles, 0 orphans) and show no regression vs the Wave D/E baselines — but the integration head as-is carries a real, reproducible concurrency defect (ffmpeg stealing serve-protocol stdin lines, hanging clients) that this branch fixes with a 2-line production change. YELLOW rather than PROVISIONAL_GREEN because the healthy measurements only hold with the fix applied, and the fix must be integrated for the head to actually have the measured concurrency behavior. All numbers are Linux CPU-only; nothing here speaks to Mac/iPhone performance."
+}

@@ -1,0 +1,277 @@
+{
+  "label": "head",
+  "detectScript": "/home/ubuntu/repos/Pickle-Sensei/tools/paddle-lab/detect_paddle.py",
+  "startedAt": "2026-08-29T18:11:44.686Z",
+  "node": "v20.18.1",
+  "commit": "104ea0f6383f5573ddc9393401700c7ecc163436",
+  "args": {
+    "seqN": 100,
+    "startupsN": 3,
+    "crashesN": 5,
+    "oneshotsN": 8
+  },
+  "startup": {
+    "perSpawnMs": [
+      2676,
+      2536,
+      2728
+    ],
+    "dist": {
+      "n": 3,
+      "p50": 2676,
+      "p90": 2728,
+      "p95": 2728,
+      "min": 2536,
+      "max": 2728,
+      "mean": 2646.7
+    },
+    "readyMeta": [
+      {
+        "event": "ready",
+        "protocol": "paddle-serve-v1",
+        "modelLoadSec": 0.457,
+        "warmupSec": 0.144,
+        "device": "cpu"
+      },
+      {
+        "event": "ready",
+        "protocol": "paddle-serve-v1",
+        "modelLoadSec": 0.38,
+        "warmupSec": 0.143,
+        "device": "cpu"
+      },
+      {
+        "event": "ready",
+        "protocol": "paddle-serve-v1",
+        "modelLoadSec": 0.446,
+        "warmupSec": 0.178,
+        "device": "cpu"
+      }
+    ]
+  },
+  "sequential": {
+    "requests": 100,
+    "ok": 100,
+    "failures": [],
+    "pooledClientWallMs": {
+      "n": 100,
+      "p50": 801,
+      "p90": 886,
+      "p95": 907,
+      "min": 618,
+      "max": 2008,
+      "mean": 799.6
+    },
+    "pooledWorkerWallMs": {
+      "n": 100,
+      "p50": 800,
+      "p90": 886,
+      "p95": 907,
+      "min": 617,
+      "max": 2007,
+      "mean": 799.1
+    },
+    "byShapeClientWallMs": {
+      "wm-volley-02:5300-5800": {
+        "n": 25,
+        "p50": 665,
+        "p90": 712,
+        "p95": 730,
+        "min": 618,
+        "max": 755,
+        "mean": 668.5
+      },
+      "wm-volley-02:6200-6700": {
+        "n": 25,
+        "p50": 784,
+        "p90": 831,
+        "p95": 860,
+        "min": 747,
+        "max": 895,
+        "mean": 796.5
+      },
+      "afn-sasebo-rally1:2100-2600": {
+        "n": 25,
+        "p50": 811,
+        "p90": 895,
+        "p95": 907,
+        "min": 773,
+        "max": 2008,
+        "mean": 869.3
+      },
+      "afn-sasebo-rally1:3100-3600": {
+        "n": 25,
+        "p50": 860,
+        "p90": 923,
+        "p95": 933,
+        "min": 794,
+        "max": 943,
+        "mean": 864
+      }
+    },
+    "workerRssKb": {
+      "first": 652068,
+      "last": 654288,
+      "min": 637180,
+      "max": 716568
+    },
+    "wallMsTotal": 82596
+  },
+  "concurrency": {
+    "batch2": {
+      "rounds": 20,
+      "requests": 40,
+      "ok": 40,
+      "failures": [],
+      "perRequestMs": {
+        "n": 40,
+        "p50": 1474,
+        "p90": 1648,
+        "p95": 1705,
+        "min": 784,
+        "max": 4111,
+        "mean": 1325.3
+      },
+      "perBatchMs": {
+        "n": 20,
+        "p50": 1553,
+        "p90": 1692,
+        "p95": 1705,
+        "min": 1474,
+        "max": 4111,
+        "mean": 1693.7
+      }
+    },
+    "batch4": {
+      "rounds": 10,
+      "requests": 40,
+      "ok": 40,
+      "failures": [],
+      "perRequestMs": {
+        "n": 40,
+        "p50": 2383,
+        "p90": 3169,
+        "p95": 3339,
+        "min": 781,
+        "max": 4400,
+        "mean": 2131.5
+      },
+      "perBatchMs": {
+        "n": 10,
+        "p50": 3149,
+        "p90": 3339,
+        "p95": 4400,
+        "min": 3023,
+        "max": 4400,
+        "mean": 3268.5
+      }
+    }
+  },
+  "workerLifetime": {
+    "lifetimeMs": 149155,
+    "requestsServed": 180,
+    "note": "single worker process served the sequential + concurrency phases"
+  },
+  "oneShotFallbackPath": {
+    "shape": "wm-volley-02:5300-5800",
+    "perInvocationMs": [
+      3476,
+      3575,
+      3569,
+      3500,
+      3537,
+      3523,
+      3489,
+      3482
+    ],
+    "dist": {
+      "n": 8,
+      "p50": 3500,
+      "p90": 3575,
+      "p95": 3575,
+      "min": 3476,
+      "max": 3575,
+      "mean": 3518.9
+    },
+    "note": "each invocation pays python import + model load + inference; this is the cost of every window that falls back"
+  },
+  "crashRecovery": {
+    "cycles": [
+      {
+        "cycle": 1,
+        "steadyMs": 781,
+        "fallbackWindowMs": 4041,
+        "fallbackPath": "one_shot",
+        "postRestartMs": 3501,
+        "postRestartPath": "worker"
+      },
+      {
+        "cycle": 2,
+        "steadyMs": 758,
+        "fallbackWindowMs": 4049,
+        "fallbackPath": "one_shot",
+        "postRestartMs": 3380,
+        "postRestartPath": "worker"
+      },
+      {
+        "cycle": 3,
+        "steadyMs": 852,
+        "fallbackWindowMs": 4087,
+        "fallbackPath": "one_shot",
+        "postRestartMs": 3495,
+        "postRestartPath": "worker"
+      },
+      {
+        "cycle": 4,
+        "steadyMs": 618,
+        "fallbackWindowMs": 3836,
+        "fallbackPath": "one_shot",
+        "postRestartMs": 3320,
+        "postRestartPath": "worker"
+      },
+      {
+        "cycle": 5,
+        "steadyMs": 773,
+        "fallbackWindowMs": 4018,
+        "fallbackPath": "one_shot",
+        "postRestartMs": 3513,
+        "postRestartPath": "worker"
+      }
+    ],
+    "restarts": 5,
+    "failures": [],
+    "steadyMs": {
+      "n": 5,
+      "p50": 773,
+      "p90": 852,
+      "p95": 852,
+      "min": 618,
+      "max": 852,
+      "mean": 756.4
+    },
+    "fallbackWindowMs": {
+      "n": 5,
+      "p50": 4041,
+      "p90": 4087,
+      "p95": 4087,
+      "min": 3836,
+      "max": 4087,
+      "mean": 4006.2
+    },
+    "postRestartMs": {
+      "n": 5,
+      "p50": 3495,
+      "p90": 3513,
+      "p95": 3513,
+      "min": 3320,
+      "max": 3513,
+      "mean": 3441.8
+    },
+    "note": "fallbackWindowMs = kill-tolerant window total incl. real one-shot; postRestartMs = first request after crash (includes supervisor respawn + model load)"
+  },
+  "cleanup": {
+    "orphans": [],
+    "pass": true
+  },
+  "finishedAt": "2026-08-29T18:15:35.484Z"
+}
