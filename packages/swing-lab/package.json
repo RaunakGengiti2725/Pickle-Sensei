@@ -53,6 +53,7 @@
   },
   "dependencies": {
     "@pickle/analysis-pipeline": "workspace:*",
+    "@pickle/capture-envelope": "workspace:*",
     "@pickle/evaluation": "workspace:*",
     "@pickle/scoring": "workspace:*",
     "@pickle/shared-types": "workspace:*",

@@ -273,6 +273,9 @@ importers:
       '@pickle/analysis-pipeline':
         specifier: workspace:*
         version: link:../analysis-pipeline
+      '@pickle/capture-envelope':
+        specifier: workspace:*
+        version: link:../capture-envelope
       '@pickle/evaluation':
         specifier: workspace:*
         version: link:../evaluation
