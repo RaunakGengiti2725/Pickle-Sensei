@@ -1,0 +1,486 @@
+{
+  "experimentId": "EXP-2026-08-29-f15-learning-curve-actions",
+  "extends": "datasets/experiments/wave-e/EXP-2026-08-29-e14-learning-curves.json",
+  "generatedAtIso": "2026-08-29T11:09:03.766Z",
+  "question": "E14 ranked data-vs-features needs. For the subsystem the curves say is label-starved, what is the expected gain per N new labels (with bounds and stated assumptions), and what is the concrete label-acquisition plan?",
+  "environment": "LINUX-CPU artifact-join only — no pipeline stage executed, no run dir touched, no bench re-measured; all numbers derive from committed artifacts",
+  "starvationClassification": {
+    "rule": "Derived deterministically from E14 dataVsFeatures.call prefixes: MORE_DATA→LABEL_STARVED, MORE_PREDICTIONS→PREDICTION_STARVED, BETTER_FEATURES→FEATURE_LIMITED.",
+    "table": [
+      {
+        "subsystem": "contact",
+        "e14Call": "MORE_PREDICTIONS_FIRST (then more data on held-out-shaped slices)",
+        "class": "PREDICTION_STARVED",
+        "devLabelUnits": 32,
+        "joinedUnits": 3
+      },
+      {
+        "subsystem": "event",
+        "e14Call": "MORE_PREDICTIONS_FIRST — label supply is NOT the bottleneck",
+        "class": "PREDICTION_STARVED",
+        "devLabelUnits": 41,
+        "joinedUnits": 3
+      },
+      {
+        "subsystem": "stroke",
+        "e14Call": "MORE_DATA (new footage) — dev-corpus labeling is saturated",
+        "class": "LABEL_STARVED",
+        "devLabelUnits": 29,
+        "joinedUnits": 3
+      },
+      {
+        "subsystem": "ball",
+        "e14Call": "MORE_PREDICTIONS_FIRST — bench manifest and results lag the labels",
+        "class": "PREDICTION_STARVED",
+        "devLabelUnits": 100,
+        "joinedUnits": 12
+      },
+      {
+        "subsystem": "target_acquisition",
+        "e14Call": "BETTER_FEATURES — first subsystem with a full-supply measured curve, and it is slice-shaped, not n-shaped",
+        "class": "FEATURE_LIMITED",
+        "devLabelUnits": 54,
+        "joinedUnits": 54
+      }
+    ],
+    "mostDataStarved": {
+      "subsystem": "stroke",
+      "why": "The only LABEL_STARVED call in E14: D13 proved dev-corpus labeling saturated (29/29 events labeled) with 4 of 9 L1 families at zero gold — new labels require new footage. Event/contact/ball are PREDICTION-starved (labels exist, predictions lag) and target_acquisition is measured FEATURE-limited."
+    }
+  },
+  "taCurveFit": {
+    "purpose": "Quantifies where labels do NOT pay: the only full-supply measured curve, fitted and extrapolated to bound the value of same-distribution labels.",
+    "points": [
+      {
+        "units": 10.5,
+        "accuracy": 0.601,
+        "assumedSd": 0.2076
+      },
+      {
+        "units": 20.9,
+        "accuracy": 0.639,
+        "assumedSd": 0.1465
+      },
+      {
+        "units": 32.3,
+        "accuracy": 0.671,
+        "assumedSd": 0.0702
+      },
+      {
+        "units": 42.6,
+        "accuracy": 0.679,
+        "assumedSd": 0.0404
+      },
+      {
+        "units": 54,
+        "accuracy": 0.685,
+        "assumedSd": 0.0632
+      }
+    ],
+    "sdAssumptions": "Resampled points: sd=(p95−p5)/3.2897 of the group-bootstrap distribution (normal approximation). Full-supply point: binomial sd √(p(1−p)/54)=0.0632 — understates group-level variance, i.e. the bounds below are, if anything, too NARROW; the qualitative plateau verdict is insensitive to this.",
+    "modelSelection": [
+      {
+        "model": "exponential_saturation",
+        "a": 0.6898,
+        "b": 0.1855,
+        "c": 14.8077,
+        "weightedSse": 0.0026
+      },
+      {
+        "model": "power_law",
+        "a": 0.7256,
+        "b": 0.6859,
+        "c": 0.7154,
+        "weightedSse": 0.0053
+      }
+    ],
+    "bestModel": "exponential_saturation",
+    "asymptote": {
+      "pointEstimate": 0.69,
+      "bootstrap": {
+        "median": 0.73,
+        "p5": 0.643,
+        "p95": 1
+      }
+    },
+    "currentAccuracyAt54": 0.685,
+    "extrapolatedGainPerNewLabels": [
+      {
+        "addedLabels": 10,
+        "pointEstimateGain": 0.0024,
+        "bootstrapGain": {
+          "median": 0.0044,
+          "p5": 0,
+          "p95": 0.0412
+        }
+      },
+      {
+        "addedLabels": 25,
+        "pointEstimateGain": 0.0039,
+        "bootstrapGain": {
+          "median": 0.0079,
+          "p5": 0,
+          "p95": 0.0911
+        }
+      },
+      {
+        "addedLabels": 50,
+        "pointEstimateGain": 0.0047,
+        "bootstrapGain": {
+          "median": 0.0104,
+          "p5": 0,
+          "p95": 0.1525
+        }
+      },
+      {
+        "addedLabels": 100,
+        "pointEstimateGain": 0.0048,
+        "bootstrapGain": {
+          "median": 0.0117,
+          "p5": 0,
+          "p95": 0.2254
+        }
+      }
+    ],
+    "bootstrap": {
+      "draws": 2000,
+      "failures": 335,
+      "seed": 20260829
+    },
+    "interpretation": "Both saturating families agree the TA curve has plateaued: the median bootstrap gain from +50 same-distribution labels is 0.0104 (90% band 0…0.1525) — an order of magnitude below the +0.178 the committed candidate CONFIG already measures on identical cases. Labeling same-distribution TA cases is quantitatively the worst use of annotation effort."
+  },
+  "taSliceSampleSize": {
+    "purpose": "E14's secondary TA data need (contested-session slice estimates) quantified with exact Wilson math.",
+    "source": "datasets/ta-bench/results/ta-bench-1787969692752.json (shipped variant), verified dev cases, sessions from datasets/ta-bench/cases.json",
+    "targetHalfWidth": 0.15,
+    "slices": [
+      {
+        "session": "afn-sasebo-2025-06",
+        "cases": 7,
+        "lockCorrect": 3,
+        "accuracy": 0.429,
+        "wilson95": {
+          "low": 0.158,
+          "high": 0.75
+        },
+        "currentHalfWidth": 0.296,
+        "casesForHalfWidth015": 39,
+        "additionalCasesNeeded": 32
+      },
+      {
+        "session": "afn-sigonella-2025",
+        "cases": 4,
+        "lockCorrect": 1,
+        "accuracy": 0.25,
+        "wilson95": {
+          "low": 0.046,
+          "high": 0.699
+        },
+        "currentHalfWidth": 0.327,
+        "casesForHalfWidth015": 30,
+        "additionalCasesNeeded": 26
+      },
+      {
+        "session": "dvids-marne-2024",
+        "cases": 17,
+        "lockCorrect": 11,
+        "accuracy": 0.647,
+        "wilson95": {
+          "low": 0.413,
+          "high": 0.827
+        },
+        "currentHalfWidth": 0.207,
+        "casesForHalfWidth015": 36,
+        "additionalCasesNeeded": 19
+      },
+      {
+        "session": "dvids-warriorgames-2026",
+        "cases": 15,
+        "lockCorrect": 14,
+        "accuracy": 0.933,
+        "wilson95": {
+          "low": 0.702,
+          "high": 0.988
+        },
+        "currentHalfWidth": 0.143,
+        "casesForHalfWidth015": 14,
+        "additionalCasesNeeded": 0
+      },
+      {
+        "session": "wm-tournament-2014",
+        "cases": 11,
+        "lockCorrect": 8,
+        "accuracy": 0.727,
+        "wilson95": {
+          "low": 0.434,
+          "high": 0.903
+        },
+        "currentHalfWidth": 0.234,
+        "casesForHalfWidth015": 31,
+        "additionalCasesNeeded": 20
+      }
+    ]
+  },
+  "strokeGainPerNewLabels": {
+    "currentFamilyCoverage": {
+      "familiesWithGold": [
+        "dink",
+        "groundstroke",
+        "overhead_lob",
+        "serve",
+        "volley"
+      ],
+      "perFamily": {
+        "dink": 9,
+        "groundstroke": 2,
+        "overhead_lob": 5,
+        "serve": 1,
+        "unknown": 2,
+        "volley": 10
+      },
+      "zeroGoldFamilies": [
+        "return",
+        "drop_reset",
+        "attack_counter",
+        "specialty"
+      ],
+      "coverage": "5/9 L1 families have any gold"
+    },
+    "strokeCurveUnfittable": {
+      "provenNegative": "The stroke accuracy curve has 2 points (3 joined units, second point resamples=1). A 3-parameter saturating model is unidentifiable at 2 points; any extrapolated accuracy-per-label number from it would be fabricated. Gain per N new labels is therefore quantified in the two computable senses below (measurability + interval width), never as extrapolated accuracy.",
+      "curvePoints": 2,
+      "joinedUnits": 3
+    },
+    "measurabilityGainPerLabels": {
+      "definition": "A family becomes MEASURABLE when it has enough gold for a first accuracy point whose 95% Wilson half-width (worst-case p=0.5) is ≤0.25; TIGHT at ≤0.20.",
+      "labelsForFirstMeasurablePoint": 12,
+      "labelsForTightPoint": 21,
+      "wilsonPlanningTable": [
+        {
+          "labelsPerFamily": 5,
+          "halfWidthAtP05": 0.33
+        },
+        {
+          "labelsPerFamily": 8,
+          "halfWidthAtP05": 0.285
+        },
+        {
+          "labelsPerFamily": 12,
+          "halfWidthAtP05": 0.246
+        },
+        {
+          "labelsPerFamily": 16,
+          "halfWidthAtP05": 0.22
+        },
+        {
+          "labelsPerFamily": 24,
+          "halfWidthAtP05": 0.186
+        },
+        {
+          "labelsPerFamily": 32,
+          "halfWidthAtP05": 0.164
+        },
+        {
+          "labelsPerFamily": 43,
+          "halfWidthAtP05": 0.143
+        }
+      ],
+      "gainStatement": "12 labels/family × 4 zero-gold families = 48 labels lifts L1 measurability from 5/9 to 9/9 families (each with CI half-width ≤0.25); +36 more (21/family) tightens each to ≤0.20."
+    },
+    "groupWidthPrior": {
+      "assumption": "TA is the only subsystem with a measured width-vs-groups relation; transferring its fitted w(G)=k/√G to stroke assumes comparable per-session unit counts and inter-session heterogeneity. Direction-of-magnitude planning prior only — NOT a stroke measurement.",
+      "fittedK": 0.587,
+      "taMeasuredWidths": [
+        {
+          "groups": 1,
+          "width": 0.683
+        },
+        {
+          "groups": 2,
+          "width": 0.482
+        },
+        {
+          "groups": 3,
+          "width": 0.231
+        },
+        {
+          "groups": 4,
+          "width": 0.133
+        }
+      ],
+      "predictedStrokeIntervalWidth": [
+        {
+          "sessionGroups": 2,
+          "predictedWidth": 0.415
+        },
+        {
+          "sessionGroups": 4,
+          "predictedWidth": 0.294
+        },
+        {
+          "sessionGroups": 6,
+          "predictedWidth": 0.24
+        },
+        {
+          "sessionGroups": 8,
+          "predictedWidth": 0.208
+        },
+        {
+          "sessionGroups": 12,
+          "predictedWidth": 0.17
+        }
+      ]
+    }
+  },
+  "labelAcquisitionPlan": {
+    "ordering": "E14's ranking is not overturned: actions 1–2 (zero labels) precede labeling. This plan is the DATA arm the ranking asks for.",
+    "actions": [
+      {
+        "priority": 1,
+        "action": "Mac prediction pass (ZERO new labels)",
+        "subsystems": [
+          "event",
+          "contact",
+          "ball",
+          "stroke"
+        ],
+        "what": "lab:regen + event/contact/ball/stroke benches over the grown gold (41 event / 32 contact / 100 ball / 29 stroke dev units) + wire wavea-wgm-wheelchair and wavea-sasebo-volleys into ball-bench.json. Converts three MEASUREMENT_LIMITED verdicts into real data-vs-features calls without any labeling.",
+        "cost": "0 labels; 1 Mac session",
+        "blockedExternal": "requires macOS/Apple Vision (unchanged Wave C boundary)"
+      },
+      {
+        "priority": 2,
+        "action": "TA feature/config work, not labels",
+        "subsystems": [
+          "target_acquisition"
+        ],
+        "what": "Measured curve fit says same-distribution TA labels are worthless: best fit exponential_saturation plateaus at asymptote 0.69; +50 labels buys 0.0104 accuracy (90% bootstrap band 0…0.1525). The committed candidate config already measures 0.863 on the same 54 cases (D-027 gate pending).",
+        "cost": "0 labels"
+      },
+      {
+        "priority": 3,
+        "action": "Stroke label acquisition — 48 new stroke-event labels (12/family × 4 zero-gold families: return, drop_reset, attack_counter, specialty)",
+        "subsystems": [
+          "stroke",
+          "event",
+          "contact"
+        ],
+        "modality": "Per event: eventStartMs/contactMs/eventEndMs bounds + owner + stroke L1/L2/L3 (pickleball-taxonomy-v2), append-only into stroke-gold.json + bundle event sidecars; explicit unknown L2/L3 when not visually established; DeclaredStroke/PredictedStroke never merged. Each label co-feeds the event corpus (E14 rank 1 secondary) and, where the strike is visible, contactMs feeds contact gold.",
+        "sourceRequirement": "NEW footage only — D13 proved dev-corpus labeling is saturated (29/29 events labeled; 4 families at zero). Spread across ≥6 new dev session groups (transferred width prior predicts curve interval ≈ 0.24 at 6 groups vs 0.415 at 2).",
+        "contentTargeting": [
+          "return: any full-rally footage containing serves — every serve implies a return; behind-court tournament/rec match clips are the highest-yield source",
+          "drop_reset: mid-court third-shot/transition play — full-rally doubles footage at 3.0–5.0 level",
+          "attack_counter: kitchen-line speedups and counters — higher-level (4.0+) doubles exchanges",
+          "specialty (ATP/erne/tweener/lob-retrieval): rarest; tournament footage with around-the-post opportunities; expect the long tail to need targeted acquisition beyond this pool"
+        ],
+        "candidateClips": {
+          "gating": "The 15 committed fresh candidates are a label-blind holdout-candidate pool (registry policy: \"role=fresh_candidate, label-blind holdout pool; excluded from datasets/corpus and from all splits/training until a future freeze registers them through the acquisition front door.\"). NO labeling may start until the integrator runs a split-freeze through the D-024 acquisition front door; only dev-assigned clips may be labeled, and ≥5 clips should be frozen as holdout/val. If the integrator elects to preserve the entire pool as holdout, the fallback is new acquisition via the e22-proven channels (VA official PD-USGov, YouTube CC BY sweeps).",
+          "clips": [
+            {
+              "id": "yt-tJuJ4MQdYy0",
+              "title": "2.5 DUPR Rotating Partner Tournament Rd3 Craig/Vu vs Vo/Nam",
+              "committedRelevanceNote": "Outdoor doubles rec-tournament rally play, fixed elevated behind-court camera, ball and paddles clearly visible"
+            },
+            {
+              "id": "yt-I5wYCXCL4dY",
+              "title": "4.0 Game | July-22-2025",
+              "committedRelevanceNote": "Outdoor 4.0-level doubles on public courts, elevated corner camera, multiple courts, fast exchanges at the net"
+            },
+            {
+              "id": "yt-hktiyFnghIw",
+              "title": "2026.08.01 MXD5.0 Francesca Fakidis + Jacob Dubas vs Margaret ...",
+              "committedRelevanceNote": "Outdoor mixed-doubles 5.0 tournament match, behind-court camera, referee and spectators, high-level dinking and drives"
+            },
+            {
+              "id": "yt-Y7DOO0j_1P4",
+              "title": "2015.11.11 - Yates,Kyle vs Vavra,Dalton - MS19+ Semifinal",
+              "committedRelevanceNote": "Night-time outdoor men's singles semifinal under lights, behind-court camera, singles movement patterns absent from current corpus"
+            },
+            {
+              "id": "yt-iuVdtmGoTbo",
+              "title": "Men's Doubles Match - Partial Game 2 - March 17, 2024",
+              "committedRelevanceNote": "Indoor gym men's doubles on portable net, wide fixed camera, indoor lighting/floor conditions distinct from existing footage"
+            },
+            {
+              "id": "yt-eK-iPN2XAJQ",
+              "title": "March 2020. Te Pai Pickleball tournament",
+              "committedRelevanceNote": "Indoor multi-court tournament (Te Pai, New Zealand), handheld/tripod side view, amateur tournament play"
+            },
+            {
+              "id": "voa-6108955",
+              "title": "Pickleball Coach Proves Age Doesn't Matter in Sports",
+              "committedRelevanceNote": "Indoor (and briefly outdoor) recreational doubles pickleball gameplay and coaching drills at DC-area community gyms; paddles, ball, kitchen line and net clearly visible; interleaved with interview segments"
+            },
+            {
+              "id": "voa-6115790",
+              "title": "Pickleball Coach Proves Age - And Pandemic - Aren't Obstacles When It Comes to True Passion",
+              "committedRelevanceNote": "Indoor (and briefly outdoor) recreational doubles pickleball gameplay and coaching drills at DC-area community gyms; paddles, ball, kitchen line and net clearly visible; interleaved with interview segments"
+            },
+            {
+              "id": "yt-o_NeuHjTEVE",
+              "title": "Pickleball Doubles Mixed 3.5 to 4.5 in Melbourne, FL 06/04/2023 Game 1",
+              "committedRelevanceNote": "Outdoor mixed doubles 3.5-4.5 rec play in Florida, elevated behind-court fixed camera with on-screen score overlay, daylight hard court"
+            },
+            {
+              "id": "yt-n-QrBfQVK_w",
+              "title": "Thirstday Pickleball | MIXED DOUBLES FIGHT! | Dave/Eunice vs WeiCong/Jiawei",
+              "committedRelevanceNote": "Indoor commercial pickleball venue, fixed camera, mixed doubles social play; venue signage and hall lighting distinct from existing footage"
+            },
+            {
+              "id": "yt-94KNxpNTyCw",
+              "title": "WORST FOOT FAULT EVER!!! Game 9 Indoor REC",
+              "committedRelevanceNote": "Indoor rec doubles with score overlay; casual rec players of varied body types"
+            },
+            {
+              "id": "yt-9ru97zKV8mk",
+              "title": "Pickleball Game 3.0 Level - Maple Hill (Southern California)",
+              "committedRelevanceNote": "Outdoor 3.0-level doubles (Southern California), behind-court camera close to players"
+            },
+            {
+              "id": "yt-6r4fOxRuKmM",
+              "title": "First Singles Pickleball Match",
+              "committedRelevanceNote": "Singles match footage — singles movement patterns underrepresented in existing corpus"
+            },
+            {
+              "id": "va-6N3Yc184a_c",
+              "title": "The Pickleball Experience | 2026 National Veterans Golden Age Games",
+              "committedRelevanceNote": "Indoor convention-center pickleball at the National Veterans Golden Age Games: older-adult and wheelchair (adaptive) doubles rallies, interview segments; adaptive play and senior athletes extend corpus diversity"
+            },
+            {
+              "id": "va-O1dLhGGPErc",
+              "title": "2025 National Veterans Golden Age Games - Day 4 Highlights",
+              "committedRelevanceNote": "Vertical multi-sport Golden Age Games highlights including indoor pickleball segments (older-adult doubles, couple play); heavy stylized graphic overlays — perception value modest, registered honestly as low-density supplemental footage"
+            }
+          ]
+        },
+        "cost": "48 stroke-event labels (~12/family); +36 optional labels to tighten every family CI to ≤0.20"
+      },
+      {
+        "priority": 4,
+        "action": "Contact slice labels — 16 edge-on/occluded-contact events",
+        "subsystems": [
+          "contact"
+        ],
+        "modality": "contactMs on events where the paddle is edge-on or the contact is body/net-occluded (the committed held-out failure shape: dev 0.667 vs held-out 0.0 at 250/245ms). Take from the SAME new dev clips as priority 3 (marginal cost near zero) — E14 rank 2 says these labels only pay after the priority-1 Mac pass.",
+        "cost": "16 contact labels (subset of priority-3 events where the slice occurs)"
+      },
+      {
+        "priority": 5,
+        "action": "TA contested-slice verified cases (slice-estimate sharpening only)",
+        "subsystems": [
+          "target_acquisition"
+        ],
+        "modality": "verified ta-bench cases (region + trueTrackId + verification note), dev split",
+        "what": [
+          "afn-sasebo-2025-06: 3/7 (Wilson95 0.158–0.75) → +32 cases for half-width ≤0.15",
+          "afn-sigonella-2025: 1/4 (Wilson95 0.046–0.699) → +26 cases for half-width ≤0.15",
+          "dvids-marne-2024: 11/17 (Wilson95 0.413–0.827) → +19 cases for half-width ≤0.15",
+          "wm-tournament-2014: 8/11 (Wilson95 0.434–0.903) → +20 cases for half-width ≤0.15"
+        ],
+        "caveat": "Sharpens the slice ESTIMATE for the D-027-pending candidate evaluation; the fitted curve proves it will not move aggregate accuracy.",
+        "cost": "97 verified cases total (all sessions to half-width ≤0.15)"
+      }
+    ],
+    "heldOutDiscipline": "wm-dink-01 and afn-vic-rally1: untouched, never named as acquisition targets. Fresh candidates: never opened; plan quotes committed registry metadata only."
+  }
+}
