@@ -1,0 +1,91 @@
+{
+  "workstream": "wave-e/e11-ood-expansion",
+  "branch": "devin/wave-e/e11-ood-expansion",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "commit": "35ea495e861cf3265f682489a6d0a66e9d21742b",
+  "measuredAt": "2026-08-29T10:02:00Z",
+  "environment": {
+    "os": "Ubuntu Linux, CPU only",
+    "node": "v20.18.1",
+    "ffmpeg": "4.4.2",
+    "poseExtraction": "unavailable (Apple Vision is macOS-only); pose and poseQuality passed as null to the gate"
+  },
+  "datasetScope": {
+    "registry": "datasets/ood/registry.json",
+    "realNegatives": 11,
+    "realNegativesAdded": [
+      {
+        "id": "yt-x8T5I4YAKNw-squash",
+        "category": "other_racket_sport_squash",
+        "license": "CC BY 3.0 (declared on YouTube watch page)",
+        "bytes": 3495145,
+        "sha256": "d2f845d62fdc4594e7f68b6e2d5736031b8db5ac859a1b7309272d359fce43f1"
+      },
+      {
+        "id": "yt-EckAW5V1wv0-racquetball",
+        "category": "other_racket_sport_racquetball",
+        "license": "CC BY 3.0 (declared on YouTube watch page)",
+        "bytes": 6651339,
+        "sha256": "431f6deb2e800d7a7787ad18a496187b2a1fae0dacf651342bce89c422635df7"
+      }
+    ],
+    "derivedNegatives": 9,
+    "derivedCategories": [
+      "still_image_file",
+      "still_image_as_video",
+      "synthetic_graphics_test_pattern",
+      "synthetic_graphics_animated",
+      "extreme_aspect_ratio",
+      "truncated_media",
+      "corrupt_media",
+      "undecodable_random_bytes"
+    ],
+    "grouping": "per corpus item / independent source (no random-frame splits)",
+    "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"]
+  },
+  "configuration": {
+    "frameAnalyzabilityVersion": "frame-analyzability-3",
+    "previousVersion": "frame-analyzability-2",
+    "gateVersion": "pre-analysis-gate-1",
+    "newReasonCodes": ["implausible_aspect_ratio", "undecodable_media", "decoded_frame_deficit"],
+    "newThresholds": { "maxAspectRatio": 4, "minDecodedFrameFraction": 0.9 },
+    "contractNote": "Gate gaps (extreme aspect ratios, truncated/corrupt media) were fixed by adding source-dimension and decode-integrity signals under a new contract version; no existing thresholds or denominators were weakened."
+  },
+  "metrics": {
+    "corpusEvaluated": 20,
+    "derivedRejectedByPoseFreeGate": 8,
+    "derivedPassedThroughPoseFree": 1,
+    "realRejectedByPoseFreeGate": 0,
+    "realPassedThroughPoseFree": 11,
+    "confidentPickleballAnalysesOnOod": 0,
+    "confidentAnalysisCaveat": "0 confident analyses is only demonstrable up to the pose-free stage on Linux: pose_presence and pose_capture_quality remain notEvaluated for every item because Apple Vision pose extraction is macOS-only. Pose-free pass-through (11 real clips + derived-graphics-life) means these would reach the pose-conditioned stage, which cannot be executed here.",
+    "corpusInvariantCheck": "398 files, 0 violations (propertyInvariants.test.ts)"
+  },
+  "findings": {
+    "poseFreePassThrough": {
+      "realNegatives": "All 11 real negatives (tennis x2, badminton, table tennis x2, empty court, crowd, interview, title card, squash, racquetball) pass pose-free frame analyzability — distinguishing other racket sports from pickleball is content-level and requires pose/content models (BLOCKED_EXTERNAL on Linux).",
+      "derived": "derived-graphics-life (animated synthetic graphics) passes pose-free frame statistics; recorded as an honest open finding rather than patched with an arbitrary motion threshold."
+    },
+    "gateGapsFixed": {
+      "implausible_aspect_ratio": "derived-extreme-wide and derived-extreme-tall previously passed frame-analyzability-2; now rejected.",
+      "undecodable_media": "derived-corrupt-bytes and derived-garbage now rejected via decoder error + zero/near-zero decoded frames.",
+      "decoded_frame_deficit": "derived-truncated (byte-truncated faststart MP4) now rejected: decoded frames < 90% of container-declared frames with decoder errors."
+    }
+  },
+  "artifacts": [
+    "datasets/experiments/wave-e/e11-ood-gate-measurements.json",
+    "datasets/ood/registry.json",
+    "datasets/ood/DATA_CARD.md (Wave-E expansion section)",
+    "packages/swing-lab/src/oodGateWaveE.ts",
+    "packages/swing-lab/test/oodDerivedNegatives.test.ts",
+    "packages/swing-lab/test/oodRealNegatives.test.ts",
+    "packages/vision-geometry/src/frameAnalyzability.ts (frame-analyzability-3)",
+    "packages/swing-lab/src/frameStats.ts (decode/source stats)"
+  ],
+  "gates": {
+    "pnpm format:check": "pass",
+    "pnpm typecheck": "pass",
+    "pnpm lint": "pass",
+    "pnpm test": "pass (471 passed, 4 skipped across workspace incl. swing-lab 39 files)"
+  }
+}
