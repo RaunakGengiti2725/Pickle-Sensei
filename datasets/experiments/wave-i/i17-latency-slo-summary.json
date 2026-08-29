@@ -1,0 +1,47 @@
+{
+  "workstreamId": "i17-latency-slo",
+  "branch": "devin/wave-i/i17-latency-slo",
+  "mission": "Latency SLO measurement (movement-completion -> result-interactive P50/P75/P90/P95, sliced by device/OS/stroke/model version/capture condition/cold-warm) plus regression alerting with frozen thresholds, recording the existing Linux benchmark harness output clearly labeled Linux-not-device.",
+  "method": [
+    "Added a standalone workspace package tools/latency-slo (@pickle/latency-slo); no existing package or gate was touched.",
+    "Defined pickle.latency-slo-record.v1: one raw sample with a full slice (device, os, stroke, modelVersion, captureCondition, phase cold/warm) and a mandatory coarse provenance LINUX_BENCH_NOT_DEVICE | DEVICE_MEASUREMENT, so Linux numbers can never be silently read as device evidence.",
+    "Defined pickle.latency-slo-report.v1: nearest-rank P50/P75/P90/P95 (same convention as tools/mac-bench and tools/iphone-trials) overall and per (dimension, value, phase) slice, each judged at p95 against frozen tiers; any report containing LINUX_BENCH_NOT_DEVICE samples carries a non-removable disclaimer and deviceEvidence BLOCKED_EXTERNAL_NO_DEVICE_MEASUREMENTS.",
+    "Froze latency-slo-thresholds-v1 (ideal <=2000ms, strong <=3000ms, max <=5000ms, judged p95) with the same numbers as GATE B iphone-latency-targets-v1, and latency-slo-regression-alerts-v1 (p95 regression alerts only when > +200ms AND > +10%; any tier degradation alerts; FAIL tier alerts; disappeared slices alert; slices with < 5 samples downgrade to WARNING).",
+    "Built an ingester for the existing E17 Linux benchmark harness artifact (tools/latency-bench bench_e2e.py output): warm-up runs map to cold, measured reps to warm, modelVersion slices apart by arm@commit12, strokes come from a frozen clip map (unknown clips are UNLABELED_CLIP), captureCondition is honestly UNLABELED_COMMITTED_DEV_CLIP, non-Linux hosts are refused outright, crashed (non-zero-exit) runs are excluded, completed-but-abstained runs count as user-visible results.",
+    "CLI: `slo report` (bench artifact -> sliced report) and `slo compare` (baseline vs current with the frozen alert config; exit 1 on any ALERT)."
+  ],
+  "deliverables": [
+    "tools/latency-slo/src/sloRecord.ts (pickle.latency-slo-record.v1 + validator)",
+    "tools/latency-slo/src/sloStats.ts (nearest-rank P50/P75/P90/P95)",
+    "tools/latency-slo/src/sloThresholds.ts (frozen latency-slo-thresholds-v1 + latency-slo-regression-alerts-v1)",
+    "tools/latency-slo/src/generateSloReport.ts (pickle.latency-slo-report.v1, slicing, disclaimer)",
+    "tools/latency-slo/src/regressionAlerts.ts (MAX_THRESHOLD_EXCEEDED / TIER_DEGRADED / P95_REGRESSION / SLICE_DISAPPEARED, LOW_SAMPLE downgrade)",
+    "tools/latency-slo/src/ingestLinuxBench.ts (E17 harness ingester, Linux-only, provenance-locked)",
+    "tools/latency-slo/src/cli.ts + README.md",
+    "tools/latency-slo/test/* (36 vitest tests, all passing)",
+    "datasets/experiments/wave-i/i17-latency-slo-report.json (recorded from the committed real bench artifact; doubles as the frozen Linux regression baseline for future compares)"
+  ],
+  "recordedMeasurements": {
+    "source": "tools/latency-bench/artifacts/bench-results.json (E17, 2026-08-29, Linux-5.15.200-x86_64, 104 successful runs across 4 arms x 2 clips)",
+    "provenance": "LINUX_BENCH_NOT_DEVICE — Linux-CPU analysis stage over pre-extracted pose artifacts, wall time includes node/tsx process startup; NEVER device evidence, NEVER GATE B input.",
+    "headline": {
+      "overallWarmP95Ms": 23855.5,
+      "overallColdP95Ms": 18647.4,
+      "bestWarmArmP95Ms": { "arm": "integrated-tight-window@8fc388ee1625", "p95Ms": 18141.1 }
+    },
+    "verdictAgainstFrozenThresholds": "FAIL on every Linux slice (p95 far above the frozen 5000ms max). This is an honest RED for the Linux harness path: the frozen tiers describe the on-device product SLO, and the Linux box runs the full pipeline on CPU without the on-device pose/ANE path. Recorded as trend baseline, not as a product verdict."
+  },
+  "linuxValidation": {
+    "packageTests": "36 passed (sloStats 6, sloRecord 6, sloThresholds 5, generateSloReport 5, regressionAlerts 7, ingestLinuxBench 7 incl. end-to-end ingest of the real committed artifact)",
+    "cliExercised": "slo report produced the committed wave-i report (104 records, 20 slices, BLOCKED_EXTERNAL_NO_DEVICE_MEASUREMENTS, disclaimer printed); slo compare of the report against itself emitted 14 MAX_THRESHOLD_EXCEEDED alerts + 6 LOW_SAMPLE warnings and exited 1 as designed."
+  },
+  "negativeFindings": [
+    "Every Linux slice FAILs the frozen 5000ms max (warm overall p95 23.9s; best arm 18.1s) — on this Linux CPU path the pipeline is ~4-5x over the product SLO ceiling, so `slo compare` against any baseline will always exit 1 on Linux data via MAX_THRESHOLD_EXCEEDED until either the pipeline gets dramatically faster or device measurements exist; the TIER_DEGRADED / P95_REGRESSION kinds are the actionable trend signals on Linux.",
+    "The committed dev clips carry no capture-condition metadata, so the captureCondition dimension currently has a single honest UNLABELED_COMMITTED_DEV_CLIP value — the slice machinery is exercised but not discriminative on this data."
+  ],
+  "irreduciblyExternal": [
+    "Real device/OS slice diversity: all recorded measurements come from one Linux x86_64 box; device-sliced SLO evidence requires physical iPhones (still all NOT_ACQUIRED per tools/iphone-trials/device-matrix.json).",
+    "TRUE movement-completion -> result-interactive on device requires human frame-marked reference recordings (iphone-trials rules); the Linux metric is the analysis-stage proxy the E17 harness defines."
+  ],
+  "verdict": "SLO_MEASUREMENT_INFRA_READY_LINUX_BASELINE_RECORDED_DEVICE_EVIDENCE_BLOCKED_EXTERNAL: sliced P50/P75/P90/P95 SLO reporting and frozen-threshold regression alerting are built, tested and exercised on the real Linux harness artifact (honestly RED against the device SLO tiers and clearly labeled Linux-not-device); device-sliced evidence remains BLOCKED_EXTERNAL."
+}

@@ -1,0 +1,68 @@
+{
+  "id": "fixture-latency-bench",
+  "label": "TEST FIXTURE — not a measurement",
+  "createdAtIso": "2026-08-29T10:00:00Z",
+  "host": {
+    "platform": "Linux-5.15.200-x86_64-with-glibc2.35",
+    "machine": "x86_64",
+    "python": "3.10.12"
+  },
+  "commits": {
+    "integrated": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "baselinePreIntegration": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "clips": ["wm-volley-02", "mystery-clip"],
+  "arms": [
+    { "name": "baseline-pre-integration", "repo": "/tmp/baseline", "extraFlags": [] },
+    { "name": "integrated-default", "repo": "/tmp/integrated", "extraFlags": [] }
+  ],
+  "repsPerArmPerClip": 2,
+  "summary": {},
+  "runs": [
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "wm-volley-02",
+      "rep": -1,
+      "warmup": true,
+      "wallMs": 15000.5,
+      "exitCode": 0,
+      "outcome": "abstained"
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "wm-volley-02",
+      "rep": 1,
+      "warmup": false,
+      "wallMs": 14000.1,
+      "exitCode": 0,
+      "outcome": "abstained"
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "wm-volley-02",
+      "rep": 1,
+      "warmup": false,
+      "wallMs": 4200.7,
+      "exitCode": 0,
+      "outcome": "analyzed"
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "mystery-clip",
+      "rep": 1,
+      "warmup": false,
+      "wallMs": 4400.2,
+      "exitCode": 0,
+      "outcome": "analyzed"
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "wm-volley-02",
+      "rep": 2,
+      "warmup": false,
+      "wallMs": 99999.9,
+      "exitCode": 1,
+      "outcome": "crashed"
+    }
+  ]
+}
