@@ -526,9 +526,102 @@ export function scoreMethod(
   };
 }
 
+// ── versioned ownership-gold corrections (wave-E E05) ─────────────────────
+//
+// Adjudicated audit findings (D2-04) are applied as APPEND-ONLY correction
+// sets: sidecar files of kind "ownership-correction-set" that reference the
+// adjudication and the original value they supersede. Originals are never
+// rewritten on disk; corrections are applied in memory, only when requested.
+
+export interface OwnershipCorrectionRecord {
+  adjudicationId: string;
+  tMs: number;
+  owner: "target" | "other";
+  action: "supersede-point" | "add-visible";
+  originalPoint?: { x: number; y: number };
+  point: { x: number; y: number };
+  note?: string;
+}
+
+export interface OwnershipCorrectionSet {
+  kind: "ownership-correction-set";
+  captureBundle: string;
+  annotatorId: string;
+  corrections: OwnershipCorrectionRecord[];
+}
+
+const CORRECTION_TIME_TOLERANCE_MS = 1;
+const CORRECTION_POINT_TOLERANCE = 0.02;
+
+export interface CorrectionApplication {
+  superseded: number;
+  added: number;
+  unmatched: string[];
+}
+
+/** Apply correction sets to annotation passes in memory (pure — unit-testable).
+ *  supersede-point rewrites the matching visible point; add-visible appends a
+ *  visible frame under the correction set's own annotatorId. */
+export function applyOwnershipCorrections(
+  passes: AnnotationPass[],
+  sets: OwnershipCorrectionSet[],
+): CorrectionApplication {
+  const result: CorrectionApplication = { superseded: 0, added: 0, unmatched: [] };
+  for (const set of sets) {
+    const addedFrames: {
+      target: AnnotationPass["paddleFrames"];
+      other: AnnotationPass["otherPaddleFrames"];
+    } = { target: [], other: [] };
+    for (const correction of set.corrections) {
+      if (correction.action === "add-visible") {
+        addedFrames[correction.owner].push({
+          tMs: correction.tMs,
+          point: correction.point,
+          visibility: "visible",
+        });
+        result.added += 1;
+        continue;
+      }
+      let matched = false;
+      for (const pass of passes) {
+        const frames = correction.owner === "target" ? pass.paddleFrames : pass.otherPaddleFrames;
+        for (const frame of frames) {
+          if (
+            frame.visibility === "visible" &&
+            frame.point &&
+            correction.originalPoint &&
+            Math.abs(frame.tMs - correction.tMs) <= CORRECTION_TIME_TOLERANCE_MS &&
+            Math.hypot(
+              frame.point.x - correction.originalPoint.x,
+              frame.point.y - correction.originalPoint.y,
+            ) <= CORRECTION_POINT_TOLERANCE
+          ) {
+            frame.point = correction.point;
+            matched = true;
+          }
+        }
+      }
+      if (matched) result.superseded += 1;
+      else result.unmatched.push(correction.adjudicationId);
+    }
+    if (addedFrames.target.length > 0 || addedFrames.other.length > 0) {
+      passes.push({
+        annotatorId: set.annotatorId,
+        paddleFrames: addedFrames.target,
+        otherPaddleFrames: addedFrames.other,
+      });
+    }
+  }
+  return result;
+}
+
 // ── loader + CLI ──────────────────────────────────────────────────────────
 
-export function loadDualFrames(includeHeldOut: boolean): DualFrame[] {
+export function loadDualFrames(
+  includeHeldOut: boolean,
+  applyCorrections = false,
+  applicationOut?: Record<string, CorrectionApplication>,
+): DualFrame[] {
   const sidecarPath = join(PB, "ownership-review/ownership-review.json");
   const queuePath = join(PB, "ownership-review/queue.json");
   const sidecar = existsSync(sidecarPath)
@@ -543,15 +636,24 @@ export function loadDualFrames(includeHeldOut: boolean): DualFrame[] {
     const annotationDir = join(PB, "bundles", caseId, "annotation");
     if (!existsSync(annotationDir)) continue;
     const passes: AnnotationPass[] = [];
+    const correctionSets: OwnershipCorrectionSet[] = [];
     for (const file of readdirSync(annotationDir).filter((name) => name.endsWith(".json"))) {
-      const annotation = JSON.parse(
-        readFileSync(join(annotationDir, file), "utf8"),
-      ) as SwingAnnotation;
+      const parsed = JSON.parse(readFileSync(join(annotationDir, file), "utf8")) as
+        SwingAnnotation | OwnershipCorrectionSet;
+      if ("kind" in parsed && parsed.kind === "ownership-correction-set") {
+        correctionSets.push(parsed);
+        continue;
+      }
+      const annotation = parsed as SwingAnnotation;
       passes.push({
         annotatorId: annotation.annotatorId,
         paddleFrames: annotation.paddleFrames ?? [],
         otherPaddleFrames: annotation.otherPaddleFrames ?? [],
       });
+    }
+    if (applyCorrections && correctionSets.length > 0) {
+      const application = applyOwnershipCorrections(passes, correctionSets);
+      if (applicationOut) applicationOut[caseId] = application;
     }
     const caseFrames = assembleDualFrames(caseId, info, passes, sidecar, queueFrames);
     if (info.poseRunDir) {
@@ -566,10 +668,14 @@ export function loadDualFrames(includeHeldOut: boolean): DualFrame[] {
   return frames;
 }
 
-export function runBench(includeHeldOut: boolean): {
+export function runBench(
+  includeHeldOut: boolean,
+  applyCorrections = false,
+): {
   benchVersion: string;
   generatedAtIso: string;
   includeHeldOut: boolean;
+  correctionsApplied: Record<string, CorrectionApplication> | null;
   dualFrames: number;
   framesWithPose: number;
   perCase: Record<string, { dualFrames: number; withPose: number }>;
@@ -579,7 +685,8 @@ export function runBench(includeHeldOut: boolean): {
    *  apples-to-apples comparison surface (all methods can answer there). */
   poseSubsetMethods: MethodReport[];
 } {
-  const frames = loadDualFrames(includeHeldOut);
+  const applicationOut: Record<string, CorrectionApplication> = {};
+  const frames = loadDualFrames(includeHeldOut, applyCorrections, applicationOut);
   const byCase = new Map<string, DualFrame[]>();
   for (const frame of frames) {
     byCase.set(frame.caseId, [...(byCase.get(frame.caseId) ?? []), frame]);
@@ -620,6 +727,7 @@ export function runBench(includeHeldOut: boolean): {
     benchVersion: OWNERSHIP_BENCH_VERSION,
     generatedAtIso: new Date().toISOString(),
     includeHeldOut,
+    correctionsApplied: applyCorrections ? applicationOut : null,
     dualFrames: orderedFrames.length,
     framesWithPose: orderedFrames.filter((frame) => frame.pose !== null).length,
     perCase,
@@ -638,13 +746,19 @@ export function runBench(includeHeldOut: boolean): {
 const isMain = process.argv[1]?.endsWith("ownershipBench.ts");
 if (isMain) {
   const includeHeldOut = process.argv.includes("--include-held-out");
-  const report = runBench(includeHeldOut);
+  const applyCorrections = process.argv.includes("--apply-corrections");
+  const outFlagIndex = process.argv.indexOf("--out");
+  const outOverride = outFlagIndex >= 0 ? process.argv[outFlagIndex + 1] : undefined;
+  const report = runBench(includeHeldOut, applyCorrections);
   const outDir = join(REPO_ROOT, "datasets/experiments/wave-d");
   mkdirSync(outDir, { recursive: true });
-  const outPath = join(
-    outDir,
-    includeHeldOut ? "d02-ownership-eval-with-held-out.json" : "d02-ownership-eval.json",
-  );
+  const outPath = outOverride
+    ? join(REPO_ROOT, outOverride)
+    : join(
+        outDir,
+        includeHeldOut ? "d02-ownership-eval-with-held-out.json" : "d02-ownership-eval.json",
+      );
+  if (outOverride) mkdirSync(join(outPath, ".."), { recursive: true });
   writeFileSync(outPath, JSON.stringify(report, null, 2));
   console.log(
     `${OWNERSHIP_BENCH_VERSION} · ${report.dualFrames} dual frames (${report.framesWithPose} with committed pose) · held-out ${includeHeldOut ? "INCLUDED" : "excluded"}`,
