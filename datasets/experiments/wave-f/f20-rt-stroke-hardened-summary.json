@@ -1,0 +1,88 @@
+{
+  "workstream": "f20-rt-stroke-hardened",
+  "wave": "F",
+  "branch": "devin/wave-f/f20-rt-stroke-hardened",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "commit": "cbdf8d4a4d05300d70722db809e2e548fa41f73f",
+  "mission": "Red-team the NEW stroke-heuristic-4 absence-of-measurement gates introduced in e03: partially-measured rival wrists, measurement dropouts, gate-masking / coverage regressions, and adversarial fixtures that pass all gates yet are wrong.",
+  "classifierUnderTest": "stroke-heuristic-4 (uncalibrated) — packages/swing-lab/src/strokeHeuristic.ts (NOT modified)",
+  "datasetScope": {
+    "realFootage": "none — all cases are deterministic synthetic pose/speed geometry",
+    "heldOut": "wm-dink-01 and afn-vic-rally1 untouched (not viewed, labeled, tuned against, or regenerated)",
+    "freshCandidates": "datasets/pickleball/fresh-candidates/ untouched",
+    "runsDirs": "untouched",
+    "provenance": "synthetic.adversarial-stroke-v4-redteam / adversarial-stroke-v4-1, deterministic runtime"
+  },
+  "configuration": {
+    "samplingMs": 30,
+    "fixtures": "packages/evaluation/src/synthetic/adversarialStrokeV4Fixtures.ts (7 fixtures)",
+    "tests": "packages/swing-lab/test/strokeHeuristicV4Gates.redteam.test.ts (9 tests, all deterministic, no ffmpeg)",
+    "sweepScript": "datasets/experiments/wave-f/f20-coverage-sweep.ts",
+    "sweepArtifact": "datasets/experiments/wave-f/f20-coverage-sweep.json"
+  },
+  "findings": [
+    {
+      "id": "F20-F1",
+      "kind": "confidently_wrong",
+      "title": "Sparse rival-wrist measurement (1-3 frames) disarms the rival-unmeasured gate and permits a wrong-arm commit",
+      "detail": "sparseRivalWrongArmFixture: rival (left) wrist is the true striking arm but is measured in only 2 frames; dominant right wrist is fully measured and moving. v4's dominant_wrist_attribution_unverifiable_rival_unmeasured gate only fires at exactly 0 rival-measured frames, so the classifier commits FOREHAND at 0.80 confidence off the wrong arm. Sweep: 0 rival frames -> UNKNOWN (gate fires); 1-3 frames -> committed at 0.80.",
+      "rootCause": "The gate tests for total absence of rival measurement rather than sufficiency of rival measurement; 1-2 glimpsed frames are treated as full verification of arm attribution."
+    },
+    {
+      "id": "F20-F2",
+      "kind": "confidently_wrong",
+      "title": "Torso ratios just above the 0.6 collapse threshold still yield a false OVERHEAD",
+      "detail": "torsoCollapseBoundaryOverheadFixture: shoulder-high volley with contact 0.22 real torso-units above shoulders, torso extent biased to 0.62 of sequence median across the swing window. The collapse gate (TORSO_COLLAPSE_MEDIAN_RATIO=0.6) does not fire and normalized elevation inflates past the overhead threshold: committed OVERHEAD at 0.68. Sweep boundary: ratio <= 0.60 -> UNKNOWN (gate fires); 0.62-0.85 -> false OVERHEAD (0.63-0.68); >= 0.90 -> correct FOREHAND.",
+      "rootCause": "Hard 0.6 cliff: mild uniform torso-extent bias (0.60 < ratio < ~0.9) passes the gate but still distorts torso-normalized contact elevation enough to flip the label."
+    },
+    {
+      "id": "F20-F3",
+      "kind": "coverage_regression",
+      "title": "Genuine deep-crouch dink below 60% median torso extent is falsely abstained",
+      "detail": "crouchDinkFixture: physically real crouch posture (torso extent genuinely ~0.55-0.58 of the standing median during the dink) trips torso_extent_collapsed_vs_sequence_median and returns UNKNOWN. Sweep coverage floor: ratio 0.50-0.58 -> UNKNOWN; ratio >= 0.60 -> correct FOREHAND at 0.80.",
+      "rootCause": "The collapse gate cannot distinguish measurement failure (tracker collapse) from genuine postural torso foreshortening; deep crouches are a legitimate pickleball posture (dinks)."
+    },
+    {
+      "id": "F20-F4",
+      "kind": "coverage_regression",
+      "title": "Fully occluded rival wrist abstains on a genuine, unambiguous forehand (v4 regression vs v3 lite port)",
+      "detail": "occludedRivalGenuineForehandFixture: dominant arm fully measured with a clean swing; rival wrist has 0 measured frames (occluded by body). v4 -> UNKNOWN (dominant_wrist_attribution_unverifiable_rival_unmeasured). The v3 lite port (packages/vision-geometry/src/strokeHeuristicLite.ts, stroke-heuristic-3) commits the correct FOREHAND on the same geometry, pinning the divergence.",
+      "rootCause": "Zero-rival-frame gate treats absence of rival measurement as disqualifying even when dominant-arm evidence is complete; coverage floor for the gate is exactly 1 rival-measured frame."
+    },
+    {
+      "id": "F20-F5",
+      "kind": "coverage_regression",
+      "title": "Exactly 3 sub-floor speed samples fire the no-swing-energy gate even when clustered before a genuine swing",
+      "detail": "speedDropoutDuringSwingFixture: genuine fast drive whose mid-swing speed samples are dropped; the only surviving in-window samples are >= 3 low-energy readings before the swing. MIN_WINDOW_SPEED_SAMPLES=3 is met, all samples < NON_SWING_SPEED_FLOOR=0.25, so no_swing_energy_in_window fires -> UNKNOWN. Sweep: 0-2 sub-floor in-window samples -> committed FOREHAND at 0.76; >= 3 -> UNKNOWN.",
+      "rootCause": "Sample-count sufficiency test ignores temporal placement of the samples within the window; clustered pre-swing samples masquerade as a measured-still window."
+    },
+    {
+      "id": "F20-F6",
+      "kind": "coverage_regression",
+      "title": "Temporally clustered wrist dropout produces a false stillness abstention despite 6 measured frames",
+      "detail": "clusteredDropoutLoopSwingFixture: genuine loop swing with ~0.01u of measured path, but all 6 measured wrist frames cluster in a near-still phase (alternating dropout pattern). Travel gate (NON_SWING_TRAVEL_FLOOR=0.05, MIN_TRAVEL_SAMPLE_FRAMES=5) sees enough frames yet only the still segment -> no_swing_motion_near_reference -> UNKNOWN.",
+      "rootCause": "Frame-count sufficiency again ignores temporal coverage: measured frames concentrated in one phase of the swing satisfy the count gate while missing the motion entirely."
+    }
+  ],
+  "metrics": {
+    "redteamTests": "9/9 passing (packages/swing-lab/test/strokeHeuristicV4Gates.redteam.test.ts)",
+    "confidentlyWrongFindings": 2,
+    "coverageRegressionFindings": 4,
+    "sweepRows": {
+      "rivalMeasuredFrames": "0..6 (gate fires only at 0; wrong-arm commit at 1-3)",
+      "occlusionTorsoRatio": "0.50..1.00 (false OVERHEAD band 0.62-0.85)",
+      "genuineCrouchTorsoRatio": "0.50..0.75 (false abstention band 0.50-0.58)",
+      "inWindowSubFloorSpeedSamples": "0..5 (false abstention at >= 3)"
+    }
+  },
+  "validation": {
+    "pnpm typecheck": "pass",
+    "pnpm lint": "pass",
+    "pnpm format:check": "pass",
+    "pnpm test": "545 passed | 4 skipped (48 files), includes the 9 new red-team tests"
+  },
+  "externalBlockers": "none for this workstream — all cases are synthetic geometry; real-footage confirmation of these gate failure modes would require Mac/Apple Vision canonical pose extraction (BLOCKED_EXTERNAL, unchanged from e03)",
+  "productionCodeModified": false,
+  "verdict": "RED",
+  "verdictRationale": "Two confidently-wrong commit paths (wrong-arm commit with 1-3 rival frames; false OVERHEAD in the 0.62-0.85 torso-ratio band) plus four measured coverage regressions with exact floors, all pinned by deterministic tests."
+}
