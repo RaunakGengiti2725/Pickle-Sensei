@@ -1,0 +1,6 @@
+{
+  "source": "unavailable-linux-bench (Apple trajectory detection cannot run here; honestly empty)",
+  "cameraAssumption": "static",
+  "pointTiming": "frame",
+  "trajectories": []
+}

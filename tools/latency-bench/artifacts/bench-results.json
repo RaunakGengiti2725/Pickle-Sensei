@@ -1,0 +1,4599 @@
+{
+  "id": "e17-latency-e2e",
+  "label": "LINUX-CPU \u2014 never extrapolate to iPhone/Mac",
+  "createdAtIso": "2026-08-29T10:26:20Z",
+  "host": {
+    "platform": "Linux-5.15.200-x86_64-with-glibc2.35",
+    "machine": "x86_64",
+    "python": "3.10.12"
+  },
+  "commits": {
+    "integrated": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+    "baselinePreIntegration": "52ba173ea6884f400d73448950e85c51635b31e2"
+  },
+  "clips": ["wm-volley-02", "afn-sasebo-rally1"],
+  "arms": [
+    {
+      "name": "baseline-pre-integration",
+      "repo": "/home/ubuntu/repos/ps-baseline",
+      "extraFlags": []
+    },
+    {
+      "name": "integrated-default",
+      "repo": "/home/ubuntu/repos/Pickle-Sensei",
+      "extraFlags": []
+    },
+    {
+      "name": "integrated-twopass-roi",
+      "repo": "/home/ubuntu/repos/Pickle-Sensei",
+      "extraFlags": ["--two-pass", "--pass1-roi"]
+    },
+    {
+      "name": "integrated-tight-window",
+      "repo": "/home/ubuntu/repos/Pickle-Sensei",
+      "extraFlags": ["--tight-window"]
+    }
+  ],
+  "repsPerArmPerClip": 12,
+  "summary": {
+    "baseline-pre-integration": {
+      "wm-volley-02": {
+        "n": 12,
+        "wallMs": {
+          "p50": 14966.5,
+          "p90": 16980.3,
+          "p95": 17766.2,
+          "min": 14323.1,
+          "max": 17766.2,
+          "mean": 15355.2
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "eventPrePassMs": 1.0,
+          "paddleDetectMs": 13751.0,
+          "paddleTrackMs": 17.0,
+          "ballCandidatesMs": 903.0,
+          "ballTrackMs": 65.0,
+          "eventIsolationMs": 1.0
+        }
+      },
+      "afn-sasebo-rally1": {
+        "n": 12,
+        "wallMs": {
+          "p50": 17561.4,
+          "p90": 18393.2,
+          "p95": 20384.3,
+          "min": 16917.9,
+          "max": 20384.3,
+          "mean": 17786.3
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "eventPrePassMs": 2.0,
+          "paddleDetectMs": 15590.0,
+          "paddleTrackMs": 15.0,
+          "ballCandidatesMs": 1569.0,
+          "ballTrackMs": 68.0,
+          "eventIsolationMs": 1.0,
+          "fusionAnalysisMs": 6.0
+        }
+      },
+      "pooled-both-clips": {
+        "n": 24,
+        "wallMs": {
+          "p50": 16980.3,
+          "p90": 18217.7,
+          "p95": 18393.2,
+          "min": 14323.1,
+          "max": 20384.3,
+          "mean": 16570.8
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "eventPrePassMs": 2.0,
+          "paddleDetectMs": 15157.0,
+          "paddleTrackMs": 16.0,
+          "ballCandidatesMs": 1075.0,
+          "ballTrackMs": 67.0,
+          "eventIsolationMs": 1.0,
+          "fusionAnalysisMs": 6.0
+        }
+      }
+    },
+    "integrated-default": {
+      "wm-volley-02": {
+        "n": 12,
+        "wallMs": {
+          "p50": 13919.1,
+          "p90": 15577.6,
+          "p95": 23984.5,
+          "min": 13736.3,
+          "max": 23984.5,
+          "mean": 15103.2
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 0.0,
+          "ballCandidatesMs": 968.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectMs": 13237.0,
+          "paddleTrackMs": 13.0,
+          "ballTrackMs": 63.0,
+          "eventIsolationMs": 0.0
+        }
+      },
+      "afn-sasebo-rally1": {
+        "n": 12,
+        "wallMs": {
+          "p50": 15801.3,
+          "p90": 17118.6,
+          "p95": 18939.8,
+          "min": 15584.3,
+          "max": 18939.8,
+          "mean": 16314.9
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 1.0,
+          "ballCandidatesMs": 1606.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectMs": 15073.0,
+          "paddleTrackMs": 13.0,
+          "ballTrackMs": 65.0,
+          "eventIsolationMs": 0.0,
+          "fusionAnalysisMs": 20.0
+        }
+      },
+      "pooled-both-clips": {
+        "n": 24,
+        "wallMs": {
+          "p50": 15584.3,
+          "p90": 17118.6,
+          "p95": 18939.8,
+          "min": 13736.3,
+          "max": 23984.5,
+          "mean": 15709.0
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 1.0,
+          "ballCandidatesMs": 1083.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectMs": 14886.0,
+          "paddleTrackMs": 13.0,
+          "ballTrackMs": 63.0,
+          "eventIsolationMs": 0.0,
+          "fusionAnalysisMs": 20.0
+        }
+      }
+    },
+    "integrated-twopass-roi": {
+      "wm-volley-02": {
+        "n": 12,
+        "wallMs": {
+          "p50": 15186.3,
+          "p90": 18188.7,
+          "p95": 23887.3,
+          "min": 14527.6,
+          "max": 23887.3,
+          "mean": 16155.9
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 4.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 1.0,
+          "ballCandidatesMs": 960.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectSparseMs": 6498.0,
+          "paddleDetectDenseMs": 7931.0,
+          "paddleDetectMs": 14494.0,
+          "paddleTrackMs": 10.0,
+          "ballTrackMs": 60.0,
+          "eventIsolationMs": 0.0
+        }
+      },
+      "afn-sasebo-rally1": {
+        "n": 12,
+        "wallMs": {
+          "p50": 19247.5,
+          "p90": 27203.6,
+          "p95": 39110.4,
+          "min": 18458.0,
+          "max": 39110.4,
+          "mean": 22309.3
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 1.0,
+          "ballCandidatesMs": 1646.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectSparseMs": 7165.0,
+          "paddleDetectDenseMs": 11350.0,
+          "paddleDetectMs": 18525.0,
+          "paddleTrackMs": 11.0,
+          "ballTrackMs": 64.0,
+          "eventIsolationMs": 1.0,
+          "fusionAnalysisMs": 21.0
+        }
+      },
+      "pooled-both-clips": {
+        "n": 24,
+        "wallMs": {
+          "p50": 18458.0,
+          "p90": 23887.3,
+          "p95": 27203.6,
+          "min": 14527.6,
+          "max": 39110.4,
+          "mean": 19232.6
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 1.0,
+          "ballCandidatesMs": 1390.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectSparseMs": 7086.0,
+          "paddleDetectDenseMs": 10863.0,
+          "paddleDetectMs": 17738.0,
+          "paddleTrackMs": 11.0,
+          "ballTrackMs": 63.0,
+          "eventIsolationMs": 0.0,
+          "fusionAnalysisMs": 21.0
+        }
+      }
+    },
+    "integrated-tight-window": {
+      "wm-volley-02": {
+        "n": 12,
+        "wallMs": {
+          "p50": 14133.2,
+          "p90": 15144.1,
+          "p95": 18141.1,
+          "min": 13765.8,
+          "max": 18141.1,
+          "mean": 14614.6
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 1.0,
+          "ballCandidatesMs": 971.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectMs": 13391.0,
+          "paddleTrackMs": 12.0,
+          "ballTrackMs": 63.0,
+          "eventIsolationMs": 1.0
+        }
+      },
+      "afn-sasebo-rally1": {
+        "n": 12,
+        "wallMs": {
+          "p50": 16326.4,
+          "p90": 17551.3,
+          "p95": 19633.7,
+          "min": 15727.0,
+          "max": 19633.7,
+          "mean": 16654.8
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 1.0,
+          "ballCandidatesMs": 1640.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectMs": 15609.0,
+          "paddleTrackMs": 12.0,
+          "ballTrackMs": 65.0,
+          "eventIsolationMs": 0.0,
+          "fusionAnalysisMs": 21.0
+        }
+      },
+      "pooled-both-clips": {
+        "n": 24,
+        "wallMs": {
+          "p50": 15727.0,
+          "p90": 17551.3,
+          "p95": 18141.1,
+          "min": 13765.8,
+          "max": 19633.7,
+          "mean": 15634.7
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 1.0,
+          "ballCandidatesMs": 1034.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectMs": 15035.0,
+          "paddleTrackMs": 12.0,
+          "ballTrackMs": 64.0,
+          "eventIsolationMs": 0.0,
+          "fusionAnalysisMs": 21.0
+        }
+      }
+    }
+  },
+  "runs": [
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "wm-volley-02",
+      "rep": -1,
+      "warmup": true,
+      "wallMs": 14648.1,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 1,
+        "paddleDetectMs": 13437,
+        "paddleTrackMs": 16,
+        "ballCandidatesMs": 894,
+        "ballTrackMs": 65,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "afn-sasebo-rally1",
+      "rep": -1,
+      "warmup": true,
+      "wallMs": 16910.2,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 3,
+        "paddleDetectMs": 15029,
+        "paddleTrackMs": 15,
+        "ballCandidatesMs": 1571,
+        "ballTrackMs": 65,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 6
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "wm-volley-02",
+      "rep": -1,
+      "warmup": true,
+      "wallMs": 13634.9,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 9,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 967,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 12871,
+        "paddleTrackMs": 16,
+        "ballTrackMs": 64,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "afn-sasebo-rally1",
+      "rep": -1,
+      "warmup": true,
+      "wallMs": 15765.0,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1604,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 15078,
+        "paddleTrackMs": 11,
+        "ballTrackMs": 63,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 22
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "wm-volley-02",
+      "rep": -1,
+      "warmup": true,
+      "wallMs": 14712.8,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 1007,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 6395,
+        "paddleDetectDenseMs": 7619,
+        "paddleDetectMs": 14022,
+        "paddleTrackMs": 11,
+        "ballTrackMs": 62,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 4250,
+          "endMs": 8210
+        },
+        "frameIntervalMs": 40,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 34
+        },
+        "denseRegions": [
+          {
+            "startMs": 5210,
+            "endMs": 5530,
+            "reasons": ["track_uncertainty"]
+          },
+          {
+            "startMs": 5610,
+            "endMs": 8050,
+            "reasons": ["paddle_speed_change", "track_uncertainty"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 100,
+          "sparseFrames": 34,
+          "denseOnlyFrames": 48,
+          "totalFrames": 82
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "afn-sasebo-rally1",
+      "rep": -1,
+      "warmup": true,
+      "wallMs": 18647.4,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1594,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 6970,
+        "paddleDetectDenseMs": 10965,
+        "paddleDetectMs": 17944,
+        "paddleTrackMs": 10,
+        "ballTrackMs": 64,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 22
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 518.3333333333333,
+          "endMs": 4087.1666666666665
+        },
+        "frameIntervalMs": 33.36666666666667,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 36
+        },
+        "denseRegions": [
+          {
+            "startMs": 718.5333333333333,
+            "endMs": 3921.7333333333336,
+            "reasons": ["event_peak", "track_uncertainty", "paddle_speed_change"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 107,
+          "sparseFrames": 36,
+          "denseOnlyFrames": 65,
+          "totalFrames": 101
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "wm-volley-02",
+      "rep": -1,
+      "warmup": true,
+      "wallMs": 13853.9,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 4,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 1021,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 13173,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 61,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0,
+        "segments": [
+          {
+            "startMs": 4500,
+            "endMs": 7960
+          }
+        ],
+        "coveredMs": 3460,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "afn-sasebo-rally1",
+      "rep": -1,
+      "warmup": true,
+      "wallMs": 15732.8,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1597,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 15004,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 72,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 24
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3,
+        "segments": [
+          {
+            "startMs": 768,
+            "endMs": 3837
+          }
+        ],
+        "coveredMs": 3069,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "wm-volley-02",
+      "rep": 0,
+      "warmup": false,
+      "wallMs": 14966.5,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 1,
+        "paddleDetectMs": 13751,
+        "paddleTrackMs": 17,
+        "ballCandidatesMs": 900,
+        "ballTrackMs": 65,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "afn-sasebo-rally1",
+      "rep": 0,
+      "warmup": false,
+      "wallMs": 17684.5,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 2,
+        "paddleDetectMs": 15759,
+        "paddleTrackMs": 14,
+        "ballCandidatesMs": 1597,
+        "ballTrackMs": 72,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 10
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "wm-volley-02",
+      "rep": 0,
+      "warmup": false,
+      "wallMs": 13906.5,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 1011,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 13217,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 61,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "afn-sasebo-rally1",
+      "rep": 0,
+      "warmup": false,
+      "wallMs": 15801.3,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1632,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 15073,
+        "paddleTrackMs": 13,
+        "ballTrackMs": 69,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 20
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "wm-volley-02",
+      "rep": 0,
+      "warmup": false,
+      "wallMs": 14700.0,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 2,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 978,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 6457,
+        "paddleDetectDenseMs": 7544,
+        "paddleDetectMs": 14008,
+        "paddleTrackMs": 10,
+        "ballTrackMs": 59,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 4250,
+          "endMs": 8210
+        },
+        "frameIntervalMs": 40,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 34
+        },
+        "denseRegions": [
+          {
+            "startMs": 5210,
+            "endMs": 5530,
+            "reasons": ["track_uncertainty"]
+          },
+          {
+            "startMs": 5610,
+            "endMs": 8050,
+            "reasons": ["paddle_speed_change", "track_uncertainty"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 100,
+          "sparseFrames": 34,
+          "denseOnlyFrames": 48,
+          "totalFrames": 82
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "afn-sasebo-rally1",
+      "rep": 0,
+      "warmup": false,
+      "wallMs": 23855.5,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1729,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 7120,
+        "paddleDetectDenseMs": 16015,
+        "paddleDetectMs": 23147,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 64,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 21
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 518.3333333333333,
+          "endMs": 4087.1666666666665
+        },
+        "frameIntervalMs": 33.36666666666667,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 36
+        },
+        "denseRegions": [
+          {
+            "startMs": 718.5333333333333,
+            "endMs": 3921.7333333333336,
+            "reasons": ["event_peak", "track_uncertainty", "paddle_speed_change"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 107,
+          "sparseFrames": 36,
+          "denseOnlyFrames": 65,
+          "totalFrames": 101
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "wm-volley-02",
+      "rep": 0,
+      "warmup": false,
+      "wallMs": 15144.1,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 949,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 14441,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 62,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0,
+        "segments": [
+          {
+            "startMs": 4500,
+            "endMs": 7960
+          }
+        ],
+        "coveredMs": 3460,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "afn-sasebo-rally1",
+      "rep": 0,
+      "warmup": false,
+      "wallMs": 16326.4,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1624,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 15609,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 65,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 21
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3,
+        "segments": [
+          {
+            "startMs": 768,
+            "endMs": 3837
+          }
+        ],
+        "coveredMs": 3069,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "wm-volley-02",
+      "rep": 1,
+      "warmup": false,
+      "wallMs": 14654.4,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 1,
+        "paddleDetectMs": 13428,
+        "paddleTrackMs": 16,
+        "ballCandidatesMs": 894,
+        "ballTrackMs": 64,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "afn-sasebo-rally1",
+      "rep": 1,
+      "warmup": false,
+      "wallMs": 17294.7,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 2,
+        "paddleDetectMs": 15369,
+        "paddleTrackMs": 17,
+        "ballCandidatesMs": 1611,
+        "ballTrackMs": 65,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 5
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "wm-volley-02",
+      "rep": 1,
+      "warmup": false,
+      "wallMs": 14544.0,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 4,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 992,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 13841,
+        "paddleTrackMs": 13,
+        "ballTrackMs": 65,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "afn-sasebo-rally1",
+      "rep": 1,
+      "warmup": false,
+      "wallMs": 15776.7,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 0,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1606,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 15079,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 63,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 21
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "wm-volley-02",
+      "rep": 1,
+      "warmup": false,
+      "wallMs": 15711.0,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 2,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 928,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 6585,
+        "paddleDetectDenseMs": 8375,
+        "paddleDetectMs": 14967,
+        "paddleTrackMs": 11,
+        "ballTrackMs": 75,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 4250,
+          "endMs": 8210
+        },
+        "frameIntervalMs": 40,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 34
+        },
+        "denseRegions": [
+          {
+            "startMs": 5210,
+            "endMs": 5530,
+            "reasons": ["track_uncertainty"]
+          },
+          {
+            "startMs": 5610,
+            "endMs": 8050,
+            "reasons": ["paddle_speed_change", "track_uncertainty"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 100,
+          "sparseFrames": 34,
+          "denseOnlyFrames": 48,
+          "totalFrames": 82
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "afn-sasebo-rally1",
+      "rep": 1,
+      "warmup": false,
+      "wallMs": 19630.8,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1641,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 7461,
+        "paddleDetectDenseMs": 11415,
+        "paddleDetectMs": 18886,
+        "paddleTrackMs": 11,
+        "ballTrackMs": 64,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 20
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 518.3333333333333,
+          "endMs": 4087.1666666666665
+        },
+        "frameIntervalMs": 33.36666666666667,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 36
+        },
+        "denseRegions": [
+          {
+            "startMs": 718.5333333333333,
+            "endMs": 3921.7333333333336,
+            "reasons": ["event_peak", "track_uncertainty", "paddle_speed_change"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 107,
+          "sparseFrames": 36,
+          "denseOnlyFrames": 65,
+          "totalFrames": 101
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "wm-volley-02",
+      "rep": 1,
+      "warmup": false,
+      "wallMs": 14666.8,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 974,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 13874,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 68,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0,
+        "segments": [
+          {
+            "startMs": 4500,
+            "endMs": 7960
+          }
+        ],
+        "coveredMs": 3460,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "afn-sasebo-rally1",
+      "rep": 1,
+      "warmup": false,
+      "wallMs": 17283.9,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 2,
+        "poseDerivativesMs": 0,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1585,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 16571,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 66,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 22
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3,
+        "segments": [
+          {
+            "startMs": 768,
+            "endMs": 3837
+          }
+        ],
+        "coveredMs": 3069,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "wm-volley-02",
+      "rep": 2,
+      "warmup": false,
+      "wallMs": 17766.2,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "eventPrePassMs": 1,
+        "paddleDetectMs": 16546,
+        "paddleTrackMs": 17,
+        "ballCandidatesMs": 897,
+        "ballTrackMs": 68,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "afn-sasebo-rally1",
+      "rep": 2,
+      "warmup": false,
+      "wallMs": 18217.7,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 2,
+        "paddleDetectMs": 16232,
+        "paddleTrackMs": 15,
+        "ballCandidatesMs": 1665,
+        "ballTrackMs": 70,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 6
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "wm-volley-02",
+      "rep": 2,
+      "warmup": false,
+      "wallMs": 15577.6,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 941,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 14880,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 65,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "afn-sasebo-rally1",
+      "rep": 2,
+      "warmup": false,
+      "wallMs": 16568.8,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1632,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 15864,
+        "paddleTrackMs": 11,
+        "ballTrackMs": 70,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 21
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "wm-volley-02",
+      "rep": 2,
+      "warmup": false,
+      "wallMs": 18188.7,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 960,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 7180,
+        "paddleDetectDenseMs": 10259,
+        "paddleDetectMs": 17448,
+        "paddleTrackMs": 11,
+        "ballTrackMs": 62,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 4250,
+          "endMs": 8210
+        },
+        "frameIntervalMs": 40,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 34
+        },
+        "denseRegions": [
+          {
+            "startMs": 5210,
+            "endMs": 5530,
+            "reasons": ["track_uncertainty"]
+          },
+          {
+            "startMs": 5610,
+            "endMs": 8050,
+            "reasons": ["paddle_speed_change", "track_uncertainty"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 100,
+          "sparseFrames": 34,
+          "denseOnlyFrames": 48,
+          "totalFrames": 82
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "afn-sasebo-rally1",
+      "rep": 2,
+      "warmup": false,
+      "wallMs": 39110.4,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 1620,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 14104,
+        "paddleDetectDenseMs": 24268,
+        "paddleDetectMs": 38384,
+        "paddleTrackMs": 11,
+        "ballTrackMs": 66,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 21
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 518.3333333333333,
+          "endMs": 4087.1666666666665
+        },
+        "frameIntervalMs": 33.36666666666667,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 36
+        },
+        "denseRegions": [
+          {
+            "startMs": 718.5333333333333,
+            "endMs": 3921.7333333333336,
+            "reasons": ["event_peak", "track_uncertainty", "paddle_speed_change"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 107,
+          "sparseFrames": 36,
+          "denseOnlyFrames": 65,
+          "totalFrames": 101
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "wm-volley-02",
+      "rep": 2,
+      "warmup": false,
+      "wallMs": 18141.1,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 1034,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 17444,
+        "paddleTrackMs": 14,
+        "ballTrackMs": 69,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0,
+        "segments": [
+          {
+            "startMs": 4500,
+            "endMs": 7960
+          }
+        ],
+        "coveredMs": 3460,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "afn-sasebo-rally1",
+      "rep": 2,
+      "warmup": false,
+      "wallMs": 16422.3,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1700,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 15722,
+        "paddleTrackMs": 13,
+        "ballTrackMs": 63,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 21
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3,
+        "segments": [
+          {
+            "startMs": 768,
+            "endMs": 3837
+          }
+        ],
+        "coveredMs": 3069,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "wm-volley-02",
+      "rep": 3,
+      "warmup": false,
+      "wallMs": 15222.1,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 1,
+        "paddleDetectMs": 13837,
+        "paddleTrackMs": 17,
+        "ballCandidatesMs": 1064,
+        "ballTrackMs": 70,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "afn-sasebo-rally1",
+      "rep": 3,
+      "warmup": false,
+      "wallMs": 20384.3,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 2,
+        "paddleDetectMs": 18453,
+        "paddleTrackMs": 15,
+        "ballCandidatesMs": 1609,
+        "ballTrackMs": 69,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 5
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "wm-volley-02",
+      "rep": 3,
+      "warmup": false,
+      "wallMs": 23984.5,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 959,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 23311,
+        "paddleTrackMs": 15,
+        "ballTrackMs": 62,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "afn-sasebo-rally1",
+      "rep": 3,
+      "warmup": false,
+      "wallMs": 18939.8,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1648,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 18241,
+        "paddleTrackMs": 14,
+        "ballTrackMs": 65,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 21
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "wm-volley-02",
+      "rep": 3,
+      "warmup": false,
+      "wallMs": 16494.0,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 988,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 7603,
+        "paddleDetectDenseMs": 8198,
+        "paddleDetectMs": 15808,
+        "paddleTrackMs": 10,
+        "ballTrackMs": 61,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 4250,
+          "endMs": 8210
+        },
+        "frameIntervalMs": 40,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 34
+        },
+        "denseRegions": [
+          {
+            "startMs": 5210,
+            "endMs": 5530,
+            "reasons": ["track_uncertainty"]
+          },
+          {
+            "startMs": 5610,
+            "endMs": 8050,
+            "reasons": ["paddle_speed_change", "track_uncertainty"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 100,
+          "sparseFrames": 34,
+          "denseOnlyFrames": 48,
+          "totalFrames": 82
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "afn-sasebo-rally1",
+      "rep": 3,
+      "warmup": false,
+      "wallMs": 23609.7,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1651,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 9806,
+        "paddleDetectDenseMs": 12996,
+        "paddleDetectMs": 22813,
+        "paddleTrackMs": 15,
+        "ballTrackMs": 78,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 24
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 518.3333333333333,
+          "endMs": 4087.1666666666665
+        },
+        "frameIntervalMs": 33.36666666666667,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 36
+        },
+        "denseRegions": [
+          {
+            "startMs": 718.5333333333333,
+            "endMs": 3921.7333333333336,
+            "reasons": ["event_peak", "track_uncertainty", "paddle_speed_change"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 107,
+          "sparseFrames": 36,
+          "denseOnlyFrames": 65,
+          "totalFrames": 101
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "wm-volley-02",
+      "rep": 3,
+      "warmup": false,
+      "wallMs": 14193.2,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 1023,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 13477,
+        "paddleTrackMs": 13,
+        "ballTrackMs": 63,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0,
+        "segments": [
+          {
+            "startMs": 4500,
+            "endMs": 7960
+          }
+        ],
+        "coveredMs": 3460,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "afn-sasebo-rally1",
+      "rep": 3,
+      "warmup": false,
+      "wallMs": 16420.0,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 0,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1613,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 15713,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 66,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 20
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3,
+        "segments": [
+          {
+            "startMs": 768,
+            "endMs": 3837
+          }
+        ],
+        "coveredMs": 3069,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "wm-volley-02",
+      "rep": 4,
+      "warmup": false,
+      "wallMs": 15672.8,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 1,
+        "paddleDetectMs": 14450,
+        "paddleTrackMs": 18,
+        "ballCandidatesMs": 892,
+        "ballTrackMs": 64,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "afn-sasebo-rally1",
+      "rep": 4,
+      "warmup": false,
+      "wallMs": 18393.2,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 2,
+        "paddleDetectMs": 16532,
+        "paddleTrackMs": 15,
+        "ballCandidatesMs": 1549,
+        "ballTrackMs": 68,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 5
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "wm-volley-02",
+      "rep": 4,
+      "warmup": false,
+      "wallMs": 14854.3,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1017,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 14175,
+        "paddleTrackMs": 13,
+        "ballTrackMs": 65,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "afn-sasebo-rally1",
+      "rep": 4,
+      "warmup": false,
+      "wallMs": 15674.8,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 0,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1595,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 14985,
+        "paddleTrackMs": 11,
+        "ballTrackMs": 65,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 20
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "wm-volley-02",
+      "rep": 4,
+      "warmup": false,
+      "wallMs": 15388.8,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 4,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 949,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 6237,
+        "paddleDetectDenseMs": 8450,
+        "paddleDetectMs": 14696,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 72,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 4250,
+          "endMs": 8210
+        },
+        "frameIntervalMs": 40,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 34
+        },
+        "denseRegions": [
+          {
+            "startMs": 5210,
+            "endMs": 5530,
+            "reasons": ["track_uncertainty"]
+          },
+          {
+            "startMs": 5610,
+            "endMs": 8050,
+            "reasons": ["paddle_speed_change", "track_uncertainty"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 100,
+          "sparseFrames": 34,
+          "denseOnlyFrames": 48,
+          "totalFrames": 82
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "afn-sasebo-rally1",
+      "rep": 4,
+      "warmup": false,
+      "wallMs": 27203.6,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1646,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 15600,
+        "paddleDetectDenseMs": 10866,
+        "paddleDetectMs": 26480,
+        "paddleTrackMs": 11,
+        "ballTrackMs": 63,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 20
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 518.3333333333333,
+          "endMs": 4087.1666666666665
+        },
+        "frameIntervalMs": 33.36666666666667,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 36
+        },
+        "denseRegions": [
+          {
+            "startMs": 718.5333333333333,
+            "endMs": 3921.7333333333336,
+            "reasons": ["event_peak", "track_uncertainty", "paddle_speed_change"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 107,
+          "sparseFrames": 36,
+          "denseOnlyFrames": 65,
+          "totalFrames": 101
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "wm-volley-02",
+      "rep": 4,
+      "warmup": false,
+      "wallMs": 13833.5,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 995,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 13116,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 61,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0,
+        "segments": [
+          {
+            "startMs": 4500,
+            "endMs": 7960
+          }
+        ],
+        "coveredMs": 3460,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "afn-sasebo-rally1",
+      "rep": 4,
+      "warmup": false,
+      "wallMs": 16175.0,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1640,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 15467,
+        "paddleTrackMs": 11,
+        "ballTrackMs": 64,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 21
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3,
+        "segments": [
+          {
+            "startMs": 768,
+            "endMs": 3837
+          }
+        ],
+        "coveredMs": 3069,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "wm-volley-02",
+      "rep": 5,
+      "warmup": false,
+      "wallMs": 14735.6,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 2,
+        "paddleDetectMs": 13513,
+        "paddleTrackMs": 15,
+        "ballCandidatesMs": 900,
+        "ballTrackMs": 72,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "afn-sasebo-rally1",
+      "rep": 5,
+      "warmup": false,
+      "wallMs": 17561.4,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 2,
+        "paddleDetectMs": 15590,
+        "paddleTrackMs": 16,
+        "ballCandidatesMs": 1625,
+        "ballTrackMs": 75,
+        "eventIsolationMs": 2,
+        "fusionAnalysisMs": 6
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "wm-volley-02",
+      "rep": 5,
+      "warmup": false,
+      "wallMs": 15253.9,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 972,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 14490,
+        "paddleTrackMs": 19,
+        "ballTrackMs": 79,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "afn-sasebo-rally1",
+      "rep": 5,
+      "warmup": false,
+      "wallMs": 17118.6,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 28,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 2096,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 16246,
+        "paddleTrackMs": 14,
+        "ballTrackMs": 63,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 20
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "wm-volley-02",
+      "rep": 5,
+      "warmup": false,
+      "wallMs": 23887.3,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 4,
+        "ballCandidatesMs": 1390,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 7526,
+        "paddleDetectDenseMs": 15639,
+        "paddleDetectMs": 23172,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 58,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 4250,
+          "endMs": 8210
+        },
+        "frameIntervalMs": 40,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 34
+        },
+        "denseRegions": [
+          {
+            "startMs": 5210,
+            "endMs": 5530,
+            "reasons": ["track_uncertainty"]
+          },
+          {
+            "startMs": 5610,
+            "endMs": 8050,
+            "reasons": ["paddle_speed_change", "track_uncertainty"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 100,
+          "sparseFrames": 34,
+          "denseOnlyFrames": 48,
+          "totalFrames": 82
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "afn-sasebo-rally1",
+      "rep": 5,
+      "warmup": false,
+      "wallMs": 20426.2,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 1652,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 7455,
+        "paddleDetectDenseMs": 12240,
+        "paddleDetectMs": 19705,
+        "paddleTrackMs": 13,
+        "ballTrackMs": 82,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 22
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 518.3333333333333,
+          "endMs": 4087.1666666666665
+        },
+        "frameIntervalMs": 33.36666666666667,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 36
+        },
+        "denseRegions": [
+          {
+            "startMs": 718.5333333333333,
+            "endMs": 3921.7333333333336,
+            "reasons": ["event_peak", "track_uncertainty", "paddle_speed_change"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 107,
+          "sparseFrames": 36,
+          "denseOnlyFrames": 65,
+          "totalFrames": 101
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "wm-volley-02",
+      "rep": 5,
+      "warmup": false,
+      "wallMs": 14855.7,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 971,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 14101,
+        "paddleTrackMs": 15,
+        "ballTrackMs": 70,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0,
+        "segments": [
+          {
+            "startMs": 4500,
+            "endMs": 7960
+          }
+        ],
+        "coveredMs": 3460,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "afn-sasebo-rally1",
+      "rep": 5,
+      "warmup": false,
+      "wallMs": 19633.7,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1799,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 18928,
+        "paddleTrackMs": 14,
+        "ballTrackMs": 65,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 21
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3,
+        "segments": [
+          {
+            "startMs": 768,
+            "endMs": 3837
+          }
+        ],
+        "coveredMs": 3069,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "wm-volley-02",
+      "rep": 6,
+      "warmup": false,
+      "wallMs": 16980.3,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 1,
+        "paddleDetectMs": 15584,
+        "paddleTrackMs": 21,
+        "ballCandidatesMs": 1075,
+        "ballTrackMs": 68,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "afn-sasebo-rally1",
+      "rep": 6,
+      "warmup": false,
+      "wallMs": 17798.7,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 2,
+        "paddleDetectMs": 15933,
+        "paddleTrackMs": 15,
+        "ballCandidatesMs": 1548,
+        "ballTrackMs": 65,
+        "eventIsolationMs": 2,
+        "fusionAnalysisMs": 9
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "wm-volley-02",
+      "rep": 6,
+      "warmup": false,
+      "wallMs": 13919.1,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1083,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 13237,
+        "paddleTrackMs": 13,
+        "ballTrackMs": 60,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "afn-sasebo-rally1",
+      "rep": 6,
+      "warmup": false,
+      "wallMs": 16801.2,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1605,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 16095,
+        "paddleTrackMs": 13,
+        "ballTrackMs": 63,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 20
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "wm-volley-02",
+      "rep": 6,
+      "warmup": false,
+      "wallMs": 15186.3,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 982,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 6564,
+        "paddleDetectDenseMs": 7931,
+        "paddleDetectMs": 14503,
+        "paddleTrackMs": 9,
+        "ballTrackMs": 60,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 4250,
+          "endMs": 8210
+        },
+        "frameIntervalMs": 40,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 34
+        },
+        "denseRegions": [
+          {
+            "startMs": 5210,
+            "endMs": 5530,
+            "reasons": ["track_uncertainty"]
+          },
+          {
+            "startMs": 5610,
+            "endMs": 8050,
+            "reasons": ["paddle_speed_change", "track_uncertainty"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 100,
+          "sparseFrames": 34,
+          "denseOnlyFrames": 48,
+          "totalFrames": 82
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "afn-sasebo-rally1",
+      "rep": 6,
+      "warmup": false,
+      "wallMs": 18939.5,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 2,
+        "poseDerivativesMs": 0,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1632,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 7099,
+        "paddleDetectDenseMs": 11111,
+        "paddleDetectMs": 18221,
+        "paddleTrackMs": 11,
+        "ballTrackMs": 64,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 21
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 518.3333333333333,
+          "endMs": 4087.1666666666665
+        },
+        "frameIntervalMs": 33.36666666666667,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 36
+        },
+        "denseRegions": [
+          {
+            "startMs": 718.5333333333333,
+            "endMs": 3921.7333333333336,
+            "reasons": ["event_peak", "track_uncertainty", "paddle_speed_change"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 107,
+          "sparseFrames": 36,
+          "denseOnlyFrames": 65,
+          "totalFrames": 101
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "wm-volley-02",
+      "rep": 6,
+      "warmup": false,
+      "wallMs": 13765.8,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 957,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 13072,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 67,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0,
+        "segments": [
+          {
+            "startMs": 4500,
+            "endMs": 7960
+          }
+        ],
+        "coveredMs": 3460,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "afn-sasebo-rally1",
+      "rep": 6,
+      "warmup": false,
+      "wallMs": 17551.3,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1661,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 16836,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 67,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 22
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3,
+        "segments": [
+          {
+            "startMs": 768,
+            "endMs": 3837
+          }
+        ],
+        "coveredMs": 3069,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "wm-volley-02",
+      "rep": 7,
+      "warmup": false,
+      "wallMs": 15320.0,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 1,
+        "paddleDetectMs": 14074,
+        "paddleTrackMs": 17,
+        "ballCandidatesMs": 912,
+        "ballTrackMs": 65,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "afn-sasebo-rally1",
+      "rep": 7,
+      "warmup": false,
+      "wallMs": 17235.8,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 2,
+        "paddleDetectMs": 15376,
+        "paddleTrackMs": 16,
+        "ballCandidatesMs": 1546,
+        "ballTrackMs": 67,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 10
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "wm-volley-02",
+      "rep": 7,
+      "warmup": false,
+      "wallMs": 13990.6,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 968,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 13313,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 63,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "afn-sasebo-rally1",
+      "rep": 7,
+      "warmup": false,
+      "wallMs": 15801.5,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 2,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1588,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 15054,
+        "paddleTrackMs": 15,
+        "ballTrackMs": 73,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 25
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "wm-volley-02",
+      "rep": 7,
+      "warmup": false,
+      "wallMs": 15216.8,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 8,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 949,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 6459,
+        "paddleDetectDenseMs": 8027,
+        "paddleDetectMs": 14494,
+        "paddleTrackMs": 11,
+        "ballTrackMs": 60,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 4250,
+          "endMs": 8210
+        },
+        "frameIntervalMs": 40,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 34
+        },
+        "denseRegions": [
+          {
+            "startMs": 5210,
+            "endMs": 5530,
+            "reasons": ["track_uncertainty"]
+          },
+          {
+            "startMs": 5610,
+            "endMs": 8050,
+            "reasons": ["paddle_speed_change", "track_uncertainty"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 100,
+          "sparseFrames": 34,
+          "denseOnlyFrames": 48,
+          "totalFrames": 82
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "afn-sasebo-rally1",
+      "rep": 7,
+      "warmup": false,
+      "wallMs": 19247.5,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1696,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 7175,
+        "paddleDetectDenseMs": 11324,
+        "paddleDetectMs": 18509,
+        "paddleTrackMs": 10,
+        "ballTrackMs": 64,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 23
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 518.3333333333333,
+          "endMs": 4087.1666666666665
+        },
+        "frameIntervalMs": 33.36666666666667,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 36
+        },
+        "denseRegions": [
+          {
+            "startMs": 718.5333333333333,
+            "endMs": 3921.7333333333336,
+            "reasons": ["event_peak", "track_uncertainty", "paddle_speed_change"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 107,
+          "sparseFrames": 36,
+          "denseOnlyFrames": 65,
+          "totalFrames": 101
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "wm-volley-02",
+      "rep": 7,
+      "warmup": false,
+      "wallMs": 13834.7,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1019,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 13127,
+        "paddleTrackMs": 14,
+        "ballTrackMs": 63,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0,
+        "segments": [
+          {
+            "startMs": 4500,
+            "endMs": 7960
+          }
+        ],
+        "coveredMs": 3460,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "afn-sasebo-rally1",
+      "rep": 7,
+      "warmup": false,
+      "wallMs": 15831.3,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 2,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 1610,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 15132,
+        "paddleTrackMs": 11,
+        "ballTrackMs": 63,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 21
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3,
+        "segments": [
+          {
+            "startMs": 768,
+            "endMs": 3837
+          }
+        ],
+        "coveredMs": 3069,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "wm-volley-02",
+      "rep": 8,
+      "warmup": false,
+      "wallMs": 14467.7,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 1,
+        "paddleDetectMs": 13221,
+        "paddleTrackMs": 16,
+        "ballCandidatesMs": 940,
+        "ballTrackMs": 63,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "afn-sasebo-rally1",
+      "rep": 8,
+      "warmup": false,
+      "wallMs": 17101.8,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 3,
+        "paddleDetectMs": 15157,
+        "paddleTrackMs": 14,
+        "ballCandidatesMs": 1631,
+        "ballTrackMs": 67,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 5
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "wm-volley-02",
+      "rep": 8,
+      "warmup": false,
+      "wallMs": 13794.7,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 944,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 13120,
+        "paddleTrackMs": 13,
+        "ballTrackMs": 62,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "afn-sasebo-rally1",
+      "rep": 8,
+      "warmup": false,
+      "wallMs": 15584.3,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 2,
+        "poseDerivativesMs": 0,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1638,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 14886,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 65,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 22
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "wm-volley-02",
+      "rep": 8,
+      "warmup": false,
+      "wallMs": 15022.2,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 5,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 959,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 6588,
+        "paddleDetectDenseMs": 7754,
+        "paddleDetectMs": 14349,
+        "paddleTrackMs": 9,
+        "ballTrackMs": 58,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 4250,
+          "endMs": 8210
+        },
+        "frameIntervalMs": 40,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 34
+        },
+        "denseRegions": [
+          {
+            "startMs": 5210,
+            "endMs": 5530,
+            "reasons": ["track_uncertainty"]
+          },
+          {
+            "startMs": 5610,
+            "endMs": 8050,
+            "reasons": ["paddle_speed_change", "track_uncertainty"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 100,
+          "sparseFrames": 34,
+          "denseOnlyFrames": 48,
+          "totalFrames": 82
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "afn-sasebo-rally1",
+      "rep": 8,
+      "warmup": false,
+      "wallMs": 19072.1,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 2,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1590,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 6993,
+        "paddleDetectDenseMs": 11372,
+        "paddleDetectMs": 18375,
+        "paddleTrackMs": 10,
+        "ballTrackMs": 66,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 21
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 518.3333333333333,
+          "endMs": 4087.1666666666665
+        },
+        "frameIntervalMs": 33.36666666666667,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 36
+        },
+        "denseRegions": [
+          {
+            "startMs": 718.5333333333333,
+            "endMs": 3921.7333333333336,
+            "reasons": ["event_peak", "track_uncertainty", "paddle_speed_change"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 107,
+          "sparseFrames": 36,
+          "denseOnlyFrames": 65,
+          "totalFrames": 101
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "wm-volley-02",
+      "rep": 8,
+      "warmup": false,
+      "wallMs": 15087.7,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 962,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 14208,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 64,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0,
+        "segments": [
+          {
+            "startMs": 4500,
+            "endMs": 7960
+          }
+        ],
+        "coveredMs": 3460,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "afn-sasebo-rally1",
+      "rep": 8,
+      "warmup": false,
+      "wallMs": 16134.7,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1696,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 15417,
+        "paddleTrackMs": 13,
+        "ballTrackMs": 64,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 21
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3,
+        "segments": [
+          {
+            "startMs": 768,
+            "endMs": 3837
+          }
+        ],
+        "coveredMs": 3069,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "wm-volley-02",
+      "rep": 9,
+      "warmup": false,
+      "wallMs": 14323.1,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 1,
+        "paddleDetectMs": 13111,
+        "paddleTrackMs": 16,
+        "ballCandidatesMs": 903,
+        "ballTrackMs": 64,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "afn-sasebo-rally1",
+      "rep": 9,
+      "warmup": false,
+      "wallMs": 17187.6,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 2,
+        "paddleDetectMs": 15308,
+        "paddleTrackMs": 16,
+        "ballCandidatesMs": 1569,
+        "ballTrackMs": 67,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 11
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "wm-volley-02",
+      "rep": 9,
+      "warmup": false,
+      "wallMs": 13778.0,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 2,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 952,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 13098,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 63,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "afn-sasebo-rally1",
+      "rep": 9,
+      "warmup": false,
+      "wallMs": 16267.0,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 1620,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 15551,
+        "paddleTrackMs": 11,
+        "ballTrackMs": 63,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 20
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "wm-volley-02",
+      "rep": 9,
+      "warmup": false,
+      "wallMs": 14527.6,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 961,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 6319,
+        "paddleDetectDenseMs": 7521,
+        "paddleDetectMs": 13847,
+        "paddleTrackMs": 9,
+        "ballTrackMs": 61,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 4250,
+          "endMs": 8210
+        },
+        "frameIntervalMs": 40,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 34
+        },
+        "denseRegions": [
+          {
+            "startMs": 5210,
+            "endMs": 5530,
+            "reasons": ["track_uncertainty"]
+          },
+          {
+            "startMs": 5610,
+            "endMs": 8050,
+            "reasons": ["paddle_speed_change", "track_uncertainty"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 100,
+          "sparseFrames": 34,
+          "denseOnlyFrames": 48,
+          "totalFrames": 82
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "afn-sasebo-rally1",
+      "rep": 9,
+      "warmup": false,
+      "wallMs": 18913.6,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 2,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 1673,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 7086,
+        "paddleDetectDenseMs": 11114,
+        "paddleDetectMs": 18212,
+        "paddleTrackMs": 10,
+        "ballTrackMs": 66,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 20
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 518.3333333333333,
+          "endMs": 4087.1666666666665
+        },
+        "frameIntervalMs": 33.36666666666667,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 36
+        },
+        "denseRegions": [
+          {
+            "startMs": 718.5333333333333,
+            "endMs": 3921.7333333333336,
+            "reasons": ["event_peak", "track_uncertainty", "paddle_speed_change"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 107,
+          "sparseFrames": 36,
+          "denseOnlyFrames": 65,
+          "totalFrames": 101
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "wm-volley-02",
+      "rep": 9,
+      "warmup": false,
+      "wallMs": 13948.6,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 967,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 13251,
+        "paddleTrackMs": 11,
+        "ballTrackMs": 61,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0,
+        "segments": [
+          {
+            "startMs": 4500,
+            "endMs": 7960
+          }
+        ],
+        "coveredMs": 3460,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "afn-sasebo-rally1",
+      "rep": 9,
+      "warmup": false,
+      "wallMs": 15805.5,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 2,
+        "poseDerivativesMs": 0,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1669,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 15116,
+        "paddleTrackMs": 11,
+        "ballTrackMs": 64,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 20
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3,
+        "segments": [
+          {
+            "startMs": 768,
+            "endMs": 3837
+          }
+        ],
+        "coveredMs": 3069,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "wm-volley-02",
+      "rep": 10,
+      "warmup": false,
+      "wallMs": 15221.7,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 2,
+        "paddleDetectMs": 13928,
+        "paddleTrackMs": 19,
+        "ballCandidatesMs": 975,
+        "ballTrackMs": 67,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "afn-sasebo-rally1",
+      "rep": 10,
+      "warmup": false,
+      "wallMs": 17657.8,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 2,
+        "paddleDetectMs": 15816,
+        "paddleTrackMs": 15,
+        "ballCandidatesMs": 1518,
+        "ballTrackMs": 69,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 6
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "wm-volley-02",
+      "rep": 10,
+      "warmup": false,
+      "wallMs": 13736.3,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 914,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 13038,
+        "paddleTrackMs": 11,
+        "ballTrackMs": 61,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "afn-sasebo-rally1",
+      "rep": 10,
+      "warmup": false,
+      "wallMs": 15791.0,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 2,
+        "poseDerivativesMs": 0,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1559,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 15070,
+        "paddleTrackMs": 13,
+        "ballTrackMs": 67,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 20
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "wm-volley-02",
+      "rep": 10,
+      "warmup": false,
+      "wallMs": 14996.5,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 8,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1027,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 6498,
+        "paddleDetectDenseMs": 7785,
+        "paddleDetectMs": 14291,
+        "paddleTrackMs": 10,
+        "ballTrackMs": 63,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 4250,
+          "endMs": 8210
+        },
+        "frameIntervalMs": 40,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 34
+        },
+        "denseRegions": [
+          {
+            "startMs": 5210,
+            "endMs": 5530,
+            "reasons": ["track_uncertainty"]
+          },
+          {
+            "startMs": 5610,
+            "endMs": 8050,
+            "reasons": ["paddle_speed_change", "track_uncertainty"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 100,
+          "sparseFrames": 34,
+          "denseOnlyFrames": 48,
+          "totalFrames": 82
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "afn-sasebo-rally1",
+      "rep": 10,
+      "warmup": false,
+      "wallMs": 19244.4,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1611,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 7165,
+        "paddleDetectDenseMs": 11350,
+        "paddleDetectMs": 18525,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 63,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 22
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 518.3333333333333,
+          "endMs": 4087.1666666666665
+        },
+        "frameIntervalMs": 33.36666666666667,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 36
+        },
+        "denseRegions": [
+          {
+            "startMs": 718.5333333333333,
+            "endMs": 3921.7333333333336,
+            "reasons": ["event_peak", "track_uncertainty", "paddle_speed_change"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 107,
+          "sparseFrames": 36,
+          "denseOnlyFrames": 65,
+          "totalFrames": 101
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "wm-volley-02",
+      "rep": 10,
+      "warmup": false,
+      "wallMs": 14133.2,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 998,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 13391,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 61,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0,
+        "segments": [
+          {
+            "startMs": 4500,
+            "endMs": 7960
+          }
+        ],
+        "coveredMs": 3460,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "afn-sasebo-rally1",
+      "rep": 10,
+      "warmup": false,
+      "wallMs": 16546.9,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 1597,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 15846,
+        "paddleTrackMs": 14,
+        "ballTrackMs": 65,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 21
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3,
+        "segments": [
+          {
+            "startMs": 768,
+            "endMs": 3837
+          }
+        ],
+        "coveredMs": 3069,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "wm-volley-02",
+      "rep": 11,
+      "warmup": false,
+      "wallMs": 14932.6,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "eventPrePassMs": 1,
+        "paddleDetectMs": 13686,
+        "paddleTrackMs": 16,
+        "ballCandidatesMs": 928,
+        "ballTrackMs": 67,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "baseline-pre-integration",
+      "clip": "afn-sasebo-rally1",
+      "rep": 11,
+      "warmup": false,
+      "wallMs": 16917.9,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 2,
+        "eventPrePassMs": 2,
+        "paddleDetectMs": 15032,
+        "paddleTrackMs": 15,
+        "ballCandidatesMs": 1554,
+        "ballTrackMs": 79,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 6
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "wm-volley-02",
+      "rep": 11,
+      "warmup": false,
+      "wallMs": 13898.3,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 2,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 975,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 13194,
+        "paddleTrackMs": 13,
+        "ballTrackMs": 63,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-default",
+      "clip": "afn-sasebo-rally1",
+      "rep": 11,
+      "warmup": false,
+      "wallMs": 15653.8,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 2,
+        "poseDerivativesMs": 0,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1582,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 14955,
+        "paddleTrackMs": 13,
+        "ballTrackMs": 63,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 21
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "wm-volley-02",
+      "rep": 11,
+      "warmup": false,
+      "wallMs": 14551.0,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 0,
+        "ballCandidatesMs": 945,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 6247,
+        "paddleDetectDenseMs": 7626,
+        "paddleDetectMs": 13881,
+        "paddleTrackMs": 10,
+        "ballTrackMs": 59,
+        "eventIsolationMs": 0
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 4250,
+          "endMs": 8210
+        },
+        "frameIntervalMs": 40,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 34
+        },
+        "denseRegions": [
+          {
+            "startMs": 5210,
+            "endMs": 5530,
+            "reasons": ["track_uncertainty"]
+          },
+          {
+            "startMs": 5610,
+            "endMs": 8050,
+            "reasons": ["paddle_speed_change", "track_uncertainty"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 100,
+          "sparseFrames": 34,
+          "denseOnlyFrames": 48,
+          "totalFrames": 82
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-twopass-roi",
+      "clip": "afn-sasebo-rally1",
+      "rep": 11,
+      "warmup": false,
+      "wallMs": 18458.0,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 0,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1656,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectSparseMs": 6864,
+        "paddleDetectDenseMs": 10863,
+        "paddleDetectMs": 17738,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 65,
+        "eventIsolationMs": 0,
+        "fusionAnalysisMs": 21
+      },
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3
+      },
+      "paddleSchedule": {
+        "version": "paddle-two-pass-1",
+        "config": {
+          "sparseStride": 3,
+          "eventPeakPadMs": 450,
+          "anchorPadMs": 150,
+          "lowConfidence": 0.3,
+          "speedChangeFactor": 2.5,
+          "missingGapFactor": 2.5
+        },
+        "detectSpan": {
+          "startMs": 518.3333333333333,
+          "endMs": 4087.1666666666665
+        },
+        "frameIntervalMs": 33.36666666666667,
+        "sparse": {
+          "stride": 3,
+          "plannedFrames": 36
+        },
+        "denseRegions": [
+          {
+            "startMs": 718.5333333333333,
+            "endMs": 3921.7333333333336,
+            "reasons": ["event_peak", "track_uncertainty", "paddle_speed_change"]
+          }
+        ],
+        "planned": {
+          "fullScanFrames": 107,
+          "sparseFrames": 36,
+          "denseOnlyFrames": 65,
+          "totalFrames": 101
+        }
+      },
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "wm-volley-02",
+      "rep": 11,
+      "warmup": false,
+      "wallMs": 13770.6,
+      "exitCode": 0,
+      "outcome": "not_analyzable",
+      "timings": {
+        "playerTrackMs": 4,
+        "poseDerivativesMs": 1,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 937,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 13016,
+        "paddleTrackMs": 14,
+        "ballTrackMs": 65,
+        "eventIsolationMs": 1
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 4500,
+        "endMs": 7960,
+        "windowMs": 3460,
+        "spanMs": 3460,
+        "prePassEvents": 0,
+        "segments": [
+          {
+            "startMs": 4500,
+            "endMs": 7960
+          }
+        ],
+        "coveredMs": 3460,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    },
+    {
+      "arm": "integrated-tight-window",
+      "clip": "afn-sasebo-rally1",
+      "rep": 11,
+      "warmup": false,
+      "wallMs": 15727.0,
+      "exitCode": 0,
+      "outcome": "abstained",
+      "timings": {
+        "playerTrackMs": 3,
+        "poseDerivativesMs": 0,
+        "eventPrePassMs": 1,
+        "ballCandidatesMs": 1665,
+        "paddleDetectViaWorker": 1,
+        "paddleDetectMs": 15035,
+        "paddleTrackMs": 12,
+        "ballTrackMs": 67,
+        "eventIsolationMs": 1,
+        "fusionAnalysisMs": 13
+      },
+      "detectSpan": {
+        "mode": "event-gated-tight",
+        "startMs": 768,
+        "endMs": 3837,
+        "windowMs": 3069,
+        "spanMs": 3069,
+        "prePassEvents": 3,
+        "segments": [
+          {
+            "startMs": 768,
+            "endMs": 3837
+          }
+        ],
+        "coveredMs": 3069,
+        "savedMs": 0
+      },
+      "paddleSchedule": null,
+      "stderrTail": null
+    }
+  ]
+}

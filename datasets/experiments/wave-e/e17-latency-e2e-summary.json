@@ -1,0 +1,343 @@
+{
+  "id": "e17-latency-e2e",
+  "title": "End-to-end Linux analysis latency (movement-complete -> result): pre-integration baseline vs integrated branch",
+  "date": "2026-08-29",
+  "branch": "devin/wave-e/e17-latency-e2e",
+  "commits": {
+    "integrated": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+    "baselinePreIntegration": "52ba173ea6884f400d73448950e85c51635b31e2 (origin/main worktree at ~/repos/ps-baseline)"
+  },
+  "platformLabel": "LINUX-CPU",
+  "environment": {
+    "platform": "Linux-5.15.200-x86_64-with-glibc2.35",
+    "machine": "x86_64",
+    "node": "v20.18.1",
+    "python": "3.10.12",
+    "torch": "2.13.0+cpu",
+    "detectorModel": "ustc-community/dfine-medium-coco",
+    "ffmpeg": "4.4.2"
+  },
+  "scope": {
+    "clips": [
+      "wm-volley-02",
+      "afn-sasebo-rally1"
+    ],
+    "heldOutUntouched": [
+      "wm-dink-01",
+      "afn-vic-rally1"
+    ],
+    "measurementBoundary": "movement-complete -> result: analyzeVideo with --reuse-extract over constant pre-generated pose/people/ball/extract-meta artifacts; wall time = full tsx child process",
+    "poseInputProvenance": "Real MediaPipe PoseLandmarker (full) pose over the real committed clips, generated once by tools/latency-bench/linux_pose_extract.py. NOT Apple Vision; used ONLY to hold pose input constant across arms, never as labels or accuracy evidence. ball.json honestly empty (Apple trajectory extraction unavailable on Linux)."
+  },
+  "methodology": {
+    "warmupPerArmClip": 1,
+    "measuredRepsPerArmClip": 12,
+    "totalMeasuredRuns": 96,
+    "failedRuns": 0,
+    "interleaving": "round-robin across arms and clips per repetition",
+    "percentileMethod": "nearest-rank",
+    "arms": {
+      "baseline-pre-integration": "origin/main analyzeVideo, default flags (one-shot detector)",
+      "integrated-default": "integrated branch defaults (warm paddle worker, pose derivative cache, concurrent ball/paddle prep, detect-span planning)",
+      "integrated-twopass-roi": "integrated + --two-pass --pass1-roi",
+      "integrated-tight-window": "integrated + --tight-window (incompatible with --two-pass per D4-07)"
+    },
+    "outcomesPerRun": "wm-volley-02: not_analyzable; afn-sasebo-rally1: abstained (expected honest outcomes with empty ball trajectories); all 96 runs exitCode=0 and executed the full detector path"
+  },
+  "results": {
+    "baseline-pre-integration": {
+      "wm-volley-02": {
+        "n": 12,
+        "wallMs": {
+          "p50": 14966.5,
+          "p90": 16980.3,
+          "p95": 17766.2,
+          "min": 14323.1,
+          "max": 17766.2,
+          "mean": 15355.2
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "eventPrePassMs": 1.0,
+          "paddleDetectMs": 13751.0,
+          "paddleTrackMs": 17.0,
+          "ballCandidatesMs": 903.0,
+          "ballTrackMs": 65.0,
+          "eventIsolationMs": 1.0
+        }
+      },
+      "afn-sasebo-rally1": {
+        "n": 12,
+        "wallMs": {
+          "p50": 17561.4,
+          "p90": 18393.2,
+          "p95": 20384.3,
+          "min": 16917.9,
+          "max": 20384.3,
+          "mean": 17786.3
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "eventPrePassMs": 2.0,
+          "paddleDetectMs": 15590.0,
+          "paddleTrackMs": 15.0,
+          "ballCandidatesMs": 1569.0,
+          "ballTrackMs": 68.0,
+          "eventIsolationMs": 1.0,
+          "fusionAnalysisMs": 6.0
+        }
+      },
+      "pooled-both-clips": {
+        "n": 24,
+        "wallMs": {
+          "p50": 16980.3,
+          "p90": 18217.7,
+          "p95": 18393.2,
+          "min": 14323.1,
+          "max": 20384.3,
+          "mean": 16570.8
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "eventPrePassMs": 2.0,
+          "paddleDetectMs": 15157.0,
+          "paddleTrackMs": 16.0,
+          "ballCandidatesMs": 1075.0,
+          "ballTrackMs": 67.0,
+          "eventIsolationMs": 1.0,
+          "fusionAnalysisMs": 6.0
+        }
+      }
+    },
+    "integrated-default": {
+      "wm-volley-02": {
+        "n": 12,
+        "wallMs": {
+          "p50": 13919.1,
+          "p90": 15577.6,
+          "p95": 23984.5,
+          "min": 13736.3,
+          "max": 23984.5,
+          "mean": 15103.2
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 0.0,
+          "ballCandidatesMs": 968.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectMs": 13237.0,
+          "paddleTrackMs": 13.0,
+          "ballTrackMs": 63.0,
+          "eventIsolationMs": 0.0
+        }
+      },
+      "afn-sasebo-rally1": {
+        "n": 12,
+        "wallMs": {
+          "p50": 15801.3,
+          "p90": 17118.6,
+          "p95": 18939.8,
+          "min": 15584.3,
+          "max": 18939.8,
+          "mean": 16314.9
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 1.0,
+          "ballCandidatesMs": 1606.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectMs": 15073.0,
+          "paddleTrackMs": 13.0,
+          "ballTrackMs": 65.0,
+          "eventIsolationMs": 0.0,
+          "fusionAnalysisMs": 20.0
+        }
+      },
+      "pooled-both-clips": {
+        "n": 24,
+        "wallMs": {
+          "p50": 15584.3,
+          "p90": 17118.6,
+          "p95": 18939.8,
+          "min": 13736.3,
+          "max": 23984.5,
+          "mean": 15709.0
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 1.0,
+          "ballCandidatesMs": 1083.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectMs": 14886.0,
+          "paddleTrackMs": 13.0,
+          "ballTrackMs": 63.0,
+          "eventIsolationMs": 0.0,
+          "fusionAnalysisMs": 20.0
+        }
+      }
+    },
+    "integrated-twopass-roi": {
+      "wm-volley-02": {
+        "n": 12,
+        "wallMs": {
+          "p50": 15186.3,
+          "p90": 18188.7,
+          "p95": 23887.3,
+          "min": 14527.6,
+          "max": 23887.3,
+          "mean": 16155.9
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 4.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 1.0,
+          "ballCandidatesMs": 960.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectSparseMs": 6498.0,
+          "paddleDetectDenseMs": 7931.0,
+          "paddleDetectMs": 14494.0,
+          "paddleTrackMs": 10.0,
+          "ballTrackMs": 60.0,
+          "eventIsolationMs": 0.0
+        }
+      },
+      "afn-sasebo-rally1": {
+        "n": 12,
+        "wallMs": {
+          "p50": 19247.5,
+          "p90": 27203.6,
+          "p95": 39110.4,
+          "min": 18458.0,
+          "max": 39110.4,
+          "mean": 22309.3
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 1.0,
+          "ballCandidatesMs": 1646.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectSparseMs": 7165.0,
+          "paddleDetectDenseMs": 11350.0,
+          "paddleDetectMs": 18525.0,
+          "paddleTrackMs": 11.0,
+          "ballTrackMs": 64.0,
+          "eventIsolationMs": 1.0,
+          "fusionAnalysisMs": 21.0
+        }
+      },
+      "pooled-both-clips": {
+        "n": 24,
+        "wallMs": {
+          "p50": 18458.0,
+          "p90": 23887.3,
+          "p95": 27203.6,
+          "min": 14527.6,
+          "max": 39110.4,
+          "mean": 19232.6
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 1.0,
+          "ballCandidatesMs": 1390.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectSparseMs": 7086.0,
+          "paddleDetectDenseMs": 10863.0,
+          "paddleDetectMs": 17738.0,
+          "paddleTrackMs": 11.0,
+          "ballTrackMs": 63.0,
+          "eventIsolationMs": 0.0,
+          "fusionAnalysisMs": 21.0
+        }
+      }
+    },
+    "integrated-tight-window": {
+      "wm-volley-02": {
+        "n": 12,
+        "wallMs": {
+          "p50": 14133.2,
+          "p90": 15144.1,
+          "p95": 18141.1,
+          "min": 13765.8,
+          "max": 18141.1,
+          "mean": 14614.6
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 1.0,
+          "ballCandidatesMs": 971.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectMs": 13391.0,
+          "paddleTrackMs": 12.0,
+          "ballTrackMs": 63.0,
+          "eventIsolationMs": 1.0
+        }
+      },
+      "afn-sasebo-rally1": {
+        "n": 12,
+        "wallMs": {
+          "p50": 16326.4,
+          "p90": 17551.3,
+          "p95": 19633.7,
+          "min": 15727.0,
+          "max": 19633.7,
+          "mean": 16654.8
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 1.0,
+          "ballCandidatesMs": 1640.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectMs": 15609.0,
+          "paddleTrackMs": 12.0,
+          "ballTrackMs": 65.0,
+          "eventIsolationMs": 0.0,
+          "fusionAnalysisMs": 21.0
+        }
+      },
+      "pooled-both-clips": {
+        "n": 24,
+        "wallMs": {
+          "p50": 15727.0,
+          "p90": 17551.3,
+          "p95": 18141.1,
+          "min": 13765.8,
+          "max": 19633.7,
+          "mean": 15634.7
+        },
+        "stageMedianMs": {
+          "playerTrackMs": 3.0,
+          "poseDerivativesMs": 1.0,
+          "eventPrePassMs": 1.0,
+          "ballCandidatesMs": 1034.0,
+          "paddleDetectViaWorker": 1.0,
+          "paddleDetectMs": 15035.0,
+          "paddleTrackMs": 12.0,
+          "ballTrackMs": 64.0,
+          "eventIsolationMs": 0.0,
+          "fusionAnalysisMs": 21.0
+        }
+      }
+    }
+  },
+  "findings": [
+    "integrated-default vs baseline (pooled, n=24 each): p50 16980.3 -> 15584.3 ms (-8.2%), p90 18217.7 -> 17118.6 ms (-6.0%), mean 16570.8 -> 15709.0 ms (-5.2%). LINUX-CPU only.",
+    "integrated-tight-window: p50 15727.0 ms (-7.4% vs baseline), best p90 tail on wm-volley-02 (15144.1 ms).",
+    "integrated-twopass-roi REGRESSES on Linux CPU: pooled p50 18458.0 ms (+8.7% vs baseline), p95 27203.6 ms; dense+sparse passes together exceed single-pass detector cost (paddleDetectMs median 17738 vs 14886 default). Consistent with D4-04 recommendation to keep --pass1-roi off by default.",
+    "Per-stage: paddleDetectMs dominates (~95% of wall) in every arm; ballCandidatesMs ~1s; all other stages <70 ms median.",
+    "All numbers are LINUX-CPU; no extrapolation to iPhone/Mac/ANE is made or valid."
+  ],
+  "artifacts": {
+    "rawResults": "tools/latency-bench/artifacts/bench-results.json (committed)",
+    "benchScript": "tools/latency-bench/bench_e2e.py",
+    "poseFixtureGenerator": "tools/latency-bench/linux_pose_extract.py",
+    "poseFixtures": "tools/latency-bench/artifacts/{wm-volley-02,afn-sasebo-rally1}/ (committed constant seed inputs)"
+  },
+  "verdict": "GREEN"
+}
