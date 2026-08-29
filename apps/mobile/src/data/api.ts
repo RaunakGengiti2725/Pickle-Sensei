@@ -1,3 +1,7 @@
+import type {
+  AnalysisFeedbackCategory,
+  AnalysisFeedbackRating,
+} from '@pickle/shared-types';
 import type { SyncTransport } from './sync';
 
 /**
@@ -142,6 +146,30 @@ export function createAnalysisPermitClient(config: ApiConfigState) {
       );
     },
   };
+}
+
+/** "Was this analysis accurate?" — a failure-mining signal, never gold.
+ * The server derives review eligibility from the consent ledger and copies
+ * the version vector from the synced shot row; the client sends only the
+ * rating and, for a negative one, a category. */
+export async function submitAnalysisFeedback(
+  config: ApiConfigState,
+  analysisId: string,
+  rating: AnalysisFeedbackRating,
+  category: AnalysisFeedbackCategory | null,
+): Promise<{ reviewEligible: boolean }> {
+  const response = await request<{
+    feedback: { reviewEligible: boolean };
+  }>(
+    config,
+    'POST',
+    `/v1/analyses/${encodeURIComponent(analysisId)}/feedback`,
+    {
+      rating,
+      category,
+    },
+  );
+  return { reviewEligible: response.feedback.reviewEligible };
 }
 
 export const api = { request };

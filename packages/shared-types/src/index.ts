@@ -1,3 +1,4 @@
+export * from "./analysisFeedback.js";
 export * from "./captureEnvelope.js";
 export * from "./consent.js";
 export * from "./domain.js";

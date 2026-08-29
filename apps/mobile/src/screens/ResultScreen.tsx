@@ -43,6 +43,7 @@ import {
   type StrokeResultEvidence,
 } from '../components/strokeResultData';
 import { techniqueScoreSectionVisible } from '../components/strokeResultModel';
+import { AnalysisFeedbackPrompt } from '../components/AnalysisFeedbackPrompt';
 import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
 
 /**
@@ -670,6 +671,10 @@ export function ResultScreen() {
                 />
               </View>
             </Card>
+          ) : null}
+
+          {syncEvidence === 'synced' ? (
+            <AnalysisFeedbackPrompt analysisId={route.params.analysisId} />
           ) : null}
         </StrokeResult>
       </ScrollView>
