@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import pg from "pg";
+import { CONSENT_SCOPES } from "@pickle/shared-types";
 import { runMigrations, seed } from "@pickle/database";
 import { InMemoryJobQueue } from "@pickle/queue";
 import { buildApp } from "../src/app.js";
@@ -124,7 +125,7 @@ describe.skipIf(!testUrl)("consent ledger (real PostgreSQL)", () => {
     const body = res.json() as StatusBody;
     expect(body.subjectPseudonym).toBeNull();
     expect(body.records).toHaveLength(0);
-    expect(body.scopes.map((s) => s.active)).toEqual([false, false]);
+    expect(body.scopes.map((s) => s.active)).toEqual(CONSENT_SCOPES.map(() => false));
   });
 
   it("rejects a malformed grant with a typed envelope", async () => {
