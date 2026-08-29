@@ -1,5 +1,7 @@
 import pg from "pg";
 import { InMemoryJobQueue, SqsJobQueue } from "@pickle/queue";
+import { BufferedAnalytics } from "@pickle/analytics";
+import { QueueSloMonitor, DEFAULT_QUEUE_SLO_CONFIG } from "@pickle/slo";
 import { runOnce, type WorkerDeps } from "./worker.js";
 import { buildObjectDeleter } from "./objectStore.js";
 
@@ -12,6 +14,9 @@ if (!databaseUrl) {
   process.exit(1);
 }
 const sqsUrl = process.env["SQS_QUEUE_URL"];
+const analytics = new BufferedAnalytics(async (batch) => {
+  for (const event of batch) console.error(`[media-worker] analytics ${JSON.stringify(event)}`);
+});
 const deps: WorkerDeps = {
   pool: new pg.Pool({ connectionString: databaseUrl }),
   queue: sqsUrl
@@ -26,11 +31,18 @@ const deps: WorkerDeps = {
   objectStore: buildObjectDeleter(process.env),
   transcoder: null, // ffmpeg pipeline wired in deployment image
   log: (line) => console.error(`[media-worker] ${line}`),
+  analytics,
+  sloMonitor: new QueueSloMonitor(DEFAULT_QUEUE_SLO_CONFIG),
 };
 
 const intervalMs = Number(process.env["WORKER_INTERVAL_MS"] ?? 5000);
 console.error(`[media-worker] polling every ${intervalMs}ms`);
+// Restart counting: each process start emits worker_started; the alerting
+// side counts these per unit time — a restart loop shows up as a spike.
+analytics.track({ name: "worker_started", at: new Date().toISOString(), platform: "service" });
+await analytics.flush();
 
+let crashCount = 0;
 while (true) {
   // A transient failure (DB outage, queue unreachable) must not crash the
   // worker process: log loudly and keep polling.
@@ -39,7 +51,15 @@ while (true) {
     if (jobs || deletions || swept)
       console.error(`[media-worker] processed jobs=${jobs} deletions=${deletions} swept=${swept}`);
   } catch (error) {
-    console.error(`[media-worker] poll cycle failed: ${String(error)}`);
+    crashCount++;
+    console.error(`[media-worker] poll cycle failed (crash ${crashCount}): ${String(error)}`);
+    analytics.track({
+      name: "worker_crash",
+      at: new Date().toISOString(),
+      platform: "service",
+      crashCount,
+    });
+    await analytics.flush();
   }
   await new Promise((resolve) => setTimeout(resolve, intervalMs));
 }

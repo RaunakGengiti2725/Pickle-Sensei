@@ -17,6 +17,7 @@
     "@pickle/database": "workspace:*",
     "@pickle/queue": "workspace:*",
     "@pickle/shared-types": "workspace:*",
+    "@pickle/slo": "workspace:*",
     "fastify": "^5.5.0",
     "jose": "^6.2.10",
     "pg": "^8.16.3",
