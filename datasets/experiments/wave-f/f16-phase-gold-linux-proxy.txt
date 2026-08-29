@@ -1,0 +1,36 @@
+wavea-marne-serve@34017 anchored: segmented
+wavea-marne-serve@34017 anchor-free: segmented
+wavea-marne-dig@14042 anchored: segmented
+wavea-marne-dig@14042 anchor-free: abstained PHASE_PEAK_NOT_PROMINENT
+wavea-faead-feed@33358 anchored: segmented
+wavea-faead-feed@33358 anchor-free: segmented
+wavea-faead-rally@13417 anchor-free: abstained PHASE_NO_MOTION_EVIDENCE
+wavea-faead-rally@13875 anchored: segmented
+wavea-faead-rally@13875 anchor-free: segmented
+wavea-944403-dink@20125 anchored: segmented
+wavea-944403-dink@20125 anchor-free: segmented
+wavea-944403-dink@20700 anchored: segmented
+wavea-944403-dink@20700 anchor-free: segmented
+wavea-944403-dink@20950 anchored: segmented
+wavea-944403-dink@20950 anchor-free: segmented
+wavea-944403-dink@21500 anchored: segmented
+wavea-944403-dink@21500 anchor-free: segmented
+wavea-944403-dink@22000 anchored: abstained no meaningful swing speed in window
+wavea-944403-dink@22000 anchor-free: abstained PHASE_NO_MOTION_EVIDENCE
+wavea-944403-smash@3617 anchored: segmented
+wavea-944403-smash@3617 anchor-free: segmented
+wavea-944403-smash@4317 anchored: segmented
+wavea-944403-smash@4317 anchor-free: segmented
+wavea-wgm-wheelchair@182400 anchored: segmented
+wavea-wgm-wheelchair@182400 anchor-free: abstained PHASE_PEAK_NOT_UNIQUE
+wavea-sasebo-volleys@51900 anchored: abstained no meaningful swing speed in window
+wavea-sasebo-volleys@51900 anchor-free: abstained PHASE_NO_MOTION_EVIDENCE
+wavea-sasebo-volleys@52267 anchored: segmented
+wavea-sasebo-volleys@52267 anchor-free: segmented
+wavea-sasebo-volleys@52434 anchored: segmented
+wavea-sasebo-volleys@52434 anchor-free: segmented
+wavea-sasebo-volleys@52867 anchored: segmented
+wavea-sasebo-volleys@52867 anchor-free: segmented
+wavea-sasebo-volleys@52934 anchored: segmented
+wavea-sasebo-volleys@52934 anchor-free: abstained PHASE_NO_MOTION_EVIDENCE
+{"anchored":"15/17","anchorFree":"12/18"}
