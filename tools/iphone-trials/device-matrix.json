@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "pickle.iphone-device-matrix.v1",
+  "requiredDevicesPerTier": 1,
+  "devices": [
+    {
+      "deviceId": "iphone-se-3",
+      "tier": "older",
+      "modelIdentifier": "iPhone14,6",
+      "marketingName": "iPhone SE (3rd generation)",
+      "minIosMajor": 16,
+      "acquisition": {
+        "state": "NOT_ACQUIRED",
+        "blockedReason": "No physical iPhone exists in this program (GATE B external blocker)."
+      }
+    },
+    {
+      "deviceId": "iphone-12",
+      "tier": "older",
+      "modelIdentifier": "iPhone13,2",
+      "marketingName": "iPhone 12",
+      "minIosMajor": 16,
+      "acquisition": {
+        "state": "NOT_ACQUIRED",
+        "blockedReason": "No physical iPhone exists in this program (GATE B external blocker)."
+      }
+    },
+    {
+      "deviceId": "iphone-13",
+      "tier": "mid",
+      "modelIdentifier": "iPhone14,5",
+      "marketingName": "iPhone 13",
+      "minIosMajor": 16,
+      "acquisition": {
+        "state": "NOT_ACQUIRED",
+        "blockedReason": "No physical iPhone exists in this program (GATE B external blocker)."
+      }
+    },
+    {
+      "deviceId": "iphone-14",
+      "tier": "mid",
+      "modelIdentifier": "iPhone14,7",
+      "marketingName": "iPhone 14",
+      "minIosMajor": 16,
+      "acquisition": {
+        "state": "NOT_ACQUIRED",
+        "blockedReason": "No physical iPhone exists in this program (GATE B external blocker)."
+      }
+    },
+    {
+      "deviceId": "iphone-15",
+      "tier": "recent",
+      "modelIdentifier": "iPhone15,4",
+      "marketingName": "iPhone 15",
+      "minIosMajor": 17,
+      "acquisition": {
+        "state": "NOT_ACQUIRED",
+        "blockedReason": "No physical iPhone exists in this program (GATE B external blocker)."
+      }
+    },
+    {
+      "deviceId": "iphone-16",
+      "tier": "recent",
+      "modelIdentifier": "iPhone17,3",
+      "marketingName": "iPhone 16",
+      "minIosMajor": 18,
+      "acquisition": {
+        "state": "NOT_ACQUIRED",
+        "blockedReason": "No physical iPhone exists in this program (GATE B external blocker)."
+      }
+    },
+    {
+      "deviceId": "iphone-15-pro",
+      "tier": "flagship",
+      "modelIdentifier": "iPhone16,1",
+      "marketingName": "iPhone 15 Pro",
+      "minIosMajor": 17,
+      "acquisition": {
+        "state": "NOT_ACQUIRED",
+        "blockedReason": "No physical iPhone exists in this program (GATE B external blocker)."
+      }
+    },
+    {
+      "deviceId": "iphone-16-pro",
+      "tier": "flagship",
+      "modelIdentifier": "iPhone17,1",
+      "marketingName": "iPhone 16 Pro",
+      "minIosMajor": 18,
+      "acquisition": {
+        "state": "NOT_ACQUIRED",
+        "blockedReason": "No physical iPhone exists in this program (GATE B external blocker)."
+      }
+    }
+  ],
+  "notes": [
+    "Coverage plan only — nothing here is evidence. A tier counts as covered only when at least one valid DEVICE_MEASUREMENT trial (pickle.iphone-trial.v1) references one of its deviceIds.",
+    "Model identifiers are Apple's public identifiers; substituting a comparable device within the same tier is acceptable if recorded in the manifest first (append a new entry, never edit history).",
+    "requiredDevicesPerTier=1 is the GATE B minimum; broaden only after the first full-matrix pass exists."
+  ]
+}

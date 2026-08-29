@@ -1,0 +1,155 @@
+{
+  "schemaVersion": "pickle.iphone-trial.v1",
+  "trialId": "SAMPLE-linux-pipeline-check-001",
+  "capturedAtIso": "2026-08-29T00:00:00.000Z",
+  "provenance": "SAMPLE_FIXTURE_NOT_A_MEASUREMENT",
+  "operator": "linux-ci (no human, no device — pipeline exercise only)",
+  "device": {
+    "matrixDeviceId": "iphone-13",
+    "tier": "mid",
+    "modelIdentifier": "iPhone14,5",
+    "iosVersion": "17.5.1",
+    "iosBuild": "21F90"
+  },
+  "app": {
+    "appVersion": "0.1.0",
+    "appBuild": "1",
+    "gitCommit": "0000000000000000000000000000000000000000",
+    "buildConfiguration": "Release"
+  },
+  "deviceState": {
+    "thermalStateStart": "nominal",
+    "thermalStateEnd": "fair",
+    "batteryStartPct": 88,
+    "batteryEndPct": 84,
+    "batteryState": "unplugged",
+    "lowPowerModeEnabled": false,
+    "storageFreeBytes": 64000000000
+  },
+  "cameraSettings": {
+    "resolution": "1920x1080",
+    "requestedFps": 60,
+    "lens": "wide",
+    "stabilizationEnabled": true,
+    "torchEnabled": false
+  },
+  "modelVersions": {
+    "stroke-heuristic-lite": "stroke-heuristic-6",
+    "contact-evidence": "contact-evidence-4",
+    "target-acquisition": "D-027-shipped"
+  },
+  "referenceRecordingRef": {
+    "measured": true,
+    "value": "sample://not-a-real-recording"
+  },
+  "metrics": {
+    "appLaunchToInteractiveMs": { "measured": true, "value": 1400 },
+    "permissionFlow": {
+      "measured": true,
+      "value": {
+        "promptsShown": ["camera", "microphone"],
+        "allGranted": true,
+        "flowMs": 5200
+      }
+    },
+    "cameraStartToFirstFrameMs": { "measured": true, "value": 620 },
+    "captureFps": {
+      "measured": true,
+      "value": { "meanFps": 59.2, "minFps": 54, "droppedFrameRatio": 0.004 }
+    },
+    "targetAcquisition": {
+      "lockAchieved": true,
+      "lockOnIntendedSubject": { "measured": true, "value": true },
+      "timeToLockMs": { "measured": true, "value": 900 },
+      "lockPersistenceRatio": { "measured": true, "value": 0.97 },
+      "identitySwitchCount": { "measured": true, "value": 0 }
+    },
+    "strokeTrigger": {
+      "measured": true,
+      "value": { "triggered": true, "triggerLatencyMs": 210, "falseTriggerCount": 0 }
+    },
+    "eventDetection": {
+      "humanMarkedEventCount": { "measured": true, "value": 3 },
+      "appProposedEventCount": { "measured": true, "value": 3 },
+      "recalledEventCount": { "measured": true, "value": 3 },
+      "falseProposalCount": { "measured": true, "value": 0 },
+      "meanBoundaryOverlapRatio": { "measured": true, "value": 0.86 }
+    },
+    "paddleTrackingVerdict": { "measured": true, "value": "CORRECT" },
+    "ballTrackingVerdict": { "measured": true, "value": "PARTIAL" },
+    "contactTiming": {
+      "humanMarkedContactMs": { "measured": true, "value": 4180 },
+      "appContactMs": { "measured": true, "value": 4210 },
+      "absErrorMs": { "measured": true, "value": 30 },
+      "appAbstained": false
+    },
+    "phaseValidity": {
+      "measured": true,
+      "value": { "orderingValid": true, "humanVerdict": "CORRECT" }
+    },
+    "strokeClassification": {
+      "appLabel": { "measured": true, "value": "forehand" },
+      "appConfidence": { "measured": true, "value": 0.72 },
+      "humanVerifiedLabel": { "measured": true, "value": "forehand" },
+      "labelCorrect": { "measured": true, "value": true },
+      "appAbstained": false
+    },
+    "autoDetectQuality": {
+      "measured": true,
+      "value": { "falseStarts": 0, "missedStrokes": 0, "humanVerdict": "CORRECT" }
+    },
+    "adaptiveCompletion": {
+      "strategy": "fixed",
+      "captureCompletionMs": { "measured": true, "value": 1500 },
+      "prematureCutoff": { "measured": true, "value": false }
+    },
+    "clipCorrectness": {
+      "clipsExpected": { "measured": true, "value": 3 },
+      "clipsProduced": { "measured": true, "value": 3 },
+      "boundsVerdict": { "measured": true, "value": "CORRECT" }
+    },
+    "analysisLatency": {
+      "primary": {
+        "measured": true,
+        "value": {
+          "runKind": "cold",
+          "trueMovementCompletionAtMs": 6000,
+          "resultInteractiveAtMs": 9800,
+          "latencyMs": 3800,
+          "markerSource": "HUMAN_FRAME_MARKED_REFERENCE_RECORDING"
+        }
+      },
+      "analysisRequestToResultMs": { "measured": true, "value": 3100 }
+    },
+    "resultCorrectness": {
+      "measured": true,
+      "value": {
+        "renderedWithoutError": true,
+        "evidenceProvenanceHonest": true,
+        "humanVerdict": "CORRECT"
+      }
+    },
+    "resultRenderMs": { "measured": true, "value": 240 },
+    "tryAgain": {
+      "measured": true,
+      "value": {
+        "attempted": true,
+        "returnedToCaptureMs": 800,
+        "stateResetCorrect": true
+      }
+    },
+    "stability": {
+      "crashed": false,
+      "crashReportRef": null,
+      "peakMemoryFootprintBytes": { "measured": true, "value": 812000000 },
+      "timeToThermalSeriousMs": {
+        "measured": false,
+        "unmeasuredReason": "thermal never reached serious in this invented sample"
+      },
+      "batteryDrainPct": { "measured": true, "value": 4 }
+    }
+  },
+  "notes": [
+    "SAMPLE FIXTURE — not a measurement. Exists only so the Linux report pipeline has a structurally-complete trial to parse. Every value is invented."
+  ]
+}

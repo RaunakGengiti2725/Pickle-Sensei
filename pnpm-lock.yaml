@@ -426,6 +426,21 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@26.3.0)(tsx@4.23.12)
 
+  tools/iphone-trials:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.0
+        version: 20.19.43
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.12
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@20.19.43)(tsx@4.23.12)
+
   tools/mac-bench:
     devDependencies:
       '@pickle/swing-lab':
