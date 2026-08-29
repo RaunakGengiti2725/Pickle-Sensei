@@ -14,7 +14,7 @@ evidence.
 
 - `project.pbxproj`: bundle id `com.picklesensei`, `MARKETING_VERSION`,
   `CURRENT_PROJECT_VERSION`, `DEVELOPMENT_TEAM`, entitlements wiring.
-- `Info.plist`: camera + microphone usage strings, ATS arbitrary loads
+- `Info.plist`: camera + microphone + photo-library usage strings, ATS arbitrary loads
   disabled, version keys sourced from build settings.
 - `PrivacyInfo.xcprivacy` accessed-API declarations present.
 - `Podfile.lock` committed (deterministic pod resolution).

@@ -1,0 +1,167 @@
+{
+  "$comment": "Release operations manifest (i32-release-operations). Single source of truth for version scheme, environment separation, monitoring hooks, and rollback hooks. Companion prose: docs/RELEASE_OPERATIONS.md; staged-rollout plan: docs/RELEASE_PLAN_V1.md. Validated by `pnpm release:check` (tools/release/check-release-manifest.mjs). This file DEFINES operations; it executes nothing. Every entry with requiresHumanAuthorization=true is an irreversible action that must not be performed without an explicit human GO decision recorded in docs/DECISIONS.md.",
+  "schemaVersion": 1,
+  "versionScheme": {
+    "marketingVersion": "1.0",
+    "buildNumber": 1,
+    "rules": {
+      "marketingVersion": "MAJOR.MINOR.PATCH; MUST equal iOS MARKETING_VERSION, Android versionName, and APP_VERSION in apps/mobile/src/config/runtimeConfig.ts",
+      "buildNumber": "monotonically increasing integer across all releases; MUST equal iOS CURRENT_PROJECT_VERSION and Android versionCode; never reused or reset",
+      "gitTag": "store-submitted and TestFlight-external builds are built only from tag v<version>-build.<build> on the audited RC SHA",
+      "backendImages": "services/api and services/media-worker images tagged with the git SHA of the release"
+    }
+  },
+  "environments": {
+    "development": {
+      "apiOrigin": null,
+      "database": "local docker-compose Postgres",
+      "mediaBucket": null,
+      "mobileConfig": "runtimeConfig.ts defaults (all null; explicit not-configured state)",
+      "realUserData": false
+    },
+    "staging": {
+      "apiOrigin": "tbd",
+      "database": "staging DB; all migrations rehearsed here before production",
+      "mediaBucket": "tbd",
+      "mobileConfig": "staging values injected at build time; never committed",
+      "realUserData": false
+    },
+    "production": {
+      "apiOrigin": "tbd",
+      "database": "production DB; forward-fix only (RELEASE_PLAN_V1 \u00a74)",
+      "mediaBucket": "tbd",
+      "mobileConfig": "production values injected at build time; never committed",
+      "realUserData": true
+    },
+    "$comment": "staging/production origins and buckets are not yet provisioned (BLOCKED_EXTERNAL). 'tbd' is asserted by release:check so a real production URL cannot land here silently."
+  },
+  "releaseBlockingSteps": [
+    {
+      "id": "claim_gate_language_check",
+      "description": "External claim gate is FAIL (docs/CLAIM_REVIEW.md); all external copy limited to 'still being validated' language",
+      "source": "docs/RELEASE_PLAN_V1.md \u00a77"
+    },
+    {
+      "id": "privacy_disclosure_sync",
+      "description": "If a build enables a backend (apiBaseUrl set), App Store Connect privacy questionnaire and PrivacyInfo.xcprivacy NSPrivacyCollectedDataTypes MUST be updated to disclose the collected data before submission",
+      "source": "docs/RELEASE_OPERATIONS.md \u00a73"
+    },
+    {
+      "id": "flag_drift_check",
+      "description": "Feature-flag state in built artifacts matches the RC record on every deploy",
+      "source": "docs/RELEASE_PLAN_V1.md \u00a72 step 4"
+    },
+    {
+      "id": "distribution_preconditions",
+      "description": "apps/mobile `npm run check:distribution` green at the release SHA",
+      "source": "docs/DISTRIBUTION.md"
+    }
+  ],
+  "monitoringHooks": [
+    {
+      "id": "silent_failure_rate",
+      "signal": "silent-failure-v1.1 rate per stage (contact/stroke/ownership), grouped by user/session/source, never per-frame",
+      "alarm": "any stage exceeds its frozen budget",
+      "severity": "P0"
+    },
+    {
+      "id": "target_wrong_lock",
+      "signal": "TARGET wrong-lock reports (support-sourced + C17 targetLock tap-distance telemetry)",
+      "alarm": "any confirmed wrong-target with confident downstream output",
+      "severity": "P0"
+    },
+    {
+      "id": "excess_abstention",
+      "signal": "abstention rate on SUPPORTED-envelope captures",
+      "alarm": ">= 2x Stage-0 baseline over a 24h window",
+      "severity": "P1"
+    },
+    {
+      "id": "envelope_verdict_distribution",
+      "signal": "SUPPORTED/DEGRADED/UNSUPPORTED/NOT_MEASURED distribution",
+      "alarm": "spike in NOT_MEASURED (capture-contract regression, h08)",
+      "severity": "P1"
+    },
+    {
+      "id": "crash_free_sessions",
+      "signal": "crash-free session rate",
+      "alarm": "< 99% internal (Stage 0) / < 99.5% canary (Stage 1)",
+      "severity": "P0"
+    },
+    {
+      "id": "pipeline_latency",
+      "signal": "analysis completion rate; per-stage latency percentiles (cold vs warm); paddle-worker fallback count",
+      "alarm": "nonzero worker fallback rate (warm path silently degrading)",
+      "severity": "P1"
+    },
+    {
+      "id": "session_engine_states",
+      "signal": "g21 session-engine event states: READY with missing content, retry-queue depth, recoverPending() outcomes after restart",
+      "alarm": "READY events with missing content > 0",
+      "severity": "P1"
+    },
+    {
+      "id": "consent_ledger_integrity",
+      "signal": "consent ledger append-only violations; export v2 signature verification failures; deletion cascade completions; training-consent opt-in audit",
+      "alarm": "any append-only violation or any training use without opt-in",
+      "severity": "P0"
+    },
+    {
+      "id": "flag_drift",
+      "signal": "feature-flag drift check on every deploy against the RC record",
+      "alarm": "any drift from the RC record",
+      "severity": "P0"
+    }
+  ],
+  "rollbackHooks": [
+    {
+      "id": "mobile_pause_phased_release",
+      "subsystem": "mobile",
+      "action": "pause App Store phased release; a shipped binary cannot be un-shipped",
+      "requiresHumanAuthorization": true
+    },
+    {
+      "id": "mobile_expedited_resubmission",
+      "subsystem": "mobile",
+      "action": "expedited-review submission of the previous good build (or a build with the offending flag forced off)",
+      "requiresHumanAuthorization": true
+    },
+    {
+      "id": "server_side_kill_switch",
+      "subsystem": "api",
+      "action": "analysis endpoints return typed maintenance errors (existing typed-error contract) to disable analysis without a client update; coach surfaces already gate-blocked server-side",
+      "requiresHumanAuthorization": true
+    },
+    {
+      "id": "backend_image_rollback",
+      "subsystem": "backend",
+      "action": "redeploy the previous SHA-tagged image; images are stateless, config/flags roll back with the deployment",
+      "requiresHumanAuthorization": true
+    },
+    {
+      "id": "db_forward_fix",
+      "subsystem": "database",
+      "action": "forward-fix only: remediate a bad migration with a new forward migration, never edit or revert an applied one; consent ledger (0015-0017) is append-only by design",
+      "requiresHumanAuthorization": true
+    },
+    {
+      "id": "db_snapshot_restore",
+      "subsystem": "database",
+      "action": "LAST RESORT; prohibited once real consent records exist in the discarded window (consent-integrity violation); requires release owner + privacy owner with written rationale",
+      "requiresHumanAuthorization": true
+    }
+  ],
+  "irreversibleActions": [
+    { "id": "app_store_submission", "requiresHumanAuthorization": true },
+    { "id": "testflight_external_distribution", "requiresHumanAuthorization": true },
+    { "id": "production_db_migration", "requiresHumanAuthorization": true },
+    { "id": "production_snapshot_restore", "requiresHumanAuthorization": true },
+    { "id": "signing_certificate_rotation", "requiresHumanAuthorization": true },
+    { "id": "enable_distribute_external_flag", "requiresHumanAuthorization": true },
+    {
+      "id": "external_accuracy_or_latency_claim",
+      "requiresHumanAuthorization": true,
+      "$comment": "blocked entirely until the claim gate passes; listed so tooling never treats it as authorized"
+    }
+  ]
+}
