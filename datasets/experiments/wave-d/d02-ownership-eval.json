@@ -1,0 +1,1415 @@
+{
+  "benchVersion": "ownership-bench-v1",
+  "generatedAtIso": "2026-08-29T08:49:07.914Z",
+  "includeHeldOut": false,
+  "dualFrames": 38,
+  "framesWithPose": 17,
+  "perCase": {
+    "wm-volley-02": {
+      "dualFrames": 6,
+      "withPose": 0
+    },
+    "afn-sasebo-rally1": {
+      "dualFrames": 13,
+      "withPose": 0
+    },
+    "afn-sasebo-rally2": {
+      "dualFrames": 1,
+      "withPose": 0
+    },
+    "wavea-944403-dink": {
+      "dualFrames": 11,
+      "withPose": 10
+    },
+    "wavea-944403-smash": {
+      "dualFrames": 3,
+      "withPose": 3
+    },
+    "wavea-faead-feed": {
+      "dualFrames": 2,
+      "withPose": 2
+    },
+    "wavea-faead-rally": {
+      "dualFrames": 1,
+      "withPose": 1
+    },
+    "wavea-marne-dig": {
+      "dualFrames": 1,
+      "withPose": 1
+    }
+  },
+  "dataDisclosure": [
+    "pose (wrists/torso) is committed only for wave-a windowed corpus runs; the five original bench cases have no committed pose, so wrist/geometry methods and the incumbent analog ABSTAIN there",
+    "the incumbent S3 heuristic is replayed as a frame-level analog (otherOwnershipFactor wrist-ratio veto + nearest target wrist), not the full track/segment machinery — canonical run dirs are absent on Linux",
+    "b3 temporal continuity seeds each case's first dual frame (geometry where pose exists, otherwise the gold label, disclosed); seed frames never score",
+    "buckets come from committed sidecar notes + candidate multiplicity; frames without notes are 'clean'",
+    "accuracy counts abstentions as not-correct; accuracyWhenAnswering and coverage are reported alongside"
+  ],
+  "methods": [
+    {
+      "method": "incumbent_wrist_ratio",
+      "scoredFrames": 38,
+      "correct": 13,
+      "abstained": 21,
+      "accuracy": 0.342,
+      "accuracyWhenAnswering": 0.765,
+      "coverage": 0.447,
+      "byBucket": {
+        "clean": {
+          "n": 10,
+          "correct": 0,
+          "abstained": 10,
+          "accuracy": 0,
+          "smallN": false
+        },
+        "dark_on_dark": {
+          "n": 25,
+          "correct": 12,
+          "abstained": 9,
+          "accuracy": 0.48,
+          "smallN": false
+        },
+        "blur": {
+          "n": 4,
+          "correct": 1,
+          "abstained": 3,
+          "accuracy": 0.25,
+          "smallN": true
+        },
+        "net_post_occlusion": {
+          "n": 11,
+          "correct": 6,
+          "abstained": 5,
+          "accuracy": 0.545,
+          "smallN": false
+        },
+        "multi_paddle": {
+          "n": 14,
+          "correct": 10,
+          "abstained": 2,
+          "accuracy": 0.714,
+          "smallN": false
+        },
+        "edge_on": {
+          "n": 10,
+          "correct": 7,
+          "abstained": 1,
+          "accuracy": 0.7,
+          "smallN": false
+        }
+      },
+      "byGroup": {
+        "wm-tournament-2014": {
+          "n": 6,
+          "correct": 0,
+          "abstained": 6,
+          "accuracy": 0,
+          "smallN": true
+        },
+        "afn-sasebo-2025-06": {
+          "n": 14,
+          "correct": 0,
+          "abstained": 14,
+          "accuracy": 0,
+          "smallN": false
+        },
+        "dvids-944403": {
+          "n": 14,
+          "correct": 9,
+          "abstained": 1,
+          "accuracy": 0.643,
+          "smallN": false
+        },
+        "dvids-faead": {
+          "n": 3,
+          "correct": 3,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        },
+        "dvids-marne-2024": {
+          "n": 1,
+          "correct": 1,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        }
+      },
+      "failures": [
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 4250,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 4290,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 6250,
+          "buckets": ["dark_on_dark"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 6290,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 6650,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 6690,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 433.77,
+          "buckets": ["dark_on_dark"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 800.8,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1001,
+          "buckets": ["blur", "dark_on_dark", "net_post_occlusion"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1201.2,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1401.4,
+          "buckets": ["dark_on_dark", "net_post_occlusion"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1801.8,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1901.9,
+          "buckets": ["blur", "dark_on_dark"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2002,
+          "buckets": ["net_post_occlusion"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2102.1,
+          "buckets": ["dark_on_dark", "net_post_occlusion"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2202.2,
+          "buckets": ["dark_on_dark", "net_post_occlusion"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2602.6,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2830,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2836.17,
+          "buckets": ["multi_paddle"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally2",
+          "tMs": 2203.7,
+          "buckets": ["blur", "dark_on_dark"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21171.15,
+          "buckets": ["dark_on_dark", "edge_on"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21588.23,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22088.73,
+          "buckets": ["dark_on_dark", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22338.98,
+          "buckets": ["dark_on_dark", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22589.23,
+          "buckets": ["dark_on_dark", "edge_on"],
+          "pickedOwner": "other"
+        }
+      ]
+    },
+    {
+      "method": "b1_wrist_distance_only",
+      "scoredFrames": 38,
+      "correct": 12,
+      "abstained": 21,
+      "accuracy": 0.316,
+      "accuracyWhenAnswering": 0.706,
+      "coverage": 0.447,
+      "byBucket": {
+        "clean": {
+          "n": 10,
+          "correct": 0,
+          "abstained": 10,
+          "accuracy": 0,
+          "smallN": false
+        },
+        "dark_on_dark": {
+          "n": 25,
+          "correct": 11,
+          "abstained": 9,
+          "accuracy": 0.44,
+          "smallN": false
+        },
+        "blur": {
+          "n": 4,
+          "correct": 1,
+          "abstained": 3,
+          "accuracy": 0.25,
+          "smallN": true
+        },
+        "net_post_occlusion": {
+          "n": 11,
+          "correct": 6,
+          "abstained": 5,
+          "accuracy": 0.545,
+          "smallN": false
+        },
+        "multi_paddle": {
+          "n": 14,
+          "correct": 10,
+          "abstained": 2,
+          "accuracy": 0.714,
+          "smallN": false
+        },
+        "edge_on": {
+          "n": 10,
+          "correct": 7,
+          "abstained": 1,
+          "accuracy": 0.7,
+          "smallN": false
+        }
+      },
+      "byGroup": {
+        "wm-tournament-2014": {
+          "n": 6,
+          "correct": 0,
+          "abstained": 6,
+          "accuracy": 0,
+          "smallN": true
+        },
+        "afn-sasebo-2025-06": {
+          "n": 14,
+          "correct": 0,
+          "abstained": 14,
+          "accuracy": 0,
+          "smallN": false
+        },
+        "dvids-944403": {
+          "n": 14,
+          "correct": 8,
+          "abstained": 1,
+          "accuracy": 0.571,
+          "smallN": false
+        },
+        "dvids-faead": {
+          "n": 3,
+          "correct": 3,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        },
+        "dvids-marne-2024": {
+          "n": 1,
+          "correct": 1,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        }
+      },
+      "failures": [
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 4250,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 4290,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 6250,
+          "buckets": ["dark_on_dark"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 6290,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 6650,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 6690,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 433.77,
+          "buckets": ["dark_on_dark"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 800.8,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1001,
+          "buckets": ["blur", "dark_on_dark", "net_post_occlusion"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1201.2,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1401.4,
+          "buckets": ["dark_on_dark", "net_post_occlusion"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1801.8,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1901.9,
+          "buckets": ["blur", "dark_on_dark"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2002,
+          "buckets": ["net_post_occlusion"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2102.1,
+          "buckets": ["dark_on_dark", "net_post_occlusion"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2202.2,
+          "buckets": ["dark_on_dark", "net_post_occlusion"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2602.6,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2830,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2836.17,
+          "buckets": ["multi_paddle"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally2",
+          "tMs": 2203.7,
+          "buckets": ["blur", "dark_on_dark"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21087.73,
+          "buckets": ["dark_on_dark"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21171.15,
+          "buckets": ["dark_on_dark", "edge_on"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21588.23,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22088.73,
+          "buckets": ["dark_on_dark", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22338.98,
+          "buckets": ["dark_on_dark", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22589.23,
+          "buckets": ["dark_on_dark", "edge_on"],
+          "pickedOwner": "other"
+        }
+      ]
+    },
+    {
+      "method": "b2_target_geometry",
+      "scoredFrames": 38,
+      "correct": 8,
+      "abstained": 21,
+      "accuracy": 0.211,
+      "accuracyWhenAnswering": 0.471,
+      "coverage": 0.447,
+      "byBucket": {
+        "clean": {
+          "n": 10,
+          "correct": 0,
+          "abstained": 10,
+          "accuracy": 0,
+          "smallN": false
+        },
+        "dark_on_dark": {
+          "n": 25,
+          "correct": 8,
+          "abstained": 9,
+          "accuracy": 0.32,
+          "smallN": false
+        },
+        "blur": {
+          "n": 4,
+          "correct": 1,
+          "abstained": 3,
+          "accuracy": 0.25,
+          "smallN": true
+        },
+        "net_post_occlusion": {
+          "n": 11,
+          "correct": 5,
+          "abstained": 5,
+          "accuracy": 0.455,
+          "smallN": false
+        },
+        "multi_paddle": {
+          "n": 14,
+          "correct": 6,
+          "abstained": 2,
+          "accuracy": 0.429,
+          "smallN": false
+        },
+        "edge_on": {
+          "n": 10,
+          "correct": 4,
+          "abstained": 1,
+          "accuracy": 0.4,
+          "smallN": false
+        }
+      },
+      "byGroup": {
+        "wm-tournament-2014": {
+          "n": 6,
+          "correct": 0,
+          "abstained": 6,
+          "accuracy": 0,
+          "smallN": true
+        },
+        "afn-sasebo-2025-06": {
+          "n": 14,
+          "correct": 0,
+          "abstained": 14,
+          "accuracy": 0,
+          "smallN": false
+        },
+        "dvids-944403": {
+          "n": 14,
+          "correct": 4,
+          "abstained": 1,
+          "accuracy": 0.286,
+          "smallN": false
+        },
+        "dvids-faead": {
+          "n": 3,
+          "correct": 3,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        },
+        "dvids-marne-2024": {
+          "n": 1,
+          "correct": 1,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        }
+      },
+      "failures": [
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 4250,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 4290,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 6250,
+          "buckets": ["dark_on_dark"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 6290,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 6650,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wm-volley-02",
+          "tMs": 6690,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 433.77,
+          "buckets": ["dark_on_dark"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 800.8,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1001,
+          "buckets": ["blur", "dark_on_dark", "net_post_occlusion"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1201.2,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1401.4,
+          "buckets": ["dark_on_dark", "net_post_occlusion"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1801.8,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1901.9,
+          "buckets": ["blur", "dark_on_dark"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2002,
+          "buckets": ["net_post_occlusion"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2102.1,
+          "buckets": ["dark_on_dark", "net_post_occlusion"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2202.2,
+          "buckets": ["dark_on_dark", "net_post_occlusion"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2602.6,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2830,
+          "buckets": ["clean"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 2836.17,
+          "buckets": ["multi_paddle"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "afn-sasebo-rally2",
+          "tMs": 2203.7,
+          "buckets": ["blur", "dark_on_dark"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 20003.32,
+          "buckets": ["multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 20253.57,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 20503.82,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21087.73,
+          "buckets": ["dark_on_dark"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21171.15,
+          "buckets": ["dark_on_dark", "edge_on"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21588.23,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle"],
+          "pickedOwner": null
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21838.48,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle", "net_post_occlusion"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22088.73,
+          "buckets": ["dark_on_dark", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22338.98,
+          "buckets": ["dark_on_dark", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22589.23,
+          "buckets": ["dark_on_dark", "edge_on"],
+          "pickedOwner": "other"
+        }
+      ]
+    },
+    {
+      "method": "b3_temporal_continuity",
+      "scoredFrames": 30,
+      "correct": 16,
+      "abstained": 0,
+      "accuracy": 0.533,
+      "accuracyWhenAnswering": 0.533,
+      "coverage": 1,
+      "byBucket": {
+        "clean": {
+          "n": 9,
+          "correct": 7,
+          "abstained": 0,
+          "accuracy": 0.778,
+          "smallN": true
+        },
+        "dark_on_dark": {
+          "n": 19,
+          "correct": 7,
+          "abstained": 0,
+          "accuracy": 0.368,
+          "smallN": false
+        },
+        "blur": {
+          "n": 2,
+          "correct": 1,
+          "abstained": 0,
+          "accuracy": 0.5,
+          "smallN": true
+        },
+        "net_post_occlusion": {
+          "n": 8,
+          "correct": 4,
+          "abstained": 0,
+          "accuracy": 0.5,
+          "smallN": true
+        },
+        "multi_paddle": {
+          "n": 10,
+          "correct": 3,
+          "abstained": 0,
+          "accuracy": 0.3,
+          "smallN": false
+        },
+        "edge_on": {
+          "n": 9,
+          "correct": 2,
+          "abstained": 0,
+          "accuracy": 0.222,
+          "smallN": true
+        }
+      },
+      "byGroup": {
+        "wm-tournament-2014": {
+          "n": 5,
+          "correct": 5,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        },
+        "afn-sasebo-2025-06": {
+          "n": 12,
+          "correct": 8,
+          "abstained": 0,
+          "accuracy": 0.667,
+          "smallN": false
+        },
+        "dvids-944403": {
+          "n": 12,
+          "correct": 2,
+          "abstained": 0,
+          "accuracy": 0.167,
+          "smallN": false
+        },
+        "dvids-faead": {
+          "n": 1,
+          "correct": 1,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        }
+      },
+      "failures": [
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 800.8,
+          "buckets": ["clean"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1001,
+          "buckets": ["blur", "dark_on_dark", "net_post_occlusion"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1201.2,
+          "buckets": ["clean"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "tMs": 1401.4,
+          "buckets": ["dark_on_dark", "net_post_occlusion"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 20253.57,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 20503.82,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 20754.07,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle", "net_post_occlusion"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21087.73,
+          "buckets": ["dark_on_dark"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21171.15,
+          "buckets": ["dark_on_dark", "edge_on"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21588.23,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21838.48,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle", "net_post_occlusion"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22088.73,
+          "buckets": ["dark_on_dark", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22338.98,
+          "buckets": ["dark_on_dark", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22589.23,
+          "buckets": ["dark_on_dark", "edge_on"],
+          "pickedOwner": "other"
+        }
+      ]
+    }
+  ],
+  "poseSubsetMethods": [
+    {
+      "method": "incumbent_wrist_ratio",
+      "scoredFrames": 17,
+      "correct": 13,
+      "abstained": 0,
+      "accuracy": 0.765,
+      "accuracyWhenAnswering": 0.765,
+      "coverage": 1,
+      "byBucket": {
+        "multi_paddle": {
+          "n": 12,
+          "correct": 10,
+          "abstained": 0,
+          "accuracy": 0.833,
+          "smallN": false
+        },
+        "dark_on_dark": {
+          "n": 16,
+          "correct": 12,
+          "abstained": 0,
+          "accuracy": 0.75,
+          "smallN": false
+        },
+        "edge_on": {
+          "n": 9,
+          "correct": 7,
+          "abstained": 0,
+          "accuracy": 0.778,
+          "smallN": true
+        },
+        "net_post_occlusion": {
+          "n": 6,
+          "correct": 6,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        },
+        "blur": {
+          "n": 1,
+          "correct": 1,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        }
+      },
+      "byGroup": {
+        "dvids-944403": {
+          "n": 13,
+          "correct": 9,
+          "abstained": 0,
+          "accuracy": 0.692,
+          "smallN": false
+        },
+        "dvids-faead": {
+          "n": 3,
+          "correct": 3,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        },
+        "dvids-marne-2024": {
+          "n": 1,
+          "correct": 1,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        }
+      },
+      "failures": [
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21171.15,
+          "buckets": ["dark_on_dark", "edge_on"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22088.73,
+          "buckets": ["dark_on_dark", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22338.98,
+          "buckets": ["dark_on_dark", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22589.23,
+          "buckets": ["dark_on_dark", "edge_on"],
+          "pickedOwner": "other"
+        }
+      ]
+    },
+    {
+      "method": "b1_wrist_distance_only",
+      "scoredFrames": 17,
+      "correct": 12,
+      "abstained": 0,
+      "accuracy": 0.706,
+      "accuracyWhenAnswering": 0.706,
+      "coverage": 1,
+      "byBucket": {
+        "multi_paddle": {
+          "n": 12,
+          "correct": 10,
+          "abstained": 0,
+          "accuracy": 0.833,
+          "smallN": false
+        },
+        "dark_on_dark": {
+          "n": 16,
+          "correct": 11,
+          "abstained": 0,
+          "accuracy": 0.688,
+          "smallN": false
+        },
+        "edge_on": {
+          "n": 9,
+          "correct": 7,
+          "abstained": 0,
+          "accuracy": 0.778,
+          "smallN": true
+        },
+        "net_post_occlusion": {
+          "n": 6,
+          "correct": 6,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        },
+        "blur": {
+          "n": 1,
+          "correct": 1,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        }
+      },
+      "byGroup": {
+        "dvids-944403": {
+          "n": 13,
+          "correct": 8,
+          "abstained": 0,
+          "accuracy": 0.615,
+          "smallN": false
+        },
+        "dvids-faead": {
+          "n": 3,
+          "correct": 3,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        },
+        "dvids-marne-2024": {
+          "n": 1,
+          "correct": 1,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        }
+      },
+      "failures": [
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21087.73,
+          "buckets": ["dark_on_dark"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21171.15,
+          "buckets": ["dark_on_dark", "edge_on"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22088.73,
+          "buckets": ["dark_on_dark", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22338.98,
+          "buckets": ["dark_on_dark", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22589.23,
+          "buckets": ["dark_on_dark", "edge_on"],
+          "pickedOwner": "other"
+        }
+      ]
+    },
+    {
+      "method": "b2_target_geometry",
+      "scoredFrames": 17,
+      "correct": 8,
+      "abstained": 0,
+      "accuracy": 0.471,
+      "accuracyWhenAnswering": 0.471,
+      "coverage": 1,
+      "byBucket": {
+        "multi_paddle": {
+          "n": 12,
+          "correct": 6,
+          "abstained": 0,
+          "accuracy": 0.5,
+          "smallN": false
+        },
+        "dark_on_dark": {
+          "n": 16,
+          "correct": 8,
+          "abstained": 0,
+          "accuracy": 0.5,
+          "smallN": false
+        },
+        "edge_on": {
+          "n": 9,
+          "correct": 4,
+          "abstained": 0,
+          "accuracy": 0.444,
+          "smallN": true
+        },
+        "net_post_occlusion": {
+          "n": 6,
+          "correct": 5,
+          "abstained": 0,
+          "accuracy": 0.833,
+          "smallN": true
+        },
+        "blur": {
+          "n": 1,
+          "correct": 1,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        }
+      },
+      "byGroup": {
+        "dvids-944403": {
+          "n": 13,
+          "correct": 4,
+          "abstained": 0,
+          "accuracy": 0.308,
+          "smallN": false
+        },
+        "dvids-faead": {
+          "n": 3,
+          "correct": 3,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        },
+        "dvids-marne-2024": {
+          "n": 1,
+          "correct": 1,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        }
+      },
+      "failures": [
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 20003.32,
+          "buckets": ["multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 20253.57,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 20503.82,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21087.73,
+          "buckets": ["dark_on_dark"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21171.15,
+          "buckets": ["dark_on_dark", "edge_on"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21838.48,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle", "net_post_occlusion"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22088.73,
+          "buckets": ["dark_on_dark", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22338.98,
+          "buckets": ["dark_on_dark", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22589.23,
+          "buckets": ["dark_on_dark", "edge_on"],
+          "pickedOwner": "other"
+        }
+      ]
+    },
+    {
+      "method": "b3_temporal_continuity",
+      "scoredFrames": 12,
+      "correct": 3,
+      "abstained": 0,
+      "accuracy": 0.25,
+      "accuracyWhenAnswering": 0.25,
+      "coverage": 1,
+      "byBucket": {
+        "dark_on_dark": {
+          "n": 12,
+          "correct": 3,
+          "abstained": 0,
+          "accuracy": 0.25,
+          "smallN": false
+        },
+        "edge_on": {
+          "n": 8,
+          "correct": 2,
+          "abstained": 0,
+          "accuracy": 0.25,
+          "smallN": true
+        },
+        "multi_paddle": {
+          "n": 8,
+          "correct": 2,
+          "abstained": 0,
+          "accuracy": 0.25,
+          "smallN": true
+        },
+        "net_post_occlusion": {
+          "n": 3,
+          "correct": 1,
+          "abstained": 0,
+          "accuracy": 0.333,
+          "smallN": true
+        }
+      },
+      "byGroup": {
+        "dvids-944403": {
+          "n": 11,
+          "correct": 2,
+          "abstained": 0,
+          "accuracy": 0.182,
+          "smallN": false
+        },
+        "dvids-faead": {
+          "n": 1,
+          "correct": 1,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        }
+      },
+      "failures": [
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 20253.57,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 20503.82,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 20754.07,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle", "net_post_occlusion"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21087.73,
+          "buckets": ["dark_on_dark"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21171.15,
+          "buckets": ["dark_on_dark", "edge_on"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 21838.48,
+          "buckets": ["dark_on_dark", "edge_on", "multi_paddle", "net_post_occlusion"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22088.73,
+          "buckets": ["dark_on_dark", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22338.98,
+          "buckets": ["dark_on_dark", "multi_paddle"],
+          "pickedOwner": "other"
+        },
+        {
+          "caseId": "wavea-944403-dink",
+          "tMs": 22589.23,
+          "buckets": ["dark_on_dark", "edge_on"],
+          "pickedOwner": "other"
+        }
+      ]
+    }
+  ]
+}

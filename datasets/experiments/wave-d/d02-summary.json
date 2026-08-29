@@ -1,0 +1,109 @@
+{
+  "id": "d02-ownership-s3",
+  "date": "2026-08-29",
+  "branch": "devin/wave-d/d02-ownership-s3",
+  "annotatorId": "devin-visual-v3-waveD",
+  "whatWasBuilt": {
+    "harness": "packages/swing-lab/src/ownershipBench.ts (ownership-bench-v1) — committed-data-only ownership evaluation harness. Loads ALL ownership annotation passes append-only (devin-visual-v2-waveC-ownership.json + prior annotators in each bundle's annotation/ dir), the ownership-review sidecar (datasets/paddle-bench/ownership-review/ownership-review.json), and attaches committed detector queue boxes (queue.json) where a frame matches. Pose context comes only from COMMITTED runs-wave-a/*/people.json (5 wave-a cases); the 5 original bench cases have no committed pose on Linux. Grouping is by source/session (wm-tournament-2014, afn-sasebo-2025-06, afn-vic-2025, dvids-944403, dvids-faead, dvids-marne-2024) — never random frame split. Held-out cases (wm-dink-01, afn-vic-rally1) are EXCLUDED by default; --include-held-out exists but was never used for iteration.",
+    "cli": "pnpm ownership:bench (packages/swing-lab) → datasets/experiments/wave-d/d02-ownership-eval.json",
+    "tests": "packages/swing-lab/test/ownershipBench.test.ts — 12 tests on the pure pick/scoring/bucket functions with synthetic geometry (243 passed total in package suite)."
+  },
+  "dataset": {
+    "dualFramesDevOnly": 38,
+    "dualFramesWithCommittedPose": 17,
+    "perCase": {
+      "wm-volley-02": { "dualFrames": 6, "withPose": 0 },
+      "afn-sasebo-rally1": { "dualFrames": 13, "withPose": 0 },
+      "afn-sasebo-rally2": { "dualFrames": 1, "withPose": 0 },
+      "wavea-944403-dink": { "dualFrames": 11, "withPose": 10 },
+      "wavea-944403-smash": { "dualFrames": 3, "withPose": 3 },
+      "wavea-faead-feed": { "dualFrames": 2, "withPose": 2 },
+      "wavea-faead-rally": { "dualFrames": 1, "withPose": 1 },
+      "wavea-marne-dig": { "dualFrames": 1, "withPose": 1 }
+    },
+    "provenance": "Strict dual frames = annotation frames with ≥1 target and ≥1 other labeled paddle point after cross-pass dedup (0.01 normalized distance). Error buckets derive from committed sidecar notes (edge_on, dark_on_dark, blur, net_post_occlusion) plus multi_paddle when ≥3 candidates. Full per-method per-bucket numbers with n are in datasets/experiments/wave-d/d02-ownership-eval.json."
+  },
+  "methods": {
+    "incumbent_wrist_ratio": "Frame-level analog of production S3 rule: candidate vetoed when an other wrist is closer than TRACKER_GATES.otherOwnershipFactor (0.85) × target-wrist distance; nearest target wrist among survivors wins.",
+    "b1_wrist_distance_only": "Nearest target wrist, no other-wrist veto.",
+    "b2_target_geometry": "Cost = distance to target torso mid normalized by torso span + 0.5 × |log(boxHeight / (0.3 × torsoSpan))| scale plausibility when a detector box exists.",
+    "b3_temporal_continuity": "Causal chain per case: each frame picks the candidate nearest the previous pick; first frame seeded by B2 where pose exists, else by a DISCLOSED gold seed. Seed frames never score."
+  },
+  "resultsPoseSubsetApplesToApples": {
+    "note": "Only the 17 frames with committed pose allow a fair comparison — all pose-dependent methods can answer on all of them (coverage 1.0). Accuracy counts abstentions as not-correct.",
+    "incumbent_wrist_ratio": { "accuracy": 0.765, "correct": 13, "n": 17 },
+    "b1_wrist_distance_only": { "accuracy": 0.706, "correct": 12, "n": 17 },
+    "b2_target_geometry": { "accuracy": 0.471, "correct": 8, "n": 17 },
+    "b3_temporal_continuity": {
+      "accuracy": 0.25,
+      "correct": 3,
+      "n": 12,
+      "note": "n excludes seed frames; drifts onto static far-court paddles once the target paddle moves fast between sampled duals (~250ms apart)."
+    }
+  },
+  "resultsAllDevFrames": {
+    "note": "All 38 dev dual frames. Pose-dependent methods honestly abstain on the 21 frames without committed pose, so accuracy here is dominated by pose availability on Linux, not method quality.",
+    "incumbent_wrist_ratio": { "accuracy": 0.342, "correct": 13, "n": 38, "coverage": 0.447 },
+    "b1_wrist_distance_only": { "accuracy": 0.316, "correct": 12, "n": 38, "coverage": 0.447 }
+  },
+  "errorBuckets": {
+    "incumbentFailuresPoseSubset": [
+      {
+        "caseId": "wavea-944403-dink",
+        "tMs": 21171,
+        "pickedOwner": "other",
+        "buckets": ["dark_on_dark", "edge_on"]
+      },
+      {
+        "caseId": "wavea-944403-dink",
+        "tMs": 22089,
+        "pickedOwner": "other",
+        "buckets": ["dark_on_dark", "multi_paddle"]
+      },
+      {
+        "caseId": "wavea-944403-dink",
+        "tMs": 22339,
+        "pickedOwner": "other",
+        "buckets": ["dark_on_dark", "multi_paddle"]
+      },
+      {
+        "caseId": "wavea-944403-dink",
+        "tMs": 22589,
+        "pickedOwner": "other",
+        "buckets": ["dark_on_dark", "edge_on"]
+      }
+    ],
+    "perBucketIncumbentPoseSubset": {
+      "multi_paddle": { "n": 12, "accuracy": 0.833 },
+      "dark_on_dark": { "n": 16, "accuracy": 0.75 },
+      "edge_on": { "n": 9, "accuracy": 0.778, "smallN": true },
+      "net_post_occlusion": { "n": 6, "accuracy": 1.0, "smallN": true },
+      "blur": { "n": 1, "accuracy": 1.0, "smallN": true }
+    },
+    "reading": "All 4 incumbent wrong-player picks on the pose subset are dark_on_dark frames in wavea-944403-dink where a far-court player's wrist sits closer in image space to the target's paddle than the target's own detected wrist. This replicates the S3 wrong-player failure family at frame level, on dev data, without touching held-out cases."
+  },
+  "productionWiringDecision": {
+    "decision": "NO baseline wired behind a flag.",
+    "why": "The promotion rule was: beat the incumbent on dev groups without materially regressing any bucket. On the only apples-to-apples surface (17 pose frames), the incumbent (0.765) beats B1 (0.706), B2 (0.471), and B3 (0.25). B1 additionally regresses dark_on_dark (0.688 vs 0.75) and dvids-944403 group (0.615 vs 0.692). Wiring any of these would be a regression sold as a win. The incumbent's other-wrist veto is empirically load-bearing: removing it (B1) only removes correct abstentions/vetoes."
+  },
+  "honestNegatives": [
+    "B2 (target geometry) at 0.471 is WORSE than a coin flip against the 2-4 candidate frames it faced; torso-distance is a bad ownership signal when opponents stand behind the target in image space.",
+    "B3 (temporal continuity) at 0.25 is the worst method tested: at the committed dual-frame sampling interval (~250ms) the target paddle moves further per step than the distance to static far-court paddles, so nearest-to-previous-pick locks onto background paddles. Continuity may still help at production frame rates (33ms), but that is a PREDICTION, not an observation — committed data cannot test it.",
+    "21 of 38 dev dual frames (wm + sasebo sessions) have no committed pose on Linux, so all pose-dependent methods abstain there; those groups' 0.0 all-frames accuracy is a coverage artifact of the macOS-only pose boundary, not evidence about method quality.",
+    "Small-n everywhere: the pose subset is 17 frames across 5 cases from 3 sessions; edge_on (n=9), net_post_occlusion (n=6), blur (n=1) are all small-n. No per-bucket claim here is statistically strong.",
+    "This is a FRAME-LEVEL analog of the S3 rule, not the full production track-segmentation path (segmentTrackByWristOwnership over tracks); frame-level parity does not guarantee cascade-level parity."
+  ],
+  "blocked": [
+    "Cascade-level S3 verification (P/R movement) requires canonical runs/ dirs + Apple Vision pose extraction — macOS-only, absent on Linux. Not fabricated.",
+    "Pose for wm-* and afn-* bench cases is not committed, so 21/38 dual frames cannot be scored by any pose-dependent method on Linux.",
+    "Held-out cases (wm-dink-01 incl. the known edge-on-at-hip failure, afn-vic-rally1) were never evaluated or iterated against, per protocol."
+  ],
+  "filesTouched": [
+    "packages/swing-lab/src/ownershipBench.ts (new)",
+    "packages/swing-lab/test/ownershipBench.test.ts (new)",
+    "packages/swing-lab/package.json (ownership:bench script)",
+    "datasets/experiments/wave-d/d02-ownership-eval.json (generated report)",
+    "datasets/experiments/wave-d/d02-summary.json (this file)"
+  ],
+  "verification": "pnpm typecheck PASS; pnpm test PASS (20 files, 243 passed / 4 skipped); prettier run on all added/modified files."
+}
