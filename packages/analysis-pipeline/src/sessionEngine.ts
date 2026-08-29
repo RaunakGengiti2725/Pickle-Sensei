@@ -71,6 +71,11 @@ export type TargetEventSelection =
       status: "selected";
       event: StrokeEventProposal;
       via: "contact" | "prominence" | "paddle_confirmation";
+      /** Present when a non-null contact estimate fell OUTSIDE every proposed
+       * event (±60ms): selection proceeded on prominence/paddle evidence alone
+       * and the contact estimate does NOT belong to the selected event —
+       * downstream must never anchor fine analysis of this event on it. */
+      contactOrphaned?: true;
     }
   | { status: "ambiguous"; reason: string; leaders: string[] }
   | { status: "none"; reason: string };
@@ -83,6 +88,19 @@ const EVENT_GATES = {
   maxBoundaryReachMs: 1200,
   minEventSpanMs: 160,
   ambiguityProminenceRatio: 1.3,
+} as const;
+
+/** v2 fragment-glue gates: gluing exists to reunite ONE movement (swing +
+ * follow-through burst split by a brief dip), never to fuse two distinct
+ * strokes. Two fragments whose peaks are far apart AND comparably strong are
+ * two hitting motions; gluing them would fabricate a multi-swing event.
+ * The measured rally1 fragmentation (400ms + 234ms fragments 167ms apart,
+ * peaks ≈480ms apart) stays glued; synthetic rapid consecutive strokes with
+ * peaks ≥550ms apart stay distinct. */
+const GLUE_GATES = {
+  maxGapMs: 350,
+  distinctPeakSeparationMs: 550,
+  distinctPeakRatio: 0.6,
 } as const;
 
 export function proposeStrokeEvents(input: {
@@ -270,7 +288,13 @@ export function proposeStrokeEventsV2(input: {
   const glued: StrokeEventProposal[] = [];
   for (const event of body.events) {
     const previous = glued[glued.length - 1];
-    if (previous && event.startMs - previous.endMs <= 350) {
+    // A later fragment that is BOTH far from the previous peak and comparably
+    // strong is a distinct stroke — never glued (GLUE_GATES).
+    const distinctStroke =
+      previous !== undefined &&
+      event.peakMs - previous.peakMs >= GLUE_GATES.distinctPeakSeparationMs &&
+      event.peakSpeed >= GLUE_GATES.distinctPeakRatio * previous.peakSpeed;
+    if (previous && !distinctStroke && event.startMs - previous.endMs <= GLUE_GATES.maxGapMs) {
       previous.endMs = event.endMs;
       if (event.peakSpeed > previous.peakSpeed) {
         previous.peakMs = event.peakMs;
@@ -419,7 +443,15 @@ export function selectTargetEventV2(
   const leaders = events.filter((event) => base.leaders.includes(event.eventId));
   const confirmed = leaders.filter((event) => event.paddleConfirmed);
   if (confirmed.length === 1) {
-    return { status: "selected", event: confirmed[0]!, via: "paddle_confirmation" };
+    const orphaned =
+      contactMs !== null &&
+      !events.some((event) => contactMs >= event.startMs - 60 && contactMs <= event.endMs + 60);
+    return {
+      status: "selected",
+      event: confirmed[0]!,
+      via: "paddle_confirmation",
+      ...(orphaned ? { contactOrphaned: true as const } : {}),
+    };
   }
   return base;
 }
@@ -431,6 +463,7 @@ export function selectTargetEvent(
   if (events.length === 0) {
     return { status: "none", reason: "no stroke events proposed" };
   }
+  let contactOrphaned = false;
   if (contactMs !== null) {
     const containing = events.filter(
       (event) => contactMs >= event.startMs - 60 && contactMs <= event.endMs + 60,
@@ -445,11 +478,13 @@ export function selectTargetEvent(
         leaders: containing.map((event) => event.eventId),
       };
     }
-    // Contact outside all events: fall through to prominence with a flag —
-    // callers should treat this as suspicious.
+    // Contact outside all events: fall through to prominence, RECORDED via
+    // contactOrphaned — the estimate does not belong to whatever is selected.
+    contactOrphaned = true;
   }
+  const orphanFlag = contactOrphaned ? { contactOrphaned: true as const } : {};
   if (events.length === 1) {
-    return { status: "selected", event: events[0]!, via: "prominence" };
+    return { status: "selected", event: events[0]!, via: "prominence", ...orphanFlag };
   }
   const byProminence = [...events].sort((a, b) => b.prominence - a.prominence);
   const ratio = byProminence[0]!.prominence / Math.max(1e-6, byProminence[1]!.prominence);
@@ -460,7 +495,7 @@ export function selectTargetEvent(
       leaders: [byProminence[0]!.eventId, byProminence[1]!.eventId],
     };
   }
-  return { status: "selected", event: byProminence[0]!, via: "prominence" };
+  return { status: "selected", event: byProminence[0]!, via: "prominence", ...orphanFlag };
 }
 // === END VERBATIM MIRROR: packages/swing-lab/src/strokeEvents.ts ===
 
