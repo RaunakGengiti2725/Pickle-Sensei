@@ -1,0 +1,165 @@
+{
+  "probeId": "h04-score-stability-formula-probe-v1",
+  "generatedAtIso": "2026-08-29T17:42:04.909Z",
+  "honesty": {
+    "evidenceClass": "FORMULA-LEVEL DIAGNOSTIC ONLY — modeled measurement-space perturbations over the sm-v1 formula; satisfies NO video-level gate (coach-gates-frozen-v1 S6 requires real re-encodes through the full Mac-gated pipeline)",
+    "dataProvenance": "real pipeline measurements from the single replayable non-held-out run in-repo (afn-sasebo-rally1); held-out cases wm-dink-01 and afn-vic-rally1 excluded by construction",
+    "perturbationProvenance": "measurement-space noise/confidence models are engineering estimates, not measured transfer functions"
+  },
+  "s6ThresholdsForReference": {
+    "maxMedianAbsDelta": 0.5,
+    "maxP95AbsDelta": 1,
+    "maxBandFlipRate": 0.05,
+    "maxAbstentionFlipRate": 0.05
+  },
+  "runs": [
+    {
+      "caseId": "afn-sasebo-rally1",
+      "report": "datasets/ball-bench/failures/PADDLE_WRONG_RACKET_LIKE_OBJECT-afn-sasebo-rally1/report.json",
+      "shotType": "forehand_drive",
+      "variant": "as-recorded (real pipeline confidences)",
+      "measurementCount": 12,
+      "baseline": {
+        "score": null,
+        "confidence": 0.5896589721485123,
+        "presentation": "abstain"
+      },
+      "summaries": [
+        {
+          "perturbationId": "compression",
+          "trials": 200,
+          "scoredTrials": 0,
+          "abstainedTrials": 200,
+          "baselineScore": null,
+          "medianAbsDelta": null,
+          "p95AbsDelta": null,
+          "maxAbsDelta": null,
+          "bandFlipRate": null,
+          "abstentionFlipRate": 0
+        },
+        {
+          "perturbationId": "crop",
+          "trials": 200,
+          "scoredTrials": 0,
+          "abstainedTrials": 200,
+          "baselineScore": null,
+          "medianAbsDelta": null,
+          "p95AbsDelta": null,
+          "maxAbsDelta": null,
+          "bandFlipRate": null,
+          "abstentionFlipRate": 0
+        },
+        {
+          "perturbationId": "brightness",
+          "trials": 200,
+          "scoredTrials": 0,
+          "abstainedTrials": 200,
+          "baselineScore": null,
+          "medianAbsDelta": null,
+          "p95AbsDelta": null,
+          "maxAbsDelta": null,
+          "bandFlipRate": null,
+          "abstentionFlipRate": 0
+        },
+        {
+          "perturbationId": "camera_motion",
+          "trials": 200,
+          "scoredTrials": 0,
+          "abstainedTrials": 200,
+          "baselineScore": null,
+          "medianAbsDelta": null,
+          "p95AbsDelta": null,
+          "maxAbsDelta": null,
+          "bandFlipRate": null,
+          "abstentionFlipRate": 0
+        },
+        {
+          "perturbationId": "frame_rate",
+          "trials": 200,
+          "scoredTrials": 0,
+          "abstainedTrials": 200,
+          "baselineScore": null,
+          "medianAbsDelta": null,
+          "p95AbsDelta": null,
+          "maxAbsDelta": null,
+          "bandFlipRate": null,
+          "abstentionFlipRate": 0
+        }
+      ]
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "report": "datasets/ball-bench/failures/PADDLE_WRONG_RACKET_LIKE_OBJECT-afn-sasebo-rally1/report.json",
+      "shotType": "forehand_drive",
+      "variant": "SYNTHETIC confidence-raised (real values, confidences forced to 0.95) — probes the scored regime of the formula only",
+      "measurementCount": 12,
+      "baseline": {
+        "score": 7.5,
+        "confidence": 0.8264999999999999,
+        "presentation": "normal"
+      },
+      "summaries": [
+        {
+          "perturbationId": "compression",
+          "trials": 200,
+          "scoredTrials": 200,
+          "abstainedTrials": 0,
+          "baselineScore": 7.5,
+          "medianAbsDelta": 0,
+          "p95AbsDelta": 0.09999999999999964,
+          "maxAbsDelta": 0.09999999999999964,
+          "bandFlipRate": 0,
+          "abstentionFlipRate": 0
+        },
+        {
+          "perturbationId": "crop",
+          "trials": 200,
+          "scoredTrials": 200,
+          "abstainedTrials": 0,
+          "baselineScore": 7.5,
+          "medianAbsDelta": 0.09999999999999964,
+          "p95AbsDelta": 0.20000000000000018,
+          "maxAbsDelta": 0.20000000000000018,
+          "bandFlipRate": 0,
+          "abstentionFlipRate": 0
+        },
+        {
+          "perturbationId": "brightness",
+          "trials": 200,
+          "scoredTrials": 200,
+          "abstainedTrials": 0,
+          "baselineScore": 7.5,
+          "medianAbsDelta": 0,
+          "p95AbsDelta": 0.09999999999999964,
+          "maxAbsDelta": 0.09999999999999964,
+          "bandFlipRate": 0,
+          "abstentionFlipRate": 0
+        },
+        {
+          "perturbationId": "camera_motion",
+          "trials": 200,
+          "scoredTrials": 200,
+          "abstainedTrials": 0,
+          "baselineScore": 7.5,
+          "medianAbsDelta": 0.09999999999999964,
+          "p95AbsDelta": 0.09999999999999964,
+          "maxAbsDelta": 0.20000000000000018,
+          "bandFlipRate": 0,
+          "abstentionFlipRate": 0
+        },
+        {
+          "perturbationId": "frame_rate",
+          "trials": 200,
+          "scoredTrials": 200,
+          "abstainedTrials": 0,
+          "baselineScore": 7.5,
+          "medianAbsDelta": 0,
+          "p95AbsDelta": 0.09999999999999964,
+          "maxAbsDelta": 0.20000000000000018,
+          "bandFlipRate": 0,
+          "abstentionFlipRate": 0
+        }
+      ]
+    }
+  ]
+}

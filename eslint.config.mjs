@@ -81,6 +81,8 @@ export default tseslint.config(
       "packages/swing-lab/src/strokeHeuristicBench.ts",
       "packages/swing-lab/src/g13H6Mining.ts",
       "packages/swing-lab/src/strokeHeuristicRecallBench.ts",
+      "packages/swing-lab/src/coachGates.ts",
+      "packages/swing-lab/src/scoreStability.ts",
       // mac-bench is a terminal benchmark harness; its CLIs print reports.
       "tools/mac-bench/src/**/*.ts",
       // One-off research scripts committed as per-workstream experiment evidence;

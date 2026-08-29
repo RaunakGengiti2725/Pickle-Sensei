@@ -47,6 +47,8 @@
     "lab:session-scheduler-sim": "pnpm --filter @pickle/swing-lab session:scheduler-sim",
     "lab:coach-queue": "pnpm --filter @pickle/swing-lab coach:queue",
     "lab:coach-agreement": "pnpm --filter @pickle/swing-lab coach:agreement",
+    "lab:coach-gates": "pnpm --filter @pickle/swing-lab coach:gates",
+    "lab:score-stability": "pnpm --filter @pickle/swing-lab score:stability",
     "lab:regen": "pnpm --filter @pickle/swing-lab regen",
     "lab:risk-curves": "pnpm --filter @pickle/swing-lab risk:curves",
     "lab:silent-retro": "pnpm --filter @pickle/swing-lab silent:retro",

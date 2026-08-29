@@ -1,0 +1,179 @@
+{
+  "specId": "coach-gates-frozen-v1",
+  "schemaVersion": 1,
+  "frozenAtIso": "2026-08-29T17:45:00.000Z",
+  "frozenBy": "wave-g2/h04-frozen-coach-gates",
+  "freezeDiscipline": "This file is FROZEN. It was written BEFORE any coach review, coach identity, or device measurement existed, so no threshold can have been tuned to make existing data pass. It must never be edited in place: any change is a NEW versioned file (coach-gates.v2.json, ...) with a recorded rationale, and thresholds may only be TIGHTENED without a coach-panel decision record. The gate checker (packages/swing-lab/src/coachGates.ts) pins this file's SHA-256 and refuses to evaluate a tampered spec.",
+  "heldOutCases": ["wm-dink-01", "afn-vic-rally1"],
+  "heldOutRule": "Held-out cases are NEVER used to evaluate, tune, or satisfy any gate in this spec. Reviews of held-out queue items count toward no denominator here.",
+  "evidenceRules": {
+    "coachEvidence": "Only reviews from coaches provisioned in datasets/coach-review/coaches.json (status=active, non-synthetic id, off-repo credentialRef) count. Machine-proposed or engineer-labeled technique quality is Tier-C and satisfies NOTHING here. LLM output is not a coach.",
+    "deviceEvidence": "Perturbation and test-retest evidence must come from real re-encodes/re-analyses of the same physical stroke video; formula-level probes are diagnostic only and satisfy no video-level gate.",
+    "verdictSemantics": "Every gate evaluates to PASS, FAIL, or NOT_EVALUABLE (insufficient real evidence). NOT_EVALUABLE blocks release exactly like FAIL. The overall verdict is RELEASE_BLOCKED unless every gate in a surface's gate set is PASS."
+  },
+  "surfaces": {
+    "technique_score": ["L1", "L2", "L4", "S1", "S2", "S3", "S4", "S5", "S6", "S7"],
+    "fault_diagnosis": ["L1", "L2", "L4", "F1", "F2", "F3", "F4"],
+    "drill_recommendation": ["L1", "L2", "L4", "D1", "D2", "D3"]
+  },
+  "gates": [
+    {
+      "id": "L1",
+      "kind": "lock",
+      "title": "Production profiles stay locked",
+      "predicate": "Every TechniqueAnalysisProfile and SharedSideProfile in @pickle/shared-types carries techniqueEvaluator=BLOCKED_ON_VALIDATION, faultTaxonomyVersion=pending-expert-program, drillMappingVersion=none, abstentionPolicy=abstain-over-invent. This gate flips only when the coach-validated gate sets below are all PASS and a new profile version is issued.",
+      "evaluableNow": true
+    },
+    {
+      "id": "L2",
+      "kind": "lock",
+      "title": "Coach identity integrity",
+      "predicate": "datasets/coach-review/coaches.json contains no synthetic/demo identities; every counted review's coachId resolves to an active registry entry; review storage is append-only (reviewId = queueItemId.coachId, one file per review).",
+      "evaluableNow": true
+    },
+    {
+      "id": "L4",
+      "kind": "lock",
+      "title": "Drill library stays unvalidated until coach evidence",
+      "predicate": "Every drill-library entry has validationStatus=UNVALIDATED and validatedFaultMappings=[] until D-gates pass; no fault->drill mapping ships without coach evidence records.",
+      "evaluableNow": true
+    },
+    {
+      "id": "S1",
+      "kind": "score_validation",
+      "title": "Correlation with coach ratings",
+      "predicate": "Spearman rank correlation between the shipped technique score and mean coach overallQuality (technique-quality-5pt-v1, >=2 evaluable reviews per event) computed over non-held-out events.",
+      "thresholds": { "minEvents": 30, "minSpearman": 0.6, "minSpearmanCiLower95": 0.3 },
+      "evaluableNow": false,
+      "requires": "coach reviews with overallQuality on >=30 distinct non-held-out scored events"
+    },
+    {
+      "id": "S2",
+      "kind": "score_validation",
+      "title": "Ranking quality",
+      "predicate": "Over all event pairs whose mean coach quality differs by >=1 point, the fraction where the shipped score orders the pair the same way as the coaches (pairwise ranking agreement).",
+      "thresholds": { "minEvents": 30, "minPairwiseAgreement": 0.75 },
+      "evaluableNow": false,
+      "requires": "same evidence as S1"
+    },
+    {
+      "id": "S3",
+      "kind": "score_validation",
+      "title": "Calibration",
+      "predicate": "Expected calibration error of score bands (green/yellow/red) against coach-quality bands (4-5 / 3 / 1-2), plus an overclaim check: fraction of green-band scores whose mean coach quality is <=2.",
+      "thresholds": { "minEvents": 30, "maxEce": 0.1, "maxGreenOverclaimRate": 0.02 },
+      "evaluableNow": false,
+      "requires": "same evidence as S1"
+    },
+    {
+      "id": "S4",
+      "kind": "score_stability",
+      "title": "Test-retest stability",
+      "predicate": "Re-analyzing the byte-identical clip must reproduce the identical score (determinism). Re-captures of the same physical stroke performance (same device, same placement, immediate retake) must agree within tolerance.",
+      "thresholds": {
+        "identicalClipMaxDelta": 0,
+        "recaptureMinPairs": 20,
+        "recaptureMaxMedianAbsDelta": 0.5,
+        "recaptureMaxP95AbsDelta": 1.0
+      },
+      "evaluableNow": false,
+      "requires": "real re-capture pairs on device (BLOCKED_EXTERNAL: physical iPhone)"
+    },
+    {
+      "id": "S5",
+      "kind": "score_generalization",
+      "title": "New-player / new-camera / new-court generalization",
+      "predicate": "S1 correlation computed per slice (players unseen in development, camera models/placements unseen in development, courts unseen in development) may not degrade more than the allowed absolute drop vs the pooled value, with a minimum n per slice.",
+      "thresholds": { "minEventsPerSlice": 15, "maxAbsSpearmanDrop": 0.15 },
+      "evaluableNow": false,
+      "requires": "coach-rated events from slices provably disjoint from development footage"
+    },
+    {
+      "id": "S6",
+      "kind": "score_stability",
+      "title": "Perturbation insensitivity (hard gate: unstable score does not ship)",
+      "predicate": "For each evaluation clip, re-encode/perturb the SAME physical stroke video: compression (CRF 23->35), center crop up to 10%, brightness +/-20%, synthetic camera shake within the capture envelope, and frame-rate downsample (60->30fps). The score on every perturbed variant is compared to the unperturbed score.",
+      "thresholds": {
+        "minClips": 20,
+        "maxMedianAbsDelta": 0.5,
+        "maxP95AbsDelta": 1.0,
+        "maxBandFlipRate": 0.05,
+        "maxAbstentionFlipRate": 0.05
+      },
+      "hardGateNote": "If this gate FAILS, the technique score DOES NOT SHIP regardless of every other gate. Insensitivity to encoding artifacts is a precondition for the number meaning anything about technique.",
+      "evaluableNow": false,
+      "requires": "video-level perturbation runs of the full pipeline (pose extraction is Mac/Apple-Vision-gated); the Linux formula-level probe (lab:score-stability) is diagnostic evidence only"
+    },
+    {
+      "id": "S7",
+      "kind": "score_validation",
+      "title": "Silent-failure rate on scores",
+      "predicate": "Fraction of normal-presentation (non-abstained, confidence >=0.8) scores that a coach panel rates as grossly wrong (score band green while mean coach quality <=2, or red while >=4).",
+      "thresholds": { "minEvents": 30, "maxConfidentWrongRate": 0.02 },
+      "evaluableNow": false,
+      "requires": "same evidence as S1"
+    },
+    {
+      "id": "F1",
+      "kind": "fault_validation",
+      "title": "Coach-owned stroke-specific taxonomy",
+      "predicate": "fault-taxonomy v1 exists, issued from coach corrections of the v0 draft with a recorded v0->v1 mapping, stroke-family-specific so every TechniqueAnalysisProfile family maps to a coach-reviewed fault set.",
+      "thresholds": { "minCoachesRevising": 2 },
+      "evaluableNow": false,
+      "requires": "coach revision records over the v0 draft taxonomy"
+    },
+    {
+      "id": "F2",
+      "kind": "fault_validation",
+      "title": "Per-fault precision / recall",
+      "predicate": "For every fault the product would surface, precision and recall against coach fault labels (severity >=2 counts as present), computed per fault with a minimum support, on non-held-out events.",
+      "thresholds": { "minSupportPerFault": 10, "minPrecision": 0.7, "minRecall": 0.5 },
+      "evaluableNow": false,
+      "requires": "coach fault labels on >=30 events with per-fault support"
+    },
+    {
+      "id": "F3",
+      "kind": "fault_validation",
+      "title": "Primary-fault agreement",
+      "predicate": "Agreement between the product's primary fault (priorityFix) and the coaches' primary fault (first/highest-severity fault; 'clean' counts as a position) over evaluable events.",
+      "thresholds": { "minEvents": 30, "minAgreement": 0.6 },
+      "evaluableNow": false,
+      "requires": "same evidence as F2"
+    },
+    {
+      "id": "F4",
+      "kind": "fault_validation",
+      "title": "False-confident-fault rate (silent failure)",
+      "predicate": "Fraction of high-confidence fault call-outs that NO coach marked at any severity on that event. A confidently asserted fault the user would train against that no coach saw is a silent failure.",
+      "thresholds": { "minEvents": 30, "maxFalseConfidentRate": 0.02 },
+      "evaluableNow": false,
+      "requires": "same evidence as F2"
+    },
+    {
+      "id": "D1",
+      "kind": "drill_validation",
+      "title": "Coach-evidenced fault->drill mappings only",
+      "predicate": "Every shipped drill recommendation traces to a validatedFaultMapping backed by named coach evidence records (drillSuggestions + explicit mapping endorsement); the drill library carries coachProvenance for every shipped entry.",
+      "thresholds": { "minCoachEndorsementsPerMapping": 2 },
+      "evaluableNow": false,
+      "requires": "coach drill endorsements referencing specific faults"
+    },
+    {
+      "id": "D2",
+      "kind": "drill_validation",
+      "title": "No drill for an unvalidated fault",
+      "predicate": "A drill recommendation may only render for a fault whose F-gates (F1-F4) are PASS; a drill hanging off an unvalidated fault is fabricated coaching.",
+      "evaluableNow": false,
+      "requires": "F-gates PASS plus D1 evidence"
+    },
+    {
+      "id": "D3",
+      "kind": "drill_validation",
+      "title": "Coach-curated drill library v1",
+      "predicate": "drill-library v1 exists with every entry coach-reviewed (provenance recorded, validationStatus=VALIDATED) replacing the UNVALIDATED v0 placeholders.",
+      "thresholds": { "minCoachesReviewing": 2 },
+      "evaluableNow": false,
+      "requires": "coach review records over the drill library"
+    }
+  ]
+}

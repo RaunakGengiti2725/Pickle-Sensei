@@ -1,0 +1,174 @@
+{
+  "specId": "coach-gates-frozen-v1",
+  "specSha256": "087bfe467e6fb56c2246c21f94a7a46a1ef81031ba6f0b7de6f0828093a63759",
+  "generatedAtIso": "2026-08-29T17:41:40.836Z",
+  "gates": [
+    {
+      "id": "L1",
+      "kind": "lock",
+      "title": "Production profiles stay locked",
+      "verdict": "PASS",
+      "detail": "all TechniqueAnalysisProfiles + SharedSideProfiles carry BLOCKED_ON_VALIDATION / pending-expert-program / none / abstain-over-invent"
+    },
+    {
+      "id": "L2",
+      "kind": "lock",
+      "title": "Coach identity integrity",
+      "verdict": "PASS",
+      "detail": "registry synthetic-free (0 active coaches); 0 review files, 0 invalid, 0 unprovisioned"
+    },
+    {
+      "id": "L4",
+      "kind": "lock",
+      "title": "Drill library stays unvalidated until coach evidence",
+      "verdict": "PASS",
+      "detail": "all 2 drill entries UNVALIDATED with empty validatedFaultMappings"
+    },
+    {
+      "id": "S1",
+      "kind": "score_validation",
+      "title": "Correlation with coach ratings",
+      "verdict": "NOT_EVALUABLE",
+      "detail": "0/30 coach-rated non-held-out events (>=2 evaluable quality ratings each); real coach reviews are the only unlock"
+    },
+    {
+      "id": "S2",
+      "kind": "score_validation",
+      "title": "Ranking quality",
+      "verdict": "NOT_EVALUABLE",
+      "detail": "requires: same evidence as S1 (today: 0 counted reviews, 0 events with >=2 quality ratings)"
+    },
+    {
+      "id": "S3",
+      "kind": "score_validation",
+      "title": "Calibration",
+      "verdict": "NOT_EVALUABLE",
+      "detail": "requires: same evidence as S1 (today: 0 counted reviews, 0 events with >=2 quality ratings)"
+    },
+    {
+      "id": "S4",
+      "kind": "score_stability",
+      "title": "Test-retest stability",
+      "verdict": "NOT_EVALUABLE",
+      "detail": "requires: real re-capture pairs on device (BLOCKED_EXTERNAL: physical iPhone) (today: 0 counted reviews, 0 events with >=2 quality ratings)"
+    },
+    {
+      "id": "S5",
+      "kind": "score_generalization",
+      "title": "New-player / new-camera / new-court generalization",
+      "verdict": "NOT_EVALUABLE",
+      "detail": "requires: coach-rated events from slices provably disjoint from development footage (today: 0 counted reviews, 0 events with >=2 quality ratings)"
+    },
+    {
+      "id": "S6",
+      "kind": "score_stability",
+      "title": "Perturbation insensitivity (hard gate: unstable score does not ship)",
+      "verdict": "NOT_EVALUABLE",
+      "detail": "requires: video-level perturbation runs of the full pipeline (pose extraction is Mac/Apple-Vision-gated); the Linux formula-level probe (lab:score-stability) is diagnostic evidence only (today: 0 counted reviews, 0 events with >=2 quality ratings)"
+    },
+    {
+      "id": "S7",
+      "kind": "score_validation",
+      "title": "Silent-failure rate on scores",
+      "verdict": "NOT_EVALUABLE",
+      "detail": "requires: same evidence as S1 (today: 0 counted reviews, 0 events with >=2 quality ratings)"
+    },
+    {
+      "id": "F1",
+      "kind": "fault_validation",
+      "title": "Coach-owned stroke-specific taxonomy",
+      "verdict": "NOT_EVALUABLE",
+      "detail": "requires: coach revision records over the v0 draft taxonomy (today: 0 counted reviews, 0 events with >=2 quality ratings)"
+    },
+    {
+      "id": "F2",
+      "kind": "fault_validation",
+      "title": "Per-fault precision / recall",
+      "verdict": "NOT_EVALUABLE",
+      "detail": "requires: coach fault labels on >=30 events with per-fault support (today: 0 counted reviews, 0 events with >=2 quality ratings)"
+    },
+    {
+      "id": "F3",
+      "kind": "fault_validation",
+      "title": "Primary-fault agreement",
+      "verdict": "NOT_EVALUABLE",
+      "detail": "requires: same evidence as F2 (today: 0 counted reviews, 0 events with >=2 quality ratings)"
+    },
+    {
+      "id": "F4",
+      "kind": "fault_validation",
+      "title": "False-confident-fault rate (silent failure)",
+      "verdict": "NOT_EVALUABLE",
+      "detail": "requires: same evidence as F2 (today: 0 counted reviews, 0 events with >=2 quality ratings)"
+    },
+    {
+      "id": "D1",
+      "kind": "drill_validation",
+      "title": "Coach-evidenced fault->drill mappings only",
+      "verdict": "NOT_EVALUABLE",
+      "detail": "requires: coach drill endorsements referencing specific faults (today: 0 counted reviews, 0 events with >=2 quality ratings)"
+    },
+    {
+      "id": "D2",
+      "kind": "drill_validation",
+      "title": "No drill for an unvalidated fault",
+      "verdict": "NOT_EVALUABLE",
+      "detail": "requires: F-gates PASS plus D1 evidence (today: 0 counted reviews, 0 events with >=2 quality ratings)"
+    },
+    {
+      "id": "D3",
+      "kind": "drill_validation",
+      "title": "Coach-curated drill library v1",
+      "verdict": "NOT_EVALUABLE",
+      "detail": "requires: coach review records over the drill library (today: 0 counted reviews, 0 events with >=2 quality ratings)"
+    }
+  ],
+  "surfaces": {
+    "technique_score": {
+      "gateIds": [
+        "L1",
+        "L2",
+        "L4",
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "S6",
+        "S7"
+      ],
+      "verdict": "RELEASE_BLOCKED"
+    },
+    "fault_diagnosis": {
+      "gateIds": [
+        "L1",
+        "L2",
+        "L4",
+        "F1",
+        "F2",
+        "F3",
+        "F4"
+      ],
+      "verdict": "RELEASE_BLOCKED"
+    },
+    "drill_recommendation": {
+      "gateIds": [
+        "L1",
+        "L2",
+        "L4",
+        "D1",
+        "D2",
+        "D3"
+      ],
+      "verdict": "RELEASE_BLOCKED"
+    }
+  },
+  "overallVerdict": "RELEASE_BLOCKED",
+  "evidenceCounts": {
+    "activeCoaches": 0,
+    "reviewFiles": 0,
+    "countedReviews": 0,
+    "heldOutReviewsExcluded": 0,
+    "invalidReviewFiles": 0
+  }
+}
