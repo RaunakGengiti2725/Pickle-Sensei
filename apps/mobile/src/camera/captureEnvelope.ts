@@ -193,6 +193,86 @@ export function captureGuidanceLines(
   return lines;
 }
 
+/**
+ * User-facing message for an analysis withheld on an UNSUPPORTED envelope.
+ * Combines the pipeline's honest reason with the actionable guidance line
+ * for every measured non-SUPPORTED dimension, so the player learns what to
+ * CHANGE — not just which internal dimension names failed.
+ */
+export function qualityBlockedMessage(
+  reason: string,
+  envelope: EnvelopeVerdict | null,
+): string {
+  const lines = captureGuidanceLines(envelope);
+  if (lines.length === 0) return reason;
+  return `${reason}\n\n${lines.map(line => `• ${line.text}`).join('\n')}`;
+}
+
+/**
+ * Mutable per-attempt evidence buffer for the live camera signals the
+ * attempt envelope consumes. `beginAttempt()` MUST run when a new capture
+ * attempt starts: readiness/quality evidence describes exactly ONE clip and
+ * must never be attributed to the next one — a stale carried-over reading
+ * would let a verdict rest on evidence from a different capture.
+ */
+export interface AttemptEvidenceBuffer {
+  readonly readiness: ReadinessSnapshot | null;
+  readonly quality: CaptureQualitySignalsV1 | null;
+  noteReadiness(readiness: ReadinessSnapshot): void;
+  noteQuality(quality: CaptureQualitySignalsV1): void;
+  beginAttempt(): void;
+}
+
+export function createAttemptEvidenceBuffer(): AttemptEvidenceBuffer {
+  let readiness: ReadinessSnapshot | null = null;
+  let quality: CaptureQualitySignalsV1 | null = null;
+  return {
+    get readiness() {
+      return readiness;
+    },
+    get quality() {
+      return quality;
+    },
+    noteReadiness(next: ReadinessSnapshot) {
+      readiness = next;
+    },
+    noteQuality(next: CaptureQualitySignalsV1) {
+      quality = next;
+    },
+    beginAttempt() {
+      readiness = null;
+      quality = null;
+    },
+  };
+}
+
+/**
+ * Envelope for a per-event clip cut from a rolling session recording.
+ * Resolution and frame rate are real capture-config values and are judged
+ * with the shared thresholds. clip_duration is intentionally NOT judged:
+ * the window length is chosen by the session engine's event bounds, not by
+ * how the user captured, and the clip-duration band was derived for whole
+ * user captures — applying it here would misclassify by construction. The
+ * dimension is reported NOT_MEASURED so the omission stays visible.
+ */
+export function sessionEventClipEnvelope(
+  clip: Pick<CapturedClip, 'width' | 'height' | 'fps'>,
+): EnvelopeVerdict {
+  return evaluateCaptureEnvelope({
+    frameWidthPx: clip.width,
+    frameHeightPx: clip.height,
+    avgFrameRateFps: clip.fps,
+    brightnessMeanLuma: null,
+    brightnessStdLuma: null,
+    laplacianVarianceMedian: null,
+    meanAbsFrameDiff: null,
+    frameIntervalCv: null,
+    clipDurationMs: null,
+    playerPixelHeightFraction: null,
+    playerMeanJointVisibility: null,
+  });
+}
+
 export interface ReadyGate {
   blocked: boolean;
   /** The UNSUPPORTED dimensions that block Ready (DEGRADED never blocks). */

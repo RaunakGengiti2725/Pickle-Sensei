@@ -500,6 +500,58 @@ describe('native session analysis provider', () => {
     expect(outcome).toEqual({ status: 'ready', analysis: record });
   });
 
+  it('passes a real capture envelope judged from the clip configuration', async () => {
+    (runCaptureAnalysis as jest.Mock).mockResolvedValue({
+      kind: 'scored',
+      analysisId: 'analysis-1',
+      record: { id: 'analysis-1' },
+    });
+    const clip = validClipPayload() as unknown as CapturedClip;
+    const provider = createNativeSessionAnalysisProvider(deps);
+    await provider.analyzeEvent(requestWithClip(clip));
+    const analyzeArgs = (runCaptureAnalysis as jest.Mock).mock.calls[0]![0];
+    const envelope = analyzeArgs.captureEnvelope;
+    expect(envelope).not.toBeNull();
+    // 720x1280 @ 59.94fps — resolution and frame rate judged from config.
+    expect(
+      envelope.dimensions.find(
+        (d: { dimension: string }) => d.dimension === 'resolution',
+      ),
+    ).toMatchObject({ status: 'SUPPORTED', measured: 720 });
+    expect(
+      envelope.dimensions.find(
+        (d: { dimension: string }) => d.dimension === 'frame_rate',
+      ),
+    ).toMatchObject({ status: 'SUPPORTED' });
+  });
+
+  it('holds an unsupported-quality session clip honestly pending — never rated', async () => {
+    (runCaptureAnalysis as jest.Mock).mockImplementation(
+      async (args: { captureEnvelope: { overall: string } | null }) => {
+        // Mirror the real gate: UNSUPPORTED envelopes are blocked before
+        // inference by runCaptureAnalysis itself.
+        if (args.captureEnvelope?.overall === 'UNSUPPORTED') {
+          return {
+            kind: 'quality_blocked',
+            reason: 'capture quality outside the supported envelope',
+            envelope: args.captureEnvelope,
+          };
+        }
+        throw new Error('expected the UNSUPPORTED envelope to be passed');
+      },
+    );
+    const payload = validClipPayload();
+    payload.width = 320;
+    payload.height = 240;
+    const clip = payload as unknown as CapturedClip;
+    const provider = createNativeSessionAnalysisProvider(deps);
+    const outcome = await provider.analyzeEvent(requestWithClip(clip));
+    expect(outcome).toEqual({
+      status: 'pending',
+      pendingReason: 'capture quality outside the supported envelope',
+    });
+  });
+
   it('maps an unavailable analysis outcome to an honest pending state', async () => {
     (runCaptureAnalysis as jest.Mock).mockResolvedValue({
       kind: 'unavailable',

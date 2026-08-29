@@ -18,14 +18,14 @@ import {
   subscribeToCameraEvents,
   type CameraEvent,
   type CapturedClip,
-  type CaptureQualitySignalsV1,
 } from '../camera/capture';
 import { CaptureEvidenceCard } from '../camera/CaptureEvidenceCard';
 import { CaptureGuidancePanel } from '../camera/CaptureGuidancePanel';
 import {
   attemptCaptureEnvelope,
+  createAttemptEvidenceBuffer,
   liveCaptureEnvelope,
-  type ReadinessSnapshot,
+  qualityBlockedMessage,
 } from '../camera/captureEnvelope';
 import type { EnvelopeVerdict } from '@pickle/shared-types';
 import { TargetSelector, type TargetSelection } from '../camera/TargetSelector';
@@ -408,11 +408,12 @@ export function AnalyzeScreen() {
   const [targetSeed, setTargetSeed] = useState<TargetSelection | null>(null);
   const [captureEnvelope, setCaptureEnvelope] =
     useState<EnvelopeVerdict | null>(null);
-  // Last measured live signals, kept for the attempt-time envelope: the
-  // readiness read closest to the swing and the latest native quality
-  // signals (null until an emitter exists — those dims stay NOT_MEASURED).
-  const lastReadiness = useRef<ReadinessSnapshot | null>(null);
-  const lastQuality = useRef<CaptureQualitySignalsV1 | null>(null);
+  // Last measured live signals of the CURRENT attempt, kept for the
+  // attempt-time envelope: the readiness read closest to the swing and the
+  // latest native quality signals (null until an emitter exists — those
+  // dims stay NOT_MEASURED). Cleared at every attempt start so evidence
+  // from one clip is never attributed to the next.
+  const attemptEvidence = useRef(createAttemptEvidenceBuffer());
   const profile = useAppStore(s => s.profile);
   const operationActive = useRef(false);
   const autoLaunchStarted = useRef(false);
@@ -421,21 +422,27 @@ export function AnalyzeScreen() {
     () =>
       subscribeToCameraEvents((event: CameraEvent) => {
         if (event.type === 'readiness') {
-          lastReadiness.current = {
+          attemptEvidence.current.noteReadiness({
             state: event.state,
             jointCoverage: event.jointCoverage,
-          };
+          });
           setCaptureEnvelope(
-            liveCaptureEnvelope(lastReadiness.current, lastQuality.current),
+            liveCaptureEnvelope(
+              attemptEvidence.current.readiness,
+              attemptEvidence.current.quality,
+            ),
           );
           setPhase({
             kind: 'working',
             message: READINESS_COPY[event.state] ?? 'Reading your position…',
           });
         } else if (event.type === 'capture_quality') {
-          lastQuality.current = event.signals;
+          attemptEvidence.current.noteQuality(event.signals);
           setCaptureEnvelope(
-            liveCaptureEnvelope(lastReadiness.current, lastQuality.current),
+            liveCaptureEnvelope(
+              attemptEvidence.current.readiness,
+              attemptEvidence.current.quality,
+            ),
           );
         } else if (event.type === 'stroke_detected') {
           setCaptureEnvelope(null);
@@ -504,8 +511,8 @@ export function AnalyzeScreen() {
             clip.captureMode === 'automatic_pose_trigger'
               ? attemptCaptureEnvelope(
                   clip,
-                  lastQuality.current,
-                  lastReadiness.current,
+                  attemptEvidence.current.quality,
+                  attemptEvidence.current.readiness,
                 )
               : null,
         });
@@ -514,8 +521,12 @@ export function AnalyzeScreen() {
           return;
         }
         if (outcome.kind === 'quality_blocked') {
-          // Honest abstention: nothing was analyzed or rated.
-          setPhase({ kind: 'error', message: outcome.reason });
+          // Honest abstention: nothing was analyzed or rated. The message
+          // carries the actionable guidance for every failing dimension.
+          setPhase({
+            kind: 'error',
+            message: qualityBlockedMessage(outcome.reason, outcome.envelope),
+          });
           return;
         }
         // Auto-detected outcomes (family-level reads, honest abstentions)
@@ -544,8 +555,10 @@ export function AnalyzeScreen() {
   const run = useCallback(async () => {
     if (operationActive.current) return;
     operationActive.current = true;
-    // Each capture attempt starts with a clean envelope verdict and target
-    // seed: both describe ONE clip and must never carry into the next one.
+    // Each capture attempt starts with a clean envelope verdict, live
+    // evidence buffer and target seed: all describe ONE clip and must never
+    // carry into the next one.
+    attemptEvidence.current.beginAttempt();
     setCaptureEnvelope(null);
     setTargetSeed(null);
     setPhase({
