@@ -292,3 +292,30 @@ already stated in `c11-summary.json`) are for the integrator to number.
 2. Qualified coach recruitment (0 real reviews).
 3. Footage supply (6 fresh candidates now committed — see finding 3).
 4. Mac re-measure list (§4).
+
+## 10. WAVE F ADDENDUM (2026-08-29)
+
+All 29 Wave F branches are merged into the integration branch (evidence:
+`datasets/experiments/wave-f/*-summary.json`; scoreboard: STATUS_BOARD Wave F addendum).
+Key deltas relevant to a fresh integrator:
+
+- The stroke heuristic is now **stroke-heuristic-5** in BOTH swing-lab and the mobile
+  Lite port (f19); the two implementations are output-identical over the 19-fixture
+  parity suite. Finding 7 above (Lite on v1 semantics) is RETIRED as of f19.
+- New v5 gates: contact-evidence confidence cap (f01), declared-handedness
+  cross-check (f02), multi-frame facing consensus (f03), symmetric-bimanual
+  abstention (f04), shoulder-separation degeneracy abstention (f05). All five E10
+  confidently-wrong pins are addressed except F20-F1 (wrong-arm BACKHAND still
+  committed at degraded 0.6 confidence — OPEN RED; degradation is not resolution).
+- Event recall on the e01 gold set: 12/16 → 13/16 with false proposals still 0 (f06).
+- Anchor-free phase contract is v2.4: 13/18, anchored path byte-identical (f07).
+- Contact disputes from D2-05 are adjudicated 4/4 upheld (f13); ownership S3 re-run is
+  field-identical to the e05 after-eval with 0 new labels (f14).
+- Preserved scientific negatives: 2x-speed OOD separation (f10), envelope threshold
+  re-derivation (f18), two-pass promotion (f25).
+- Result surface: 4 fabricated-provenance defects fixed with regression tests (f26).
+- Stroke is the most label-starved subsystem (4 of 9 L1 families at zero gold, f15) —
+  the top data priority for any next wave.
+
+Gates at Wave F head (Linux, commit d6f951f): typecheck, root tests (swing-lab
+592 | 4 skipped), lint, format:check, mobile tsc, and mobile jest (397) all green.

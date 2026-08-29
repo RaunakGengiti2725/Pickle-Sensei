@@ -181,6 +181,60 @@ typecheck all packages green · root test suite green (swing-lab 536 passed | 4 
 analysis-pipeline 47, all other packages green) · lint 0 errors · format:check clean ·
 mobile tsc 0 errors · PR #1 CI verify + mobile green.
 
+---
+
+# WAVE F ADDENDUM (2026-08-29, Linux, 29 workflow workstreams)
+
+All 29 branches merged into the integration branch. Per-workstream evidence:
+`datasets/experiments/wave-f/*-summary.json`. Same measurement boundary (no Mac/iPhone).
+
+| ID  | Workstream                   | Result (Linux, artifact-backed)                                                                                         | State            |
+| --- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------- |
+| f01 | stroke E10-F1 contact gate   | absent contact evidence now caps side confidence (limiting factor recorded)                                               | GREEN            |
+| f02 | handedness cross-check       | declared-handedness contradiction by dominant-motion wrist degrades or abstains                                            | GREEN            |
+| f03 | facing consensus             | multi-frame facing votes (window 200ms, ≥3 votes, ≥2/3 ratio) replace single-frame sign                                   | GREEN            |
+| f04 | bimanual gate                | E10-F5 closed: symmetric wide-separation synchronized two-arm motion abstains; two-handed-backhand control preserved       | GREEN            |
+| f05 | shoulder degeneracy gate     | E10-F3 root cause closed: image-plane shoulder separation < 0.04u abstains in both implementations                         | GREEN            |
+| f06 | event recall misses          | recall 12/16 (.750) → 13/16 (.813); mean overlap .839 → .875; false proposals stayed 0                                   | GREEN (measured) |
+| f07 | phase remaining six          | anchor-free v2.4: 12/18 → 13/18; anchored path byte-identical (15/17 unchanged); 5 honest abstentions remain              | GREEN            |
+| f08 | ball hard slices             | hard-slice fixes measured; broader generalization still required                                                            | GREEN (bounded)  |
+| f09 | contact adversarial          | adversarial contact findings persist; fixes partial                                                                        | ORANGE           |
+| f10 | OOD 2x-speed gap             | 2x-speed separation not achievable with current frame statistics — negative preserved                                     | SCIENTIFIC_NEG.  |
+| f11 | e22 intake                   | acquired-clip intake completed with rights/provenance                                                                       | GREEN            |
+| f12 | label queue execution        | 35 append-only records across 4 modalities; queue ranks 14-18 blocked (source windows unavailable)                        | ORANGE           |
+| f13 | contact dispute adjudication | 4/4 disputes adjudicated (all upheld); two-concurrent-balls forensic finding recorded                                       | GREEN            |
+| f14 | ownership S3 rerun           | field-by-field identical to e05 after-eval (0 labels added since); worst-slice forensics filed                             | GREEN (verify)   |
+| f15 | learning curve actions       | stroke is the LABEL_STARVED subsystem (4 of 9 L1 families at zero gold); TA curve saturating (~.69 asymptote)             | GREEN            |
+| f16 | cascade Linux proxy          | per-stage replay scoreboard from committed artifacts; canonical strict cascade still Mac-blocked                            | GREEN (proxy)    |
+| f17 | silent failure rerun         | silent-failure metric re-run on post-Wave-E head                                                                            | GREEN            |
+| f18 | envelope thresholds v0.2     | corpus re-derivation again failed to validate thresholds — negative preserved                                              | SCIENTIFIC_NEG.  |
+| f19 | mobile heuristic parity      | Lite ported to v5; output-identical to swing-lab over 19-fixture parity suite                                              | GREEN            |
+| f20 | rt stroke hardened           | F20-F1 wrong-arm BACKHAND still committed (degraded to 0.6 by f02, still wrong) — OPEN; F20-F4 closed by f19             | RED (open)       |
+| f21 | rt session scheduler         | storm/race/retry/livelock red team on real scheduler; executor seam scripted (native gap D-040 disclosed)                  | GREEN (bounded)  |
+| f22 | rt envelope bypass           | 8 KNOWN GAP bypasses pinned as regressions (blur+grain, strobing, upscale, tiny subject, crop-jitter…); 2 proven negatives | ORANGE           |
+| f23 | rt consent abuse             | consent abuse leaks found and pinned                                                                                        | ORANGE           |
+| f24 | rt data provenance           | provenance chain attack found no material break                                                                             | GREEN            |
+| f25 | two-pass verdict             | adaptive two-pass promotion not justified by wall-clock evidence — negative preserved                                     | SCIENTIFIC_NEG.  |
+| f26 | result evidence audit        | 4 fabricated-provenance Result defects found and fixed (+7 regression tests; mobile 397 tests green)                       | GREEN            |
+| f27 | voice adversarial            | 91-case adversarial eval: 97.8% accuracy, 0 false accepts; 2 negation mis-selections pinned                                | GREEN (bounded)  |
+| f28 | decisions backlog            | decision log reconciled through Wave F                                                                                      | GREEN            |
+| f29 | dead code execution          | dead-code removals executed with regression coverage                                                                        | GREEN            |
+
+## GATES AT WAVE F INTEGRATION (Linux, commit d6f951f)
+
+typecheck all packages green · root test suite green (swing-lab 592 passed | 4 skipped,
+vision-geometry 78, analysis-pipeline 56, all other packages green) · lint 0 errors ·
+format:check clean · mobile tsc 0 errors · mobile jest 40 suites / 397 tests green.
+
+## OPEN FINDINGS AFTER WAVE F
+
+- F20-F1: wrong-arm forehand-as-BACKHAND still committed at 0.6 confidence — a
+  confidently-wrong stroke remains user-visible; degradation is not resolution. RED.
+- Contact adversarial failures (f09) and envelope bypasses (f22) remain ORANGE.
+- Consent abuse leaks (f23) remain ORANGE.
+- 2x-speed OOD separation (f10), envelope threshold validation (f18), and two-pass
+  promotion (f25) are preserved scientific negatives.
+
 ## EXTERNAL BLOCKERS (unchanged)
 
 1. Physical iPhone hardware (latency evidence).
