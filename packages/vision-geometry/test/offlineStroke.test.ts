@@ -517,6 +517,146 @@ describe("estimateContact", () => {
     // No fusion internals unless explicitly requested.
     expect(estimate.fusionKernels).toBeUndefined();
   });
+
+  // ── D3-04 red-team regressions: fabricated-marker family. All fixtures
+  // below are SYNTHETIC and adversarial: thin evidence must produce an
+  // abstention (or at minimum an unconfirmed estimate), never a confident
+  // fabricated contact marker.
+  it("abstains when the only evidence is a lone ungated ball turn (no pose/paddle in window)", () => {
+    const { sequence } = generateSwingSequence();
+    // Scan window far past the pose data: zero frames, zero motion series.
+    // A single clean synthetic bounce with no target reference anywhere.
+    const ball: BallObservation[] = Array.from({ length: 8 }, (_, index) => {
+      const t = 5300 + index * 40;
+      const before = index <= 3;
+      return {
+        frameIndex: index,
+        timestampMs: t,
+        x: before ? 0.1 + index * 0.05 : 0.25 - (index - 3) * 0.05,
+        y: 0.2,
+        confidence: 0.8,
+      };
+    });
+    const estimate = estimateContact({
+      sequence,
+      window: { startMs: 5000, endMs: 6000, peakMotionMs: null },
+      ballObservations: ball,
+    });
+    expect(estimate.status).toBe("abstained");
+    if (estimate.status !== "abstained") return;
+    expect(estimate.limitingFactors).toContain("ball_evidence_untethered");
+  });
+
+  it("abstains on clustered ungated zig-zag turns even when peakMotionMs is near them", () => {
+    const { sequence } = generateSwingSequence();
+    // Jittery zig-zag producing several ungated turns; a peakMotionMs within
+    // the divergence gate must not rescue untethered ball-only evidence.
+    const ball: BallObservation[] = Array.from({ length: 12 }, (_, index) => ({
+      frameIndex: index,
+      timestampMs: 5300 + index * 30,
+      x: 0.3 + (index % 2 === 0 ? 0.02 : -0.02) + index * 0.01,
+      y: 0.25 + (index % 3 === 0 ? 0.02 : -0.01),
+      confidence: 0.8,
+    }));
+    const estimate = estimateContact({
+      sequence,
+      window: { startMs: 5000, endMs: 6000, peakMotionMs: 5600 },
+      ballObservations: ball,
+    });
+    expect(estimate.status).toBe("abstained");
+    if (estimate.status !== "abstained") return;
+    expect(estimate.limitingFactors).toContain("ball_evidence_untethered");
+  });
+
+  it("does not let junk-confidence ball detections confirm the estimate", () => {
+    const { sequence, window } = generateSwingSequence();
+    // Same geometry as the corroborating-ball fixture, but every detection
+    // carries confidence 0.05 — below the tracker's constructive floor
+    // (≥0.35), i.e. degraded/foreign-provenance detections.
+    const ball: BallObservation[] = [];
+    for (let index = 0; index < 12; index += 1) {
+      const t = window.peakMs - 180 + index * 30;
+      const before = t <= window.peakMs;
+      ball.push({
+        frameIndex: index,
+        timestampMs: t,
+        x: before
+          ? 0.9 - (0.9 - 0.584) * ((t - (window.peakMs - 180)) / 180)
+          : 0.584 + ((t - window.peakMs) / 180) * 0.5,
+        y: before
+          ? 0.6 + 0.1 * ((t - (window.peakMs - 180)) / 180)
+          : 0.7 - ((t - window.peakMs) / 180) * 0.25,
+        confidence: 0.05,
+      });
+    }
+    const estimate = estimateContact({
+      sequence,
+      window: { startMs: window.startMs, endMs: window.endMs, peakMotionMs: window.peakMs },
+      ballObservations: ball,
+    });
+    expect(estimate.status).toBe("estimated"); // the real wrist swing still times it
+    if (estimate.status !== "estimated") return;
+    expect(estimate.ballConfirmed).toBe(false);
+    expect(estimate.confidence).toBeLessThanOrEqual(0.55);
+  });
+
+  it("rejects idle wrist micro-drift instead of estimating from a fidget", () => {
+    const { sequence } = generateSwingSequence();
+    // Wrists frozen except a single tiny smooth bump (peak well under
+    // 0.5 torso/s): idle fidgeting, far below any real stroke
+    // (dev-measured 5–8 torso/s).
+    const still = {
+      ...sequence,
+      frames: sequence.frames.map((frame) => ({
+        ...frame,
+        landmarks: frame.landmarks.map((mark) => {
+          if (!mark.name.endsWith("wrist")) return mark;
+          const bump =
+            Math.abs(frame.timestampMs - 900) < 120
+              ? 0.006 * Math.cos(((frame.timestampMs - 900) / 120) * (Math.PI / 2))
+              : 0;
+          return { ...mark, x: 0.5 + bump, y: 0.6 };
+        }),
+      })),
+    };
+    const estimate = estimateContact({
+      sequence: still,
+      window: { startMs: 0, endMs: 1900, peakMotionMs: 900 },
+      ballObservations: null,
+    });
+    expect(estimate.status).toBe("abstained");
+  });
+
+  it("still confirms a genuine tethered, tracker-trusted ball turn (coverage guard)", () => {
+    const { sequence, window } = generateSwingSequence();
+    // Identical to the corroborating-ball fixture above: the hardening must
+    // not cost this committed positive case its confirmed estimate.
+    const ball: BallObservation[] = [];
+    for (let index = 0; index < 12; index += 1) {
+      const t = window.peakMs - 180 + index * 30;
+      const before = t <= window.peakMs;
+      ball.push({
+        frameIndex: index,
+        timestampMs: t,
+        x: before
+          ? 0.9 - (0.9 - 0.584) * ((t - (window.peakMs - 180)) / 180)
+          : 0.584 + ((t - window.peakMs) / 180) * 0.5,
+        y: before
+          ? 0.6 + 0.1 * ((t - (window.peakMs - 180)) / 180)
+          : 0.7 - ((t - window.peakMs) / 180) * 0.25,
+        confidence: 0.8,
+      });
+    }
+    const estimate = estimateContact({
+      sequence,
+      window: { startMs: window.startMs, endMs: window.endMs, peakMotionMs: window.peakMs },
+      ballObservations: ball,
+    });
+    expect(estimate.status).toBe("estimated");
+    if (estimate.status !== "estimated") return;
+    expect(estimate.ballConfirmed).toBe(true);
+    expect(Math.abs(estimate.estimatedContactMs - window.peakMs)).toBeLessThanOrEqual(60);
+  });
 });
 
 describe("evaluateCaptureQuality", () => {

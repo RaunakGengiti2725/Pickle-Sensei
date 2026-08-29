@@ -80,6 +80,26 @@ describe("silent-failure-v1 contract", () => {
     expect(verdict.claims.CONTACT_MARKER.status).toBe("silent_failure");
   });
 
+  it("merge-reactivation-style 695ms marker is a silent failure even when 'confirmed'", () => {
+    // SYNTHETIC FIXTURE replaying the documented failure shape (STATUS_BOARD:
+    // merge fabricated 695ms contact): a grossly wrong marker must count as a
+    // silent failure regardless of any confirmation flags.
+    const verdict = evaluateSilentFailure(
+      {
+        ...FIXTURE_ALL_CORRECT,
+        contact: {
+          status: "estimated",
+          estimatedContactMs: (FIXTURE_GOLD.contactMs ?? 0) + 695,
+          ballConfirmed: true,
+          paddleConfirmed: true,
+        },
+      },
+      FIXTURE_GOLD,
+    );
+    expect(verdict.claims.CONTACT_MARKER.status).toBe("silent_failure");
+    expect(verdict.silentFailure).toBe(true);
+  });
+
   it("66–132ms marker WITH confirmation is not a silent failure; WITHOUT is", () => {
     const confirmed = evaluateSilentFailure(
       {

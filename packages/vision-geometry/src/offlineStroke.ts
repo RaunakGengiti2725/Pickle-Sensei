@@ -148,7 +148,7 @@ export function detectOfflineStrokeWindow(sequence: PoseSequence): Result<Offlin
  * rally2 whip −383ms) — the uncertainty lives in the kernel widths instead.
  */
 
-export const CONTACT_ESTIMATOR_VERSION = "contact-evidence-4";
+export const CONTACT_ESTIMATOR_VERSION = "contact-evidence-4.1";
 
 /** Coarse stroke family used to pick temporal priors. Derived from the
  * declared stroke or a predicted family; "unknown" is always safe. */
@@ -261,6 +261,9 @@ const FUSION = {
   maximaFloorFraction: 0.15,
   maximaCap: 6,
   minPaddlePeakSpeed: 0.5, // u/s — below this a paddle "peak" is idle drift
+  /** A wrist "peak" below this (torso spans per second) is idle drift /
+   * pose jitter, not a stroke (dev-measured real stroke peaks: 5–8 torso/s). */
+  minWristPeakTorsoPerSec: 0.5,
   /** A body/paddle speed above this (torso spans per second) is not human
    * motion but a tracking glitch (landmark jump / identity swap): the
    * measurement is invalid and the peak is rejected outright. Dev-measured
@@ -272,6 +275,11 @@ const FUSION = {
   wristGateFullTorso: 0.9,
   wristGateRejectTorso: 1.8,
   ungatedTurnFactor: 0.5, // no target reference near the turn → half weight
+  /** Ball-track observation confidence below which ball evidence is ramped
+   * down. The tracker's heuristic confidence is ≥0.35 by construction
+   * (base 0.35 + non-negative terms), so anything lower marks degraded or
+   * foreign-provenance detections that must not drive a contact marker. */
+  ballObservationConfidenceFull: 0.35,
   /** Ball-turn shape quality. */
   minTurnAngleDeg: 35,
   turnSpeedRatioFloor: 0.35,
@@ -325,6 +333,14 @@ interface KernelContribution {
   mass: number;
   sigmaMs: number;
   note: string;
+  /** Ball kernels only: true when the evidence is spatially tied to a
+   * measured target reference (gated turn / proximity minimum). Untethered
+   * ball motion alone must never place a target contact marker. */
+  tethered?: boolean;
+  /** Ball kernels only: the underlying detection's confidence is below the
+   * tracker's constructive floor — such evidence may support timing but
+   * never CONFIRM an estimate. */
+  lowConfidence?: boolean;
 }
 
 export function estimateContact(input: {
@@ -414,7 +430,11 @@ export function estimateContact(input: {
 
   // ── Motion family 2: wrist speed peaks ──────────────────────────────────
   if (wrist.length >= 5) {
-    const maxima = localMaxima(wrist, (peak) => plausible(peak, "wrist_speed_peak"));
+    const maxima = localMaxima(
+      wrist,
+      (peak) =>
+        peak.value / torso >= FUSION.minWristPeakTorsoPerSec && plausible(peak, "wrist_speed_peak"),
+    );
     const totalValue = sum(maxima.map((peak) => peak.value));
     const sigma = compact ? FUSION.compactWristSigmaMs : FUSION.sigmaMs.wrist_speed_peak;
     for (const peak of maxima) {
@@ -445,7 +465,12 @@ export function estimateContact(input: {
     // All direction changes, each gated by distance to the target's
     // paddle/wrist AT that moment (torso-normalized, aspect-corrected).
     const turns = directionChanges(ball);
-    const gated: Array<{ turn: (typeof turns)[number]; quality: number; note: string }> = [];
+    const gated: Array<{
+      turn: (typeof turns)[number];
+      quality: number;
+      note: string;
+      tethered: boolean;
+    }> = [];
     let rejectedTurns = 0;
     for (const turn of turns) {
       const reference = nearestTargetReference(
@@ -491,6 +516,7 @@ export function estimateContact(input: {
         turn,
         quality,
         note: `${turn.angleDeg.toFixed(0)}°, speed ratio ${turn.speedRatio.toFixed(2)}, ${gateNote}`,
+        tethered: reference !== null,
       });
     }
     if (rejectedTurns > 0 && gated.length === 0) {
@@ -500,6 +526,7 @@ export function estimateContact(input: {
     for (const entry of gated) {
       ballKernels.push({
         signal: "ball_direction_change",
+        tethered: entry.tethered,
         tMs: entry.turn.timestampMs - FUSION.offsetMs.ball_direction_change,
         // q·(q/Σq): a single strong gated turn carries the full reliability;
         // several comparable turns share it (ambiguity is not certainty).
@@ -527,6 +554,7 @@ export function estimateContact(input: {
       if (quality > 0) {
         ballKernels.push({
           signal: "ball_paddle_proximity",
+          tethered: true,
           tMs: paddleProximity.timestampMs - FUSION.offsetMs.ball_paddle_proximity,
           mass:
             FUSION.reliability.ball_paddle_proximity *
@@ -556,6 +584,7 @@ export function estimateContact(input: {
         if (quality > 0) {
           ballKernels.push({
             signal: "ball_wrist_proximity",
+            tethered: true,
             tMs: wristProximity.timestampMs - FUSION.offsetMs.ball_wrist_proximity,
             mass:
               FUSION.reliability.ball_wrist_proximity *
@@ -594,6 +623,18 @@ export function estimateContact(input: {
       kernel.mass *= flight.factor;
       kernel.note += `, ball at drift speed ${flight.torsoPerSec === null ? "unknown" : flight.torsoPerSec.toFixed(1) + " torso/s"} ×${flight.factor.toFixed(2)}`;
     }
+    // Detections the tracker itself barely trusts must not drive a marker.
+    const observationConfidence = nearestBallConfidence(ball ?? [], kernel.tMs);
+    if (observationConfidence !== null) {
+      const confidenceFactor = clamp01(
+        observationConfidence / FUSION.ballObservationConfidenceFull,
+      );
+      if (confidenceFactor < 1) {
+        kernel.mass *= confidenceFactor;
+        kernel.lowConfidence = true;
+        kernel.note += `, ball observation confidence ${observationConfidence.toFixed(2)} ×${confidenceFactor.toFixed(2)}`;
+      }
+    }
   }
   // The ball modality's sub-signals are correlated observations of the same
   // object; together they may not exceed the modality's full trust.
@@ -603,6 +644,22 @@ export function estimateContact(input: {
     for (const kernel of ballKernels) kernel.mass *= scale;
   }
   kernels.push(...ballKernels);
+
+  // Ball motion with no spatial tie to the target and no target motion
+  // evidence at all cannot place a TARGET contact marker: an untethered
+  // turn could belong to the opponent's hit, a bounce, or a stray object.
+  const motionKernelCount = kernels.filter((kernel) => !kernel.signal.startsWith("ball_")).length;
+  const tetheredBallCount = kernels.filter(
+    (kernel) => kernel.signal.startsWith("ball_") && kernel.tethered === true,
+  ).length;
+  if (kernels.length > 0 && motionKernelCount === 0 && tetheredBallCount === 0) {
+    return {
+      status: "abstained",
+      reason:
+        "All surviving contact evidence is ball motion untethered to the target (no target reference near any turn, and no target motion evidence): cannot attribute a contact to the target.",
+      limitingFactors: [...limitingFactors, "ball_evidence_untethered"],
+    };
+  }
 
   if (kernels.length === 0) {
     return {
@@ -767,7 +824,14 @@ export function estimateContact(input: {
   // cannot confirm it — and kernels discounted to dust are not
   // corroboration either (mass floor).
   const ballMassTotal = sum(
-    kernels.filter((kernel) => kernel.signal.startsWith("ball_")).map((kernel) => kernel.mass),
+    kernels
+      .filter(
+        (kernel) =>
+          kernel.signal.startsWith("ball_") &&
+          kernel.tethered === true &&
+          kernel.lowConfidence !== true,
+      )
+      .map((kernel) => kernel.mass),
   );
   const ballSignal = kernels.some((kernel) => kernel.signal.startsWith("ball_"));
   const ballPresent = (ball ?? []).some(
@@ -949,6 +1013,22 @@ function motionSupportAt(
     supports.push(clamp01(value / (FUSION.motionSupportFullFraction * max)));
   }
   return supports.length === 0 ? 1 : Math.max(...supports);
+}
+
+/** Confidence of the ball observation nearest a moment (within the flight
+ * band); null when no observation is near enough to attribute. */
+function nearestBallConfidence(ball: readonly BallObservation[], tMs: number): number | null {
+  let best: BallObservation | null = null;
+  for (const observation of ball) {
+    if (Math.abs(observation.timestampMs - tMs) > FUSION.ballFlightBandMs) continue;
+    if (
+      best === null ||
+      Math.abs(observation.timestampMs - tMs) < Math.abs(best.timestampMs - tMs)
+    ) {
+      best = observation;
+    }
+  }
+  return best === null ? null : best.confidence;
 }
 
 /** Cross-modal corroboration: the OTHER motion series' time-interpolated
