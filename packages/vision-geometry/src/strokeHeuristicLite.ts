@@ -405,7 +405,6 @@ export function classifyStroke(input: {
     return unknown("symmetric_bimanual_motion_rim_propulsion_signature", evidence, limitingFactors);
   }
 
-
   // ── Gates: measured non-motion is not a stroke (stroke-heuristic-3) ────
   // Both gates act only on MEASUREMENTS: a speed series that never reaches
   // walking-arm pace inside the event window, or a repeatedly-measured
@@ -764,9 +763,7 @@ export function classifyStroke(input: {
     return unknown(null, evidence, limitingFactors, contactPointSource, contactPointReliability);
   }
   const sideConfidenceCap =
-    sideTrustDegraded || handednessContradicted || facingDegraded
-      ? DEGRADED_CONFIDENCE_CAP
-      : 0.8;
+    sideTrustDegraded || handednessContradicted || facingDegraded ? DEGRADED_CONFIDENCE_CAP : 0.8;
   if (contactPointReliability === "degraded") {
     limitingFactors.push("contact_point_degraded_confidence_capped");
   }

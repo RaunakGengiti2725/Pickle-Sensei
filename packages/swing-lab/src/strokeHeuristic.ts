@@ -759,9 +759,7 @@ export function classifyStroke(input: {
     return unknown(null, evidence, limitingFactors, contactPointSource, contactPointReliability);
   }
   const sideConfidenceCap =
-    sideTrustDegraded || handednessContradicted || facingDegraded
-      ? DEGRADED_CONFIDENCE_CAP
-      : 0.8;
+    sideTrustDegraded || handednessContradicted || facingDegraded ? DEGRADED_CONFIDENCE_CAP : 0.8;
   if (contactPointReliability === "degraded") {
     limitingFactors.push("contact_point_degraded_confidence_capped");
   }
