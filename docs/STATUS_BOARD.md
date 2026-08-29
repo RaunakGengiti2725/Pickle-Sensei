@@ -258,3 +258,74 @@ format:check clean · mobile tsc 0 errors · mobile jest 40 suites / 397 tests g
 3. Qualified coach recruitment (0 real reviews; technique/fault/severity/drill stay locked).
 4. Additional lawful footage beyond the acquired CC/gov pool.
 5. Mobbin MCP unavailable in this environment (disclosed; no fabricated research).
+
+---
+
+# WAVES G / G2 / H ADDENDUM (2026-08-29, Linux — production certification attempt)
+
+Waves G (26 workstreams: F09/F22/F23 remediation, h6 event mining, generalization
+matrix, fresh-footage probe, oracle waterfall, selective-risk curves, session E2E,
+latency distribution, PR audit) and G2/H (27 certification workstreams h01–h27) ran to
+completion. Evidence: `datasets/experiments/wave-g/`, `wave-g2/`, `wave-h/`.
+
+Wave H was an honest certification attempt, and it did NOT certify release:
+
+- h14 cascade cert: Linux proxy replay only — event 13/16 recall, contact 7/10 coverage
+  with 1 known-wrong marker (f09 residual), stroke confidently-wrong 2 (down from 3, at
+  a coverage cost), phase 15/17 anchored / 13/18 anchor-free, 0 ordering violations.
+  Canonical Mac strict cascade (last measured 2/5) remains BLOCKED_EXTERNAL.
+- h16 fresh-generalization cert: incomplete — fresh human-label evidence insufficient.
+- h17 envelope cert: synthetic probes pass; two pinned KNOWN GAPS remain (upscaled 240p
+  passes resolution checks; sharp low-texture scenes misread as motion blur).
+- h22 perf cert: Linux-CPU only; iPhone latency BLOCKED_EXTERNAL.
+- h25 release cert: P0/P1 register v1 — 4 P0 (1 unresolved at RC), 12 P1, 5
+  BLOCKED_EXTERNAL. RC record, release plan (docs/RELEASE_PLAN_V1.md) written; no
+  tags, deploys, or store actions performed.
+- h26/h27 red teams: findings pinned as regressions; envelope and product attack
+  surfaces documented.
+
+CI remediation on PR #1 after integration: h17 ffmpeg-backed envelope tests were timing
+out at Vitest's 5s default in CI — raised to 60s per test (no assertion change).
+
+---
+
+# WAVE I ADDENDUM (2026-08-29, Linux, 35 production-operations workstreams)
+
+All 35 `devin/wave-i/*` branches (i01–i35) merged into the integration branch, with
+conflicts resolved additively (helpers preserved in `.workflows/`). Scope: release
+pipeline stages, model registry governance (immutable entries, rollback predecessors,
+dataset pointers), analysis provenance, shadow eval, canary rollout, rollback drills
+(measured detect/disable/rollback/confirm timings), silent-failure triage signals,
+user feedback + bad-analysis reporting, hard-case queue, active-learning priority,
+consent-gated data flywheel, dataset versioning, holdout rotation ledger, drift
+detection, iOS-compat process, latency/crash/backend-queue SLOs, session ops, coach
+program ops, disagreement adjudication, drill governance, score version governance,
+security monitoring, incident response runbooks, feature flags, offline/weak-network
+handling, cost-per-analysis reporting, media lifecycle/retention, support diagnostics,
+release operations, quality dashboard, recurring health review, and
+no-self-confirmation guards. Evidence: `datasets/experiments/wave-i/` plus
+per-package test suites.
+
+Post-integration gate fixes (commit 0bf3925):
+
+- `pickle-sensei-datasets@v2` release cut (immutable; v1 untouched) covering the new
+  `datasets/holdouts/` and `datasets/reports/` directories; release test now audits the
+  latest release and keeps v1 registered in the index.
+- Rollback drill clock made portable (Date.now), rollback test fixture updated to the
+  full governance-field ModelManifestEntry, scoring versionGovernance namespace
+  re-export dropped (mobile Babel incompatibility; module remains directly importable).
+
+## GATES AT WAVE I INTEGRATION (Linux, commit 0bf3925)
+
+typecheck all packages green · root test suite green (swing-lab 892 tests: 887 passed |
+4 skipped | 1 fixed, all other packages green) · lint 0 errors · format:check clean ·
+git diff --check clean · mobile tsc 0 errors · mobile jest 55 suites / 513 tests green.
+
+## RELEASE STATUS
+
+NO-GO — NOT_SAFE_TO_RELEASE. Engineering/ops infrastructure is integrated and
+exercised on Linux, but the release gates that require the physical world remain open:
+physical supported-iPhone validation, Mac strict-cascade re-measure, qualified real
+coaches (0 reviews), fresh-user/fresh-footage generalization evidence, and production
+traffic/observability evidence. None of these may be satisfied by Linux, simulator,
+fixture, or historical-clip evidence.

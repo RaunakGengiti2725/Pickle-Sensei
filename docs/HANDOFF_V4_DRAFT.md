@@ -333,3 +333,36 @@ Key deltas relevant to a fresh integrator:
 
 Gates at Wave F head (Linux, commit d6f951f): typecheck, root tests (swing-lab
 592 | 4 skipped), lint, format:check, mobile tsc, and mobile jest (397) all green.
+
+## 11. WAVES G / G2 / H / I ADDENDUM (2026-08-29)
+
+Waves G (26), G2 (9), and H (18) completed the production-certification attempt;
+Wave I (35) delivered production operations. All wave-i branches are merged into the
+integration branch (head 0bf3925). See STATUS_BOARD Waves G/G2/H and Wave I addenda
+for the scoreboard and gate state.
+
+Key facts for a fresh integrator:
+
+- Certification verdict: NO-GO — NOT_SAFE_TO_RELEASE. Open gates are exclusively
+  external: physical supported-iPhone validation, Mac strict-cascade re-measure,
+  qualified real coaches (0 reviews), fresh-user/fresh-footage generalization
+  evidence, production traffic/observability evidence.
+- h25 produced the RC record, docs/RELEASE_PLAN_V1.md, and the P0/P1 register
+  (4 P0 / 12 P1 / 5 BLOCKED_EXTERNAL at RC).
+- Dataset releases are immutable: `pickle-sensei-datasets@v2` is the latest release
+  (covers holdouts/ and reports/); v1 is untouched and still registered.
+- Scoring has two parallel version-governance modules (wave-i overlap):
+  `packages/scoring/src/versioning.ts` is re-exported from the package index;
+  `versionGovernance.ts` must be imported directly (namespace re-export removed —
+  the mobile Babel jest transform cannot parse `export * as`).
+- `ModelManifestEntry` now requires governance fields (commit, splits, metrics,
+  supportedCaptureEnvelope, calibrationVersion, runtimeRequirements, promotionDate,
+  rollbackPredecessor); update fixtures accordingly.
+- h17 envelope tests run real ffmpeg encodes: keep per-test timeouts at 60s.
+- Media worker `runOnce` now returns { jobs, deletions, swept, expired } combining
+  deletion propagation, retention expiry, media sweep, and queue-SLO telemetry.
+- Additive-merge helpers live in `.workflows/resolve_additive.py` and
+  `.workflows/resolve_migrate_cert.py` (untracked, preserved).
+
+Gates at head 0bf3925 (Linux): typecheck, root tests, lint, format:check,
+git diff --check, mobile tsc, mobile jest (55 suites / 513 tests) all green.
