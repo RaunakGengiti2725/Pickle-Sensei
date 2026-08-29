@@ -97,6 +97,13 @@ import {
   planTwoPassSchedule,
   type TwoPassSchedule,
 } from "./paddleSchedule.js";
+import {
+  dominantWristSpeeds,
+  planDetectSpanHull,
+  planDetectSpanSegments,
+  segmentsCoverageMs,
+  type SpanSegment,
+} from "./detectSpanPlan.js";
 import { renderReport, type LabRunReport, type PlayerStageReport } from "./report.js";
 import { detectPaddleWindow, startPaddleWorker, type PaddleServeWorker } from "./paddleWorker.js";
 
@@ -148,6 +155,11 @@ interface CliArgs {
   /** OFF-by-default adaptive two-pass detector schedule: sparse scan +
    * stride-1 densification (see paddleSchedule.ts). */
   twoPass: boolean;
+  /** OFF-by-default tight detector windowing: one padded segment per
+   * pre-pass event instead of the single padded event hull, saving the
+   * detector frames in the dead time between well-separated events
+   * (see detectSpanPlan.ts). */
+  tightWindow: boolean;
   /** Pass-1 stride when --two-pass is on. */
   sparseStride: number;
   /** Product-assisted target selection: one tap during setup. */
@@ -189,6 +201,7 @@ function parseArgs(argv: string[]): CliArgs {
     cropRecovery: argv.includes("--crop-recovery"),
     paddleWorker: !argv.includes("--no-paddle-worker"),
     twoPass: argv.includes("--two-pass"),
+    tightWindow: argv.includes("--tight-window"),
     sparseStride: Number(flag("--sparse-stride") ?? 3),
     targetSeed: (() => {
       const tap = flag("--target-tap");
@@ -508,29 +521,38 @@ async function run(args: CliArgs, paddleWorker: PaddleServeWorker | null): Promi
   timings["eventPrePassMs"] = Date.now() - prePassStarted;
   // A stroke needs preparation + follow-through context around its kinematic
   // peak; a bare peak span starves the tracker (measured: 240ms span → paddle
-  // coverage 17% → UNTRACKED). Pad, union, clamp, and enforce a floor.
-  const EVENT_CONTEXT_PAD_MS = 600;
-  const MIN_DETECT_SPAN_MS = 1500;
-  let prePassSpan: { startMs: number; endMs: number } = strokeWindow;
-  if (prePass.events.length > 0) {
-    const startMs =
-      Math.min(...prePass.events.map((event) => event.startMs)) - EVENT_CONTEXT_PAD_MS;
-    const endMs = Math.max(...prePass.events.map((event) => event.endMs)) + EVENT_CONTEXT_PAD_MS;
-    const deficit = MIN_DETECT_SPAN_MS - (endMs - startMs);
-    const grow = deficit > 0 ? deficit / 2 : 0;
-    prePassSpan = {
-      startMs: Math.max(strokeWindow.startMs, startMs - grow),
-      endMs: Math.min(strokeWindow.endMs, endMs + grow),
-    };
-  }
+  // coverage 17% → UNTRACKED). Pad, union, clamp, and enforce a floor
+  // (detectSpanPlan.ts — hull is the legacy math, verbatim).
+  const prePassSpan = planDetectSpanHull(strokeWindow, prePass.events);
   const detectSpan = args.fullScan ? strokeWindow : prePassSpan;
+  // Tight windowing (OFF by default): per-event segments within the hull.
+  // Under --full-scan or --two-pass the single-span path stays authoritative.
+  const tightActive = args.tightWindow && !args.fullScan && !args.twoPass;
+  if (args.tightWindow && (args.fullScan || args.twoPass)) {
+    console.log("--tight-window ignored (incompatible with --full-scan/--two-pass)");
+  }
+  const detectSegments: SpanSegment[] = tightActive
+    ? planDetectSpanSegments(strokeWindow, prePass.events)
+    : [{ startMs: detectSpan.startMs, endMs: detectSpan.endMs }];
   report.detectSpan = {
-    mode: args.fullScan ? "full-window" : "event-gated",
+    mode: args.fullScan ? "full-window" : tightActive ? "event-gated-tight" : "event-gated",
     startMs: Math.round(detectSpan.startMs),
     endMs: Math.round(detectSpan.endMs),
     windowMs: Math.round(strokeWindow.endMs - strokeWindow.startMs),
     spanMs: Math.round(detectSpan.endMs - detectSpan.startMs),
     prePassEvents: prePass.events.length,
+    ...(tightActive
+      ? {
+          segments: detectSegments.map((segment) => ({
+            startMs: Math.round(segment.startMs),
+            endMs: Math.round(segment.endMs),
+          })),
+          coveredMs: Math.round(segmentsCoverageMs(detectSegments)),
+          savedMs: Math.round(
+            detectSpan.endMs - detectSpan.startMs - segmentsCoverageMs(detectSegments),
+          ),
+        }
+      : {}),
   };
 
   // ── 5b/5c prep. Paddle detection ∥ ball candidate generation ───────────
@@ -544,6 +566,7 @@ async function run(args: CliArgs, paddleWorker: PaddleServeWorker | null): Promi
     args,
     window: strokeWindow,
     detectSpan,
+    detectSegments,
     eventPeaksMs: prePass.events.map((event) => event.peakMs),
     timings,
     worker: paddleWorker,
@@ -978,6 +1001,8 @@ async function preparePaddleDetections(input: {
   args: CliArgs;
   window: { startMs: number; endMs: number };
   detectSpan: { startMs: number; endMs: number };
+  /** Disjoint detector segments (tight windowing); [detectSpan] otherwise. */
+  detectSegments: SpanSegment[];
   /** Kinematic peaks from the pose-only pre-pass (two-pass densification). */
   eventPeaksMs: readonly number[];
   timings: Record<string, number>;
@@ -998,7 +1023,12 @@ async function preparePaddleDetections(input: {
     // Two-pass mode never reuses: a stride-1 file must not stand in for a
     // scheduled artifact (H found the reuse gate ignores stride — footgun).
     let reusable = false;
-    if (input.args.reuseExtract && existsSync(detsPath) && !input.args.twoPass) {
+    if (
+      input.args.reuseExtract &&
+      existsSync(detsPath) &&
+      !input.args.twoPass &&
+      input.detectSegments.length <= 1
+    ) {
       const existing = JSON.parse(readFileSync(detsPath, "utf8")) as RawPaddleDetectionFile;
       reusable =
         existing.window.startMs <= wantedStart + 100 && existing.window.endMs >= wantedEnd - 100;
@@ -1038,8 +1068,47 @@ async function preparePaddleDetections(input: {
     };
     const started = Date.now();
     if (!input.args.twoPass) {
-      console.log("detecting paddle candidates (D-FINE COCO proxy, python)…");
-      await detect(detsPath, wantedStart, wantedEnd, 1);
+      if (input.detectSegments.length <= 1) {
+        console.log("detecting paddle candidates (D-FINE COCO proxy, python)…");
+        await detect(detsPath, wantedStart, wantedEnd, 1);
+        input.timings["paddleDetectMs"] = Date.now() - started;
+        return { status: "ready", schedule: null };
+      }
+      // Tight windowing: one detector invocation per segment (same ±250ms
+      // halo each), concatenated into ONE detection file whose declared
+      // window is the overall covered span. Segment detections at a given
+      // tMs are identical to what the single-span invocation would produce
+      // there — the detector is frame-local; only the skipped inter-segment
+      // dead time differs.
+      console.log(
+        `detecting paddle candidates (D-FINE COCO proxy, python) in ${input.detectSegments.length} tight segments…`,
+      );
+      const segmentFiles: RawPaddleDetectionFile[] = [];
+      for (const [index, segment] of input.detectSegments.entries()) {
+        const segmentPath = join(input.args.outDir, `paddle-dets.seg${index}.json`);
+        await detect(segmentPath, Math.max(0, segment.startMs - 250), segment.endMs + 250, 1);
+        segmentFiles.push(JSON.parse(readFileSync(segmentPath, "utf8")) as RawPaddleDetectionFile);
+      }
+      const first = segmentFiles[0]!;
+      const combined: RawPaddleDetectionFile = {
+        ...first,
+        window: { startMs: wantedStart, endMs: wantedEnd },
+        timing: {
+          ...first.timing,
+          framesProcessed: segmentFiles.reduce(
+            (total, file) => total + file.timing.framesProcessed,
+            0,
+          ),
+          wallSecTotal: segmentFiles.reduce((total, file) => total + file.timing.wallSecTotal, 0),
+        },
+        // Adjacent segments' ±250ms halos can overlap; keep one frame per tMs.
+        frames: [
+          ...new Map(
+            segmentFiles.flatMap((file) => file.frames).map((frame) => [frame.tMs, frame]),
+          ).values(),
+        ].sort((a, b) => a.tMs - b.tMs),
+      };
+      writeFileSync(detsPath, JSON.stringify(combined));
       input.timings["paddleDetectMs"] = Date.now() - started;
       return { status: "ready", schedule: null };
     }
@@ -1262,46 +1331,6 @@ async function runPaddleStage(input: {
       unavailableReason: `paddle_detector_failed: ${message}`,
     };
   }
-}
-
-/** Dominant-wrist speed series (normalized u/s) from the pose sequence. */
-function dominantWristSpeeds(
-  sequence: PoseSequence,
-  window: { startMs: number; endMs: number },
-): Array<{ timestampMs: number; value: number }> {
-  // Choose the wrist with more total travel inside the window.
-  const travel = { left: 0, right: 0 };
-  const last: Record<string, { x: number; y: number } | undefined> = {};
-  const perWrist: Record<"left" | "right", Array<{ timestampMs: number; value: number }>> = {
-    left: [],
-    right: [],
-  };
-  const legacy = toLegacyPoseFrames(sequence);
-  for (const frame of legacy) {
-    for (const sideName of ["left", "right"] as const) {
-      const mark = frame.landmarks.find(
-        (landmark) => landmark.name === `${sideName}_wrist` && landmark.visibility >= 0.25,
-      );
-      if (!mark) continue;
-      const prior = last[sideName];
-      if (prior) {
-        const dtSec =
-          perWrist[sideName].length > 0
-            ? (frame.timestampMs - perWrist[sideName][perWrist[sideName].length - 1]!.timestampMs) /
-              1000
-            : 0.04;
-        const step = Math.hypot(mark.x - prior.x, mark.y - prior.y);
-        if (dtSec > 0 && dtSec <= 0.15) {
-          perWrist[sideName].push({ timestampMs: frame.timestampMs, value: step / dtSec });
-          if (frame.timestampMs >= window.startMs && frame.timestampMs <= window.endMs) {
-            travel[sideName] += step;
-          }
-        }
-      }
-      last[sideName] = { x: mark.x, y: mark.y };
-    }
-  }
-  return travel.right >= travel.left ? perWrist.right : perWrist.left;
 }
 
 interface BallStage {

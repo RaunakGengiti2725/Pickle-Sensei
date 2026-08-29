@@ -88,12 +88,17 @@ export interface LabRunReport {
   paddle: PaddleReportEntry | null;
   player?: PlayerStageReport | null;
   detectSpan?: {
-    mode: "full-window" | "event-gated";
+    mode: "full-window" | "event-gated" | "event-gated-tight";
     startMs: number;
     endMs: number;
     windowMs: number;
     spanMs: number;
     prePassEvents: number;
+    /** Present only in tight mode (--tight-window): the disjoint detector
+     * segments, their total coverage, and the dead time skipped vs the hull. */
+    segments?: Array<{ startMs: number; endMs: number }>;
+    coveredMs?: number;
+    savedMs?: number;
   } | null;
   /** Present only when --two-pass ran (adaptive detector schedule). */
   paddleSchedule?: import("./paddleSchedule.js").TwoPassSchedule | null;
