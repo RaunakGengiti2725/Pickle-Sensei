@@ -19,7 +19,7 @@ import {
   EXAMPLE_REVIEWS_PATH,
   type LoadedReviews,
 } from "../src/coachAgreement.js";
-import type { CoachReview } from "../src/coachReview.js";
+import type { CoachReview, DrillSuggestion } from "../src/coachReview.js";
 
 /* ------------------------------------------------------------------------ *
  * statistics — hand-computed fixtures
@@ -213,7 +213,7 @@ describe("planAssignments", () => {
 function review(overrides: Partial<CoachReview> & { coachId: string; item: string }): CoachReview {
   const { item, ...rest } = overrides;
   const base: CoachReview = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     reviewId: `${item}.${overrides.coachId}`,
     queueItemId: item,
     coachId: overrides.coachId,
@@ -224,15 +224,44 @@ function review(overrides: Partial<CoachReview> & { coachId: string; item: strin
     drillLibraryVersion: "drill-library-v0",
     strokeConfirmation: { kind: "confirmed", stroke: "FOREHAND_DINK" },
     overallQuality: { scaleId: "technique-quality-5pt-v1", value: 3 },
+    phaseEvaluations: [],
+    primaryFaultId: null,
     faults: [],
     drillSuggestions: [],
     confidence: 0.8,
     cannotEvaluate: null,
     rationale: "test fixture rationale long enough to pass validation",
+    provenance: {
+      coachQualificationSnapshot: {
+        coachId: overrides.coachId,
+        credentialRef: "cred-test",
+        registryStatus: "active",
+        provisionedAtIso: "2026-08-01T00:00:00.000Z",
+        provisionedBy: "test-fixture-admin",
+        snapshotAtIso: "2026-08-29T00:00:00.000Z",
+      },
+      videoRef: { path: "fixtures/none.mp4", annotatorId: null, annotationRevision: null },
+      analysisVersions: {},
+      rawLabelsShown: null,
+      adjudicationState: "unadjudicated",
+    },
     createdAtIso: "2026-08-29T00:00:00.000Z",
     submittedAtIso: "2026-08-29T00:00:00.000Z",
   };
   return { ...base, ...rest };
+}
+
+function drillSuggestion(drillId: string): DrillSuggestion {
+  return {
+    drillId,
+    freeText: "",
+    whyApplies: "fixture reasoning long enough",
+    role: "recommended",
+    progressionNote: null,
+    regressionNote: null,
+    equipmentNote: null,
+    skillLevelRelevance: "all",
+  };
 }
 
 function loaded(reviews: CoachReview[]): LoadedReviews {
@@ -266,11 +295,11 @@ describe("computeAgreement", () => {
           {
             faultId: "drive.arm_only_power",
             severity: 3,
-            evidence: { timestampsMs: [100], region: null },
+            evidence: { timestampsMs: [100], frames: [], region: null },
             rationale: "fixture rationale text",
           },
         ],
-        drillSuggestions: [{ drillId: "drill.skinny-singles", freeText: "" }],
+        drillSuggestions: [drillSuggestion("drill.skinny-singles")],
       }),
       review({
         coachId: "coach-b",
@@ -281,11 +310,11 @@ describe("computeAgreement", () => {
           {
             faultId: "drive.late_preparation",
             severity: 1,
-            evidence: { timestampsMs: [90], region: null },
+            evidence: { timestampsMs: [90], frames: [], region: null },
             rationale: "fixture rationale text",
           },
         ],
-        drillSuggestions: [{ drillId: "drill.wall-dink-rally", freeText: "" }],
+        drillSuggestions: [drillSuggestion("drill.wall-dink-rally")],
       }),
       review({ coachId: "coach-a", item: "case-2-E1" }),
       review({
@@ -345,7 +374,7 @@ describe("computeAgreement", () => {
     const fault = (severity: 1 | 2 | 3) => ({
       faultId: "dink.wristy_flick",
       severity,
-      evidence: { timestampsMs: [10], region: null },
+      evidence: { timestampsMs: [10], frames: [], region: null },
       rationale: "fixture rationale text",
     });
     const reviews = [
@@ -376,13 +405,13 @@ describe("primaryFault", () => {
         {
           faultId: "dink.backswing_too_big",
           severity: 1,
-          evidence: { timestampsMs: [1], region: null },
+          evidence: { timestampsMs: [1], frames: [], region: null },
           rationale: "fixture rationale",
         },
         {
           faultId: "dink.wristy_flick",
           severity: 3,
-          evidence: { timestampsMs: [2], region: null },
+          evidence: { timestampsMs: [2], frames: [], region: null },
           rationale: "fixture rationale",
         },
       ],

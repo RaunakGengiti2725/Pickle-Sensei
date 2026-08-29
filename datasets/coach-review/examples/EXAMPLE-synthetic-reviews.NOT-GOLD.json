@@ -4,93 +4,253 @@
   "eventRefNote": "eventRefs point at fabricated EXAMPLE-case ids that do not exist in any bench or gold dataset; held-out cases (wm-dink-01, afn-vic-rally1) are untouched.",
   "reviews": [
     {
-      "schemaVersion": 2,
+      "schemaVersion": 3,
       "reviewId": "EXAMPLE-case-1-E1.SYNTHETIC-coach-a",
       "queueItemId": "EXAMPLE-case-1-E1",
       "coachId": "SYNTHETIC-coach-a",
       "coachCredentialRef": "SYNTHETIC-cred-a",
-      "eventRef": { "caseId": "EXAMPLE-case-1", "eventIndex": 0 },
+      "eventRef": {
+        "caseId": "EXAMPLE-case-1",
+        "eventIndex": 0
+      },
       "strokeTaxonomyVersion": "pickleball-stroke-taxonomy-v3",
       "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
       "drillLibraryVersion": "drill-library-v0",
-      "strokeConfirmation": { "kind": "confirmed", "stroke": "FOREHAND_DINK" },
-      "overallQuality": { "scaleId": "technique-quality-5pt-v1", "value": 3 },
+      "strokeConfirmation": {
+        "kind": "confirmed",
+        "stroke": "FOREHAND_DINK"
+      },
+      "overallQuality": {
+        "scaleId": "technique-quality-5pt-v1",
+        "value": 3
+      },
       "faults": [
         {
           "faultId": "dink.wristy_flick",
           "severity": 2,
-          "evidence": { "timestampsMs": [1200, 1260], "region": null },
+          "evidence": {
+            "timestampsMs": [
+              1200,
+              1260
+            ],
+            "region": null,
+            "frames": []
+          },
           "rationale": "SYNTHETIC fixture rationale: fabricated observation for pipeline proof only."
         }
       ],
-      "drillSuggestions": [{ "drillId": "drill.wall-dink-rally", "freeText": "" }],
+      "drillSuggestions": [
+        {
+          "drillId": "drill.wall-dink-rally",
+          "freeText": "",
+          "whyApplies": "SYNTHETIC fixture reasoning for pipeline proof only.",
+          "role": "recommended",
+          "progressionNote": null,
+          "regressionNote": null,
+          "equipmentNote": null,
+          "skillLevelRelevance": "all"
+        }
+      ],
       "confidence": 0.8,
       "cannotEvaluate": null,
       "rationale": "SYNTHETIC fixture rationale: fabricated content used only to exercise the agreement pipeline.",
       "createdAtIso": "2026-08-29T00:00:00.000Z",
-      "submittedAtIso": "2026-08-29T00:00:00.000Z"
+      "submittedAtIso": "2026-08-29T00:00:00.000Z",
+      "phaseEvaluations": [
+        {
+          "phaseId": "contact",
+          "assessment": "not_observable",
+          "note": "SYNTHETIC fixture: no phase actually observed."
+        }
+      ],
+      "primaryFaultId": "dink.wristy_flick",
+      "provenance": {
+        "coachQualificationSnapshot": {
+          "coachId": "SYNTHETIC-coach-a",
+          "credentialRef": "SYNTHETIC-cred-a",
+          "registryStatus": "active",
+          "provisionedAtIso": "2026-08-01T00:00:00.000Z",
+          "provisionedBy": "SYNTHETIC-fixture-engineering",
+          "snapshotAtIso": "2026-08-29T00:00:00.000Z"
+        },
+        "videoRef": {
+          "path": "EXAMPLE-fixtures/none.mp4",
+          "annotatorId": null,
+          "annotationRevision": null
+        },
+        "analysisVersions": {},
+        "rawLabelsShown": null,
+        "adjudicationState": "unadjudicated"
+      }
     },
     {
-      "schemaVersion": 2,
+      "schemaVersion": 3,
       "reviewId": "EXAMPLE-case-1-E1.SYNTHETIC-coach-b",
       "queueItemId": "EXAMPLE-case-1-E1",
       "coachId": "SYNTHETIC-coach-b",
       "coachCredentialRef": "SYNTHETIC-cred-b",
-      "eventRef": { "caseId": "EXAMPLE-case-1", "eventIndex": 0 },
+      "eventRef": {
+        "caseId": "EXAMPLE-case-1",
+        "eventIndex": 0
+      },
       "strokeTaxonomyVersion": "pickleball-stroke-taxonomy-v3",
       "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
       "drillLibraryVersion": "drill-library-v0",
-      "strokeConfirmation": { "kind": "confirmed", "stroke": "FOREHAND_DINK" },
-      "overallQuality": { "scaleId": "technique-quality-5pt-v1", "value": 4 },
+      "strokeConfirmation": {
+        "kind": "confirmed",
+        "stroke": "FOREHAND_DINK"
+      },
+      "overallQuality": {
+        "scaleId": "technique-quality-5pt-v1",
+        "value": 4
+      },
       "faults": [
         {
           "faultId": "dink.wristy_flick",
           "severity": 1,
-          "evidence": { "timestampsMs": [1210], "region": null },
+          "evidence": {
+            "timestampsMs": [
+              1210
+            ],
+            "region": null,
+            "frames": []
+          },
           "rationale": "SYNTHETIC fixture rationale: fabricated observation for pipeline proof only."
         }
       ],
-      "drillSuggestions": [{ "drillId": "drill.wall-dink-rally", "freeText": "" }],
+      "drillSuggestions": [
+        {
+          "drillId": "drill.wall-dink-rally",
+          "freeText": "",
+          "whyApplies": "SYNTHETIC fixture reasoning for pipeline proof only.",
+          "role": "recommended",
+          "progressionNote": null,
+          "regressionNote": null,
+          "equipmentNote": null,
+          "skillLevelRelevance": "all"
+        }
+      ],
       "confidence": 0.7,
       "cannotEvaluate": null,
       "rationale": "SYNTHETIC fixture rationale: fabricated content used only to exercise the agreement pipeline.",
       "createdAtIso": "2026-08-29T00:00:00.000Z",
-      "submittedAtIso": "2026-08-29T00:00:00.000Z"
+      "submittedAtIso": "2026-08-29T00:00:00.000Z",
+      "phaseEvaluations": [
+        {
+          "phaseId": "contact",
+          "assessment": "not_observable",
+          "note": "SYNTHETIC fixture: no phase actually observed."
+        }
+      ],
+      "primaryFaultId": "dink.wristy_flick",
+      "provenance": {
+        "coachQualificationSnapshot": {
+          "coachId": "SYNTHETIC-coach-b",
+          "credentialRef": "SYNTHETIC-cred-b",
+          "registryStatus": "active",
+          "provisionedAtIso": "2026-08-01T00:00:00.000Z",
+          "provisionedBy": "SYNTHETIC-fixture-engineering",
+          "snapshotAtIso": "2026-08-29T00:00:00.000Z"
+        },
+        "videoRef": {
+          "path": "EXAMPLE-fixtures/none.mp4",
+          "annotatorId": null,
+          "annotationRevision": null
+        },
+        "analysisVersions": {},
+        "rawLabelsShown": null,
+        "adjudicationState": "unadjudicated"
+      }
     },
     {
-      "schemaVersion": 2,
+      "schemaVersion": 3,
       "reviewId": "EXAMPLE-case-2-E1.SYNTHETIC-coach-a",
       "queueItemId": "EXAMPLE-case-2-E1",
       "coachId": "SYNTHETIC-coach-a",
       "coachCredentialRef": "SYNTHETIC-cred-a",
-      "eventRef": { "caseId": "EXAMPLE-case-2", "eventIndex": 0 },
+      "eventRef": {
+        "caseId": "EXAMPLE-case-2",
+        "eventIndex": 0
+      },
       "strokeTaxonomyVersion": "pickleball-stroke-taxonomy-v3",
       "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
       "drillLibraryVersion": "drill-library-v0",
-      "strokeConfirmation": { "kind": "confirmed", "stroke": "FOREHAND_DRIVE" },
-      "overallQuality": { "scaleId": "technique-quality-5pt-v1", "value": 2 },
+      "strokeConfirmation": {
+        "kind": "confirmed",
+        "stroke": "FOREHAND_DRIVE"
+      },
+      "overallQuality": {
+        "scaleId": "technique-quality-5pt-v1",
+        "value": 2
+      },
       "faults": [
         {
           "faultId": "drive.arm_only_power",
           "severity": 3,
-          "evidence": { "timestampsMs": [2400], "region": null },
+          "evidence": {
+            "timestampsMs": [
+              2400
+            ],
+            "region": null,
+            "frames": []
+          },
           "rationale": "SYNTHETIC fixture rationale: fabricated observation for pipeline proof only."
         }
       ],
-      "drillSuggestions": [{ "drillId": "drill.skinny-singles", "freeText": "" }],
+      "drillSuggestions": [
+        {
+          "drillId": "drill.skinny-singles",
+          "freeText": "",
+          "whyApplies": "SYNTHETIC fixture reasoning for pipeline proof only.",
+          "role": "recommended",
+          "progressionNote": null,
+          "regressionNote": null,
+          "equipmentNote": null,
+          "skillLevelRelevance": "all"
+        }
+      ],
       "confidence": 0.9,
       "cannotEvaluate": null,
       "rationale": "SYNTHETIC fixture rationale: fabricated content used only to exercise the agreement pipeline.",
       "createdAtIso": "2026-08-29T00:00:00.000Z",
-      "submittedAtIso": "2026-08-29T00:00:00.000Z"
+      "submittedAtIso": "2026-08-29T00:00:00.000Z",
+      "phaseEvaluations": [
+        {
+          "phaseId": "contact",
+          "assessment": "not_observable",
+          "note": "SYNTHETIC fixture: no phase actually observed."
+        }
+      ],
+      "primaryFaultId": "drive.arm_only_power",
+      "provenance": {
+        "coachQualificationSnapshot": {
+          "coachId": "SYNTHETIC-coach-a",
+          "credentialRef": "SYNTHETIC-cred-a",
+          "registryStatus": "active",
+          "provisionedAtIso": "2026-08-01T00:00:00.000Z",
+          "provisionedBy": "SYNTHETIC-fixture-engineering",
+          "snapshotAtIso": "2026-08-29T00:00:00.000Z"
+        },
+        "videoRef": {
+          "path": "EXAMPLE-fixtures/none.mp4",
+          "annotatorId": null,
+          "annotationRevision": null
+        },
+        "analysisVersions": {},
+        "rawLabelsShown": null,
+        "adjudicationState": "unadjudicated"
+      }
     },
     {
-      "schemaVersion": 2,
+      "schemaVersion": 3,
       "reviewId": "EXAMPLE-case-2-E1.SYNTHETIC-coach-b",
       "queueItemId": "EXAMPLE-case-2-E1",
       "coachId": "SYNTHETIC-coach-b",
       "coachCredentialRef": "SYNTHETIC-cred-b",
-      "eventRef": { "caseId": "EXAMPLE-case-2", "eventIndex": 0 },
+      "eventRef": {
+        "caseId": "EXAMPLE-case-2",
+        "eventIndex": 0
+      },
       "strokeTaxonomyVersion": "pickleball-stroke-taxonomy-v3",
       "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
       "drillLibraryVersion": "drill-library-v0",
@@ -99,61 +259,170 @@
         "stroke": "BACKHAND_DRIVE",
         "note": "SYNTHETIC fixture correction note for pipeline proof."
       },
-      "overallQuality": { "scaleId": "technique-quality-5pt-v1", "value": 4 },
+      "overallQuality": {
+        "scaleId": "technique-quality-5pt-v1",
+        "value": 4
+      },
       "faults": [
         {
           "faultId": "drive.late_preparation",
           "severity": 2,
-          "evidence": { "timestampsMs": [2300], "region": null },
+          "evidence": {
+            "timestampsMs": [
+              2300
+            ],
+            "region": null,
+            "frames": []
+          },
           "rationale": "SYNTHETIC fixture rationale: fabricated observation for pipeline proof only."
         }
       ],
-      "drillSuggestions": [{ "drillId": null, "freeText": "SYNTHETIC free-text drill suggestion." }],
+      "drillSuggestions": [
+        {
+          "drillId": null,
+          "freeText": "SYNTHETIC free-text drill suggestion.",
+          "whyApplies": "SYNTHETIC fixture reasoning for pipeline proof only.",
+          "role": "recommended",
+          "progressionNote": null,
+          "regressionNote": null,
+          "equipmentNote": null,
+          "skillLevelRelevance": "all"
+        }
+      ],
       "confidence": 0.6,
       "cannotEvaluate": null,
       "rationale": "SYNTHETIC fixture rationale: fabricated content used only to exercise the agreement pipeline.",
       "createdAtIso": "2026-08-29T00:00:00.000Z",
-      "submittedAtIso": "2026-08-29T00:00:00.000Z"
+      "submittedAtIso": "2026-08-29T00:00:00.000Z",
+      "phaseEvaluations": [
+        {
+          "phaseId": "contact",
+          "assessment": "not_observable",
+          "note": "SYNTHETIC fixture: no phase actually observed."
+        }
+      ],
+      "primaryFaultId": "drive.late_preparation",
+      "provenance": {
+        "coachQualificationSnapshot": {
+          "coachId": "SYNTHETIC-coach-b",
+          "credentialRef": "SYNTHETIC-cred-b",
+          "registryStatus": "active",
+          "provisionedAtIso": "2026-08-01T00:00:00.000Z",
+          "provisionedBy": "SYNTHETIC-fixture-engineering",
+          "snapshotAtIso": "2026-08-29T00:00:00.000Z"
+        },
+        "videoRef": {
+          "path": "EXAMPLE-fixtures/none.mp4",
+          "annotatorId": null,
+          "annotationRevision": null
+        },
+        "analysisVersions": {},
+        "rawLabelsShown": null,
+        "adjudicationState": "unadjudicated"
+      }
     },
     {
-      "schemaVersion": 2,
+      "schemaVersion": 3,
       "reviewId": "EXAMPLE-case-3-E1.SYNTHETIC-coach-a",
       "queueItemId": "EXAMPLE-case-3-E1",
       "coachId": "SYNTHETIC-coach-a",
       "coachCredentialRef": "SYNTHETIC-cred-a",
-      "eventRef": { "caseId": "EXAMPLE-case-3", "eventIndex": 0 },
+      "eventRef": {
+        "caseId": "EXAMPLE-case-3",
+        "eventIndex": 0
+      },
       "strokeTaxonomyVersion": "pickleball-stroke-taxonomy-v3",
       "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
       "drillLibraryVersion": "drill-library-v0",
-      "strokeConfirmation": { "kind": "confirmed", "stroke": "SERVE" },
-      "overallQuality": { "scaleId": "technique-quality-5pt-v1", "value": 5 },
+      "strokeConfirmation": {
+        "kind": "confirmed",
+        "stroke": "SERVE"
+      },
+      "overallQuality": {
+        "scaleId": "technique-quality-5pt-v1",
+        "value": 5
+      },
       "faults": [],
       "drillSuggestions": [],
       "confidence": 0.85,
       "cannotEvaluate": null,
       "rationale": "SYNTHETIC fixture rationale: fabricated content used only to exercise the agreement pipeline.",
       "createdAtIso": "2026-08-29T00:00:00.000Z",
-      "submittedAtIso": "2026-08-29T00:00:00.000Z"
+      "submittedAtIso": "2026-08-29T00:00:00.000Z",
+      "phaseEvaluations": [
+        {
+          "phaseId": "contact",
+          "assessment": "not_observable",
+          "note": "SYNTHETIC fixture: no phase actually observed."
+        }
+      ],
+      "primaryFaultId": null,
+      "provenance": {
+        "coachQualificationSnapshot": {
+          "coachId": "SYNTHETIC-coach-a",
+          "credentialRef": "SYNTHETIC-cred-a",
+          "registryStatus": "active",
+          "provisionedAtIso": "2026-08-01T00:00:00.000Z",
+          "provisionedBy": "SYNTHETIC-fixture-engineering",
+          "snapshotAtIso": "2026-08-29T00:00:00.000Z"
+        },
+        "videoRef": {
+          "path": "EXAMPLE-fixtures/none.mp4",
+          "annotatorId": null,
+          "annotationRevision": null
+        },
+        "analysisVersions": {},
+        "rawLabelsShown": null,
+        "adjudicationState": "unadjudicated"
+      }
     },
     {
-      "schemaVersion": 2,
+      "schemaVersion": 3,
       "reviewId": "EXAMPLE-case-3-E1.SYNTHETIC-coach-c",
       "queueItemId": "EXAMPLE-case-3-E1",
       "coachId": "SYNTHETIC-coach-c",
       "coachCredentialRef": "SYNTHETIC-cred-c",
-      "eventRef": { "caseId": "EXAMPLE-case-3", "eventIndex": 0 },
+      "eventRef": {
+        "caseId": "EXAMPLE-case-3",
+        "eventIndex": 0
+      },
       "strokeTaxonomyVersion": "pickleball-stroke-taxonomy-v3",
       "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
       "drillLibraryVersion": "drill-library-v0",
-      "strokeConfirmation": { "kind": "cannot_judge", "reason": "SYNTHETIC: camera angle fixture reason." },
+      "strokeConfirmation": {
+        "kind": "cannot_judge",
+        "reason": "SYNTHETIC: camera angle fixture reason."
+      },
       "overallQuality": null,
       "faults": [],
       "drillSuggestions": [],
       "confidence": 0.2,
-      "cannotEvaluate": { "reason": "SYNTHETIC fixture: fabricated cannot-evaluate outcome for pipeline proof." },
+      "cannotEvaluate": {
+        "reason": "SYNTHETIC fixture: fabricated cannot-evaluate outcome for pipeline proof."
+      },
       "rationale": "",
       "createdAtIso": "2026-08-29T00:00:00.000Z",
-      "submittedAtIso": "2026-08-29T00:00:00.000Z"
+      "submittedAtIso": "2026-08-29T00:00:00.000Z",
+      "phaseEvaluations": [],
+      "primaryFaultId": null,
+      "provenance": {
+        "coachQualificationSnapshot": {
+          "coachId": "SYNTHETIC-coach-c",
+          "credentialRef": "SYNTHETIC-cred-c",
+          "registryStatus": "active",
+          "provisionedAtIso": "2026-08-01T00:00:00.000Z",
+          "provisionedBy": "SYNTHETIC-fixture-engineering",
+          "snapshotAtIso": "2026-08-29T00:00:00.000Z"
+        },
+        "videoRef": {
+          "path": "EXAMPLE-fixtures/none.mp4",
+          "annotatorId": null,
+          "annotationRevision": null
+        },
+        "analysisVersions": {},
+        "rawLabelsShown": null,
+        "adjudicationState": "unadjudicated"
+      }
     }
   ]
 }
