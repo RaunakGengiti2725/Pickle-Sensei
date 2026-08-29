@@ -1,0 +1,347 @@
+{
+  "gateVersion": "g08-f22-evidence-gate-v1.0-frozen",
+  "frozenGateDocSha256": "e32ceb29ed9663506d17e07f579cd705217e87cec0807e052508160799052b1c",
+  "labelSchemaVersion": "g08-f22-evidence-labels-v1",
+  "thresholdsVersion": "capture-envelope-thresholds-v0.3-provisional",
+  "generatedBy": "packages/capture-envelope/src/g08EvalGate.ts",
+  "generatedAtIso": "2026-08-29T17:45:38.499Z",
+  "labelFile": "datasets/experiments/wave-g/g08-labels.json",
+  "totalLabelRecords": 0,
+  "effectiveLabels": 0,
+  "supersededLabels": 0,
+  "overallMetrics": {
+    "n": 0,
+    "nAmbiguous": 0,
+    "nSafe": 0,
+    "nDegraded": 0,
+    "nUnsafe": 0,
+    "distinctSessionKeys": 0,
+    "falseSafeRate": {
+      "numerator": 0,
+      "denominator": 0,
+      "rate": null
+    },
+    "falseRejectRate": {
+      "numerator": 0,
+      "denominator": 0,
+      "rate": null
+    },
+    "missedDegradationRate": {
+      "numerator": 0,
+      "denominator": 0,
+      "rate": null
+    },
+    "usableRateGivenSupported": {
+      "numerator": 0,
+      "denominator": 0,
+      "rate": null
+    },
+    "usableRateGivenFlagged": {
+      "numerator": 0,
+      "denominator": 0,
+      "rate": null
+    },
+    "silentFailureRateGivenSupported": {
+      "numerator": 0,
+      "denominator": 0,
+      "rate": null
+    }
+  },
+  "families": [
+    {
+      "family": "blur_masked_by_noise",
+      "metrics": {
+        "n": 0,
+        "nAmbiguous": 0,
+        "nSafe": 0,
+        "nDegraded": 0,
+        "nUnsafe": 0,
+        "distinctSessionKeys": 0,
+        "falseSafeRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "falseRejectRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "missedDegradationRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "usableRateGivenSupported": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "usableRateGivenFlagged": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "silentFailureRateGivenSupported": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        }
+      },
+      "evidenceSufficient": false,
+      "decidable": false,
+      "blockers": [
+        "labeled windows 0 < 10",
+        "UNSAFE+DEGRADED 0 < 5",
+        "SAFE 0 < 3",
+        "distinct sessions 0 < 3"
+      ]
+    },
+    {
+      "family": "bimodal_exposure",
+      "metrics": {
+        "n": 0,
+        "nAmbiguous": 0,
+        "nSafe": 0,
+        "nDegraded": 0,
+        "nUnsafe": 0,
+        "distinctSessionKeys": 0,
+        "falseSafeRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "falseRejectRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "missedDegradationRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "usableRateGivenSupported": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "usableRateGivenFlagged": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "silentFailureRateGivenSupported": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        }
+      },
+      "evidenceSufficient": false,
+      "decidable": false,
+      "blockers": [
+        "labeled windows 0 < 10",
+        "UNSAFE+DEGRADED 0 < 5",
+        "SAFE 0 < 3",
+        "distinct sessions 0 < 3"
+      ]
+    },
+    {
+      "family": "strobing_exposure",
+      "metrics": {
+        "n": 0,
+        "nAmbiguous": 0,
+        "nSafe": 0,
+        "nDegraded": 0,
+        "nUnsafe": 0,
+        "distinctSessionKeys": 0,
+        "falseSafeRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "falseRejectRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "missedDegradationRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "usableRateGivenSupported": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "usableRateGivenFlagged": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "silentFailureRateGivenSupported": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        }
+      },
+      "evidenceSufficient": false,
+      "decidable": false,
+      "blockers": [
+        "labeled windows 0 < 10",
+        "UNSAFE+DEGRADED 0 < 5",
+        "SAFE 0 < 3",
+        "distinct sessions 0 < 3"
+      ]
+    },
+    {
+      "family": "upscaled_content",
+      "metrics": {
+        "n": 0,
+        "nAmbiguous": 0,
+        "nSafe": 0,
+        "nDegraded": 0,
+        "nUnsafe": 0,
+        "distinctSessionKeys": 0,
+        "falseSafeRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "falseRejectRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "missedDegradationRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "usableRateGivenSupported": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "usableRateGivenFlagged": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "silentFailureRateGivenSupported": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        }
+      },
+      "evidenceSufficient": false,
+      "decidable": false,
+      "blockers": [
+        "labeled windows 0 < 10",
+        "UNSAFE+DEGRADED 0 < 5",
+        "SAFE 0 < 3",
+        "distinct sessions 0 < 3"
+      ]
+    },
+    {
+      "family": "tiny_subject",
+      "metrics": {
+        "n": 0,
+        "nAmbiguous": 0,
+        "nSafe": 0,
+        "nDegraded": 0,
+        "nUnsafe": 0,
+        "distinctSessionKeys": 0,
+        "falseSafeRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "falseRejectRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "missedDegradationRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "usableRateGivenSupported": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "usableRateGivenFlagged": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "silentFailureRateGivenSupported": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        }
+      },
+      "evidenceSufficient": false,
+      "decidable": false,
+      "blockers": [
+        "labeled windows 0 < 10",
+        "UNSAFE+DEGRADED 0 < 5",
+        "SAFE 0 < 3",
+        "distinct sessions 0 < 3"
+      ]
+    },
+    {
+      "family": "camera_shake",
+      "metrics": {
+        "n": 0,
+        "nAmbiguous": 0,
+        "nSafe": 0,
+        "nDegraded": 0,
+        "nUnsafe": 0,
+        "distinctSessionKeys": 0,
+        "falseSafeRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "falseRejectRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "missedDegradationRate": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "usableRateGivenSupported": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "usableRateGivenFlagged": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        },
+        "silentFailureRateGivenSupported": {
+          "numerator": 0,
+          "denominator": 0,
+          "rate": null
+        }
+      },
+      "evidenceSufficient": false,
+      "decidable": false,
+      "blockers": [
+        "labeled windows 0 < 10",
+        "UNSAFE+DEGRADED 0 < 5",
+        "SAFE 0 < 3",
+        "distinct sessions 0 < 3"
+      ]
+    }
+  ],
+  "status": "BLOCKED_EXTERNAL: 6/6 families NOT DECIDABLE — human labels are the only missing input (blur_masked_by_noise, bimodal_exposure, strobing_exposure, upscaled_content, tiny_subject, camera_shake)"
+}

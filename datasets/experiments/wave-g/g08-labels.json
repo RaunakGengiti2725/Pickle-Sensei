@@ -1,0 +1,5 @@
+{
+  "schemaVersion": "g08-f22-evidence-labels-v1",
+  "provenance": "EMPTY — no human labeling session has occurred yet. This file is the single missing input to the frozen g08 gate. It may only be filled by a human reviewing the Tier-C candidates in g08-review-pack.json (or windows of their choosing); machine-written labels are invalid per g08LabelSchema.ts and are rejected by validation.",
+  "labels": []
+}
