@@ -1,0 +1,78 @@
+{
+  "workstream": "g20-selective-risk",
+  "branch": "devin/wave-g/g20-selective-risk",
+  "base": "devin/1787988068-wave-c-integration @ 104ea0f",
+  "date": "2026-08-29",
+  "mission": "build selective-risk curves for the confidence-emitting cascade stages (contact, stroke, ownership): sweep the answer/abstain confidence threshold and measure coverage vs silent-failure rate on replayable committed labeled data, grouped by independent session; identify HIGH->answer / INTERMEDIATE->partial / LOW->abstain operating points; report whether current thresholds sit on the efficient frontier. Measurement only — no production threshold changed.",
+  "method": "new script datasets/experiments/wave-g/g20-selective-risk.ts reuses the unmodified committed-data replay harnesses (e02 contactGoldReplay for contact, e03 strokeHeuristicBench for stroke, D02 ownershipBench dual-frame loader for ownership). For each stage every evaluable unit becomes (sessionGroup, confidence|null, wrong|null); stage-internal abstentions stay in every coverage denominator. The threshold sweep visits every distinct observed confidence plus t=0 (the current production operating point: no downstream confidence gate exists at any stage) and records counts pooled and per session group, plus Pareto-frontier membership per point. Full curves: datasets/experiments/wave-g/g20-selective-risk-curves.json.",
+  "datasetScopeAndGrouping": {
+    "contact": "10 target-owned gold contact events (wave-D contact sidecars) across 5 source sessions (dvids-944403 n=2, dvids-faead n=4, dvids-marne n=1, dvids-sasebo n=2, dvids-wgm n=1); LINUX-CPU, committed wave-a pose, ORACLE ball (gold frames, conf 0.9), no paddle track",
+    "stroke": "18 evaluable stroke-gold labels across 3 source sessions (dvids-marne-2024 n=12, afn-sasebo-2025-06 n=5, dvids-warriorgames-2026 n=1); 0 answered rows excluded as unverifiable",
+    "ownership": "38 dev dual frames across 5 source sessions (dvids-944403 n=14, afn-sasebo-2025-06 n=14, wm-tournament-2014 n=6, dvids-faead n=3, dvids-marne-2024 n=1); frames without committed pose (20) are incumbent-analog abstentions and stay in the denominator"
+  },
+  "holdoutStatement": "wm-dink-01 and afn-vic-rally1 were never read, listed, or referenced: the contact and stroke harnesses exclude them by construction and the ownership loader was called with includeHeldOut=false.",
+  "configuration": {
+    "contactWrongness": "silent-failure-v1 CONTACT_MARKER: |err| > 132ms, or 66 < |err| <= 132ms without ball/paddle confirmation (paddle unreachable on Linux)",
+    "strokeWrongness": "confidently-wrong convention: L1 wrong OR L2 wrong among gold-verifiable components",
+    "ownershipScore": "DERIVED selection margin 1 - dBest/dSecond over veto-surviving candidates for the incumbent S3 frame-level analog — production ownership emits NO confidence (finding); sole-survivor frames answer at margin 1 and cannot be ranked by it",
+    "productionThresholdsChanged": false
+  },
+  "measuredResults": {
+    "contact": {
+      "nUnits": 10,
+      "currentPoint_t0": { "answered": 7, "wrongAnswered": 2, "coverage": 0.7, "riskOfAnswered": 0.286, "onFrontier": true },
+      "curve": [
+        { "t": 0.86, "answered": 1, "wrong": 0 },
+        { "t": 0.782, "answered": 2, "wrong": 0 },
+        { "t": 0.683, "answered": 3, "wrong": 1 },
+        { "t": 0.55, "answered": 6, "wrong": 2 },
+        { "t": 0.488, "answered": 7, "wrong": 2 }
+      ],
+      "zeroObservedRiskPoint": { "t": 0.782, "answered": 2, "wrong": 0, "coverage": 0.2 }
+    },
+    "stroke": {
+      "nUnits": 18,
+      "currentPoint_t0": { "answered": 5, "wrongAnswered": 2, "coverage": 0.278, "riskOfAnswered": 0.4, "onFrontier": true },
+      "curve": [
+        { "t": 0.85, "answered": 1, "wrong": 0 },
+        { "t": 0.8, "answered": 4, "wrong": 1 },
+        { "t": 0.6, "answered": 5, "wrong": 2 }
+      ],
+      "zeroObservedRiskPoint": { "t": 0.85, "answered": 1, "wrong": 0, "coverage": 0.056 }
+    },
+    "ownership": {
+      "nUnits": 38,
+      "soleSurvivorAnswers": 10,
+      "currentPoint_t0_vetoOnly": { "answered": 17, "wrongAnswered": 4, "coverage": 0.447, "riskOfAnswered": 0.235, "onFrontier": true },
+      "curve": [
+        { "t": 1.0, "answered": 10, "wrong": 0 },
+        { "t": 0.717, "answered": 11, "wrong": 1 },
+        { "t": 0.575, "answered": 12, "wrong": 1 },
+        { "t": 0.509, "answered": 14, "wrong": 2 },
+        { "t": 0.381, "answered": 16, "wrong": 3 },
+        { "t": 0.13, "answered": 17, "wrong": 4 }
+      ],
+      "zeroObservedRiskPoint": { "t": 1.0, "answered": 10, "wrong": 0, "coverage": 0.263 }
+    }
+  },
+  "operatingPointCandidates": {
+    "caveat": "candidates measured on this data only (n=10/18/38 units, 3-5 session groups) — NOT population guarantees and NOT production changes; validating them requires fresh labeled sessions",
+    "contact": { "HIGH_answer": "conf >= 0.78 (2/10 answered, 0 wrong)", "INTERMEDIATE_partial": "0.488 <= conf < 0.78 (5 answered, 2 wrong — show with visible uncertainty)", "LOW_abstain": "estimator-internal abstention (3/10 events)" },
+    "stroke": { "HIGH_answer": "conf >= 0.85 (1/18 answered, 0 wrong)", "INTERMEDIATE_partial": "0.6 <= conf < 0.85 (4 answered, 2 wrong)", "LOW_abstain": "classifier-internal UNKNOWN (13/18 labels)" },
+    "ownership": { "HIGH_answer": "margin >= 0.575 or sole veto survivor (12 answered, 1 wrong)", "INTERMEDIATE_partial": "0.13 <= margin < 0.575 (5 answered, 3 wrong)", "LOW_abstain": "no veto survivor or no pose (21/38 frames)" }
+  },
+  "findings": [
+    "Current operating points (t=0, answer-everything-committed) sit on the Pareto frontier at every stage — but only as the maximum-coverage endpoint; each stage leaves a measurably safer high-confidence band unused.",
+    "Contact confidence is informative but shows one inversion: the mid-band (0.55-0.683) is dominated — both wrong markers carry conf 0.55-0.683 while the lowest emitted conf (0.488) answer is correct; the 0.55/0.7 confidence caps compress the scale (max emitted 0.86 under ORACLE ball).",
+    "Stroke is the riskiest answering stage measured: 2/5 committed labels wrong (risk 0.4 among answered) with only 5/18 coverage; conf >= 0.8 already cuts risk to 1/4 — consistent with f15's stroke label starvation.",
+    "Ownership emits no confidence in production — the veto is binary. The derived margin cleanly separates this data: all 10 sole-survivor picks are correct, and 4/7 margin-ranked contested picks below margin 0.717 include all 4 wrong picks; a margin >= 0.575 gate would have kept 12/17 answers with 1 wrong.",
+    "All curves are exact over these samples but small-n (10/18/38 units; wrong counts 2/2/4); per-session counts show errors concentrate in single sessions (contact: dvids-faead+dvids-sasebo; stroke: dvids-marne+wgm; ownership: all 4 wrong in dvids-944403), so pooled rates are optimistic about cross-session stability."
+  ],
+  "verdict": "YELLOW",
+  "verdictRationale": "The curves were measured honestly with counts at every point on replayable committed data and current thresholds were located on (the max-coverage end of) the efficient frontier, but n is too small (2-4 wrong answers per stage, errors concentrated in single sessions) to promote any operating point, and the ownership score is a derived margin because production emits no confidence there — so this is validated tooling plus provisional operating-point candidates, not a threshold recommendation.",
+  "artifacts": [
+    "datasets/experiments/wave-g/g20-selective-risk.ts",
+    "datasets/experiments/wave-g/g20-selective-risk-curves.json",
+    "datasets/experiments/wave-g/g20-selective-risk-summary.json"
+  ]
+}
