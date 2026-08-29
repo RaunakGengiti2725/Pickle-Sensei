@@ -27,7 +27,12 @@
       "declaredLicenseTermsPermitCommercialUse": true,
       "itemCount": 338,
       "countType": "images",
-      "classes": ["ball", "player", "paddle", "PB-Paddle"],
+      "classes": [
+        "ball",
+        "player",
+        "paddle",
+        "PB-Paddle"
+      ],
       "status": "registered_not_downloaded",
       "trainingEligible": false,
       "commercialTrainingClearance": "not_cleared",
@@ -61,7 +66,9 @@
         "validation": 6028,
         "test": 2748
       },
-      "classes": ["pickleball"],
+      "classes": [
+        "pickleball"
+      ],
       "status": "registered_not_downloaded",
       "trainingEligible": false,
       "commercialTrainingClearance": "not_cleared",
@@ -92,8 +99,13 @@
       "modality": "youtube_segment_metadata",
       "globalRowCount": 934,
       "pickleballRowCount": 2,
-      "pickleballActions": ["Punch volley"],
-      "pickleballSegmentDurationsSeconds": [2, 2],
+      "pickleballActions": [
+        "Punch volley"
+      ],
+      "pickleballSegmentDurationsSeconds": [
+        2,
+        2
+      ],
       "mediaDistribution": "not_distributed_by_dataset",
       "mediaLicenseForPickleballRows": "not_declared",
       "declaredMediaLicenseTermsPermitCommercialUse": null,
@@ -108,12 +120,19 @@
     {
       "id": "university-of-rochester-pickleball-analytics",
       "name": "University of Rochester Pickleball Analytics senior design dataset",
-      "officialUrls": ["https://www.hajim.rochester.edu/senior-design-day/pickleball-analytics/"],
+      "officialUrls": [
+        "https://www.hajim.rochester.edu/senior-design-day/pickleball-analytics/"
+      ],
       "task": "ball_tracking",
       "modality": "video_frames_with_ball_coordinates",
       "trimmedFrameCount": 12810,
       "ballLabeledFrameCount": 12000,
-      "labelFields": ["Frame", "Visibility", "X", "Y"],
+      "labelFields": [
+        "Frame",
+        "Visibility",
+        "X",
+        "Y"
+      ],
       "mediaDistribution": "not_published",
       "declaredDatasetLicense": "none_found",
       "declaredMediaLicenseTermsPermitCommercialUse": null,
@@ -127,7 +146,9 @@
     {
       "id": "ball-tracking-pickleball-github",
       "name": "TrackNet-Pickleball repository",
-      "officialUrls": ["https://github.com/shivam-d11/Ball-Tracking-PickleBall"],
+      "officialUrls": [
+        "https://github.com/shivam-d11/Ball-Tracking-PickleBall"
+      ],
       "task": "ball_tracking_code_and_weights",
       "modality": "code_and_model_weights",
       "repositoryLicense": "Apache-2.0",
@@ -178,7 +199,9 @@
     {
       "id": "scientific-reports-mctn-pickleball-dataset-claim",
       "name": "Pickleball Dataset referenced by the MCTN Scientific Reports paper",
-      "officialUrls": ["https://www.nature.com/articles/s41598-025-33985-6"],
+      "officialUrls": [
+        "https://www.nature.com/articles/s41598-025-33985-6"
+      ],
       "task": "claimed_pose_and_action_detection",
       "modality": "not_retrievable",
       "itemCount": "not_reported",
@@ -200,6 +223,334 @@
       "matchingRepositoryCount": 20,
       "usableArtifactCount": 0,
       "result": "All 20 matching sportsgirl/Pickleball01 through Pickleball20 repositories contained only .gitattributes and had no dataset card, media, labels, or license."
+    }
+  ],
+  "freshCandidates": {
+    "addedAt": "2026-08-29",
+    "workstream": "wave-c/c16-data-acquisition",
+    "policy": "role=fresh_candidate, label-blind holdout pool; excluded from datasets/corpus and from all splits/training until a future freeze registers them through the acquisition front door.",
+    "totalBytes": 181080528,
+    "items": [
+      {
+        "id": "yt-tJuJ4MQdYy0",
+        "role": "fresh_candidate",
+        "labelBlind": true,
+        "path": "datasets/pickleball/fresh-candidates/yt-tJuJ4MQdYy0.mp4",
+        "sourceUrl": "https://www.youtube.com/watch?v=tJuJ4MQdYy0",
+        "title": "2.5 DUPR Rotating Partner Tournament Rd3 Craig/Vu vs Vo/Nam",
+        "uploader": "Craig vs Pickleball",
+        "uploaderChannelId": "UCoRUrqRSyLdZrph7rDF8lHw",
+        "uploadDate": "2025-02-27",
+        "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+        "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+        "provenanceAssessment": "Uploader is a personal channel publishing self-recorded games from a fixed camera at the recorder's own venue; channel context is consistent with the uploader being the videographer and rights holder. Uploader authority is assessed from channel context, not independently confirmed by the rights holder — recorded as a residual caveat.",
+        "rights": {
+          "store": "yes_with_attribution",
+          "analyze": "yes_with_attribution",
+          "annotate": "yes_with_attribution",
+          "train": "yes_with_attribution",
+          "redistributeDerivatives": "yes_with_attribution",
+          "commercial": "yes_with_attribution",
+          "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+          "reviewedBy": "wave-c:c16-data-acquisition (page-verified license; channel-context provenance assessment)",
+          "reviewedAtIso": "2026-08-29"
+        },
+        "restrictions": [
+          "attribution to the uploader required on redistribution",
+          "uploader authority assessed from channel context, not independently confirmed"
+        ],
+        "media": {
+          "type": "video/mp4 (H.264, no audio)",
+          "segment": "120s-180s of the 382s source video, re-encoded libx264 crf20",
+          "sourceResolutionFps": "1920x1080@60",
+          "clipWidth": 1920,
+          "clipHeight": 1080,
+          "clipFps": 60.0,
+          "clipDurationSeconds": 60.0,
+          "clipBytes": 31043189,
+          "sha256": "34942348e22f4d43fa4ce10d1451fb085cfb42164770994c9042dd6b91b9eb8d"
+        },
+        "pickleballRelevance": "Outdoor doubles rec-tournament rally play, fixed elevated behind-court camera, ball and paddles clearly visible",
+        "acquisition": {
+          "acquiredAt": "2026-08-29",
+          "method": "yt-dlp download of the CC BY source video, 60s segment re-encode with ffmpeg (libx264 crf20, audio stripped)",
+          "workstream": "wave-c/c16-data-acquisition"
+        },
+        "notes": "FRESH HOLDOUT candidate: label-blind until a future freeze. No labels of any kind exist or may be created for this clip before the freeze."
+      },
+      {
+        "id": "yt-I5wYCXCL4dY",
+        "role": "fresh_candidate",
+        "labelBlind": true,
+        "path": "datasets/pickleball/fresh-candidates/yt-I5wYCXCL4dY.mp4",
+        "sourceUrl": "https://www.youtube.com/watch?v=I5wYCXCL4dY",
+        "title": "4.0 Game | July-22-2025",
+        "uploader": "Chasing Pickleballs",
+        "uploaderChannelId": "UCQn04yJl81xKf7qvJ_V4DGg",
+        "uploadDate": "2025-07-28",
+        "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+        "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+        "provenanceAssessment": "Uploader is a personal channel publishing self-recorded games from a fixed camera at the recorder's own venue; channel context is consistent with the uploader being the videographer and rights holder. Uploader authority is assessed from channel context, not independently confirmed by the rights holder — recorded as a residual caveat.",
+        "rights": {
+          "store": "yes_with_attribution",
+          "analyze": "yes_with_attribution",
+          "annotate": "yes_with_attribution",
+          "train": "yes_with_attribution",
+          "redistributeDerivatives": "yes_with_attribution",
+          "commercial": "yes_with_attribution",
+          "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+          "reviewedBy": "wave-c:c16-data-acquisition (page-verified license; channel-context provenance assessment)",
+          "reviewedAtIso": "2026-08-29"
+        },
+        "restrictions": [
+          "attribution to the uploader required on redistribution",
+          "uploader authority assessed from channel context, not independently confirmed"
+        ],
+        "media": {
+          "type": "video/mp4 (H.264, no audio)",
+          "segment": "90s-150s of the 264s source video, re-encoded libx264 crf20",
+          "sourceResolutionFps": "2560x1440@60",
+          "clipWidth": 1920,
+          "clipHeight": 1080,
+          "clipFps": 60.0,
+          "clipDurationSeconds": 60.0,
+          "clipBytes": 48532209,
+          "sha256": "c0a327452feb7ec4bf3bc805cebbef695dee7a11f8a42a3cc74f404218b0b3c7"
+        },
+        "pickleballRelevance": "Outdoor 4.0-level doubles on public courts, elevated corner camera, multiple courts, fast exchanges at the net",
+        "acquisition": {
+          "acquiredAt": "2026-08-29",
+          "method": "yt-dlp download of the CC BY source video, 60s segment re-encode with ffmpeg (libx264 crf20, audio stripped)",
+          "workstream": "wave-c/c16-data-acquisition"
+        },
+        "notes": "FRESH HOLDOUT candidate: label-blind until a future freeze. No labels of any kind exist or may be created for this clip before the freeze."
+      },
+      {
+        "id": "yt-hktiyFnghIw",
+        "role": "fresh_candidate",
+        "labelBlind": true,
+        "path": "datasets/pickleball/fresh-candidates/yt-hktiyFnghIw.mp4",
+        "sourceUrl": "https://www.youtube.com/watch?v=hktiyFnghIw",
+        "title": "2026.08.01 MXD5.0 Francesca Fakidis + Jacob Dubas vs Margaret ...",
+        "uploader": "pickleball4you",
+        "uploaderChannelId": "UC83z_qzETSgcemFzZdtmFvw",
+        "uploadDate": "2026-08-04",
+        "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+        "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+        "provenanceAssessment": "Uploader is a personal channel publishing self-recorded games from a fixed camera at the recorder's own venue; channel context is consistent with the uploader being the videographer and rights holder. Uploader authority is assessed from channel context, not independently confirmed by the rights holder — recorded as a residual caveat.",
+        "rights": {
+          "store": "yes_with_attribution",
+          "analyze": "yes_with_attribution",
+          "annotate": "yes_with_attribution",
+          "train": "yes_with_attribution",
+          "redistributeDerivatives": "yes_with_attribution",
+          "commercial": "yes_with_attribution",
+          "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+          "reviewedBy": "wave-c:c16-data-acquisition (page-verified license; channel-context provenance assessment)",
+          "reviewedAtIso": "2026-08-29"
+        },
+        "restrictions": [
+          "attribution to the uploader required on redistribution",
+          "uploader authority assessed from channel context, not independently confirmed"
+        ],
+        "media": {
+          "type": "video/mp4 (H.264, no audio)",
+          "segment": "300s-360s of the 1483s source video, re-encoded libx264 crf20",
+          "sourceResolutionFps": "1920x1080@30",
+          "clipWidth": 1920,
+          "clipHeight": 1080,
+          "clipFps": 29.97,
+          "clipDurationSeconds": 60.0,
+          "clipBytes": 24656295,
+          "sha256": "f24520258593d7d11effd4b8655d108b42f1878aff0281f2fe60ae7af4715a88"
+        },
+        "pickleballRelevance": "Outdoor mixed-doubles 5.0 tournament match, behind-court camera, referee and spectators, high-level dinking and drives",
+        "acquisition": {
+          "acquiredAt": "2026-08-29",
+          "method": "yt-dlp download of the CC BY source video, 60s segment re-encode with ffmpeg (libx264 crf20, audio stripped)",
+          "workstream": "wave-c/c16-data-acquisition"
+        },
+        "notes": "FRESH HOLDOUT candidate: label-blind until a future freeze. No labels of any kind exist or may be created for this clip before the freeze."
+      },
+      {
+        "id": "yt-Y7DOO0j_1P4",
+        "role": "fresh_candidate",
+        "labelBlind": true,
+        "path": "datasets/pickleball/fresh-candidates/yt-Y7DOO0j_1P4.mp4",
+        "sourceUrl": "https://www.youtube.com/watch?v=Y7DOO0j_1P4",
+        "title": "2015.11.11 - Yates,Kyle vs Vavra,Dalton - MS19+ Semifinal",
+        "uploader": "pickleball4you",
+        "uploaderChannelId": "UC83z_qzETSgcemFzZdtmFvw",
+        "uploadDate": "2015-11-24",
+        "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+        "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+        "provenanceAssessment": "Uploader is a personal channel publishing self-recorded games from a fixed camera at the recorder's own venue; channel context is consistent with the uploader being the videographer and rights holder. Uploader authority is assessed from channel context, not independently confirmed by the rights holder — recorded as a residual caveat.",
+        "rights": {
+          "store": "yes_with_attribution",
+          "analyze": "yes_with_attribution",
+          "annotate": "yes_with_attribution",
+          "train": "yes_with_attribution",
+          "redistributeDerivatives": "yes_with_attribution",
+          "commercial": "yes_with_attribution",
+          "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+          "reviewedBy": "wave-c:c16-data-acquisition (page-verified license; channel-context provenance assessment)",
+          "reviewedAtIso": "2026-08-29"
+        },
+        "restrictions": [
+          "attribution to the uploader required on redistribution",
+          "uploader authority assessed from channel context, not independently confirmed"
+        ],
+        "media": {
+          "type": "video/mp4 (H.264, no audio)",
+          "segment": "400s-460s of the 1615s source video, re-encoded libx264 crf20",
+          "sourceResolutionFps": "1920x1080@30",
+          "clipWidth": 1920,
+          "clipHeight": 1080,
+          "clipFps": 29.97,
+          "clipDurationSeconds": 60.0,
+          "clipBytes": 25365777,
+          "sha256": "33949eb30efdf59b65389cf5b3dcbadefd77a855ff654a1a63ee896d32f6a6e5"
+        },
+        "pickleballRelevance": "Night-time outdoor men's singles semifinal under lights, behind-court camera, singles movement patterns absent from current corpus",
+        "acquisition": {
+          "acquiredAt": "2026-08-29",
+          "method": "yt-dlp download of the CC BY source video, 60s segment re-encode with ffmpeg (libx264 crf20, audio stripped)",
+          "workstream": "wave-c/c16-data-acquisition"
+        },
+        "notes": "FRESH HOLDOUT candidate: label-blind until a future freeze. No labels of any kind exist or may be created for this clip before the freeze."
+      },
+      {
+        "id": "yt-iuVdtmGoTbo",
+        "role": "fresh_candidate",
+        "labelBlind": true,
+        "path": "datasets/pickleball/fresh-candidates/yt-iuVdtmGoTbo.mp4",
+        "sourceUrl": "https://www.youtube.com/watch?v=iuVdtmGoTbo",
+        "title": "Men's Doubles Match - Partial Game 2 - March 17, 2024",
+        "uploader": "Sigal Pickleball",
+        "uploaderChannelId": "UCCCCsr1yhR9G_6MyJcuisxA",
+        "uploadDate": "2024-03-24",
+        "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+        "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+        "provenanceAssessment": "Uploader is a personal channel publishing self-recorded games from a fixed camera at the recorder's own venue; channel context is consistent with the uploader being the videographer and rights holder. Uploader authority is assessed from channel context, not independently confirmed by the rights holder — recorded as a residual caveat.",
+        "rights": {
+          "store": "yes_with_attribution",
+          "analyze": "yes_with_attribution",
+          "annotate": "yes_with_attribution",
+          "train": "yes_with_attribution",
+          "redistributeDerivatives": "yes_with_attribution",
+          "commercial": "yes_with_attribution",
+          "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+          "reviewedBy": "wave-c:c16-data-acquisition (page-verified license; channel-context provenance assessment)",
+          "reviewedAtIso": "2026-08-29"
+        },
+        "restrictions": [
+          "attribution to the uploader required on redistribution",
+          "uploader authority assessed from channel context, not independently confirmed"
+        ],
+        "media": {
+          "type": "video/mp4 (H.264, no audio)",
+          "segment": "120s-180s of the 523s source video, re-encoded libx264 crf20",
+          "sourceResolutionFps": "1920x1080@60",
+          "clipWidth": 1920,
+          "clipHeight": 1080,
+          "clipFps": 60.0,
+          "clipDurationSeconds": 60.0,
+          "clipBytes": 23799127,
+          "sha256": "c1a5391109fb32581419cf082c97839de3b638afd58fc8ac558035947ba12c0d"
+        },
+        "pickleballRelevance": "Indoor gym men's doubles on portable net, wide fixed camera, indoor lighting/floor conditions distinct from existing footage",
+        "acquisition": {
+          "acquiredAt": "2026-08-29",
+          "method": "yt-dlp download of the CC BY source video, 60s segment re-encode with ffmpeg (libx264 crf20, audio stripped)",
+          "workstream": "wave-c/c16-data-acquisition"
+        },
+        "notes": "FRESH HOLDOUT candidate: label-blind until a future freeze. No labels of any kind exist or may be created for this clip before the freeze."
+      },
+      {
+        "id": "yt-eK-iPN2XAJQ",
+        "role": "fresh_candidate",
+        "labelBlind": true,
+        "path": "datasets/pickleball/fresh-candidates/yt-eK-iPN2XAJQ.mp4",
+        "sourceUrl": "https://www.youtube.com/watch?v=eK-iPN2XAJQ",
+        "title": "March 2020. Te Pai Pickleball tournament",
+        "uploader": "Sandy Austin",
+        "uploaderChannelId": "UCZPhq0QqV1DWsN1D8E6jfCA",
+        "uploadDate": "2020-03-11",
+        "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+        "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+        "provenanceAssessment": "Uploader is a personal channel publishing self-recorded games from a fixed camera at the recorder's own venue; channel context is consistent with the uploader being the videographer and rights holder. Uploader authority is assessed from channel context, not independently confirmed by the rights holder — recorded as a residual caveat.",
+        "rights": {
+          "store": "yes_with_attribution",
+          "analyze": "yes_with_attribution",
+          "annotate": "yes_with_attribution",
+          "train": "yes_with_attribution",
+          "redistributeDerivatives": "yes_with_attribution",
+          "commercial": "yes_with_attribution",
+          "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+          "reviewedBy": "wave-c:c16-data-acquisition (page-verified license; channel-context provenance assessment)",
+          "reviewedAtIso": "2026-08-29"
+        },
+        "restrictions": [
+          "attribution to the uploader required on redistribution",
+          "uploader authority assessed from channel context, not independently confirmed"
+        ],
+        "media": {
+          "type": "video/mp4 (H.264, no audio)",
+          "segment": "60s-120s of the 318s source video, re-encoded libx264 crf20",
+          "sourceResolutionFps": "1920x1080@30",
+          "clipWidth": 1920,
+          "clipHeight": 1080,
+          "clipFps": 29.97,
+          "clipDurationSeconds": 60.0,
+          "clipBytes": 27683931,
+          "sha256": "fca94767321a0c6f302db8b34b1b64c798b840613baa493d29feb3eb4c941468"
+        },
+        "pickleballRelevance": "Indoor multi-court tournament (Te Pai, New Zealand), handheld/tripod side view, amateur tournament play",
+        "acquisition": {
+          "acquiredAt": "2026-08-29",
+          "method": "yt-dlp download of the CC BY source video, 60s segment re-encode with ffmpeg (libx264 crf20, audio stripped)",
+          "workstream": "wave-c/c16-data-acquisition"
+        },
+        "notes": "FRESH HOLDOUT candidate: label-blind until a future freeze. No labels of any kind exist or may be created for this clip before the freeze."
+      }
+    ]
+  },
+  "quarantinedUnknownRights": [
+    {
+      "id": "ia-epcga-virtual-pickleball-session-pt1",
+      "sourceUrl": "https://archive.org/details/epcga-EP_Parks_Rec_Virtual_Pickleball_Session_Pt._1",
+      "title": "EP Parks & Rec Virtual Pickleball Session Pt. 1",
+      "publisher": "Estes Park (CO) government access TV via Internet Archive",
+      "license": "none declared (no licenseurl field on the item)",
+      "status": "quarantined_not_downloaded",
+      "reason": "Pickleball-relevant municipal video with no declared license; municipal works are not automatically public domain."
+    },
+    {
+      "id": "ia-pickleball-finals-09-05-2016",
+      "sourceUrl": "https://archive.org/details/Pickleball_Finals_09.05.2016",
+      "title": "Pickleball Finals 09.05.2016",
+      "publisher": "unknown uploader via Internet Archive",
+      "license": "none declared",
+      "status": "quarantined_not_downloaded",
+      "reason": "Match footage with no license metadata and no identifiable rights holder."
+    },
+    {
+      "id": "ia-cica-pickleball-at-north-park",
+      "sourceUrl": "https://archive.org/details/cica-PICKLEBALL_AT_NORTH_PARK",
+      "title": "PICKLEBALL AT NORTH PARK",
+      "publisher": "municipal access TV via Internet Archive",
+      "license": "none declared",
+      "status": "quarantined_not_downloaded",
+      "reason": "No declared license; municipal access TV rights unclear."
+    },
+    {
+      "id": "ia-cctv17vt-south-burlington-council",
+      "sourceUrl": "https://archive.org/details/cctv17vt-South_Burlington_City_Council_-_7_15_2024",
+      "title": "South Burlington City Council - 7/15/2024",
+      "publisher": "CCTV Channel 17 via Internet Archive",
+      "license": "CC BY-NC-SA 4.0",
+      "status": "excluded_noncommercial",
+      "reason": "NC term blocks commercial training; also meeting footage, minimal gameplay."
     }
   ]
 }
