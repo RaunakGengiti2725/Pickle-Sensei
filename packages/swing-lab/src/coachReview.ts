@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join, resolve } from "node:path";
 import { REPO_ROOT } from "./engine/corpus.js";
 import { STROKE_TAXONOMY_V3 } from "./strokeHeuristic.js";
+import { scaffoldCoachRegistryV2 } from "./coachProvisioning.js";
 import type { StrokeEventLabel, SwingAnnotation } from "./annotationSchema.js";
 
 /**
@@ -20,8 +21,11 @@ import type { StrokeEventLabel, SwingAnnotation } from "./annotationSchema.js";
  *   datasets/coach-review/schema.json                       — derived, regenerated
  *   datasets/coach-review/taxonomy/fault-taxonomy.v0-draft.json — derived, regenerated
  *   datasets/coach-review/drills/drill-library.v0.json      — derived, regenerated
- *   datasets/coach-review/coaches.json                      — HUMAN-managed registry;
+ *   datasets/coach-review/coaches.json                      — HUMAN-managed registry
+ *                                                             (v2, see coachProvisioning.ts);
  *                                                             scaffolded once, never overwritten
+ *   datasets/coach-review/provisioning-log/<actionId>.json  — append-only provisioning
+ *                                                             audit trail (coachProvisioning.ts)
  *   datasets/coach-review/reviews/<reviewId>.json           — ONE FILE PER REVIEW,
  *                                                             written only through the
  *                                                             provisioned-coach path,
@@ -993,6 +997,8 @@ if (isMain) {
       faultTaxonomy: "datasets/coach-review/taxonomy/fault-taxonomy.v0-draft.json",
       drillLibrary: "datasets/coach-review/drills/drill-library.v0.json",
       coachRegistry: "datasets/coach-review/coaches.json",
+      qualificationPolicy: "docs/COACH_QUALIFICATION_POLICY.md",
+      provisioningLog: "datasets/coach-review/provisioning-log/",
       reviewsDir: "datasets/coach-review/reviews/",
     },
     queue,
@@ -1055,22 +1061,7 @@ if (isMain) {
   /** Coach registry is HUMAN-managed: scaffold once, never overwrite. */
   const registryPath = join(outDir, "coaches.json");
   if (!existsSync(registryPath)) {
-    writeFileSync(
-      registryPath,
-      JSON.stringify(
-        {
-          schemaVersion: 1,
-          note:
-            "HUMAN-managed registry. Provisioning a real coach (docs/COACHING.md §2) means appending " +
-            "{coachId, credentialRef, status:'active', provisionedAtIso, provisionedBy} here in a reviewed " +
-            "commit. coachId is opaque/pseudonymous; credentials + PII stay OFF-REPO behind credentialRef. " +
-            "This file is never written by tooling and MUST NOT contain synthetic/demo identities.",
-          coaches: [],
-        },
-        null,
-        2,
-      ),
-    );
+    writeFileSync(registryPath, JSON.stringify(scaffoldCoachRegistryV2(), null, 2));
   }
 
   console.log(

@@ -1,5 +1,9 @@
 {
-  "schemaVersion": 1,
-  "note": "HUMAN-managed registry. Provisioning a real coach (docs/COACHING.md §2) means appending {coachId, credentialRef, status:'active', provisionedAtIso, provisionedBy} here in a reviewed commit. coachId is opaque/pseudonymous; credentials + PII stay OFF-REPO behind credentialRef. This file is never written by tooling and MUST NOT contain synthetic/demo identities.",
+  "schemaVersion": 2,
+  "note": "HUMAN-managed registry. Provisioning a real coach (docs/COACHING.md §2, docs/COACH_QUALIFICATION_POLICY.md) means an admin verifies qualification evidence off-repo, then appends a full entry (identity + qualification record) here via the provisioning flow, which also writes an append-only audit record to datasets/coach-review/provisioning-log/. coachId is opaque/pseudonymous; credentials + PII stay OFF-REPO behind credentialRef/evidenceRef. Qualification fields are optional-but-recorded and may NEVER be invented. This file MUST NOT contain synthetic/demo identities, and only verdict-qualified coaches may be active.",
+  "qualificationPolicy": {
+    "version": "coach-qualification-policy-v1",
+    "document": "docs/COACH_QUALIFICATION_POLICY.md"
+  },
   "coaches": []
 }

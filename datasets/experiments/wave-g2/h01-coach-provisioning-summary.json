@@ -1,0 +1,43 @@
+{
+  "workstreamId": "h01-coach-provisioning",
+  "wave": "g2",
+  "branch": "devin/wave-g2/h01-coach-provisioning",
+  "mission": "Build the auditable coach-provisioning system: coach identity + structured qualification metadata, a documented + versioned qualification policy, and enforcement that only provisioned qualified coaches can submit production reviews — so that when a real coach appears, only their evidence remains external.",
+  "method": [
+    "Extended the existing coach portal backend (packages/swing-lab coachReview v2 + apps/admin-web Coach Review Lab) rather than building a parallel system.",
+    "Added an authoritative provisioning schema (packages/swing-lab/src/coachProvisioning.ts): coach registry v2 with a CoachQualification record (certifications, professional coaching history, competitive background, affiliation, years coaching, specialties — every field verified-with-off-repo-evidence or explicitly null, never invented), plus an append-only ProvisioningAction audit trail (provision/suspend/reinstate: who, whom, when, why).",
+    "Wrote docs/COACH_QUALIFICATION_POLICY.md (coach-qualification-policy-v1, pinned in code): three qualification criteria, five verification methods with the rule that unverified_disclosed can never satisfy a criterion, optional-but-recorded semantics, roles, and audit rules.",
+    "Wired enforcement into the lab API: every production write path (reviews, amendments, adjudications, assignments) now passes the shared gateIdentity which additionally requires registry schemaVersion 2 and isEligibleReviewer (active, non-synthetic, credentialRef-matched, verdict-qualified under a known policy version). No anonymous expert Gold.",
+    "Added the admin provisioning flow: GET/POST /api/coach-provisioning validates the action, writes the append-only audit record to datasets/coach-review/provisioning-log/<coachId>.a<n>.json first, then updates coaches.json, refusing anything that would leave the registry invalid.",
+    "Upgraded the (still empty) datasets/coach-review/coaches.json to registry v2 and updated docs/COACHING.md §2.",
+    "Added 16 unit tests for the validators/eligibility gate and 7 endpoint tests for the provisioning flow (throwaway tmp root, TEST-ONLY fixture identities); all pre-existing tests still pass unmodified in behavior (the labApi test fixture registry was upgraded to v2 with clearly-marked test-only qualification records)."
+  ],
+  "deliverables": [
+    "packages/swing-lab/src/coachProvisioning.ts (authoritative registry v2 + qualification + audit-trail schema, validators, isEligibleReviewer)",
+    "apps/admin-web/src/coachReview/provisioning.ts (admin-web mirror)",
+    "apps/admin-web/src/coachReview/labApi.ts (qualification-enforced gateIdentity on all write paths; /api/coach-provisioning admin flow with append-only audit log)",
+    "docs/COACH_QUALIFICATION_POLICY.md (coach-qualification-policy-v1)",
+    "docs/COACHING.md §2 updated to the audited provisioning flow",
+    "datasets/coach-review/coaches.json upgraded to schema v2 (still empty — zero real coaches, truthfully)",
+    "packages/swing-lab/test/coachProvisioning.test.ts + provisioning endpoint tests in apps/admin-web/src/coachReview/__tests__/labApi.test.ts"
+  ],
+  "irreducibly_external": [
+    "Recruiting real qualified coaches and verifying their qualification evidence (certifications, employment history, competitive records) — a human step; the registry remains EMPTY and every production write is refused until it happens.",
+    "Real coach reviews themselves (GATE A evidence): technique score, fault diagnosis, and drill recommendation stay BLOCKED_ON_VALIDATION.",
+    "GATE B physical-iPhone real-user validation (out of this workstream's scope; no device available)."
+  ],
+  "truth_notes": [
+    "No coach identities, qualifications, reviews, or measurements were fabricated; all fixture identities live only in tests/tmp roots and are labeled TEST-ONLY; SYNTHETIC identities are rejected by validators and endpoints.",
+    "Held-out cases wm-dink-01 and afn-vic-rally1 were not touched.",
+    "The BLOCKED_ON_VALIDATION lock was strengthened (qualification now required in addition to identity), never weakened."
+  ],
+  "gates": {
+    "pnpm_typecheck": "pass",
+    "pnpm_test": "pass (52 files, 609 passed, 4 skipped)",
+    "pnpm_lint": "pass",
+    "pnpm_format_check": "pass",
+    "mobile": "not run — no mobile/shared code touched",
+    "swift_mac_iphone": "unavailable — no results claimed"
+  },
+  "verdict": "READY: the coach-provisioning architecture is complete and enforced end-to-end; only real human coach evidence remains external."
+}

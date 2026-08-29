@@ -34,33 +34,36 @@ pnpm --filter @pickle/admin-web dev     # http://localhost:5173/#/coach
   truthfully "awaiting reviews" while the count is 0).
 - **Program** — the schema, fault-taxonomy draft, drill library and this doc.
 
-## 2. Identity provisioning (human step, reviewed commit)
+## 2. Identity provisioning (human step, audited)
 
 Coaches get an **opaque pseudonymous id**; PII and credential documents stay
-OFF-REPO.
+OFF-REPO. Qualification is assessed against the versioned policy in
+`docs/COACH_QUALIFICATION_POLICY.md` (`coach-qualification-policy-v1`);
+schema + validators live in `packages/swing-lab/src/coachProvisioning.ts`.
 
-1. Verify qualification off-repo (e.g. certification, teaching résumé) and
-   file it in the private credential store; that record's id is the
-   `credentialRef` (e.g. `cred-2026-001`).
-2. Append an entry to `datasets/coach-review/coaches.json` in a reviewed PR:
-
-```json
-{
-  "coachId": "coach-01",
-  "credentialRef": "cred-2026-001",
-  "status": "active",
-  "provisionedAtIso": "2026-…",
-  "provisionedBy": "<admin identity>"
-}
-```
-
-3. That's it — the console's submit path unlocks for that coachId.
+1. An admin verifies qualification evidence off-repo (certification,
+   coaching history, competitive record — per the policy's verification
+   standards) and files it in the private credential store; those record ids
+   become `credentialRef` / `evidenceRef`.
+2. The admin submits a `provision` action through the admin flow
+   (`POST /api/coach-provisioning`) — or an equivalently reviewed commit —
+   carrying the full registry v2 entry: identity plus the structured
+   `qualification` record (satisfied criteria, verdict, assessor,
+   certifications, coaching history, competitive background, affiliation,
+   years coaching, specialties — every field real or explicitly null).
+3. The flow appends an audit record to
+   `datasets/coach-review/provisioning-log/<coachId>.a<n>.json` (who
+   provisioned whom, when, why) and updates
+   `datasets/coach-review/coaches.json`. Suspensions/reinstatements are
+   further sequential audit actions.
+4. The console's submit path unlocks for that coachId.
 
 Rules enforced by tooling: the registry is scaffolded once and never
 overwritten by the CLI; `SYNTHETIC*` ids are rejected by the validator and
 the persistence endpoint (dev fixtures can never masquerade as reviews);
 with zero active registry entries every write attempt is refused with
-"no coach identity provisioned".
+"no coach identity provisioned"; and only verdict-qualified coaches under a
+known policy version pass the eligibility gate — no anonymous expert Gold.
 
 ## 3. The review record (schema v2)
 
