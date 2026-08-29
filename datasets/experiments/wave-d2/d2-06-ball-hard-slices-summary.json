@@ -1,0 +1,74 @@
+{
+  "id": "d2-06-ball-hard-slices",
+  "workstream": "D2-06 \u2014 Ball gold hard slices",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "createdAtIso": "2026-08-29T08:50:00.000Z",
+  "branch": "devin/wave-d2/d2-06-ball-hard-slices",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "scopeBundles": [
+    "wm-volley-02",
+    "afn-sasebo-rally2",
+    "wavea-wgm-wheelchair",
+    "wavea-sasebo-volleys"
+  ],
+  "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"],
+  "method": "Every committed point comes from viewing the exact decoded frame: ffmpeg select=eq(n,IDX) absolute CFR indexing on the source recording (no -ss seeking), point measured on a zoomed pixel crop and re-verified in a 4x crop centered on the measured coordinate. No interpolation is presented as observation; ambiguous frames carry visibility=uncertain (no point) and full occlusions carry visibility=occluded (no point). Append-only sidecars devin-visual-v4-waveD2-ball.json; no existing annotation file modified.",
+  "clocks": {
+    "wm-volley-02": "CLIP clock, 25fps, tMs=n*40 (v1/waveC convention)",
+    "afn-sasebo-rally2": "CLIP clock via source mapping clip_n=source_n-918 on rec-6e06a3157947 (29.97fps); cross-registered against v1 ball points at 2500/2682 (agreement within ~0.01 normalized); residual alignment uncertainty <=1 frame (33ms), disclosed in the sidecar",
+    "wavea-wgm-wheelchair": "RECORDING clock, 30fps, tMs=round(n*100/3) (wave-a convention), rec-960a1a200d6d",
+    "wavea-sasebo-volleys": "RECORDING clock, 29.97fps, tMs=round(n*1000/29.97) (wave-a convention), rec-6e06a3157947"
+  },
+  "counts": {
+    "newBallLabelsTotal": 43,
+    "withPoint": 39,
+    "noPoint": 4,
+    "perBundle": {
+      "wm-volley-02": 5,
+      "afn-sasebo-rally2": 14,
+      "wavea-wgm-wheelchair": 9,
+      "wavea-sasebo-volleys": 15
+    },
+    "byOcclusionState": {
+      "observed": 35,
+      "entering_occlusion": 3,
+      "occluded": 2,
+      "reacquired": 1,
+      "uncertain_no_state": 2
+    }
+  },
+  "hardSliceCoverage": {
+    "netCrossing": "wavea-sasebo-volleys 51718-51852 (through-mesh, tape-band partial overlap, cleared tape) and 54455 (crossed to near side); wm-volley-02 6640 (through mesh below tape)",
+    "paddleOcclusion": "afn-sasebo-rally2 2536 (paddle blur sweeps across ball); wavea-sasebo-volleys 51819 (mostly hidden behind far paddle blade), 53887 (ball overlapping paddle face at contact)",
+    "multiBallBackground": "afn-sasebo-rally2 2402 abstention (two indistinguishable green blobs -> uncertain, no point); wavea-sasebo-volleys 51919 (second background-court ball in frame, disambiguated by trajectory continuity)",
+    "fastBlur": "wavea-sasebo-volleys 53220 (fast-volley streak); wavea-wgm-wheelchair 182733-182867 (post-hit blur streaks); afn-sasebo-rally2 2469/3003 (blurred lob apex, blurred reacquisition)",
+    "occlusionCycle": "afn-sasebo-rally2 2803 observed -> 2869/2903 occluded (no point) -> 3003 reacquired"
+  },
+  "provenance": {
+    "wm-volley-02": {
+      "source": "wm-volley-nearplayer.mp4, derived from Wikimedia Commons 'Pickleball game' by Victor Jehovskiy, CC BY 3.0",
+      "license": "CC BY 3.0"
+    },
+    "afn-sasebo-rally2": {
+      "source": "afn-sasebo-indoor (rec-6e06a3157947), Wikimedia Commons 'Pickleball Japan Federation Visits Sasebo' (DVIDS 967848), AFN (U.S. DoD)",
+      "license": "Public domain (U.S. federal government work, PD-USGov)"
+    },
+    "wavea-sasebo-volleys": {
+      "source": "same recording rec-6e06a3157947",
+      "license": "Public domain (U.S. federal government work, PD-USGov)"
+    },
+    "wavea-wgm-wheelchair": {
+      "source": "dvids-warriorgames-match (rec-960a1a200d6d), DVIDS, U.S. DoD",
+      "license": "Public domain (U.S. federal government work, PD-USGov)"
+    },
+    "note": "No new media downloaded into the corpus for this workstream; frames were decoded locally from the already-registered source recordings (re-fetched outside the repo for inspection only; media directories are gitignored). Zero bytes of media added to the repository."
+  },
+  "validation": "All four sidecars pass packages/swing-lab/src/annotationSchema.ts validateAnnotation (0 problems each). No code touched; typecheck/tests not applicable beyond validation.",
+  "honesty": [
+    "No canonical Mac cascade runs exist on this Linux box; no benchmark/cascade numbers are claimed.",
+    "wm-volley-02 6320: ball not findable in the 1000px clip frame -> uncertain, no point (consistent with v1's independent 6360 uncertain).",
+    "afn-sasebo-rally2 2402: two candidate balls could not be disambiguated -> abstained (no point).",
+    "afn-sasebo-rally2 clip-clock mapping carries a disclosed <=1-frame alignment uncertainty.",
+    "wavea-sasebo-volleys 53988-54088 are the post-rally ball-toss (wave-a reviewed ~53954 as milling); they are ball-position truth, not rally-state truth."
+  ]
+}

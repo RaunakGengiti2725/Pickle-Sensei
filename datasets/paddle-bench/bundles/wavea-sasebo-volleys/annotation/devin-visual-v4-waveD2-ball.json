@@ -1,0 +1,181 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-sasebo-volleys",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "createdAtIso": "2026-08-29T08:40:00.000Z",
+  "revision": 1,
+  "stroke": "unsure",
+  "handedness": "unsure",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": null,
+    "accelerationStartMs": null,
+    "contactMs": null,
+    "followThroughEndMs": null
+  },
+  "contactUncertainty": null,
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.7,
+  "notes": "Ball-only hard-slice gold pass (workstream D2-06): stroke/phase/checkpoint fields intentionally unlabeled. Method: frames decoded by absolute frame index at the exact container frame rate (ffmpeg select=eq(n\\,IDX), no -ss seeking); every committed point measured on a zoomed pixel crop of the decoded frame and re-verified in a 4x centered crop; radiusNorm = ball radius px / frame height, omitted where blur or partial overlap makes it unmeasurable. Occluded frames carry NO point by rule; uncertain frames carry no point and no occlusionState. Append-only sidecar; no existing label touched. RECORDING clock (rec-6e06a3157947, afn-sasebo-indoor, 29.97fps), tMs=round(n*1000/29.97), same convention as the wave-a event annotation; all frames within the event window [51600..54600]. Hard slices covered: through-net-mesh visibility, net-tape/paddle partial overlaps, fast-volley motion blur, a background-court second ball, and the post-rally ball-toss (wave-a reviewed ~53954 as post-rally milling; my 53988-54088 points are that toss). The ball passes behind the near target's torso from ~54621, outside the window, so no occluded frame is committed here.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T08:40:00.000Z"
+    }
+  ],
+  "ballFrames": [
+    {
+      "tMs": 51718,
+      "point": {
+        "x": 0.3484,
+        "y": 0.6713
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0102,
+      "occlusionState": "observed",
+      "note": "seen through the near-court net mesh, below the tape, at the far player's low volley"
+    },
+    {
+      "tMs": 51819,
+      "point": {
+        "x": 0.3479,
+        "y": 0.6523
+      },
+      "visibility": "visible",
+      "occlusionState": "entering_occlusion",
+      "note": "mostly hidden behind the far player's paddle blade; center estimated from the visible sliver"
+    },
+    {
+      "tMs": 51852,
+      "point": {
+        "x": 0.3495,
+        "y": 0.6155
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "emerging above the paddle blade"
+    },
+    {
+      "tMs": 51919,
+      "point": {
+        "x": 0.3503,
+        "y": 0.5593
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "second ball visible on a background court at ~(0.408,0.461) in the same frame; target ball identified by trajectory continuity"
+    },
+    {
+      "tMs": 52053,
+      "point": {
+        "x": 0.3536,
+        "y": 0.4694
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "against the far player's headband/face clutter"
+    },
+    {
+      "tMs": 52553,
+      "point": {
+        "x": 0.3728,
+        "y": 0.5502
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "directly above a paddle blade edge"
+    },
+    {
+      "tMs": 53220,
+      "point": {
+        "x": 0.2858,
+        "y": 0.566
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "strong motion-blur (fast volley); centroid of blur"
+    },
+    {
+      "tMs": 53887,
+      "point": {
+        "x": 0.2574,
+        "y": 0.5787
+      },
+      "visibility": "visible",
+      "occlusionState": "entering_occlusion",
+      "note": "ball partially overlapping the paddle face at contact, blurred"
+    },
+    {
+      "tMs": 53988,
+      "point": {
+        "x": 0.2747,
+        "y": 0.5347
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "at the far player's chest/hand (post-rally toss; matches the wave-a note rejecting ~53954 as milling)"
+    },
+    {
+      "tMs": 54021,
+      "point": {
+        "x": 0.2795,
+        "y": 0.5234
+      },
+      "visibility": "visible",
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 54054,
+      "point": {
+        "x": 0.2861,
+        "y": 0.5185
+      },
+      "visibility": "visible",
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 54088,
+      "point": {
+        "x": 0.2934,
+        "y": 0.5136
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "paddle blade immediately behind the ball, not overlapping"
+    },
+    {
+      "tMs": 54455,
+      "point": {
+        "x": 0.3688,
+        "y": 0.6704
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "crossed to the near side of the net, descending"
+    },
+    {
+      "tMs": 54555,
+      "point": {
+        "x": 0.3932,
+        "y": 0.7935
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0139,
+      "occlusionState": "observed",
+      "note": "large near-camera, incoming toward the near target's low backhand"
+    },
+    {
+      "tMs": 54588,
+      "point": {
+        "x": 0.401,
+        "y": 0.8426
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "last frame visible before it passes behind the near target's torso (from ~54621, outside the event window)"
+    }
+  ]
+}

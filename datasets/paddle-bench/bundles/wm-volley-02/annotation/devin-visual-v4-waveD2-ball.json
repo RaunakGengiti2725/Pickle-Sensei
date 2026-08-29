@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wm-volley-02",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "createdAtIso": "2026-08-29T08:40:00.000Z",
+  "revision": 1,
+  "stroke": "unsure",
+  "handedness": "unsure",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": null,
+    "accelerationStartMs": null,
+    "contactMs": null,
+    "followThroughEndMs": null
+  },
+  "contactUncertainty": null,
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.75,
+  "notes": "Ball-only hard-slice gold pass (workstream D2-06): stroke/phase/checkpoint fields intentionally unlabeled. Method: frames decoded by absolute frame index at the exact container frame rate (ffmpeg select=eq(n\\,IDX), no -ss seeking); every committed point measured on a zoomed pixel crop of the decoded frame and re-verified in a 4x centered crop; radiusNorm = ball radius px / frame height, omitted where blur or partial overlap makes it unmeasurable. Occluded frames carry NO point by rule; uncertain frames carry no point and no occlusionState. Append-only sidecar; no existing label touched. CLIP clock (clip.mp4 convention of the v1/waveC passes, 25fps, 1000x1080), tMs=n*40. Fills the frame gaps between the v1 labels 6360-6760 on the far player's exchange; ball at 6320/6360 not findable in the clip frame (the 1000px crop cuts the source frame; v1 independently marked 6360 uncertain).",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T08:40:00.000Z"
+    }
+  ],
+  "ballFrames": [
+    {
+      "tMs": 6320,
+      "point": null,
+      "visibility": "uncertain",
+      "note": "searched right-edge and upper zoom crops; ball not visible anywhere in the clip frame (likely still outside the 1000px source crop)"
+    },
+    {
+      "tMs": 6400,
+      "point": {
+        "x": 0.985,
+        "y": 0.311
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0093,
+      "occlusionState": "observed",
+      "note": "fully visible near the right frame edge, incoming from the right"
+    },
+    {
+      "tMs": 6480,
+      "point": {
+        "x": 0.938,
+        "y": 0.394
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0089,
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 6560,
+      "point": {
+        "x": 0.898,
+        "y": 0.472
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "immediately below the far player's paddle blade tip"
+    },
+    {
+      "tMs": 6640,
+      "point": {
+        "x": 0.855,
+        "y": 0.568
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "seen through the near-court net mesh below the tape"
+    }
+  ]
+}
