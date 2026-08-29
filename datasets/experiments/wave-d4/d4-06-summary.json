@@ -1,0 +1,62 @@
+{
+  "workstream": "D4-06 — Paddle student-model groundwork (latency mandate)",
+  "date": "2026-08-29",
+  "branch": "devin/wave-d4/d4-06-student-model",
+  "verdict": "ORANGE",
+  "deliverables": {
+    "distillationPipeline": "tools/paddle-lab/distill_export.py -> datasets/releases/paddle-distill-v0.1/{examples.jsonl, manifest.json} (formatVersion paddle-distill-v1)",
+    "studentModel": "tools/paddle-lab/{student_lib.py, train_student.py} -> datasets/experiments/wave-d4/d4-06-student/{student-paddle-v0.pt, training-report.json}",
+    "benchHarness": "tools/paddle-lab/student_bench.py -> datasets/experiments/wave-d4/d4-06-student/bench.json"
+  },
+  "datasetAccounting": {
+    "totalCommittedExamples": 417,
+    "trainingEligible": 382,
+    "quarantined": 35,
+    "quarantineReasons": {
+      "held_out_case:held_out (wm-dink-01)": 28,
+      "held_out_case:test_held_out (afn-vic-rally1)": 7
+    },
+    "trainingEligibleWithCommittedPixels": 217,
+    "withTeacherDetections": 367,
+    "withOwnershipOutcome": 100,
+    "firstPartyExamples": 0,
+    "firstPartyConsentGranted": 0,
+    "gates": {
+      "rights": "corpus rights.train in {yes, yes_with_attribution}; else quarantined; attribution obligation recorded (CC BY 3.0)",
+      "consentC10": "wired via services/media-worker trainingConsent semantics (latest explicit model_training grant; absence never opt-in); currently exercised by zero examples because no first-party footage exists",
+      "heldOut": "wm-dink-01 and afn-vic-rally1 always quarantined; never used for training, tuning, or benching"
+    }
+  },
+  "training": {
+    "model": "paddle-student-v0 center-heatmap CNN, 83889 params",
+    "hardware": "LINUX-CPU",
+    "trainWallSec": 14.4,
+    "split": "by sessionKey: train afn-sasebo-2025-06 (124 frames), val wm-tournament-2014 (93 frames)",
+    "targets": "teacher D-FINE (COCO racket-class proxy) detections; teacher outputs, NOT human observations"
+  },
+  "bench": {
+    "protocol": "committed human bundle annotations only; hitRadiusNorm 0.08; matchToleranceMs 40; teacher scored from COMMITTED dets artifacts (no re-inference)",
+    "cases": {
+      "afn-sasebo-rally1 (IN-DOMAIN for student)": {
+        "teacher": { "recall": 0.949, "precision": 0.616, "hits": "37/39" },
+        "student": { "recall": 0.846, "precision": 0.627, "hits": "33/39" }
+      },
+      "wm-volley-02 (cross-session)": {
+        "teacher": { "recall": 1.0, "precision": 0.518, "hits": "27/27" },
+        "student": { "recall": 0.074, "precision": 0.012, "hits": "2/27" }
+      }
+    },
+    "latencyLinuxCpu": {
+      "studentMsPerFrame": 1.02,
+      "teacherMsPerFrame": 107.5,
+      "label": "LINUX-CPU only; no Mac/iPhone numbers exist or are claimed"
+    }
+  },
+  "honestFraming": [
+    "TINY-DATA groundwork, not a promotion: 217 usable training frames from 2 clips / 2 sessions.",
+    "Student memorizes its training session (recall 0.846 in-domain) but fails cross-session (recall 0.074 on wm-volley-02). This is the expected honest outcome at this data scale.",
+    "The ~100x LINUX-CPU latency gap (1.02 vs 107.5 ms/frame) is the groundwork signal supporting the latency mandate; accuracy parity is nowhere near demonstrated.",
+    "Teacher is a COCO proxy (tennis racket / baseball bat), not a pickleball-paddle-trained model; its outputs are predictions, never observations.",
+    "Held-out cases wm-dink-01 and afn-vic-rally1 were untouched (auto-quarantined by the exporter)."
+  ]
+}

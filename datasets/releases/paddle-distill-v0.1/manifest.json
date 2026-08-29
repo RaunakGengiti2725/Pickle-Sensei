@@ -1,0 +1,103 @@
+{
+  "attributionObligations": ["CC BY 3.0"],
+  "counts": {
+    "byCase": {
+      "afn-sasebo-rally1": {
+        "pixelsCommitted": 124,
+        "total": 124,
+        "trainingEligible": 124,
+        "withOwnership": 19,
+        "withTeacher": 124
+      },
+      "afn-sasebo-rally2": {
+        "pixelsCommitted": 0,
+        "total": 137,
+        "trainingEligible": 137,
+        "withOwnership": 11,
+        "withTeacher": 137
+      },
+      "afn-vic-rally1": {
+        "pixelsCommitted": 0,
+        "total": 7,
+        "trainingEligible": 0,
+        "withOwnership": 7,
+        "withTeacher": 0
+      },
+      "wavea-944403-dink": {
+        "pixelsCommitted": 0,
+        "total": 12,
+        "trainingEligible": 12,
+        "withOwnership": 12,
+        "withTeacher": 0
+      },
+      "wavea-944403-smash": {
+        "pixelsCommitted": 0,
+        "total": 4,
+        "trainingEligible": 4,
+        "withOwnership": 4,
+        "withTeacher": 0
+      },
+      "wavea-faead-feed": {
+        "pixelsCommitted": 0,
+        "total": 2,
+        "trainingEligible": 2,
+        "withOwnership": 2,
+        "withTeacher": 0
+      },
+      "wavea-faead-rally": {
+        "pixelsCommitted": 0,
+        "total": 5,
+        "trainingEligible": 5,
+        "withOwnership": 5,
+        "withTeacher": 0
+      },
+      "wavea-marne-dig": {
+        "pixelsCommitted": 0,
+        "total": 5,
+        "trainingEligible": 5,
+        "withOwnership": 5,
+        "withTeacher": 0
+      },
+      "wm-dink-01": {
+        "pixelsCommitted": 28,
+        "total": 28,
+        "trainingEligible": 0,
+        "withOwnership": 19,
+        "withTeacher": 13
+      },
+      "wm-volley-02": {
+        "pixelsCommitted": 93,
+        "total": 93,
+        "trainingEligible": 93,
+        "withOwnership": 16,
+        "withTeacher": 93
+      }
+    },
+    "examples": 417,
+    "firstPartyConsentGranted": 0,
+    "firstPartyExamples": 0,
+    "quarantineReasons": {
+      "held_out_case:held_out": 28,
+      "held_out_case:test_held_out": 7
+    },
+    "quarantined": 35,
+    "trainingEligible": 382,
+    "trainingEligibleWithPixels": 217,
+    "withOwnershipOutcome": 100,
+    "withTeacherDetections": 367
+  },
+  "formatVersion": "paddle-distill-v1",
+  "gates": {
+    "consent": "C10: sourceUserId!=null requires a model_training grant in the supplied consent export (services/media-worker trainingConsent mirror); absence is never opt-in",
+    "rights": "corpus rights.train in {yes, yes_with_attribution}; fallback license rule (PD-USGov / CC BY); else quarantined",
+    "splitDiscipline": "role held_out / test_held_out always quarantined from training"
+  },
+  "generator": "tools/paddle-lab/distill_export.py",
+  "honestLimits": [
+    "wave-a teacher artifacts predate the C01 seek fix; tMs may be one frame (~33ms) early",
+    "pixels are committed for 3 bundle clips only; examples without pixelsCommitted are export-only until media is restored",
+    "no first-party footage exists yet; the consent gate is wired but exercised by zero examples"
+  ],
+  "releaseId": "paddle-distill-v0.1",
+  "splitRule": "by sessionKey (paddle-bench.json splitNote: formal splits by sessionKey begin when training begins)"
+}
