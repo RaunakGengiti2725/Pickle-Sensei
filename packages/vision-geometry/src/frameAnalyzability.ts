@@ -27,6 +27,30 @@ export interface FrameStats {
    * at the top/bottom of the frame, averaged over frames.
    */
   letterboxRowFraction: number;
+  /**
+   * Temporal statistics of the outermost border ring of pixels (all four
+   * edges). A physical bezel around a re-filmed screen is temporally frozen
+   * and dark on every edge — unlike letterbox bars, which are only
+   * horizontal. Absent = not measured (reported in `notEvaluated`).
+   */
+  borderRing?: {
+    /** Mean per-pixel temporal luma std over the ring. */
+    temporalStd: number;
+    /** Mean luma over the ring across all frames. */
+    meanLuma: number;
+  };
+  /**
+   * Temporally frozen (per-pixel temporal std ≤ ~0.5) 4-connected pixel
+   * components lying entirely in the bottom third of the raster — where a
+   * broadcast score graphic sits over otherwise-moving court content.
+   * Absent = not measured (reported in `notEvaluated`).
+   */
+  bottomFrozenComponents?: Array<{
+    /** Component size in raster pixels. */
+    size: number;
+    /** Spatial std of the mean-luma image inside the component (text contrast). */
+    lumaStd: number;
+  }>;
 }
 
 export interface FrameAnalyzabilityReport {
@@ -42,7 +66,7 @@ export interface FrameAnalyzabilityReport {
   };
 }
 
-export const FRAME_ANALYZABILITY_VERSION = "frame-analyzability-1";
+export const FRAME_ANALYZABILITY_VERSION = "frame-analyzability-2";
 
 export const FRAME_THRESHOLDS = {
   /** Below two frames there is no motion signal at all. */
@@ -51,12 +75,22 @@ export const FRAME_THRESHOLDS = {
   minDurationMs: 500,
   /** Beyond this the clip is not a single-stroke capture. */
   maxDurationMs: 10 * 60 * 1000,
-  /** Median inter-frame diff at or below this = still image played as video. */
-  stillImageMaxDiff: 0.5,
+  /** A consecutive frame pair is frozen when its mean abs diff is at or below this. */
+  frozenPairMaxDiff: 0.02,
+  /** At or above this fraction of frozen pairs = still image(s) played as video. */
+  stillImageMinFrozenFraction: 0.5,
   /** Median spatial luma std at or below this = solid-color frames. */
   solidColorMaxStd: 2,
   /** At or above this fraction of bar rows the content area is a letterboxed card. */
   letterboxMaxFraction: 0.4,
+  /** Border ring at or below this temporal std = frozen frame border. */
+  staticBorderMaxTemporalStd: 1,
+  /** ...and at or below this mean luma = dark bezel, not scene content. */
+  staticBorderMaxLuma: 48,
+  /** A frozen bottom-third component this large... */
+  overlayMinComponentSize: 8,
+  /** ...with at least this internal luma contrast = static graphic overlay. */
+  overlayMinComponentLumaStd: 12,
 } as const;
 
 /** Reason codes this gate can emit (closed set, used by the fuzz suite). */
@@ -67,12 +101,19 @@ export const FRAME_ANALYZABILITY_REASONS = [
   "still_image_video",
   "solid_color_frames",
   "letterbox_dominant",
+  "static_border_frame",
+  "static_overlay_suspected",
 ] as const;
 
 export function evaluateFrameAnalyzability(stats: FrameStats): FrameAnalyzabilityReport {
   const reasons: string[] = [];
   const medianDiff = stats.interFrameDiffs.length > 0 ? median(stats.interFrameDiffs) : 0;
   const medianStd = stats.spatialLumaStd.length > 0 ? median(stats.spatialLumaStd) : 0;
+  const frozenPairFraction =
+    stats.interFrameDiffs.length > 0
+      ? stats.interFrameDiffs.filter((d) => d <= FRAME_THRESHOLDS.frozenPairMaxDiff).length /
+        stats.interFrameDiffs.length
+      : 1;
 
   if (stats.frameCount < FRAME_THRESHOLDS.minFrames) {
     reasons.push("single_frame_clip");
@@ -83,7 +124,7 @@ export function evaluateFrameAnalyzability(stats: FrameStats): FrameAnalyzabilit
     if (stats.durationMs > FRAME_THRESHOLDS.maxDurationMs) {
       reasons.push("duration_implausibly_long");
     }
-    if (medianDiff <= FRAME_THRESHOLDS.stillImageMaxDiff) {
+    if (frozenPairFraction >= FRAME_THRESHOLDS.stillImageMinFrozenFraction) {
       reasons.push("still_image_video");
     }
   }
@@ -93,15 +134,39 @@ export function evaluateFrameAnalyzability(stats: FrameStats): FrameAnalyzabilit
   if (stats.letterboxRowFraction >= FRAME_THRESHOLDS.letterboxMaxFraction) {
     reasons.push("letterbox_dominant");
   }
+  if (
+    stats.borderRing !== undefined &&
+    stats.frameCount >= FRAME_THRESHOLDS.minFrames &&
+    stats.borderRing.temporalStd <= FRAME_THRESHOLDS.staticBorderMaxTemporalStd &&
+    stats.borderRing.meanLuma <= FRAME_THRESHOLDS.staticBorderMaxLuma
+  ) {
+    reasons.push("static_border_frame");
+  }
+  if (
+    stats.bottomFrozenComponents !== undefined &&
+    !reasons.includes("still_image_video") &&
+    stats.bottomFrozenComponents.some(
+      (component) =>
+        component.size >= FRAME_THRESHOLDS.overlayMinComponentSize &&
+        component.lumaStd >= FRAME_THRESHOLDS.overlayMinComponentLumaStd,
+    )
+  ) {
+    reasons.push("static_overlay_suspected");
+  }
+
+  const notEvaluated = [
+    "camera_motion", // needs feature tracking, not per-frame statistics
+    "scene_cuts", // owned by swing-lab sceneValidity (luma-histogram detector)
+    "exposure_flicker", // needs temporal luma-histogram analysis we do not run yet
+    "playback_speed", // resampled (e.g. 2x) playback is statistically a normal capture here
+  ];
+  if (stats.borderRing === undefined) notEvaluated.push("static_border_frame");
+  if (stats.bottomFrozenComponents === undefined) notEvaluated.push("static_overlay_suspected");
 
   return {
     analyzable: reasons.length === 0,
     reasons,
-    notEvaluated: [
-      "camera_motion", // needs feature tracking, not per-frame statistics
-      "scene_cuts", // owned by swing-lab sceneValidity (luma-histogram detector)
-      "exposure_flicker", // needs temporal luma-histogram analysis we do not run yet
-    ],
+    notEvaluated,
     stats: {
       frameCount: stats.frameCount,
       durationMs: stats.durationMs,
