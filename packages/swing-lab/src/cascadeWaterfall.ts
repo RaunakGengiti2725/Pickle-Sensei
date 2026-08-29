@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { REPO_ROOT } from "./engine/corpus.js";
 import type { StrokeEventLabel, SwingAnnotation } from "./annotationSchema.js";
 import {
-  SILENT_FAILURE_CONTRACT,
+  SILENT_FAILURE_CONTRACT_V1_1,
   SILENT_FAILURE_CLAIMS,
   evaluateSilentFailure,
 } from "./silentFailure.js";
@@ -333,6 +333,7 @@ if (isMain) {
       eventEndMs: gold.eventEndMs,
       contactMs: gold.contactMs,
       strokeLabel: goldStroke,
+      contactDisputed: gold.contactDisputed === true,
     });
     rows.push({
       caseId: benchCase.id,
@@ -377,7 +378,7 @@ if (isMain) {
       note: "second north-star: complements strict survival, never replaces it; per-case verdicts in rows[].usable",
     },
     silentFailure: {
-      contract: SILENT_FAILURE_CONTRACT,
+      contract: SILENT_FAILURE_CONTRACT_V1_1,
       silentFailures: silentFailureCount,
       answeredTrials: answeredCount,
       allTrials: rows.length,
@@ -426,7 +427,7 @@ if (isMain) {
   }
   console.log("═".repeat(74));
   console.log(
-    `SILENT FAILURE RATE — contract ${SILENT_FAILURE_CONTRACT.version} (defined before measuring)`,
+    `SILENT FAILURE RATE — contract ${SILENT_FAILURE_CONTRACT_V1_1.version} (defined before measuring)`,
   );
   console.log(
     "third north-star: confident material claims gold says are wrong; abstentions are NOT silent failures",

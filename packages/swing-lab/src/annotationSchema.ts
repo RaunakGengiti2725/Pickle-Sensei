@@ -86,6 +86,14 @@ export interface StrokeEventLabel {
   eventEndMs: number;
   owner: "target" | "other";
   note?: string;
+  /**
+   * A filed dispute against contactMs (e.g. the C05 dispute on the
+   * wavea-944403-dink 21604ms contact). Disputed gold is kept, never deleted;
+   * metrics exclude-and-disclose it (silent-failure-v1.1).
+   */
+  contactDisputed?: boolean;
+  /** Reference to where the dispute is filed (experiment summary, adjudication queue). */
+  contactDisputeRef?: string;
 }
 
 export interface SwingAnnotation {

@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { REPO_ROOT } from "./engine/corpus.js";
 import {
   areaUnderRiskCoverage,
+  calibrationReport,
   coverageRiskCurve,
-  expectedCalibrationError,
   reliabilityBins,
   type ConfidenceSample,
 } from "./calibration.js";
@@ -111,7 +111,7 @@ if (isMain) {
       name: dataset.name,
       provenance: dataset.provenance,
       n: dataset.samples.length,
-      ece10: expectedCalibrationError(dataset.samples, 10),
+      calibration: calibrationReport(dataset.samples, { nBins: 10 }),
       aurc: areaUnderRiskCoverage(dataset.samples),
       reliabilityBins: reliabilityBins(dataset.samples, 10).filter((bin) => bin.count > 0),
       coverageRiskCurve: coverageRiskCurve(dataset.samples),
@@ -126,9 +126,12 @@ if (isMain) {
     console.log("═".repeat(74));
     console.log(dataset.name);
     console.log(`  provenance: ${dataset.provenance}`);
-    console.log(
-      `  n=${dataset.n} · ECE(10 bins)=${dataset.ece10.toFixed(4)} · AURC=${dataset.aurc.toFixed(4)}`,
-    );
+    const eceText =
+      dataset.calibration.ece === null
+        ? `REFUSED (n=${dataset.calibration.n} < floor ${dataset.calibration.minSamples})`
+        : dataset.calibration.ece.toFixed(4);
+    console.log(`  n=${dataset.n} · ECE(10 bins)=${eceText} · AURC=${dataset.aurc.toFixed(4)}`);
+    for (const flag of dataset.calibration.flags) console.log(`  FLAG: ${flag}`);
     console.log("  threshold  coverage  risk      answered  wrong");
     for (const point of dataset.coverageRiskCurve) {
       console.log(

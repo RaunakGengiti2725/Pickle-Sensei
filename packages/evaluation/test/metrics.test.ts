@@ -96,6 +96,30 @@ describe("calibration metrics", () => {
     );
     expect(overconfident.expectedCalibrationError).toBeCloseTo(0.95);
   });
+
+  // REGRESSION (D3-10): NaN confidence used to crash with an opaque TypeError
+  // (bins[NaN] undefined); out-of-range flowed into the edge bins silently.
+  it("rejects non-finite and out-of-range confidences with a clear error", () => {
+    expect(() => calibrationReport([{ confidence: NaN, correct: true }])).toThrow(/finite/);
+    expect(() => calibrationReport([{ confidence: 1.5, correct: true }])).toThrow(/\[0,1\]/);
+  });
+
+  // REGRESSION (D3-10): empty/tiny-n/degenerate ECE printed as a bare
+  // confident number; the report must disclose n and warn.
+  it("discloses n and warns on empty, tiny-n, and degenerate inputs", () => {
+    const empty = calibrationReport([]);
+    expect(empty.n).toBe(0);
+    expect(empty.warnings.join(" ")).toMatch(/no samples/);
+    const tiny = calibrationReport([{ confidence: 1, correct: false }]);
+    expect(tiny.n).toBe(1);
+    expect(tiny.warnings.join(" ")).toMatch(/insufficient n/);
+    expect(tiny.warnings.join(" ")).toMatch(/degenerate/);
+    const healthy = calibrationReport(
+      Array.from({ length: 12 }, (_, i) => ({ confidence: i / 12, correct: i % 2 === 0 })),
+    );
+    expect(healthy.n).toBe(12);
+    expect(healthy.warnings).toEqual([]);
+  });
 });
 
 describe("regression gate", () => {

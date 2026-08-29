@@ -65,6 +65,30 @@ export const SILENT_FAILURE_CONTRACT = {
     "trial is ANSWERED if >=1 claim answered and gold-verifiable; trial is a SILENT FAILURE if >=1 answered claim is wrong; report silent failures over ALL trials and over ANSWERED trials",
 } as const;
 
+/**
+ * SILENT FAILURE CONTRACT — silent-failure-v1.1 (re-versioned, never softened
+ * in place). Identical to v1 for undisputed, well-formed gold. Two additions:
+ *
+ *   DISPUTED GOLD — when a gold value carries a filed dispute (e.g. the C05
+ *     contact dispute), the affected claim is EXCLUDED AND DISCLOSED
+ *     (status "excluded_disputed_gold"): it counts as neither correct nor a
+ *     silent failure, and the disclosure names the dispute. Disputed gold is
+ *     not reliable gold; silently counting either way would let the dispute
+ *     decide the metric.
+ *   NON-FINITE GUARD — a claim whose verification arithmetic would involve a
+ *     non-finite value (NaN/Infinity in gold bounds, gold contact, or the
+ *     estimate) is UNVERIFIABLE with disclosure, never a confident verdict in
+ *     either direction.
+ */
+export const SILENT_FAILURE_CONTRACT_V1_1 = {
+  ...SILENT_FAILURE_CONTRACT,
+  version: "silent-failure-v1.1",
+  disputedGold:
+    "a claim whose gold value is under a filed dispute is excluded-and-disclosed (excluded_disputed_gold): counted neither correct nor silent failure, disclosed in the per-claim detail",
+  nonFiniteGuard:
+    "non-finite values (NaN/Infinity) in gold or estimates make the claim unverifiable-with-disclosure, never a confident verdict",
+} as const;
+
 export const SILENT_FAILURE_CLAIMS = [
   "TARGET_IDENTITY",
   "EVENT",
@@ -74,7 +98,8 @@ export const SILENT_FAILURE_CLAIMS = [
 ] as const;
 export type SilentFailureClaim = (typeof SILENT_FAILURE_CLAIMS)[number];
 
-export type ClaimStatus = "correct" | "silent_failure" | "abstained" | "unverifiable";
+export type ClaimStatus =
+  "correct" | "silent_failure" | "abstained" | "unverifiable" | "excluded_disputed_gold";
 
 export interface ClaimVerdict {
   status: ClaimStatus;
@@ -109,6 +134,10 @@ export interface SilentFailureGold {
   eventEndMs: number;
   contactMs: number | null;
   strokeLabel: string | null;
+  /** A filed dispute against the gold contact (e.g. C05); excluded-and-disclosed. */
+  contactDisputed?: boolean;
+  /** A filed dispute against the gold stroke label; excluded-and-disclosed. */
+  strokeLabelDisputed?: boolean;
 }
 
 const l1Side = (label: string): string =>
@@ -120,11 +149,19 @@ export function evaluateSilentFailure(
 ): SilentFailureVerdict {
   const claims = {} as Record<SilentFailureClaim, ClaimVerdict>;
 
+  const finiteOrNull = (value: number | null | undefined): boolean =>
+    value == null || Number.isFinite(value);
+
   const player = report.player;
   if (!player) {
     claims.TARGET_IDENTITY = {
       status: "abstained",
       detail: "no lock presented (no player identity in report)",
+    };
+  } else if (!finiteOrNull(player.targetCoverage)) {
+    claims.TARGET_IDENTITY = {
+      status: "unverifiable",
+      detail: `lock presented but coverage is non-finite (${player.targetCoverage}) — cannot verify`,
     };
   } else {
     const coverage = player.targetCoverage ?? 0;
@@ -143,6 +180,17 @@ export function evaluateSilentFailure(
       status: "abstained",
       detail: `no event selected (status ${report.targetEvent?.status ?? "missing"})`,
     };
+  } else if (
+    !Number.isFinite(gold.eventStartMs) ||
+    !Number.isFinite(gold.eventEndMs) ||
+    gold.eventEndMs <= gold.eventStartMs ||
+    !Number.isFinite(selected.startMs) ||
+    !Number.isFinite(selected.endMs)
+  ) {
+    claims.EVENT = {
+      status: "unverifiable",
+      detail: `event selected but bounds are non-finite or degenerate (gold ${gold.eventStartMs}–${gold.eventEndMs}, selected ${selected.startMs}–${selected.endMs}) — cannot verify`,
+    };
   } else {
     const overlap = Math.max(
       0,
@@ -151,6 +199,8 @@ export function evaluateSilentFailure(
     const goldSpan = gold.eventEndMs - gold.eventStartMs;
     const contactInside =
       gold.contactMs !== null &&
+      gold.contactDisputed !== true &&
+      Number.isFinite(gold.contactMs) &&
       gold.contactMs >= selected.startMs &&
       gold.contactMs <= selected.endMs;
     const pass = overlap / goldSpan >= 0.5 || contactInside;
@@ -168,6 +218,11 @@ export function evaluateSilentFailure(
   const predicted = report.strokePrediction?.label ?? null;
   if (predicted === null) {
     claims.STROKE_L1 = { status: "abstained", detail: "stroke abstained (null/missing label)" };
+  } else if (gold.strokeLabelDisputed === true) {
+    claims.STROKE_L1 = {
+      status: "excluded_disputed_gold",
+      detail: `predicted ${predicted} but gold stroke label${gold.strokeLabel === null ? "" : ` ${gold.strokeLabel}`} is under a filed dispute — excluded and disclosed, counted neither way`,
+    };
   } else if (gold.strokeLabel === null) {
     claims.STROKE_L1 = {
       status: "unverifiable",
@@ -189,10 +244,20 @@ export function evaluateSilentFailure(
       status: "abstained",
       detail: `contact ${contact?.status ?? "missing"} — no marker claimed`,
     };
+  } else if (gold.contactDisputed === true) {
+    claims.CONTACT_MARKER = {
+      status: "excluded_disputed_gold",
+      detail: `marker claimed but gold contact${gold.contactMs === null ? "" : ` ${gold.contactMs}ms`} is under a filed dispute — excluded and disclosed, counted neither way`,
+    };
   } else if (contact.estimatedContactMs === undefined || gold.contactMs === null) {
     claims.CONTACT_MARKER = {
       status: "unverifiable",
       detail: `marker claimed but ${gold.contactMs === null ? "no gold contact" : "no estimate timestamp"} — err unverifiable`,
+    };
+  } else if (!Number.isFinite(contact.estimatedContactMs) || !Number.isFinite(gold.contactMs)) {
+    claims.CONTACT_MARKER = {
+      status: "unverifiable",
+      detail: `marker claimed but timestamps are non-finite (est ${contact.estimatedContactMs}, gold ${gold.contactMs}) — cannot verify`,
     };
   } else {
     const err = Math.abs(contact.estimatedContactMs - gold.contactMs);
@@ -226,16 +291,25 @@ export function evaluateSilentFailure(
     };
   } else {
     const boundaries = phases.boundaries ?? {};
+    const followFinite =
+      boundaries.followThroughEndMs == null || Number.isFinite(boundaries.followThroughEndMs);
+    const contactFinite = boundaries.contactMs == null || Number.isFinite(boundaries.contactMs);
     const orderingValid =
       boundaries.followThroughEndMs == null ||
       boundaries.contactMs == null ||
       boundaries.followThroughEndMs > boundaries.contactMs;
-    claims.PHASE_RENDER = orderingValid
-      ? { status: "correct", detail: "timeline rendered, ordering valid" }
-      : {
-          status: "silent_failure",
-          detail: "timeline rendered with impossible ordering (followThroughEnd <= contact)",
-        };
+    claims.PHASE_RENDER =
+      !followFinite || !contactFinite
+        ? {
+            status: "silent_failure",
+            detail: `timeline rendered with non-finite boundary (contact ${boundaries.contactMs}, followThroughEnd ${boundaries.followThroughEndMs}) — a physically false render`,
+          }
+        : orderingValid
+          ? { status: "correct", detail: "timeline rendered, ordering valid" }
+          : {
+              status: "silent_failure",
+              detail: "timeline rendered with impossible ordering (followThroughEnd <= contact)",
+            };
   }
 
   const values = Object.values(claims);
