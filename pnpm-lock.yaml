@@ -179,6 +179,25 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@26.3.0)(tsx@4.23.12)
 
+  packages/first-party-intake:
+    dependencies:
+      '@pickle/capture-envelope':
+        specifier: workspace:*
+        version: link:../capture-envelope
+      '@pickle/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+    devDependencies:
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.12
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@26.3.0)(tsx@4.23.12)
+
   packages/model-registry:
     dependencies:
       '@pickle/shared-types':
