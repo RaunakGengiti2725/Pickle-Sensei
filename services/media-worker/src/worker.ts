@@ -1,5 +1,6 @@
 import type pg from "pg";
 import type { IJobQueue, JobEnvelope } from "@pickle/queue";
+import type { IAnalyticsSink } from "@pickle/analytics";
 
 /**
  * Media/maintenance worker (spec p. 38, directive §58).
@@ -36,6 +37,9 @@ export interface WorkerDeps {
     | ((input: { objectKey: string }) => Promise<{ normalizedKey: string; thumbnailKey: string }>)
     | null;
   log: (line: string) => void;
+  /** Operational telemetry sink (worker_failure / queue_backlog). Optional:
+   * absence means events are simply not emitted — behavior is unchanged. */
+  analytics?: IAnalyticsSink;
 }
 
 type JobOutcome = { handled: true; note: string } | { handled: false; note: string };
@@ -295,14 +299,27 @@ export async function runOnce(
   let jobs = 0;
   for (const { job, ack } of received) {
     let outcome: JobOutcome;
+    let threw = false;
     try {
       outcome = await handleJob(deps, job);
     } catch (error) {
       // One poison job must never take down the batch: it stays on the queue
       // (visibility timeout) and the failure is logged loudly.
+      threw = true;
       outcome = { handled: false, note: `handler threw: ${String(error)}` };
     }
     deps.log(`${job.kind}: ${outcome.note}`);
+    if (!outcome.handled) {
+      // Category only — the detailed note stays in the worker log, never in
+      // analytics (it can carry error strings and object keys).
+      deps.analytics?.track({
+        name: "worker_failure",
+        at: new Date().toISOString(),
+        platform: "service",
+        jobKind: job.kind,
+        failureKind: threw ? "handler_exception" : "unhandled",
+      });
+    }
     if (outcome.handled) {
       await ack();
       jobs++;
@@ -312,5 +329,15 @@ export async function runOnce(
   }
   const deletions = await processDeletionTasks(deps);
   const swept = await sweepDeletedMedia(deps);
+  if (deps.analytics) {
+    deps.analytics.track({
+      name: "queue_backlog",
+      at: new Date().toISOString(),
+      platform: "service",
+      queue: "media",
+      depth: await deps.queue.size(),
+    });
+    await deps.analytics.flush();
+  }
   return { jobs, deletions, swept };
 }

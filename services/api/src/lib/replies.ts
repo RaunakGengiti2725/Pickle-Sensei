@@ -1,6 +1,13 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FailureKind } from "@pickle/shared-types";
 
+const failureCodes = new WeakMap<FastifyReply, string>();
+
+/** The typed error code sent on this reply, if it went through sendFailure. */
+export function failureCodeFor(reply: FastifyReply): string | undefined {
+  return failureCodes.get(reply);
+}
+
 /** Typed error envelope for every failure (directive §6). */
 export function sendFailure(
   reply: FastifyReply,
@@ -10,6 +17,7 @@ export function sendFailure(
   code: string,
   message: string,
 ): FastifyReply {
+  failureCodes.set(reply, code);
   return reply.status(status).send({
     error: {
       kind,

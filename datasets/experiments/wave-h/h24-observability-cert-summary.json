@@ -1,0 +1,85 @@
+{
+  "workstream": "h24-observability-cert",
+  "gate": "GATE 15 — observability",
+  "branch": "devin/wave-h/h24-observability-cert",
+  "baseline": "devin/1787988068-wave-c-integration @ 104ea0f",
+  "date": "2026-08-29",
+  "environment": "Linux CI box, Node v20.18.1, pnpm 10.15.1. No Mac/iPhone hardware: no device measurements are claimed.",
+  "method": [
+    "Audited existing telemetry (packages/analytics, services/api, services/media-worker, mobile handoff docs) against the Gate 15 required signal list.",
+    "Extended the typed AnalyticsEvent taxonomy in @pickle/analytics with the missing operational events (analysis_abstained, capture_envelope_verdict, target_lock_failed, event_proposal_failed, app_crash, worker_failure, queue_backlog, api_failure) plus latency/modelVersion fields on analysis events and appBuild/platform/deviceClass base metadata.",
+    "Added a structural privacy scanner (findPrivacyViolations) enforced at the BufferedAnalytics sink boundary: media/storage URI schemes, filesystem paths, emails, base64-like blobs, forbidden keys (uri/url/path/objectKey/email/phone/deviceId/idfa/stackTrace/rawFrame/imageData/videoData/poseFrames/...), oversized strings (>200) and arrays (>32). Violating events are dropped and reported, never buffered or transmitted.",
+    "Wired service-side emission: services/api emits api_failure (route TEMPLATE, method, statusCode, typed errorCode) for all 5xx and the 401/403 security-sensitive slice via an onResponse hook; services/media-worker emits worker_failure (categorical failureKind only) and queue_backlog (queue depth) per cycle. Raw error text stays in service logs only.",
+    "Committed operational configuration: infra/observability/alerts.json (12 versioned alert conditions with runbooks) and infra/observability/views.sql (10 SQL views), both validated against ANALYTICS_EVENT_NAMES by packages/analytics/test/observability.test.ts so config can never reference a nonexistent event. docs/OBSERVABILITY.md documents the taxonomy, redaction rules, ingestion status, and alert families.",
+    "Ran root gates on the branch."
+  ],
+  "measured_results": {
+    "root_gates": {
+      "typecheck": "PASS (all 21 workspace projects)",
+      "test": "PASS — full workspace run: 593 passed / 4 skipped in swing-lab alone; per-package counts for touched packages below",
+      "lint": "PASS (eslint ., exit 0)",
+      "format_check": "PASS (prettier --check ., 'All matched files use Prettier code style!')"
+    },
+    "touched_package_tests": {
+      "packages/analytics": "3 files, 20 tests passed (3 pre-existing + 10 redaction + 7 observability-config)",
+      "services/api": "4 files 18 tests passed, 7 files 82 tests skipped (skips are pre-existing DB-integration tests requiring DATABASE_URL_TEST; not caused by this work)",
+      "services/media-worker": "1 file 4 tests passed, 4 files 25 tests skipped (same pre-existing DB skip condition)"
+    },
+    "alert_conditions_committed": 12,
+    "sql_views_committed": 10,
+    "gate15_signal_coverage": {
+      "wired_and_tested_on_this_branch": [
+        "api_failure (backend 5xx + security-sensitive 401/403, typed error codes, route templates)",
+        "worker_failure (categorical)",
+        "queue_backlog (depth gauge)"
+      ],
+      "typed_contract_shipped_mobile_wiring_out_of_scope_on_linux": [
+        "analysis_started/completed/failed (+latencyMs, modelVersion)",
+        "analysis_abstained (reasonCategory)",
+        "capture_envelope_verdict",
+        "target_lock_failed",
+        "event_proposal_failed",
+        "app_crash (fingerprint, fatal)",
+        "device/build version via base metadata (appBuild, platform, deviceClass)"
+      ]
+    },
+    "redaction_verification": "10 regression tests prove URI schemes (file:/content:/ph:/s3:/blob:/data:), filesystem paths, emails, base64 blobs, oversized payloads, and forbidden keys are detected and that BufferedAnalytics refuses to buffer violating events; API and worker telemetry tests additionally prove concrete query values/emails and raw handler-error paths never appear in emitted events.",
+    "mobile_gates": "Not run — apps/mobile not touched by this workstream."
+  },
+  "findings": {
+    "P0": [],
+    "P1": [
+      {
+        "id": "H24-P1-1",
+        "status": "FIXED",
+        "finding": "No privacy guard existed at the analytics sink boundary: any caller could ship media URIs, emails, raw error strings, or oversized blobs to the transport. Fixed with structural scanning + drop-and-report in BufferedAnalytics, with 10 regression tests."
+      },
+      {
+        "id": "H24-P1-2",
+        "status": "FIXED",
+        "finding": "No backend operational telemetry existed: API failures (including the security-sensitive 401/403 slice), worker failures, and queue backlog were invisible. Fixed with typed service-side emission + tests."
+      },
+      {
+        "id": "H24-P1-3",
+        "status": "UNRESOLVED (external / out of Linux scope)",
+        "finding": "Mobile emission points for the analysis-funnel events (analysis_*, capture_envelope_verdict, target_lock_failed, event_proposal_failed, app_crash) are contract-only: apps/mobile wiring and on-device verification require the Mac/iPhone toolchain, which is unavailable here (per docs/STATUS_BOARD.md boundary). The typed contract, redaction guard, views, and alerts are ready; wiring is a Mac-gated follow-up."
+      },
+      {
+        "id": "H24-P1-4",
+        "status": "UNRESOLVED (disclosed)",
+        "finding": "No server-side analytics ingestion endpoint exists in the RC; BufferedAnalytics transports are pluggable and services default to structured logs. views.sql commits the reviewed table contract and view definitions for the ingestion migration; until it ships, the same queries run over structured logs. Alerting cannot be live end-to-end until ingestion exists."
+      }
+    ],
+    "P2": [
+      {
+        "id": "H24-P2-1",
+        "status": "FIXED",
+        "finding": "Alert thresholds had no committed, reviewable home; now versioned in infra/observability/alerts.json with min-denominator guards so low-traffic windows cannot page, and validated by tests against the event taxonomy."
+      }
+    ]
+  },
+  "verdict": "PASS_WITH_DISCLOSED_LIMITS",
+  "verdict_rationale": "Everything internally solvable on Linux for Gate 15 is implemented, tested, and green: complete typed event taxonomy covering every mandated signal, enforced privacy redaction with regression tests, wired+tested service-side emission (API failure, worker failure, queue backlog), and committed testable operational views + 12 alert conditions including crash spikes, analysis-failure spikes, latency spikes, backend errors, queue backlog, and security-sensitive failures. Two honest limits remain and are NOT softened: (1) mobile emission wiring/verification is Mac-gated (H24-P1-3); (2) no ingestion endpoint exists yet, so alerts are committed config, not live monitors (H24-P1-4). If GO requires live end-to-end observability from device to alert, this gate alone is BLOCKED_EXTERNAL on the Mac/iPhone toolchain and an ingestion deployment; the code-level gate is PASS.",
+  "held_out_cases_touched": false,
+  "no_pr_opened": true
+}
