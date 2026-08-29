@@ -43,6 +43,19 @@ function makeBase(path: string, size = "1280x720", rate = 30, duration = 3): voi
   ]);
 }
 
+/**
+ * Writes a stream copy of `src` carrying `degrees` of rotation metadata.
+ * ffmpeg <5 honors the legacy `rotate` stream tag; newer ffmpeg dropped that
+ * path in favor of the `-display_rotation` input option (which writes a
+ * displaymatrix, the same side data real phone captures carry).
+ */
+function makeRotated(src: string, dest: string, degrees: number): void {
+  ffmpeg(["-i", src, "-c", "copy", "-metadata:s:v:0", `rotate=${degrees}`, dest]);
+  if (probeClipStream(dest).rotationDegrees === 0) {
+    ffmpeg(["-display_rotation", String(degrees), "-i", src, "-c", "copy", dest]);
+  }
+}
+
 function dimensionStatus(clipPath: string, dimension: string): string | undefined {
   const verdict = evaluateCaptureEnvelope(measureClip(clipPath));
   return verdict.dimensions.find((d) => d.dimension === dimension)?.status;
@@ -142,7 +155,7 @@ describe.skipIf(!hasFfmpeg)("red-team synthetic adversarial clips (D3-07)", () =
 
   it("90° rotation metadata swaps display dimensions and keeps resolution honest", () => {
     const clip = join(dir, "portraitmeta.mp4");
-    ffmpeg(["-i", base, "-c", "copy", "-metadata:s:v:0", "rotate=90", clip]);
+    makeRotated(base, clip, 90);
     const info = probeClipStream(clip);
     expect([90, 270]).toContain(info.rotationDegrees);
     expect(info.displayWidth).toBe(720);
@@ -155,7 +168,7 @@ describe.skipIf(!hasFfmpeg)("red-team synthetic adversarial clips (D3-07)", () =
 
   it("180° rotation metadata leaves pixel measurements identical to the unrotated clip", () => {
     const clip = join(dir, "rot180meta.mp4");
-    ffmpeg(["-i", base, "-c", "copy", "-metadata:s:v:0", "rotate=180", clip]);
+    makeRotated(base, clip, 180);
     const rotated = measureClip(clip);
     const plain = measureClip(base);
     expect(rotated.frameWidthPx).toBe(plain.frameWidthPx);
