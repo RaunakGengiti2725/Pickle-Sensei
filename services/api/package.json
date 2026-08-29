@@ -22,6 +22,8 @@
     "zod": "^4.1.5"
   },
   "devDependencies": {
+    "@pickle/first-party-intake": "workspace:*",
+    "@pickle/media-worker": "workspace:*",
     "@types/pg": "^8.15.5",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",

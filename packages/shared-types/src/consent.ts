@@ -92,3 +92,46 @@ export function deriveConsentStatus(records: readonly ConsentRecord[]): ConsentS
 export function isModelTrainingConsentActive(records: readonly ConsentRecord[]): boolean {
   return deriveConsentStatus(records).find((s) => s.scope === "model_training")?.active ?? false;
 }
+
+/**
+ * Consent ledger export contract. The API serves a subject's full ledger in
+ * this envelope; intake hosts verify the integrity fields before trusting the
+ * records. Versioned like every consent contract: changes re-version.
+ */
+export const CONSENT_LEDGER_EXPORT_VERSION = "consent-ledger-export-v1";
+
+export interface ConsentLedgerExport {
+  exportVersion: string;
+  exportedAtIso: string;
+  subjectPseudonym: string;
+  /** Must equal records.length. */
+  recordCount: number;
+  /** Highest seq in records; null when the ledger is empty. */
+  maxSeq: number | null;
+  /** sha256 hex of canonicalConsentRecordsJson(records). */
+  recordsSha256: string;
+  records: ConsentRecord[];
+}
+
+/**
+ * Deterministic serialization of ledger records for export hashing: fixed
+ * key order, seq normalized to null when absent. Both the exporter and the
+ * verifier must hash exactly this string.
+ */
+export function canonicalConsentRecordsJson(records: readonly ConsentRecord[]): string {
+  return JSON.stringify(
+    records.map((r) => ({
+      id: r.id,
+      subjectPseudonym: r.subjectPseudonym,
+      scope: r.scope,
+      action: r.action,
+      consentVersion: r.consentVersion,
+      source: r.source,
+      device: r.device,
+      captureMode: r.captureMode,
+      strokeIntent: r.strokeIntent,
+      recordedAtIso: r.recordedAtIso,
+      seq: r.seq ?? null,
+    })),
+  );
+}

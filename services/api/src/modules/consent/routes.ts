@@ -1,7 +1,14 @@
+import { createHash } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type pg from "pg";
 import { ConsentGrantRequest, ConsentWithdrawRequest } from "@pickle/api-contracts";
-import { deriveConsentStatus, type ConsentRecord } from "@pickle/shared-types";
+import {
+  CONSENT_LEDGER_EXPORT_VERSION,
+  canonicalConsentRecordsJson,
+  deriveConsentStatus,
+  type ConsentLedgerExport,
+  type ConsentRecord,
+} from "@pickle/shared-types";
 import type { AppContext } from "../../context.js";
 import { sendFailure } from "../../lib/replies.js";
 import { audit, many, one, withTransaction } from "../../lib/db.js";
@@ -209,5 +216,57 @@ export function registerConsentRoutes(app: FastifyInstance, context: AppContext)
       [request.user!.id],
     );
     return statusPayload(pool, row?.pseudonym ?? null);
+  });
+
+  // Canonical ledger export for intake hosts (first-party-intake consumes
+  // exactly this envelope). Records are ConsentRecord-shaped (recordedAtIso,
+  // seq required) and ordered by seq; the integrity fields let the consumer
+  // detect truncated, reordered, or tampered exports offline.
+  app.get("/v1/me/consent/export", { preHandler: app.authenticate }, async (request, reply) => {
+    const pool = requireDb(request, reply);
+    if (!pool) return reply;
+    const userId = request.user!.id;
+    const row = await one<{ pseudonym: string }>(
+      pool,
+      "SELECT pseudonym FROM consent_subject WHERE user_id = $1",
+      [userId],
+    );
+    if (!row) {
+      return sendFailure(
+        reply,
+        request,
+        404,
+        "permanent",
+        "consent.no_ledger",
+        "No consent ledger exists for this account.",
+      );
+    }
+    const records = (
+      await many<ConsentRow>(
+        pool,
+        "SELECT * FROM consent_record WHERE subject_pseudonym = $1 ORDER BY seq",
+        [row.pseudonym],
+      )
+    ).map(toRecord);
+    await audit(pool, {
+      actorUserId: userId,
+      action: "consent.ledger.exported",
+      targetKind: "consent_subject",
+      targetId: row.pseudonym,
+      requestId: request.id,
+      metadata: { recordCount: records.length },
+    });
+    const payload: ConsentLedgerExport = {
+      exportVersion: CONSENT_LEDGER_EXPORT_VERSION,
+      exportedAtIso: new Date().toISOString(),
+      subjectPseudonym: row.pseudonym,
+      recordCount: records.length,
+      maxSeq: records.length > 0 ? records.at(-1)!.seq! : null,
+      recordsSha256: createHash("sha256")
+        .update(canonicalConsentRecordsJson(records))
+        .digest("hex"),
+      records,
+    };
+    return payload;
   });
 }

@@ -388,3 +388,30 @@ export const ConsentStatusResponse = z.object({
   records: z.array(ConsentRecordSchema),
 });
 export type ConsentStatusResponseT = z.infer<typeof ConsentStatusResponse>;
+
+/** Ledger export envelope: ConsentRecord contract shape (recordedAtIso, seq
+ * required) with integrity fields intake hosts verify before trusting it. */
+export const ConsentLedgerExportRecordSchema = z.object({
+  id: z.uuid(),
+  subjectPseudonym: z.uuid(),
+  scope: z.enum(CONSENT_SCOPES),
+  action: z.enum(CONSENT_ACTIONS),
+  consentVersion: z.string(),
+  source: z.enum(CONSENT_SOURCES),
+  device: z.string().nullable(),
+  captureMode: z.enum(CONSENT_CAPTURE_MODES).nullable(),
+  strokeIntent: z.string().nullable(),
+  recordedAtIso: z.iso.datetime(),
+  seq: z.number().int().positive(),
+});
+
+export const ConsentLedgerExportResponse = z.object({
+  exportVersion: z.literal("consent-ledger-export-v1"),
+  exportedAtIso: z.iso.datetime(),
+  subjectPseudonym: z.uuid(),
+  recordCount: z.number().int().nonnegative(),
+  maxSeq: z.number().int().positive().nullable(),
+  recordsSha256: z.string().regex(/^[0-9a-f]{64}$/),
+  records: z.array(ConsentLedgerExportRecordSchema),
+});
+export type ConsentLedgerExportResponseT = z.infer<typeof ConsentLedgerExportResponse>;

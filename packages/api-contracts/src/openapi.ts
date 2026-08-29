@@ -18,6 +18,7 @@ import {
   TrainingPlanReassessmentRequest,
   DrillCompletionCreateRequest,
   ConsentGrantRequest,
+  ConsentLedgerExportResponse,
   ConsentWithdrawRequest,
   ConsentStatusResponse,
 } from "./schemas.js";
@@ -241,6 +242,21 @@ export function buildOpenApiDocument(apiVersion: string): Record<string, unknown
               content: { "application/json": { schema: schema(ConsentStatusResponse) } },
             },
             "401": errorResponse,
+          },
+        },
+      },
+      "/v1/me/consent/export": {
+        get: {
+          operationId: "exportConsentLedger",
+          summary:
+            "Canonical consent ledger export for intake hosts — versioned envelope with integrity fields (recordCount, maxSeq, recordsSha256)",
+          responses: {
+            "200": {
+              description: "Consent ledger export envelope",
+              content: { "application/json": { schema: schema(ConsentLedgerExportResponse) } },
+            },
+            "401": errorResponse,
+            "404": errorResponse,
           },
         },
       },
