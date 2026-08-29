@@ -214,7 +214,7 @@ describe("stroke gold file", () => {
     expect(validateStrokeGoldFile(gold)).toEqual([]);
     expect(gold.labels.length).toBeGreaterThanOrEqual(15);
     for (const label of gold.labels) {
-      expect(label.annotatorId).toBe("devin-visual-v2-waveC");
+      expect(["devin-visual-v2-waveC", "devin-visual-v3-waveD"]).toContain(label.annotatorId);
       expect(["wm-dink-01", "afn-vic-rally1"]).not.toContain(label.caseId); // held-out untouched
       expect(label.reasoning.length).toBeGreaterThan(20);
     }
