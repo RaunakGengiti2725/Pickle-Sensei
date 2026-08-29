@@ -1,3 +1,4 @@
+export * from "./captureEnvelope.js";
 export * from "./consent.js";
 export * from "./domain.js";
 export * from "./errors.js";

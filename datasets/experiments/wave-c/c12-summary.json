@@ -1,0 +1,49 @@
+{
+  "workstream": "C12 — measurable supported-capture-envelope checker",
+  "status": "GREEN (module + measurements) with one disclosed premise correction: only 3 bundle clips are committed, not 13",
+  "built": {
+    "package": "packages/capture-envelope (@pickle/capture-envelope, new focused module)",
+    "checker": "src/envelope.ts evaluateCaptureEnvelope(measurements) → EnvelopeVerdict; per-dimension SUPPORTED/DEGRADED/UNSUPPORTED/NOT_MEASURED; overall = worst MEASURED dimension; null pose signals become NOT_MEASURED and are listed in notMeasured (degraded observability is surfaced, never hidden)",
+    "thresholds": "src/thresholds.ts CAPTURE_ENVELOPE_THRESHOLDS, version capture-envelope-thresholds-v0.1-provisional, provisional flag exported and stamped on every verdict; every dimension rule carries its own versioned thresholdId; bands are starting hypotheses to be re-learned from labeled evidence and re-versioned — NOT validated",
+    "dimensions": [
+      "resolution (short side px)",
+      "frame_rate (avg fps)",
+      "brightness (mean luma 0-255 over sampled gray frames)",
+      "motion_blur (median Laplacian variance on 320w gray downscales)",
+      "camera_motion (mean abs per-pixel luma diff between consecutive sampled frames)",
+      "clip_duration (ms)",
+      "player_pixel_height (fraction of frame height — pose-derived, CONTRACT ONLY here)",
+      "player_visibility (mean joint visibility — pose-derived, CONTRACT ONLY here)"
+    ],
+    "cpuEvaluator": "src/clipProbe.ts (ffprobe stream stats + ffmpeg fps=4/scale=320:-2/gray rawvideo sampling; Laplacian variance + frame diff computed in TS) and src/evalBundles.ts (pnpm --filter @pickle/capture-envelope eval:bundles) writing datasets/experiments/wave-c/c12-envelope-measurements.json",
+    "sharedTypes": "packages/shared-types/src/captureEnvelope.ts: EnvelopeVerdict, EnvelopeDimensionVerdict, EnvelopeDimension, EnvelopeStatus (exported from index) so mobile capture guidance can consume typed verdicts later; no mobile UI touched"
+  },
+  "measured": {
+    "provenance": "real ffprobe/ffmpeg measurements on the committed bundle clips, Linux CPU, ffmpeg 6.1.1-3ubuntu5; full per-clip values in c12-envelope-measurements.json",
+    "clipsMeasured": 3,
+    "perClip": {
+      "afn-sasebo-rally1": "1920x1080 @29.97fps, 4404ms, luma 104.13, lapVar median 2306.03, frameDiff 8.967 → overall DEGRADED (camera_motion DEGRADED; all other measured dims SUPPORTED)",
+      "wm-dink-01": "1100x1080 @25fps, 8000ms, luma 129.30, lapVar median 1977.18, frameDiff 10.073 → overall DEGRADED (frame_rate 25fps DEGRADED, camera_motion DEGRADED)",
+      "wm-volley-02": "1000x1080 @25fps, 8000ms, luma 105.09, lapVar median 1968.61, frameDiff 7.843 → overall DEGRADED (frame_rate 25fps DEGRADED, camera_motion DEGRADED)"
+    },
+    "gates": "root pnpm typecheck exit 0 (all packages incl. new one); @pickle/capture-envelope vitest 11/11; @pickle/shared-types 13/13 and @pickle/vision-contracts 5/5 unchanged-green after the shared-types export addition"
+  },
+  "honestNegatives": [
+    "Task premise said 13 committed bundle clips; git only tracks 3 clip.mp4 files (afn-sasebo-rally1, wm-dink-01, wm-volley-02). The other 10 wavea-* / afn-* bundles are annotation-only (corpus media is gitignored/re-derivable per .gitignore). Measured envelope exists for 3 clips, not 13; missingClips are named in the measurements JSON.",
+    "camera_motion proxy (global frame diff) conflates subject motion with camera motion — all 3 static-mount clips land DEGRADED because players move. The proxy detects instability but its v0.1 band is clearly miscalibrated for static-camera-with-action footage; this is exactly the kind of constant that must be learned from evidence before promotion.",
+    "motion_blur Laplacian-variance values (≈1970-2306) sit far above the v0.1 supported floor (100); the floor is untested against genuinely blurred captures — no blurred negative example exists in the committed set.",
+    "player_pixel_height / player_visibility are contract-only here: pose extraction (Apple Vision) is macOS-only, so both are NOT_MEASURED on all clips and no pose numbers were fabricated.",
+    "No verdict here says anything about downstream analyzability — thresholds have never been validated against cascade outcomes; every verdict is stamped provisional."
+  ],
+  "blocked": [
+    "Empirical threshold learning: needs a labeled corpus linking envelope measurements to downstream analyzability (usable-result outcomes); the 3 committed clips are too few and contain no UNSUPPORTED exemplars.",
+    "Pose-derived dimensions: blocked on macOS-only pose extraction (or on-device capture telemetry) to produce player pixel height / visibility measurements.",
+    "The 10 annotation-only bundles cannot be measured until their media is re-derived via lab:acquire/lab:factory (media not committed)."
+  ],
+  "filesChanged": [
+    "packages/capture-envelope/** (new package: thresholds, checker, clip prober, bundle evaluator, 11 unit tests)",
+    "packages/shared-types/src/captureEnvelope.ts (+ index export)",
+    "datasets/experiments/wave-c/c12-envelope-measurements.json (real measurements)",
+    "datasets/experiments/wave-c/c12-summary.json (this file)"
+  ]
+}
