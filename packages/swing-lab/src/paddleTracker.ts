@@ -268,7 +268,14 @@ export function buildPaddleTracks(
 export function wristSeries(
   sequence: PoseSequence,
 ): Array<{ timestampMs: number; wrists: Array<{ x: number; y: number }> }> {
-  return toLegacyPoseFrames(sequence).map((frame) => ({
+  return wristSeriesFromFrames(toLegacyPoseFrames(sequence));
+}
+
+/** Same projection, from already-materialized legacy frames. */
+export function wristSeriesFromFrames(
+  frames: ReturnType<typeof toLegacyPoseFrames>,
+): Array<{ timestampMs: number; wrists: Array<{ x: number; y: number }> }> {
+  return frames.map((frame) => ({
     timestampMs: frame.timestampMs,
     wrists: frame.landmarks
       .filter((mark) => mark.name.endsWith("wrist") && mark.visibility >= 0.2)

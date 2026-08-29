@@ -166,12 +166,7 @@ export interface BallAblation {
   stageC_trackedObsPerSec: number;
 }
 
-export type BallState =
-  | "TRACKED"
-  | "ENTERING_OCCLUSION"
-  | "OCCLUDED"
-  | "REACQUIRED"
-  | "LOST";
+export type BallState = "TRACKED" | "ENTERING_OCCLUSION" | "OCCLUDED" | "REACQUIRED" | "LOST";
 
 export interface BallTimeline {
   states: Array<{ state: BallState; fromMs: number; toMs: number }>;
@@ -204,7 +199,12 @@ export type BallTrackingOutcome =
        * region; only consulted when NO paddle-aligned candidate exists). */
       selection: "paddle_aligned" | "body_occlusion";
     }
-  | { status: "untracked"; reason: string; gatedTracks: BallTrackCandidate[]; ablation: BallAblation };
+  | {
+      status: "untracked";
+      reason: string;
+      gatedTracks: BallTrackCandidate[];
+      ablation: BallAblation;
+    };
 
 export const BALL_GATES2 = {
   /** Association. Base gate must exceed a fast ball's per-frame step:
@@ -252,6 +252,8 @@ export function buildBallTracks(
   pose: PoseSequence,
   window: { startMs: number; endMs: number },
   paddle: readonly TrackedPaddleObservation[] | null,
+  /** Precomputed toLegacyPoseFrames(pose); derived here when absent. */
+  legacyFrames?: ReturnType<typeof toLegacyPoseFrames> | null,
 ): {
   gated: BallTrackCandidate[];
   all: BallTrackCandidate[];
@@ -267,8 +269,9 @@ export function buildBallTracks(
     const cy = Math.min(grid - 1, Math.max(0, Math.floor(y * grid)));
     return chronic.cells[cy * grid + cx] ?? 0;
   };
-  const band = playBand(pose);
-  const joints = jointSeries(pose);
+  const frames = legacyFrames ?? toLegacyPoseFrames(pose);
+  const band = playBand(frames);
+  const joints = jointSeries(frames);
 
   // ── Association (stage B) ────────────────────────────────────────────────
   const active: ActiveBallTrack[] = [];
@@ -341,9 +344,7 @@ export function buildBallTracks(
     }
     if (active.length > BALL_GATES2.maxActiveTracks) {
       // Prune the stalest single-observation seeds first.
-      active.sort(
-        (a, b) => b.observations.length - a.observations.length || b.lastMs - a.lastMs,
-      );
+      active.sort((a, b) => b.observations.length - a.observations.length || b.lastMs - a.lastMs);
       finished.push(...active.splice(BALL_GATES2.maxActiveTracks));
     }
   }
@@ -357,8 +358,7 @@ export function buildBallTracks(
   const fragments = finished
     .filter(
       (track) =>
-        track.observations.length >= 3 &&
-        track.observations.length < BALL_GATES2.minObservations,
+        track.observations.length >= 3 && track.observations.length < BALL_GATES2.minObservations,
     )
     .map((track) => describeTrack(track, window, paddle, band, chronicAt, joints))
     .filter(
@@ -450,9 +450,7 @@ export function linkBallTimeline(input: {
   const bodyMode = bodyInfo?.endsIntoBody === true;
   // Robust pre-occlusion velocity for body-occlusion prediction: a single
   // mis-associated tail blob must not bend the search corridor.
-  const preOcclusionVelocity = bodyMode
-    ? (input.primary.terminalVelocity ?? velocity)
-    : velocity;
+  const preOcclusionVelocity = bodyMode ? (input.primary.terminalVelocity ?? velocity) : velocity;
   const preOcclusionSpeed = Math.hypot(preOcclusionVelocity.x, preOcclusionVelocity.y);
 
   const states: BallTimeline["states"] = [];
@@ -472,7 +470,10 @@ export function linkBallTimeline(input: {
 
   // Nothing to bridge if the track already reaches (near) the window end.
   if (last.timestampMs >= input.windowEndMs - 120) {
-    return { timeline: { states, bridge: [], reacquisition: { attempted: false } }, outgoing: null };
+    return {
+      timeline: { states, bridge: [], reacquisition: { attempted: false } },
+      outgoing: null,
+    };
   }
 
   const contactInGap =
@@ -682,8 +683,7 @@ export function linkBallTimeline(input: {
     fromMs: last.timestampMs,
     toMs: outgoingFirst.timestampMs,
   });
-  const outgoingLast =
-    winner.candidate.observations[winner.candidate.observations.length - 1]!;
+  const outgoingLast = winner.candidate.observations[winner.candidate.observations.length - 1]!;
   states.push({
     state: "REACQUIRED",
     fromMs: outgoingFirst.timestampMs,
@@ -705,9 +705,7 @@ export function linkBallTimeline(input: {
   };
 }
 
-function segmentVelocity(
-  candidate: BallTrackCandidate,
-): { x: number; y: number } | null {
+function segmentVelocity(candidate: BallTrackCandidate): { x: number; y: number } | null {
   const observations = candidate.observations;
   if (observations.length < 2) return null;
   const first = observations[0]!;
@@ -833,9 +831,7 @@ export function selectPrimaryBallTrack(
   const observedAll = outgoing
     ? [...best.observations, ...outgoing.observations]
     : best.observations;
-  const labCombined: BallTrackCandidate = outgoing
-    ? { ...best, observations: observedAll }
-    : best;
+  const labCombined: BallTrackCandidate = outgoing ? { ...best, observations: observedAll } : best;
 
   const windowLength = Math.max(1, window.endMs - window.startMs);
   const track: BallTrack = {
@@ -849,15 +845,13 @@ export function selectPrimaryBallTrack(
       artifactHash: null,
     },
     // Observed points only, both segments; the occlusion gap stays a gap.
-    observations: observedAll.map(
-      (observation, index): BallObservation => ({
-        frameIndex: index,
-        timestampMs: Math.round(observation.timestampMs),
-        x: observation.x,
-        y: observation.y,
-        confidence: observation.confidence,
-      }),
-    ),
+    observations: observedAll.map((observation, index): BallObservation => ({
+      frameIndex: index,
+      timestampMs: Math.round(observation.timestampMs),
+      x: observation.x,
+      y: observation.y,
+      confidence: observation.confidence,
+    })),
     contact: null,
     bounce: null,
     continuity: Math.min(1, best.windowOverlapMs / windowLength),
@@ -961,9 +955,8 @@ function describeTrack(
       (observation) => observation.chronicActivity > BALL_GATES2.chronicCellThreshold,
     ).length / observations.length;
   const inBandFraction =
-    observations.filter(
-      (observation) => observation.y >= band.top && observation.y <= band.bottom,
-    ).length / observations.length;
+    observations.filter((observation) => observation.y >= band.top && observation.y <= band.bottom)
+      .length / observations.length;
 
   const overlapStart = Math.max(window.startMs, observations[0]!.timestampMs);
   const overlapEnd = Math.min(window.endMs, observations[observations.length - 1]!.timestampMs);
@@ -1148,7 +1141,10 @@ function bodyBoxAt(joints: JointSeries, timestampMs: number, pad: number): BodyB
   return { minX: minX - pad, maxX: maxX + pad, minY: minY - pad, maxY: maxY + pad };
 }
 
-function nearestPointOnBox(point: { x: number; y: number }, box: BodyBox): { x: number; y: number } {
+function nearestPointOnBox(
+  point: { x: number; y: number },
+  box: BodyBox,
+): { x: number; y: number } {
   return {
     x: Math.min(box.maxX, Math.max(box.minX, point.x)),
     y: Math.min(box.maxY, Math.max(box.minY, point.y)),
@@ -1163,8 +1159,8 @@ function distanceToBox(point: { x: number; y: number }, box: BodyBox): number {
 
 type JointSeries = Array<{ timestampMs: number; points: Array<{ x: number; y: number }> }>;
 
-function jointSeries(pose: PoseSequence): JointSeries {
-  return toLegacyPoseFrames(pose).map((frame) => ({
+function jointSeries(frames: ReturnType<typeof toLegacyPoseFrames>): JointSeries {
+  return frames.map((frame) => ({
     timestampMs: frame.timestampMs,
     points: frame.landmarks
       .filter((mark) => mark.visibility >= 0.25)
@@ -1189,10 +1185,10 @@ function nearestJoints(
 }
 
 /** Vertical play band from measured pose: above heads to below ankles. */
-function playBand(pose: PoseSequence): { top: number; bottom: number } {
+function playBand(frames: ReturnType<typeof toLegacyPoseFrames>): { top: number; bottom: number } {
   let minHead = 1;
   let maxAnkle = 0;
-  for (const frame of toLegacyPoseFrames(pose)) {
+  for (const frame of frames) {
     for (const mark of frame.landmarks) {
       if (mark.visibility < 0.3) continue;
       if (mark.name === "head") minHead = Math.min(minHead, mark.y);

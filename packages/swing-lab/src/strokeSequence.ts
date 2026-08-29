@@ -62,9 +62,11 @@ export function buildStrokeSequence(input: {
   ball: readonly BallTrackObservation[] | null;
   wristSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
   paddleSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
+  /** Precomputed toLegacyPoseFrames(sequence); derived here when absent. */
+  legacyFrames?: ReturnType<typeof toLegacyPoseFrames> | null;
 }): StrokeSequence {
   const pad = 400;
-  const frames = toLegacyPoseFrames(input.sequence).filter(
+  const frames = (input.legacyFrames ?? toLegacyPoseFrames(input.sequence)).filter(
     (frame) =>
       frame.timestampMs >= input.window.startMs - pad &&
       frame.timestampMs <= input.window.endMs + pad,
@@ -81,7 +83,11 @@ export function buildStrokeSequence(input: {
       tRelContactMs: input.contactMs !== null ? frame.timestampMs - input.contactMs : null,
       pose: { present: Object.keys(joints).length > 0, joints },
       paddle: paddleNear
-        ? { present: true, center: [paddleNear.center.x, paddleNear.center.y], confidence: paddleNear.confidence }
+        ? {
+            present: true,
+            center: [paddleNear.center.x, paddleNear.center.y],
+            confidence: paddleNear.confidence,
+          }
         : { present: false, center: null, confidence: null },
       ball: ballNear
         ? { present: true, center: [ballNear.x, ballNear.y], confidence: ballNear.confidence }
@@ -91,7 +97,10 @@ export function buildStrokeSequence(input: {
 
   // ── Experimental kinetic events ─────────────────────────────────────────
   const events: KineticEvent[] = [];
-  const push = (event: KineticEvent["event"], sample: { timestampMs: number; value: number } | null) => {
+  const push = (
+    event: KineticEvent["event"],
+    sample: { timestampMs: number; value: number } | null,
+  ) => {
     if (!sample) return;
     events.push({
       event,
