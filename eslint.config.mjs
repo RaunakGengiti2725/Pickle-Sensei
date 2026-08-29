@@ -68,6 +68,7 @@ export default tseslint.config(
       "packages/swing-lab/src/ballHardSliceEval.ts",
       "packages/swing-lab/src/eventFailureOracle.ts",
       "packages/swing-lab/src/e13EventBoundsEval.ts",
+      "packages/swing-lab/src/eventRecallBench.ts",
       "packages/swing-lab/src/experimentBundle.ts",
       "packages/swing-lab/src/oodNegativesMeasure.ts",
       "packages/swing-lab/src/ownershipBench.ts",
