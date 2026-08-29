@@ -1,0 +1,1228 @@
+{
+  "experiment": "g20-selective-risk",
+  "generatedAtIso": "2026-08-29T17:33:56.064Z",
+  "condition": {
+    "platform": "linux-cpu — NOT-CANONICAL / NOT-MAC (committed replayable data only)",
+    "heldOut": "wm-dink-01 and afn-vic-rally1 never read",
+    "grouping": "independent source session (per-point per-group counts; never random splits)",
+    "productionThresholdsChanged": false
+  },
+  "stages": [
+    {
+      "stage": "contact",
+      "confidenceSource": "estimateContact emitted confidence (e02 replay, ORACLE ball, no paddle)",
+      "currentProductionOperatingPoint": "t=0 — every internally-committed estimate is shown; no downstream confidence gate exists (caps: 0.7 without ball confirm, 0.55 without ball+paddle)",
+      "units": [
+        {
+          "group": "dvids-944403",
+          "confidence": 0.782394664126404,
+          "wrong": false
+        },
+        {
+          "group": "dvids-944403",
+          "confidence": 0.55,
+          "wrong": false
+        },
+        {
+          "group": "dvids-faead",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "dvids-faead",
+          "confidence": 0.55,
+          "wrong": true
+        },
+        {
+          "group": "dvids-faead",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "dvids-faead",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "dvids-marne",
+          "confidence": 0.4877830454018606,
+          "wrong": false
+        },
+        {
+          "group": "dvids-sasebo",
+          "confidence": 0.6830856493897352,
+          "wrong": true
+        },
+        {
+          "group": "dvids-sasebo",
+          "confidence": 0.55,
+          "wrong": false
+        },
+        {
+          "group": "dvids-wgm",
+          "confidence": 0.8600052616513526,
+          "wrong": false
+        }
+      ],
+      "disclosures": [
+        "target-owned gold contact events only (silent-failure-v1 CONTACT_MARKER is a target claim)",
+        "ORACLE-BALL condition (gold ball frames, conf 0.9) — measures the estimator's temporal fusion, not the ball tracker; no committed paddle track, so paddleConfirmed is unreachable",
+        "wrong = |err| > 132ms, or 66 < |err| <= 132ms without ball confirmation (contract v1 CONTACT_MARKER)",
+        "estimator-internal abstentions stay in every coverage denominator"
+      ],
+      "curve": [
+        {
+          "threshold": 0.86,
+          "nUnits": 10,
+          "answered": 1,
+          "wrongAnswered": 0,
+          "coverage": 0.1,
+          "riskOfAnswered": 0,
+          "perGroup": {
+            "dvids-944403": {
+              "n": 2,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-faead": {
+              "n": 4,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-marne": {
+              "n": 1,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-sasebo": {
+              "n": 2,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-wgm": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": false
+        },
+        {
+          "threshold": 0.782,
+          "nUnits": 10,
+          "answered": 2,
+          "wrongAnswered": 0,
+          "coverage": 0.2,
+          "riskOfAnswered": 0,
+          "perGroup": {
+            "dvids-944403": {
+              "n": 2,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "dvids-faead": {
+              "n": 4,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-marne": {
+              "n": 1,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-sasebo": {
+              "n": 2,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-wgm": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": true
+        },
+        {
+          "threshold": 0.683,
+          "nUnits": 10,
+          "answered": 3,
+          "wrongAnswered": 1,
+          "coverage": 0.3,
+          "riskOfAnswered": 0.333,
+          "perGroup": {
+            "dvids-944403": {
+              "n": 2,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "dvids-faead": {
+              "n": 4,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-marne": {
+              "n": 1,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-sasebo": {
+              "n": 2,
+              "answered": 1,
+              "wrongAnswered": 1
+            },
+            "dvids-wgm": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": false
+        },
+        {
+          "threshold": 0.55,
+          "nUnits": 10,
+          "answered": 6,
+          "wrongAnswered": 2,
+          "coverage": 0.6,
+          "riskOfAnswered": 0.333,
+          "perGroup": {
+            "dvids-944403": {
+              "n": 2,
+              "answered": 2,
+              "wrongAnswered": 0
+            },
+            "dvids-faead": {
+              "n": 4,
+              "answered": 1,
+              "wrongAnswered": 1
+            },
+            "dvids-marne": {
+              "n": 1,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-sasebo": {
+              "n": 2,
+              "answered": 2,
+              "wrongAnswered": 1
+            },
+            "dvids-wgm": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": false
+        },
+        {
+          "threshold": 0.488,
+          "nUnits": 10,
+          "answered": 7,
+          "wrongAnswered": 2,
+          "coverage": 0.7,
+          "riskOfAnswered": 0.286,
+          "perGroup": {
+            "dvids-944403": {
+              "n": 2,
+              "answered": 2,
+              "wrongAnswered": 0
+            },
+            "dvids-faead": {
+              "n": 4,
+              "answered": 1,
+              "wrongAnswered": 1
+            },
+            "dvids-marne": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "dvids-sasebo": {
+              "n": 2,
+              "answered": 2,
+              "wrongAnswered": 1
+            },
+            "dvids-wgm": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": true
+        },
+        {
+          "threshold": 0,
+          "nUnits": 10,
+          "answered": 7,
+          "wrongAnswered": 2,
+          "coverage": 0.7,
+          "riskOfAnswered": 0.286,
+          "perGroup": {
+            "dvids-944403": {
+              "n": 2,
+              "answered": 2,
+              "wrongAnswered": 0
+            },
+            "dvids-faead": {
+              "n": 4,
+              "answered": 1,
+              "wrongAnswered": 1
+            },
+            "dvids-marne": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "dvids-sasebo": {
+              "n": 2,
+              "answered": 2,
+              "wrongAnswered": 1
+            },
+            "dvids-wgm": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": true
+        }
+      ],
+      "zeroObservedRiskPoint": {
+        "threshold": 0.782,
+        "nUnits": 10,
+        "answered": 2,
+        "wrongAnswered": 0,
+        "coverage": 0.2,
+        "riskOfAnswered": 0,
+        "perGroup": {
+          "dvids-944403": {
+            "n": 2,
+            "answered": 1,
+            "wrongAnswered": 0
+          },
+          "dvids-faead": {
+            "n": 4,
+            "answered": 0,
+            "wrongAnswered": 0
+          },
+          "dvids-marne": {
+            "n": 1,
+            "answered": 0,
+            "wrongAnswered": 0
+          },
+          "dvids-sasebo": {
+            "n": 2,
+            "answered": 0,
+            "wrongAnswered": 0
+          },
+          "dvids-wgm": {
+            "n": 1,
+            "answered": 1,
+            "wrongAnswered": 0
+          }
+        },
+        "onFrontier": true
+      },
+      "currentPoint": {
+        "threshold": 0,
+        "nUnits": 10,
+        "answered": 7,
+        "wrongAnswered": 2,
+        "coverage": 0.7,
+        "riskOfAnswered": 0.286,
+        "perGroup": {
+          "dvids-944403": {
+            "n": 2,
+            "answered": 2,
+            "wrongAnswered": 0
+          },
+          "dvids-faead": {
+            "n": 4,
+            "answered": 1,
+            "wrongAnswered": 1
+          },
+          "dvids-marne": {
+            "n": 1,
+            "answered": 1,
+            "wrongAnswered": 0
+          },
+          "dvids-sasebo": {
+            "n": 2,
+            "answered": 2,
+            "wrongAnswered": 1
+          },
+          "dvids-wgm": {
+            "n": 1,
+            "answered": 1,
+            "wrongAnswered": 0
+          }
+        },
+        "onFrontier": true
+      }
+    },
+    {
+      "stage": "stroke",
+      "confidenceSource": "classifyStroke emitted confidence (e03 committed-data bench)",
+      "currentProductionOperatingPoint": "t=0 — every committed (non-UNKNOWN) label is shown; internal gates abstain below evidence floors, no downstream confidence gate exists",
+      "units": [
+        {
+          "group": "dvids-marne-2024",
+          "confidence": 0.8,
+          "wrong": false
+        },
+        {
+          "group": "dvids-marne-2024",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "dvids-marne-2024",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "dvids-marne-2024",
+          "confidence": 0.6,
+          "wrong": true
+        },
+        {
+          "group": "dvids-marne-2024",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "dvids-marne-2024",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "dvids-marne-2024",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "dvids-marne-2024",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "dvids-marne-2024",
+          "confidence": 0.8,
+          "wrong": false
+        },
+        {
+          "group": "dvids-marne-2024",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "dvids-marne-2024",
+          "confidence": 0.85,
+          "wrong": false
+        },
+        {
+          "group": "dvids-marne-2024",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "dvids-warriorgames-2026",
+          "confidence": 0.8,
+          "wrong": true
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        }
+      ],
+      "excludedUnverifiable": 0,
+      "disclosures": [
+        "unit = evaluable stroke-gold label (committed wave-a pose windows only; paddle=null everywhere)",
+        "wrong = confidently-wrong convention (L1 wrong OR L2 wrong); answered rows with no gold-verifiable component are excluded and counted",
+        "classifier-internal abstentions (UNKNOWN) and pose-unavailable rows stay in every coverage denominator"
+      ],
+      "curve": [
+        {
+          "threshold": 0.85,
+          "nUnits": 18,
+          "answered": 1,
+          "wrongAnswered": 0,
+          "coverage": 0.056,
+          "riskOfAnswered": 0,
+          "perGroup": {
+            "afn-sasebo-2025-06": {
+              "n": 5,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-marne-2024": {
+              "n": 12,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "dvids-warriorgames-2026": {
+              "n": 1,
+              "answered": 0,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": true
+        },
+        {
+          "threshold": 0.8,
+          "nUnits": 18,
+          "answered": 4,
+          "wrongAnswered": 1,
+          "coverage": 0.222,
+          "riskOfAnswered": 0.25,
+          "perGroup": {
+            "afn-sasebo-2025-06": {
+              "n": 5,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-marne-2024": {
+              "n": 12,
+              "answered": 3,
+              "wrongAnswered": 0
+            },
+            "dvids-warriorgames-2026": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 1
+            }
+          },
+          "onFrontier": true
+        },
+        {
+          "threshold": 0.6,
+          "nUnits": 18,
+          "answered": 5,
+          "wrongAnswered": 2,
+          "coverage": 0.278,
+          "riskOfAnswered": 0.4,
+          "perGroup": {
+            "afn-sasebo-2025-06": {
+              "n": 5,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-marne-2024": {
+              "n": 12,
+              "answered": 4,
+              "wrongAnswered": 1
+            },
+            "dvids-warriorgames-2026": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 1
+            }
+          },
+          "onFrontier": true
+        },
+        {
+          "threshold": 0,
+          "nUnits": 18,
+          "answered": 5,
+          "wrongAnswered": 2,
+          "coverage": 0.278,
+          "riskOfAnswered": 0.4,
+          "perGroup": {
+            "afn-sasebo-2025-06": {
+              "n": 5,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-marne-2024": {
+              "n": 12,
+              "answered": 4,
+              "wrongAnswered": 1
+            },
+            "dvids-warriorgames-2026": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 1
+            }
+          },
+          "onFrontier": true
+        }
+      ],
+      "zeroObservedRiskPoint": {
+        "threshold": 0.85,
+        "nUnits": 18,
+        "answered": 1,
+        "wrongAnswered": 0,
+        "coverage": 0.056,
+        "riskOfAnswered": 0,
+        "perGroup": {
+          "afn-sasebo-2025-06": {
+            "n": 5,
+            "answered": 0,
+            "wrongAnswered": 0
+          },
+          "dvids-marne-2024": {
+            "n": 12,
+            "answered": 1,
+            "wrongAnswered": 0
+          },
+          "dvids-warriorgames-2026": {
+            "n": 1,
+            "answered": 0,
+            "wrongAnswered": 0
+          }
+        },
+        "onFrontier": true
+      },
+      "currentPoint": {
+        "threshold": 0,
+        "nUnits": 18,
+        "answered": 5,
+        "wrongAnswered": 2,
+        "coverage": 0.278,
+        "riskOfAnswered": 0.4,
+        "perGroup": {
+          "afn-sasebo-2025-06": {
+            "n": 5,
+            "answered": 0,
+            "wrongAnswered": 0
+          },
+          "dvids-marne-2024": {
+            "n": 12,
+            "answered": 4,
+            "wrongAnswered": 1
+          },
+          "dvids-warriorgames-2026": {
+            "n": 1,
+            "answered": 1,
+            "wrongAnswered": 1
+          }
+        },
+        "onFrontier": true
+      }
+    },
+    {
+      "stage": "ownership",
+      "confidenceSource": "DERIVED selection margin for the incumbent S3 frame-level analog (production emits no confidence)",
+      "currentProductionOperatingPoint": "veto-only (t=0) — the wrist-ratio veto is the only production gate; every surviving nearest-wrist pick is committed",
+      "units": [
+        {
+          "group": "wm-tournament-2014",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "wm-tournament-2014",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "wm-tournament-2014",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "wm-tournament-2014",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "wm-tournament-2014",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "wm-tournament-2014",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "afn-sasebo-2025-06",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "dvids-944403",
+          "confidence": 1,
+          "wrong": false
+        },
+        {
+          "group": "dvids-944403",
+          "confidence": 1,
+          "wrong": false
+        },
+        {
+          "group": "dvids-944403",
+          "confidence": 1,
+          "wrong": false
+        },
+        {
+          "group": "dvids-944403",
+          "confidence": 1,
+          "wrong": false
+        },
+        {
+          "group": "dvids-944403",
+          "confidence": 1,
+          "wrong": false
+        },
+        {
+          "group": "dvids-944403",
+          "confidence": 0.5658290439904884,
+          "wrong": true
+        },
+        {
+          "group": "dvids-944403",
+          "confidence": null,
+          "wrong": null
+        },
+        {
+          "group": "dvids-944403",
+          "confidence": 0.3813764156481495,
+          "wrong": false
+        },
+        {
+          "group": "dvids-944403",
+          "confidence": 0.1301322253216992,
+          "wrong": true
+        },
+        {
+          "group": "dvids-944403",
+          "confidence": 0.7167844367266756,
+          "wrong": true
+        },
+        {
+          "group": "dvids-944403",
+          "confidence": 0.4262848316202643,
+          "wrong": true
+        },
+        {
+          "group": "dvids-944403",
+          "confidence": 1,
+          "wrong": false
+        },
+        {
+          "group": "dvids-944403",
+          "confidence": 1,
+          "wrong": false
+        },
+        {
+          "group": "dvids-944403",
+          "confidence": 1,
+          "wrong": false
+        },
+        {
+          "group": "dvids-faead",
+          "confidence": 0.5087638166947597,
+          "wrong": false
+        },
+        {
+          "group": "dvids-faead",
+          "confidence": 0.5745527339985738,
+          "wrong": false
+        },
+        {
+          "group": "dvids-faead",
+          "confidence": 1,
+          "wrong": false
+        },
+        {
+          "group": "dvids-marne-2024",
+          "confidence": 1,
+          "wrong": false
+        }
+      ],
+      "soleSurvivorAnswers": 10,
+      "disclosures": [
+        "unit = committed dual frame (>=1 visible target + >=1 visible other paddle point); held-out cases never loaded",
+        "the production S3 rule emits NO confidence — this margin (1 - dBest/dSecond over veto-surviving candidates) is a DERIVED geometric score measured here, not a calibrated probability and not a production output",
+        "frames whose veto leaves a single candidate answer at margin 1 (counted separately as soleSurvivorAnswers — the margin cannot rank them)",
+        "frames without committed pose are abstentions of the incumbent analog and stay in every coverage denominator"
+      ],
+      "curve": [
+        {
+          "threshold": 1,
+          "nUnits": 38,
+          "answered": 10,
+          "wrongAnswered": 0,
+          "coverage": 0.263,
+          "riskOfAnswered": 0,
+          "perGroup": {
+            "afn-sasebo-2025-06": {
+              "n": 14,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-944403": {
+              "n": 14,
+              "answered": 8,
+              "wrongAnswered": 0
+            },
+            "dvids-faead": {
+              "n": 3,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "dvids-marne-2024": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "wm-tournament-2014": {
+              "n": 6,
+              "answered": 0,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": true
+        },
+        {
+          "threshold": 0.717,
+          "nUnits": 38,
+          "answered": 11,
+          "wrongAnswered": 1,
+          "coverage": 0.289,
+          "riskOfAnswered": 0.091,
+          "perGroup": {
+            "afn-sasebo-2025-06": {
+              "n": 14,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-944403": {
+              "n": 14,
+              "answered": 9,
+              "wrongAnswered": 1
+            },
+            "dvids-faead": {
+              "n": 3,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "dvids-marne-2024": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "wm-tournament-2014": {
+              "n": 6,
+              "answered": 0,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": false
+        },
+        {
+          "threshold": 0.575,
+          "nUnits": 38,
+          "answered": 12,
+          "wrongAnswered": 1,
+          "coverage": 0.316,
+          "riskOfAnswered": 0.083,
+          "perGroup": {
+            "afn-sasebo-2025-06": {
+              "n": 14,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-944403": {
+              "n": 14,
+              "answered": 9,
+              "wrongAnswered": 1
+            },
+            "dvids-faead": {
+              "n": 3,
+              "answered": 2,
+              "wrongAnswered": 0
+            },
+            "dvids-marne-2024": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "wm-tournament-2014": {
+              "n": 6,
+              "answered": 0,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": true
+        },
+        {
+          "threshold": 0.566,
+          "nUnits": 38,
+          "answered": 13,
+          "wrongAnswered": 2,
+          "coverage": 0.342,
+          "riskOfAnswered": 0.154,
+          "perGroup": {
+            "afn-sasebo-2025-06": {
+              "n": 14,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-944403": {
+              "n": 14,
+              "answered": 10,
+              "wrongAnswered": 2
+            },
+            "dvids-faead": {
+              "n": 3,
+              "answered": 2,
+              "wrongAnswered": 0
+            },
+            "dvids-marne-2024": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "wm-tournament-2014": {
+              "n": 6,
+              "answered": 0,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": false
+        },
+        {
+          "threshold": 0.509,
+          "nUnits": 38,
+          "answered": 14,
+          "wrongAnswered": 2,
+          "coverage": 0.368,
+          "riskOfAnswered": 0.143,
+          "perGroup": {
+            "afn-sasebo-2025-06": {
+              "n": 14,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-944403": {
+              "n": 14,
+              "answered": 10,
+              "wrongAnswered": 2
+            },
+            "dvids-faead": {
+              "n": 3,
+              "answered": 3,
+              "wrongAnswered": 0
+            },
+            "dvids-marne-2024": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "wm-tournament-2014": {
+              "n": 6,
+              "answered": 0,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": true
+        },
+        {
+          "threshold": 0.426,
+          "nUnits": 38,
+          "answered": 15,
+          "wrongAnswered": 3,
+          "coverage": 0.395,
+          "riskOfAnswered": 0.2,
+          "perGroup": {
+            "afn-sasebo-2025-06": {
+              "n": 14,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-944403": {
+              "n": 14,
+              "answered": 11,
+              "wrongAnswered": 3
+            },
+            "dvids-faead": {
+              "n": 3,
+              "answered": 3,
+              "wrongAnswered": 0
+            },
+            "dvids-marne-2024": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "wm-tournament-2014": {
+              "n": 6,
+              "answered": 0,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": false
+        },
+        {
+          "threshold": 0.381,
+          "nUnits": 38,
+          "answered": 16,
+          "wrongAnswered": 3,
+          "coverage": 0.421,
+          "riskOfAnswered": 0.188,
+          "perGroup": {
+            "afn-sasebo-2025-06": {
+              "n": 14,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-944403": {
+              "n": 14,
+              "answered": 12,
+              "wrongAnswered": 3
+            },
+            "dvids-faead": {
+              "n": 3,
+              "answered": 3,
+              "wrongAnswered": 0
+            },
+            "dvids-marne-2024": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "wm-tournament-2014": {
+              "n": 6,
+              "answered": 0,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": true
+        },
+        {
+          "threshold": 0.13,
+          "nUnits": 38,
+          "answered": 17,
+          "wrongAnswered": 4,
+          "coverage": 0.447,
+          "riskOfAnswered": 0.235,
+          "perGroup": {
+            "afn-sasebo-2025-06": {
+              "n": 14,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-944403": {
+              "n": 14,
+              "answered": 13,
+              "wrongAnswered": 4
+            },
+            "dvids-faead": {
+              "n": 3,
+              "answered": 3,
+              "wrongAnswered": 0
+            },
+            "dvids-marne-2024": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "wm-tournament-2014": {
+              "n": 6,
+              "answered": 0,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": true
+        },
+        {
+          "threshold": 0,
+          "nUnits": 38,
+          "answered": 17,
+          "wrongAnswered": 4,
+          "coverage": 0.447,
+          "riskOfAnswered": 0.235,
+          "perGroup": {
+            "afn-sasebo-2025-06": {
+              "n": 14,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-944403": {
+              "n": 14,
+              "answered": 13,
+              "wrongAnswered": 4
+            },
+            "dvids-faead": {
+              "n": 3,
+              "answered": 3,
+              "wrongAnswered": 0
+            },
+            "dvids-marne-2024": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "wm-tournament-2014": {
+              "n": 6,
+              "answered": 0,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": true
+        }
+      ],
+      "zeroObservedRiskPoint": {
+        "threshold": 1,
+        "nUnits": 38,
+        "answered": 10,
+        "wrongAnswered": 0,
+        "coverage": 0.263,
+        "riskOfAnswered": 0,
+        "perGroup": {
+          "afn-sasebo-2025-06": {
+            "n": 14,
+            "answered": 0,
+            "wrongAnswered": 0
+          },
+          "dvids-944403": {
+            "n": 14,
+            "answered": 8,
+            "wrongAnswered": 0
+          },
+          "dvids-faead": {
+            "n": 3,
+            "answered": 1,
+            "wrongAnswered": 0
+          },
+          "dvids-marne-2024": {
+            "n": 1,
+            "answered": 1,
+            "wrongAnswered": 0
+          },
+          "wm-tournament-2014": {
+            "n": 6,
+            "answered": 0,
+            "wrongAnswered": 0
+          }
+        },
+        "onFrontier": true
+      },
+      "currentPoint": {
+        "threshold": 0,
+        "nUnits": 38,
+        "answered": 17,
+        "wrongAnswered": 4,
+        "coverage": 0.447,
+        "riskOfAnswered": 0.235,
+        "perGroup": {
+          "afn-sasebo-2025-06": {
+            "n": 14,
+            "answered": 0,
+            "wrongAnswered": 0
+          },
+          "dvids-944403": {
+            "n": 14,
+            "answered": 13,
+            "wrongAnswered": 4
+          },
+          "dvids-faead": {
+            "n": 3,
+            "answered": 3,
+            "wrongAnswered": 0
+          },
+          "dvids-marne-2024": {
+            "n": 1,
+            "answered": 1,
+            "wrongAnswered": 0
+          },
+          "wm-tournament-2014": {
+            "n": 6,
+            "answered": 0,
+            "wrongAnswered": 0
+          }
+        },
+        "onFrontier": true
+      }
+    }
+  ]
+}
