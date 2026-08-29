@@ -1,0 +1,58 @@
+{
+  "id": "g10-f23-roles",
+  "wave": "wave-g",
+  "date": "2026-08-29",
+  "mission": "Least-privilege Postgres role separation for the consent system: MIGRATION_OWNER / APPLICATION_RUNTIME / WORKER_RUNTIME / READONLY, with SQL grants via the repo migration system, docker-compose bootstrap wiring, and service connection-role separation.",
+  "method": "New migration 0018_consent_role_separation.sql creates four cluster-wide NOLOGIN group roles (idempotent, race-safe across the per-suite-schema test pattern) and applies per-schema grants: full DML on ordinary tables for the two runtime roles, SELECT-only for readonly, plus consent carve-outs (consent_record: no UPDATE/DELETE/TRUNCATE; consent_subject: no DELETE; consent_subject_erasure and schema_migrations: read-only) and ALTER DEFAULT PRIVILEGES for future migrations. Runtime roles own nothing, so ALTER/DROP/trigger-disable on the consent schema are denied by ownership. consent_subject deletion happens only via the app_user FK cascade, which executes with owner privileges, so the worker keeps zero direct delete rights on consent tables while account deletion still tombstones correctly. infra/postgres/init-roles.sql (mounted as /docker-entrypoint-initdb.d in both compose Postgres containers) creates local login users pickle_app/pickle_worker/pickle_ro/pickle_migrator holding membership in the group roles. services/api reads DATABASE_URL_APP and services/media-worker reads DATABASE_URL_WORKER, both falling back to DATABASE_URL for back-compat; migrations/seed keep using owner DATABASE_URL. New integration suite packages/database/test/roles.integration.test.ts verifies the boundaries with SET ROLE against real Postgres.",
+  "datasetScopeAndGrouping": "No ML dataset involved. Scope is the Postgres schema (migrations 0001-0018) exercised against local docker Postgres 16 (postgres_test, fresh volume with the init script). Verification grouped as: (a) new roles integration suite, (b) full existing root test suite including all consent integration/red-team/abuse/e2e suites, (c) a manual probe over a real pickle_app login connection (not just SET ROLE).",
+  "holdoutStatement": "Held-out cases wm-dink-01 and afn-vic-rally1 were not read, listed, referenced, or touched. This workstream is database/infrastructure only and used no video bundles or annotation data.",
+  "configuration": {
+    "branch": "devin/wave-g/g10-f23-roles",
+    "baseBranch": "devin/1787988068-wave-c-integration",
+    "baseHead": "104ea0f",
+    "postgres": "postgres:16-alpine via docker compose (postgres_test on :5433, fresh volume so init-roles.sql ran)",
+    "node": "v20.18.1",
+    "pnpm": "10.15.1 (workspace packageManager)",
+    "groupRoles": [
+      "pickle_migration_owner",
+      "pickle_application_runtime",
+      "pickle_worker_runtime",
+      "pickle_readonly"
+    ],
+    "localLoginUsers": ["pickle_app", "pickle_worker", "pickle_ro", "pickle_migrator"],
+    "serviceEnvVars": {
+      "api": "DATABASE_URL_APP ?? DATABASE_URL",
+      "mediaWorker": "DATABASE_URL_WORKER ?? DATABASE_URL",
+      "migrations": "DATABASE_URL (owner)"
+    }
+  },
+  "measuredResults": {
+    "rolesIntegrationSuite": {
+      "file": "packages/database/test/roles.integration.test.ts",
+      "tests": 7,
+      "passed": 7,
+      "deniedOperationsAsserted": 22,
+      "notes": "Asserts per runtime role: append+read allowed on consent_record; UPDATE/DELETE/TRUNCATE consent_record denied; DELETE consent_subject denied; INSERT/UPDATE/DELETE consent_subject_erasure denied; INSERT/DELETE schema_migrations denied; ALTER TABLE / DISABLE TRIGGER / DROP TABLE / DROP TRIGGER / CREATE TABLE denied; worker DELETE app_user cascades and tombstones (1 tombstone row observed); readonly SELECT-only; default privileges cover a table created after 0018."
+    },
+    "databasePackageTests": { "files": 2, "tests": 14, "passed": 14 },
+    "apiTests": { "files": 10, "tests": 96, "passed": 96 },
+    "mediaWorkerTests": { "files": 4, "tests": 25, "passed": 25 },
+    "rootGates": {
+      "typecheck": "pass (exit 0, all 17+ workspace projects)",
+      "test": "pass: 593 passed, 4 skipped, 0 failed (DATABASE_URL_TEST set, all consent integration suites executed against real Postgres)",
+      "lint": "pass (exit 0)",
+      "formatCheck": "pass (exit 0)"
+    },
+    "mobileGates": "not affected by this change (no apps/mobile files touched); run anyway: npm ci OK, tsc --noEmit 0 errors, jest 397 passed / 397 total",
+    "realLoginProbe": "Fresh schema migrated with owner creds (18 applied); connected as pickle_app login user: INSERT app_user OK, consent_subject ON CONFLICT upsert OK, consent_record append OK (seq 1), UPDATE consent_record -> ERROR: permission denied for table consent_record."
+  },
+  "findings": [
+    "The consent_subject ON CONFLICT (user_id) DO UPDATE upsert used by services/api requires UPDATE privilege on consent_subject; the 0017 immutability trigger still rejects any real change, so granting UPDATE preserves the intended no-rewrite property while keeping the existing query shape working.",
+    "FK ON DELETE CASCADE executes with the referencing table owner's privileges, so the worker needs only DELETE on app_user for account deletion; the consent_subject tombstone trigger fires under owner privileges and the worker holds no INSERT on consent_subject_erasure.",
+    "Roles are cluster-wide but the test pattern migrates many throwaway schemas concurrently, so role creation must be race-safe (duplicate_object caught) and grants must be re-applied per schema; ALTER DEFAULT PRIVILEGES is scoped per schema and is dropped with DROP SCHEMA CASCADE, so test cleanup is unaffected.",
+    "Privilege-level enforcement is defense in depth on top of the 0015/0016/0017 triggers: even a runtime credential compromise cannot disable those triggers (ownership required) or bulk-erase the ledger (no TRUNCATE granted).",
+    "Back-compat verified: the full pre-existing suite (593 tests) passes unchanged with superuser DATABASE_URL_TEST, i.e. single-credential local setups are unaffected."
+  ],
+  "verdict": "PROVISIONAL_GREEN",
+  "verdictRationale": "All privilege boundaries are implemented, migrated through the repo's migration system, and verified with counts against real local Postgres 16 (7/7 new role tests incl. 22 denied-operation assertions; 593/593 existing tests pass; real pickle_app login connection confirmed allowed/denied paths). PROVISIONAL rather than GREEN because production credential provisioning (AWS Secrets Manager values, RDS role ownership transfer to pickle_migration_owner) is external to this repo and unexercised here, and existing local dev volumes only pick up the login users after volume recreation or a manual psql apply."
+}

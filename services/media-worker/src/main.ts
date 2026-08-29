@@ -2,9 +2,12 @@ import pg from "pg";
 import { InMemoryJobQueue, SqsJobQueue } from "@pickle/queue";
 import { runOnce, type WorkerDeps } from "./worker.js";
 
-const databaseUrl = process.env["DATABASE_URL"];
+// Worker runtime role (DATABASE_URL_WORKER) with DATABASE_URL fallback for
+// single-credential local setups; migrations use owner credentials via the
+// @pickle/database CLI.
+const databaseUrl = process.env["DATABASE_URL_WORKER"] ?? process.env["DATABASE_URL"];
 if (!databaseUrl) {
-  console.error("DATABASE_URL required");
+  console.error("DATABASE_URL_WORKER or DATABASE_URL required");
   process.exit(1);
 }
 const sqsUrl = process.env["SQS_QUEUE_URL"];
