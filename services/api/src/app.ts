@@ -41,6 +41,7 @@ import { registerFlagRoutes } from "./modules/flags/routes.js";
 import { flagStateFingerprint } from "./modules/flags/registry.js";
 import { registerAdminRoutes } from "./modules/admin/routes.js";
 import { registerRollbackRoutes } from "./modules/admin/rollback.js";
+import { registerQualityRoutes } from "./modules/quality/routes.js";
 import { registerTrainingRoutes } from "./modules/training/routes.js";
 
 /**
@@ -404,6 +405,7 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
   registerFlagRoutes(app, context);
   registerAdminRoutes(app, context);
   registerRollbackRoutes(app, context);
+  registerQualityRoutes(app, context);
   registerTrainingRoutes(app, context);
 
   return app;

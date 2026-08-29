@@ -41,6 +41,207 @@ function useApi(token: string) {
   );
 }
 
+interface QualityRate {
+  numerator: number;
+  denominator: number;
+  rate: number | null;
+}
+
+interface QualityDashboard {
+  schemaVersion: string;
+  generatedAtIso: string;
+  windowDays: number;
+  trials: {
+    attempts: number;
+    outcomeCounts: Record<string, number>;
+    completion: QualityRate;
+    usableResult: QualityRate;
+    abstention: QualityRate;
+    envelopeRejection: QualityRate;
+    targetLockSuccess: QualityRate;
+    strokeDistribution: Array<{ key: string; count: number }>;
+    latency: {
+      measuredCount: number;
+      p50Ms: number | null;
+      p90Ms: number | null;
+      p99Ms: number | null;
+    };
+    modelVersionDistribution: Array<{ key: string; count: number }>;
+    userReportedWrongTrialCount: number;
+  };
+  sessions: { started: number; completed: number; completion: QualityRate };
+  crashFree:
+    { status: "measured"; rate: number | null } | { status: "not_evaluable"; reason: string };
+  backend: {
+    analysisJobs: { requested: number; failed: number; failureRate: QualityRate };
+    deletionTasksFailed: number;
+    apiErrors: { status: "not_evaluable"; reason: string } | QualityRate;
+  };
+  queues: {
+    analysisQueued: number;
+    analysisProcessing: number;
+    oldestAnalysisQueuedAgeSeconds: number | null;
+    deletionQueued: number;
+    deletionProcessing: number;
+  };
+  review: {
+    userReportedWrongShotRatings: number;
+    coachReviewQueueDepth: number;
+    silentFailureQueueDepth: number;
+    coachReviewsRecorded: number;
+  };
+}
+
+function pct(r: QualityRate): string {
+  return r.rate === null
+    ? "n/a (0 denominator)"
+    : `${(r.rate * 100).toFixed(1)}% (${r.numerator}/${r.denominator})`;
+}
+
+function QualityDashboardPanel({ token }: { token: string }) {
+  const api = useApi(token);
+  const [windowDays, setWindowDays] = useState(7);
+  const [data, setData] = useState<QualityDashboard | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api("GET", `/v1/admin/quality-dashboard?windowDays=${windowDays}`)
+      .then((json) => setData(json as unknown as QualityDashboard))
+      .catch((e) => setError(String(e)));
+  }, [api, windowDays]);
+  useEffect(load, [load]);
+
+  return (
+    <section style={box}>
+      <h2>Quality dashboard (audited; aggregates only, never private media)</h2>
+      <label>
+        {"window days "}
+        <input
+          type="number"
+          min={1}
+          max={90}
+          value={windowDays}
+          onChange={(e) => setWindowDays(Number(e.target.value))}
+          style={{ width: 64 }}
+        />
+      </label>
+      <button onClick={load}>Refresh</button>
+      {error && <p style={{ color: "#b91c1c" }}>{error}</p>}
+      {data && (
+        <table cellPadding={6}>
+          <tbody>
+            <tr>
+              <td>Trial attempts (consented)</td>
+              <td>{data.trials.attempts}</td>
+            </tr>
+            <tr>
+              <td>Completion</td>
+              <td>{pct(data.trials.completion)}</td>
+            </tr>
+            <tr>
+              <td>Usable-result rate</td>
+              <td>{pct(data.trials.usableResult)}</td>
+            </tr>
+            <tr>
+              <td>Abstention</td>
+              <td>{pct(data.trials.abstention)}</td>
+            </tr>
+            <tr>
+              <td>Envelope rejection</td>
+              <td>{pct(data.trials.envelopeRejection)}</td>
+            </tr>
+            <tr>
+              <td>Target-lock success</td>
+              <td>{pct(data.trials.targetLockSuccess)}</td>
+            </tr>
+            <tr>
+              <td>Stroke distribution</td>
+              <td>
+                {data.trials.strokeDistribution.map((s) => `${s.key}: ${s.count}`).join(", ") ||
+                  "none"}
+              </td>
+            </tr>
+            <tr>
+              <td>Latency p50/p90/p99 (ms)</td>
+              <td>
+                {data.trials.latency.measuredCount === 0
+                  ? "unmeasured"
+                  : `${data.trials.latency.p50Ms} / ${data.trials.latency.p90Ms} / ${data.trials.latency.p99Ms} (n=${data.trials.latency.measuredCount})`}
+              </td>
+            </tr>
+            <tr>
+              <td>Model versions</td>
+              <td>
+                {data.trials.modelVersionDistribution
+                  .map((m) => `${m.key}: ${m.count}`)
+                  .join(", ") || "none"}
+              </td>
+            </tr>
+            <tr>
+              <td>User-flagged trials</td>
+              <td>{data.trials.userReportedWrongTrialCount}</td>
+            </tr>
+            <tr>
+              <td>Session completion</td>
+              <td>{pct(data.sessions.completion)}</td>
+            </tr>
+            <tr>
+              <td>Crash-free rate</td>
+              <td>
+                {data.crashFree.status === "not_evaluable"
+                  ? `NOT_EVALUABLE — ${data.crashFree.reason}`
+                  : String(data.crashFree.rate)}
+              </td>
+            </tr>
+            <tr>
+              <td>Analysis-job failures</td>
+              <td>{pct(data.backend.analysisJobs.failureRate)}</td>
+            </tr>
+            <tr>
+              <td>Deletion tasks failed</td>
+              <td>{data.backend.deletionTasksFailed}</td>
+            </tr>
+            <tr>
+              <td>API errors</td>
+              <td>
+                {"status" in data.backend.apiErrors
+                  ? `NOT_EVALUABLE — ${data.backend.apiErrors.reason}`
+                  : pct(data.backend.apiErrors)}
+              </td>
+            </tr>
+            <tr>
+              <td>Queues (analysis q/p, oldest s; deletion q/p)</td>
+              <td>
+                {data.queues.analysisQueued}/{data.queues.analysisProcessing},{" "}
+                {data.queues.oldestAnalysisQueuedAgeSeconds === null
+                  ? "—"
+                  : Math.round(data.queues.oldestAnalysisQueuedAgeSeconds)}
+                ; {data.queues.deletionQueued}/{data.queues.deletionProcessing}
+              </td>
+            </tr>
+            <tr>
+              <td>User-reported wrong (shot ratings)</td>
+              <td>{data.review.userReportedWrongShotRatings}</td>
+            </tr>
+            <tr>
+              <td>Coach-review queue depth</td>
+              <td>{data.review.coachReviewQueueDepth}</td>
+            </tr>
+            <tr>
+              <td>Silent-failure queue depth</td>
+              <td>{data.review.silentFailureQueueDepth}</td>
+            </tr>
+            <tr>
+              <td>Coach reviews recorded</td>
+              <td>{data.review.coachReviewsRecorded}</td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
 function FlagsPanel({ token }: { token: string }) {
   const api = useApi(token);
   const [flags, setFlags] = useState<Record<string, boolean> | null>(null);
@@ -227,6 +428,7 @@ export function AdminApp() {
           </section>
           {token ? (
             <>
+              <QualityDashboardPanel token={token} />
               <FlagsPanel token={token} />
               <ModelBundlePanel token={token} />
               <UserLookupPanel token={token} />
