@@ -12,6 +12,7 @@ import {
   finalizeAnalysisPermitWithDb,
   lockRatingAccessForAtomicWrite,
 } from "../billing/access.js";
+import { refreshSummaryIfPresent } from "../sessions/summary.js";
 
 /**
  * Shots module: idempotent batch upsert of on-device structured results
@@ -343,6 +344,9 @@ export async function upsertShots(
           await tx.query("UPDATE practice_session SET shot_count = shot_count + 1 WHERE id = $1", [
             shot.sessionId,
           ]);
+          // A late outbox flush must not leave a finalized session reporting a
+          // summary that excludes this shot.
+          await refreshSummaryIfPresent(tx, userId, shot.sessionId);
         }
         // Daily progress rollup, scoring-model-version aware (spec p. 16).
         if (shot.resultKind === "scored" && shot.overallScore !== null) {

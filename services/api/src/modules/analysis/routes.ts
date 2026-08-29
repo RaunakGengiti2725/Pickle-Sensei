@@ -86,6 +86,25 @@ export function registerAnalysisRoutes(app: FastifyInstance, context: AppContext
         );
     }
 
+    if (body.sessionId) {
+      // Possession of a session UUID never grants access to it: an analysis may
+      // only be attached to a practice session the caller owns.
+      const owned = await one(
+        context.pool!,
+        "SELECT id FROM practice_session WHERE id = $1 AND user_id = $2",
+        [body.sessionId, userId],
+      );
+      if (!owned)
+        return sendFailure(
+          reply,
+          request,
+          404,
+          "permanent",
+          "session.not_found",
+          "Session not found.",
+        );
+    }
+
     const shotType = body.expectedShotType
       ? await one<{ id: string }>(context.pool!, "SELECT id FROM shot_type WHERE slug = $1", [
           body.expectedShotType,

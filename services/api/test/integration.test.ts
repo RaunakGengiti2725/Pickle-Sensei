@@ -113,6 +113,7 @@ describe.skipIf(!testUrl)("API integration (real PostgreSQL)", () => {
       consentExportSigningKeyId: "consent-export-k1",
       appleIapConfigured: false,
       googlePlayConfigured: false,
+      adminAuthSubjects: ["auth0|itest-admin"],
     };
     queue = new InMemoryJobQueue();
     app = buildApp(config, { queue });

@@ -27,6 +27,9 @@ import { audit, many, one, withTransaction } from "../../lib/db.js";
  * pseudonym; the user mapping lives in consent_subject.
  */
 
+/** Tolerated device clock skew for a client-stamped consent decision. */
+const MAX_DECISION_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
 interface ConsentRow extends Record<string, unknown> {
   id: string;
   seq: string;
@@ -163,6 +166,15 @@ export function registerConsentRoutes(app: FastifyInstance, context: AppContext)
       if (!versionCheck.ok) {
         return { rejected: "version" as const, message: versionCheck.message! };
       }
+      // A decision stamped in the future would slip past that ordering check
+      // and resurrect withdrawn consent, so a device clock ahead of the
+      // server's by more than the tolerated skew is rejected outright.
+      if (
+        decidedAtIso !== undefined &&
+        Date.parse(decidedAtIso) > Date.now() + MAX_DECISION_CLOCK_SKEW_MS
+      ) {
+        return { rejected: "future" as const };
+      }
       // A decision stamped before the scope's latest ledger action is a
       // replay of an old decision, not a new one: the later action (e.g. a
       // withdrawal) supersedes it and it must not resurrect consent.
@@ -211,6 +223,16 @@ export function registerConsentRoutes(app: FastifyInstance, context: AppContext)
         "permanent",
         "consent.version_rejected",
         outcome.message,
+      );
+    }
+    if (outcome.rejected === "future") {
+      return sendFailure(
+        reply,
+        request,
+        409,
+        "permanent",
+        "consent.decision_future_dated",
+        "This consent decision is stamped in the future and cannot be applied.",
       );
     }
     if (outcome.rejected === "stale") {

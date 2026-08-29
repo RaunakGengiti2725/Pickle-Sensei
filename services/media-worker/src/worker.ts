@@ -215,8 +215,12 @@ export async function processDeletionTasks(deps: WorkerDeps): Promise<number> {
           continue;
         case "final_hard_delete": {
           // Only when every other task for this user is done.
+          // Other final_hard_delete rows for the same user are the same
+          // terminal step (a duplicated enqueue), not outstanding work: were
+          // they counted, each copy would wait on the others and the deletion
+          // would stall forever.
           const pending = await deps.pool.query(
-            "SELECT count(*)::int AS n FROM deletion_task WHERE user_id = $1 AND status NOT IN ('done') AND id <> $2 AND kind <> 'idp_revoke'",
+            "SELECT count(*)::int AS n FROM deletion_task WHERE user_id = $1 AND status NOT IN ('done') AND id <> $2 AND kind NOT IN ('idp_revoke','final_hard_delete')",
             [task.user_id, task.id],
           );
           if ((pending.rows[0]?.n ?? 1) > 0) {

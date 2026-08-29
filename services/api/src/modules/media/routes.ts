@@ -126,6 +126,41 @@ export function registerMediaRoutes(app: FastifyInstance, context: AppContext): 
         "media.not_found",
         "Upload not found or already completed.",
       );
+    // The privacy gate is re-evaluated here, not just at upload creation: if
+    // the user turned cloud sync off while the upload was in flight, the video
+    // must not be promoted to ready — it is dropped and purged instead.
+    const settings = await one<{ cloud_sync_enabled: boolean }>(
+      context.pool!,
+      "SELECT cloud_sync_enabled FROM user_setting WHERE user_id = $1",
+      [request.user!.id],
+    );
+    if (!settings?.cloud_sync_enabled) {
+      await context.pool!.query(
+        "UPDATE media_asset SET status = 'deleted', deleted_at = now() WHERE id = $1",
+        [id],
+      );
+      try {
+        await context.queue.enqueue("media.purge", { mediaAssetId: id });
+      } catch (error) {
+        // Asset is marked deleted; the worker sweep still purges the object.
+        request.log.error({ err: error }, "media.purge dispatch failed; sweep will purge");
+      }
+      await audit(context.pool!, {
+        actorUserId: request.user!.id,
+        action: "media.discarded_cloud_sync_disabled",
+        targetKind: "media_asset",
+        targetId: id,
+        requestId: request.id,
+      });
+      return sendFailure(
+        reply,
+        request,
+        403,
+        "permission_denied",
+        "media.cloud_sync_disabled",
+        "Cloud video sync is disabled in your privacy settings. The upload was discarded.",
+      );
+    }
     if (context.objectStore) {
       const head = await context.objectStore.headObject(pending.object_key);
       if (!head) {

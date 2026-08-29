@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import pg from "pg";
 import { buildOpenApiDocument } from "@pickle/api-contracts";
 import { InMemoryJobQueue, SqsJobQueue, type IJobQueue } from "@pickle/queue";
+import type { FailureKind } from "@pickle/shared-types";
 import type { ApiConfig } from "./config.js";
 import type { AppContext } from "./context.js";
 import { sendFailure } from "./lib/replies.js";
@@ -31,6 +32,95 @@ import { registerTrainingRoutes } from "./modules/training/routes.js";
  * in-process services, never HTTP. Honesty rule: anything not implemented
  * returns a typed 501 envelope — never a fake success (directive §5).
  */
+
+const UUID_PATTERN =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+/** Postgres `invalid_text_representation` — a bad identifier reached SQL. */
+const PG_INVALID_TEXT_REPRESENTATION = "22P02";
+
+/**
+ * Datastore outages: connection refused/reset plus the Postgres classes for
+ * connection failure (08…), admin shutdown, and exhausted resources.
+ */
+const UNAVAILABLE_SYSTEM_CODES = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "ENOTFOUND",
+  "ETIMEDOUT",
+  "57P01",
+  "57P02",
+  "57P03",
+  "53300",
+  "53400",
+]);
+
+function isDatastoreUnavailable(error: unknown): boolean {
+  const code = (error as { code?: string }).code;
+  if (typeof code === "string" && (UNAVAILABLE_SYSTEM_CODES.has(code) || code.startsWith("08")))
+    return true;
+  const message = error instanceof Error ? error.message : "";
+  return message === "Connection terminated unexpectedly" || message.startsWith("timeout exceeded");
+}
+
+interface ClientFailure {
+  status: number;
+  kind: FailureKind;
+  code: string;
+  message: string;
+}
+
+/**
+ * Maps request-level failures (bad JSON, wrong content type, oversized body,
+ * unroutable identifiers) onto the typed 4xx envelope they deserve.
+ */
+function classifyClientFailure(
+  error: unknown,
+  statusCode: number | undefined,
+): ClientFailure | null {
+  const pgCode = (error as { code?: string }).code;
+  if (pgCode === PG_INVALID_TEXT_REPRESENTATION) {
+    return {
+      status: 400,
+      kind: "permanent",
+      code: "validation.identifier",
+      message: "A request value was not a valid identifier.",
+    };
+  }
+  if (statusCode === undefined || statusCode < 400 || statusCode >= 500) return null;
+  if (statusCode === 413) {
+    return {
+      status: 413,
+      kind: "permanent",
+      code: "validation.payload_too_large",
+      message: "Request body is larger than the server accepts.",
+    };
+  }
+  if (statusCode === 415) {
+    return {
+      status: 415,
+      kind: "permanent",
+      code: "validation.unsupported_media_type",
+      message: "Request content type is not supported.",
+    };
+  }
+  if (statusCode === 429) {
+    return {
+      status: 429,
+      kind: "retryable",
+      code: "api.rate_limited",
+      message: "Too many requests. Retry later.",
+    };
+  }
+  return {
+    status: statusCode,
+    kind: "permanent",
+    code: "validation.request",
+    message: "Request could not be parsed.",
+  };
+}
 
 export interface BuildAppOptions {
   queue?: IJobQueue;
@@ -67,6 +157,23 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
   app.addHook("onClose", async () => {
     await pool?.end();
   });
+  // Path ids are UUIDs everywhere. Rejecting a malformed one here keeps a
+  // client typo out of the database and out of the 5xx error budget.
+  app.addHook("preValidation", async (request, reply) => {
+    const params = request.params as Record<string, unknown> | undefined;
+    const id = params?.["id"];
+    if (typeof id === "string" && !UUID_PATTERN.test(id)) {
+      return sendFailure(
+        reply,
+        request,
+        400,
+        "permanent",
+        "validation.path_id",
+        "Path id must be a UUID.",
+      );
+    }
+  });
+
   app.setErrorHandler((error, request, reply) => {
     const statusCode = (error as { statusCode?: number }).statusCode;
     if (statusCode === 410) {
@@ -77,6 +184,34 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
         "permanent",
         "account.deleted",
         "This account was deleted.",
+      );
+    }
+    // A malformed request is the client's fault and must not be reported as an
+    // internal failure: a 500 both misleads the app (permanent vs fixable) and
+    // hides real server faults inside the noise of bad input.
+    const clientFailure = classifyClientFailure(error, statusCode);
+    if (clientFailure) {
+      request.log.warn({ err: error }, "client request rejected");
+      return sendFailure(
+        reply,
+        request,
+        clientFailure.status,
+        clientFailure.kind,
+        clientFailure.code,
+        clientFailure.message,
+      );
+    }
+    // A datastore outage is transient: reporting it as permanent tells the app
+    // to give up on queued work that would have synced after recovery.
+    if (isDatastoreUnavailable(error)) {
+      request.log.error({ err: error }, "datastore unavailable");
+      return sendFailure(
+        reply,
+        request,
+        503,
+        "retryable",
+        "api.datastore_unavailable",
+        "The service is temporarily unavailable. Retry shortly.",
       );
     }
     request.log.error({ err: error }, "unhandled error");

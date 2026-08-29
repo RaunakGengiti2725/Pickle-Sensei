@@ -30,22 +30,45 @@ export interface TryAgainHandoff {
   auto: boolean;
 }
 
+/**
+ * A re-arm is the continuation of one tap, so it is only valid for as long as
+ * that navigation takes. An armed handoff whose navigation never landed (the
+ * app was backgrounded, the user went elsewhere) must expire instead of
+ * seeding a later, unrelated capture with a declaration the player never made
+ * for it.
+ */
+export const TRY_AGAIN_HANDOFF_TTL_MS = 30_000;
+
 let pendingHandoff: TryAgainHandoff | null = null;
+let pendingArmedAtMs = 0;
 
 export function armTryAgain(handoff: TryAgainHandoff): void {
   pendingHandoff = handoff;
+  pendingArmedAtMs = Date.now();
 }
 
-/** Single-shot: the first consumer takes it; later calls see null. */
+function expired(): boolean {
+  return Date.now() - pendingArmedAtMs > TRY_AGAIN_HANDOFF_TTL_MS;
+}
+
+/** Single-shot and time-bounded: the first prompt consumer takes it, a late
+ * one gets nothing. Either way the handoff is cleared. */
 export function consumeTryAgainHandoff(): TryAgainHandoff | null {
-  const handoff = pendingHandoff;
-  pendingHandoff = null;
+  const handoff = expired() ? null : pendingHandoff;
+  clearTryAgainHandoff();
   return handoff;
+}
+
+/** Drops any armed handoff — used when capture starts from another entry
+ * point, so nothing stale can survive into the next re-arm window. */
+export function clearTryAgainHandoff(): void {
+  pendingHandoff = null;
+  pendingArmedAtMs = 0;
 }
 
 /** Test hook — inspect without consuming. */
 export function peekTryAgainHandoff(): TryAgainHandoff | null {
-  return pendingHandoff;
+  return expired() ? null : pendingHandoff;
 }
 
 /** True when the registry maps this canonical to this exact legacy slug —
