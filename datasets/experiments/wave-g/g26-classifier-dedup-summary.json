@@ -1,0 +1,46 @@
+{
+  "id": "g26-classifier-dedup",
+  "wave": "g",
+  "mission": "Eliminate the duplicated stroke classifier (packages/swing-lab/src/strokeHeuristic.ts vs packages/vision-geometry/src/strokeHeuristicLite.ts) by establishing a single source of truth, preserving EXACT current behavior (parity suite + full test suites green, byte-identical outputs).",
+  "method": "Compiled both files with the TypeScript compiler (comments stripped, ES2022 target) and diffed the emitted JavaScript to enumerate every semantic difference before touching anything. Found the two copies were already compiled-output-identical except for: (a) swing-lab's optional precomputed `legacyFrames` input (Lite always recomputed), (b) Lite's optional-`confidence` paddle handling (a strict superset: for swing-lab's TrackedPaddleObservation, whose `confidence` is a required number, every branch and every emitted evidence string is identical), and (c) declaration ordering of one constant (no-op). Chose vision-geometry as canonical (mobile cannot import swing-lab \u2014 D-039; swing-lab already depends on vision-geometry, so no dependency cycle): added the optional `legacyFrames` passthrough to strokeHeuristicLite.ts (identical `input.legacyFrames ?? toLegacyPoseFrames(input.sequence)` expression swing-lab used), replaced swing-lab/src/strokeHeuristic.ts with a re-export of classifyStroke/STROKE_TAXONOMY_V3/STROKE_HEURISTIC_VERSION/StrokeV3 and `HeuristicStrokePrediction as StrokePrediction` from @pickle/vision-geometry, and promoted the canonical version-history doc (stroke-heuristic-2..6, gates 1-12) from the deleted lab copy into the canonical file. The 19-fixture parity suite is KEPT: it now locks the re-export wiring so a resurrected local copy or broken re-export fails CI.",
+  "dataset_scope_and_grouping": "No dataset work: this is a production dedup refactor. Correctness evidence is (1) the pre-change compiled-JS diff of the two implementations, (2) the existing 19-fixture parity suite (both import paths asserted deeply equal), (3) swing-lab's poseDerivatives byte-identity test (JSON.stringify equality of classifyStroke with and without precomputed legacyFrames, now exercising the canonical implementation), and (4) full root + mobile gates.",
+  "holdout_statement": "Held-out cases wm-dink-01 and afn-vic-rally1 were never read, listed, referenced, or measured in this workstream.",
+  "configuration": {
+    "base_branch": "devin/1787988068-wave-c-integration",
+    "base_head": "104ea0f",
+    "canonical_file": "packages/vision-geometry/src/strokeHeuristicLite.ts",
+    "deleted_copy_replaced_by_reexport": "packages/swing-lab/src/strokeHeuristic.ts",
+    "behavior_changes": "none intended; classifier version string unchanged (stroke-heuristic-6 (uncalibrated))",
+    "node": "v20.18.1",
+    "package_manager": "pnpm 10.15.1 (workspace)"
+  },
+  "measured_results": {
+    "pre_change_compiled_js_diff": {
+      "tool": "typescript transpileModule, removeComments, ES2022",
+      "total_diff_lines_changed": 13,
+      "semantic_deltas": [
+        "swing-lab-only optional legacyFrames input (1 line) \u2014 now added to the canonical file verbatim",
+        "Lite-only optional paddle confidence handling (paddleNearConfidence ?? null / 'unreported' evidence string) \u2014 unreachable difference for swing-lab inputs whose TrackedPaddleObservation.confidence is a required number: identical branch outcomes and identical evidence strings",
+        "SHOULDER_MIN_SEPARATION const declaration position (ordering only, no-op)"
+      ],
+      "otherwise": "byte-identical compiled output across all ~1100 remaining lines"
+    },
+    "parity_suite": { "file": "packages/swing-lab/test/strokeHeuristicParity.test.ts", "tests_passed": 19, "tests_total": 19 },
+    "root_gates_on_branch": {
+      "typecheck": "all 20 workspace projects green",
+      "test": "swing-lab 593 passed | 4 skipped (51 files), vision-geometry 78 passed (8 files), analysis-pipeline 56 passed, all other packages green",
+      "lint": "0 errors",
+      "format_check": "clean"
+    },
+    "mobile_gates_on_branch": { "tsc_noEmit_errors": 0, "jest": "40 suites, 397 tests passed" },
+    "swift_mac_iphone": "unavailable on this Linux box \u2014 no numbers claimed"
+  },
+  "findings": [
+    "The two copies had ALREADY converged to identical compiled output at wave-c-integration head except for the three deltas above \u2014 the F20 double-fix discipline held, but only by hand.",
+    "Dependency direction made the merge safe in one move: mobile consumes vision-geometry sources directly (metro/tsconfig path aliases), swing-lab already declares @pickle/vision-geometry as a workspace dependency, and nothing imported internals of the deleted copy beyond its five public exports.",
+    "swing-lab's TrackedPaddleObservation is structurally assignable to HeuristicPaddleObservation, so no adapter was needed; the StrokePrediction interface is re-exported as an alias of HeuristicStrokePrediction (structurally identical fields).",
+    "The parity suite remains valuable after the dedup: it pins the re-export wiring and fails CI if a local copy is ever reintroduced or the re-export is broken."
+  ],
+  "verdict": "PROVISIONAL_GREEN",
+  "verdict_rationale": "The drift risk is eliminated by construction (one implementation, one file) rather than guarded by a hand-synced parity ritual. All required evidence is measured and green: pre-change compiled diff enumerated every semantic difference (13 diff lines, all shown to be no-ops for swing-lab's input types), the 19/19 parity suite and the legacyFrames byte-identity test pass against the merged implementation, and all root + mobile gates are green on the branch. PROVISIONAL rather than full GREEN only because 'byte-identical outputs' is demonstrated over the committed fixture/test corpus and by compiled-source identity, not over fresh real-clip traffic \u2014 consistent with no fresh-clip runs being available on this box."
+}

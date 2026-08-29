@@ -3,18 +3,16 @@ import { toLegacyPoseFrames, type PoseSequence } from "@pickle/swing-domain";
 
 /**
  * Stroke recognition taxonomy v3 + the hierarchical HEURISTIC baseline —
- * PORT of packages/swing-lab/src/strokeHeuristic.ts (stroke-heuristic-4).
+ * the SINGLE SOURCE OF TRUTH for the stroke classifier.
  *
- * WHY THIS FILE EXISTS: the mobile app wires AUTO DETECT (declared-null
+ * WHY THIS FILE LIVES HERE: the mobile app wires AUTO DETECT (declared-null
  * stroke routing, see analysis-pipeline/strokeAutoResolution.ts) and must not
  * depend on @pickle/swing-lab, whose package drags in node-only tooling.
  * The classifier itself is pure TypeScript over pose frames, so it lives
- * here in the deterministic geometry bundle.
- *
- * DEDUP FOLLOW-UP (intentionally not done this wave): swing-lab keeps its
- * own byte-equivalent copy for the desktop lab; a later wave should delete
- * that copy and re-export from here. Until then, behavioral changes must be
- * made in BOTH files or (better) not at all without calibration data.
+ * here in the deterministic geometry bundle. The desktop lab consumes this
+ * same implementation via packages/swing-lab/src/strokeHeuristic.ts, which
+ * is a re-export of this module (the former byte-equivalent swing-lab copy
+ * was deleted once the two had converged to identical compiled output).
  *
  * This is measured geometry, not a learned classifier, and it says so:
  * predictions stop at the deepest taxonomy level the evidence supports.
@@ -25,60 +23,112 @@ import { toLegacyPoseFrames, type PoseSequence } from "@pickle/swing-domain";
  * DINK vs DRIVE only when contact height and swing speed agree with margin —
  * which today they never can without bounce observation.
  *
- * stroke-heuristic-2 hardened CONTACT-POINT provenance and the OVERHEAD
- * claim against single-point tracking failures (plausibility gate, skeletal
- * corroboration, abstention band). stroke-heuristic-3 adds NON-STROKE
- * abstention gates found by red-teaming AUTO DETECT: measured non-motion
- * (a walk-through, an aborted/checked swing, a static reach) and degenerate
- * torso normalization must abstain instead of committing an identity.
- * stroke-heuristic-3.1 ports stroke-heuristic-5's FACING CONSENSUS (E10-F4):
- * the camera-facing sign is decided by the shoulder x-order majority across
- * ±200ms of the reference (near-profile frames cannot vote), never by the
- * single nearest frame alone, whose x-order a transient mid-swing shoulder
- * crossing can invert and mirror the side call at full confidence.
+ * stroke-heuristic-2 (this file) hardens the CONTACT-POINT provenance and the
+ * OVERHEAD claim against single-point tracking failures, and prefers honest
+ * abstention over a confidently-wrong guess:
  *
- * stroke-heuristic-3.1 ports swing-lab's stroke-heuristic-5 additions in
- * lockstep:
- *  - CONTACT-EVIDENCE CAP (E10-F1): when the reference is only the isolated
- *    event's motion peak (no contact event was ever measured) AND no
- *    plausible paddle point corroborates a contact, nothing in the input
- *    distinguishes the motion from a ball-less swing — the side commitment
- *    is treated as degraded-trust (degraded abstention band +
- *    DEGRADED_CONFIDENCE_CAP instead of the 0.8 ceiling).
- *  - HANDEDNESS CROSS-CHECK (E10-F2): the side decision assumes the paddle
- *    is in the declared hand, but the declaration is player-supplied
- *    context, not evidence. A verifiable, decisive contradiction between
- *    the measured dominant-motion wrist and the declared side abstains; a
- *    non-decisive contradiction degrades the side confidence instead.
- * The swing-lab stroke-heuristic-4 absence-of-measurement gates are still
- * NOT ported (tracked separately).
+ *  1. CONTACT-POINT PLAUSIBILITY — a paddle-track center is only trusted as
+ *     the contact point when it is kinematically reachable from the dominant
+ *     wrist. An implausible paddle point (stale/wrong box) falls back to the
+ *     wrist; when neither is reliable the classifier ABSTAINS.
+ *  2. OVERHEAD CORROBORATION — OVERHEAD is no longer claimable from a single
+ *     contact-point height. The dominant wrist (and elbow) must be measured
+ *     above the shoulder line in a window around contact; conversely, strong
+ *     multi-frame skeletal raise evidence can override a LOW-PROVENANCE
+ *     contact point that sits at mid-body (dev-measured failure: a stale
+ *     paddle box at mid-body during a real overhead).
+ *  3. ABSTENTION BAND — degraded contact-point provenance narrows what the
+ *     classifier will claim: small side margins return UNKNOWN with reasons,
+ *     and committed predictions carry a capped confidence.
  *
- * stroke-heuristic-3.1 adds the SYMMETRIC BIMANUAL gate (E10-F5, ported in
- * lockstep with swing-lab's stroke-heuristic-5): wheelchair rim propulsion
- * moves BOTH wrists in a synchronized, similar-magnitude, WIDE-SEPARATION
- * arc — a shape the single-dominant-wrist energy/travel gates cannot see.
- * When the rival wrist mirrors the dominant wrist's motion step-for-step
- * AND the wrists stay far apart (each hand on its own wheel rim), no
- * single-arm stroke identity is attributable — abstain. Genuine two-handed
- * backhands keep BOTH hands on ONE grip, so their wrist separation stays
- * small and the gate does not fire. (swing-lab's stroke-heuristic-4
- * absence-of-measurement gates are NOT yet ported here — that dedup/port
- * remains a follow-up.)
+ * stroke-heuristic-3 (this file) adds NON-STROKE abstention gates found by
+ * red-teaming AUTO DETECT: measured non-motion (a walk-through, an
+ * aborted/checked swing, a static reach) and degenerate torso normalization
+ * must abstain instead of committing an identity.
  *
- * stroke-heuristic-4 closes three absence-of-measurement holes found by
- * benchmarking against the wave-c/d stroke gold on committed wave-a pose
- * slices (strokeHeuristicBench):
+ * stroke-heuristic-4 (this file) closes three absence-of-measurement holes
+ * found by benchmarking against the wave-c/d stroke gold on committed
+ * wave-a pose slices (strokeHeuristicBench):
  *
  *  4. The non-swing SPEED gate only fires on measured in-window samples —
  *     a window that contains ZERO samples of an otherwise long series must
- *     not read as "no swing energy".
+ *     not read as "no swing energy" (dev failure: a real forehand volley
+ *     whose event window fell in a speed-series gap was abstained as a
+ *     non-stroke).
  *  5. Torso normalization is checked against the SEQUENCE's own median
  *     torso extent: a reference frame whose torso extent has transiently
- *     collapsed clears the absolute floor yet still yields a garbage
- *     midline/normalization — abstain.
+ *     collapsed (dev failure: 0.057u vs sequence median 0.140u — 41% —
+ *     during an occluded overhead) clears the absolute floor yet still
+ *     yields a garbage midline/normalization — abstain.
  *  6. Dominant-wrist attribution requires the RIVAL wrist to have been
  *     measured near the reference: a rival with zero measured frames has
- *     zero travel by absence, so "this wrist moved more" is unverifiable.
+ *     zero travel by absence, so "this wrist moved more" is unverifiable
+ *     (dev failure: the visible non-striking arm was committed as a
+ *     forehand while the actual striking arm was never measured).
+ *
+ * stroke-heuristic-5 (this file) closes four holes found by red-teaming
+ * ambiguous motion (E10-F1/F2/F4/F5, strokeHeuristicAmbiguous.redteam):
+ *
+ *  7. CONTACT-EVIDENCE CAP — when the reference is only the isolated
+ *     event's motion peak (no contact event was ever measured) AND no
+ *     plausible paddle point corroborates a contact, nothing in the input
+ *     distinguishes the motion from a ball-less swing (practice shadow
+ *     swing, wheelchair rim push): the side geometry is still read, but
+ *     the commitment is treated as degraded-trust — the degraded
+ *     abstention band applies and the confidence is capped at
+ *     DEGRADED_CONFIDENCE_CAP instead of the 0.8 ceiling.
+ *  8. HANDEDNESS CROSS-CHECK — the side decision assumes the paddle is in
+ *     the declared hand, but the declaration is player-supplied context,
+ *     not evidence. When the wrist measured to carry the swing sits on the
+ *     OPPOSITE side and the travel comparison is verifiable and decisive,
+ *     the declaration is contradicted by measurement and the side call
+ *     would be mirrored — abstain. A non-decisive contradiction (sparse
+ *     rival measurement or comparable travels, e.g. a two-handed backhand)
+ *     degrades the side confidence instead.
+ *  9. FACING CONSENSUS — the camera-facing sign (rear view vs front view,
+ *     which mirrors the side decision) is decided by the shoulder x-order
+ *     MAJORITY across the frames around the reference, not the x-order of
+ *     the single nearest frame. Mid-swing torso rotation can carry the
+ *     shoulders past profile for an instant exactly at contact
+ *     (measured attack: every frame rear-view except the contact frame →
+ *     BACKHAND 0.80 on a genuine forehand); one transiently-crossed frame
+ *     must never mirror the side call. Frames whose image-plane shoulder
+ *     separation is below a floor (near-profile) cannot vote — their
+ *     x-order is noise-scale. When no consensus exists the single-frame
+ *     sign is used only with adequate shoulder separation and the side
+ *     confidence is capped; with neither, the classifier abstains.
+ * 10. SYMMETRIC BIMANUAL GATE — wheelchair rim propulsion moves BOTH
+ *     wrists in a synchronized, similar-magnitude, WIDE-SEPARATION arc —
+ *     a shape the single-dominant-wrist energy/travel gates cannot see
+ *     (the push cleared both at 0.8 confidence). When the rival wrist
+ *     mirrors the dominant wrist's motion step-for-step AND the wrists
+ *     stay far apart (each hand on its own wheel rim), no single-arm
+ *     stroke identity is attributable — abstain. Genuine two-handed
+ *     backhands keep BOTH hands on ONE grip, so their wrist separation
+ *     stays small and the gate does not fire.
+ *
+ * stroke-heuristic-6 (this file) closes the F20-F1 wrong-arm commit
+ * (strokeHeuristicV4Gates.redteam):
+ *
+ * 11. SPARSE-DECLARED-WRIST ABSTENTION — when the dominant-motion wrist
+ *     contradicts the declared hand NON-decisively and the declared wrist
+ *     was glimpsed in fewer than MIN_TRAVEL_SAMPLE_FRAMES frames, the
+ *     side premise rests on an arm whose ownership is contradicted while
+ *     the declared alternative is unmeasurable (its unmeasured mid-swing
+ *     arc contributes zero travel): the contradiction can be neither
+ *     confirmed nor refuted — abstain instead of committing the mirrored
+ *     side at the degraded cap. Two-handed backhands measure BOTH wrists
+ *     in ≥MIN_TRAVEL_SAMPLE_FRAMES frames and keep the degraded-commit
+ *     path.
+ * 12. MEDIAN-NORMALIZATION OVERHEAD CROSS-CHECK — a reference torso extent
+ *     compressed by partial occlusion (yet above the 0.6 collapse floor)
+ *     inflates every torso-normalized ratio, including the raise-window
+ *     corroboration, so point and skeleton "agree" on a manufactured
+ *     OVERHEAD (F20-F2). When the contact height clears the overhead line
+ *     under reference-extent normalization but not under sequence-median
+ *     normalization, the decision is made by the normalizer, not the
+ *     motion — abstain. Honestly-measured strokes normalize consistently
+ *     and are unaffected.
  *
  * declared / annotated / predicted stroke stay separate records everywhere.
  */
@@ -161,7 +211,7 @@ export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-6 (uncalibrated)";
  *   produced a wrong side commit; the smallest legitimate reference in the
  *   same bench measured 65%. 0.6 separates them; the median needs ≥5
  *   measured torso frames to be meaningful.
- * HANDEDNESS_CONTRADICTION_TRAVEL_RATIO (stroke-heuristic-3.1) — a
+ * HANDEDNESS_CONTRADICTION_TRAVEL_RATIO (stroke-heuristic-5) — a
  *   declared-handedness contradiction is DECISIVE only when the
  *   off-declaration wrist's ±200ms travel is at least this multiple of the
  *   declared wrist's travel, with both wrists measured in
@@ -185,7 +235,7 @@ export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-6 (uncalibrated)";
  *   keeps the mid-rotation crossing fixture (E10-F4, exactly 0.04u at
  *   contact) outside the gate.
  *
- * Facing-consensus constants (stroke-heuristic-3.1, red-team derived —
+ * Facing-consensus constants (stroke-heuristic-5, red-team derived —
  * conservative floors, NOT calibrated statistics):
  * FACING_WINDOW_MS — same ±200ms neighborhood the dominant-wrist travel
  *   scan already uses: wide enough for repeated measurements, narrow
@@ -228,7 +278,7 @@ const FACING_MIN_VOTES = 3;
 const FACING_CONSENSUS_MIN_RATIO = 2 / 3;
 
 /**
- * Symmetric-bimanual (rim-propulsion) gate constants (stroke-heuristic-3.1,
+ * Symmetric-bimanual (rim-propulsion) gate constants (stroke-heuristic-5,
  * red-team derived from the E10-F5 fixture — conservative floors, NOT
  * calibrated statistics):
  * BIMANUAL_MIN_PAIRED_STEPS — the gate only judges MEASUREMENTS: it needs
@@ -302,10 +352,12 @@ export function classifyStroke(input: {
   paddle: readonly HeuristicPaddleObservation[] | null;
   paddleSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
   wristSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
+  /** Precomputed toLegacyPoseFrames(sequence); derived here when absent. */
+  legacyFrames?: ReturnType<typeof toLegacyPoseFrames> | null;
 }): HeuristicStrokePrediction {
   const evidence: string[] = [];
   const limitingFactors: string[] = [];
-  const frames = toLegacyPoseFrames(input.sequence);
+  const frames = input.legacyFrames ?? toLegacyPoseFrames(input.sequence);
   let contactMs: number;
   let referenceIsEventPeak = false;
   if (input.contactMs !== null) {
