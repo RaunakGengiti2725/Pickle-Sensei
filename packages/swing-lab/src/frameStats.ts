@@ -1,8 +1,5 @@
 import { execFile, spawnSync } from "node:child_process";
-import { promisify } from "node:util";
 import type { FrameStats } from "@pickle/vision-geometry";
-
-const execFileAsync = promisify(execFile);
 
 /**
  * Pose-free frame statistics for the pre-analysis OOD gate: decodes the clip
@@ -38,6 +35,27 @@ const DECODE_ARGS = (videoPath: string) => [
   "-",
 ];
 
+/**
+ * Runs a subprocess to completion off the event loop, resolving with whatever
+ * stdout/stderr it produced whether or not it exited cleanly (matching the
+ * spawnSync callers, which read partial output from failed processes too).
+ */
+function execFileCollect(
+  command: string,
+  args: string[],
+): Promise<{ stdout: Buffer; stderr: Buffer; exitedNonZero: boolean }> {
+  return new Promise((resolve) => {
+    execFile(
+      command,
+      args,
+      { maxBuffer: 1024 * 1024 * 1024, encoding: "buffer" },
+      (error, stdout, stderr) => {
+        resolve({ stdout, stderr, exitedNonZero: error !== null });
+      },
+    );
+  });
+}
+
 function countDecodeErrors(stderrText: string, exitedNonZero: boolean): number {
   const count = stderrText
     .split("\n")
@@ -60,26 +78,13 @@ export function extractFrameStats(videoPath: string): FrameStats {
  * waits off the event loop; byte-identical inputs produce identical outputs.
  */
 export async function extractFrameStatsAsync(videoPath: string): Promise<FrameStats> {
-  let raw: Buffer = Buffer.alloc(0);
-  let stderrText = "";
-  let exitedNonZero = false;
-  try {
-    const decode = await execFileAsync("ffmpeg", DECODE_ARGS(videoPath), {
-      maxBuffer: 1024 * 1024 * 1024,
-      encoding: "buffer",
-    });
-    raw = decode.stdout;
-    stderrText = decode.stderr.toString("utf8");
-  } catch (error) {
-    exitedNonZero = true;
-    const failed = error as { stdout?: Buffer; stderr?: Buffer };
-    if (Buffer.isBuffer(failed.stdout)) raw = failed.stdout;
-    if (Buffer.isBuffer(failed.stderr)) stderrText = failed.stderr.toString("utf8");
-  }
-  const decodeErrorCount = countDecodeErrors(stderrText, exitedNonZero);
-  const source = probeSource(videoPath);
-  const durationMs = probeDurationMs(videoPath);
-  return computeFrameStats(raw, decodeErrorCount, source, durationMs);
+  const decode = await execFileCollect("ffmpeg", DECODE_ARGS(videoPath));
+  const decodeErrorCount = countDecodeErrors(decode.stderr.toString("utf8"), decode.exitedNonZero);
+  const source = parseSourceProbe(await execFileCollect("ffprobe", SOURCE_PROBE_ARGS(videoPath)));
+  const durationMs = parseDurationProbe(
+    await execFileCollect("ffprobe", DURATION_PROBE_ARGS(videoPath)),
+  );
+  return computeFrameStats(decode.stdout, decodeErrorCount, source, durationMs);
 }
 
 function computeFrameStats(
@@ -173,27 +178,49 @@ function computeFrameStats(
   };
 }
 
+const SOURCE_PROBE_ARGS = (videoPath: string) => [
+  "-v",
+  "error",
+  "-select_streams",
+  "v:0",
+  "-show_entries",
+  "stream=width,height,avg_frame_rate",
+  "-of",
+  "csv=p=0",
+  videoPath,
+];
+
+const DURATION_PROBE_ARGS = (videoPath: string) => [
+  "-v",
+  "error",
+  "-show_entries",
+  "format=duration",
+  "-of",
+  "default=noprint_wrappers=1:nokey=1",
+  videoPath,
+];
+
 /** Container-declared source dimensions and frame rate; null when unprobeable. */
 function probeSource(
   videoPath: string,
 ): { width: number; height: number; fps: number | null } | null {
-  const probe = spawnSync(
-    "ffprobe",
-    [
-      "-v",
-      "error",
-      "-select_streams",
-      "v:0",
-      "-show_entries",
-      "stream=width,height,avg_frame_rate",
-      "-of",
-      "csv=p=0",
-      videoPath,
-    ],
-    { encoding: "utf8" },
-  );
+  const probe = spawnSync("ffprobe", SOURCE_PROBE_ARGS(videoPath), { encoding: "utf8" });
   if (probe.status !== 0) return null;
-  const [w, h, rate] = (probe.stdout ?? "").trim().split(",");
+  return parseSourceStdout(probe.stdout ?? "");
+}
+
+function parseSourceProbe(probe: {
+  stdout: Buffer;
+  exitedNonZero: boolean;
+}): { width: number; height: number; fps: number | null } | null {
+  if (probe.exitedNonZero) return null;
+  return parseSourceStdout(probe.stdout.toString("utf8"));
+}
+
+function parseSourceStdout(
+  stdout: string,
+): { width: number; height: number; fps: number | null } | null {
+  const [w, h, rate] = stdout.trim().split(",");
   const width = Number(w);
   const height = Number(h);
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
@@ -286,20 +313,17 @@ function findBottomFrozenComponents(
 }
 
 function probeDurationMs(videoPath: string): number {
-  const probe = spawnSync(
-    "ffprobe",
-    [
-      "-v",
-      "error",
-      "-show_entries",
-      "format=duration",
-      "-of",
-      "default=noprint_wrappers=1:nokey=1",
-      videoPath,
-    ],
-    { encoding: "utf8" },
-  );
+  const probe = spawnSync("ffprobe", DURATION_PROBE_ARGS(videoPath), { encoding: "utf8" });
   if (probe.status !== 0) return 0;
-  const seconds = Number((probe.stdout ?? "").trim());
+  return parseDurationStdout(probe.stdout ?? "");
+}
+
+function parseDurationProbe(probe: { stdout: Buffer; exitedNonZero: boolean }): number {
+  if (probe.exitedNonZero) return 0;
+  return parseDurationStdout(probe.stdout.toString("utf8"));
+}
+
+function parseDurationStdout(stdout: string): number {
+  const seconds = Number(stdout.trim());
   return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : 0;
 }

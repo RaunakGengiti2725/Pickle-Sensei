@@ -182,4 +182,12 @@ describe("OOD gate red team: committed positive corpus still passes", { timeout:
       for (const entry of rejected) expect(entry).toContain("yt-iuVdtmGoTbo");
     },
   );
+
+  it("sync and async frame-stat extraction produce identical FrameStats for the same clip", async () => {
+    // The async path is a re-plumbing of the same ffmpeg/ffprobe pipeline;
+    // any divergence would mean the two gates score different evidence.
+    const sync = extractFrameStats(sourceClip);
+    const async_ = await extractFrameStatsAsync(sourceClip);
+    expect(async_).toStrictEqual(sync);
+  });
 });
