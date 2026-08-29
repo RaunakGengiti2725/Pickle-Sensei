@@ -1,0 +1,123 @@
+{
+  "workstreamId": "e03-stroke-l1l2",
+  "wave": "wave-e",
+  "branch": "devin/wave-e/e03-stroke-l1l2",
+  "codeCommit": "347625a",
+  "createdAtIso": "2026-08-29T10:05:00Z",
+  "mission": "Strengthen stroke L1/L2 classification with the enlarged stroke taxonomy labels (wave-d d13 + wave-c c18); evaluate L1/L2 accuracy, unknown/ambiguous handling, and confidently-wrong rate grouped by session.",
+  "datasetScope": {
+    "goldFile": "datasets/paddle-bench/stroke-gold.json (29 labels, wave-c c18 + wave-d d13, append-only, untouched)",
+    "goldLabelsTotal": 29,
+    "evaluableLabels": 18,
+    "unevaluable": {
+      "afn-sasebo-rally1": 7,
+      "wm-volley-02": 2,
+      "afn-sasebo-rally2": 2,
+      "reason": "no committed pose for these cases on Linux; canonical runs/ require macOS Apple Vision extraction (BLOCKED_EXTERNAL for those 11 labels — not fabricated)"
+    },
+    "heldOut": "wm-dink-01 and afn-vic-rally1 were never viewed, labeled, evaluated, or tuned against (also absent from stroke-gold by construction)",
+    "poseSource": "datasets/paddle-bench/runs-wave-a/<case>/people.json — the 8 committed wave-a corpus slices",
+    "grouping": "by corpus sessionKey (dvids-marne-2024, afn-sasebo-2025-06, dvids-warriorgames-2026) and by event owner (target/other) — never random-frame splits"
+  },
+  "configuration": {
+    "benchmark": "packages/swing-lab/src/strokeHeuristicBench.ts (stroke-heuristic-bench-v1, new; CLI: pnpm --filter @pickle/swing-lab exec tsx src/strokeHeuristicBench.ts)",
+    "baselineClassifier": "stroke-heuristic-3 (uncalibrated)",
+    "candidateClassifier": "stroke-heuristic-4 (uncalibrated)",
+    "paddle": "null everywhere — no committed paddle track for these windows; all contact points wrist-derived",
+    "reference": "gold contactMs when present; measured in-window dominant-wrist speed peak when contactMs is null (never a window midpoint)",
+    "l1Definition": "OVERHEAD vs SWING — the class the heuristic can claim without bounce observation; families inside SWING are not separable by design",
+    "confidentlyWrongDefinition": "committed (non-UNKNOWN) prediction wrong at L1 or L2"
+  },
+  "changes": [
+    {
+      "id": "v4-speed-gate-sample-floor",
+      "description": "Non-swing speed gate fires only with >=3 measured samples inside the event window; a window slice with zero samples of an otherwise long series was firing 'no_swing_energy_in_window' from absence of measurement (contract violation).",
+      "motivatingFailure": "wavea-faead-rally @13875 (gold volley/forehand): 0 in-window speed samples -> false non-stroke abstention"
+    },
+    {
+      "id": "v4-torso-collapse-vs-median",
+      "description": "Reference-frame torso extent < 0.6x the sequence's own median torso extent abstains (transient hip-line collapse passes the absolute 0.04 floor but yields garbage normalization). Dev anchors: collapsed frame 41% of median (wrong commit), smallest legitimate reference 65%.",
+      "motivatingFailure": "wavea-944403-dink @22000 (gold overhead_lob): torso 0.057u vs median 0.140u -> confidently-wrong BACKHAND"
+    },
+    {
+      "id": "v4-rival-wrist-attribution",
+      "description": "Dominant-wrist attribution abstains when the rival wrist has zero measured frames within ±200ms of the reference — its zero travel is absence, not stillness, so 'this wrist moved more' is unverifiable.",
+      "motivatingFailure": "wavea-marne-dig @14042 (gold overhead_lob/overhead): striking arm never measured; the visible non-striking wrist was committed as FOREHAND at conf 0.8"
+    }
+  ],
+  "metrics": {
+    "baseline_stroke-heuristic-3": {
+      "overall": { "n": 18, "l1Correct": 8, "l1Wrong": 2, "l1Abstained": 7, "l1GoldUnknown": 1, "l2Correct": 4, "l2Wrong": 3, "l2Abstained": 4, "l2GoldUnknown": 7, "confidentlyWrong": 4 },
+      "byGroup": {
+        "dvids-marne-2024": { "n": 12, "l1Correct": 6, "l1Wrong": 2, "l1Abstained": 3, "l1GoldUnknown": 1, "l2Correct": 3, "l2Wrong": 2, "l2Abstained": 2, "l2GoldUnknown": 5, "confidentlyWrong": 3 },
+        "dvids-warriorgames-2026": { "n": 1, "l1Correct": 1, "l1Wrong": 0, "l1Abstained": 0, "l2Correct": 0, "l2Wrong": 1, "confidentlyWrong": 1 },
+        "afn-sasebo-2025-06": { "n": 5, "l1Correct": 1, "l1Wrong": 0, "l1Abstained": 4, "l2Correct": 1, "l2Wrong": 0, "l2Abstained": 2, "l2GoldUnknown": 2, "confidentlyWrong": 0 }
+      },
+      "byOwner": {
+        "target": { "n": 11, "l1Correct": 5, "l1Wrong": 1, "l1Abstained": 4, "l1GoldUnknown": 1, "l2Correct": 3, "l2Wrong": 3, "l2Abstained": 4, "l2GoldUnknown": 1, "confidentlyWrong": 3 },
+        "other": { "n": 7, "l1Correct": 3, "l1Wrong": 1, "l1Abstained": 3, "l2Correct": 1, "l2Wrong": 0, "l2GoldUnknown": 6, "confidentlyWrong": 1 }
+      }
+    },
+    "candidate_stroke-heuristic-4": {
+      "overall": { "n": 18, "l1Correct": 9, "l1Wrong": 0, "l1Abstained": 8, "l1GoldUnknown": 1, "l2Correct": 4, "l2Wrong": 3, "l2Abstained": 4, "l2GoldUnknown": 7, "confidentlyWrong": 3 },
+      "byGroup": {
+        "dvids-marne-2024": { "n": 12, "l1Correct": 7, "l1Wrong": 0, "l1Abstained": 4, "l1GoldUnknown": 1, "l2Correct": 3, "l2Wrong": 2, "l2Abstained": 2, "l2GoldUnknown": 5, "confidentlyWrong": 2 },
+        "dvids-warriorgames-2026": { "n": 1, "l1Correct": 1, "l1Wrong": 0, "l1Abstained": 0, "l2Correct": 0, "l2Wrong": 1, "confidentlyWrong": 1 },
+        "afn-sasebo-2025-06": { "n": 5, "l1Correct": 1, "l1Wrong": 0, "l1Abstained": 4, "l2Correct": 1, "l2Wrong": 0, "l2Abstained": 2, "l2GoldUnknown": 2, "confidentlyWrong": 0 }
+      },
+      "byOwner": {
+        "target": { "n": 11, "l1Correct": 6, "l1Wrong": 0, "l1Abstained": 4, "l1GoldUnknown": 1, "l2Correct": 3, "l2Wrong": 3, "l2Abstained": 4, "l2GoldUnknown": 1, "confidentlyWrong": 3 },
+        "other": { "n": 7, "l1Correct": 3, "l1Wrong": 0, "l1Abstained": 4, "l2Correct": 1, "l2Wrong": 0, "l2GoldUnknown": 6, "confidentlyWrong": 0 }
+      },
+      "byGoldFamily": {
+        "serve": { "n": 1, "l1Correct": 1, "l2Correct": 1, "confidentlyWrong": 0 },
+        "overhead_lob": { "n": 3, "l1Correct": 1, "l1Abstained": 2, "l2Correct": 1, "l2Abstained": 1, "l2GoldUnknown": 1, "confidentlyWrong": 0 },
+        "groundstroke": { "n": 2, "l1Correct": 1, "l1Abstained": 1, "l2Wrong": 1, "l2Abstained": 1, "confidentlyWrong": 1 },
+        "volley": { "n": 7, "l1Correct": 3, "l1Abstained": 4, "l2Correct": 2, "l2Wrong": 1, "l2Abstained": 2, "l2GoldUnknown": 2, "confidentlyWrong": 1 },
+        "dink": { "n": 4, "l1Correct": 3, "l1Abstained": 1, "l2Wrong": 1, "l2GoldUnknown": 3, "confidentlyWrong": 1 },
+        "unknown": { "n": 1, "l1GoldUnknown": 1, "l2GoldUnknown": 1, "confidentlyWrong": 0 }
+      }
+    },
+    "delta": {
+      "l1Wrong": "2 -> 0",
+      "l1Correct": "8 -> 9 (faead-rally @13875 recovered from a false non-stroke abstention)",
+      "confidentlyWrong": "4 -> 3 (rate on committed predictions: 4/10 -> 3/9)",
+      "notLost": "no previously-correct row regressed; the two fixed confidently-wrong rows became honest abstentions with recorded reasons"
+    }
+  },
+  "unknownAmbiguousHandling": {
+    "goldUnknownL1": 1,
+    "goldUnknownL2": 7,
+    "note": "gold-unknown labels are first-class outcomes (never scored correct/wrong); prediction abstentions are counted separately from wrong; OTHER-owned rows carry per-row attribution-risk disclosures and are a separate slice"
+  },
+  "remainingFailures": [
+    {
+      "row": "wavea-faead-rally @13417 (gold groundstroke/backhand -> FOREHAND)",
+      "rootCause": "near-side-on view: shoulder x-separation 0.042u vs torso 0.114u makes the shoulder-order facing sign a coin flip; correct rows exist at even lower shoulder/torso ratios (serve 0.29, smash 0.24), so a ratio gate would destroy correct calls — no generalizable fix found in this data"
+    },
+    {
+      "row": "wavea-wgm-wheelchair @182400 (gold dink/backhand -> FOREHAND)",
+      "rootCause": "contact measured 1.70 shoulder-widths on the player's right in a front view; a cross-body backhand (or unrecorded left-handedness) breaks the midline-side proxy — unresolvable without more measured evidence"
+    },
+    {
+      "row": "wavea-faead-rally @13875 (gold volley/forehand -> BACKHAND, exposed by the v4 speed-gate fix)",
+      "rootCause": "dominant-wrist choice fell to the LEFT wrist (travel 0.07 vs right 0.02) with the rival sparsely measured (4 frames); raising the rival-measurement floor above 0 would also abstain a correct row (sasebo @52434, rival 1 frame) — declined as bench-fitting"
+    }
+  ],
+  "validation": {
+    "tests": "packages/swing-lab: 477 passed / 4 skipped (includes new test/strokeHeuristicV4Gates.test.ts, 7 tests, and test/strokeHeuristicBench.test.ts, 11 tests); full root pnpm test green",
+    "gates": "pnpm format:check, pnpm typecheck, pnpm lint, pnpm test all pass at codeCommit"
+  },
+  "artifacts": [
+    "packages/swing-lab/src/strokeHeuristicBench.ts (benchmark, committed-data L1/L2 eval)",
+    "packages/swing-lab/src/strokeHeuristic.ts (stroke-heuristic-4)",
+    "packages/swing-lab/test/strokeHeuristicV4Gates.test.ts",
+    "packages/swing-lab/test/strokeHeuristicBench.test.ts"
+  ],
+  "blockedExternal": [
+    "11/29 gold labels (afn-sasebo-rally1/2, wm-volley-02) are not evaluable on Linux: canonical run dirs require macOS Apple Vision pose extraction",
+    "No committed paddle tracks for the wave-a windows: production paddle-informed contact points could not be exercised"
+  ],
+  "verdict": "GREEN",
+  "verdictRationale": "First prediction-side L1/L2 numbers ever measured for classifyStroke (18/29 gold labels, session-grouped). Three generalizable absence-of-measurement gates (versioned as stroke-heuristic-4) measurably reduced L1 wrong 2->0 and confidently-wrong 4->3 without losing any correct row; remaining failures are root-caused and disclosed rather than tuned away."
+}

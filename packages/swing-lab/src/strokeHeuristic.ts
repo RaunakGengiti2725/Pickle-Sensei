@@ -36,6 +36,26 @@ import type { TrackedPaddleObservation } from "./paddleTracker.js";
  * aborted/checked swing, a static reach) and degenerate torso normalization
  * must abstain instead of committing an identity.
  *
+ * stroke-heuristic-4 (this file) closes three absence-of-measurement holes
+ * found by benchmarking against the wave-c/d stroke gold on committed
+ * wave-a pose slices (strokeHeuristicBench):
+ *
+ *  4. The non-swing SPEED gate only fires on measured in-window samples —
+ *     a window that contains ZERO samples of an otherwise long series must
+ *     not read as "no swing energy" (dev failure: a real forehand volley
+ *     whose event window fell in a speed-series gap was abstained as a
+ *     non-stroke).
+ *  5. Torso normalization is checked against the SEQUENCE's own median
+ *     torso extent: a reference frame whose torso extent has transiently
+ *     collapsed (dev failure: 0.057u vs sequence median 0.140u — 41% —
+ *     during an occluded overhead) clears the absolute floor yet still
+ *     yields a garbage midline/normalization — abstain.
+ *  6. Dominant-wrist attribution requires the RIVAL wrist to have been
+ *     measured near the reference: a rival with zero measured frames has
+ *     zero travel by absence, so "this wrist moved more" is unverifiable
+ *     (dev failure: the visible non-striking arm was committed as a
+ *     forehand while the actual striking arm was never measured).
+ *
  * declared / annotated / predicted stroke stay separate records everywhere.
  */
 
@@ -59,7 +79,7 @@ export const STROKE_TAXONOMY_V3 = {
 } as const;
 export type StrokeV3 = (typeof STROKE_TAXONOMY_V3.labels)[number];
 
-export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-3 (uncalibrated)";
+export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-4 (uncalibrated)";
 
 /**
  * Constants derived from the DEV sandbox pose/paddle data (W9-forensics.txt,
@@ -106,6 +126,15 @@ export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-3 (uncalibrated)";
  *   measures ≈0. The gate fires only below 0.05u AND when the wrist was
  *   actually measured in ≥5 nearby frames — sparse visibility must never
  *   masquerade as stillness.
+ * MIN_WINDOW_SPEED_SAMPLES (stroke-heuristic-4) — the speed gate needs ≥3
+ *   MEASURED samples inside the event window to claim "no swing energy";
+ *   an empty window slice of a long series is absence, not evidence.
+ * TORSO_COLLAPSE_MEDIAN_RATIO / TORSO_MEDIAN_MIN_FRAMES (stroke-heuristic-4)
+ *   — relative torso-collapse gate. Dev anchors: a transiently occluded
+ *   reference frame measured 41% of the sequence median torso extent and
+ *   produced a wrong side commit; the smallest legitimate reference in the
+ *   same bench measured 65%. 0.6 separates them; the median needs ≥5
+ *   measured torso frames to be meaningful.
  * TORSO_MIN_EXTENT — normalized image units. Real torsos measure ≈0.12–0.24
  *   (synthetic default 0.2); below 0.04 the hip line has collapsed onto the
  *   shoulder line (e.g. chair-back occlusion) and every torso-normalized
@@ -125,9 +154,12 @@ const SIDE_MARGIN_FLOOR = 0.15;
 const SIDE_MARGIN_DEGRADED_BAND = 0.5;
 const DEGRADED_CONFIDENCE_CAP = 0.6;
 const NON_SWING_SPEED_FLOOR = 0.25;
+const MIN_WINDOW_SPEED_SAMPLES = 3;
 const NON_SWING_TRAVEL_FLOOR = 0.05;
 const MIN_TRAVEL_SAMPLE_FRAMES = 5;
 const TORSO_MIN_EXTENT = 0.04;
+const TORSO_COLLAPSE_MEDIAN_RATIO = 0.6;
+const TORSO_MEDIAN_MIN_FRAMES = 5;
 
 export interface StrokePrediction {
   taxonomyVersion: string;
@@ -205,7 +237,36 @@ export function classifyStroke(input: {
     return unknown("torso_extent_degenerate_normalization_unreliable", evidence, limitingFactors);
   }
 
+  // ── Gate: transient torso collapse vs the sequence median (v4) ────────
+  // An occluded reference frame can clear the absolute floor while still
+  // measuring a fraction of the player's own median torso extent — the
+  // midline and every torso-normalized ratio at that instant are garbage.
+  const medianTorso = medianTorsoExtent(frames);
+  if (medianTorso !== null && rawTorsoExtent < TORSO_COLLAPSE_MEDIAN_RATIO * medianTorso) {
+    evidence.push(
+      `torso extent ${rawTorsoExtent.toFixed(3)}u at reference vs sequence median ${medianTorso.toFixed(3)}u ` +
+        `(< ${TORSO_COLLAPSE_MEDIAN_RATIO}× — transient collapse)`,
+    );
+    return unknown("torso_extent_collapsed_vs_sequence_median", evidence, limitingFactors);
+  }
+
   const wristInfo = dominantWristInfo(frames, contactMs);
+
+  // ── Gate: dominant-wrist attribution must be verifiable (v4) ──────────
+  // The dominant wrist is chosen by comparative travel. When the rival
+  // wrist was NEVER measured near the reference its travel is zero by
+  // absence, so the comparison is unverifiable — the visible arm may be
+  // the non-striking one. Abstain rather than commit an unattributable side.
+  if (wristInfo.measuredFrames > 0 && wristInfo.rivalMeasuredFrames === 0) {
+    evidence.push(
+      `rival (${wristInfo.side === "right" ? "left" : "right"}) wrist has 0 measured frames ±200ms — dominant-wrist travel comparison unverifiable`,
+    );
+    return unknown(
+      "dominant_wrist_attribution_unverifiable_rival_unmeasured",
+      evidence,
+      limitingFactors,
+    );
+  }
 
   // ── Gates: measured non-motion is not a stroke (stroke-heuristic-3) ────
   // Both gates act only on MEASUREMENTS: a speed series that never reaches
@@ -219,17 +280,19 @@ export function classifyStroke(input: {
         ? { series: input.wristSpeeds, source: "wrist" }
         : null;
   if (speeds) {
-    const windowPeak = speeds.series
-      .filter(
-        (sample) =>
-          sample.timestampMs >= input.window.startMs && sample.timestampMs <= input.window.endMs,
-      )
-      .reduce((best, sample) => Math.max(best, sample.value), 0);
-    if (windowPeak < NON_SWING_SPEED_FLOOR) {
+    const windowSamples = speeds.series.filter(
+      (sample) =>
+        sample.timestampMs >= input.window.startMs && sample.timestampMs <= input.window.endMs,
+    );
+    const windowPeak = windowSamples.reduce((best, sample) => Math.max(best, sample.value), 0);
+    if (windowSamples.length >= MIN_WINDOW_SPEED_SAMPLES && windowPeak < NON_SWING_SPEED_FLOOR) {
       evidence.push(
-        `${speeds.source} speed peak ${windowPeak.toFixed(2)} u/s in window (non-swing floor ${NON_SWING_SPEED_FLOOR})`,
+        `${speeds.source} speed peak ${windowPeak.toFixed(2)} u/s over ${windowSamples.length} in-window samples (non-swing floor ${NON_SWING_SPEED_FLOOR})`,
       );
       return unknown("no_swing_energy_in_window", evidence, limitingFactors);
+    }
+    if (windowSamples.length > 0 && windowSamples.length < MIN_WINDOW_SPEED_SAMPLES) {
+      limitingFactors.push("speed_window_sparsely_sampled_gate_not_applicable");
     }
   }
   if (
@@ -542,6 +605,24 @@ function unknown(
   };
 }
 
+/** Median torso extent (hip line minus shoulder line) over all frames where
+ * all four torso joints are present; null below TORSO_MEDIAN_MIN_FRAMES. */
+function medianTorsoExtent(frames: ReturnType<typeof toLegacyPoseFrames>): number | null {
+  const extents: number[] = [];
+  for (const frame of frames) {
+    const find = (name: string) => frame.landmarks.find((landmark) => landmark.name === name);
+    const leftShoulder = find("left_shoulder");
+    const rightShoulder = find("right_shoulder");
+    const leftHip = find("left_hip");
+    const rightHip = find("right_hip");
+    if (!leftShoulder || !rightShoulder || !leftHip || !rightHip) continue;
+    extents.push((leftHip.y + rightHip.y) / 2 - (leftShoulder.y + rightShoulder.y) / 2);
+  }
+  if (extents.length < TORSO_MEDIAN_MIN_FRAMES) return null;
+  extents.sort((a, b) => a - b);
+  return extents[Math.floor(extents.length / 2)] ?? null;
+}
+
 function nearestFrame(frames: ReturnType<typeof toLegacyPoseFrames>, timestampMs: number) {
   let best: (typeof frames)[number] | null = null;
   let bestDelta = Infinity;
@@ -568,6 +649,7 @@ function dominantWristInfo(
   visibility: number;
   travel: number;
   measuredFrames: number;
+  rivalMeasuredFrames: number;
 } {
   const nearby = frames.filter((frame) => Math.abs(frame.timestampMs - contactMs) <= 200);
   const travel = { left: 0, right: 0 };
@@ -590,12 +672,14 @@ function dominantWristInfo(
   const mark = frame?.landmarks.find(
     (landmark) => landmark.name === `${chosen}_wrist` && landmark.visibility >= 0.25,
   );
+  const rival = chosen === "right" ? "left" : "right";
   return {
     side: chosen,
     point: mark ? { x: mark.x, y: mark.y } : null,
     visibility: mark?.visibility ?? 0,
     travel: travel[chosen],
     measuredFrames: measured[chosen],
+    rivalMeasuredFrames: measured[rival],
   };
 }
 
