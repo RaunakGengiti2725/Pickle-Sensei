@@ -1,0 +1,292 @@
+{
+  "certId": "h15-autodetect-cert",
+  "generatedAtIso": "2026-08-29T18:06:56.763Z",
+  "benchVersion": "stroke-heuristic-bench-v1",
+  "classifierVersion": "stroke-heuristic-6 (uncalibrated)",
+  "replayLadder": {
+    "goldLabelsTotal": 29,
+    "evaluableLabels": 18,
+    "unevaluableCases": {
+      "afn-sasebo-rally1": 7,
+      "wm-volley-02": 2,
+      "afn-sasebo-rally2": 2
+    },
+    "ladder": {
+      "n": 18,
+      "leaf": 1,
+      "family": 4,
+      "abstain": 13,
+      "leafCorrect": 1,
+      "leafWrong": 0,
+      "familySideCorrect": 1,
+      "familySideWrong": 2,
+      "familySideGoldUnknown": 1,
+      "confidentWrongRoutes": [
+        "wavea-faead-rally@13417 family FOREHAND vs gold groundstroke/backhand (conf 0.6, limits reference_is_event_peak_not_contact|paddle_not_tracked_at_contact|bounce_not_observed_volley_vs_groundstroke_unresolved|no_contact_evidence_confidence_capped|bounce_not_observed_level3_uncommitted)",
+        "wavea-wgm-wheelchair@182400 family FOREHAND vs gold dink/backhand (conf 0.8, limits paddle_not_tracked_at_contact|bounce_not_observed_volley_vs_groundstroke_unresolved|bounce_not_observed_level3_uncommitted)"
+      ]
+    },
+    "byGroupN": {
+      "dvids-marne-2024": 12,
+      "dvids-warriorgames-2026": 1,
+      "afn-sasebo-2025-06": 5
+    },
+    "byGroupConfidentWrong": {
+      "dvids-marne-2024": 1,
+      "dvids-warriorgames-2026": 1
+    }
+  },
+  "declaredSeparation": {
+    "checked": 4,
+    "contradictionSurfaced": 4,
+    "contradictionMissed": 0,
+    "agreementFalseAlarm": 0,
+    "sideAgnosticFalseAlarm": 0,
+    "declaredProfileUnchangedUnderContradiction": 4,
+    "declaredProfileChanged": 0,
+    "noFalseDisagreementOnUnknown": true
+  },
+  "syntheticAdversarial": [
+    {
+      "id": "practice_swing_no_contact",
+      "description": "Ball-less practice swing: genuine swing motion, contact never measured, event-peak reference only, no paddle corroboration — must never resolve to a leaf (confident stroke Result).",
+      "label": "FOREHAND",
+      "confidence": 0.6,
+      "resolutionKind": "side",
+      "pass": true
+    },
+    {
+      "id": "whiff_miss_estimated_contact",
+      "description": "Complete miss where an upstream estimator still supplied a contactMs but no paddle evidence exists — must never resolve to a leaf.",
+      "label": "FOREHAND",
+      "confidence": 0.8,
+      "resolutionKind": "side",
+      "pass": true
+    },
+    {
+      "id": "static_reach",
+      "description": "Held-still reach (near-zero wrist travel, slow series) — must abstain.",
+      "label": "UNKNOWN",
+      "confidence": 0.2,
+      "resolutionKind": "abstain",
+      "pass": true
+    },
+    {
+      "id": "walk_through_no_swing_energy",
+      "description": "Walk-through: measured speed series never exceeds 0.1 u/s — must abstain.",
+      "label": "UNKNOWN",
+      "confidence": 0.2,
+      "resolutionKind": "abstain",
+      "pass": true
+    },
+    {
+      "id": "bimanual_rim_propulsion",
+      "description": "Wheelchair rim propulsion: both wrists synchronized, similar magnitude, wide separation — must abstain (E10-F5 gate).",
+      "label": "UNKNOWN",
+      "confidence": 0.2,
+      "resolutionKind": "abstain",
+      "pass": true
+    },
+    {
+      "id": "near_profile_shoulders",
+      "description": "Near-profile: image-plane shoulder separation below 0.04u — side decision must abstain (E10-F3 gate).",
+      "label": "UNKNOWN",
+      "confidence": 0.2,
+      "resolutionKind": "abstain",
+      "pass": true
+    },
+    {
+      "id": "torso_collapse_transient",
+      "description": "Transient hip-line collapse at the reference vs the sequence's own median — must abstain (v4 gate).",
+      "label": "UNKNOWN",
+      "confidence": 0.2,
+      "resolutionKind": "abstain",
+      "pass": true
+    },
+    {
+      "id": "midline_ambiguous_contact",
+      "description": "Contact directly on the body midline — side must abstain, never guess.",
+      "label": "UNKNOWN",
+      "confidence": 0.2,
+      "resolutionKind": "abstain",
+      "pass": true
+    },
+    {
+      "id": "no_reference_at_all",
+      "description": "No contact and no event peak — must abstain (never a window midpoint).",
+      "label": "UNKNOWN",
+      "confidence": 0.2,
+      "resolutionKind": "abstain",
+      "pass": true
+    },
+    {
+      "id": "ambidextrous_handedness",
+      "description": "Unknown/ambidextrous declared handedness — must abstain, never assume.",
+      "label": "UNKNOWN",
+      "confidence": 0.2,
+      "resolutionKind": "abstain",
+      "pass": true
+    }
+  ],
+  "hostileProviderLadder": [
+    {
+      "id": "sub_floor_confidence_commit",
+      "kind": "abstain",
+      "expected": "abstain",
+      "pass": true
+    },
+    {
+      "id": "unregistered_leaf",
+      "kind": "abstain",
+      "expected": "abstain",
+      "pass": true
+    },
+    {
+      "id": "unresolvable_depth2_label",
+      "kind": "abstain",
+      "expected": "abstain",
+      "pass": true
+    },
+    {
+      "id": "side_never_promoted_to_leaf",
+      "kind": "side",
+      "expected": "side",
+      "pass": true
+    },
+    {
+      "id": "unknown_leaf_marker",
+      "kind": "abstain",
+      "expected": "abstain",
+      "pass": true
+    }
+  ],
+  "slugResolution": [
+    {
+      "id": "ambiguous_slug_no_canonical",
+      "result": null,
+      "expected": null,
+      "pass": true
+    },
+    {
+      "id": "ambiguous_slug_valid_canonical",
+      "result": "FOREHAND_DINK",
+      "expected": "FOREHAND_DINK",
+      "pass": true
+    },
+    {
+      "id": "contradicting_canonical_ignored",
+      "result": null,
+      "expected": null,
+      "pass": true
+    }
+  ],
+  "adaptiveCompletion": {
+    "constantParity": [
+      {
+        "field": "settleFloor",
+        "engine": 0.15,
+        "swift": 0.15,
+        "capture": 0.15,
+        "benchLiteral": true,
+        "pass": true
+      },
+      {
+        "field": "settlePeakFraction",
+        "engine": 0.25,
+        "swift": 0.25,
+        "capture": 0.25,
+        "benchLiteral": true,
+        "pass": true
+      },
+      {
+        "field": "settleQuietMs",
+        "engine": 400,
+        "swift": 400,
+        "capture": 400,
+        "benchLiteral": true,
+        "pass": true
+      },
+      {
+        "field": "minFollowThroughMs",
+        "engine": 300,
+        "swift": 300,
+        "capture": 300,
+        "benchLiteral": true,
+        "pass": true
+      },
+      {
+        "field": "safetyMaxMs",
+        "engine": 2500,
+        "swift": 2500,
+        "capture": 2500,
+        "benchLiteral": true,
+        "pass": true
+      },
+      {
+        "field": "valleyDipFraction",
+        "engine": 0.6,
+        "swift": 0.6,
+        "capture": 0.6,
+        "benchLiteral": true,
+        "pass": true
+      },
+      {
+        "field": "valleyRiseRatio",
+        "engine": 1.5,
+        "swift": 1.5,
+        "capture": 1.5,
+        "benchLiteral": true,
+        "pass": true
+      },
+      {
+        "field": "valleyMinDwellMs",
+        "engine": 80,
+        "swift": 80,
+        "capture": 80,
+        "benchLiteral": true,
+        "pass": true
+      }
+    ],
+    "shippedDefaultFixed": true,
+    "engineChecks": [
+      {
+        "id": "settle_close",
+        "closed": [
+          "settle"
+        ],
+        "pass": true
+      },
+      {
+        "id": "valley_close_first_of_two",
+        "closed": [
+          "next_stroke_valley",
+          "flush"
+        ],
+        "pass": true
+      },
+      {
+        "id": "safety_close",
+        "closed": [
+          "safety_max"
+        ],
+        "pass": true
+      },
+      {
+        "id": "flush_close_never_silent",
+        "closed": [
+          "flush"
+        ],
+        "pass": true
+      },
+      {
+        "id": "append_only_late_samples_dropped",
+        "closed": [],
+        "pass": true
+      }
+    ],
+    "appendOnly": {
+      "droppedLateSamples": 1,
+      "closedEventsUnchanged": true
+    }
+  }
+}
