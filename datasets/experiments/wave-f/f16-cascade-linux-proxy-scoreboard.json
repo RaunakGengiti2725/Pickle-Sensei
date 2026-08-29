@@ -1,0 +1,127 @@
+{
+  "id": "f16-cascade-linux-proxy-scoreboard",
+  "wave": "F",
+  "title": "Per-stage Linux-proxy cascade scoreboard — regression baseline for future waves",
+  "banner": "NOT-CANONICAL / NOT-MAC. This scoreboard replays only the cascade stages runnable on Linux from COMMITTED artifacts. It is NOT the canonical n=5 strict cascade (pnpm lab:cascade over datasets/paddle-bench/runs/), which remains Mac-blocked per wave-e e06 (BLOCKED_EXTERNAL: run dirs gitignored/absent, Apple-Vision pose macOS-only). Numbers here must NEVER be compared against the Mac north-star table in docs/STATUS_BOARD.md.",
+  "commit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "branch": "devin/wave-f/f16-cascade-linux-proxy (measured on origin/devin/1787988068-wave-c-integration head)",
+  "generatedAtIso": "2026-08-29T11:15:00Z",
+  "environment": "Linux Ubuntu, Node 20.18.1, pnpm 10.15.1, ffmpeg 4.4.2, LINUX-CPU (no Apple Vision pose, no Mac, no iPhone)",
+  "reproduce": "bash datasets/experiments/wave-f/f16-replay-all.sh",
+  "groupingDiscipline": "every stage groups by independent source session/clip; no random-frame splits anywhere; held-out cases wm-dink-01 and afn-vic-rally1 never read by any stage",
+  "stages": {
+    "TARGET": {
+      "runnableOnLinux": false,
+      "reason": "TA bench replay (pnpm lab:ta-bench run --all) requires datasets/corpus/runs/<recId>/people.json, which is gitignored and absent on Linux hosts. Probe run at head replayed 0/301 committed cases (n=0). The committed TA numbers in wave-c/wave-e artifacts were measured where corpus runs existed.",
+      "coverage": "0/301 committed TA cases replayable from committed artifacts"
+    },
+    "EVENT": {
+      "runnableOnLinux": true,
+      "harness": "packages/swing-lab/src/eventRecallBench.ts (wave-e e01, unmodified)",
+      "artifact": "datasets/experiments/wave-f/f16-event-recall-linux-proxy.json",
+      "coverage": "16 DEV gold target events across 10 cases with committed wrist signal (wave-a windowed people.json + W6 rally1 replay fixture); canonical 5-case bench events NOT covered (no committed pose except rally1 fixture)",
+      "headMetrics": {
+        "recall": "12/16 (0.75)",
+        "misBounded": 1,
+        "missed": 3,
+        "meanBestOverlapOfProposedOk": 0.839,
+        "contactInsideRate": "12/12",
+        "falseInNonEvent": "0 in 5 labeled non-event spans",
+        "unmatchedProposals": 0
+      },
+      "waveEReference": "e01 after: 12/16 recall, mean overlap .839, 0 false proposals",
+      "verdict": "NO_DRIFT — byte-level agreement with e01 after-state"
+    },
+    "OWNERSHIP": {
+      "runnableOnLinux": true,
+      "harness": "packages/swing-lab/src/ownershipBench.ts (wave-D D02, unmodified)",
+      "artifact": "datasets/experiments/wave-f/f16-ownership-eval-linux-proxy.json (committed labels as-is) + f16-ownership-eval-corrected-linux-proxy.json (--apply-corrections, e05 adjudicated state)",
+      "coverage": "corrected: 39 dual frames (18 with committed pose) across 8 cases / 5 source sessions; incumbent wrist-ratio heuristic only replayable on the 18-frame pose subset; canonical 5-case bench frames have NO committed pose (labels-only methods there)",
+      "headMetrics": {
+        "incumbent_all_dual_frames": "acc 13/39 (0.333), coverage 0.436",
+        "incumbent_pose_subset": "acc 13/18 (0.722), answering 0.765",
+        "uncorrected_pose_subset": "acc 13/17 (0.765) on 38 dual frames"
+      },
+      "waveEReference": "e05 after: 39 dual frames / 18 with pose, incumbent pose-subset 0.722",
+      "verdict": "NO_DRIFT — matches e05 after-state exactly"
+    },
+    "PADDLE": {
+      "runnableOnLinux": false,
+      "reason": "Paddle bench and cascade PADDLE stage read runs/<case>/report.json + debug.json paddle tracks under datasets/paddle-bench/runs/ (gitignored, Mac-only; e06 forensics). No committed paddle tracks exist for the wave-a bundles either.",
+      "coverage": "0/5 canonical bench cases replayable"
+    },
+    "BALL": {
+      "runnableOnLinux": true,
+      "harness": "packages/swing-lab/src/ballHardSliceEval.ts (wave-e e12 / D2-06, unmodified) — REAL tracker (buildBallTracks → selectPrimaryBallTrack) over committed Linux-regenerated motion candidates",
+      "artifact": "datasets/experiments/wave-f/f16-ball-hardslice-linux-proxy.json",
+      "coverage": "43 D2-06 hard-slice gold labels (35 OBSERVED / 3 ENTERING_OCCLUSION / 2 OCCLUDED / 1 REACQUIRED / 2 uncertain-excluded); pose-free proxy — the play-band gate is inert (no pose on Linux); NOT the canonical BALL stage criterion",
+      "headMetrics": {
+        "OBSERVED": "hits 4/35, miss 11, wrongLoc 20",
+        "ENTERING_OCCLUSION": "hits 1/3",
+        "OCCLUDED": "2/2 abstention VIOLATIONS (tracker emits during occlusion)",
+        "REACQUIRED": "0/1"
+      },
+      "waveEReference": "e12 after: identical per-bucket aggregate (OBSERVED 4/35 hits, 11 miss, 20 wrongLoc; 2 OCCLUDED violations)",
+      "verdict": "NO_DRIFT — matches e12 after-state exactly (hard-slice weakness and occlusion violations remain open findings, not regressions)"
+    },
+    "CONTACT": {
+      "runnableOnLinux": true,
+      "harness": "packages/vision-geometry/eval/contactGoldReplay.ts via datasets/experiments/wave-f/f16-contact-replay-run.ts (assertion-free wrapper; replay logic unmodified). Condition: committed runs-wave-a pose, ORACLE ball (gold frames, conf 0.9 — measures temporal fusion, NOT the ball tracker), paddle track ABSENT.",
+      "artifact": "datasets/experiments/wave-f/f16-contact-replay-linux-proxy.json",
+      "coverage": "10 non-held-out gold target contact events (plus other-owner rows) across 4 sessions; oracle-ball condition only",
+      "headMetrics": {
+        "coverage": "7/10 estimated (0.7)",
+        "strictHits_66ms": 4,
+        "acceptableHits_132ms": 6,
+        "wrongMarkers": "1 (rate of estimated 0.143)",
+        "medianErrorMs": 27,
+        "p90ErrorMs": 128
+      },
+      "waveEReference": "e02 committed artifact (commit f2dedf7): 6/10 estimated, 0 wrong markers, median 17ms, p90 65ms",
+      "verdict": "DRIFT_FOUND — see driftFinding; the committed e02 eval suite now FAILS at integration head",
+      "driftFinding": {
+        "symptom": "wavea-sasebo-volleys gold target contact @52019 (volley): e02 state was errorMs 16 at conf 0.70 with ballConfirmed=true; head state is errorMs 144 at conf 0.79 with ballConfirmed=false (ball evidence gone, wrist peak @51875 wins). 144 > 132 acceptable ⇒ high-confidence wrong marker, which violates the e02 eval invariant (pnpm --filter @pickle/vision-geometry eval fails at head: 'expected 144 to be less than or equal to 132').",
+        "evidence": "harness and gold unchanged since e02 (git log f2dedf7..HEAD on eval/contactGoldReplay.ts is empty; same 10 gold target events); the only estimateContact source change in that range is e09 commit f3a0e63 'gap-edge censoring + paddle reach tether (contact-evidence-4.2)' merged at d46e7d8 AFTER e02's artifact was recorded. e09 validated on synthetic adversarial fixtures only; this committed-gold row was never re-replayed post-merge until now.",
+        "interpretation": "PLAUSIBLE root cause (inference, not proven line-level): e09's gap-edge censoring censors the ball direction-change/proximity evidence near the occlusion gap around 52019, removing the anchor that made e02's estimate correct; coverage simultaneously rose 6→7 estimated. Both e02 and e09 shipped as 'contact-evidence-4.2' without bumping the version against each other, so the version string cannot distinguish the two behaviors.",
+        "disposition": "Recorded as a regression finding for the integrator (f16 is read-only on production code). Candidate fixes: re-tune censoring on committed gold, or version-split the estimator (4.3) with the invariant restored."
+      }
+    },
+    "PHASE": {
+      "runnableOnLinux": true,
+      "harness": "datasets/experiments/wave-d3/d3-05-measure-gold.ts (unmodified) — segmentPhasesTemporalV2 on committed wave-a event-bounds gold",
+      "artifact": "datasets/experiments/wave-f/f16-phase-gold-linux-proxy.log",
+      "coverage": "18 anchor-free-eligible / 17 anchored gold labels across 8 dev bundles; abstention reasons preserved",
+      "headMetrics": {
+        "anchored": "15/17 segmented",
+        "anchorFree": "12/18 segmented (abstains: 3× PHASE_NO_MOTION_EVIDENCE, 1× PHASE_PEAK_NOT_UNIQUE + 2 anchored-path no-swing-speed)"
+      },
+      "waveEReference": "e04 after (v2.3): anchored 15/17, anchor-free 12/18",
+      "verdict": "NO_DRIFT — matches e04 after-state exactly"
+    },
+    "STROKE": {
+      "runnableOnLinux": true,
+      "harness": "packages/swing-lab/src/strokeHeuristicBench.ts (wave-e e03, unmodified) via datasets/experiments/wave-f/f16-stroke-bench-run.ts (persists the full report)",
+      "artifact": "datasets/experiments/wave-f/f16-stroke-bench-linux-proxy.json",
+      "coverage": "18/29 committed stroke gold labels evaluable (11 unevaluable: no committed pose), 4 source-session groups",
+      "headMetrics": {
+        "L1": "9 correct / 0 wrong / 8 abstained (1 gold-unknown)",
+        "L2": "4 correct / 3 wrong / 4 abstained (7 gold-unknown)",
+        "confidentlyWrong": 3
+      },
+      "waveEReference": "e03 candidate stroke-heuristic-4: identical (9/0/8 L1, 4/3/4 L2, conf-wrong 3)",
+      "verdict": "NO_DRIFT — matches e03 after-state exactly"
+    }
+  },
+  "scoreboardSummary": {
+    "stagesRunnable": "5 of 7 cascade stages have an honest Linux proxy (EVENT, OWNERSHIP, BALL, CONTACT, PHASE, STROKE — 6 harnesses over 5 cascade positions; TARGET and PADDLE have none)",
+    "noDrift": ["EVENT", "OWNERSHIP", "BALL", "PHASE", "STROKE"],
+    "driftFound": ["CONTACT — 1 new high-confidence wrong marker (144ms @ conf 0.79) on committed gold, introduced between e02's artifact commit and integration head; e02 eval suite fails at head"],
+    "notRunnable": ["TARGET (corpus runs gitignored)", "PADDLE (bench runs gitignored, Mac-only)"]
+  },
+  "limits": [
+    "None of these numbers are cascade north stars: denominators, conditions, and criteria differ per stage (oracle ball for CONTACT, pose-free tracker for BALL, pose-subset for OWNERSHIP incumbent).",
+    "Cross-stage conditioning (the strict-survival waterfall) is NOT measured — each stage is replayed independently on its own committed inputs, unlike the canonical cascade where each stage consumes upstream outputs.",
+    "The label-blind fresh-candidate pool and held-out cases are untouched.",
+    "Future waves should treat stage-level metric changes vs THIS artifact (same commands, same committed data) as regressions; comparisons against Mac numbers remain invalid."
+  ]
+}

@@ -1,0 +1,629 @@
+{
+  "experiment": "f16-cascade-linux-proxy (contact stage, e02 replay harness unmodified)",
+  "estimatorVersion": "contact-evidence-4.2",
+  "commit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "evaluatedAtIso": "2026-08-29T11:07:21.365Z",
+  "condition": {
+    "platform": "linux-cpu — NOT-CANONICAL / NOT-MAC",
+    "pose": "committed runs-wave-a people.json (auto target policy)",
+    "ball": "ORACLE (visually verified gold annotation frames, conf 0.9) — measures temporal fusion, NOT the ball tracker",
+    "paddle": "ABSENT (no committed paddle track for these bundles; wrist-gate proxy path exercised)",
+    "heldOut": "wm-dink-01 and afn-vic-rally1 never read",
+    "grouping": "bundle/session (no random-frame splits)",
+    "toleranceMs": {
+      "strict": 66,
+      "acceptable": 132
+    }
+  },
+  "goldEvents": 15,
+  "overall": {
+    "targetEvents": 10,
+    "estimated": 7,
+    "abstained": 3,
+    "coverage": 0.7,
+    "abstentionRate": 0.3,
+    "wrongMarkers": 1,
+    "wrongMarkerRateOfEstimated": 0.143,
+    "strictHits": 4,
+    "acceptableHits": 6,
+    "medianErrorMs": 27,
+    "p75ErrorMs": 110,
+    "p90ErrorMs": 128
+  },
+  "highConfViolations": [
+    {
+      "bundle": "wavea-sasebo-volleys",
+      "goldContactMs": 52019,
+      "family": "volley",
+      "estimatedContactMs": 51875,
+      "confidence": 0.792023189372536,
+      "errorMs": 144,
+      "limitingFactors": [
+        "no_paddle_evidence"
+      ]
+    }
+  ],
+  "bySession": {
+    "dvids-944403": {
+      "targetEvents": 2,
+      "estimated": 2,
+      "abstained": 0,
+      "coverage": 1,
+      "abstentionRate": 0,
+      "wrongMarkers": 0,
+      "wrongMarkerRateOfEstimated": 0,
+      "strictHits": 2,
+      "acceptableHits": 2,
+      "medianErrorMs": 11,
+      "p75ErrorMs": 15,
+      "p90ErrorMs": 17
+    },
+    "dvids-faead": {
+      "targetEvents": 4,
+      "estimated": 1,
+      "abstained": 3,
+      "coverage": 0.25,
+      "abstentionRate": 0.75,
+      "wrongMarkers": 0,
+      "wrongMarkerRateOfEstimated": 0,
+      "strictHits": 0,
+      "acceptableHits": 1,
+      "medianErrorMs": 117,
+      "p75ErrorMs": 117,
+      "p90ErrorMs": 117
+    },
+    "dvids-marne": {
+      "targetEvents": 1,
+      "estimated": 1,
+      "abstained": 0,
+      "coverage": 1,
+      "abstentionRate": 0,
+      "wrongMarkers": 0,
+      "wrongMarkerRateOfEstimated": 0,
+      "strictHits": 1,
+      "acceptableHits": 1,
+      "medianErrorMs": 27,
+      "p75ErrorMs": 27,
+      "p90ErrorMs": 27
+    },
+    "dvids-sasebo": {
+      "targetEvents": 2,
+      "estimated": 2,
+      "abstained": 0,
+      "coverage": 1,
+      "abstentionRate": 0,
+      "wrongMarkers": 1,
+      "wrongMarkerRateOfEstimated": 0.5,
+      "strictHits": 1,
+      "acceptableHits": 1,
+      "medianErrorMs": 74,
+      "p75ErrorMs": 109,
+      "p90ErrorMs": 130
+    },
+    "dvids-wgm": {
+      "targetEvents": 1,
+      "estimated": 1,
+      "abstained": 0,
+      "coverage": 1,
+      "abstentionRate": 0,
+      "wrongMarkers": 0,
+      "wrongMarkerRateOfEstimated": 0,
+      "strictHits": 0,
+      "acceptableHits": 1,
+      "medianErrorMs": 103,
+      "p75ErrorMs": 103,
+      "p90ErrorMs": 103
+    }
+  },
+  "byBundle": {
+    "wavea-944403-dink": {
+      "targetEvents": 1,
+      "estimated": 1,
+      "abstained": 0,
+      "coverage": 1,
+      "abstentionRate": 0,
+      "wrongMarkers": 0,
+      "wrongMarkerRateOfEstimated": 0,
+      "strictHits": 1,
+      "acceptableHits": 1,
+      "medianErrorMs": 18,
+      "p75ErrorMs": 18,
+      "p90ErrorMs": 18
+    },
+    "wavea-944403-smash": {
+      "targetEvents": 1,
+      "estimated": 1,
+      "abstained": 0,
+      "coverage": 1,
+      "abstentionRate": 0,
+      "wrongMarkers": 0,
+      "wrongMarkerRateOfEstimated": 0,
+      "strictHits": 1,
+      "acceptableHits": 1,
+      "medianErrorMs": 4,
+      "p75ErrorMs": 4,
+      "p90ErrorMs": 4
+    },
+    "wavea-faead-feed": {
+      "targetEvents": 2,
+      "estimated": 1,
+      "abstained": 1,
+      "coverage": 0.5,
+      "abstentionRate": 0.5,
+      "wrongMarkers": 0,
+      "wrongMarkerRateOfEstimated": 0,
+      "strictHits": 0,
+      "acceptableHits": 1,
+      "medianErrorMs": 117,
+      "p75ErrorMs": 117,
+      "p90ErrorMs": 117
+    },
+    "wavea-faead-rally": {
+      "targetEvents": 2,
+      "estimated": 0,
+      "abstained": 2,
+      "coverage": 0,
+      "abstentionRate": 1,
+      "wrongMarkers": 0,
+      "wrongMarkerRateOfEstimated": null,
+      "strictHits": 0,
+      "acceptableHits": 0,
+      "medianErrorMs": null,
+      "p75ErrorMs": null,
+      "p90ErrorMs": null
+    },
+    "wavea-marne-dig": {
+      "targetEvents": 0,
+      "estimated": 0,
+      "abstained": 0,
+      "coverage": null,
+      "abstentionRate": null,
+      "wrongMarkers": 0,
+      "wrongMarkerRateOfEstimated": null,
+      "strictHits": 0,
+      "acceptableHits": 0,
+      "medianErrorMs": null,
+      "p75ErrorMs": null,
+      "p90ErrorMs": null
+    },
+    "wavea-marne-serve": {
+      "targetEvents": 1,
+      "estimated": 1,
+      "abstained": 0,
+      "coverage": 1,
+      "abstentionRate": 0,
+      "wrongMarkers": 0,
+      "wrongMarkerRateOfEstimated": 0,
+      "strictHits": 1,
+      "acceptableHits": 1,
+      "medianErrorMs": 27,
+      "p75ErrorMs": 27,
+      "p90ErrorMs": 27
+    },
+    "wavea-sasebo-volleys": {
+      "targetEvents": 2,
+      "estimated": 2,
+      "abstained": 0,
+      "coverage": 1,
+      "abstentionRate": 0,
+      "wrongMarkers": 1,
+      "wrongMarkerRateOfEstimated": 0.5,
+      "strictHits": 1,
+      "acceptableHits": 1,
+      "medianErrorMs": 74,
+      "p75ErrorMs": 109,
+      "p90ErrorMs": 130
+    },
+    "wavea-wgm-wheelchair": {
+      "targetEvents": 1,
+      "estimated": 1,
+      "abstained": 0,
+      "coverage": 1,
+      "abstentionRate": 0,
+      "wrongMarkers": 0,
+      "wrongMarkerRateOfEstimated": 0,
+      "strictHits": 0,
+      "acceptableHits": 1,
+      "medianErrorMs": 103,
+      "p75ErrorMs": 103,
+      "p90ErrorMs": 103
+    }
+  },
+  "rows": [
+    {
+      "bundle": "wavea-944403-dink",
+      "session": "dvids-944403",
+      "goldContactMs": 20821,
+      "owner": "other",
+      "family": "dink",
+      "status": "estimated",
+      "estimatedContactMs": 20935,
+      "confidence": 0.55,
+      "errorMs": 114,
+      "reason": null,
+      "limitingFactors": [
+        "ball_never_near_target",
+        "ball_evidence_weak",
+        "no_paddle_evidence"
+      ],
+      "ballConfirmed": false,
+      "supportingEvidence": [
+        {
+          "signal": "wrist_speed_peak",
+          "timestampMs": 20938,
+          "weight": 0.5
+        },
+        {
+          "signal": "ball_direction_change",
+          "timestampMs": 21104,
+          "weight": 0.044
+        }
+      ]
+    },
+    {
+      "bundle": "wavea-944403-dink",
+      "session": "dvids-944403",
+      "goldContactMs": 21113,
+      "owner": "target",
+      "family": "drive",
+      "status": "estimated",
+      "estimatedContactMs": 21095,
+      "confidence": 0.782394664126404,
+      "errorMs": 18,
+      "reason": null,
+      "limitingFactors": [
+        "no_paddle_evidence"
+      ],
+      "ballConfirmed": true,
+      "supportingEvidence": [
+        {
+          "signal": "wrist_speed_peak",
+          "timestampMs": 20938,
+          "weight": 0.5
+        },
+        {
+          "signal": "ball_direction_change",
+          "timestampMs": 21104,
+          "weight": 0.351
+        },
+        {
+          "signal": "ball_wrist_proximity",
+          "timestampMs": 21104,
+          "weight": 0.091
+        }
+      ]
+    },
+    {
+      "bundle": "wavea-944403-dink",
+      "session": "dvids-944403",
+      "goldContactMs": 22130,
+      "owner": "other",
+      "family": "unknown",
+      "status": "estimated",
+      "estimatedContactMs": 21975,
+      "confidence": 0.55,
+      "errorMs": 155,
+      "reason": null,
+      "limitingFactors": [
+        "no_ball_evidence",
+        "no_paddle_evidence"
+      ],
+      "ballConfirmed": false,
+      "supportingEvidence": [
+        {
+          "signal": "wrist_speed_peak",
+          "timestampMs": 21955,
+          "weight": 0.445
+        }
+      ]
+    },
+    {
+      "bundle": "wavea-944403-smash",
+      "session": "dvids-944403",
+      "goldContactMs": 3954,
+      "owner": "other",
+      "family": "overhead",
+      "status": "estimated",
+      "estimatedContactMs": 4030,
+      "confidence": 0.55,
+      "errorMs": 76,
+      "reason": null,
+      "limitingFactors": [
+        "no_ball_evidence",
+        "no_paddle_evidence"
+      ],
+      "ballConfirmed": false,
+      "supportingEvidence": [
+        {
+          "signal": "wrist_speed_peak",
+          "timestampMs": 3987,
+          "weight": 0.369
+        }
+      ]
+    },
+    {
+      "bundle": "wavea-944403-smash",
+      "session": "dvids-944403",
+      "goldContactMs": 4371,
+      "owner": "target",
+      "family": "overhead",
+      "status": "estimated",
+      "estimatedContactMs": 4375,
+      "confidence": 0.55,
+      "errorMs": 4,
+      "reason": null,
+      "limitingFactors": [
+        "ball_lost_at_contact",
+        "no_paddle_evidence"
+      ],
+      "ballConfirmed": false,
+      "supportingEvidence": [
+        {
+          "signal": "wrist_speed_peak",
+          "timestampMs": 4404,
+          "weight": 0.5
+        },
+        {
+          "signal": "ball_direction_change",
+          "timestampMs": 4638,
+          "weight": 0.001
+        },
+        {
+          "signal": "ball_wrist_proximity",
+          "timestampMs": 4571,
+          "weight": 0.007
+        }
+      ]
+    },
+    {
+      "bundle": "wavea-faead-feed",
+      "session": "dvids-faead",
+      "goldContactMs": 33438,
+      "owner": "target",
+      "family": "unknown",
+      "status": "abstained",
+      "estimatedContactMs": null,
+      "confidence": null,
+      "errorMs": null,
+      "reason": "Contact evidence is multi-modal: comparable clusters at ~33440ms and ~33810ms (84% as strong, 370ms apart); no single moment is defensible.",
+      "limitingFactors": [
+        "contact_evidence_multimodal"
+      ],
+      "ballConfirmed": null,
+      "supportingEvidence": []
+    },
+    {
+      "bundle": "wavea-faead-feed",
+      "session": "dvids-faead",
+      "goldContactMs": 33688,
+      "owner": "target",
+      "family": "unknown",
+      "status": "estimated",
+      "estimatedContactMs": 33805,
+      "confidence": 0.55,
+      "errorMs": 117,
+      "reason": null,
+      "limitingFactors": [
+        "ball_evidence_weak",
+        "no_paddle_evidence"
+      ],
+      "ballConfirmed": false,
+      "supportingEvidence": [
+        {
+          "signal": "wrist_speed_peak",
+          "timestampMs": 33750,
+          "weight": 0.5
+        },
+        {
+          "signal": "ball_direction_change",
+          "timestampMs": 33875,
+          "weight": 0.102
+        },
+        {
+          "signal": "ball_wrist_proximity",
+          "timestampMs": 33417,
+          "weight": 0.068
+        }
+      ]
+    },
+    {
+      "bundle": "wavea-faead-rally",
+      "session": "dvids-faead",
+      "goldContactMs": 13333,
+      "owner": "target",
+      "family": "unknown",
+      "status": "abstained",
+      "estimatedContactMs": null,
+      "confidence": null,
+      "errorMs": null,
+      "reason": "Contact evidence is multi-modal: comparable clusters at ~13615ms and ~13180ms (59% as strong, 435ms apart); no single moment is defensible.",
+      "limitingFactors": [
+        "contact_evidence_multimodal"
+      ],
+      "ballConfirmed": null,
+      "supportingEvidence": []
+    },
+    {
+      "bundle": "wavea-faead-rally",
+      "session": "dvids-faead",
+      "goldContactMs": 14021,
+      "owner": "target",
+      "family": "volley",
+      "status": "abstained",
+      "estimatedContactMs": null,
+      "confidence": null,
+      "errorMs": null,
+      "reason": "Contact evidence is multi-modal: comparable clusters at ~14285ms and ~13700ms (92% as strong, 585ms apart); no single moment is defensible.",
+      "limitingFactors": [
+        "contact_evidence_multimodal"
+      ],
+      "ballConfirmed": null,
+      "supportingEvidence": []
+    },
+    {
+      "bundle": "wavea-marne-dig",
+      "session": "dvids-marne",
+      "goldContactMs": 13630,
+      "owner": "other",
+      "family": "unknown",
+      "status": "abstained",
+      "estimatedContactMs": null,
+      "confidence": null,
+      "errorMs": null,
+      "reason": "Contact evidence is multi-modal: comparable clusters at ~13525ms and ~13890ms (69% as strong, 365ms apart); no single moment is defensible.",
+      "limitingFactors": [
+        "contact_evidence_multimodal"
+      ],
+      "ballConfirmed": null,
+      "supportingEvidence": []
+    },
+    {
+      "bundle": "wavea-marne-serve",
+      "session": "dvids-marne",
+      "goldContactMs": 34718,
+      "owner": "target",
+      "family": "serve",
+      "status": "estimated",
+      "estimatedContactMs": 34745,
+      "confidence": 0.4877830454018606,
+      "errorMs": 27,
+      "reason": null,
+      "limitingFactors": [
+        "no_ball_evidence",
+        "no_paddle_evidence"
+      ],
+      "ballConfirmed": false,
+      "supportingEvidence": [
+        {
+          "signal": "wrist_speed_peak",
+          "timestampMs": 34818,
+          "weight": 0.5
+        }
+      ]
+    },
+    {
+      "bundle": "wavea-sasebo-volleys",
+      "session": "dvids-sasebo",
+      "goldContactMs": 52019,
+      "owner": "target",
+      "family": "volley",
+      "status": "estimated",
+      "estimatedContactMs": 51875,
+      "confidence": 0.792023189372536,
+      "errorMs": 144,
+      "reason": null,
+      "limitingFactors": [
+        "no_paddle_evidence"
+      ],
+      "ballConfirmed": true,
+      "supportingEvidence": [
+        {
+          "signal": "wrist_speed_peak",
+          "timestampMs": 51985,
+          "weight": 0.416
+        },
+        {
+          "signal": "ball_direction_change",
+          "timestampMs": 52053,
+          "weight": 0.084
+        },
+        {
+          "signal": "ball_wrist_proximity",
+          "timestampMs": 51852,
+          "weight": 0.281
+        }
+      ]
+    },
+    {
+      "bundle": "wavea-sasebo-volleys",
+      "session": "dvids-sasebo",
+      "goldContactMs": 52352,
+      "owner": "other",
+      "family": "volley",
+      "status": "estimated",
+      "estimatedContactMs": 52500,
+      "confidence": 0.55,
+      "errorMs": 148,
+      "reason": null,
+      "limitingFactors": [
+        "ball_evidence_weak",
+        "no_paddle_evidence"
+      ],
+      "ballConfirmed": false,
+      "supportingEvidence": [
+        {
+          "signal": "wrist_speed_peak",
+          "timestampMs": 52586,
+          "weight": 0.5
+        },
+        {
+          "signal": "ball_direction_change",
+          "timestampMs": 52053,
+          "weight": 0.015
+        },
+        {
+          "signal": "ball_wrist_proximity",
+          "timestampMs": 52553,
+          "weight": 0.067
+        }
+      ]
+    },
+    {
+      "bundle": "wavea-sasebo-volleys",
+      "session": "dvids-sasebo",
+      "goldContactMs": 52502,
+      "owner": "target",
+      "family": "unknown",
+      "status": "estimated",
+      "estimatedContactMs": 52505,
+      "confidence": 0.55,
+      "errorMs": 3,
+      "reason": null,
+      "limitingFactors": [
+        "no_ball_evidence",
+        "no_paddle_evidence"
+      ],
+      "ballConfirmed": false,
+      "supportingEvidence": [
+        {
+          "signal": "wrist_speed_peak",
+          "timestampMs": 52586,
+          "weight": 0.5
+        }
+      ]
+    },
+    {
+      "bundle": "wavea-wgm-wheelchair",
+      "session": "dvids-wgm",
+      "goldContactMs": 182567,
+      "owner": "target",
+      "family": "dink",
+      "status": "estimated",
+      "estimatedContactMs": 182670,
+      "confidence": 0.8600052616513526,
+      "errorMs": 103,
+      "reason": null,
+      "limitingFactors": [
+        "no_paddle_evidence"
+      ],
+      "ballConfirmed": true,
+      "supportingEvidence": [
+        {
+          "signal": "wrist_speed_peak",
+          "timestampMs": 183233,
+          "weight": 0.5
+        },
+        {
+          "signal": "ball_direction_change",
+          "timestampMs": 182667,
+          "weight": 0.658
+        },
+        {
+          "signal": "ball_wrist_proximity",
+          "timestampMs": 182667,
+          "weight": 0.342
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "workstreamId": "f16-cascade-linux-proxy",
+  "wave": "F",
+  "title": "Best honest Linux proxy for the Mac-blocked strict cascade: per-stage replay scoreboard from committed artifacts",
+  "branch": "devin/wave-f/f16-cascade-linux-proxy",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "commit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "generatedAtIso": "2026-08-29T11:20:00Z",
+  "environment": "Linux Ubuntu, Node 20.18.1, pnpm 10.15.1, ffmpeg 4.4.2, LINUX-CPU (no Apple Vision, no Mac, no iPhone)",
+  "verdict": "GREEN",
+  "mission": "e06 proved canonical strict-cascade replay is Mac-blocked. Replay every cascade stage that IS runnable on Linux from committed artifacts on the integrated branch and produce a per-stage Linux-proxy scoreboard, explicitly NOT-CANONICAL/NOT-MAC, as the regression baseline for future waves.",
+  "whatWasRun": {
+    "runner": "datasets/experiments/wave-f/f16-replay-all.sh (single command reproducing every stage)",
+    "stagesReplayed": {
+      "EVENT": "eventRecallBench.ts — 12/16 recall, 0 false proposals (matches e01)",
+      "OWNERSHIP": "ownershipBench.ts ± --apply-corrections — corrected 39 dual frames / 18 pose, incumbent pose-subset 13/18 = 0.722 (matches e05 after)",
+      "BALL": "ballHardSliceEval.ts — 43 D2-06 labels: OBSERVED 4/35 hits, 2/2 OCCLUDED abstention violations (matches e12 after)",
+      "CONTACT": "e02 contactGoldReplay via assertion-free wrapper — 7/10 estimated, 1 wrong marker, median 27ms (DRIFT vs e02: 6/10, 0 wrong, median 17ms)",
+      "PHASE": "d3-05-measure-gold.ts — anchored 15/17, anchor-free 12/18 (matches e04 after)",
+      "STROKE": "strokeHeuristicBench.ts via persisting wrapper — L1 9/0/8, conf-wrong 3 on 18/29 evaluable gold (matches e03 heuristic-4)"
+    },
+    "stagesProvenNotRunnable": {
+      "TARGET": "ta-bench replay needs datasets/corpus/runs/<recId>/people.json (gitignored, absent) — probe at head replayed 0/301 committed cases",
+      "PADDLE": "needs datasets/paddle-bench/runs/ (gitignored, Mac-only per e06 forensics); no committed paddle tracks exist"
+    }
+  },
+  "keyFinding": {
+    "id": "F16-CONTACT-DRIFT-1",
+    "severity": "regression (committed-gold, high-confidence wrong marker)",
+    "measured": "wavea-sasebo-volleys target contact @52019: e02 committed state errorMs 16 @ conf 0.70, ballConfirmed=true → head errorMs 144 @ conf 0.79, ballConfirmed=false. pnpm --filter @pickle/vision-geometry eval FAILS at integration head ('expected 144 to be less than or equal to 132').",
+    "provenance": "replay harness and gold unchanged since e02 (empty git log f2dedf7..HEAD on contactGoldReplay.ts; same 10 gold target events). Only estimateContact source change in range: e09 f3a0e63 (gap-edge censoring + paddle reach tether), merged after e02's artifact. e09 was validated on synthetic fixtures only. Root-cause attribution to the censoring path is stated as inference in the scoreboard, not as proven fact.",
+    "handoff": "integrator decision needed: re-tune 4.2 censoring on committed gold or version-split to 4.3; note e02 and e09 both shipped as 'contact-evidence-4.2' (version collision)."
+  },
+  "artifacts": [
+    "datasets/experiments/wave-f/f16-cascade-linux-proxy-scoreboard.json (the scoreboard — regression baseline)",
+    "datasets/experiments/wave-f/f16-replay-all.sh (reproducible runner)",
+    "datasets/experiments/wave-f/f16-event-recall-linux-proxy.json",
+    "datasets/experiments/wave-f/f16-ownership-eval-linux-proxy.json",
+    "datasets/experiments/wave-f/f16-ownership-eval-corrected-linux-proxy.json",
+    "datasets/experiments/wave-f/f16-ball-hardslice-linux-proxy.json",
+    "datasets/experiments/wave-f/f16-contact-replay-run.ts + f16-contact-replay-linux-proxy.json",
+    "datasets/experiments/wave-f/f16-phase-gold-linux-proxy.log",
+    "datasets/experiments/wave-f/f16-stroke-bench-run.ts + f16-stroke-bench-linux-proxy.json"
+  ],
+  "honestyNotes": [
+    "Every artifact is labeled NOT-CANONICAL / NOT-MAC with per-stage coverage limits; no comparison against the Mac north-star table is valid.",
+    "Cross-stage strict-survival conditioning is NOT measured: stages are replayed independently on committed inputs, unlike the canonical waterfall.",
+    "Held-out cases wm-dink-01 and afn-vic-rally1 were never read; the fresh-candidate pool was untouched.",
+    "No production code, integrator-owned docs, migrations, or runs/ directories were modified; wrappers reuse existing harness code unmodified.",
+    "The e02 artifact datasets/experiments/wave-e/e02-contact-gold-replay-metrics.json was NOT rewritten: the failing eval aborts before its write, and a byte-diff against a pre-run backup confirmed it is unchanged.",
+    "A probe TA-bench run at head produced an n=0 result file which was deleted, not committed (0 cases replayable — recorded above as the TARGET coverage proof)."
+  ],
+  "gates": {
+    "formatCheck": "pnpm format:check clean on wave-f files",
+    "packagesTouched": "none (read-only on production code; new files under datasets/experiments/wave-f/ only)"
+  }
+}
