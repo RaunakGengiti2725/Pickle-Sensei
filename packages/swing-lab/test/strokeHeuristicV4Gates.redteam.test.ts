@@ -78,24 +78,23 @@ describe("stroke-heuristic-4 gate OPEN FINDINGS (pinned confidently-wrong output
     );
   });
 
-  it("F20-F2: torso extent parked at 62.5% of the sequence median passes the 0.6 collapse floor and a shoulder-high volley commits OVERHEAD at 0.68", () => {
+  it("F20-F2 RESOLVED (stroke-heuristic-6): torso extent parked at 62.5% of the sequence median no longer commits a false OVERHEAD — the median-normalization cross-check abstains", () => {
     // Ground truth: a shoulder-high punch volley (contact 0.22 REAL
     // torso-units above the shoulder line — below the 0.25 overhead line).
     // A partial hip occlusion compresses the measured extent to 0.125u
     // (median 0.20u) across the whole ±150ms corroboration window, so the
     // contact point reads 0.36 torso-units high AND every raise-window
-    // frame inflates identically — point and skeleton "agree" on OVERHEAD.
-    // ROOT CAUSE: TORSO_COLLAPSE_MEDIAN_RATIO is a binary 0.6 floor; in the
-    // 0.6-1.0 band the normalization error (up to 1.67x) flows silently
-    // into every torso-normalized ratio with no confidence degradation,
-    // and scanRaiseWindow normalizes each frame by the SAME collapsed
-    // extent, so the "independent" skeletal corroboration inherits the
-    // identical bias instead of contradicting it.
+    // frame inflates identically — point and skeleton "agreed" on OVERHEAD
+    // at 0.68 under v4/v5 (both normalized by the SAME collapsed extent).
+    // stroke-heuristic-6 re-normalizes the contact height by the sequence
+    // median (0.225 ≤ 0.25 here): the OVERHEAD decision flips between the
+    // two normalizations, so it is decided by the normalizer, not the
+    // motion — abstain.
     const prediction = classifyFixture(torsoCollapseBoundaryOverheadFixture());
-    expect(prediction.label).toBe("OVERHEAD");
-    expect(prediction.leaf).toBe("OVERHEAD");
-    expect(prediction.confidence).toBeCloseTo(0.68, 2);
-    expect(prediction.limitingFactors).not.toContain("torso_extent_collapsed_vs_sequence_median");
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain(
+      "overhead_decision_flips_under_median_torso_normalization",
+    );
   });
 
   it("F20-F2 counterfactual: the byte-identical motion with an honestly-measured torso commits FOREHAND, not OVERHEAD", () => {
@@ -189,19 +188,17 @@ describe("stroke-heuristic-4 gate COVERAGE FINDINGS (pinned false abstentions on
 });
 
 describe("f20 fixtures never silently change shape (umbrella pins)", () => {
-  it("the remaining confidently-wrong pin commits; the resolved F20-F1 and four coverage pins abstain", () => {
+  it("the resolved F20-F1/F20-F2 and four coverage pins abstain; the honest-torso counterfactual still commits", () => {
     // If any of these flips, a classifier change touched the v4 gate
     // surface — re-run the F20 forensics before accepting it.
-    // F20-F1 moved to the abstaining set when stroke-heuristic-6 closed
-    // the sparse-declared-wrist wrong-arm commit.
-    const committing = [torsoCollapseBoundaryOverheadFixture()];
-    for (const fixture of committing) {
-      const prediction = classifyFixture(fixture);
-      expect(prediction.label, fixture.id).not.toBe("UNKNOWN");
-      expect(prediction.confidence, fixture.id).toBeGreaterThanOrEqual(0.6);
-    }
+    // Both confidently-wrong pins moved to the abstaining set when
+    // stroke-heuristic-6 closed them; the counterfactual guards against
+    // the fix over-reaching into honestly-measured strokes.
+    const counterfactual = classifyFixture(torsoHonestShoulderVolleyFixture());
+    expect(counterfactual.label).toBe("FOREHAND");
     const abstaining = [
       sparseRivalWrongArmFixture(),
+      torsoCollapseBoundaryOverheadFixture(),
       crouchDinkFixture(),
       occludedRivalGenuineForehandFixture(),
       speedDropoutDuringSwingFixture(),

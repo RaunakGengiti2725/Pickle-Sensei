@@ -314,6 +314,13 @@ Key deltas relevant to a fresh integrator:
   committing the mirrored side at 0.6. Both swing-lab and Lite bumped to v6, parity
   19/19 preserved, sasebo @52434 (rival at 1 frame, no contradiction) unaffected.
   F20-F2 (false OVERHEAD in the torso-collapse band) is now the top open stroke RED.
+  FURTHER UPDATE: F20-F2 also closed by stroke-heuristic-6 — when the OVERHEAD line
+  flips between reference-extent and sequence-median torso normalization, the
+  classifier abstains (overhead_decision_flips_under_median_torso_normalization)
+  instead of committing the manufactured OVERHEAD at 0.68; the honest-torso
+  counterfactual still commits FOREHAND. Both copies carry the gate; parity 19/19.
+  Evidence is fixture-level only — f20 promoted to YELLOW pending fresh-clip coverage
+  measurement of the new abstention gate.
 - Event recall on the e01 gold set: 12/16 → 13/16 with false proposals still 0 (f06).
 - Anchor-free phase contract is v2.4: 13/18, anchored path byte-identical (f07).
 - Contact disputes from D2-05 are adjudicated 4/4 upheld (f13); ownership S3 re-run is

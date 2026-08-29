@@ -110,6 +110,15 @@ import type { TrackedPaddleObservation } from "./paddleTracker.js";
  *     side at the degraded cap. Two-handed backhands measure BOTH wrists
  *     in ≥MIN_TRAVEL_SAMPLE_FRAMES frames and keep the degraded-commit
  *     path.
+ * 12. MEDIAN-NORMALIZATION OVERHEAD CROSS-CHECK — a reference torso extent
+ *     compressed by partial occlusion (yet above the 0.6 collapse floor)
+ *     inflates every torso-normalized ratio, including the raise-window
+ *     corroboration, so point and skeleton "agree" on a manufactured
+ *     OVERHEAD (F20-F2). When the contact height clears the overhead line
+ *     under reference-extent normalization but not under sequence-median
+ *     normalization, the decision is made by the normalizer, not the
+ *     motion — abstain. Honestly-measured strokes normalize consistently
+ *     and are unaffected.
  *
  * declared / annotated / predicted stroke stay separate records everywhere.
  */
@@ -543,6 +552,32 @@ export function classifyStroke(input: {
   // ── Level 1: vertical motion class ─────────────────────────────────────
   const aboveShoulder = (shoulderY - contactPoint.y) / torso; // >0 above
   const pointRaised = aboveShoulder > OVERHEAD_POINT_RAISE_TORSO;
+
+  // ── Cross-check: OVERHEAD line under sequence-median normalization (v6) ─
+  // Above the TORSO_COLLAPSE_MEDIAN_RATIO floor the reference extent can
+  // still be compressed by a partial occlusion; every ratio it normalizes
+  // inflates by the same factor, and the raise-window corroboration
+  // inherits the identical bias (it normalizes by the same collapsed
+  // frames). The sequence-median extent is the one available measurement
+  // that does not share the reference frame's compression: when the
+  // OVERHEAD decision flips between the two normalizations, the label is
+  // decided by the normalizer, not the motion.
+  if (pointRaised && medianTorso !== null && rawTorsoExtent < medianTorso) {
+    const aboveShoulderMedian = (shoulderY - contactPoint.y) / medianTorso;
+    if (aboveShoulderMedian <= OVERHEAD_POINT_RAISE_TORSO) {
+      evidence.push(
+        `contact ${aboveShoulder.toFixed(2)} torso above shoulders by reference extent ${rawTorsoExtent.toFixed(3)}u ` +
+          `but ${aboveShoulderMedian.toFixed(2)} by sequence median ${medianTorso.toFixed(3)}u (line ${OVERHEAD_POINT_RAISE_TORSO}) — decision is normalization-sensitive`,
+      );
+      return unknown(
+        "overhead_decision_flips_under_median_torso_normalization",
+        evidence,
+        limitingFactors,
+        contactPointSource,
+        contactPointReliability,
+      );
+    }
+  }
 
   // Skeletal raise corroboration around contact (stroke-heuristic-2): the
   // contact POINT is one measurement of one instant; the raise of the

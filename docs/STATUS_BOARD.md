@@ -209,7 +209,7 @@ All 29 branches merged into the integration branch. Per-workstream evidence:
 | f17 | silent failure rerun         | silent-failure metric re-run on post-Wave-E head                                                                            | GREEN            |
 | f18 | envelope thresholds v0.2     | corpus re-derivation again failed to validate thresholds — negative preserved                                              | SCIENTIFIC_NEG.  |
 | f19 | mobile heuristic parity      | Lite ported to v5; output-identical to swing-lab over 19-fixture parity suite                                              | GREEN            |
-| f20 | rt stroke hardened           | F20-F1 closed post-wave by stroke-heuristic-6 sparse-declared-wrist abstention; F20-F2 false OVERHEAD remains open        | ORANGE           |
+| f20 | rt stroke hardened           | F20-F1 and F20-F2 both closed post-wave by stroke-heuristic-6 abstention gates (fixture-level; no fresh-clip evidence yet)  | YELLOW           |
 | f21 | rt session scheduler         | storm/race/retry/livelock red team on real scheduler; executor seam scripted (native gap D-040 disclosed)                  | GREEN (bounded)  |
 | f22 | rt envelope bypass           | 8 KNOWN GAP bypasses pinned as regressions (blur+grain, strobing, upscale, tiny subject, crop-jitter…); 2 proven negatives | ORANGE           |
 | f23 | rt consent abuse             | consent abuse leaks found and pinned                                                                                        | ORANGE           |
@@ -232,7 +232,14 @@ format:check clean · mobile tsc 0 errors · mobile jest 40 suites / 397 tests g
   handedness contradiction leaves the declared wrist below MIN_TRAVEL_SAMPLE_FRAMES
   (was: wrong-arm BACKHAND committed at 0.6). Both copies bumped to v6; parity 19/19;
   root gates + mobile gates green at the fixing commit.
-- F20-F2: false OVERHEAD at 0.68 in the 0.6–1.0 torso-collapse band remains OPEN (RED).
+- F20-F2 RESOLVED post-Wave-F: stroke-heuristic-6 cross-checks the OVERHEAD line under
+  sequence-median torso normalization; when the decision flips between reference-extent
+  and median normalization it abstains
+  (overhead_decision_flips_under_median_torso_normalization) instead of committing the
+  manufactured OVERHEAD at 0.68. Counterfactual (honest torso, same motion) still
+  commits FOREHAND. Both copies carry the gate; parity 19/19; root + mobile gates green
+  at the fixing commit. Evidence is fixture-level only — no fresh-clip measurement of
+  the gate's coverage cost yet, so f20 is YELLOW, not GREEN.
 - Contact adversarial failures (f09) and envelope bypasses (f22) remain ORANGE.
 - Consent abuse leaks (f23) remain ORANGE.
 - 2x-speed OOD separation (f10), envelope threshold validation (f18), and two-pass
