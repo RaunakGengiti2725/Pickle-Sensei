@@ -38,7 +38,7 @@ export interface WorkerDeps {
   log: (line: string) => void;
 }
 
-export type JobOutcome = { handled: true; note: string } | { handled: false; note: string };
+type JobOutcome = { handled: true; note: string } | { handled: false; note: string };
 
 export async function handleJob(deps: WorkerDeps, job: JobEnvelope): Promise<JobOutcome> {
   switch (job.kind) {

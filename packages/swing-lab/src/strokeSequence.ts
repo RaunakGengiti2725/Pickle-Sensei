@@ -20,7 +20,7 @@ export const SEQUENCE_SCHEMA_VERSION = 1 as const;
 export const KINETIC_MEASUREMENT_STATUS =
   "experimental measurement (not a validated coaching metric)";
 
-export interface SequenceTimestep {
+interface SequenceTimestep {
   tMs: number;
   /** Milliseconds relative to estimated contact; null when no estimate. */
   tRelContactMs: number | null;

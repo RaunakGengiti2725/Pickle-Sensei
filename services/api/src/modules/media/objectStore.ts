@@ -30,7 +30,7 @@ export interface S3StoreConfig {
   forcePathStyle?: boolean;
 }
 
-export class S3ObjectStore implements IObjectStore {
+class S3ObjectStore implements IObjectStore {
   readonly bucket: string;
   private client: S3Client;
 
