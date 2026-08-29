@@ -1,6 +1,6 @@
 {
   "workstream": "C18 — Stroke gold scaling + canonical L1/L2/L3 taxonomy bench wiring",
-  "status": "ORANGE",
+  "status": "BLOCKED_EXTERNAL",
   "built": {
     "canonicalTaxonomy": "Verified ml/README.md points to packages/shared-types/src/pickleballTaxonomy.ts as product-wide source of truth; its existing contract contains 61 unique techniques across 9 families.",
     "bench": "Added a versioned pickleball-taxonomy-v2 gold contract and swing-lab scoring for L1 family, L2 side, and L3 exact technique. Verdicts preserve correct, wrong, abstained, ambiguous, gold_unknown, and L2 not_applicable separately. Reports include per-level confusion matrices.",
@@ -63,7 +63,8 @@
     "The declared-intent comparison is fixture evidence only; no canonical run artifact with declared intent was available on this machine."
   ],
   "blocked": [
-    "Observed prediction-side L1/L2/L3 metrics remain blocked on canonical report generation via pnpm lab:regen on macOS with Apple Vision pose extraction."
+    "Observed prediction-side L1/L2/L3 metrics remain blocked on canonical report generation via pnpm lab:regen on macOS with Apple Vision pose extraction.",
+    "Delivery push is externally blocked: the configured git-manager proxy returned HTTP 403 for both origin and explicit plain-HTTPS push attempts. The completed commits remain local."
   ],
   "filesChanged": [
     "package.json",
