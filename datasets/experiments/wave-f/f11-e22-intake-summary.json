@@ -1,0 +1,67 @@
+{
+  "workstream": "f11-e22-intake",
+  "wave": "wave-f",
+  "date": "2026-08-29",
+  "branch": "devin/wave-f/f11-e22-intake",
+  "base": "origin/devin/1787988068-wave-c-integration",
+  "baseCommit": "8588ddd (docs reconciliation from e25 evidence pack)",
+  "mission": "Run the 7 lawful clips acquired in wave-e/e22 through the intake pipeline: verify rights records, register/verify sha256, classify each as label-eligible DEV material vs label-blind fresh-holdout-candidate (extending the e08 fresh-holdout guard accordingly), and produce data cards. No holdout-candidate clip labeled.",
+  "verdict": "GREEN",
+  "measuredOutcome": {
+    "clipsIntaken": 7,
+    "rightsRecordsVerified": "7/7 complete (license, licenseVerification, provenanceAssessment, restrictions, all 9 rights fields); both VA clips' prior quarantine entries carry resolvedBy pointers to their e22 acceptance",
+    "sha256Verification": "7/7 recomputed digests byte-match registry media.sha256; 7/7 byte counts match clipBytes",
+    "fullDecodeCheck": "7/7 clips fully decoded with ffprobe -count_frames, zero errors (frames: yt-o_NeuHjTEVE 1798, yt-n-QrBfQVK_w 1800, yt-94KNxpNTyCw 1800, yt-9ru97zKV8mk 1800, yt-6r4fOxRuKmM 3596, va-6N3Yc184a_c 5145, va-O1dLhGGPErc 1461)",
+    "classification": {
+      "dev_label_eligible": [
+        "yt-o_NeuHjTEVE",
+        "yt-94KNxpNTyCw",
+        "va-6N3Yc184a_c"
+      ],
+      "fresh_holdout_candidate": [
+        "yt-n-QrBfQVK_w",
+        "yt-9ru97zKV8mk",
+        "yt-6r4fOxRuKmM",
+        "va-O1dLhGGPErc"
+      ]
+    },
+    "poolSizesAfterIntake": {
+      "fresh_candidate_labelBlind_holdout_pool": {
+        "clips": 12,
+        "bytes": 414070121
+      },
+      "dev_label_eligible_pool": {
+        "clips": 3,
+        "bytes": 107259661
+      },
+      "quarantinedOrExcludedUnknownRights": 23,
+      "registeredNotDownloadedSources": 2,
+      "evaluatedButExcludedSources": 6
+    },
+    "labelsCreated": 0
+  },
+  "classificationPolicy": [
+    "Session grouping: no uploaderChannelId is split across roles. The two VA clips cover different event years (2026 vs 2025 Golden Age Games) and are treated as separate sessions; the same-producer relationship is recorded as a caveat in registry intakeRecords.authority.",
+    "DEV picks maximize dev-label utility against the standing new-dev-labels blocker (standard capture geometry, gameplay-dense 1080p footage, plus the strongest-rights PD-USGov adaptive-play clip) while removing no capture-setting family from the holdout pool (each DEV pick's setting family retains >=2 independent holdout sources, except adaptive play which retains va-O1dLhGGPErc).",
+    "Holdout picks maximize marginal holdout diversity: only commercial indoor venue (yt-n-QrBfQVK_w), close behind-court outdoor geometry (yt-9ru97zKV8mk), only daytime singles + only 60fps clip in the cohort (yt-6r4fOxRuKmM), and vertical low-density OOD-leaning envelope (va-O1dLhGGPErc)."
+  ],
+  "honestyNotes": [
+    "The e22 per-item 'label-blind until freeze' notes are superseded ONLY for the 3 dev_label_eligible clips, versioned via registry intakeRecords (originals preserved in each entry's notes); the 4 holdout candidates and all 8 pre-e22 fresh candidates remain strictly label-blind.",
+    "No labels of any kind were created by this intake; dev_label_eligible means labels MAY now be created, and corpus/split/training entry still requires the lab:acquire front door (D-025).",
+    "Holdout-candidate data cards are built solely from registry metadata plus mechanical integrity checks; no content was viewed beyond e22's disclosed frame screening.",
+    "Held-out cases wm-dink-01 and afn-vic-rally1 were not viewed, labeled, tuned against, or regenerated."
+  ],
+  "artifacts": [
+    "datasets/pickleball/registry.json (new devPool section with the 3 graduated items; new intakeRecords section with 7 verification+classification records; freshCandidates reduced to 12 items with totalBytes recount and intakeNote)",
+    "datasets/pickleball/dev-pool/{yt-o_NeuHjTEVE,yt-94KNxpNTyCw,va-6N3Yc184a_c}.mp4 (git mv from fresh-candidates/, sha256 unchanged)",
+    "datasets/pickleball/data-cards/{yt-o_NeuHjTEVE,yt-94KNxpNTyCw,va-6N3Yc184a_c,yt-n-QrBfQVK_w,yt-9ru97zKV8mk,yt-6r4fOxRuKmM,va-O1dLhGGPErc}.md (7 per-clip data-card-v1 cards)",
+    "packages/swing-lab/test/e08FreshHoldoutGuard.test.ts (extended: F11 dev-pool guard — role/labelBlind pins, pool disjointness, exact dev-pool directory contents, per-file sha256 byte-match)",
+    "datasets/experiments/wave-f/f11-e22-intake-summary.json (this file)"
+  ],
+  "gates": {
+    "formatCheck": "pnpm format:check clean (all matched files use Prettier code style)",
+    "typecheck": "pnpm typecheck green (all packages)",
+    "lint": "pnpm lint green (0 errors)",
+    "tests": "swing-lab suite 540 passed | 4 skipped (includes 9/9 extended e08FreshHoldoutGuard tests and the oodGateRedTeam fresh-candidate coverage floor over the reduced 12-clip pool)"
+  }
+}
