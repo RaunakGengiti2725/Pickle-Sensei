@@ -2,6 +2,8 @@
   "workstream": "wave-e/e23-active-learning-queue",
   "branch": "devin/wave-e/e23-active-learning-queue",
   "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "baseCommit": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+  "implementationCommit": "8a64ddcea98caaef7ff251296e645080510df73f",
   "createdAtIso": "2026-08-29T10:00:00.000Z",
   "status": "GREEN",
   "mission": "Generate the next annotation queue via active learning: rank clips/frames by uncertainty, audit disagreement, hard slices, and OOD-boundary proximity, as a concrete item-level queue others can annotate from.",
