@@ -37,3 +37,17 @@ export {
   type SessionTaskRecord,
   type SessionTaskTerminal,
 } from "./sessionScheduler.js";
+// Session operations health (Wave I / i20): measured per-session ops report
+// over the engine snapshot + scheduler metrics, with PARTIAL_EVENT_ANALYSIS
+// as a hard production failure signal and a coverage-gated summary.
+export {
+  SESSION_OPS_HEALTH_VERSION,
+  assessSessionOpsHealth,
+  generateSessionOpsSummary,
+  type SessionEventOpsRecord,
+  type SessionLatencyAggregate,
+  type SessionOpsFailureSignal,
+  type SessionOpsHealthReport,
+  type SessionOpsSummary,
+  type SessionOpsVerdict,
+} from "./sessionOpsHealth.js";
