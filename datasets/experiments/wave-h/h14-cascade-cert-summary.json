@@ -1,0 +1,181 @@
+{
+  "gate": "GATE 4 — cascade certification (Wave H, workstream h14-cascade-cert)",
+  "branch": "devin/wave-h/h14-cascade-cert",
+  "baseline": {
+    "branch": "devin/1787988068-wave-c-integration",
+    "commit": "104ea0f"
+  },
+  "method": {
+    "harness": "Linux proxy replay (Wave F f16 harness recreated as datasets/experiments/wave-h/h14-replay-all.sh) on committed runs-wave-a pose + oracle ball sidecars; NOT the canonical Mac/Apple Vision strict cascade",
+    "scope": "every replayable non-holdout labeled case; held-out wm-dink-01 and afn-vic-rally1 untouched and excluded from all denominators",
+    "grouping": "metrics grouped by bundle/session/source, never frames-as-trials; machine labels treated as Tier-C only (all scoring against Gold)",
+    "environment": "Linux, Node v20.18.1, pnpm; no Apple Vision pose extraction, no Mac, no iPhone available",
+    "artifacts": [
+      "datasets/experiments/wave-h/h14-event-recall-linux-proxy.json",
+      "datasets/experiments/wave-h/h14-ownership-eval-linux-proxy.json",
+      "datasets/experiments/wave-h/h14-ownership-eval-corrected-linux-proxy.json",
+      "datasets/experiments/wave-h/h14-ball-hardslice-linux-proxy.json",
+      "datasets/experiments/wave-h/h14-contact-replay-linux-proxy.json",
+      "datasets/experiments/wave-h/h14-phase-gold-linux-proxy.txt",
+      "datasets/experiments/wave-h/h14-stroke-bench-linux-proxy.json"
+    ],
+    "rootGates": "pnpm typecheck, pnpm test, pnpm lint, pnpm format:check all pass at the release-candidate head on this branch (no production code changed)"
+  },
+  "measuredResults": {
+    "target": {
+      "status": "BLOCKED_EXTERNAL (not replayable on Linux)",
+      "detail": "Lock correctness/persistence/no-takeover/occlusion-reacquisition need full-video Apple Vision pose runs; datasets/corpus/runs and datasets/paddle-bench/runs are absent at the RC head. Unit-level target persistence tests pass under pnpm test. Last canonical Mac measurement: 5/5 (STATUS_BOARD north star).",
+      "counts": { "replayableCases": 0 }
+    },
+    "event": {
+      "status": "MEASURED (Linux proxy, event-recall-1 bench)",
+      "counts": {
+        "goldTargetEvents": 16,
+        "proposedOk": 13,
+        "misBounded": 1,
+        "missed": 2,
+        "recall": 0.813,
+        "contactInsideRate": 1.0,
+        "contactInsideDenominator": 12,
+        "falseInNonEvent": 0,
+        "nonEventSpans": 5,
+        "unmatchedProposals": 0,
+        "notReplayable": ["wm-volley-02", "afn-sasebo-rally2"]
+      },
+      "vsWaveF": "identical to f16 (13/16, 1 mis-bounded, 2 missed) — no regression"
+    },
+    "paddle": {
+      "status": "BLOCKED_EXTERNAL for detection/edge-on/foreign-paddle (needs full-video runs); ownership MEASURED via committed sidecars",
+      "ownershipCounts": {
+        "allRows": 39,
+        "correctAll": 13,
+        "poseSubsetRows": 18,
+        "poseSubsetCorrect": 13,
+        "poseSubsetAccuracy": 0.722
+      },
+      "vsWaveF": "identical to f16 / e05 corrected eval — no regression"
+    },
+    "ball": {
+      "status": "MEASURED (Linux proxy, hard-slice bench)",
+      "counts": {
+        "observedHits": 9,
+        "observedMisses": 16,
+        "observedWrongLocation": 10,
+        "observedTotal": 35,
+        "enteringOcclusionHits": 1,
+        "enteringOcclusionTotal": 3,
+        "occludedAbstained": 2,
+        "occludedTotal": 2,
+        "occludedPredictionViolations": 0,
+        "reacquiredHits": 0,
+        "reacquiredTotal": 1,
+        "uncertainExcluded": 2
+      },
+      "vsWaveF": "identical to f16 (9/35 observed, 0 occlusion violations) — no regression; hard-slice observed accuracy remains weak (known ORANGE, external: needs better detector/labels)"
+    },
+    "contact": {
+      "status": "MEASURED (Linux proxy, contact gold replay, target-owned events)",
+      "thresholds": { "strictMs": 66, "acceptableMs": 132, "wrongMarker": ">132ms", "confidentBand": ">=0.7" },
+      "counts": {
+        "targetEvents": 10,
+        "estimated": 7,
+        "abstained": 3,
+        "coverage": 0.7,
+        "abstentionRate": 0.3,
+        "strictHits": 4,
+        "acceptableHits": 6,
+        "wrongMarkers": 1,
+        "wrongMarkerRateOfEstimated": 0.143,
+        "confidentWrongMarkers": 0,
+        "medianErrorMs": 27,
+        "p75ErrorMs": 110,
+        "p90ErrorMs": 128
+      },
+      "wrongMarkerDetail": "wavea-sasebo-volleys gold 52019ms: estimated 51875ms (err 144ms) at confidence 0.683 with ballConfirmed. Known f09 residual: estimate driven by ball-wrist-proximity + wrist-peak evidence while the sparse oracle ball annotation (500ms gap after the true turn sample) censors the dissenting turn. contact-evidence-4.3 restored censored mass to the confidence denominator so the row sits BELOW the 0.7 confident band (0.792 -> 0.683); the marker location is unchanged and still wrong.",
+      "fabricatedMarkers": "0 markers claimed without ball/paddle evidentiary support",
+      "vsWaveF": "identical to f16 — no regression, no improvement"
+    },
+    "phase": {
+      "status": "MEASURED (Linux proxy, phase gold bench)",
+      "counts": {
+        "anchoredCorrect": 15,
+        "anchoredTotal": 17,
+        "anchorFreeCorrect": 13,
+        "anchorFreeTotal": 18,
+        "physicalOrderingViolations": 0
+      },
+      "vsWaveF": "identical to f16 / f07 — no regression"
+    },
+    "stroke": {
+      "status": "MEASURED (Linux proxy, stroke heuristic bench on committed gold, 18 non-holdout rows)",
+      "counts": {
+        "rows": 18,
+        "l1Correct": 5,
+        "l1Wrong": 0,
+        "l1Abstained": 12,
+        "l1GoldUnknown": 1,
+        "l2Correct": 2,
+        "l2Wrong": 2,
+        "l2Abstained": 7,
+        "l2GoldUnknown": 7,
+        "confidentlyWrong": 2
+      },
+      "declaredVsPredicted": "DeclaredStroke and PredictedStroke remain separate surfaces; bench scores PredictedStroke only; UNKNOWN abstentions counted as abstentions, never correct",
+      "vsWaveF": "f16: l1Correct 9, l2Correct 4, l2Wrong 3, confidentlyWrong 3. h14 (RC head): l1Correct 5, l2Correct 2, l2Wrong 2, confidentlyWrong 2. Wave-F stroke-hardening gates (f02 handedness crosscheck, f03 facing consensus, f04 bimanual, f05 shoulder degeneracy) converted several previously-confident rows into honest abstentions: confidently-wrong down 3 -> 2, at the cost of coverage (L1 abstention 8 -> 12 of 18)."
+    },
+    "strictCascadeNorthStar": {
+      "status": "BLOCKED_EXTERNAL",
+      "detail": "The end-to-end strict cascade (target->event->paddle->ball->contact->phase->stroke on the 5-case cascade set) requires full-video Apple Vision pose extraction on a Mac; not runnable on Linux. Last canonical measurement remains strict 2/5 (STATUS_BOARD). Nothing in the Linux-replayable stages shows a regression versus the artifacts underlying that 2/5."
+    }
+  },
+  "oracleFrontierAnalysis": {
+    "strokeConfidentWrong": "Both wrong rows already sit at the oracle frontier for their stage: wavea-wgm-wheelchair @182400 uses referenceUsed=gold_contact (perfect contact oracle) with committed pose, and still commits FOREHAND at 0.8 against gold dink/backhand — binding cause is the wrist-midline side proxy defeated by a cross-body backhand (e03 root cause, re-verified). wavea-faead-rally @13417 has no gold contact (referenceUsed=wrist_speed_peak) and commits FOREHAND at 0.6 against gold groundstroke/backhand with confidence already capped by no_contact_evidence. Perfecting upstream stages does not flip either row.",
+    "contactWrongMarker": "With a perfect target/event oracle the sasebo row still errs 144ms: the binding cause is the sparse oracle ball annotation gap at the true turn (f09 root cause, re-verified) — better ball evidence density, not upstream cascade stages, is what is missing."
+  },
+  "findings": {
+    "P0": [
+      {
+        "id": "H14-P0-1",
+        "title": "Confident wrong stroke side on committed gold: wavea-wgm-wheelchair @182400 predicts FOREHAND at confidence 0.8; gold is dink/backhand (L2 wrong)",
+        "status": "UNRESOLVED — not internally solvable",
+        "rationale": "Root-caused in e03 and re-verified here at the oracle frontier (gold-contact reference, committed pose): the wrist-midline side proxy is defeated by a cross-body backhand. Wave-F added four independent generalizable gates (f02–f05) which this row survives. Any further gate that flips this specific row would be tuned against 1–2 bench rows (bench-fitting, prohibited). The generalizable fix requires new measured evidence (paddle-face/handedness labels) — external label acquisition per the f15 plan. A second confidently-wrong row (wavea-faead-rally @13417, FOREHAND 0.6 vs gold backhand) shares the same binding cause with confidence already capped by no-contact-evidence limiting factors."
+      }
+    ],
+    "P1": [
+      {
+        "id": "H14-P1-1",
+        "title": "Persistent wrong contact marker at moderate confidence: sasebo gold 52019 estimated 144ms early at 0.683 with ballConfirmed",
+        "status": "UNRESOLVED — not internally solvable without denser ball evidence",
+        "rationale": "Known f09 residual. contact-evidence-4.3 already removed the silent-failure character (confidence forced below the 0.7 confident band by restoring censored mass — a structural inequality, not a tuned constant). The marker location itself cannot be corrected internally: the only dissenting true-turn ball sample is followed by a 500ms annotation gap, so moving the estimate would mean re-tuning gap censoring against one gold row. Not a silent high-confidence failure under the repo silent-failure-v1 contract (confidence < 0.7, limiting factors carried), but it is a wrong marker a user could see with visible uncertainty — must-fix before broad release via denser ball labels/detection (external)."
+      },
+      {
+        "id": "H14-P1-2",
+        "title": "Stroke coverage on supported capture is low: L1 abstention 12/18 on committed gold at the RC head (was 8/18 pre-hardening)",
+        "status": "UNRESOLVED — accepted trade-off, external to improve",
+        "rationale": "The Wave-F hardening gates that cut confidently-wrong 3 -> 2 also raised abstention. The remaining abstentions carry honest limiting factors (paddle_not_tracked_at_contact, no_contact_evidence, degenerate shoulder geometry). Recovering coverage without re-admitting confident wrong predictions requires better paddle tracking/contact evidence, which is label/detector-bound (f15 LABEL_STARVED finding)."
+      },
+      {
+        "id": "H14-P1-3",
+        "title": "Ball hard-slice observed accuracy 9/35",
+        "status": "UNRESOLVED — external (detector/label-bound)",
+        "rationale": "Identical to f16/f08; occlusion honesty invariants hold (0 occluded-prediction violations, 2/2 occluded abstentions). Known ORANGE."
+      }
+    ],
+    "P2": [
+      {
+        "id": "H14-P2-1",
+        "title": "Event mis-bounding on 1/16 gold events and 2 missed low-amplitude events",
+        "status": "UNRESOLVED — known f06 residuals, unchanged",
+        "rationale": "Recall 13/16 with 0 false proposals in non-event spans; misses are low-amplitude strokes at the proposal floor."
+      }
+    ],
+    "fixedThisWorkstream": []
+  },
+  "silentFailures": {
+    "found": 0,
+    "detail": "No silent high-confidence failure (confident band >=0.7) exists in any replayable stage at the RC head: contact confidentWrongMarkers=0 (the one wrong marker sits at 0.683 with limiting factors), stroke L1 wrong=0, occluded ball predictions=0. The two confidently-wrong stroke L2 rows are visible bench findings (P0 above), already root-caused via oracle frontier analysis; neither is fixable internally without bench-fitting."
+  },
+  "verdict": "FAIL",
+  "verdictRationale": "The cascade-certification gate FAILS for unrestricted release: one P0 remains unresolved (confident wrong stroke SIDE at 0.8 on committed gold, not internally solvable — requires external label acquisition), plus three P1s (moderate-confidence wrong contact marker, low stroke coverage, weak hard-slice ball accuracy), all external-evidence-bound. No regression versus the Wave-F baseline was found in any replayable stage; stroke honesty improved (confidently-wrong 3 -> 2, L1 wrong 0). The canonical Mac strict-cascade rerun (historical 2/5) is BLOCKED_EXTERNAL on this Linux environment and must be rerun on a Mac before a final GO. Evidence here is Linux-proxy only and is explicitly NOT a claim of iPhone/Mac results.",
+  "recommendation": "NO-GO for broad release on this gate until (a) the canonical Mac strict cascade is rerun on the RC head and (b) the stroke-side P0 is either fixed with new labeled evidence or the product surfaces PredictedStroke side with explicit uncertainty (DeclaredStroke remains the authoritative user-declared surface). All Linux-replayable invariants (no fabricated contact, no occluded-ball claims, no L1 stroke lies, event false-proposal zero) hold at the RC head."
+}
