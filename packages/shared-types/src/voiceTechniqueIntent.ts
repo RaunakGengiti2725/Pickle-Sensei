@@ -27,6 +27,22 @@ import {
  *    the tappable grid stays available);
  *  - "auto" / "not sure" style phrases resolve to AUTO (declared-null).
  *
+ * voice-intent-v3 adversarial hardening (bounded and deterministic; strictly
+ * fewer silent accepts than v2, never more):
+ *  - a NEGATED technique is never selected: a bounded negation grammar
+ *    ("not a dink", "no serves today", "skip the returns") scrubs the
+ *    negated technique span before detection; a transcript whose only
+ *    technique words are negated is an honest UNKNOWN with re-prompt copy;
+ *  - ambient/overheard speech idioms that reuse technique words ("she
+ *    smashes records", "returning customers", "reset the router", third-
+ *    person praise like "nice serve") are scrubbed like other idioms;
+ *  - the spoken-family filter applies only when the family word is the ONLY
+ *    technique word, so "serve and forehand drive" stays ambiguous instead
+ *    of collapsing to SERVE;
+ *  - a coarse candidate set silently resolves only when EVERY candidate has
+ *    a capture-selectable analog — unselectable candidates (lobs, specialty
+ *    shots) no longer vanish in projection and fake a unique selection.
+ *
  * voice-intent-v2 robustness additions (all still bounded and deterministic;
  * strictly fewer silent accepts than v1, never more):
  *  - common misspellings/ASR variants of technique words are in the grammar
@@ -47,7 +63,7 @@ import {
  * separate record (see analysis-pipeline strokeAutoResolution.ts).
  */
 
-export const VOICE_INTENT_VERSION = "voice-intent-v2" as const;
+export const VOICE_INTENT_VERSION = "voice-intent-v3" as const;
 
 export type VoiceSide = "forehand" | "backhand" | "two_hand_backhand";
 
@@ -112,6 +128,23 @@ const NON_TECHNIQUE_IDIOMS: readonly RegExp[] = [
   /\bblock\s+(out|of)\b/,
   /\broad\s?blocks?\b/,
   /\bdriv\w*\s+(home|back|over|away|safely?|to|us|me)\b/,
+  /\bsmash(es|ed)?\s+(records?|hits?)\b/,
+  /\bsmash\s+hit\b/,
+  /\breturning\s+(champions?|customers?|guests?|users?|visitors?)\b/,
+  /\bserving\s+(sizes?|suggestions?)\b/,
+  /\breset\s+(the\s+|your\s+|my\s+)?(routers?|passwords?|phones?|wifi|modems?|computers?|games?)\b/,
+  /\bserves?\s+on\s+(the|a)\s+(boards?|committees?|juries?|councils?)\b/,
+  /\bpunch\s+(cards?|lines?|lists?)\b/,
+  /\bblock\s+part(y|ies)\b/,
+  /\bdrive[-\s]?(through|thru)\b/,
+  /\bdrives?\s+(a|an|the)\s+(trucks?|cars?|vans?|buses|taxis?)\b/,
+  /\bslices?\s+of\b/,
+  /\bdrops?\s+the\s+(temperature|prices?|subject)\b/,
+  /\bcounter\s?offers?\b/,
+  /\broll\s+(the\s+)?windows?\b/,
+  // third-person praise / spectator talk — not a declaration by the player
+  /\b(wow|nice|great|what\s+a|that\s+was\s+an?)\s+(great\s+|nice\s+|good\s+|beautiful\s+)?(serves?|dinks?|volleys?|smash(es)?|returns?|drop\s?shots?|drives?|lobs?)\b/,
+  /\b(his|her|their)\s+(serves?|dinks?|volleys?|smash(es)?|returns?|drop\s?shots?|drives?|lobs?)\b/,
 ];
 
 /**
@@ -155,6 +188,32 @@ const COMPONENT_PATTERNS: Readonly<Record<string, RegExp>> = {
 };
 
 const SIDE_COMPONENTS = new Set(["forehand", "backhand", "two_hand_backhand"]);
+
+/**
+ * Bounded negation grammar. A negation cue followed by technique words
+ * ("not a dink", "no serves today", "skip the returns", "don't want to
+ * practice my backhand dink") scrubs the negated technique span before
+ * detection: a negated technique is NEVER selected. A transcript whose only
+ * technique words were negated becomes an honest unknown with re-prompt
+ * copy. Contrastive phrases where the kept technique stands apart from the
+ * negated span ("not the serve the return") keep the non-negated reading;
+ * tightly packed contrasts ("backhand not forehand dink") degrade to a
+ * coarse re-prompt — safe, never a guess.
+ */
+const NEGATION_CUES = String.raw`not|no|don'?t|doesn'?t|won'?t|never|without|except(?:\s+for)?|skip(?:ping)?|instead\s+of|rather\s+than|stop(?:ped)?`;
+const NEGATION_FILLERS = String.raw`(?:(?:a|an|the|my|any|more|to|do|doing|want|wanna|like|practice|practicing|work(?:ing)?|on)\s+)*`;
+const TECHNIQUE_WORD_UNION = [
+  TWO_HAND_PATTERN,
+  FOREHAND_PATTERN,
+  BACKHAND_PATTERN,
+  ...Object.values(COMPONENT_PATTERNS),
+]
+  .map((pattern) => `(?:${pattern.source})`)
+  .join("|");
+const NEGATED_TECHNIQUE_PATTERN = new RegExp(
+  String.raw`\b(?:${NEGATION_CUES})\s+${NEGATION_FILLERS}(?:(?:${TECHNIQUE_WORD_UNION})\s*)+`,
+  "g",
+);
 
 /** Slug → non-side component list, derived once from the taxonomy. */
 interface SlugGrammar {
@@ -234,6 +293,10 @@ function scrubIdioms(text: string): string {
   return scrubbed.replace(/\s+/g, " ").trim();
 }
 
+function scrubNegatedTechniques(text: string): string {
+  return text.replace(NEGATED_TECHNIQUE_PATTERN, " ").replace(/\s+/g, " ").trim();
+}
+
 const FAMILY_NAMES = new Set<string>(["serve", "return", "dink", "volley"]);
 
 /**
@@ -247,7 +310,7 @@ function filterToSpokenFamily(
   mentioned: readonly string[],
 ): readonly SlugGrammar[] {
   const spokenFamilies = mentioned.filter((component) => FAMILY_NAMES.has(component));
-  if (spokenFamilies.length !== 1) return candidates;
+  if (spokenFamilies.length !== 1 || mentioned.length !== 1) return candidates;
   const family = spokenFamilies[0]! as StrokeFamily;
   const withinFamily = candidates.filter((grammar) => grammar.family === family);
   return withinFamily.length > 0 ? withinFamily : candidates;
@@ -265,8 +328,8 @@ function filterToSpokenFamily(
  * candidate set and stays a family/side-level intent.
  */
 export function resolveVoiceTechniqueIntent(rawTranscript: string): VoiceIntentResolution {
-  const text = scrubIdioms(normalize(rawTranscript));
-  if (text.length === 0) {
+  const scrubbed = scrubIdioms(normalize(rawTranscript));
+  if (scrubbed.length === 0) {
     return {
       version: VOICE_INTENT_VERSION,
       status: "unknown",
@@ -274,9 +337,12 @@ export function resolveVoiceTechniqueIntent(rawTranscript: string): VoiceIntentR
       rePrompt: "Say the technique you are working on — for example “backhand dink”.",
     };
   }
-  if (AUTO_PATTERN.test(text)) {
+  if (AUTO_PATTERN.test(scrubbed)) {
     return { version: VOICE_INTENT_VERSION, status: "auto" };
   }
+
+  const text = scrubNegatedTechniques(scrubbed);
+  const negatedTechnique = text !== scrubbed;
 
   const sides = detectSides(text);
   const side = sides.length === 1 ? sides[0]! : null;
@@ -295,6 +361,14 @@ export function resolveVoiceTechniqueIntent(rawTranscript: string): VoiceIntentR
   }
 
   if (mentioned.length === 0 && sides.length === 0) {
+    if (negatedTechnique) {
+      return {
+        version: VOICE_INTENT_VERSION,
+        status: "unknown",
+        reason: "only negated technique words",
+        rePrompt: "Got it — not that one. Say the technique you DO want, or tap one below.",
+      };
+    }
     return {
       version: VOICE_INTENT_VERSION,
       status: "unknown",
@@ -486,7 +560,10 @@ export function projectVoiceResolution(resolution: VoiceIntentResolution): Inten
       reason: "no matching technique is in the capture-selectable set yet",
     };
   }
-  if (selectables.length === 1) {
+  const allCandidatesSelectable = resolution.candidates.every(
+    (slug) => selectableForSlug(slug) !== null,
+  );
+  if (selectables.length === 1 && allCandidatesSelectable) {
     return { status: "resolved", technique: selectables[0]!, confidence: 0.9 };
   }
   return { status: "ambiguous", options: selectables, reason: resolution.reason };
