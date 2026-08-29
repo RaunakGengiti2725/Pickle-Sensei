@@ -3,6 +3,7 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  HeadObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
@@ -16,6 +17,8 @@ export interface IObjectStore {
   presignUpload(key: string, contentType: string, expiresSeconds: number): Promise<string>;
   presignDownload(key: string, expiresSeconds: number): Promise<string>;
   deleteObject(key: string): Promise<void>;
+  /** Returns the stored object's size, or null when the object does not exist. */
+  headObject(key: string): Promise<{ sizeBytes: number } | null>;
 }
 
 export interface S3StoreConfig {
@@ -63,6 +66,17 @@ export class S3ObjectStore implements IObjectStore {
 
   async deleteObject(key: string): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+  }
+
+  async headObject(key: string): Promise<{ sizeBytes: number } | null> {
+    try {
+      const head = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
+      return { sizeBytes: Number(head.ContentLength ?? 0) };
+    } catch (error) {
+      const name = (error as { name?: string }).name;
+      if (name === "NotFound" || name === "NoSuchKey") return null;
+      throw error;
+    }
   }
 }
 

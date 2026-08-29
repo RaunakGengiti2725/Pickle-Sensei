@@ -26,8 +26,8 @@ const intervalMs = Number(process.env["WORKER_INTERVAL_MS"] ?? 5000);
 console.error(`[media-worker] polling every ${intervalMs}ms`);
 
 while (true) {
-  const { jobs, deletions } = await runOnce(deps);
-  if (jobs || deletions)
-    console.error(`[media-worker] processed jobs=${jobs} deletions=${deletions}`);
+  const { jobs, deletions, swept } = await runOnce(deps);
+  if (jobs || deletions || swept)
+    console.error(`[media-worker] processed jobs=${jobs} deletions=${deletions} swept=${swept}`);
   await new Promise((resolve) => setTimeout(resolve, intervalMs));
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -9,6 +10,7 @@ import {
 } from "../src/trainingConsent.js";
 
 const testUrl = process.env["DATABASE_URL_TEST"];
+const schemaName = `training_consent_${process.pid}_${randomUUID().replaceAll("-", "")}`;
 const migrationsDir = join(
   dirname(fileURLToPath(import.meta.url)),
   "..",
@@ -19,8 +21,15 @@ const migrationsDir = join(
   "migrations",
 );
 
+function schemaUrl(base: string, schema: string): string {
+  const url = new URL(base);
+  url.searchParams.set("options", `-c search_path=${schema}`);
+  return url.toString();
+}
+
 describe.skipIf(!testUrl)("training consent gate (real PostgreSQL)", () => {
   let pool: pg.Pool;
+  let adminPool: pg.Pool;
   let consentedUser: string;
   let silentUser: string;
   let withdrawnUser: string;
@@ -58,8 +67,9 @@ describe.skipIf(!testUrl)("training consent gate (real PostgreSQL)", () => {
   }
 
   beforeAll(async () => {
-    pool = new pg.Pool({ connectionString: testUrl });
-    await pool.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
+    adminPool = new pg.Pool({ connectionString: testUrl });
+    await adminPool.query(`CREATE SCHEMA ${schemaName}`);
+    pool = new pg.Pool({ connectionString: schemaUrl(testUrl!, schemaName) });
     await runMigrations(pool, migrationsDir);
     await seed(pool);
     consentedUser = await createUser("auth0|gate-consented");
@@ -75,6 +85,10 @@ describe.skipIf(!testUrl)("training consent gate (real PostgreSQL)", () => {
 
   afterAll(async () => {
     await pool?.end();
+    if (adminPool) {
+      await adminPool.query(`DROP SCHEMA IF EXISTS ${schemaName} CASCADE`);
+      await adminPool.end();
+    }
   });
 
   it("no consent record means NO training consent (absence is never opt-in)", async () => {

@@ -1,0 +1,114 @@
+{
+  "workstream": "D3-12",
+  "branch": "devin/wave-d3/d3-12-rt-api-errors",
+  "subsystem": "services/api media module + services/media-worker (error taxonomy, deletion completeness, dispatch failure)",
+  "method": "Red-team integration tests against the repo's real-PostgreSQL isolated-schema harness with synthetic (clearly labeled) in-memory object store and fault-injecting queue. No held-out cases touched (wm-dink-01, afn-vic-rally1). No fabricated evidence; all counts below are from tests executed in this session.",
+  "verdict": "GREEN",
+  "totals": {
+    "breaks_found": 10,
+    "breaks_fixed": 10,
+    "breaks_open": 0,
+    "new_regression_tests": 21,
+    "test_results": {
+      "services/api": "66/66 passed",
+      "services/media-worker": "20/20 passed",
+      "pnpm typecheck": "pass (all packages)"
+    }
+  },
+  "breaks": [
+    {
+      "id": "B1",
+      "scenario": "malformed upload / unsupported content type",
+      "found": "Upload accepted any contentType for any kind (e.g. video/mp4 thumbnail, application/octet-stream raw_video); only a global size cap existed and thumbnails could declare up to the full video cap.",
+      "fix": "Per-kind content-type allowlist and per-kind size caps in services/api/src/modules/media/routes.ts; typed 422 permanent media.unsupported_type / media.size_exceeded.",
+      "status": "FIXED",
+      "tests": ["services/api/test/media-redteam.integration.test.ts"]
+    },
+    {
+      "id": "B2",
+      "scenario": "upload completion without an uploaded object",
+      "found": "POST /complete trusted the client entirely: it marked assets ready without verifying the object exists in storage, so a 'ready' asset could point at nothing (corrupted_media never surfaced).",
+      "fix": "Added IObjectStore.headObject; completion verifies existence and returns typed 422 corrupted_media media.object_missing.",
+      "status": "FIXED",
+      "tests": ["services/api/test/media-redteam.integration.test.ts"]
+    },
+    {
+      "id": "B3",
+      "scenario": "oversized video (actual object larger than declared)",
+      "found": "Declared size was checked but the actual stored object size never was; an oversized object sailed through to ready/processing.",
+      "fix": "Completion compares headObject size to the per-kind cap; oversized objects are marked deleted, a purge is enqueued (asserted per-asset), and a typed 422 corrupted_media media.size_exceeded is returned.",
+      "status": "FIXED",
+      "tests": ["services/api/test/media-redteam.integration.test.ts"]
+    },
+    {
+      "id": "B4",
+      "scenario": "analysis/processing dispatch failure mid-pipeline",
+      "found": "A queue enqueue failure during completion left the asset stuck in 'processing' with no job on the queue and no typed error (silent stall).",
+      "fix": "Typed 503 retryable media.dispatch_failed; asset reverted to 'uploading' so completion can be retried.",
+      "status": "FIXED",
+      "tests": ["services/api/test/media-redteam.integration.test.ts"]
+    },
+    {
+      "id": "B5",
+      "scenario": "deletion dispatch failure (lost purge job)",
+      "found": "If the purge enqueue failed after DELETE committed, the object was orphaned forever: nothing ever retried it.",
+      "fix": "Deletion stays committed (user intent honored), failure is logged, and a new worker sweep (sweepDeletedMedia in services/media-worker/src/worker.ts, run every runOnce) purges any deleted_at asset whose object_key is still set.",
+      "status": "FIXED",
+      "tests": [
+        "services/api/test/media-redteam.integration.test.ts",
+        "services/media-worker/test/worker-redteam.test.ts"
+      ]
+    },
+    {
+      "id": "B6",
+      "scenario": "worker crash during deletion",
+      "found": "deletion_task rows claimed as 'processing' by a crashed worker were never re-selected (query filtered status = 'queued' only), stranding account/media purges forever.",
+      "fix": "Task pickup now includes stalled 'processing' rows; regression test simulates a crash-abandoned row and proves it completes.",
+      "status": "FIXED",
+      "tests": ["services/media-worker/test/worker-redteam.test.ts"]
+    },
+    {
+      "id": "B7",
+      "scenario": "double-deletion",
+      "found": "API double-delete returned 404 (acceptable typed not-found) but worker double purge re-ran deleteObject unconditionally; purge could also null object_key on a LIVE (not deleted) asset if a stray/forged purge job arrived.",
+      "fix": "Purge refuses live assets (typed refusal note, object untouched), second purge is idempotent ('no object to delete'), object_key only nulled after successful storage deletion.",
+      "status": "FIXED",
+      "tests": ["services/media-worker/test/worker-redteam.test.ts"]
+    },
+    {
+      "id": "B8",
+      "scenario": "deletion during analysis / deleted-media processing",
+      "found": "media.process did not check deleted_at: processing a deleted asset flipped its status back to 'ready' (resurrection), and a transcode finishing after deletion left orphan derived artifacts; transcoder exceptions crashed the whole worker batch (silent catch-all absent, but one poison job killed all jobs).",
+      "fix": "media.process refuses deleted media, re-checks deleted_at after transcode and deletes derived artifacts produced mid-deletion, rejects derived keys outside the master prefix, marks transcode failures as status 'failed' (typed, visible), and runOnce isolates per-job failures so poison jobs return to the queue without killing the batch.",
+      "status": "FIXED",
+      "tests": ["services/media-worker/test/worker-redteam.test.ts"]
+    },
+    {
+      "id": "B9",
+      "scenario": "orphan derived artifacts on purge",
+      "found": "Purge deleted only the master object; normalized/thumbnail derivatives under the asset prefix were orphaned.",
+      "fix": "deleteObjectAndDerived lists and deletes all keys under `${objectKey}/` before the master; purge without an object store leaves the job visible (unhandled) instead of faking completion, and account final_hard_delete stays queued while media_purge is blocked.",
+      "status": "FIXED",
+      "tests": ["services/media-worker/test/worker-redteam.test.ts"]
+    },
+    {
+      "id": "B10",
+      "scenario": "test harness races (found while red-teaming, in-subsystem test files)",
+      "found": "consent.integration.test.ts and trainingConsent.test.ts did DROP SCHEMA public CASCADE and re-migrated concurrently with other suites, racing on CREATE EXTENSION/CREATE TABLE IF NOT EXISTS (reproducible duplicate-key failures); training.integration.test.ts streak test posted completions at noon UTC 'today', which is in the future before 12:00 UTC and was rejected by the server's own future-time guard.",
+      "fix": "Both suites converted to the repo's isolated-schema pattern (no destructive DROP of public); streak test clamps 'today at noon UTC' to now-60s when noon is still in the future. No production behavior or assertions weakened.",
+      "status": "FIXED",
+      "tests": [
+        "services/api/test/consent.integration.test.ts",
+        "services/media-worker/test/trainingConsent.test.ts",
+        "services/api/test/training.integration.test.ts"
+      ]
+    }
+  ],
+  "invariants_verified": [
+    "All error responses use the repo error envelope { error: { kind, code, message, retryable, requestId } } with kinds from the shared taxonomy (permanent, retryable, corrupted_media, ...).",
+    "Deletion is complete: master object + all derived artifacts removed; object_key nulled only after storage deletion; sweep reconciles lost purge dispatches.",
+    "Analysis of deleted media impossible: analysis dispatch (deleted_at IS NULL owner query), playback URL, upload completion, and worker media.process all refuse deleted assets; no status resurrection.",
+    "No silent catches: queue failures produce typed 503s or logged+swept states; transcoder failures mark assets failed; poison jobs remain visible on the queue; purge without storage stays unhandled."
+  ],
+  "notes": "Synthetic fixtures: FakeObjectStore/FakeStore (in-memory key inventory) and FaultyQueue (single-throw enqueue) are clearly labeled synthetic in the test files. No contracts (usable-result-v1, silent-failure-v1) touched. No mobile, ML, or held-out-case changes."
+}
