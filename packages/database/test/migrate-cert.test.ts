@@ -132,7 +132,10 @@ describe.skipIf(!testUrl)("migration certification (real PostgreSQL)", () => {
         "0015_consent_records.sql",
         "0016_audit_indexes_consent_hardening.sql",
         "0017_consent_abuse_hardening.sql",
+        "0018_coach_review_records.sql",
+        "0018_consent_role_separation.sql",
         "0018_deletion_task_retry.sql",
+        "0018_evaluation_telemetry.sql",
       ]);
 
       const after = await pool.query(
