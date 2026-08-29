@@ -1,0 +1,172 @@
+{
+  "bench": "d4-04-pass1-roi",
+  "measurementEnv": "LINUX-CPU",
+  "zoneSource": "annotation paddleFrames points (pose absent on Linux; disclosed proxy for the wrist-driven production plan)",
+  "stride": 3,
+  "padNorm": 0.15,
+  "iouFloor": 0.5,
+  "modelLoadSec": 0.375,
+  "processorInputSize": "fixed 640x640 (do_resize=True) \u2014 ROI cropping does not shrink model compute, only decode/preprocess",
+  "cases": [
+    {
+      "case": "wm-volley-02",
+      "window": {
+        "startMs": 5180.0,
+        "endMs": 8000.0
+      },
+      "roiNorm": [0.4007, 0.376, 1.0, 0.774],
+      "roiAreaFraction": 0.2385,
+      "agreementInsideRoi": {
+        "framesCompared": 24,
+        "fullInsideRoi": 371,
+        "fullOutsideRoi": 743,
+        "matched": 175,
+        "unmatchedFullInsideRoi": 196,
+        "highScoreInsideRoi": 67,
+        "highScoreMatched": 53,
+        "roiOnly": 1039,
+        "worst": [
+          {
+            "tMs": 5200.0,
+            "unmatchedInsideRoi": 7
+          },
+          {
+            "tMs": 5320.0,
+            "unmatchedInsideRoi": 11
+          },
+          {
+            "tMs": 5440.0,
+            "unmatchedInsideRoi": 6
+          },
+          {
+            "tMs": 5560.0,
+            "unmatchedInsideRoi": 3
+          },
+          {
+            "tMs": 5680.0,
+            "unmatchedInsideRoi": 7
+          },
+          {
+            "tMs": 5800.0,
+            "unmatchedInsideRoi": 9
+          },
+          {
+            "tMs": 5920.0,
+            "unmatchedInsideRoi": 9
+          },
+          {
+            "tMs": 6040.0,
+            "unmatchedInsideRoi": 8
+          },
+          {
+            "tMs": 6160.0,
+            "unmatchedInsideRoi": 3
+          },
+          {
+            "tMs": 6280.0,
+            "unmatchedInsideRoi": 8
+          }
+        ],
+        "matchRate": 0.4717,
+        "highScoreMatchRate": 0.791,
+        "meanIoU": 0.7687,
+        "meanAbsScoreDelta": 0.133
+      },
+      "timing": {
+        "fullFrame": {
+          "framesProcessed": 24,
+          "inferenceSecTotal": 2.641,
+          "wallSecTotal": 2.818,
+          "requestWallSec": 2.835
+        },
+        "roi": {
+          "framesProcessed": 24,
+          "inferenceSecTotal": 2.443,
+          "wallSecTotal": 2.655,
+          "requestWallSec": 2.675
+        }
+      },
+      "wallClockSavedSec": 0.16
+    },
+    {
+      "case": "afn-sasebo-rally1",
+      "window": {
+        "startMs": 1400.0,
+        "endMs": 4400.0
+      },
+      "roiNorm": [0.2995, 0.219, 0.6765, 0.8319],
+      "roiAreaFraction": 0.2311,
+      "agreementInsideRoi": {
+        "framesCompared": 30,
+        "fullInsideRoi": 431,
+        "fullOutsideRoi": 359,
+        "matched": 158,
+        "unmatchedFullInsideRoi": 273,
+        "highScoreInsideRoi": 88,
+        "highScoreMatched": 69,
+        "roiOnly": 450,
+        "worst": [
+          {
+            "tMs": 1401.4,
+            "unmatchedInsideRoi": 21
+          },
+          {
+            "tMs": 1501.5,
+            "unmatchedInsideRoi": 7
+          },
+          {
+            "tMs": 1601.6,
+            "unmatchedInsideRoi": 10
+          },
+          {
+            "tMs": 1701.7,
+            "unmatchedInsideRoi": 12
+          },
+          {
+            "tMs": 1801.8,
+            "unmatchedInsideRoi": 13
+          },
+          {
+            "tMs": 1901.9,
+            "unmatchedInsideRoi": 10
+          },
+          {
+            "tMs": 2002.0,
+            "unmatchedInsideRoi": 12
+          },
+          {
+            "tMs": 2102.1,
+            "unmatchedInsideRoi": 15
+          },
+          {
+            "tMs": 2202.2,
+            "unmatchedInsideRoi": 3
+          },
+          {
+            "tMs": 2302.3,
+            "unmatchedInsideRoi": 7
+          }
+        ],
+        "matchRate": 0.3666,
+        "highScoreMatchRate": 0.7841,
+        "meanIoU": 0.7675,
+        "meanAbsScoreDelta": 0.1615
+      },
+      "timing": {
+        "fullFrame": {
+          "framesProcessed": 30,
+          "inferenceSecTotal": 3.379,
+          "wallSecTotal": 3.586,
+          "requestWallSec": 3.618
+        },
+        "roi": {
+          "framesProcessed": 30,
+          "inferenceSecTotal": 3.189,
+          "wallSecTotal": 3.481,
+          "requestWallSec": 3.511
+        }
+      },
+      "wallClockSavedSec": 0.107
+    }
+  ]
+}
