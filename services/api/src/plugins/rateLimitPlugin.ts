@@ -39,6 +39,7 @@ const EXPENSIVE_ROUTES = new Set([
   "POST /v1/friends/requests",
   "POST /v1/share-cards",
   "POST /v1/analyses",
+  "POST /v1/analyses/:id/report",
   "POST /v1/account/bootstrap",
   "DELETE /v1/me",
   "POST /v1/billing/sync",

@@ -137,6 +137,7 @@ describe.skipIf(!testUrl)("migration certification (real PostgreSQL)", () => {
         "0018_deletion_task_retry.sql",
         "0018_evaluation_telemetry.sql",
         "0019_analysis_feedback.sql",
+        "0019_bad_analysis_reports.sql",
         "0019_model_rollout.sql",
         "0019_rollback_known_good.sql",
       ]);
