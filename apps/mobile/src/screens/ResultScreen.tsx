@@ -42,6 +42,7 @@ import {
   loadStrokeResultEvidence,
   type StrokeResultEvidence,
 } from '../components/strokeResultData';
+import { techniqueScoreSectionVisible } from '../components/strokeResultModel';
 import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
 
 /**
@@ -296,7 +297,7 @@ export function ResultScreen() {
           onTryAgain={tryAgain}
           onDone={() => navigation.popToTop()}
         >
-          {analysis && analysis.resultKind === 'scored' ? (
+          {techniqueScoreSectionVisible(analysis) ? (
             <>
               <SectionTitle title="Technique score" />
               <Card tone="dark" style={styles.resultStage}>
