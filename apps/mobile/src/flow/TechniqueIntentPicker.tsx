@@ -56,7 +56,7 @@ export function TechniqueIntentPicker(props: {
   const [text, setText] = useState('');
   const autoSelected = props.value?.source === 'auto';
 
-  // Transcript-in, intent-out: the voice-intent-v1 grammar resolves against
+  // Transcript-in, intent-out: the voice-intent-v2 grammar resolves against
   // the 61-technique taxonomy, then projects into the capture-selectable
   // registry. Both steps are deterministic and registry-terminated.
   const voiceResolution: VoiceIntentResolution | null = useMemo(

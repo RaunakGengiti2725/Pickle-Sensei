@@ -2,7 +2,7 @@
  * Voice-intent phrase corpus — SYNTHETIC transcripts written by hand for
  * this test (no real user speech, no speech engine involved). The contract
  * under test is transcript-in → intent-out only: the deterministic
- * voice-intent-v1 grammar (61-technique taxonomy) plus its projection into
+ * voice-intent-v2 grammar (61-technique taxonomy) plus its projection into
  * the capture-selectable registry the mobile picker declares through.
  *
  * Honesty invariants exercised:
@@ -101,6 +101,37 @@ const UNKNOWN_CORPUS = [
   'my elbow hurts',
 ] as const;
 
+/** Misspelled/ASR-variant phrases: [transcript, expected taxonomy leaf]. */
+const MISSPELLING_LEAF_CORPUS: ReadonlyArray<
+  [string, PickleballTechniqueSlug]
+> = [
+  ['forhand drive', 'drive_forehand'],
+  ['four hand drive', 'drive_forehand'],
+  ['crosscort forehand dink', 'dink_crosscourt_forehand'],
+  ['forehand punch volly', 'punch_volley_forehand'],
+];
+
+/** Multi-intent phrases: must stay coarse — a side/leaf is never guessed. */
+const MULTI_INTENT_CORPUS = [
+  'forehand and backhand dink',
+  'forehand or backhand drive',
+  'backhand and forehand volley',
+  'serve and return',
+] as const;
+
+/** Everyday idioms reusing technique words: honest unknown, never a route. */
+const IDIOM_CORPUS = [
+  'serve dinner tonight',
+  'that serves you right',
+  'return my call later',
+  'can you return it',
+  'drop me off at the court',
+  'just drop it',
+  'on a roll today',
+  'drive home safely',
+  'block out the sun',
+] as const;
+
 describe('voice-intent phrase corpus (synthetic): leaf commitments', () => {
   it.each(LEAF_CORPUS)('"%s" → %s', (transcript, slug) => {
     const resolution = resolveVoiceTechniqueIntent(transcript);
@@ -151,6 +182,39 @@ describe('voice-intent phrase corpus (synthetic): auto + honest unknown', () => 
       expect(resolution.status).toBe('unknown');
       if (resolution.status !== 'unknown') return;
       expect(resolution.rePrompt.length).toBeGreaterThan(0);
+    },
+  );
+});
+
+describe('voice-intent robustness (v2): misspellings, multi-intent, idioms', () => {
+  it.each(MISSPELLING_LEAF_CORPUS)(
+    'misspelled "%s" → %s',
+    (transcript, slug) => {
+      const resolution = resolveVoiceTechniqueIntent(transcript);
+      expect(resolution.status).toBe('leaf');
+      if (resolution.status !== 'leaf') return;
+      expect(resolution.slug).toBe(slug);
+    },
+  );
+
+  it.each(MULTI_INTENT_CORPUS.map(transcript => [transcript]))(
+    'multi-intent "%s" never silently selects one technique',
+    transcript => {
+      const projected = projectVoiceResolution(
+        resolveVoiceTechniqueIntent(transcript),
+      );
+      expect(projected.status).not.toBe('resolved');
+    },
+  );
+
+  it.each(IDIOM_CORPUS.map(transcript => [transcript]))(
+    'idiom "%s" → never resolves to a technique',
+    transcript => {
+      const projected = projectVoiceResolution(
+        resolveVoiceTechniqueIntent(transcript),
+      );
+      expect(projected.status).not.toBe('resolved');
+      expect(projected.status).not.toBe('ambiguous');
     },
   );
 });
@@ -212,7 +276,7 @@ describe('projection into the capture-selectable registry (declared PRIOR path)'
     }
   });
 
-  it('resolution objects are versioned voice-intent-v1', () => {
+  it('resolution objects are versioned voice-intent-v2', () => {
     for (const [transcript] of LEAF_CORPUS) {
       expect(resolveVoiceTechniqueIntent(transcript).version).toBe(
         VOICE_INTENT_VERSION,
