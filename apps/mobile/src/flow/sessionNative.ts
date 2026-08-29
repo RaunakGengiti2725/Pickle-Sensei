@@ -6,6 +6,7 @@ import {
 } from '../camera/capture';
 import type { ApiConfigState } from '../data/api';
 import type { LocalDb } from '../data/db';
+import { sessionEventClipEnvelope } from '../camera/captureEnvelope';
 import { savePendingCapture } from '../data/repository';
 import { runCaptureAnalysis } from '../analysis/runCaptureAnalysis';
 import { makeUuid } from '../util/uuid';
@@ -221,6 +222,7 @@ export function createNativeSessionAnalysisProvider(
         apiConfig: deps.apiConfig,
         appVersion: deps.appVersion,
         sessionId: request.sessionId,
+        captureEnvelope: sessionEventClipEnvelope(clip),
       });
       if (
         outcome.kind === 'unavailable' ||

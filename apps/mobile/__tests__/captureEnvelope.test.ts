@@ -7,8 +7,11 @@ import type { CaptureQualitySignalsV1 } from '../src/camera/capture';
 import {
   attemptCaptureEnvelope,
   captureGuidanceLines,
+  createAttemptEvidenceBuffer,
   liveCaptureEnvelope,
+  qualityBlockedMessage,
   readyGate,
+  sessionEventClipEnvelope,
 } from '../src/camera/captureEnvelope';
 
 /**
@@ -189,5 +192,87 @@ describe('readyGate', () => {
     const gate = readyGate(verdict);
     expect(gate.blocked).toBe(true);
     expect(gate.blockingDimensions).toEqual(['resolution', 'frame_rate']);
+  });
+});
+
+describe('qualityBlockedMessage', () => {
+  it('appends the actionable guidance line for every failing dimension', () => {
+    const verdict = attemptCaptureEnvelope(
+      { width: 320, height: 240, fps: 60, durationMs: 3200 },
+      null,
+      null,
+    );
+    const message = qualityBlockedMessage('Nothing was rated.', verdict);
+    expect(message).toContain('Nothing was rated.');
+    expect(message).toContain('raise the camera quality setting');
+  });
+
+  it('returns the plain reason when there is no guidance to give', () => {
+    expect(qualityBlockedMessage('Nothing was rated.', null)).toBe(
+      'Nothing was rated.',
+    );
+  });
+});
+
+describe('createAttemptEvidenceBuffer', () => {
+  it('clears evidence at attempt start so one clip never inherits another clip readings', () => {
+    const buffer = createAttemptEvidenceBuffer();
+    buffer.noteReadiness({ state: 'no_person', jointCoverage: 0 });
+    buffer.noteQuality(qualitySignals({ brightnessMeanLuma: 10 }));
+    expect(buffer.readiness).not.toBeNull();
+    expect(buffer.quality).not.toBeNull();
+
+    buffer.beginAttempt();
+    expect(buffer.readiness).toBeNull();
+    expect(buffer.quality).toBeNull();
+    // Without carried-over evidence the attempt envelope judges only what
+    // the clip itself measures — stale no_person cannot block a new clip.
+    const verdict = attemptCaptureEnvelope(
+      { width: 1080, height: 1920, fps: 60, durationMs: 3200 },
+      buffer.quality,
+      buffer.readiness,
+    );
+    expect(dimension(verdict, 'player_visibility').status).toBe('NOT_MEASURED');
+    expect(dimension(verdict, 'brightness').status).toBe('NOT_MEASURED');
+    expect(verdict.overall).toBe('SUPPORTED');
+  });
+});
+
+describe('sessionEventClipEnvelope', () => {
+  it('judges resolution and frame rate from the real clip configuration', () => {
+    const verdict = sessionEventClipEnvelope({
+      width: 1080,
+      height: 1920,
+      fps: 60,
+    });
+    expect(dimension(verdict, 'resolution')).toMatchObject({
+      status: 'SUPPORTED',
+      measured: 1080,
+    });
+    expect(dimension(verdict, 'frame_rate')).toMatchObject({
+      status: 'SUPPORTED',
+      measured: 60,
+    });
+    expect(verdict.overall).toBe('SUPPORTED');
+  });
+
+  it('classifies a low-resolution session recording UNSUPPORTED', () => {
+    const verdict = sessionEventClipEnvelope({
+      width: 320,
+      height: 240,
+      fps: 60,
+    });
+    expect(dimension(verdict, 'resolution').status).toBe('UNSUPPORTED');
+    expect(verdict.overall).toBe('UNSUPPORTED');
+  });
+
+  it('leaves engine-chosen clip duration NOT_MEASURED — the window length is not user capture quality', () => {
+    const verdict = sessionEventClipEnvelope({
+      width: 1080,
+      height: 1920,
+      fps: 60,
+    });
+    expect(dimension(verdict, 'clip_duration').status).toBe('NOT_MEASURED');
+    expect(verdict.notMeasured).toContain('clip_duration');
   });
 });
