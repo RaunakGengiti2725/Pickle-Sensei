@@ -116,19 +116,25 @@ describe("classifyStroke ambiguous-motion OPEN FINDINGS (pinned confidently-wron
     );
   });
 
-  it("E10-F4: single-frame shoulder crossing flips a genuine forehand to BACKHAND at 0.8", () => {
+  it("E10-F4 RESOLVED (stroke-heuristic-5): transient shoulder crossing at contact no longer mirrors the side — facing consensus recovers FOREHAND", () => {
     // Ground truth: FOREHAND (rear view in every frame except the contact
     // instant, where torso rotation crosses the shoulders past profile).
-    // ROOT CAUSE: the facing sign is derived from the shoulder x-order of
-    // the single nearest frame; mid-swing rotation at that instant inverts
-    // it, mirroring the side decision at full confidence. No multi-frame
-    // facing consensus, no small-shoulder-separation guard.
+    // Originally pinned as a confidently-wrong BACKHAND 0.80: the facing
+    // sign came from the shoulder x-order of the single nearest frame.
+    // stroke-heuristic-5 decides facing by the multi-frame shoulder x-order
+    // consensus over ±200ms (near-profile frames cannot vote), so the one
+    // crossed frame is outvoted by the rear-view majority and the override
+    // is recorded.
     const fixture = facingFlipAtContactFixture();
     const prediction = classifyFixture(fixture, { contactMs: fixture.window.peakMs });
-    expect(prediction.label).toBe("BACKHAND");
+    expect(prediction.label).toBe("FOREHAND");
     expect(prediction.taxonomyDepth).toBe(2);
-    expect(prediction.confidence).toBeCloseTo(0.8, 5);
-    expect(prediction.evidence).toContain("front-ish view (shoulder order)");
+    expect(
+      prediction.evidence.some((entry) => entry.includes("rear-ish view (facing consensus")),
+    ).toBe(true);
+    expect(prediction.limitingFactors).toContain(
+      "facing_sign_at_reference_overridden_by_consensus",
+    );
   });
 
   it("E10-F5: wheelchair rim propulsion commits FOREHAND (now capped at 0.6 by the contact-evidence gate — root cause still open)", () => {
@@ -163,13 +169,14 @@ describe("classifyStroke ambiguous-motion defenses that held (must keep holding)
     );
   });
 
-  it("open-finding fixtures never silently change shape: the still-open pins commit a leaf-less depth-2 side", () => {
+  it("open-finding fixtures never silently change shape: the still-open pin commits a leaf-less depth-2 side", () => {
     // Umbrella pin: if any fixture starts abstaining (or committing a leaf),
     // a classifier change touched this surface — re-run the E10 forensics.
     // F3 (profileViewCollapsedShoulders) was resolved by stroke-heuristic-4;
-    // F1 (practiceShadowSwing) and F2 (nonDominantHandSwing) by
-    // stroke-heuristic-5; each is covered by its own regression test above.
-    const fixtures = [facingFlipAtContactFixture(), wheelchairRimPushFixture()];
+    // F1 (practiceShadowSwing), F2 (nonDominantHandSwing), and F4
+    // (facingFlipAtContact) by stroke-heuristic-5; each is covered by its
+    // own regression test above. Only F5 (wheelchairRimPush) remains open.
+    const fixtures = [wheelchairRimPushFixture()];
     for (const fixture of fixtures) {
       const prediction = classifyFixture(fixture, {
         contactMs: fixture.window.peakMs,

@@ -1,0 +1,95 @@
+{
+  "id": "f03-stroke-f4-facing-consensus",
+  "wave": "F",
+  "branch": "devin/wave-f/f03-stroke-f4-facing-consensus",
+  "baseCommit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "mission": "Close E10-F4: a single-frame shoulder crossing at the reference frame flipped a genuine forehand to BACKHAND at 0.8 because the camera-facing sign derived from the shoulder x-order of one nearest frame.",
+  "datasetScope": {
+    "evaluation": "Synthetic/adversarial fixtures (packages/evaluation adversarial stroke fixtures) plus the existing stroke-heuristic bench over previously-labeled wave-a gold cases (18 rows, grouped by source session). No new labels created. Held-out cases wm-dink-01 and afn-vic-rally1 untouched. No fresh-candidate material viewed or used.",
+    "realWorldValidation": "None available in this environment (no Mac/iPhone/Apple Vision/coach review) — not fabricated."
+  },
+  "configuration": {
+    "FACING_WINDOW_MS": 200,
+    "FACING_MIN_SHOULDER_SEPARATION": 0.03,
+    "FACING_MIN_VOTES": 3,
+    "FACING_CONSENSUS_MIN_RATIO": "2/3",
+    "fallback": "nearest-frame shoulder x-order only if nearest separation >= floor; then side confidence capped at DEGRADED_CONFIDENCE_CAP with limiting factor facing_single_frame_confidence_capped",
+    "abstention": "UNKNOWN with limiting factor facing_unmeasurable_no_consensus_and_degenerate_shoulder_separation when no consensus and nearest separation < floor"
+  },
+  "implementation": {
+    "files": [
+      "packages/swing-lab/src/strokeHeuristic.ts (stroke-heuristic-4 -> stroke-heuristic-5)",
+      "packages/vision-geometry/src/strokeHeuristicLite.ts (stroke-heuristic-3 -> stroke-heuristic-3.1, kept behaviorally aligned)",
+      "packages/swing-lab/test/strokeHeuristicAmbiguous.redteam.test.ts (E10-F4 pin flipped)",
+      "packages/swing-lab/test/strokeHeuristic.test.ts (version string)"
+    ],
+    "summary": "Facing sign is now a majority consensus (>=3 votes, >=2/3 majority) over frames within ±200ms of the reference, skipping near-profile frames whose shoulder x-separation is below 0.03u. A transient crossing at the reference frame is overridden by consensus and surfaced via evidence + limiting factor facing_sign_at_reference_overridden_by_consensus."
+  },
+  "before": {
+    "e10F4Fixture": {
+      "fixture": "facing-flip-at-contact",
+      "groundTruth": "FOREHAND",
+      "predicted": "BACKHAND",
+      "taxonomyDepth": 2,
+      "confidence": 0.8,
+      "rootCause": "facing sign from shoulder x-order of the single nearest frame; the fixture crosses shoulders only at the contact frame"
+    },
+    "benchOverall": {
+      "n": 18,
+      "l1Correct": 9,
+      "l1Wrong": 0,
+      "l1Abstained": 8,
+      "l1GoldUnknown": 1,
+      "l2Correct": 4,
+      "l2Wrong": 3,
+      "l2Abstained": 4,
+      "l2GoldUnknown": 7,
+      "l2NotApplicable": 0,
+      "confidentlyWrong": 3
+    }
+  },
+  "after": {
+    "e10F4Fixture": {
+      "predicted": "FOREHAND",
+      "taxonomyDepth": 2,
+      "confidence": 0.8,
+      "evidence": "rear-ish view (facing consensus 24/25 voting frames ±200ms); shoulder x-order at the reference frame is inverted vs consensus (transient crossing) — consensus wins",
+      "liteParity": "vision-geometry lite classifier returns the same FOREHAND depth-2 result at 0.8"
+    },
+    "benchOverall": {
+      "n": 18,
+      "l1Correct": 7,
+      "l1Wrong": 0,
+      "l1Abstained": 10,
+      "l1GoldUnknown": 1,
+      "l2Correct": 4,
+      "l2Wrong": 2,
+      "l2Abstained": 5,
+      "l2GoldUnknown": 7,
+      "l2NotApplicable": 0,
+      "confidentlyWrong": 2
+    },
+    "benchCaseDeltas": [
+      {
+        "caseId": "wavea-faead-rally",
+        "before": "BACKHAND depth 2 @ 0.8 — L2 WRONG (gold forehand), confidently wrong",
+        "after": "UNKNOWN (abstained) via facing_unmeasurable_no_consensus_and_degenerate_shoulder_separation",
+        "forensics": "player is near-profile through the whole ±200ms window: shoulder x-separation 0.020-0.028u (sep/torso ratio 0.18-0.28) on every frame, all below the 0.03u floor; the sign was consistent (+1) yet the resulting side call was wrong at full confidence, which is exactly what the small-shoulder-separation guard is for"
+      },
+      {
+        "caseId": "wavea-944403-dink",
+        "before": "FOREHAND depth 2 @ 0.8 — L1 correct, L2 gold_unknown",
+        "after": "UNKNOWN (abstained) via facing_unmeasurable_no_consensus_and_degenerate_shoulder_separation",
+        "forensics": "near-profile with a genuine shoulder crossing right after contact (sign flips -1 -> +1 within the window; separation 0.0003-0.026u around contact, below the floor); the previous 0.8 side call was unfalsifiable (gold L2 unknown)"
+      }
+    ],
+    "benchDeltaAssessment": "confidentlyWrong 3 -> 2 and l2Wrong 3 -> 2 (wavea-faead-rally's wrong BACKHAND@0.8 removed). Honest cost: two near-profile cases now abstain, so l1Correct 9 -> 7 / l1Abstained 8 -> 10. l1Wrong stays 0 and no correct L2 claim was lost. All bench and package tests remain green."
+  },
+  "tests": {
+    "packages/vision-geometry": "8 files, 70 tests passed",
+    "packages/swing-lab": "47 files, 536 passed | 4 skipped",
+    "flippedPin": "strokeHeuristicAmbiguous.redteam.test.ts E10-F4 now asserts FOREHAND depth 2 with facing-consensus evidence and facing_sign_at_reference_overridden_by_consensus; the umbrella 'still-open pins' test dropped facingFlipAtContactFixture (4 -> 3 open pins)"
+  },
+  "verdict": "GREEN",
+  "notes": "No thresholds/denominators weakened; abstentions are surfaced as explicit limiting factors and evidence strings. Desktop and lite classifiers verified behaviorally equivalent on the F4 fixture and the F3 profile fixture."
+}

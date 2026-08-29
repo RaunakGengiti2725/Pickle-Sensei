@@ -31,6 +31,11 @@ import { toLegacyPoseFrames, type PoseSequence } from "@pickle/swing-domain";
  * abstention gates found by red-teaming AUTO DETECT: measured non-motion
  * (a walk-through, an aborted/checked swing, a static reach) and degenerate
  * torso normalization must abstain instead of committing an identity.
+ * stroke-heuristic-3.1 ports stroke-heuristic-5's FACING CONSENSUS (E10-F4):
+ * the camera-facing sign is decided by the shoulder x-order majority across
+ * ±200ms of the reference (near-profile frames cannot vote), never by the
+ * single nearest frame alone, whose x-order a transient mid-swing shoulder
+ * crossing can invert and mirror the side call at full confidence.
  *
  * stroke-heuristic-3.1 ports swing-lab's stroke-heuristic-5 additions in
  * lockstep:
@@ -134,6 +139,21 @@ export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-3.1 (uncalibrated)";
  *   (synthetic default 0.2); below 0.04 the hip line has collapsed onto the
  *   shoulder line (e.g. chair-back occlusion) and every torso-normalized
  *   ratio in this file is meaningless — abstain instead of dividing by it.
+ *
+ * Facing-consensus constants (stroke-heuristic-3.1, red-team derived —
+ * conservative floors, NOT calibrated statistics):
+ * FACING_WINDOW_MS — same ±200ms neighborhood the dominant-wrist travel
+ *   scan already uses: wide enough for repeated measurements, narrow
+ *   enough that the player has not genuinely turned around.
+ * FACING_MIN_SHOULDER_SEPARATION — image-plane |Δx| below which a frame's
+ *   shoulder x-order is noise-scale and cannot vote. The near-profile
+ *   red-team fixture measures 0.005u; real synthetic/dev shoulder widths
+ *   measure ≥0.1u even mid-turn. 0.03 sits above the 0.02 width clamp.
+ * FACING_MIN_VOTES / FACING_CONSENSUS_MIN_RATIO — a consensus needs ≥3
+ *   voting frames with a ≥2/3 majority. Below that the facing is genuinely
+ *   ambiguous near the reference: fall back to the single-frame sign
+ *   (separation-guarded) with the side confidence capped at the degraded
+ *   ceiling, or abstain when even that frame is near-profile.
  */
 const PADDLE_REACH_ARM_LENGTHS = 1.2;
 const PADDLE_REACH_TORSO_UNITS = 1.5;
@@ -153,6 +173,10 @@ const NON_SWING_TRAVEL_FLOOR = 0.05;
 const MIN_TRAVEL_SAMPLE_FRAMES = 5;
 const TORSO_MIN_EXTENT = 0.04;
 const HANDEDNESS_CONTRADICTION_TRAVEL_RATIO = 1.5;
+const FACING_WINDOW_MS = 200;
+const FACING_MIN_SHOULDER_SEPARATION = 0.03;
+const FACING_MIN_VOTES = 3;
+const FACING_CONSENSUS_MIN_RATIO = 2 / 3;
 
 /**
  * Minimal paddle observation the heuristic actually reads. swing-lab's
@@ -517,11 +541,44 @@ export function classifyStroke(input: {
     limitingFactors.push("declared_handedness_unconfirmed_by_dominant_motion_wrist");
   }
   // Facing sign: rear view keeps anatomical right on image right (+1);
-  // front view mirrors it (-1).
-  const facing = rightShoulder.x >= leftShoulder.x ? 1 : -1;
-  evidence.push(
-    facing === 1 ? "rear-ish view (shoulder order)" : "front-ish view (shoulder order)",
-  );
+  // front view mirrors it (-1). Decided by multi-frame consensus over
+  // ±FACING_WINDOW_MS — never by the single nearest frame alone, whose
+  // x-order a transient mid-swing shoulder crossing can invert.
+  const facingVotes = scanFacingWindow(frames, contactMs);
+  const nearestSeparation = Math.abs(rightShoulder.x - leftShoulder.x);
+  const nearestSign = rightShoulder.x >= leftShoulder.x ? 1 : -1;
+  let facing: 1 | -1;
+  let facingDegraded = false;
+  if (facingVotes.consensus !== null) {
+    facing = facingVotes.consensus;
+    evidence.push(
+      `${facing === 1 ? "rear-ish" : "front-ish"} view (facing consensus ${facing === 1 ? facingVotes.rear : facingVotes.front}/${facingVotes.rear + facingVotes.front} voting frames ±${FACING_WINDOW_MS}ms)`,
+    );
+    if (nearestSeparation >= FACING_MIN_SHOULDER_SEPARATION && nearestSign !== facing) {
+      evidence.push(
+        `shoulder x-order at the reference frame is inverted vs consensus (transient crossing) — consensus wins`,
+      );
+      limitingFactors.push("facing_sign_at_reference_overridden_by_consensus");
+    }
+  } else if (nearestSeparation >= FACING_MIN_SHOULDER_SEPARATION) {
+    facing = nearestSign;
+    evidence.push(
+      `${facing === 1 ? "rear-ish" : "front-ish"} view (single-frame shoulder order — consensus unavailable: ${facingVotes.rear}/${facingVotes.front} rear/front votes, ${facingVotes.skippedSmallSeparation} near-profile frame(s) skipped)`,
+    );
+    limitingFactors.push("facing_consensus_unavailable_single_frame_shoulder_order");
+    facingDegraded = true;
+  } else {
+    evidence.push(
+      `shoulder separation ${nearestSeparation.toFixed(3)}u at reference (floor ${FACING_MIN_SHOULDER_SEPARATION}) and no facing consensus (${facingVotes.rear}/${facingVotes.front} rear/front votes)`,
+    );
+    return unknown(
+      "facing_unmeasurable_no_consensus_and_degenerate_shoulder_separation",
+      evidence,
+      limitingFactors,
+      contactPointSource,
+      contactPointReliability,
+    );
+  }
   const offset = ((contactPoint.x - midX) / shoulderWidth) * facing;
   // offset > 0 = contact on the player's RIGHT side.
   const dominantRight = input.handedness === "right";
@@ -554,12 +611,17 @@ export function classifyStroke(input: {
     return unknown(null, evidence, limitingFactors, contactPointSource, contactPointReliability);
   }
   const sideConfidenceCap =
-    sideTrustDegraded || handednessContradicted ? DEGRADED_CONFIDENCE_CAP : 0.8;
+    sideTrustDegraded || handednessContradicted || facingDegraded
+      ? DEGRADED_CONFIDENCE_CAP
+      : 0.8;
   if (contactPointReliability === "degraded") {
     limitingFactors.push("contact_point_degraded_confidence_capped");
   }
   if (contactEvidenceAbsent) {
     limitingFactors.push("no_contact_evidence_confidence_capped");
+  }
+  if (facingDegraded) {
+    limitingFactors.push("facing_single_frame_confidence_capped");
   }
   const sideConfidence = clamp(0.45 + sideMargin * 0.5, 0.45, sideConfidenceCap);
 
@@ -627,6 +689,41 @@ function unknown(
     contactPointSource,
     contactPointReliability,
   };
+}
+
+/** Shoulder x-order votes across ±FACING_WINDOW_MS of the reference.
+ * Frames vote rear (+1) when the right shoulder sits at image-right of the
+ * left, front (-1) otherwise; frames whose image-plane shoulder separation
+ * is below FACING_MIN_SHOULDER_SEPARATION are near-profile — their x-order
+ * is noise-scale — and are skipped. A consensus exists when ≥FACING_MIN_VOTES
+ * frames voted and one sign holds ≥FACING_CONSENSUS_MIN_RATIO of the votes. */
+function scanFacingWindow(
+  frames: ReturnType<typeof toLegacyPoseFrames>,
+  contactMs: number,
+): { consensus: 1 | -1 | null; rear: number; front: number; skippedSmallSeparation: number } {
+  let rear = 0;
+  let front = 0;
+  let skippedSmallSeparation = 0;
+  for (const frame of frames) {
+    if (Math.abs(frame.timestampMs - contactMs) > FACING_WINDOW_MS) continue;
+    const find = (name: string) => frame.landmarks.find((landmark) => landmark.name === name);
+    const leftShoulder = find("left_shoulder");
+    const rightShoulder = find("right_shoulder");
+    if (!leftShoulder || !rightShoulder) continue;
+    if (Math.abs(rightShoulder.x - leftShoulder.x) < FACING_MIN_SHOULDER_SEPARATION) {
+      skippedSmallSeparation += 1;
+      continue;
+    }
+    if (rightShoulder.x >= leftShoulder.x) rear += 1;
+    else front += 1;
+  }
+  const total = rear + front;
+  let consensus: 1 | -1 | null = null;
+  if (total >= FACING_MIN_VOTES) {
+    if (rear / total >= FACING_CONSENSUS_MIN_RATIO) consensus = 1;
+    else if (front / total >= FACING_CONSENSUS_MIN_RATIO) consensus = -1;
+  }
+  return { consensus, rear, front, skippedSmallSeparation };
 }
 
 function nearestFrame(frames: ReturnType<typeof toLegacyPoseFrames>, timestampMs: number) {
