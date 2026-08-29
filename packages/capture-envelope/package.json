@@ -11,7 +11,8 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "eval:bundles": "tsx src/evalBundles.ts"
+    "eval:bundles": "tsx src/evalBundles.ts",
+    "eval:corpus": "tsx src/evalCorpus.ts"
   },
   "dependencies": {
     "@pickle/shared-types": "workspace:*"

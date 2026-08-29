@@ -94,10 +94,17 @@ export function probeClipStream(clipPath: string): ClipStreamInfo {
  * intervals, from packet timestamps sorted into presentation order. Returns
  * null when fewer than 3 usable intervals exist (too short to judge timing).
  */
-export function probeFrameIntervalCv(clipPath: string): number | null {
+export function probeFrameIntervalCv(clipPath: string, window?: MeasureWindow): number | null {
+  const intervalArgs = window
+    ? [
+        "-read_intervals",
+        `${(window.startMs / 1000).toFixed(3)}%+${(window.durationMs / 1000).toFixed(3)}`,
+      ]
+    : [];
   const out = run("ffprobe", [
     "-v",
     "error",
+    ...intervalArgs,
     "-select_streams",
     "v:0",
     "-show_entries",
@@ -126,6 +133,12 @@ export function probeFrameIntervalCv(clipPath: string): number | null {
   return Math.sqrt(variance) / mean;
 }
 
+/** Restrict measurement to a sub-window of the clip (e.g. one scene). */
+export interface MeasureWindow {
+  startMs: number;
+  durationMs: number;
+}
+
 export interface SampledGrayFrames {
   width: number;
   height: number;
@@ -142,12 +155,17 @@ export function extractSampledGrayFrames(
   clipPath: string,
   sourceWidth: number,
   sourceHeight: number,
+  window?: MeasureWindow,
 ): SampledGrayFrames {
   const width = SAMPLE_WIDTH;
   const height = Math.round((sourceHeight * width) / sourceWidth / 2) * 2;
+  const windowArgs = window
+    ? ["-ss", (window.startMs / 1000).toFixed(3), "-t", (window.durationMs / 1000).toFixed(3)]
+    : [];
   const raw = run("ffmpeg", [
     "-v",
     "error",
+    ...windowArgs,
     "-i",
     clipPath,
     "-vf",
@@ -213,9 +231,9 @@ function stdDev(values: number[]): number | null {
 }
 
 /** Measure the video-only envelope signals for a clip on CPU. */
-export function measureClip(clipPath: string): CaptureEnvelopeMeasurements {
+export function measureClip(clipPath: string, window?: MeasureWindow): CaptureEnvelopeMeasurements {
   const info = probeClipStream(clipPath);
-  const sampled = extractSampledGrayFrames(clipPath, info.displayWidth, info.displayHeight);
+  const sampled = extractSampledGrayFrames(clipPath, info.displayWidth, info.displayHeight, window);
 
   const lumaMeans = sampled.frames.map((frame) => meanLuma(frame));
   const lapVars = sampled.frames.map((frame) =>
@@ -240,8 +258,8 @@ export function measureClip(clipPath: string): CaptureEnvelopeMeasurements {
     laplacianVarianceMedian: median(lapVars),
     meanAbsFrameDiff:
       diffs.length > 0 ? diffs.reduce((acc, value) => acc + value, 0) / diffs.length : null,
-    frameIntervalCv: probeFrameIntervalCv(clipPath),
-    clipDurationMs: info.durationMs,
+    frameIntervalCv: probeFrameIntervalCv(clipPath, window),
+    clipDurationMs: window ? Math.round(window.durationMs) : info.durationMs,
     playerPixelHeightFraction: null,
     playerMeanJointVisibility: null,
   };

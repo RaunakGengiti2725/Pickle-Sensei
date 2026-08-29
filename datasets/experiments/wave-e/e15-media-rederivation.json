@@ -1,0 +1,181 @@
+{
+  "note": "media files themselves are gitignored; this records re-derivation provenance",
+  "results": [
+    {
+      "recordingId": "rec-024decaeb66e",
+      "path": "datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+      "sourceId": "src-commons-Pro_Pickleball_Tour_AFN_VIC_957519_.webm",
+      "status": "excluded_held_out"
+    },
+    {
+      "recordingId": "rec-0c19a6f0251d",
+      "path": "datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "sourceId": "src-commons-Pickleball_Japan_Federation_Visits_Sasebo_967848_.webm",
+      "status": "derived_not_redownloadable"
+    },
+    {
+      "recordingId": "rec-1c1286ce675e",
+      "path": "datasets/corpus/media/dvids-1011822-1c1286ce675e.mp4",
+      "sourceId": "src-dvids-1011822",
+      "status": "downloaded",
+      "sha256": "1c1286ce675e92574e2c358d699460325c8dbe915beef03f7e12e022f969acf7",
+      "shaVerified": true
+    },
+    {
+      "recordingId": "rec-208ca8beea6d",
+      "path": "datasets/corpus/media/dvids-956784-208ca8beea6d.mp4",
+      "sourceId": "src-dvids-956784",
+      "status": "derived_not_redownloadable"
+    },
+    {
+      "recordingId": "rec-21fb75446a03",
+      "path": "datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "sourceId": "src-commons-Pickleball_Japan_Federation_Visits_Sasebo_967848_.webm",
+      "status": "derived_not_redownloadable"
+    },
+    {
+      "recordingId": "rec-274544640cc6",
+      "path": "datasets/paddle-bench/videos/afn-provic.mp4",
+      "sourceId": "src-commons-Pro_Pickleball_Tour_AFN_VIC_957519_.webm",
+      "status": "no_media_url"
+    },
+    {
+      "recordingId": "rec-44c0c451500c",
+      "path": "datasets/paddle-bench/videos/dvids-warriorgames-broll.mp4",
+      "sourceId": "src-dvids-1011773",
+      "status": "no_media_url"
+    },
+    {
+      "recordingId": "rec-5bf0e6a85afb",
+      "path": "datasets/paddle-bench/videos/afn-infocus-pro.mp4",
+      "sourceId": "src-commons-InFocus-_Pro_Pickleball_Tour_956784_.webm",
+      "status": "no_media_url"
+    },
+    {
+      "recordingId": "rec-6e06a3157947",
+      "path": "datasets/paddle-bench/videos/afn-sasebo-indoor.mp4",
+      "sourceId": "src-commons-Pickleball_Japan_Federation_Visits_Sasebo_967848_.webm",
+      "status": "no_media_url"
+    },
+    {
+      "recordingId": "rec-72cd8795bdc2",
+      "path": "datasets/corpus/media/dvids-957519-72cd8795bdc2.mp4",
+      "sourceId": "src-dvids-957519",
+      "status": "derived_not_redownloadable"
+    },
+    {
+      "recordingId": "rec-75c28e175c47",
+      "path": "datasets/corpus/media/dvids-986421-75c28e175c47.mp4",
+      "sourceId": "src-dvids-986421",
+      "status": "downloaded",
+      "sha256": "75c28e175c47c8dcd4e7aa353660a3dd668c97deb3aafe99d2df580e3a25e6c6",
+      "shaVerified": true
+    },
+    {
+      "recordingId": "rec-7d396a6d6566",
+      "path": "datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "sourceId": "src-commons-Pickleball_game.webm",
+      "status": "excluded_held_out"
+    },
+    {
+      "recordingId": "rec-8b77606225ba",
+      "path": "datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "sourceId": "src-commons-Pickleball_game.webm",
+      "status": "derived_not_redownloadable"
+    },
+    {
+      "recordingId": "rec-912aeaa8c30c",
+      "path": "datasets/corpus/media/dvids-1008415-912aeaa8c30c.mp4",
+      "sourceId": "src-dvids-1008415",
+      "status": "downloaded",
+      "sha256": "912aeaa8c30ce981f322999ddbff05fbaa373e2c8f17ff49a57cc266cb7d0cfa",
+      "shaVerified": true
+    },
+    {
+      "recordingId": "rec-916657917f2b",
+      "path": "datasets/corpus/media/dvids-944403-916657917f2b.mp4",
+      "sourceId": "src-dvids-944403",
+      "status": "downloaded",
+      "sha256": "916657917f2be72f67717b35bdc0f163915c48a1126731c25f0ae1364121ad13",
+      "shaVerified": true
+    },
+    {
+      "recordingId": "rec-960a1a200d6d",
+      "path": "datasets/paddle-bench/videos/dvids-warriorgames-match.mp4",
+      "sourceId": "src-dvids-1011384",
+      "status": "no_media_url"
+    },
+    {
+      "recordingId": "rec-96ae65019c30",
+      "path": "datasets/paddle-bench/videos/dvids-marne-outdoor.mp4",
+      "sourceId": "src-dvids-944593",
+      "status": "no_media_url"
+    },
+    {
+      "recordingId": "rec-aaead01533ed",
+      "path": "datasets/corpus/media/dvids-1019785-aaead01533ed.mp4",
+      "sourceId": "src-dvids-1019785",
+      "status": "downloaded",
+      "sha256": "aaead01533ed771bfdc13408292fe6f074c391b674593d2b22f5e504f44afac7",
+      "shaVerified": true
+    },
+    {
+      "recordingId": "rec-aba9629c681d",
+      "path": "datasets/corpus/media/dvids-967848-aba9629c681d.mp4",
+      "sourceId": "src-dvids-967848",
+      "status": "derived_not_redownloadable"
+    },
+    {
+      "recordingId": "rec-ac6c9d7b5055",
+      "path": "datasets/paddle-bench/videos/wm-farplayer-return.mp4",
+      "sourceId": "src-commons-Pickleball_game.webm",
+      "status": "derived_not_redownloadable"
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "path": "datasets/corpus/media/dvids-943757-afd0b6bad5d0.mp4",
+      "sourceId": "src-dvids-943757",
+      "status": "downloaded",
+      "sha256": "afd0b6bad5d06b0135456336f663f0932cd6e63859b2be1a3d7cc4d231c38b0a",
+      "shaVerified": true
+    },
+    {
+      "recordingId": "rec-b6f280b2900c",
+      "path": "datasets/paddle-bench/videos/wm-pickleball-game.mp4",
+      "sourceId": "src-commons-Pickleball_game.webm",
+      "status": "no_media_url"
+    },
+    {
+      "recordingId": "rec-c1b5580db415",
+      "path": "datasets/corpus/media/dvids-906546-c1b5580db415.mp4",
+      "sourceId": "src-dvids-906546",
+      "status": "downloaded",
+      "sha256": "c1b5580db415826c36d2f52a57ce5b7e000663ea6e5851e8b3adfb0779eed94c",
+      "shaVerified": true
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "path": "datasets/corpus/media/dvids-1007845-d230484fbaa5.mp4",
+      "sourceId": "src-dvids-1007845",
+      "status": "downloaded",
+      "sha256": "d230484fbaa5afa63d2302f0d29ca0dd04a5eff0b80e658bd66ed84e6fe63527",
+      "shaVerified": true
+    },
+    {
+      "recordingId": "rec-d613b17cfef1",
+      "path": "datasets/corpus/media/dvids-1019773-d613b17cfef1.mp4",
+      "sourceId": "src-dvids-1019773",
+      "status": "downloaded",
+      "sha256": "d613b17cfef1de51d6e2bcb6dbd5122e533c7c8040d17f2d1aaf5b3114392b10",
+      "shaVerified": true
+    },
+    {
+      "recordingId": "rec-faead33a362c",
+      "path": "datasets/corpus/media/dvids-944209-faead33a362c.mp4",
+      "sourceId": "src-dvids-944209",
+      "status": "downloaded",
+      "sha256": "faead33a362caba7ce422d052e49290522b96bd514993a0070a802c7c3679cbf",
+      "shaVerified": true
+    }
+  ]
+}

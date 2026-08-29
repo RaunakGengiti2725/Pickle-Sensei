@@ -10,7 +10,7 @@
  * `degraded` → DEGRADED, else UNSUPPORTED. Bounds are inclusive.
  */
 
-export const CAPTURE_ENVELOPE_THRESHOLDS_VERSION = "capture-envelope-thresholds-v0.2-provisional";
+export const CAPTURE_ENVELOPE_THRESHOLDS_VERSION = "capture-envelope-thresholds-v0.3-provisional";
 export const CAPTURE_ENVELOPE_THRESHOLDS_PROVISIONAL = true;
 
 export interface EnvelopeBand {
@@ -33,12 +33,18 @@ export const CAPTURE_ENVELOPE_THRESHOLDS = {
     supported: { min: 720 },
     degraded: { min: 480 },
   },
-  /** Average frame rate, fps. */
+  /**
+   * Average frame rate, fps. v0.2: 24fps footage repeatedly completed
+   * downstream analysis (7 of 9 downstream-good corpus units measured at
+   * 24fps, E15), so 24 is inside the supported band. The degraded floor
+   * remains a hypothesis: no labeled evidence exists between 8fps
+   * (synthetic UNSUPPORTED, D3-07) and 24fps.
+   */
   frame_rate: {
-    id: "frame-rate-avg-v0.1",
+    id: "frame-rate-avg-v0.2",
     unit: "fps",
-    supported: { min: 29 },
-    degraded: { min: 24 },
+    supported: { min: 24 },
+    degraded: { min: 15 },
   },
   /** Mean luma of sampled grayscale frames, 0–255. */
   brightness: {
@@ -62,12 +68,19 @@ export const CAPTURE_ENVELOPE_THRESHOLDS = {
    * Camera-motion proxy: mean absolute per-pixel luma difference between
    * consecutive sampled frames (same 320px-wide grayscale normalization).
    * High values ⇒ global motion / unstable mount.
+   *
+   * v0.2 recalibration from E15 corpus evidence: the proxy conflates
+   * subject motion with camera motion, and downstream-good units measured
+   * 7.8–32.7 (v0.1 supported max 6 flagged 9/9 of them; AUC 0.38, i.e.
+   * the old bands flagged the wrong side). Supported covers the observed
+   * downstream-good range; degraded covers the rest of the observed corpus
+   * range (max 45.6). p100-based with n=9 good units — still provisional.
    */
   camera_motion: {
-    id: "global-frame-diff-320w-v0.1",
+    id: "global-frame-diff-320w-v0.2",
     unit: "mean abs luma diff @320w",
-    supported: { max: 6 },
-    degraded: { max: 14 },
+    supported: { max: 33 },
+    degraded: { max: 46 },
   },
   /**
    * Timing-stability proxy: coefficient of variation (std dev / mean) of
