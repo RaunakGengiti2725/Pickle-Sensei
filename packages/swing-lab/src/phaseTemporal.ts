@@ -82,6 +82,13 @@ export function segmentPhasesTemporal(input: {
   paddleSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
   wristSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
 }): TemporalPhaseOutcome {
+  // Non-finite samples are not measurements. A single NaN/Infinity poisons
+  // the peak (Math.max) and every threshold derived from it, which lets a
+  // quiet window slip past the no-meaningful-swing gate and emit a garbage
+  // timeline (D3-05 red-team finding). Drop them before any gate runs; the
+  // remaining coverage/sample-count gates then judge only real observations.
+  const paddleSpeeds = finiteSamples(input.paddleSpeeds);
+  const wristSpeeds = finiteSamples(input.wristSpeeds);
   const windowLength = Math.max(1, input.window.endMs - input.window.startMs);
   const coverage = (series: ReadonlyArray<{ timestampMs: number }> | null): number => {
     if (!series || series.length < 2) return 0;
@@ -92,18 +99,18 @@ export function segmentPhasesTemporal(input: {
     if (inWindow.length < 2) return 0;
     return (inWindow[inWindow.length - 1]!.timestampMs - inWindow[0]!.timestampMs) / windowLength;
   };
-  const paddleCoverage = coverage(input.paddleSpeeds);
-  const wristCoverage = coverage(input.wristSpeeds);
+  const paddleCoverage = coverage(paddleSpeeds);
+  const wristCoverage = coverage(wristSpeeds);
   let source: "paddle" | "wrist";
   let series: ReadonlyArray<{ timestampMs: number; value: number }>;
   let confidence: number;
-  if (paddleCoverage >= 0.4 && input.paddleSpeeds) {
+  if (paddleCoverage >= 0.4 && paddleSpeeds) {
     source = "paddle";
-    series = input.paddleSpeeds;
+    series = paddleSpeeds;
     confidence = 0.6;
-  } else if (wristCoverage >= 0.5 && input.wristSpeeds) {
+  } else if (wristCoverage >= 0.5 && wristSpeeds) {
     source = "wrist";
-    series = input.wristSpeeds;
+    series = wristSpeeds;
     confidence = 0.4; // wrist is a proxy for the hitting system, not the paddle
   } else {
     return {
@@ -245,7 +252,7 @@ export const PHASE_TEMPORAL_V2_VERSION =
  * "exact contact not established" is embedded verbatim for honest UI labeling.
  */
 export const PHASE_TEMPORAL_V2_ANCHOR_FREE_VERSION =
-  "phase.paddle-temporal.v2.1 (event-local, anchor-free around measured motion peak; timeline from motion evidence — exact contact not established; heuristic, uncalibrated)";
+  "phase.paddle-temporal.v2.2 (event-local, anchor-free around measured UNIQUE motion peak; timeline from motion evidence — exact contact not established; heuristic, uncalibrated)";
 
 /**
  * v2 principles (learned from v1's measured failure modes):
@@ -292,7 +299,7 @@ export function segmentPhasesTemporalV2(input: {
   const slice = (
     series: ReadonlyArray<{ timestampMs: number; value: number }> | null,
   ): Array<{ timestampMs: number; value: number }> =>
-    (series ?? []).filter(
+    (finiteSamples(series) ?? []).filter(
       (sample) =>
         sample.timestampMs >= input.event.startMs - pad &&
         sample.timestampMs <= input.event.endMs + pad,
@@ -377,7 +384,7 @@ function segmentPhasesAnchorFree(input: {
   const slice = (
     series: ReadonlyArray<{ timestampMs: number; value: number }> | null,
   ): Array<{ timestampMs: number; value: number }> =>
-    (series ?? [])
+    (finiteSamples(series) ?? [])
       .filter(
         (sample) =>
           sample.timestampMs >= input.event.startMs - pad &&
@@ -447,6 +454,20 @@ function segmentPhasesAnchorFree(input: {
       status: "abstained",
       reason:
         "PHASE_PEAK_OUTSIDE_EVENT: a stronger kinematic peak sits in the margin just outside the event — the event does not own its swing apex",
+    };
+  }
+  // A swing has ONE decisive apex. Periodic motion (e.g. wheelchair
+  // propulsion strokes) produces several near-equal peaks; picking one of
+  // them as "the swing" would invent a timeline around an arbitrary push.
+  const rival = series.find(
+    (sample) =>
+      Math.abs(sample.timestampMs - peakSample.timestampMs) > 180 &&
+      sample.value >= 0.9 * peakSample.value,
+  );
+  if (rival) {
+    return {
+      status: "abstained",
+      reason: `PHASE_PEAK_NOT_UNIQUE: rival peak ${rival.value.toFixed(2)} at ${Math.round(rival.timestampMs)}ms is within 10% of the apex ${peakSample.value.toFixed(2)} at ${Math.round(peakSample.timestampMs)}ms — periodic/multi-burst motion has no single swing apex`,
     };
   }
   if (
@@ -560,6 +581,16 @@ function segmentPhasesAnchorFree(input: {
       },
     },
   };
+}
+
+/** Non-finite samples (NaN/±Infinity timestamp or value) are not measurements. */
+function finiteSamples(
+  series: ReadonlyArray<{ timestampMs: number; value: number }> | null,
+): ReadonlyArray<{ timestampMs: number; value: number }> | null {
+  if (!series) return null;
+  return series.filter(
+    (sample) => Number.isFinite(sample.timestampMs) && Number.isFinite(sample.value),
+  );
 }
 
 function nearestIndex(series: ReadonlyArray<{ timestampMs: number }>, tMs: number): number {
