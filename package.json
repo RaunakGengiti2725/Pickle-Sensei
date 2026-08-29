@@ -44,6 +44,7 @@
     "lab:own": "pnpm --filter @pickle/swing-lab own",
     "lab:completion-bench": "pnpm --filter @pickle/swing-lab completion:bench",
     "lab:cascade": "pnpm --filter @pickle/swing-lab cascade",
+    "lab:session-scheduler-sim": "pnpm --filter @pickle/swing-lab session:scheduler-sim",
     "lab:coach-queue": "pnpm --filter @pickle/swing-lab coach:queue",
     "lab:regen": "pnpm --filter @pickle/swing-lab regen",
     "lab:risk-curves": "pnpm --filter @pickle/swing-lab risk:curves",

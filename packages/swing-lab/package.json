@@ -45,7 +45,8 @@
     "bundle:experiments": "tsx src/experimentBundle.ts",
     "invariants:corpus": "tsx src/corpusCheck.ts",
     "merge:safety": "tsx src/paddleMergeSafetySweep.ts",
-    "worker:soak": "tsx src/paddleWorkerSoak.ts"
+    "worker:soak": "tsx src/paddleWorkerSoak.ts",
+    "session:scheduler-sim": "tsx src/sessionSchedulerSim.ts"
   },
   "dependencies": {
     "@pickle/analysis-pipeline": "workspace:*",
