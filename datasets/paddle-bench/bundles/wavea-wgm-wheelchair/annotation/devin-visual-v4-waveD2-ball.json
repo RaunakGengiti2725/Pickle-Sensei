@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-wgm-wheelchair",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "createdAtIso": "2026-08-29T08:40:00.000Z",
+  "revision": 1,
+  "stroke": "unsure",
+  "handedness": "unsure",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": null,
+    "accelerationStartMs": null,
+    "contactMs": null,
+    "followThroughEndMs": null
+  },
+  "contactUncertainty": null,
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.75,
+  "notes": "Ball-only hard-slice gold pass (workstream D2-06): stroke/phase/checkpoint fields intentionally unlabeled. Method: frames decoded by absolute frame index at the exact container frame rate (ffmpeg select=eq(n\\,IDX), no -ss seeking); every committed point measured on a zoomed pixel crop of the decoded frame and re-verified in a 4x centered crop; radiusNorm = ball radius px / frame height, omitted where blur or partial overlap makes it unmeasurable. Occluded frames carry NO point by rule; uncertain frames carry no point and no occlusionState. Append-only sidecar; no existing label touched. RECORDING clock (rec-960a1a200d6d, dvids-warriorgames-match, 30fps), tMs=round(n*100/3). Ball track through the wheelchair athlete's low lift inside the wave-a event window [182250..183300]: low bounce left of the chair, slow rise, then a fast blurred departure right; no occlusion occurs in these frames (the 182800/182867 streaks are fully in view). All frames within the event window.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T08:40:00.000Z"
+    }
+  ],
+  "ballFrames": [
+    {
+      "tMs": 182333,
+      "point": {
+        "x": 0.3547,
+        "y": 0.7472
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0153,
+      "occlusionState": "observed",
+      "note": "low bounce left of the chair"
+    },
+    {
+      "tMs": 182467,
+      "point": {
+        "x": 0.3497,
+        "y": 0.6102
+      },
+      "visibility": "visible",
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 182533,
+      "point": {
+        "x": 0.3448,
+        "y": 0.5657
+      },
+      "visibility": "visible",
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 182567,
+      "point": {
+        "x": 0.3445,
+        "y": 0.5495
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "paddle blade up-left of the ball, no overlap in this frame"
+    },
+    {
+      "tMs": 182600,
+      "point": {
+        "x": 0.3424,
+        "y": 0.5384
+      },
+      "visibility": "visible",
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 182667,
+      "point": {
+        "x": 0.3393,
+        "y": 0.5361
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "near apex, nearly stationary frame-to-frame"
+    },
+    {
+      "tMs": 182733,
+      "point": {
+        "x": 0.3906,
+        "y": 0.5255
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "motion-blurred blob; the wheelchair frame tube crosses the blur; centroid of blur"
+    },
+    {
+      "tMs": 182800,
+      "point": {
+        "x": 0.6458,
+        "y": 0.4664
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "strong horizontal motion-blur streak after the hit; centroid of streak, radius not measurable"
+    },
+    {
+      "tMs": 182867,
+      "point": {
+        "x": 0.9349,
+        "y": 0.4201
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "faint blur streak near the right frame edge"
+    }
+  ]
+}
