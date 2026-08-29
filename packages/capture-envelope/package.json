@@ -12,7 +12,9 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "eval:bundles": "tsx src/evalBundles.ts",
-    "eval:corpus": "tsx src/evalCorpus.ts"
+    "eval:corpus": "tsx src/evalCorpus.ts",
+    "eval:f18": "tsx src/f18DegradationLadder.ts",
+    "eval:f18-analyze": "tsx src/f18Analysis.ts"
   },
   "dependencies": {
     "@pickle/shared-types": "workspace:*"
