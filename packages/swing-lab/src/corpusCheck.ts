@@ -1,10 +1,12 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { checkArtifactInvariants, type InvariantViolation } from "./invariants.js";
+import { checkProvenanceChain } from "./provenanceChain.js";
 
 /**
- * Corpus invariant check: runs the artifact invariants over every committed
- * JSON file under a root (datasets/ in practice) and REPORTS what it finds.
+ * Corpus invariant check: runs the artifact invariants AND the end-to-end
+ * provenance chain check (provenance-chain-1) over every committed JSON file
+ * under a root (datasets/ in practice) and REPORTS what it finds.
  * Violations are findings about the data, never repaired here.
  */
 
@@ -38,6 +40,9 @@ export function runCorpusCheck(rootDir: string): CorpusCheckReport {
       continue;
     }
     for (const violation of checkArtifactInvariants(parsed)) {
+      violations.push({ file: rel, ...violation });
+    }
+    for (const violation of checkProvenanceChain(parsed)) {
       violations.push({ file: rel, ...violation });
     }
   }
