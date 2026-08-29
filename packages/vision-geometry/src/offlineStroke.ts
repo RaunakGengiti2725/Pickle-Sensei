@@ -148,7 +148,7 @@ export function detectOfflineStrokeWindow(sequence: PoseSequence): Result<Offlin
  * rally2 whip −383ms) — the uncertainty lives in the kernel widths instead.
  */
 
-export const CONTACT_ESTIMATOR_VERSION = "contact-evidence-4.1";
+export const CONTACT_ESTIMATOR_VERSION = "contact-evidence-4.2";
 
 /** Coarse stroke family used to pick temporal priors. Derived from the
  * declared stroke or a predicted family; "unknown" is always safe. */
@@ -213,6 +213,14 @@ export type ContactEstimate =
       /** Competing modes, top first, when the density was multi-modal. */
       modes?: ContactMode[];
       contactDistribution?: ContactDistributionPoint[];
+      /** Per-kernel fusion internals (only when includeFusionKernels). */
+      fusionKernels?: Array<{
+        signal: ContactEvidenceSignal["signal"];
+        tMs: number;
+        mass: number;
+        sigmaMs: number;
+        note: string;
+      }>;
     };
 
 /**
@@ -274,6 +282,18 @@ const FUSION = {
   paddleGateRejectTorso: 1.2,
   wristGateFullTorso: 0.9,
   wristGateRejectTorso: 1.8,
+  /** Extended strokes (drive/serve/overhead) contact the ball at the far end
+   * of an extended arm + paddle — roughly one extra torso span from the
+   * wrist than compact strokes (arm ~0.6 torso + paddle ~0.8 torso reach vs
+   * the compact block where the paddle sits near the body). The wrist gate
+   * is a PROXY gate that only applies when no paddle track exists at the
+   * moment; for extended families the compact-tuned radii reject the ball at
+   * a legitimate contact point (Wave-E measured: gold drive contact ball sat
+   * 1.70 torso from the wrist — past the 0.9 full-trust radius). Compact and
+   * unknown families keep the tighter radii. */
+  extendedWristGateFullTorso: 1.8,
+  extendedWristGateRejectTorso: 2.6,
+  extendedWristProximityFullTorso: 2.2,
   ungatedTurnFactor: 0.5, // no target reference near the turn → half weight
   /** Ball-track observation confidence below which ball evidence is ramped
    * down. The tracker's heuristic confidence is ≥0.35 by construction
@@ -367,6 +387,14 @@ export function estimateContact(input: {
     input.sequence.video.height > 0 ? input.sequence.video.width / input.sequence.video.height : 1;
   const family: StrokeFamily = input.strokeFamily ?? "unknown";
   const compact = family === "volley" || family === "dink";
+  const extended = family === "drive" || family === "serve" || family === "overhead";
+  const wristGateFull = extended ? FUSION.extendedWristGateFullTorso : FUSION.wristGateFullTorso;
+  const wristGateReject = extended
+    ? FUSION.extendedWristGateRejectTorso
+    : FUSION.wristGateRejectTorso;
+  const wristProximityFull = extended
+    ? FUSION.extendedWristProximityFullTorso
+    : FUSION.wristProximityFullTorso;
   const measuredTorso = medianTorsoSpan(frames, aspect);
   const torso = measuredTorso ?? FUSION.defaultTorsoSpan;
 
@@ -492,7 +520,7 @@ export function estimateContact(input: {
         const [full, reject] =
           reference.source === "paddle"
             ? [FUSION.paddleGateFullTorso, FUSION.paddleGateRejectTorso]
-            : [FUSION.wristGateFullTorso, FUSION.wristGateRejectTorso];
+            : [wristGateFull, wristGateReject];
         gate =
           torsoDistance <= full
             ? 1
@@ -576,7 +604,7 @@ export function estimateContact(input: {
       if (wristProximity) {
         const torsoDistance = wristProximity.distance / torso;
         const quality = clamp01(
-          (FUSION.wristProximityFullTorso - torsoDistance) / FUSION.wristProximitySpanTorso,
+          (wristProximityFull - torsoDistance) / FUSION.wristProximitySpanTorso,
         );
         const boundary =
           wristProximity.timestampMs === ball[0]!.timestampMs ||
@@ -734,6 +762,17 @@ export function estimateContact(input: {
           share: round3(mode.density / top.density),
         })),
         contactDistribution: distribution,
+        ...(input.includeFusionKernels
+          ? {
+              fusionKernels: kernels.map((kernel) => ({
+                signal: kernel.signal,
+                tMs: Math.round(kernel.tMs),
+                mass: round3(kernel.mass),
+                sigmaMs: Math.round(kernel.sigmaMs),
+                note: kernel.note,
+              })),
+            }
+          : {}),
       };
     }
   }
@@ -777,8 +816,7 @@ export function estimateContact(input: {
         frames,
       );
       if (reference === null) continue;
-      const limit =
-        reference.source === "paddle" ? FUSION.proximityFullTorso : FUSION.wristProximityFullTorso;
+      const limit = reference.source === "paddle" ? FUSION.proximityFullTorso : wristProximityFull;
       const ratio = reference.distance / torso / limit;
       if (bestRatio === null || ratio < bestRatio) {
         bestRatio = ratio;
