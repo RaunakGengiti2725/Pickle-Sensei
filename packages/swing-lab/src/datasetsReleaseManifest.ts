@@ -128,6 +128,16 @@ const COMPONENT_SPECS: ComponentSpec[] = [
     freeze: [],
   },
   {
+    componentId: "holdouts",
+    dir: "holdouts",
+    description:
+      "holdout rotation ledger: inspection counts and retirement state for fresh/regression holdout cases",
+    classification: "registry_metadata",
+    notGold: true,
+    notGoldReason: "governance bookkeeping over holdout usage; carries no labels",
+    freeze: ["ledger.json"],
+  },
+  {
     componentId: "mining",
     dir: "mining",
     description: "scene/candidate mining outputs from DVIDS footage",
@@ -173,6 +183,15 @@ const COMPONENT_SPECS: ComponentSpec[] = [
     classification: "release_snapshots",
     notGold: false,
     notGoldReason: null,
+    freeze: [],
+  },
+  {
+    componentId: "reports",
+    dir: "reports",
+    description: "recurring model-health review reports (machine-assembled summaries)",
+    classification: "run_outputs",
+    notGold: true,
+    notGoldReason: "health-review bookkeeping, not labels",
     freeze: [],
   },
   {

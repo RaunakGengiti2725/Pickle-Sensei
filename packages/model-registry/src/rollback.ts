@@ -35,7 +35,7 @@ export interface RollbackJournalEntry {
 /** Millisecond monotonic-ish clock; injectable for deterministic tests. */
 export type DurationClock = () => number;
 
-const defaultClock: DurationClock = () => performance.now();
+const defaultClock: DurationClock = () => Date.now();
 
 /**
  * Tracks the active artifact for one subsystem. `apply` is the ONLY path by

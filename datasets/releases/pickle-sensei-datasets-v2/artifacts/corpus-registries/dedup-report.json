@@ -1,0 +1,98 @@
+{
+  "generatedAtIso": "2026-08-28T22:32:13.571Z",
+  "algo": "dhash64-9x8-gray@1fps",
+  "limitations": "temporal dHash does not catch SPATIAL crops — those rely on declared lineage at registration",
+  "findings": [
+    {
+      "recordingA": "rec-0c19a6f0251d",
+      "recordingB": "rec-6e06a3157947",
+      "match": {
+        "offsetSec": -30,
+        "alignedSeconds": 5,
+        "meanHamming": 5
+      },
+      "declared": true,
+      "action": "declared lineage confirmed by phash"
+    },
+    {
+      "recordingA": "rec-0c19a6f0251d",
+      "recordingB": "rec-aba9629c681d",
+      "match": {
+        "offsetSec": -30,
+        "alignedSeconds": 5,
+        "meanHamming": 5.2
+      },
+      "declared": false,
+      "action": "MERGED SESSIONS: rec-aba9629c681d dvids-967848 → afn-sasebo-2025-06"
+    },
+    {
+      "recordingA": "rec-208ca8beea6d",
+      "recordingB": "rec-5bf0e6a85afb",
+      "match": {
+        "offsetSec": 0,
+        "alignedSeconds": 60,
+        "meanHamming": 0.48
+      },
+      "declared": false,
+      "action": "MERGED SESSIONS: rec-208ca8beea6d dvids-956784 → afn-sigonella-2025"
+    },
+    {
+      "recordingA": "rec-21fb75446a03",
+      "recordingB": "rec-6e06a3157947",
+      "match": {
+        "offsetSec": -26,
+        "alignedSeconds": 4,
+        "meanHamming": 0.25
+      },
+      "declared": true,
+      "action": "declared lineage confirmed by phash"
+    },
+    {
+      "recordingA": "rec-21fb75446a03",
+      "recordingB": "rec-aba9629c681d",
+      "match": {
+        "offsetSec": -26,
+        "alignedSeconds": 4,
+        "meanHamming": 1
+      },
+      "declared": false,
+      "action": "same session already (subclip family)"
+    },
+    {
+      "recordingA": "rec-274544640cc6",
+      "recordingB": "rec-72cd8795bdc2",
+      "match": {
+        "offsetSec": 0,
+        "alignedSeconds": 60,
+        "meanHamming": 0.55
+      },
+      "declared": false,
+      "action": "MERGED SESSIONS: rec-72cd8795bdc2 dvids-957519 → afn-vic-2025"
+    },
+    {
+      "recordingA": "rec-6e06a3157947",
+      "recordingB": "rec-aba9629c681d",
+      "match": {
+        "offsetSec": 0,
+        "alignedSeconds": 60,
+        "meanHamming": 0.45
+      },
+      "declared": false,
+      "action": "same session already (subclip family)"
+    }
+  ],
+  "leakage": [
+    {
+      "severity": "warning",
+      "message": "detected undeclared overlap rec-0c19a6f0251d↔rec-aba9629c681d (5s aligned, hamming 5.2); MERGED SESSIONS: rec-aba9629c681d dvids-967848 → afn-sasebo-2025-06"
+    },
+    {
+      "severity": "warning",
+      "message": "detected undeclared overlap rec-208ca8beea6d↔rec-5bf0e6a85afb (60s aligned, hamming 0.48); MERGED SESSIONS: rec-208ca8beea6d dvids-956784 → afn-sigonella-2025"
+    },
+    {
+      "severity": "warning",
+      "message": "detected undeclared overlap rec-274544640cc6↔rec-72cd8795bdc2 (60s aligned, hamming 0.55); MERGED SESSIONS: rec-72cd8795bdc2 dvids-957519 → afn-vic-2025"
+    }
+  ]
+}

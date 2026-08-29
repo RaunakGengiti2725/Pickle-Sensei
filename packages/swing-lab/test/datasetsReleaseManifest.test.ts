@@ -12,33 +12,51 @@ import {
 } from "@pickle/model-registry";
 
 /**
- * The shipped pickle-sensei-datasets v1 release must stay internally
+ * The latest shipped pickle-sensei-datasets release must stay internally
  * consistent: schema-valid, hash-sealed, frozen artifacts byte-verifiable,
  * NOT-GOLD marking honest, and usable as an exact model-registry pointer.
+ * Earlier releases remain immutable and stay registered in the index.
  */
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-const RELEASE = join(ROOT, "datasets/releases/pickle-sensei-datasets-v1");
+const LATEST_VERSION = "v2";
+const RELEASE = join(ROOT, `datasets/releases/pickle-sensei-datasets-${LATEST_VERSION}`);
 
 const manifest = JSON.parse(
   readFileSync(join(RELEASE, "manifest.json"), "utf8"),
 ) as DatasetReleaseManifest;
 
-describe("pickle-sensei-datasets v1 release", () => {
+const priorManifests = readdirSync(join(ROOT, "datasets/releases"), { withFileTypes: true })
+  .filter(
+    (entry) =>
+      entry.isDirectory() &&
+      entry.name.startsWith("pickle-sensei-datasets-") &&
+      entry.name !== `pickle-sensei-datasets-${LATEST_VERSION}`,
+  )
+  .map(
+    (entry) =>
+      JSON.parse(
+        readFileSync(join(ROOT, "datasets/releases", entry.name, "manifest.json"), "utf8"),
+      ) as DatasetReleaseManifest,
+  );
+
+describe(`pickle-sensei-datasets ${LATEST_VERSION} release`, () => {
   it("is hash-sealed and schema-valid with zero recorded problems", () => {
     const body = readFileSync(join(RELEASE, "manifest.json"), "utf8");
     const sealed = readFileSync(join(RELEASE, "manifest.sha256"), "utf8").trim();
     expect(createHash("sha256").update(body).digest("hex")).toBe(sealed);
     expect(validateDatasetReleaseManifest(manifest)).toEqual([]);
     expect(manifest.problems).toEqual([]);
-    expect(manifest.releaseId).toBe("pickle-sensei-datasets@v1");
+    expect(manifest.releaseId).toBe(`pickle-sensei-datasets@${LATEST_VERSION}`);
   });
 
   it("frozen artifacts exist inside the release directory and hash-match exactly", () => {
     let checked = 0;
     for (const component of manifest.components) {
       for (const artifact of component.artifacts) {
-        expect(artifact.path).toContain("releases/pickle-sensei-datasets-v1/artifacts/");
+        expect(artifact.path).toContain(
+          `releases/pickle-sensei-datasets-${LATEST_VERSION}/artifacts/`,
+        );
         const frozen = join(ROOT, artifact.path);
         expect(existsSync(frozen)).toBe(true);
         expect(createHash("sha256").update(readFileSync(frozen)).digest("hex")).toBe(
@@ -93,12 +111,15 @@ describe("pickle-sensei-datasets v1 release", () => {
   });
 
   it("resolves as an exact dataset pointer for the model registry, alongside legacy releases", () => {
-    const index = new DatasetReleaseIndex([manifest]);
+    const index = new DatasetReleaseIndex([...priorManifests, manifest]);
     for (const legacy of readdirSync(join(ROOT, "datasets/releases"), { withFileTypes: true })) {
       if (legacy.isDirectory() && !legacy.name.startsWith("pickle-sensei-datasets")) {
         index.registerLegacy(legacy.name);
       }
     }
+    expect(index.byVersion(`pickle-sensei-datasets@${LATEST_VERSION}`)?.version).toBe(
+      LATEST_VERSION,
+    );
     expect(index.byVersion("pickle-sensei-datasets@v1")?.version).toBe("v1");
     expect(index.has("pickle-real-v0.3")).toBe(true);
     expect(auditModelDatasetLineage(DEFAULT_MODEL_MANIFEST, index)).toEqual([]);

@@ -1,0 +1,157 @@
+{
+  "schemaVersion": 1,
+  "provenance": "licensed",
+  "note": "REAL ball benchmark. Center-point labels from raw stills; uncertain frames are excluded from precision/recall, never guessed. Source footage: CC BY 3.0 (see paddle-bench/registry.json). WAVE-C EXPANSION (annotator devin-visual-v2-waveC, append-only): +38 ball labels across 6 bundles (5 new wavea-* cases below on the RECORDING clock, plus wm-volley-02 extension labels in bundles/wm-volley-02/annotation/devin-visual-v2-waveC.json on the clip clock). Total gold ball frames 22 -> 60. Labels carry an optional occlusionState (observed/entering_occlusion/occluded/reacquired); occluded frames have no point by rule. Occlusion sequences: paddle occlusion (wavea-944403-smash 4838-4855ms) and body occlusion (wavea-faead-rally 13458-13583ms). NOTE: wavea-* runDirs are event-replay runs without ball debug artifacts, so runBallBench skips these cases until ball debug is regenerated on macOS - the labels are ready either way.",
+  "cameraType": "tripod, rear elevated, 25fps 1080p crops",
+  "cases": [
+    {
+      "id": "wm-volley-02",
+      "video": "../paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "fps": 25,
+      "resolution": "1000x1080",
+      "strokeEvents": ["volley exchange, ball visibly meets paddle at 6680ms"],
+      "players": "near white-shirt primary + 3 others",
+      "labels": "../paddle-bench/bundles/wm-volley-02/annotation/devin-visual-v1.json",
+      "runDir": "../paddle-bench/runs/wm-volley-02",
+      "sourceKey": "wm-pickleball-game",
+      "sessionKey": "wm-tournament-2014",
+      "role": "development"
+    },
+    {
+      "id": "wm-dink-01",
+      "video": "../paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "fps": 25,
+      "resolution": "1100x1080",
+      "strokeEvents": ["kitchen-line dink at ~1260ms"],
+      "players": "near yellow-cap primary + 3 others",
+      "labels": "../paddle-bench/bundles/wm-dink-01/annotation/devin-visual-v1.json",
+      "runDir": "../paddle-bench/runs/wm-dink-01",
+      "sourceKey": "wm-pickleball-game",
+      "sessionKey": "wm-tournament-2014",
+      "role": "held_out"
+    },
+    {
+      "id": "afn-sasebo-rally1",
+      "video": "../paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "fps": 29.97,
+      "resolution": "1920x1080",
+      "strokeEvents": ["backhand volley at kitchen, contact ~2900ms"],
+      "players": "white-shirt woman primary + partner + background courts",
+      "labels": "../paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v1.json",
+      "runDir": "../paddle-bench/runs/afn-sasebo-rally1",
+      "sourceKey": "afn-sasebo-indoor",
+      "sessionKey": "afn-sasebo-2025-06",
+      "role": "development"
+    },
+    {
+      "id": "afn-sasebo-rally2",
+      "video": "../paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "fps": 29.97,
+      "resolution": "1920x1080",
+      "strokeEvents": ["overhead by near man, contact ~2620ms"],
+      "players": "near gray-shirt man + partners + background",
+      "labels": "../paddle-bench/bundles/afn-sasebo-rally2/annotation/devin-visual-v1.json",
+      "runDir": "../paddle-bench/runs/afn-sasebo-rally2",
+      "sourceKey": "afn-sasebo-indoor",
+      "sessionKey": "afn-sasebo-2025-06",
+      "role": "development"
+    },
+    {
+      "id": "afn-vic-rally1",
+      "video": "../paddle-bench/videos/afn-vic-rally1.mp4",
+      "fps": 29.97,
+      "resolution": "1920x1080",
+      "strokeEvents": ["low forehand by near man, contact ~680ms; BLUE ball"],
+      "players": "near gray-shirt man + green partner + 2 opponents",
+      "labels": "../paddle-bench/bundles/afn-vic-rally1/annotation/devin-visual-v1.json",
+      "runDir": "../paddle-bench/runs/afn-vic-rally1",
+      "sourceKey": "afn-provic",
+      "sessionKey": "afn-vic-2025",
+      "role": "test_held_out"
+    },
+    {
+      "id": "wavea-944403-dink-ball",
+      "video": "../corpus/media/dvids-944403-916657917f2b.mp4",
+      "fps": 59.94,
+      "resolution": "1920x1080",
+      "clock": "recording",
+      "strokeEvents": ["near-left drive, wave-a contact 21117ms; ball labeled 21004-21255ms"],
+      "players": "two red-shirt near players (backs to camera) + two far players",
+      "labels": "../paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v2-waveC.json",
+      "runDir": "../paddle-bench/runs-wave-a/wavea-944403-dink",
+      "sourceKey": "dvids-944403",
+      "sessionKey": "dvids-marne-2024",
+      "role": "development"
+    },
+    {
+      "id": "wavea-944403-smash-ball",
+      "video": "../corpus/media/dvids-944403-916657917f2b.mp4",
+      "fps": 59.94,
+      "resolution": "1920x1080",
+      "clock": "recording",
+      "strokeEvents": [
+        "lob bounce ~4638ms; contact behind paddle ~4838-4855ms (ball hidden, no point labeled)"
+      ],
+      "players": "black-shirt near player + others",
+      "labels": "../paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v2-waveC.json",
+      "runDir": "../paddle-bench/runs-wave-a/wavea-944403-smash",
+      "sourceKey": "dvids-944403",
+      "sessionKey": "dvids-marne-2024",
+      "role": "development"
+    },
+    {
+      "id": "wavea-faead-feed-ball",
+      "video": "../corpus/media/dvids-944209-faead33a362c.mp4",
+      "fps": 24,
+      "resolution": "1920x1080",
+      "clock": "recording",
+      "strokeEvents": [
+        "feed: ball in server's hand 33000ms, struck ~33708-33750ms (direction reversal)"
+      ],
+      "players": "near server + far court",
+      "labels": "../paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-waveC.json",
+      "runDir": "../paddle-bench/runs-wave-a/wavea-faead-feed",
+      "sourceKey": "dvids-944209",
+      "sessionKey": "dvids-marne-2024",
+      "role": "development"
+    },
+    {
+      "id": "wavea-faead-rally-ball",
+      "video": "../corpus/media/dvids-944209-faead33a362c.mp4",
+      "fps": 24,
+      "resolution": "1920x1080",
+      "clock": "recording",
+      "strokeEvents": [
+        "rally: bounce ~13208-13250ms, body occlusion 13458-13583ms, return flight 13875ms+"
+      ],
+      "players": "near red-shirt player (back to camera) + others",
+      "labels": "../paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v2-waveC.json",
+      "runDir": "../paddle-bench/runs-wave-a/wavea-faead-rally",
+      "sourceKey": "dvids-944209",
+      "sessionKey": "dvids-marne-2024",
+      "role": "development"
+    },
+    {
+      "id": "wavea-marne-dig-ball",
+      "video": "../paddle-bench/videos/dvids-marne-outdoor.mp4",
+      "fps": 59.94,
+      "resolution": "1920x1080",
+      "clock": "recording",
+      "strokeEvents": ["incoming lob arc across the dig window, apex ~12529ms"],
+      "players": "red-shirt digging player + others",
+      "labels": "../paddle-bench/bundles/wavea-marne-dig/annotation/devin-visual-v2-waveC.json",
+      "runDir": "../paddle-bench/runs-wave-a/wavea-marne-dig",
+      "sourceKey": "dvids-marne-outdoor",
+      "sessionKey": "dvids-marne-2024",
+      "role": "development"
+    }
+  ],
+  "coverageGaps": [
+    "no serve/return/drive ball labels scored by the bench yet (wavea feed/drive labels exist but their runDirs lack ball debug artifacts)",
+    "bounce events adjacent to labels (wavea-944403-smash ~4638ms, wavea-faead-rally ~13208ms) but not labeled as bounce events",
+    "outgoing-ball labels still thin on scoreable cases (wm-volley-02 has 2 new post-reply frames)",
+    "no low-light labels; lob flights now labeled (wavea-marne-dig, wavea-944403-smash) but only outdoors",
+    "no net-crossing occlusion sequence labeled (944403 net-band pass stayed fully visible); occlusion coverage is paddle- and body-occlusion only"
+  ],
+  "splitNote": "development cases were used to debug identity/occlusion this session; wm-dink-01 was NOT tuned against (its regressions are reported as-is). Formal train/val/test splits by sessionKey begin when training begins."
+}

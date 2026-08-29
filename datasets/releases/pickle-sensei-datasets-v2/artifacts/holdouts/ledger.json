@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "policyVersion": "holdout-rotation-v1",
+  "generatedAtIso": "2026-08-29T21:20:00.000Z",
+  "provenanceNote": "Inspection events below were reconstructed from committed repo artifacts by wave-i/i14-holdout-rotation on 2026-08-29. Nothing here is fabricated: every event cites the on-disk evidence that proves the inspection happened. Artifact-file counts come from `grep -rl <caseId> datasets/` at reconstruction time.",
+  "holdouts": [
+    {
+      "caseId": "wm-dink-01",
+      "tier": "LOCKED_TEST",
+      "status": "RETIRED_TO_REGRESSION",
+      "firstHeldOutAtIso": "2026-08-28",
+      "inspections": [
+        {
+          "kind": "committed_label",
+          "dateIso": "2026-08-28",
+          "workstream": "wave-a annotation",
+          "evidence": "datasets/paddle-bench/bundles/wm-dink-01/annotation/devin-visual-v1.json — a committed visual annotation requires a human to have viewed the frames"
+        },
+        {
+          "kind": "failure_dossier",
+          "dateIso": "2026-08-28",
+          "workstream": "ball-bench failure mining",
+          "evidence": "datasets/ball-bench/failures/BALL_FALSE_POSITIVE_BACKGROUND-wm-dink-01/report.json — per-frame pose/quality stats and a named failure mode for this specific clip"
+        },
+        {
+          "kind": "human_frame_review",
+          "dateIso": "2026-08-28",
+          "workstream": "ownership review",
+          "evidence": "datasets/paddle-bench/ownership-review/ownership-review.json — per-case ownership judgments for wm-dink-01 entries"
+        },
+        {
+          "kind": "benchmark_evaluation",
+          "dateIso": "2026-08-29",
+          "workstream": "waves A through H (paddle-bench, ball-bench, cascade, completion-bench, experiments, releases)",
+          "evidence": "322 distinct committed artifact files under datasets/ reference wm-dink-01, including per-wave experiment summaries and repeated bench result files — sustained evaluation exposure across every development wave",
+          "artifactFileCount": 322
+        }
+      ],
+      "retirement": {
+        "dateIso": "2026-08-29",
+        "workstream": "wave-i/i14-holdout-rotation",
+        "reason": "4 recorded inspection events exceed the LOCKED_TEST budget of 3; the case carries committed labels, a failure dossier, an ownership review, and 322 referencing artifacts — it no longer measures generalization",
+        "regressionRole": "pinned regression fixture: keeps running in existing benches to catch regressions, but its results may never back a certification or generalization claim",
+        "successorId": "yt-tuKiznvDJ4E"
+      },
+      "notes": "Declared a held-out CASE in datasets/corpus/splits.json (wm-tournament-2014 pinned note) and in coach-gates HELD_OUT_CASE_IDS, but the inspection record above shows the held-out discipline did not hold in practice."
+    },
+    {
+      "caseId": "afn-vic-rally1",
+      "tier": "LOCKED_TEST",
+      "status": "RETIRED_TO_REGRESSION",
+      "firstHeldOutAtIso": "2026-08-28",
+      "inspections": [
+        {
+          "kind": "committed_label",
+          "dateIso": "2026-08-28",
+          "workstream": "wave-a annotation",
+          "evidence": "datasets/paddle-bench/bundles/afn-vic-rally1/annotation/devin-visual-v1.json — a committed visual annotation requires a human to have viewed the frames"
+        },
+        {
+          "kind": "failure_dossier",
+          "dateIso": "2026-08-28",
+          "workstream": "ball-bench failure mining",
+          "evidence": "datasets/ball-bench/failures/SCENE_CUT_UNDETECTED-afn-vic-rally1/report.json and classification.json — per-frame pose/quality stats and a named failure mode for this specific clip"
+        },
+        {
+          "kind": "human_frame_review",
+          "dateIso": "2026-08-28",
+          "workstream": "ownership review",
+          "evidence": "datasets/paddle-bench/ownership-review/ownership-review.json — per-case ownership judgments for afn-vic-rally1 entries"
+        },
+        {
+          "kind": "benchmark_evaluation",
+          "dateIso": "2026-08-29",
+          "workstream": "waves A through H (paddle-bench, ball-bench, cascade, completion-bench, experiments, releases)",
+          "evidence": "297 distinct committed artifact files under datasets/ reference afn-vic-rally1, including per-wave experiment summaries and repeated bench result files — sustained evaluation exposure across every development wave",
+          "artifactFileCount": 297
+        }
+      ],
+      "retirement": {
+        "dateIso": "2026-08-29",
+        "workstream": "wave-i/i14-holdout-rotation",
+        "reason": "4 recorded inspection events exceed the LOCKED_TEST budget of 3; the case carries committed labels, a failure dossier, an ownership review, and 297 referencing artifacts — it no longer measures generalization",
+        "regressionRole": "pinned regression fixture: keeps running in existing benches to catch regressions, but its results may never back a certification or generalization claim",
+        "successorId": "yt-hktiyFnghIw"
+      },
+      "notes": "Declared held-out in coach-gates HELD_OUT_CASE_IDS with locked_test discipline claimed for the afn-vic-2025 source in datasets/corpus/splits.json, but the inspection record above shows the held-out discipline did not hold in practice."
+    }
+  ],
+  "successors": [
+    {
+      "caseId": "yt-tuKiznvDJ4E",
+      "tier": "SHADOW_HOLDOUT",
+      "designatedAtIso": "2026-08-29",
+      "designationRule": "newest source uploadDate (2026-08-12) among label-blind freshCandidates in datasets/pickleball/registry.json, chosen from registry metadata only — the clip content was never opened or viewed for this designation",
+      "registryRef": "datasets/pickleball/registry.json#freshCandidates (role=fresh_candidate, labelBlind=true)",
+      "labelBlind": true,
+      "inspectionCount": 0,
+      "pendingExternal": "acquisition front-door freeze must formally register this clip as a holdout (per the freshCandidates label-blind policy) before any certification evaluation may run on it"
+    },
+    {
+      "caseId": "yt-hktiyFnghIw",
+      "tier": "SHADOW_HOLDOUT",
+      "designatedAtIso": "2026-08-29",
+      "designationRule": "second-newest source uploadDate (2026-08-04) among label-blind freshCandidates in datasets/pickleball/registry.json, chosen from registry metadata only — the clip content was never opened or viewed for this designation",
+      "registryRef": "datasets/pickleball/registry.json#freshCandidates (role=fresh_candidate, labelBlind=true)",
+      "labelBlind": true,
+      "inspectionCount": 0,
+      "pendingExternal": "acquisition front-door freeze must formally register this clip as a holdout (per the freshCandidates label-blind policy) before any certification evaluation may run on it"
+    }
+  ]
+}

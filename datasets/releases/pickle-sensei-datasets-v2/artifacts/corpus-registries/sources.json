@@ -1,0 +1,646 @@
+[
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-commons-InFocus-_Pro_Pickleball_Tour_956784_.webm",
+    "origin": "wikimedia_commons",
+    "originId": "InFocus- Pro Pickleball Tour (956784).webm",
+    "url": "https://commons.wikimedia.org/wiki/File:InFocus-_Pro_Pickleball_Tour_(956784).webm",
+    "title": "Indoor clinic/interview segment (Sigonella, Italy): demo strokes, tosses, close-ups; interview overlays",
+    "author": "AFN Sigonella (U.S. DoD)",
+    "license": "Public domain (U.S. federal government work, PD-USGov)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:corpus-init (rule-derived from v1 registry license)",
+      "reviewedAtIso": "2026-08-28T22:04:40.318Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28",
+      "method": "manual acquisition in earlier runs (v1 registry)",
+      "tool": "legacy import"
+    },
+    "restrictions": [
+      "none (public domain); attribution to DoD/AFN recorded as courtesy"
+    ],
+    "description": "Indoor clinic/interview segment (Sigonella, Italy): demo strokes, tosses, close-ups; interview overlays.",
+    "notes": "imported from datasets/paddle-bench/registry.json (schema v1)"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-commons-Pickleball_game.webm",
+    "origin": "wikimedia_commons",
+    "originId": "Pickleball game.webm",
+    "url": "https://commons.wikimedia.org/wiki/File:Pickleball_game.webm",
+    "title": "Outdoor tournament doubles, rear elevated view behind near court; multiple rallies; paddles visible during strokes; far players small in frame",
+    "author": "Victor Jehovskiy",
+    "license": "CC BY 3.0",
+    "rights": {
+      "store": "yes_with_attribution",
+      "analyze": "yes_with_attribution",
+      "annotate": "yes_with_attribution",
+      "train": "yes_with_attribution",
+      "redistributeDerivatives": "yes_with_attribution",
+      "commercial": "yes_with_attribution",
+      "basis": "CC BY 3.0 — CC BY permits any use incl. commercial with attribution.",
+      "reviewedBy": "lab:corpus-init (rule-derived from v1 registry license)",
+      "reviewedAtIso": "2026-08-28T22:04:40.955Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-27",
+      "method": "manual acquisition in earlier runs (v1 registry)",
+      "tool": "legacy import"
+    },
+    "restrictions": [],
+    "description": "Outdoor tournament doubles, rear elevated view behind near court; multiple rallies; paddles visible during strokes; far players small in frame.",
+    "notes": "imported from datasets/paddle-bench/registry.json (schema v1)"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-commons-Pickleball_Japan_Federation_Visits_Sasebo_967848_.webm",
+    "origin": "wikimedia_commons",
+    "originId": "Pickleball Japan Federation Visits Sasebo (967848).webm",
+    "url": "https://commons.wikimedia.org/wiki/File:Pickleball_Japan_Federation_Visits_Sasebo_(967848).webm",
+    "title": "Indoor gymnasium (Sasebo, Japan) pickleball event: rallies at medium distance (side view), wide multi-court shots, crowd scenes",
+    "author": "U.S. Navy / AFN, MC2 Orion Shotton (VIRIN 250620-N-GG032-8421)",
+    "license": "Public domain (U.S. federal government work, PD-USGov)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:corpus-init (rule-derived from v1 registry license)",
+      "reviewedAtIso": "2026-08-28T22:04:41.032Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28",
+      "method": "manual acquisition in earlier runs (v1 registry)",
+      "tool": "legacy import"
+    },
+    "restrictions": [
+      "none (public domain); attribution to DoD/AFN recorded as courtesy"
+    ],
+    "description": "Indoor gymnasium (Sasebo, Japan) pickleball event: rallies at medium distance (side view), wide multi-court shots, crowd scenes. 60s, 1080p (AV1 transcoded to H.264).",
+    "notes": "imported from datasets/paddle-bench/registry.json (schema v1)"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-commons-Pro_Pickleball_Tour_AFN_VIC_957519_.webm",
+    "origin": "wikimedia_commons",
+    "originId": "Pro Pickleball Tour AFN VIC (957519).webm",
+    "url": "https://commons.wikimedia.org/wiki/File:Pro_Pickleball_Tour_AFN_VIC_(957519).webm",
+    "title": "News segment on pro pickleball tour; b-roll of play plus graphics/interviews",
+    "author": "AFN (U.S. DoD)",
+    "license": "Public domain (U.S. federal government work, PD-USGov)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:corpus-init (rule-derived from v1 registry license)",
+      "reviewedAtIso": "2026-08-28T22:04:41.076Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28",
+      "method": "manual acquisition in earlier runs (v1 registry)",
+      "tool": "legacy import"
+    },
+    "restrictions": [
+      "none (public domain); attribution to DoD/AFN recorded as courtesy"
+    ],
+    "description": "News segment on pro pickleball tour; b-roll of play plus graphics/interviews.",
+    "notes": "imported from datasets/paddle-bench/registry.json (schema v1)"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-dvids-1007845",
+    "origin": "dvids",
+    "originId": "1007845",
+    "url": "https://www.dvidshub.net/video/1007845/2026-liberaider-games-highlights",
+    "title": "The 2026 Liberaider Games: Highlights",
+    "author": "SSG Tomarius Roberts",
+    "publishedDate": "05.11.2026",
+    "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:acquire (rule-derived; human spot-check required for unclear)",
+      "reviewedAtIso": "2026-08-28T22:05:36.316Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28T22:05:36.316Z",
+      "method": "dvids page parse + direct media download",
+      "mediaUrl": "https://d34w7g4gy10iej.cloudfront.net/video/2605/DOD_111721400/DOD_111721400.mp4",
+      "tool": "lab:acquire v0.2"
+    },
+    "restrictions": [
+      "DVIDS requests journalist credit (author recorded)",
+      "must not imply DoD endorsement"
+    ],
+    "description": "Airmen with the 461st Air Control Wing participate in multiple sports events during the Liberaider Games at Robins Air Force Base, Georgia, May 11, 2026. The wing hosted the week-long morale event, which started with a 5K run, and included various activities including flag football, pickleball and kickball. (U.S. Air Force video by Tomarius Roberts) · VIRIN 260511-F-ZA034-1001 · ROBINS AIR FORCE BASE, GEORGIA, US · Package"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-dvids-1008415",
+    "origin": "dvids",
+    "originId": "1008415",
+    "url": "https://www.dvidshub.net/video/1008415/hubs-ohana-pickleball-tournament",
+    "title": "Hubs: Ohana Pickleball Tournament",
+    "author": "CPL Tae Won Han",
+    "publishedDate": "05.26.2026",
+    "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:acquire (rule-derived; human spot-check required for unclear)",
+      "reviewedAtIso": "2026-08-28T22:05:39.411Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28T22:05:39.411Z",
+      "method": "dvids page parse + direct media download",
+      "mediaUrl": "https://d34w7g4gy10iej.cloudfront.net/video/2605/DOD_111732709/DOD_111732709.mp4",
+      "tool": "lab:acquire v0.2"
+    },
+    "restrictions": [
+      "DVIDS requests journalist credit (author recorded)",
+      "must not imply DoD endorsement"
+    ],
+    "description": "A video notifies military members and their families of events happening during the month of June, created by Media Bureau Korea at Camp Humphreys, South Korea, May 27th. The videos are shared with the AFN Pacific audience and more information regarding events has been listed the hosting’s installation website. (U.S. Army video by Pfc. Tae Won Han) · VIRIN 260527-A-FP383-2042 · KR · Video Productions"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-dvids-1011384",
+    "origin": "dvids",
+    "originId": "1011384",
+    "url": "https://www.dvidshub.net/video/1011384/warrior-games-2026-pickleball-match",
+    "title": "Indoor adaptive-sports pickleball match, Warrior Games 2026 San Antonio (5min)",
+    "author": "U.S. DoD, SGT Keyona Smith (DVIDS 1011384)",
+    "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:corpus-init (rule-derived from v1 registry license)",
+      "reviewedAtIso": "2026-08-28T22:04:40.529Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28",
+      "method": "manual acquisition in earlier runs (v1 registry)",
+      "tool": "legacy import"
+    },
+    "restrictions": [
+      "none (public domain); DVIDS requests journalist credit; must not imply DoD endorsement"
+    ],
+    "description": "Indoor adaptive-sports pickleball match, Warrior Games 2026 San Antonio (5min). Blue court, mixed gameplay + interviews (multi-shot: scene-validity gate required). Diverse adaptive-athlete population.",
+    "notes": "imported from datasets/paddle-bench/registry.json (schema v1)"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-dvids-1011773",
+    "origin": "dvids",
+    "originId": "1011773",
+    "url": "https://www.dvidshub.net/video/1011773/2026-warrior-games",
+    "title": "Warrior Games 2026 pickleball b-roll (1:49), independent videographer/session from the match footage",
+    "author": "U.S. Army, SGT Pomare Teo (DVIDS 1011773)",
+    "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:corpus-init (rule-derived from v1 registry license)",
+      "reviewedAtIso": "2026-08-28T22:04:40.756Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28",
+      "method": "manual acquisition in earlier runs (v1 registry)",
+      "tool": "legacy import"
+    },
+    "restrictions": [
+      "none (public domain); DVIDS requests journalist credit; must not imply DoD endorsement"
+    ],
+    "description": "Warrior Games 2026 pickleball b-roll (1:49), independent videographer/session from the match footage.",
+    "notes": "imported from datasets/paddle-bench/registry.json (schema v1)"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-dvids-1011822",
+    "origin": "dvids",
+    "originId": "1011822",
+    "url": "https://www.dvidshub.net/video/1011822/warrior-games-2026",
+    "title": "Warrior Games 2026",
+    "author": "SrA Mark Colmenares",
+    "publishedDate": "06.13.2026",
+    "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:acquire (rule-derived; human spot-check required for unclear)",
+      "reviewedAtIso": "2026-08-28T22:05:42.489Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28T22:05:42.489Z",
+      "method": "dvids page parse + direct media download",
+      "mediaUrl": "https://d34w7g4gy10iej.cloudfront.net/video/2606/DOD_111789701/DOD_111789701.mp4",
+      "tool": "lab:acquire v0.2"
+    },
+    "restrictions": [
+      "DVIDS requests journalist credit (author recorded)",
+      "must not imply DoD endorsement"
+    ],
+    "description": "U.S. Service members, veterans and civilians gather for a powerlifting and pickleball event at Warrior Games 26, June 13, 2026, in San Antonio, Texas. The Warrior Games celebrate the determination, strength, and resilience of wounded, ill, and injured service members and veterans. The 2026 Warrior Games take place 13-20 June in San Antonio, Texas, bringing together nearly 200 wounded, ill, and injured service members and veterans from the Army, Marine Corps, Navy/Coast Guard, Air Force/Space Force, and Special Operations Command to compete across multiple adaptive sporting events. (U.S. Air Force video by Senior Airman Mark Colmenares) · VIRIN 061326-F-MC101-1001 · SAN ANTONIO, TEXAS, US · Video Productions"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-dvids-1019773",
+    "origin": "dvids",
+    "originId": "1019773",
+    "url": "https://www.dvidshub.net/video/1019773/2027-warrior-games-one-year-out-event-espn-wide-world-sports-b-roll",
+    "title": "2027 Warrior Games One-Year-Out Event - ESPN Wide World of Sports B-Roll",
+    "author": "Dakota Pope",
+    "publishedDate": "08.07.2026",
+    "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:acquire (rule-derived; human spot-check required for unclear)",
+      "reviewedAtIso": "2026-08-28T22:06:21.321Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28T22:06:21.321Z",
+      "method": "dvids page parse + direct media download",
+      "mediaUrl": "https://d34w7g4gy10iej.cloudfront.net/video/2608/DOD_111915608/DOD_111915608.mp4",
+      "tool": "lab:acquire v0.2"
+    },
+    "restrictions": [
+      "DVIDS requests journalist credit (author recorded)",
+      "must not imply DoD endorsement"
+    ],
+    "description": "B-roll footage highlights the 2027 Department of War Warrior Games One-Year-Out event held at the ESPN Wide World of Sports Complex in Orlando, Florida, Aug. 7, 2026. The footage captures a demonstration of adaptive pickleball, showcasing the athletic skills and camaraderie of participants ahead of the official competition. The complex will serve as a primary venue for the upcoming adaptive sports competition, marking the official one-year countdown to the 2027 Warrior Games. No DoW or Federal endorsement implied. (U.S. Army video by Dakota J. Pope) · VIRIN 260807-A-ZO053-1663 · US · B-Roll"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-dvids-1019785",
+    "origin": "dvids",
+    "originId": "1019785",
+    "url": "https://www.dvidshub.net/video/1019785/2027-warrior-games-one-year-out-media-event-and-announcements",
+    "title": "2027 Warrior Games One-Year-Out Media Event and Announcements",
+    "author": "Dakota Pope",
+    "publishedDate": "08.07.2026",
+    "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:acquire (rule-derived; human spot-check required for unclear)",
+      "reviewedAtIso": "2026-08-28T22:07:54.363Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28T22:07:54.363Z",
+      "method": "dvids page parse + direct media download",
+      "mediaUrl": "https://d34w7g4gy10iej.cloudfront.net/video/2608/DOD_111915853/DOD_111915853.mp4",
+      "tool": "lab:acquire v0.2"
+    },
+    "restrictions": [
+      "DVIDS requests journalist credit (author recorded)",
+      "must not imply DoD endorsement"
+    ],
+    "description": "Event sponsors, competitors, and Warrior Games personnel speak during an official media event at the ESPN Wide World of Sports Complex in Orlando, Florida, Aug. 7, 2026. Held during the 2027 Department of War Warrior Games One-Year-Out event, the event featured the announcement of the official competition dates of Aug. 7-14, 2027, the revealing of the 2027 games theme &quot;Ignite the Spirit,&quot; and the official addition of pickleball as a medal sport. The Warrior Games celebrate the resilience, recovery, and athletic achievements of wounded, ill, and injured active-duty service members and veterans. (U.S. Army video by Dakota J. Pope) · VIRIN 260807-A-ZO053-6158 · US · Video Productions"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-dvids-906546",
+    "origin": "dvids",
+    "originId": "906546",
+    "url": "https://www.dvidshub.net/video/906546/zama-pulse-nov-dec-2023-edition",
+    "title": "Zama Pulse Nov. - Dec. 2023 edition",
+    "author": "Daisuke Sato",
+    "publishedDate": "12.05.2023",
+    "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:acquire (rule-derived; human spot-check required for unclear)",
+      "reviewedAtIso": "2026-08-28T22:08:58.536Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28T22:08:58.536Z",
+      "method": "dvids page parse + direct media download",
+      "mediaUrl": "https://d34w7g4gy10iej.cloudfront.net/video/2312/DOD_110029779/DOD_110029779.mp4",
+      "tool": "lab:acquire v0.2"
+    },
+    "restrictions": [
+      "DVIDS requests journalist credit (author recorded)",
+      "must not imply DoD endorsement"
+    ],
+    "description": "Here is the latest episode of the &quot;Zama Pulse,&quot; the show with news highlights, community updates and features on Japanese culture!\r\nThis month's news headlines include:\r\n\r\n- Tree-Lighting Ceremony\r\n- USARJ Band Final Performance at Budokan\r\n- Football and Cheer Clinic\r\n- River Cleanup with Local Cities\r\n- PAO Meets PAO\r\n- Children Interview Veterans\r\n- Guard and Protection Bilateral Training\r\n- USAG Okinawa Outreach Program\r\n- Trunk-or-Treating in Kyogamisaki\r\n- Beach Clean-Up in Kyogamisaki\r\n- Zama Middle High School News Report\r\n- Pickleball Tournament\r\n\r\nKeep an eye out for new episodes in the future. We hope you enjoy the show! · VIRIN 231205-A-MS361-1949 · ZAMA, KANAGAWA, JP · Newscasts"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-dvids-943757",
+    "origin": "dvids",
+    "originId": "943757",
+    "url": "https://www.dvidshub.net/video/943757/jbsa-sru-adaptive-sports-camp",
+    "title": "JBSA SRU Adaptive Sports Camp",
+    "author": "James Camillocci",
+    "publishedDate": "10.15.2024",
+    "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:acquire (rule-derived; human spot-check required for unclear)",
+      "reviewedAtIso": "2026-08-28T22:09:09.752Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28T22:09:09.752Z",
+      "method": "dvids page parse + direct media download",
+      "mediaUrl": "https://d34w7g4gy10iej.cloudfront.net/video/2411/DOD_110684605/DOD_110684605.mp4",
+      "tool": "lab:acquire v0.2"
+    },
+    "restrictions": [
+      "DVIDS requests journalist credit (author recorded)",
+      "must not imply DoD endorsement"
+    ],
+    "description": "The Joint Base San Antonio Soldier Recovery Unit hosted its 3rd annual Adaptive Sports Camp and Local Trials, Oct. 15 – 23, 2024, at various locations on the Fort Sam Houston installation. The Adaptive Sports Camp featured 11 events (wheelchair basketball, sitting volleyball, track, field, archery, swimming, powerlifting, rowing, cycling, air rifle, air pistol) and introduced Pickleball as an exhibition sport. · VIRIN 241015-O-NB001-9376 · SAN ANTONIO, TEXAS, US · Package"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-dvids-944209",
+    "origin": "dvids",
+    "originId": "944209",
+    "url": "https://www.dvidshub.net/video/944209/broll-marne-week-pickleball",
+    "title": "Broll Marne week pickleball",
+    "author": "SPC Darnell Howard",
+    "publishedDate": "11.19.2024",
+    "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:acquire (rule-derived; human spot-check required for unclear)",
+      "reviewedAtIso": "2026-08-28T22:09:16.064Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28T22:09:16.064Z",
+      "method": "dvids page parse + direct media download",
+      "mediaUrl": "https://d34w7g4gy10iej.cloudfront.net/video/2411/DOD_110692879/DOD_110692879.mp4",
+      "tool": "lab:acquire v0.2"
+    },
+    "restrictions": [
+      "DVIDS requests journalist credit (author recorded)",
+      "must not imply DoD endorsement"
+    ],
+    "description": "Soldiers from the 3rd Infantry Division, continues a rally in a pickleball game during Marne Week at Fort Stewart, Georgia, Nov. 19, 2024. Marne Week is an annual week-long event hosted by the division to highlight the division's anniversary and storied legacy. (U.S. Army Video by Pfc. Darnell Howard)) · VIRIN 111924-A-HP112-1001 · US · B-Roll"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-dvids-944403",
+    "origin": "dvids",
+    "originId": "944403",
+    "url": "https://www.dvidshub.net/video/944403/marne-week-2024-pickleball",
+    "title": "Marne Week 2024 - Pickleball",
+    "author": "SPC Jude Vogel",
+    "publishedDate": "11.20.2024",
+    "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:acquire (rule-derived; human spot-check required for unclear)",
+      "reviewedAtIso": "2026-08-28T22:09:28.978Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28T22:09:28.978Z",
+      "method": "dvids page parse + direct media download",
+      "mediaUrl": "https://d34w7g4gy10iej.cloudfront.net/video/2411/DOD_110695694/DOD_110695694.mp4",
+      "tool": "lab:acquire v0.2"
+    },
+    "restrictions": [
+      "DVIDS requests journalist credit (author recorded)",
+      "must not imply DoD endorsement"
+    ],
+    "description": "Dogface Soldiers participate in a Pickleball game during Marne Week 2024 at Fort Stewart, Georgia, November 20, 2024. Pickleball is one of a number of competitions held during Marne Week, which serves as a time to showcase the tenacity and fighting spirit of Dogface Soldiers through competition. (U.S. Army video by Pfc. Jude Vogel) · VIRIN 241120-A-UY468-4556 · FORT STEWART, GEORGIA, US · B-Roll"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-dvids-944593",
+    "origin": "dvids",
+    "originId": "944593",
+    "url": "https://www.dvidshub.net/video/944593/marne-week-2024-pickleball-b-roll-3rd-cab-vs-92-eng-bn",
+    "title": "OUTDOOR pickleball, Fort Stewart GA, Marne Week 2024",
+    "author": "U.S. Army, SSG Dean Johnson (DVIDS 944593)",
+    "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:corpus-init (rule-derived from v1 registry license)",
+      "reviewedAtIso": "2026-08-28T22:04:40.432Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28",
+      "method": "manual acquisition in earlier runs (v1 registry)",
+      "tool": "legacy import"
+    },
+    "restrictions": [
+      "none (public domain); DVIDS requests journalist credit; must not imply DoD endorsement"
+    ],
+    "description": "OUTDOOR pickleball, Fort Stewart GA, Marne Week 2024. True side/oblique court-level views, dark clothing, light-blue paddle, overcast daylight. Fills outdoor + side-view + dark-clothing gaps.",
+    "notes": "imported from datasets/paddle-bench/registry.json (schema v1)"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-dvids-956784",
+    "origin": "dvids",
+    "originId": "956784",
+    "url": "https://www.dvidshub.net/video/956784/infocus-pro-pickleball-tour",
+    "title": "InFocus: Pro Pickleball Tour",
+    "author": "PO3 Jacob Hart",
+    "publishedDate": "03.24.2025",
+    "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:acquire (rule-derived; human spot-check required for unclear)",
+      "reviewedAtIso": "2026-08-28T22:09:34.327Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28T22:09:34.327Z",
+      "method": "dvids page parse + direct media download",
+      "mediaUrl": "https://d34w7g4gy10iej.cloudfront.net/video/2503/DOD_110888235/DOD_110888235.mp4",
+      "tool": "lab:acquire v0.2"
+    },
+    "restrictions": [
+      "DVIDS requests journalist credit (author recorded)",
+      "must not imply DoD endorsement"
+    ],
+    "description": "NAVAL AIR STATION SIGONELLA, Italy (March 24, 2025) Members of the Pro Pickleball Tour in association with Armed Forces Entertainment visit Naval Air Station Sigonella to coach personnel on how to play the game Pickleball. American Forces Network Sigonella is a Navy-operated American Forces Radio and Television Service station that provides host command and military information, local and world news, sports and entertainment programming for service members, their families, and DoD personnel assigned to NAS Sigonella. (U.S. Navy video by Mass Communication Specialist Seaman Jacob Hart) · VIRIN 250324-N-SH175-1001 · IT · Video Productions"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-dvids-957519",
+    "origin": "dvids",
+    "originId": "957519",
+    "url": "https://www.dvidshub.net/video/957519/pro-pickleball-tour-afn-vic",
+    "title": "Pro Pickleball Tour AFN VIC",
+    "author": "SSG Brandon White",
+    "publishedDate": "03.17.2025",
+    "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:acquire (rule-derived; human spot-check required for unclear)",
+      "reviewedAtIso": "2026-08-28T22:09:40.122Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28T22:09:40.122Z",
+      "method": "dvids page parse + direct media download",
+      "mediaUrl": "https://d34w7g4gy10iej.cloudfront.net/video/2504/DOD_110902308/DOD_110902308.mp4",
+      "tool": "lab:acquire v0.2"
+    },
+    "restrictions": [
+      "DVIDS requests journalist credit (author recorded)",
+      "must not imply DoD endorsement"
+    ],
+    "description": "The Pro Pickleball Tour visits Caserma Ederle on March 17, 2025. The trip was sponsored by the MWR to raise the morale of the Soldiers assigned to USAG Italy and to introduce a new, emerging sport to the community. (U.S. Army video by Staff Sgt. Brandon White.) · VIRIN 250317-A-FG870-5499 · IT · Video Productions"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-dvids-967848",
+    "origin": "dvids",
+    "originId": "967848",
+    "url": "https://www.dvidshub.net/video/967848/pickleball-japan-federation-visits-sasebo",
+    "title": "Pickleball Japan Federation Visits Sasebo",
+    "author": "PO2 Orion Shotton",
+    "publishedDate": "06.19.2025",
+    "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:acquire (rule-derived; human spot-check required for unclear)",
+      "reviewedAtIso": "2026-08-28T22:09:47.473Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28T22:09:47.473Z",
+      "method": "dvids page parse + direct media download",
+      "mediaUrl": "https://d34w7g4gy10iej.cloudfront.net/video/2506/DOD_111093758/DOD_111093758.mp4",
+      "tool": "lab:acquire v0.2"
+    },
+    "restrictions": [
+      "DVIDS requests journalist credit (author recorded)",
+      "must not imply DoD endorsement"
+    ],
+    "description": "The Pickleball Japan Federation visited the Sasebo Gymnasium Cultural Hall to host a pickleball event on June 20th, 2025. The American Forces Network produces and delivers unique, immediate and uninterrupted media services to inform and entertain overseas DoD personnel and families. (U.S. Navy video by Mass Communication Specialist 2nd Class Orion Shotton) · VIRIN 250620-N-GG032-8421 · JP · Video Productions"
+  },
+  {
+    "schemaVersion": 1,
+    "sourceId": "src-dvids-986421",
+    "origin": "dvids",
+    "originId": "986421",
+    "url": "https://www.dvidshub.net/video/986421/blue-pages-intramural-pickleball",
+    "title": "Blue Pages: Intramural Pickleball",
+    "author": "A1C Ryan Bratton",
+    "publishedDate": "10.16.2025",
+    "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+    "rights": {
+      "store": "yes",
+      "analyze": "yes",
+      "annotate": "yes",
+      "train": "yes",
+      "redistributeDerivatives": "yes",
+      "commercial": "yes",
+      "basis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "reviewedBy": "lab:acquire (rule-derived; human spot-check required for unclear)",
+      "reviewedAtIso": "2026-08-28T22:09:50.413Z"
+    },
+    "acquisition": {
+      "acquiredAtIso": "2026-08-28T22:09:50.413Z",
+      "method": "dvids page parse + direct media download",
+      "mediaUrl": "https://d34w7g4gy10iej.cloudfront.net/video/2511/DOD_111378367/DOD_111378367.mp4",
+      "tool": "lab:acquire v0.2"
+    },
+    "restrictions": [
+      "DVIDS requests journalist credit (author recorded)",
+      "must not imply DoD endorsement"
+    ],
+    "description": "Come to the Eifel Powerhaus indoor court for intramural pickleball starting November 4th. Sessions will be held Tuesdays and Thursdays from 5:30-8 p.m. · VIRIN 251017-F-HX870-1481 · RHEINLAND-PFALZ, DE · Commercials"
+  }
+]
