@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { evaluateCaptureEnvelope, type CaptureEnvelopeMeasurements } from "../src/envelope.js";
-import { runAnalyticTrajectories, runLatticeSweep } from "../src/sweepSurfacesG09.js";
+import {
+  LATTICE_DIMS_V03,
+  LATTICE_DIMS_V04_NEW,
+  runAnalyticTrajectories,
+  runLatticeSweep,
+} from "../src/sweepSurfacesG09.js";
 
 /**
  * g09-f22-surfaces regression pins.
@@ -34,16 +39,24 @@ describe("g09: analytic decision-surface monotonicity", () => {
     }
   });
 
-  it("3^9 severity lattice: overall == worst measured dimension; one-step-worse never improves overall", () => {
-    const lattice = runLatticeSweep();
+  it("3^9 severity lattice (v0.3 dims): overall == worst measured dimension; one-step-worse never improves overall", () => {
+    const lattice = runLatticeSweep(LATTICE_DIMS_V03);
     expect(lattice.vectors).toBe(19683);
     expect(lattice.successorComparisons).toBe(118098);
     expect(lattice.overallMonotonicityViolations).toBe(0);
     expect(lattice.overallEqualsMaxSeverityViolations).toBe(0);
   });
 
+  it("3^4 severity lattice (thresholds-v0.4 dims: exposure_clipping/exposure_stability/sensor_noise/camera_shake)", () => {
+    const lattice = runLatticeSweep(LATTICE_DIMS_V04_NEW);
+    expect(lattice.vectors).toBe(81);
+    expect(lattice.successorComparisons).toBe(216);
+    expect(lattice.overallMonotonicityViolations).toBe(0);
+    expect(lattice.overallEqualsMaxSeverityViolations).toBe(0);
+  });
+
   it("STRUCTURAL (known, F22 A5): losing the worst dimension's measurement upgrades the overall verdict", () => {
-    const lattice = runLatticeSweep();
+    const lattice = runLatticeSweep(LATTICE_DIMS_V03);
     expect(lattice.notMeasuredUpgradeChecked).toBeGreaterThan(0);
     // NOT_MEASURED never worsens overall, so nulling the unique worst
     // dimension upgrades the verdict every time. Documented surface
@@ -64,8 +77,11 @@ const shakenControl: CaptureEnvelopeMeasurements = {
   avgFrameRateFps: 29.97002997002997,
   brightnessMeanLuma: 104.06067515432099,
   brightnessStdLuma: null,
+  clippedPixelFraction: null,
   laplacianVarianceMedian: 2066.986932903704,
+  denoiseSurvivalRatio: null,
   meanAbsFrameDiff: 35.435745506535945,
+  contrastNormalizedFrameDiff: null,
   frameIntervalCv: 1.4154739438544443e-5,
   clipDurationMs: 4404,
   playerPixelHeightFraction: null,

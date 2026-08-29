@@ -85,9 +85,29 @@ export const ANALYTIC_TRAJECTORIES: AnalyticTrajectory[] = [
     values: [130, 200, 200.1, 220, 220.1, 245, 255],
   },
   {
+    dimension: "exposure_clipping",
+    direction: "rising clipped-pixel fraction",
+    values: [0.05, 0.3, 0.301, 0.6, 0.601, 0.9, 1.0],
+  },
+  {
+    dimension: "exposure_stability",
+    direction: "rising per-frame mean-luma std (strobing exposure)",
+    values: [5, 40, 40.1, 80, 80.1, 150, 255],
+  },
+  {
     dimension: "motion_blur",
     direction: "increasing blur (falling laplacian variance)",
     values: [500, 100, 99.9, 30, 29.9, 5, 0],
+  },
+  {
+    dimension: "sensor_noise",
+    direction: "falling denoise-survival ratio (rising noise)",
+    values: [0.6, 0.25, 0.249, 0.15, 0.149, 0.05, 0.01],
+  },
+  {
+    dimension: "camera_shake",
+    direction: "rising contrast-normalized frame diff",
+    values: [0.05, 0.18, 0.181, 0.45, 0.451, 0.8, 2.0],
   },
   {
     dimension: "camera_motion",
@@ -164,7 +184,11 @@ const LATTICE_VALUES: Record<EnvelopeDimension, [number, number, number]> = {
   resolution: [1080, 480, 240],
   frame_rate: [30, 15, 8],
   brightness: [130, 45, 10],
+  exposure_clipping: [0.1, 0.45, 0.8],
+  exposure_stability: [10, 60, 120],
   motion_blur: [500, 50, 5],
+  sensor_noise: [0.5, 0.2, 0.05],
+  camera_shake: [0.05, 0.3, 0.7],
   camera_motion: [5, 40, 80],
   timing_stability: [0.01, 0.25, 1.0],
   clip_duration: [30_000, 1500, 200],
@@ -181,9 +205,12 @@ function measurementsFromLevels(
     frameHeightPx: v("resolution"),
     avgFrameRateFps: v("frame_rate"),
     brightnessMeanLuma: v("brightness"),
-    brightnessStdLuma: 5,
+    brightnessStdLuma: v("exposure_stability"),
+    clippedPixelFraction: v("exposure_clipping"),
     laplacianVarianceMedian: v("motion_blur"),
+    denoiseSurvivalRatio: v("sensor_noise"),
     meanAbsFrameDiff: v("camera_motion"),
+    contrastNormalizedFrameDiff: v("camera_shake"),
     frameIntervalCv: v("timing_stability"),
     clipDurationMs: v("clip_duration"),
     playerPixelHeightFraction: v("player_pixel_height"),
@@ -201,8 +228,10 @@ export interface LatticeResult {
   notMeasuredUpgradeChecked: number;
 }
 
-export function runLatticeSweep(): LatticeResult {
-  const dims = [...ENVELOPE_DIMENSIONS];
+export function runLatticeSweep(varyDims?: readonly EnvelopeDimension[]): LatticeResult {
+  // The full 3^13 lattice is ~20.7M evaluations; callers sweep sublattices
+  // (remaining dimensions pinned at severity 0) to stay tractable.
+  const dims = [...(varyDims ?? ENVELOPE_DIMENSIONS)];
   const total = 3 ** dims.length;
   let successorComparisons = 0;
   let overallMonotonicityViolations = 0;
@@ -212,6 +241,7 @@ export function runLatticeSweep(): LatticeResult {
 
   const levelsOf = (index: number): Record<EnvelopeDimension, number> => {
     const levels = {} as Record<EnvelopeDimension, number>;
+    for (const dim of ENVELOPE_DIMENSIONS) levels[dim] = 0;
     let rest = index;
     for (const dim of dims) {
       levels[dim] = rest % 3;
@@ -253,6 +283,18 @@ export function runLatticeSweep(): LatticeResult {
           break;
         case "brightness":
           nulled.brightnessMeanLuma = null;
+          break;
+        case "exposure_clipping":
+          nulled.clippedPixelFraction = null;
+          break;
+        case "exposure_stability":
+          nulled.brightnessStdLuma = null;
+          break;
+        case "sensor_noise":
+          nulled.denoiseSurvivalRatio = null;
+          break;
+        case "camera_shake":
+          nulled.contrastNormalizedFrameDiff = null;
           break;
         case "motion_blur":
           nulled.laplacianVarianceMedian = null;
@@ -597,8 +639,12 @@ function measuredSummary(m: CaptureEnvelopeMeasurements): Record<string, number 
         : null,
     avgFrameRateFps: m.avgFrameRateFps,
     brightnessMeanLuma: m.brightnessMeanLuma,
+    brightnessStdLuma: m.brightnessStdLuma,
+    clippedPixelFraction: m.clippedPixelFraction,
     laplacianVarianceMedian: m.laplacianVarianceMedian,
+    denoiseSurvivalRatio: m.denoiseSurvivalRatio,
     meanAbsFrameDiff: m.meanAbsFrameDiff,
+    contrastNormalizedFrameDiff: m.contrastNormalizedFrameDiff,
     frameIntervalCv: m.frameIntervalCv,
     clipDurationMs: m.clipDurationMs,
   };
@@ -629,8 +675,12 @@ const MEASURED_KEY_FOR_DIMENSION: Record<EnvelopeDimension, string> = {
   resolution: "shortSidePx",
   frame_rate: "avgFrameRateFps",
   brightness: "brightnessMeanLuma",
+  exposure_clipping: "clippedPixelFraction",
+  exposure_stability: "brightnessStdLuma",
   motion_blur: "laplacianVarianceMedian",
+  sensor_noise: "denoiseSurvivalRatio",
   camera_motion: "meanAbsFrameDiff",
+  camera_shake: "contrastNormalizedFrameDiff",
   timing_stability: "frameIntervalCv",
   clip_duration: "clipDurationMs",
   player_pixel_height: "shortSidePx",
@@ -680,6 +730,30 @@ export function findAxisViolations(rows: SweepRow[]): Violation[] {
   return violations;
 }
 
+/**
+ * Sublattices for tractable sweeps: the full 3^13 lattice is ~20.7M
+ * evaluations. The v0.3 nine-dimension lattice is preserved verbatim; the
+ * four thresholds-v0.4 dimensions (g07-f22-fixes) get their own lattice
+ * with the legacy nine pinned at severity 0.
+ */
+export const LATTICE_DIMS_V03: readonly EnvelopeDimension[] = [
+  "resolution",
+  "frame_rate",
+  "brightness",
+  "motion_blur",
+  "camera_motion",
+  "timing_stability",
+  "clip_duration",
+  "player_pixel_height",
+  "player_visibility",
+];
+export const LATTICE_DIMS_V04_NEW: readonly EnvelopeDimension[] = [
+  "exposure_clipping",
+  "exposure_stability",
+  "sensor_noise",
+  "camera_shake",
+];
+
 // ---------------------------------------------------------------------------
 // Main.
 
@@ -691,7 +765,12 @@ if (isMain) {
   let adjacentPairs = 0;
 
   const analytic = runAnalyticTrajectories();
-  const lattice = runLatticeSweep();
+  const lattice = runLatticeSweep(LATTICE_DIMS_V03);
+  const latticeNew = runLatticeSweep(LATTICE_DIMS_V04_NEW);
+  process.stderr.write(
+    `new-dim lattice: ${latticeNew.vectors} vectors, ${latticeNew.successorComparisons} successor comparisons, ` +
+      `${latticeNew.overallMonotonicityViolations} overall violations\n`,
+  );
   process.stderr.write(
     `analytic: ${analytic.reduce((a, t) => a + t.comparisons, 0)} comparisons, ` +
       `${analytic.reduce((a, t) => a + t.violations.length, 0)} violations; ` +

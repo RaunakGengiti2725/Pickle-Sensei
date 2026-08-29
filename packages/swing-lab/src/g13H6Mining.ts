@@ -397,7 +397,10 @@ function speedPeaks(
   return chosen.sort((a, b) => a.timestampMs - b.timestampMs);
 }
 
-function runBoth(input: Parameters<typeof classifyStrokeV6>[0]): {
+// Typed against the frozen v5 signature (required paddle confidence) — the
+// stricter of the two, structurally assignable to v6's optional-confidence
+// canonical signature.
+function runBoth(input: Parameters<typeof classifyStrokeV5>[0]): {
   v5: StrokePrediction;
   v6: StrokePrediction;
 } {
