@@ -32,6 +32,7 @@ import { registerConsentRoutes } from "./modules/consent/routes.js";
 import { registerEvaluationRoutes } from "./modules/evaluation/routes.js";
 import { registerFlagRoutes } from "./modules/flags/routes.js";
 import { registerAdminRoutes } from "./modules/admin/routes.js";
+import { registerRollbackRoutes } from "./modules/admin/rollback.js";
 import { registerTrainingRoutes } from "./modules/training/routes.js";
 
 /**
@@ -309,6 +310,7 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
   registerEvaluationRoutes(app, context);
   registerFlagRoutes(app, context);
   registerAdminRoutes(app, context);
+  registerRollbackRoutes(app, context);
   registerTrainingRoutes(app, context);
 
   return app;
