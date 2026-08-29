@@ -203,7 +203,6 @@ describe("corpus check over committed datasets/ artifacts", () => {
     }
     // Findings are reported, not asserted away: the count is logged for the
     // wave-c summary; the check only guarantees the corpus was scanned.
-    // eslint-disable-next-line no-console
     console.log(
       `corpus check: ${report.filesChecked} files, ${report.violations.length} violations`,
       Object.fromEntries(byRule),

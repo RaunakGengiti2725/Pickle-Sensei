@@ -52,6 +52,8 @@ export default tseslint.config(
       "packages/swing-lab/src/cascadeWaterfall.ts",
       "packages/swing-lab/src/coverageRisk.ts",
       "packages/swing-lab/src/coachReview.ts",
+      "packages/swing-lab/src/corpusCheck.ts",
+      "packages/swing-lab/src/strokeTaxonomyBench.ts",
       // data-engine CLIs (acquire/factory/status/import/failure-mine) print reports.
       "packages/swing-lab/src/engine/**/*.ts",
     ],

@@ -221,6 +221,7 @@ export async function detectPaddleWindow(input: {
   oneShot: () => void;
   log?: (message: string) => void;
 }): Promise<"worker" | "one_shot"> {
+  // eslint-disable-next-line no-console
   const log = input.log ?? ((message) => console.log(message));
   if (input.worker) {
     try {
