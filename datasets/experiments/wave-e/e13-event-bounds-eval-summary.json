@@ -1,0 +1,66 @@
+{
+  "workstream": "wave-e/e13-event-bounds-eval",
+  "branch": "devin/wave-e/e13-event-bounds-eval",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "baseCommit": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+  "completedAtIso": "2026-08-29",
+  "verdict": "GREEN",
+  "mission": "Re-run event boundary evaluation against the new D2-07 event-bounds gold (12 records: 7 stroke events, 5 explicit non-events) on the integrated branch; report recall, bounds error, contact-inside rate, false-positive rate on non-events; forensics for every miss.",
+  "configuration": {
+    "proposer": "proposeStrokeEventsV2 (stroke-event-2: body proposes, paddle confirms) replayed on the committed runs-wave-a windowed auto-target wrist series",
+    "paddleEvidence": "no paddle-speed series is committed for these runDirs — paddle confirmation structurally absent in every replay (recorded, matching D06 oracle conditions)",
+    "gold": "datasets/paddle-bench/bundles/{wavea-marne-serve,wavea-wgm-wheelchair,wavea-sasebo-volleys}/annotation/devin-visual-v4-waveD2-events.json (D2-07, annotator devin-visual-v4-waveD2)",
+    "matching": "one-to-one greedy by overlap fraction, target-owner gold outranks other-owner (proposals are target-body proposals); PROPOSED_OK = overlap ≥ 0.5 of gold span OR gold contactMs inside proposal ±60ms (D06 oracle criterion); proposal reuse disclosed, never silently double-counted",
+    "grouping": "all 3 bundles are independent DEV sources/sessions (dvids-marne-2024, dvids-warriorgames-2026, afn-sasebo-2025-06); no random-frame splits; held-out cases wm-dink-01 and afn-vic-rally1 not referenced"
+  },
+  "measured": {
+    "targetOwnerEvents": {
+      "n": 5,
+      "recall": "3/5 PROPOSED_OK",
+      "misBounded": 0,
+      "missed": 2,
+      "medianAbsStartErrMs": 167,
+      "medianAbsEndErrMs": 100,
+      "contactInsideMatched": "3/3"
+    },
+    "otherOwnerEvents": {
+      "n": 2,
+      "recall": "0/2",
+      "note": "expected: the proposer runs on the AUTO-TARGET wrist series only; other-owner rows measure contamination context, not recall (both misses carry OWNER=other disclosure in forensics)"
+    },
+    "falsePositives": {
+      "explicitNonEvents": 5,
+      "falsePositiveNonEvents": 0,
+      "falsePositiveRate": "0/5 — setup_motion x2, locomotion (wheel push), ready-track, post-rally ball retrieval all clean",
+      "unmatchedProposals": "0/3 total proposals"
+    },
+    "perBundleProposals": {
+      "wavea-marne-serve": "1 proposal 34117–35335ms (gold serve 34021–35435, overlap 0.86, contact 34689 inside)",
+      "wavea-wgm-wheelchair": "1 proposal 182567–183300ms (gold backhand 182400–183067, overlap 0.75, contact 182583 inside)",
+      "wavea-sasebo-volleys": "1 proposal 52152–52920ms for a 5-stroke 1.3s rally (assigned to far-black-2, overlap 1.0, contact 52683 inside)"
+    }
+  },
+  "forensics": {
+    "wavea-sasebo-volleys-far-black-1": "MISSED · WRIST_SIGNAL_QUALITY: in-span smoothed wrist peak 0.31 < proposal gate 0.5 (max(0.5, 30% of global peak)) — the recorded target wrist signal never reads as a swing inside 51900–52300; the single rally proposal E1 covers only 37% of this gold span (reuse disclosed)",
+    "wavea-sasebo-volleys-far-black-3": "MISSED · WRIST_SIGNAL_QUALITY: in-span smoothed wrist peak 0.344 < gate 0.5 inside 52934–53234 — the final short volley's wrist signature is below the swing gate at this camera scale",
+    "wavea-sasebo-volleys-near-camo-1": "MISSED (owner=other, expected) · the above-gate in-span peak (0.692) belongs to the TARGET's interleaved counter movement, not the opponent; EVENT_LOGIC label carries the OWNER=other disclosure",
+    "wavea-sasebo-volleys-near-camo-2": "MISSED (owner=other, expected) · in-span target-wrist peak 0.287 < gate — no target-signal contamination over the opponent's second counter",
+    "patternFinding": "All target misses concentrate in the rapid-volley window: the proposer emits ONE fused span (52152–52920) for a 5-stroke exchange whose target contacts are 52000/52683/53067ms. Fusion is consistent with GLUE_GATES.distinctPeakSeparationMs=550 and the smoothing+merge gates; the first and last target volleys additionally never clear the 0.5 wrist gate. This is a measured proposer limitation on ~350–700ms stroke spacing, not a labeling artifact."
+  },
+  "artifacts": {
+    "report": "datasets/experiments/wave-e/e13-event-bounds-eval-report.json (per-record rows, per-bundle proposals, full forensic evidence strings)",
+    "evalTool": "packages/swing-lab/src/e13EventBoundsEval.ts (read-only replay; reuses D06 oracle attribution helpers; no production mutation)",
+    "regressionFixture": "packages/swing-lab/test/e13EventBoundsEval.test.ts (6 assertions locking recall 3/5, contact-inside 3/3, FP 0/5, forensic attachment)"
+  },
+  "gates": {
+    "typecheck": "pnpm typecheck exit 0",
+    "lint": "pnpm lint exit 0",
+    "test": "pnpm --filter @pickle/swing-lab test exit 0 (incl. new fixture)",
+    "formatCheck": "pnpm format:check exit 0"
+  },
+  "honesty": {
+    "heldOutViewed": [],
+    "goldTouched": "none — D2-07 sidecars read-only; no label, threshold, or contract modified",
+    "caveat": "n=7 gold events across 3 DEV bundles; numbers are a measurement of this proposer on this gold, not a reliability claim"
+  }
+}
