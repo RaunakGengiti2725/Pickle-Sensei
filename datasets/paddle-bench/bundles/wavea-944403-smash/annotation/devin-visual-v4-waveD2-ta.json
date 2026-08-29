@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-944403-smash",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "modality": "target_acquisition",
+  "createdAtIso": "2026-08-29T09:20:00.000Z",
+  "source": {
+    "recordingId": "rec-916657917f2b",
+    "sha256": "916657917f2be72f67717b35bdc0f163915c48a1126731c25f0ae1364121ad13",
+    "windowMs": { "from": 2900, "to": 4900 },
+    "fps": 59.94,
+    "licenseQuote": "Public domain (U.S. federal government work, PD-USGov; DVIDS)"
+  },
+  "coordinateConvention": "normalized full-frame xywh torso boxes",
+  "contestedConvention": "another visible person's torso center within START_REGION_RADIUS=0.17 of the target torso center",
+  "records": [
+    {
+      "frameIndex": 174,
+      "recordingTimeMs": 2903,
+      "persons": [
+        {
+          "id": "near_left_black",
+          "torsoBox": { "x": 0.397, "y": 0.297, "width": 0.102, "height": 0.214 },
+          "occlusion": "none"
+        },
+        {
+          "id": "near_right_black",
+          "torsoBox": { "x": 0.804, "y": 0.285, "width": 0.096, "height": 0.217 },
+          "occlusion": "none"
+        },
+        {
+          "id": "far_center_red",
+          "torsoBox": { "x": 0.497, "y": 0.303, "width": 0.071, "height": 0.155 },
+          "occlusion": "none"
+        },
+        {
+          "id": "far_right_red",
+          "torsoBox": { "x": 0.649, "y": 0.296, "width": 0.073, "height": 0.153 },
+          "occlusion": "none"
+        },
+        {
+          "id": "background_left_black",
+          "torsoBox": { "x": 0.234, "y": 0.322, "width": 0.027, "height": 0.092 },
+          "occlusion": "none"
+        },
+        {
+          "id": "background_right_black",
+          "torsoBox": { "x": 0.272, "y": 0.328, "width": 0.028, "height": 0.084 },
+          "occlusion": "none"
+        }
+      ],
+      "targetPersonId": "near_right_black",
+      "startRegionContested": false,
+      "targetOcclusion": "none",
+      "uncertainty": "torso extents approximate to about 0.01 normalized; identities visually clear"
+    },
+    {
+      "frameIndex": 204,
+      "recordingTimeMs": 3403,
+      "persons": [
+        {
+          "id": "near_left_black",
+          "torsoBox": { "x": 0.399, "y": 0.278, "width": 0.104, "height": 0.217 },
+          "occlusion": "none"
+        },
+        {
+          "id": "near_right_black",
+          "torsoBox": { "x": 0.797, "y": 0.264, "width": 0.092, "height": 0.218 },
+          "occlusion": "none"
+        },
+        {
+          "id": "far_center_red",
+          "torsoBox": { "x": 0.484, "y": 0.302, "width": 0.061, "height": 0.151 },
+          "occlusion": "partial_by_near_left"
+        },
+        {
+          "id": "far_right_red",
+          "torsoBox": { "x": 0.654, "y": 0.298, "width": 0.063, "height": 0.151 },
+          "occlusion": "none"
+        },
+        {
+          "id": "background_left_black",
+          "torsoBox": { "x": 0.204, "y": 0.324, "width": 0.027, "height": 0.089 },
+          "occlusion": "none"
+        },
+        {
+          "id": "background_right_black",
+          "torsoBox": { "x": 0.246, "y": 0.33, "width": 0.027, "height": 0.083 },
+          "occlusion": "none"
+        }
+      ],
+      "targetPersonId": "near_right_black",
+      "startRegionContested": false,
+      "targetOcclusion": "none",
+      "uncertainty": "far-center torso partly hidden by near-left player"
+    },
+    {
+      "frameIndex": 234,
+      "recordingTimeMs": 3904,
+      "persons": [
+        {
+          "id": "near_left_black",
+          "torsoBox": { "x": 0.345, "y": 0.293, "width": 0.105, "height": 0.211 },
+          "occlusion": "none"
+        },
+        {
+          "id": "near_right_black",
+          "torsoBox": { "x": 0.754, "y": 0.291, "width": 0.087, "height": 0.207 },
+          "occlusion": "none"
+        },
+        {
+          "id": "far_center_red",
+          "torsoBox": { "x": 0.473, "y": 0.322, "width": 0.06, "height": 0.148 },
+          "occlusion": "none"
+        },
+        {
+          "id": "far_right_red",
+          "torsoBox": { "x": 0.6, "y": 0.19, "width": 0.081, "height": 0.198 },
+          "occlusion": "none"
+        },
+        {
+          "id": "background_left_black",
+          "torsoBox": { "x": 0.182, "y": 0.321, "width": 0.027, "height": 0.088 },
+          "occlusion": "none"
+        },
+        {
+          "id": "background_right_black",
+          "torsoBox": { "x": 0.218, "y": 0.325, "width": 0.028, "height": 0.083 },
+          "occlusion": "none"
+        }
+      ],
+      "targetPersonId": "near_right_black",
+      "startRegionContested": false,
+      "targetOcclusion": "none",
+      "uncertainty": "none beyond approximate torso boundaries"
+    },
+    {
+      "frameIndex": 264,
+      "recordingTimeMs": 4404,
+      "persons": [
+        {
+          "id": "near_left_black",
+          "torsoBox": { "x": 0.276, "y": 0.311, "width": 0.094, "height": 0.2 },
+          "occlusion": "none"
+        },
+        {
+          "id": "near_right_black",
+          "torsoBox": { "x": 0.714, "y": 0.292, "width": 0.088, "height": 0.21 },
+          "occlusion": "none"
+        },
+        {
+          "id": "far_center_red",
+          "torsoBox": { "x": 0.458, "y": 0.315, "width": 0.063, "height": 0.147 },
+          "occlusion": "none"
+        },
+        {
+          "id": "far_right_red",
+          "torsoBox": { "x": 0.548, "y": 0.326, "width": 0.066, "height": 0.148 },
+          "occlusion": "none"
+        },
+        {
+          "id": "background_left_black",
+          "torsoBox": { "x": 0.164, "y": 0.321, "width": 0.026, "height": 0.087 },
+          "occlusion": "none"
+        },
+        {
+          "id": "background_right_black",
+          "torsoBox": { "x": 0.197, "y": 0.326, "width": 0.027, "height": 0.082 },
+          "occlusion": "none"
+        }
+      ],
+      "targetPersonId": "near_right_black",
+      "startRegionContested": false,
+      "targetOcclusion": "none",
+      "uncertainty": "none beyond approximate torso boundaries"
+    }
+  ]
+}
