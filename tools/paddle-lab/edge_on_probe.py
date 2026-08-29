@@ -220,7 +220,7 @@ def cmd_extract(_args) -> None:
         by_case.setdefault(r["case"], []).append(r)
     for case, items in by_case.items():
         video = str(CASES[case]["video"])
-        width, height, fps, _dur = ffprobe_meta(video)
+        width, height, fps, _dur, _start = ffprobe_meta(video)
         wanted = {r["frameIndex"]: r for r in items}
         max_idx = max(wanted)
         n_saved = 0

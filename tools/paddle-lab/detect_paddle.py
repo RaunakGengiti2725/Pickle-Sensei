@@ -62,6 +62,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import subprocess
 import sys
 import time
@@ -82,11 +83,11 @@ EXTRA_LABELS = {"sports ball"}
 DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
 
 
-def ffprobe_meta(video: str) -> tuple[int, int, float, float]:
+def ffprobe_meta(video: str) -> tuple[int, int, float, float, float]:
     out = subprocess.run(
         [
             "ffprobe", "-v", "error", "-select_streams", "v:0",
-            "-show_entries", "stream=width,height,avg_frame_rate,duration",
+            "-show_entries", "stream=width,height,avg_frame_rate,duration,start_time",
             "-of", "json", video,
         ],
         capture_output=True, text=True, check=True,
@@ -94,7 +95,29 @@ def ffprobe_meta(video: str) -> tuple[int, int, float, float]:
     stream = json.loads(out.stdout)["streams"][0]
     num, den = stream["avg_frame_rate"].split("/")
     fps = float(num) / float(den)
-    return int(stream["width"]), int(stream["height"]), fps, float(stream.get("duration", 0)) * 1000
+    try:
+        start_time_ms = float(stream.get("start_time", 0)) * 1000
+    except (TypeError, ValueError):
+        start_time_ms = 0.0
+    return (
+        int(stream["width"]), int(stream["height"]), fps,
+        float(stream.get("duration", 0)) * 1000, start_time_ms,
+    )
+
+
+def plan_window_seek(start_ms: float, fps: float, start_time_ms: float = 0.0) -> tuple[int, float]:
+    """Map a requested window start to absolute CFR frame indexing.
+
+    Frame k of a CFR stream sits at pts = start_time + k/fps. ffmpeg's CLI
+    adds the input's start_time to the `-ss` target, then emits the first
+    frame whose pts >= target — so the seek value is expressed relative to
+    stream start: frame index ceil((start - start_time) * fps), sought at
+    index/fps floored to ffmpeg's millisecond CLI precision so the seek lands
+    exactly on the frame's pts (never rounding up past it).
+    """
+    first_index = max(0, math.ceil((start_ms - start_time_ms) * fps / 1000.0 - 1e-6))
+    seek_sec = math.floor(first_index / fps * 1000.0) / 1000.0
+    return first_index, seek_sec
 
 
 def frame_iter(
@@ -107,6 +130,7 @@ def frame_iter(
     stride: int = 1,
     decode_size: tuple[int, int] | None = None,
     legacy: bool = False,
+    start_time_ms: float = 0.0,
 ):
     """Decode upright RGB frames via ffmpeg rawvideo pipe (applies rotation).
 
@@ -119,11 +143,13 @@ def frame_iter(
     the original behavior byte-for-byte: no -vf, every window frame piped at
     full resolution, stride applied Python-side.
     """
+    first_index, seek_sec = plan_window_seek(start_ms, fps, start_time_ms)
     args = ["ffmpeg", "-v", "error"]
     if start_ms > 0:
-        args += ["-ss", f"{start_ms / 1000:.3f}"]
+        args += ["-ss", f"{seek_sec:.3f}"]
     if end_ms > 0:
-        args += ["-to", f"{end_ms / 1000:.3f}"]
+        # -to is adjusted by the input start_time exactly like -ss.
+        args += ["-to", f"{max((end_ms - start_time_ms) / 1000, seek_sec + 0.001):.3f}"]
     args += ["-i", video]
     out_w, out_h = width, height
     if legacy:
@@ -152,7 +178,10 @@ def frame_iter(
         if not (legacy and source_index % stride != 0):
             # Constant-frame-rate assumption (our lab transcodes are CFR); the
             # timestamp model is recorded in the output for auditability.
-            t_ms = start_ms + source_index * 1000.0 / fps
+            # tMs is the ABSOLUTE frame pts under the CFR model —
+            # start_time + frame_index/fps: the first emitted frame is the
+            # first frame with pts >= start, not a frame at exactly start_ms.
+            t_ms = start_time_ms + (first_index + source_index) * 1000.0 / fps
             yield source_index, t_ms, np.frombuffer(chunk, dtype=np.uint8).reshape(out_h, out_w, 3)
         index += 1
     proc.wait()
@@ -211,7 +240,7 @@ def run_window(
     Output schema is identical to the pre-W2 script; box/score values on the
     default path are bit-equal to the legacy path (same decoded pixels, same
     model, batched instead of per-value GPU->CPU transfer)."""
-    width, height, fps, duration_ms = ffprobe_meta(video)
+    width, height, fps, duration_ms, start_time_ms = ffprobe_meta(video)
     frames_out = []
     infer_sec_total = 0.0
     wall_started = time.perf_counter()
@@ -231,6 +260,7 @@ def run_window(
     for _, t_ms, rgb in frame_iter(
         video, start_ms, end_ms, width, height, fps,
         stride=stride, decode_size=decode_size, legacy=legacy_decode,
+        start_time_ms=start_time_ms,
     ):
         dec_h, dec_w = rgb.shape[0], rgb.shape[1]
         crop_x0 = crop_y0 = 0

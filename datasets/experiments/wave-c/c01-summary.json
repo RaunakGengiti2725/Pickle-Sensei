@@ -1,0 +1,47 @@
+{
+  "workstream": "C01-detector-timestamp",
+  "date": "2026-08-29",
+  "task": "Root-cause and fix the paddle detector ~one-frame-early tMs (W12 forensic discovery), prove on committed bundle clips, guard with a regression test.",
+  "rootCause": {
+    "summary": "Two compounding defects in tools/paddle-lab/detect_paddle.py frame extraction, both in the tMs labeling model, neither in pixel decode.",
+    "defect1": "frame_iter labeled the first emitted frame `start_ms` and subsequent frames `start_ms + i/fps`. ffmpeg `-ss X` (input option) actually emits the first frame whose pts >= target, i.e. a frame boundary AT OR AFTER start_ms — so every tMs was early by (ceil-to-frame-boundary - start_ms), a sub-frame-to-one-frame shift whenever start_ms is not exactly a frame boundary. runPaddleStage always passes start_ms = detectSpan.startMs - 250, which is essentially never frame-aligned.",
+    "defect2": "Container start_time was ignored. ffmpeg's CLI adds the input stream's start_time to the -ss/-to targets before seeking, and frame k's pts is start_time + k/fps. For clips with a non-zero start_time (afn-sasebo-rally1: start_time = 33.367ms = exactly one frame at 29.97fps) this (a) shifted every tMs one extra frame early and (b) silently dropped the true first window frame and included one frame past the requested end.",
+    "whyOneFrame": "On 29.97fps clips with one-frame start_time (the rally family), defect2 alone is a clean ~33ms one-frame shift; defect1 adds a 0..1-frame fractional shift on top. Measured pre-fix: wm-volley-02 (25fps, start_time 0, start 617ms) tMs early by 23.0ms; afn-sasebo-rally1 tMs early by 50.05ms (33.37 start_time + 16.68 fractional)."
+  },
+  "fix": {
+    "file": "tools/paddle-lab/detect_paddle.py",
+    "mechanism": "New plan_window_seek(start_ms, fps, start_time_ms): first_index = ceil((start_ms - start_time_ms)*fps/1000), sought via -ss floor(first_index/fps) at ffmpeg's ms CLI precision (ffmpeg re-adds start_time internally), so the first emitted frame is deterministically absolute frame first_index. tMs = start_time_ms + (first_index + i*stride)/fps*1000, i.e. the frame's true CFR pts. -to is likewise expressed relative to start_time. ffprobe_meta now also returns start_time_ms. Applies to one-shot, --serve, --legacy-decode and stride paths (labeling is shared); pixel decode is untouched.",
+    "alsoTouched": "tools/paddle-lab/edge_on_probe.py: ffprobe_meta 5-tuple unpack only."
+  },
+  "proof": {
+    "clips": ["datasets/paddle-bench/bundles/wm-volley-02/clip.mp4 (dev, 25fps, start_time 0)", "datasets/paddle-bench/bundles/afn-sasebo-rally1/clip.mp4 (dev, 29.97fps, start_time 33.367ms)"],
+    "device": "cpu (Linux, torch 2.13.0+cpu, D-FINE dfine-medium-coco), ffmpeg 7.0.2 static",
+    "fullDetectorOldVsNew": {
+      "window": "startMs 617, endMs 1217 on both clips",
+      "wm-volley-02": "15 frames both runs; per-ordinal detections+extras byte-identical 15/15; old tMs uniformly 23.0ms early vs ffprobe pts; new tMs max |dev| vs ffprobe best_effort pts = 0.000ms.",
+      "afn-sasebo-rally1": "old run: 18 frames labeled 617.00..1184.23 but actual pts 667.33..1234.57 (50.05ms early) AND the true first window frame (pts 633.97) was dropped by the start_time-shifted seek. new run: 18 frames, tMs 633.97..1201.20 = exact frame pts (max dev 0.003ms, float rounding), window [617,1217] now honored. Detections byte-identical frame-for-frame where the two runs decode the same frame (old[i] == new[i+1] for all 18 shared frames).",
+      "pixelIdentity": "regression guard hashes every frame_iter frame and requires an exact byte match against a direct no-seek full-clip CFR decode; all windows pass on both clips."
+    },
+    "regressionGuard": {
+      "file": "tools/paddle-lab/test_timestamp_alignment.py",
+      "what": "For 5 windows per clip (aligned, non-aligned, arbitrary-ms, stride-3), asserts every emitted frame's pixels are byte-identical to direct CFR decode, its tMs equals the matched absolute frame's CFR time (start_time + k/fps) within 0.51ms, and the CFR model agrees with ffprobe per-frame best_effort_timestamp_time.",
+      "result": "PASS on both clips post-fix; the same checks on the pre-fix code FAIL with -20.0ms (volley, non-aligned window) and -50.05ms (rally1) shifts.",
+      "note": "stride>1 window exercises the `-fps_mode vfr` path, which needs ffmpeg >= 5.1 (Ubuntu system ffmpeg 4.4 lacks it; used a static ffmpeg 7.0.2)."
+    }
+  },
+  "honestNegativesAndRemaining": [
+    "Canonical Mac run dirs (datasets/paddle-bench/runs/) still carry the OLD offset — they are gitignored/absent here and regen is macOS-only (`pnpm lab:regen`). All existing paddle-dets.json tMs (and anything derived: paddle-speed series, S-stage attribution, annotation tMs made against them) keep the ~one-frame-early fog until a Mac regen.",
+    "afn-sasebo-rally2 / afn-vic-rally1 bundle clips are not committed (only rally1, wm-dink-01, wm-volley-02 have clip.mp4), so proof used wm-volley-02 + afn-sasebo-rally1 — both dev cases; held-out cases were not touched or iterated against.",
+    "tools/paddle-lab/ball_candidates.py contains its own copy of the same extraction pattern (own ffprobe_meta without start_time + start_ms labeling) and very likely carries the same offset; NOT fixed here (outside C01 scope) — flagging for a follow-up.",
+    "Whether gold/annotation tMs were authored against pts (video-player scrubbing) or against the old shifted detector timeline is per-label provenance the fix cannot resolve; HANDOFF_V3 already records annotation tMs as carrying ±1-frame fog.",
+    "detect_paddle numbers here are CPU-run for identity/timestamp proof only; no latency claims."
+  ],
+  "commands": [
+    "cd tools/paddle-lab && .venv/bin/python test_timestamp_alignment.py",
+    ".venv/bin/python detect_paddle.py --video <clip> --out <dets.json> --start-ms 617 --end-ms 1217"
+  ],
+  "gates": {
+    "pnpmTypecheck": "17/17 packages pass (no TS package touched; run anyway)",
+    "packageTests": "no TS/mobile package touched; python guard test passes"
+  }
+}
