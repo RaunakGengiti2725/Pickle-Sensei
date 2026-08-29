@@ -38,7 +38,10 @@ export interface SplitsFile {
   policyVersion: typeof SPLIT_POLICY_VERSION;
   proportions: Record<SplitName, number>;
   pinned: Record<string, { split: SplitName; reason: string }>;
-  assigned: Record<string, { split: SplitName; method: "pinned" | "deterministic"; assignedAtIso: string }>;
+  assigned: Record<
+    string,
+    { split: SplitName; method: "pinned" | "deterministic"; assignedAtIso: string }
+  >;
 }
 
 export function deterministicSplit(sessionKey: string): SplitName {
@@ -62,8 +65,12 @@ export function saveSplits(path: string, splits: SplitsFile): void {
   const tmp = `${path}.tmp-${process.pid}`;
   const sorted: SplitsFile = {
     ...splits,
-    pinned: Object.fromEntries(Object.entries(splits.pinned).sort(([a], [b]) => a.localeCompare(b))),
-    assigned: Object.fromEntries(Object.entries(splits.assigned).sort(([a], [b]) => a.localeCompare(b))),
+    pinned: Object.fromEntries(
+      Object.entries(splits.pinned).sort(([a], [b]) => a.localeCompare(b)),
+    ),
+    assigned: Object.fromEntries(
+      Object.entries(splits.assigned).sort(([a], [b]) => a.localeCompare(b)),
+    ),
   };
   writeFileSync(tmp, JSON.stringify(sorted, null, 2));
   renameSync(tmp, path);
@@ -105,7 +112,10 @@ export function auditSplits(
   const byId = new Map(recordings.map((recording) => [recording.recordingId, recording]));
   for (const recording of recordings) {
     if (!splits.assigned[recording.sessionKey]) {
-      findings.push({ severity: "problem", message: `${recording.recordingId}: session ${recording.sessionKey} has no split assignment` });
+      findings.push({
+        severity: "problem",
+        message: `${recording.recordingId}: session ${recording.sessionKey} has no split assignment`,
+      });
     }
     for (const lineage of recording.derivedFrom) {
       const parent = byId.get(lineage.parentRecordingId);

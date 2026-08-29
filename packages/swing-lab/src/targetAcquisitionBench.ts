@@ -3,8 +3,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { REPO_ROOT, corpusPaths, loadRecordings, readAllEvents } from "./engine/corpus.js";
 import {
-  peopleFileToReplayFrames, replayAcquisition, resampleTo30fps,
-  TA_REPLAY_VERSION, START_REGION_RADIUS, REPLAY_VARIANTS, type ReplayVariant,
+  peopleFileToReplayFrames,
+  replayAcquisition,
+  resampleTo30fps,
+  TA_REPLAY_VERSION,
+  START_REGION_RADIUS,
+  REPLAY_VARIANTS,
+  type ReplayVariant,
 } from "./engine/taReplay.js";
 import { loadSplits } from "./engine/splits.js";
 import { buildPlayerTracks, type PeopleFile, type PlayerTrack } from "./playerTracker.js";
@@ -99,57 +104,73 @@ function propose(includeLockedTest: boolean): void {
       // Long scenes are proposed in 12s windows (coverage must mean "present
       // during this exchange", not "present for a whole 4-minute scene").
       for (let windowStart = segment.startMs; windowStart < segment.endMs; windowStart += 10_000) {
-      const windowEnd = Math.min(windowStart + 12_000, segment.endMs);
-      if (windowEnd - windowStart < 3000) break;
-      const windowIndex = Math.round((windowStart - segment.startMs) / 10_000);
-      const tracks = windowTracks(run.people, windowStart, windowEnd);
-      const substantial = tracks.filter(
-        (track) =>
-          track.coverage >= 0.5 &&
-          track.meanTorsoSpan >= 0.05 &&
-          // Gameplay validity: never propose a static/graphic human as a target.
-          classifyTrackLiveness(track) !== "static_or_graphic",
-      );
-      for (const track of substantial) {
-        const first = track.frames.slice(0, 5);
-        if (first.length === 0) continue;
-        const region = {
-          x: Number((first.reduce((total, frame) => total + frame.torsoMid.x, 0) / first.length).toFixed(4)),
-          y: Number((first.reduce((total, frame) => total + frame.torsoMid.y, 0) / first.length).toFixed(4)),
-        };
-        const caseId = `ta-${recording.recordingId.replace(/^rec-/, "")}-s${sceneIndex}w${windowIndex}-p${track.trackId}`;
-        if (known.has(caseId)) continue;
-        const othersNear = substantial.filter(
-          (other) =>
-            other.trackId !== track.trackId &&
-            other.frames.some(
-              (frame) => Math.hypot(frame.torsoMid.x - region.x, frame.torsoMid.y - region.y) <= START_REGION_RADIUS,
+        const windowEnd = Math.min(windowStart + 12_000, segment.endMs);
+        if (windowEnd - windowStart < 3000) break;
+        const windowIndex = Math.round((windowStart - segment.startMs) / 10_000);
+        const tracks = windowTracks(run.people, windowStart, windowEnd);
+        const substantial = tracks.filter(
+          (track) =>
+            track.coverage >= 0.5 &&
+            track.meanTorsoSpan >= 0.05 &&
+            // Gameplay validity: never propose a static/graphic human as a target.
+            classifyTrackLiveness(track) !== "static_or_graphic",
+        );
+        for (const track of substantial) {
+          const first = track.frames.slice(0, 5);
+          if (first.length === 0) continue;
+          const region = {
+            x: Number(
+              (first.reduce((total, frame) => total + frame.torsoMid.x, 0) / first.length).toFixed(
+                4,
+              ),
             ),
-        ).length;
-        file.cases.push({
-          caseId,
-          recordingId: recording.recordingId,
-          sessionKey: recording.sessionKey,
-          split: splits.assigned[recording.sessionKey]!.split,
-          windowMs: { start: Math.round(windowStart), end: Math.round(windowEnd) },
-          regionNorm: region,
-          trueTrackId: track.trackId,
-          situation: [
-            tracks.length <= 1 ? "solo" : tracks.length === 2 ? "two_players" : "multi_player",
-            ...(othersNear > 0 ? ["contested_region"] : []),
-            ...(track.lossPeriods.length > 0 ? ["target_loss_periods"] : []),
-            ...(track.meanTorsoSpan < 0.08 ? ["small_target"] : []),
-          ],
-          verification: { state: "proposed", by: "ta-bench propose (machine)", note: "unverified Tier-C case" },
-        });
-        known.add(caseId);
-        added += 1;
-      }
+            y: Number(
+              (first.reduce((total, frame) => total + frame.torsoMid.y, 0) / first.length).toFixed(
+                4,
+              ),
+            ),
+          };
+          const caseId = `ta-${recording.recordingId.replace(/^rec-/, "")}-s${sceneIndex}w${windowIndex}-p${track.trackId}`;
+          if (known.has(caseId)) continue;
+          const othersNear = substantial.filter(
+            (other) =>
+              other.trackId !== track.trackId &&
+              other.frames.some(
+                (frame) =>
+                  Math.hypot(frame.torsoMid.x - region.x, frame.torsoMid.y - region.y) <=
+                  START_REGION_RADIUS,
+              ),
+          ).length;
+          file.cases.push({
+            caseId,
+            recordingId: recording.recordingId,
+            sessionKey: recording.sessionKey,
+            split: splits.assigned[recording.sessionKey]!.split,
+            windowMs: { start: Math.round(windowStart), end: Math.round(windowEnd) },
+            regionNorm: region,
+            trueTrackId: track.trackId,
+            situation: [
+              tracks.length <= 1 ? "solo" : tracks.length === 2 ? "two_players" : "multi_player",
+              ...(othersNear > 0 ? ["contested_region"] : []),
+              ...(track.lossPeriods.length > 0 ? ["target_loss_periods"] : []),
+              ...(track.meanTorsoSpan < 0.08 ? ["small_target"] : []),
+            ],
+            verification: {
+              state: "proposed",
+              by: "ta-bench propose (machine)",
+              note: "unverified Tier-C case",
+            },
+          });
+          known.add(caseId);
+          added += 1;
+        }
       }
     }
   }
   saveCases(file);
-  console.log(`proposed ${added} new cases (total ${file.cases.length}) → ${CASES_PATH.replace(`${REPO_ROOT}/`, "")}`);
+  console.log(
+    `proposed ${added} new cases (total ${file.cases.length}) → ${CASES_PATH.replace(`${REPO_ROOT}/`, "")}`,
+  );
 }
 
 // ── render (human verification aid) ──────────────────────────────────────
@@ -171,7 +192,10 @@ function renderCase(taCase: TaCase): string | null {
   );
   for (const track of tracks) {
     const at = track.frames.reduce((best, frame) =>
-      Math.abs(frame.timestampMs - midFrame.timestampMs) < Math.abs(best.timestampMs - midFrame.timestampMs) ? frame : best,
+      Math.abs(frame.timestampMs - midFrame.timestampMs) <
+      Math.abs(best.timestampMs - midFrame.timestampMs)
+        ? frame
+        : best,
     );
     if (Math.abs(at.timestampMs - midFrame.timestampMs) > 200) continue;
     const color = track.trackId === taCase.trueTrackId ? "lime" : "red";
@@ -184,11 +208,17 @@ function renderCase(taCase: TaCase): string | null {
   mkdirSync(outDir, { recursive: true });
   const outPath = join(outDir, `${taCase.caseId}.png`);
   execFileSync("ffmpeg", [
-    "-y", "-v", "error",
-    "-ss", (midFrame.timestampMs / 1000).toFixed(3),
-    "-i", join(REPO_ROOT, recording.path),
-    "-vf", boxes.join(","),
-    "-frames:v", "1",
+    "-y",
+    "-v",
+    "error",
+    "-ss",
+    (midFrame.timestampMs / 1000).toFixed(3),
+    "-i",
+    join(REPO_ROOT, recording.path),
+    "-vf",
+    boxes.join(","),
+    "-frames:v",
+    "1",
     outPath,
   ]);
   return outPath;
@@ -268,7 +298,10 @@ function runCase(taCase: TaCase, variant: ReplayVariant = {}): CaseResult | null
       previousOn = on;
     }
     if (offStreakStart !== null && replay.follow.length > 0) {
-      longestOff = Math.max(longestOff, replay.follow[replay.follow.length - 1]!.t - offStreakStart);
+      longestOff = Math.max(
+        longestOff,
+        replay.follow[replay.follow.length - 1]!.t - offStreakStart,
+      );
     }
     postLock = {
       frames: considered,
@@ -306,7 +339,9 @@ if (isMain) {
     const selected = target ? file.cases.filter((entry) => entry.caseId === target) : file.cases;
     for (const taCase of selected) {
       const out = renderCase(taCase);
-      console.log(out ? `rendered ${out.replace(`${REPO_ROOT}/`, "")}` : `✗ cannot render ${taCase.caseId}`);
+      console.log(
+        out ? `rendered ${out.replace(`${REPO_ROOT}/`, "")}` : `✗ cannot render ${taCase.caseId}`,
+      );
     }
   } else if (mode === "run") {
     const all = process.argv.includes("--all");
@@ -328,7 +363,11 @@ if (isMain) {
         (splitFilter === null || entry.split === splitFilter),
     );
     if (cases.length === 0) {
-      console.log(all ? "no cases" : "no VERIFIED cases — verify proposals first (lab:ta-bench render, then edit cases.json)");
+      console.log(
+        all
+          ? "no cases"
+          : "no VERIFIED cases — verify proposals first (lab:ta-bench render, then edit cases.json)",
+      );
       process.exit(1);
     }
     const results = cases
@@ -352,7 +391,12 @@ if (isMain) {
         postLockStable90: stable.length,
         meanOnTargetFraction: locked.length
           ? Number(
-              (locked.reduce((total, result) => total + (result.postLock?.onTargetFraction ?? 0), 0) / locked.length).toFixed(3),
+              (
+                locked.reduce(
+                  (total, result) => total + (result.postLock?.onTargetFraction ?? 0),
+                  0,
+                ) / locked.length
+              ).toFixed(3),
             )
           : null,
       };
@@ -361,8 +405,15 @@ if (isMain) {
       benchVersion: TA_REPLAY_VERSION,
       generatedAtIso: new Date().toISOString(),
       variant: { name: variantName, config: variant, shipped: variantName === "shipped" },
-      constants: { START_REGION_RADIUS, framesToLock: 9, gestureElevation: 0.03, onTargetRadius: 0.06 },
-      scope: all ? "all non-rejected cases (INCLUDES unverified Tier-C proposals)" : "verified cases only",
+      constants: {
+        START_REGION_RADIUS,
+        framesToLock: 9,
+        gestureElevation: 0.03,
+        onTargetRadius: 0.06,
+      },
+      scope: all
+        ? "all non-rejected cases (INCLUDES unverified Tier-C proposals)"
+        : "verified cases only",
       summaryVerified: summarize(verified),
       summaryAll: summarize(results),
       results,

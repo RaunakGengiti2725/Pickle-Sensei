@@ -90,9 +90,7 @@ export function segmentPhasesTemporal(input: {
         sample.timestampMs >= input.window.startMs && sample.timestampMs <= input.window.endMs,
     );
     if (inWindow.length < 2) return 0;
-    return (
-      (inWindow[inWindow.length - 1]!.timestampMs - inWindow[0]!.timestampMs) / windowLength
-    );
+    return (inWindow[inWindow.length - 1]!.timestampMs - inWindow[0]!.timestampMs) / windowLength;
   };
   const paddleCoverage = coverage(input.paddleSpeeds);
   const wristCoverage = coverage(input.wristSpeeds);
@@ -134,8 +132,9 @@ export function segmentPhasesTemporal(input: {
     anchorMs = input.contactMs;
   } else {
     anchor = "speed_peak";
-    anchorMs = inWindow.reduce((best, sample) => (sample.value > best.value ? sample : best))
-      .timestampMs;
+    anchorMs = inWindow.reduce((best, sample) =>
+      sample.value > best.value ? sample : best,
+    ).timestampMs;
     confidence *= 0.8;
   }
   const peakValue = inWindow.reduce((best, sample) => Math.max(best, sample.value), 0);
@@ -171,7 +170,8 @@ export function segmentPhasesTemporal(input: {
     if (!firstAfterAnchor) {
       return {
         status: "abstained",
-        reason: "PHASE_NO_POST_CONTACT_EVIDENCE: no kinematic samples after the contact anchor inside the event",
+        reason:
+          "PHASE_NO_POST_CONTACT_EVIDENCE: no kinematic samples after the contact anchor inside the event",
       };
     }
     followThroughEndMs = firstAfterAnchor.timestampMs;
@@ -227,8 +227,7 @@ export function segmentPhasesTemporal(input: {
       followThroughEndMs,
       recoveryEndMs,
       relative: {
-        preparationStartMs:
-          preparationStartMs !== null ? preparationStartMs - anchorMs : null,
+        preparationStartMs: preparationStartMs !== null ? preparationStartMs - anchorMs : null,
         accelerationStartMs: accelerationStartMs - anchorMs,
         followThroughEndMs: followThroughEndMs - anchorMs,
         recoveryEndMs: recoveryEndMs !== null ? recoveryEndMs - anchorMs : null,
@@ -283,10 +282,7 @@ export function segmentPhasesTemporalV2(input: {
   if (input.contactMs === null) {
     return segmentPhasesAnchorFree(input);
   }
-  if (
-    input.contactMs < input.event.startMs - 120 ||
-    input.contactMs > input.event.endMs + 120
-  ) {
+  if (input.contactMs < input.event.startMs - 120 || input.contactMs > input.event.endMs + 120) {
     return {
       status: "abstained",
       reason: "PHASE_WRONG_EVENT: contact estimate lies outside the target event",
@@ -536,7 +532,8 @@ function segmentPhasesAnchorFree(input: {
   if (!ordered) {
     return {
       status: "abstained",
-      reason: "PHASE_DISORDERED_BOUNDARIES: anchor-free boundaries failed the monotonic ordering invariant",
+      reason:
+        "PHASE_DISORDERED_BOUNDARIES: anchor-free boundaries failed the monotonic ordering invariant",
     };
   }
 
@@ -565,10 +562,7 @@ function segmentPhasesAnchorFree(input: {
   };
 }
 
-function nearestIndex(
-  series: ReadonlyArray<{ timestampMs: number }>,
-  tMs: number,
-): number {
+function nearestIndex(series: ReadonlyArray<{ timestampMs: number }>, tMs: number): number {
   let best = 0;
   let bestDelta = Infinity;
   for (const [index, sample] of series.entries()) {

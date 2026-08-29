@@ -45,7 +45,10 @@ describe("resolveTechniqueIntent (deterministic, registry-terminated)", () => {
     const result = resolveTechniqueIntent("my dink");
     expect(result.status).toBe("ambiguous");
     if (result.status !== "ambiguous") return;
-    expect(result.options.map((option) => option.canonical).sort()).toEqual(["BACKHAND_DINK", "FOREHAND_DINK"]);
+    expect(result.options.map((option) => option.canonical).sort()).toEqual([
+      "BACKHAND_DINK",
+      "FOREHAND_DINK",
+    ]);
   });
 
   it("auto-detect phrases resolve to auto", () => {
@@ -60,9 +63,19 @@ describe("resolveTechniqueIntent (deterministic, registry-terminated)", () => {
 
   it("every resolvable output terminates in the versioned registry", () => {
     const canonicals = new Set(SELECTABLE_TECHNIQUES_V1.map((technique) => technique.canonical));
-    for (const text of ["forehand drive", "backhand volley", "serve", "overhead", "reset", "speedup", "return", "third shot drop"]) {
+    for (const text of [
+      "forehand drive",
+      "backhand volley",
+      "serve",
+      "overhead",
+      "reset",
+      "speedup",
+      "return",
+      "third shot drop",
+    ]) {
       const result = resolveTechniqueIntent(text);
-      if (result.status === "resolved") expect(canonicals.has(result.technique.canonical)).toBe(true);
+      if (result.status === "resolved")
+        expect(canonicals.has(result.technique.canonical)).toBe(true);
       if (result.status === "ambiguous") {
         for (const option of result.options) expect(canonicals.has(option.canonical)).toBe(true);
       }

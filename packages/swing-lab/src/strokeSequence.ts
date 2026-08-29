@@ -81,7 +81,11 @@ export function buildStrokeSequence(input: {
       tRelContactMs: input.contactMs !== null ? frame.timestampMs - input.contactMs : null,
       pose: { present: Object.keys(joints).length > 0, joints },
       paddle: paddleNear
-        ? { present: true, center: [paddleNear.center.x, paddleNear.center.y], confidence: paddleNear.confidence }
+        ? {
+            present: true,
+            center: [paddleNear.center.x, paddleNear.center.y],
+            confidence: paddleNear.confidence,
+          }
         : { present: false, center: null, confidence: null },
       ball: ballNear
         ? { present: true, center: [ballNear.x, ballNear.y], confidence: ballNear.confidence }
@@ -91,7 +95,10 @@ export function buildStrokeSequence(input: {
 
   // ── Experimental kinetic events ─────────────────────────────────────────
   const events: KineticEvent[] = [];
-  const push = (event: KineticEvent["event"], sample: { timestampMs: number; value: number } | null) => {
+  const push = (
+    event: KineticEvent["event"],
+    sample: { timestampMs: number; value: number } | null,
+  ) => {
     if (!sample) return;
     events.push({
       event,

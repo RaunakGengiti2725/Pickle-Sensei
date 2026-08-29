@@ -425,7 +425,9 @@ describe('selectInsight priority', () => {
       }),
     });
     expect(insight.basis).toBe('phase_timeline');
-    expect(insight.sentence).toContain('exact contact moment was not established');
+    expect(insight.sentence).toContain(
+      'exact contact moment was not established',
+    );
   });
 
   it('with nothing defensible, the insight is the abstention explanation', () => {
@@ -567,7 +569,13 @@ describe('attemptChips', () => {
 
   it('a null sessionId groups with nothing', () => {
     const solo = attemptChips(
-      [{ analysisId: 'a', capturedAtIso: '2026-08-30T10:00:00Z', sessionId: null }],
+      [
+        {
+          analysisId: 'a',
+          capturedAtIso: '2026-08-30T10:00:00Z',
+          sessionId: null,
+        },
+      ],
       'a',
     );
     expect(solo).toEqual([]);
@@ -582,9 +590,7 @@ describe('attemptChips', () => {
 
 describe('abstention state', () => {
   it('a result-null record is an abstention surface', () => {
-    expect(
-      isAbstainedResult({ id: 'r1', result: null }, null),
-    ).toBe(true);
+    expect(isAbstainedResult({ id: 'r1', result: null }, null)).toBe(true);
   });
 
   it('a scored analysis is not', () => {

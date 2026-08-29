@@ -88,8 +88,12 @@ describe("estimateContact", () => {
       ball.push({
         frameIndex: index,
         timestampMs: t,
-        x: before ? 0.9 - (0.9 - 0.584) * ((t - (window.peakMs - 180)) / 180) : 0.584 + ((t - window.peakMs) / 180) * 0.5,
-        y: before ? 0.6 + 0.1 * ((t - (window.peakMs - 180)) / 180) : 0.7 - ((t - window.peakMs) / 180) * 0.25,
+        x: before
+          ? 0.9 - (0.9 - 0.584) * ((t - (window.peakMs - 180)) / 180)
+          : 0.584 + ((t - window.peakMs) / 180) * 0.5,
+        y: before
+          ? 0.6 + 0.1 * ((t - (window.peakMs - 180)) / 180)
+          : 0.7 - ((t - window.peakMs) / 180) * 0.25,
         confidence: 0.8,
       });
     }
@@ -187,7 +191,9 @@ describe("estimateContact", () => {
       return {
         frameIndex: index,
         timestampMs: t,
-        x: before ? 0.9 - (0.9 - 0.6) * ((t - (window.peakMs - 180)) / 180) : 0.6 + ((t - window.peakMs) / 180) * 0.5,
+        x: before
+          ? 0.9 - (0.9 - 0.6) * ((t - (window.peakMs - 180)) / 180)
+          : 0.6 + ((t - window.peakMs) / 180) * 0.5,
         y: 0.6,
         confidence: 0.8,
       };
@@ -376,15 +382,15 @@ describe("estimateContact", () => {
     // nothing and cannot confirm.
     expect(Math.abs(estimate.estimatedContactMs - window.peakMs)).toBeLessThanOrEqual(60);
     expect(estimate.ballConfirmed).toBe(false);
-    expect(
-      estimate.supportingEvidence.map((signal) => signal.signal),
-    ).not.toContain("ball_direction_change");
+    expect(estimate.supportingEvidence.map((signal) => signal.signal)).not.toContain(
+      "ball_direction_change",
+    );
     expect(estimate.limitingFactors).toContain("ball_turns_rejected_far_from_target");
     expect(estimate.limitingFactors).toContain("ball_never_near_target_paddle");
     // Gating decisions are recorded in the signal detail strings.
-    expect(
-      estimate.supportingEvidence.some((signal) => signal.detail.includes("rejected")),
-    ).toBe(true);
+    expect(estimate.supportingEvidence.some((signal) => signal.detail.includes("rejected"))).toBe(
+      true,
+    );
   });
 
   it("abstains when the ball is OBSERVED far from the target at the fused moment (refutes contact)", () => {
@@ -451,9 +457,9 @@ describe("estimateContact", () => {
     });
     expect(estimate.status).toBe("estimated");
     if (estimate.status !== "estimated") return;
-    expect(
-      estimate.supportingEvidence.map((signal) => signal.signal),
-    ).not.toContain("ball_direction_change");
+    expect(estimate.supportingEvidence.map((signal) => signal.signal)).not.toContain(
+      "ball_direction_change",
+    );
     expect(estimate.ballConfirmed).toBe(false);
   });
 

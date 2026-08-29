@@ -34,17 +34,21 @@ if (!seeded.ok) throw new Error("seed failed");
 const sequence = targetPoseSequence(peopleFile, seeded.value.target);
 const debug = JSON.parse(readFileSync(join(runDir, "debug.json"), "utf8"));
 const paddle =
-  debug.paddle?.observations?.map((o: { t: number; x: number; y: number; w: number; h: number; conf: number }) => ({
-    timestampMs: o.t,
-    box: { x: o.x, y: o.y, width: o.w, height: o.h },
-    center: { x: o.x + o.w / 2, y: o.y + o.h / 2 },
-    detectorScore: o.conf,
-    trackId: debug.paddle.trackId,
-    confidence: o.conf,
-    nearWrist: true,
-  })) ?? null;
+  debug.paddle?.observations?.map(
+    (o: { t: number; x: number; y: number; w: number; h: number; conf: number }) => ({
+      timestampMs: o.t,
+      box: { x: o.x, y: o.y, width: o.w, height: o.h },
+      center: { x: o.x + o.w / 2, y: o.y + o.h / 2 },
+      detectorScore: o.conf,
+      trackId: debug.paddle.trackId,
+      confidence: o.conf,
+      nearWrist: true,
+    }),
+  ) ?? null;
 
-const file = JSON.parse(readFileSync(join(runDir, "ball-candidates.json"), "utf8")) as BallCandidateFile;
+const file = JSON.parse(
+  readFileSync(join(runDir, "ball-candidates.json"), "utf8"),
+) as BallCandidateFile;
 const { gated, all, fragments, ablation } = buildBallTracks(file, sequence, window, paddle);
 const outcome = selectPrimaryBallTrack(gated, ablation, window, {
   paddleTrackExists: (paddle?.length ?? 0) > 0,
@@ -56,7 +60,9 @@ if (outcome.status === "tracked") {
   console.log(
     `PRIMARY #${outcome.lab.trackId} ${Math.round(first.timestampMs)}-${Math.round(last.timestampMs)}ms n=${outcome.lab.observations.length}`,
   );
-  console.log(`timeline: ${outcome.timeline.states.map((s) => `${s.state} ${Math.round(s.fromMs)}-${Math.round(s.toMs)}`).join(" → ")}`);
+  console.log(
+    `timeline: ${outcome.timeline.states.map((s) => `${s.state} ${Math.round(s.fromMs)}-${Math.round(s.toMs)}`).join(" → ")}`,
+  );
   console.log(`reacq: ${JSON.stringify(outcome.timeline.reacquisition)}`);
   for (const o of outcome.lab.observations)
     console.log(`  t=${Math.round(o.timestampMs)} (${o.x.toFixed(3)},${o.y.toFixed(3)})`);
@@ -100,5 +106,10 @@ function owners(pool: readonly BallTrackCandidate[], poolName: string) {
 }
 owners(gated, "gated");
 owners(fragments, "fragment");
-owners(all.filter((c) => !gated.some((g) => g.trackId === c.trackId)), "assocOnly");
-console.log(`\npaddle obs span: ${paddle?.[0]?.timestampMs} .. ${paddle?.[paddle.length - 1]?.timestampMs} (${paddle?.length})`);
+owners(
+  all.filter((c) => !gated.some((g) => g.trackId === c.trackId)),
+  "assocOnly",
+);
+console.log(
+  `\npaddle obs span: ${paddle?.[0]?.timestampMs} .. ${paddle?.[paddle.length - 1]?.timestampMs} (${paddle?.length})`,
+);

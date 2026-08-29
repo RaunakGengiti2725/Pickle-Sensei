@@ -171,9 +171,7 @@ export function classifyStroke(input: {
   const wristInfo = dominantWristInfo(frames, contactMs);
   const armLength = estimateArmLength(frames, contactMs, wristInfo.side);
   const reachLimit =
-    armLength !== null
-      ? PADDLE_REACH_ARM_LENGTHS * armLength
-      : PADDLE_REACH_TORSO_UNITS * torso;
+    armLength !== null ? PADDLE_REACH_ARM_LENGTHS * armLength : PADDLE_REACH_TORSO_UNITS * torso;
 
   let contactPoint: { x: number; y: number } | null = null;
   let contactPointSource: "paddle" | "wrist" | null = null;
@@ -181,10 +179,7 @@ export function classifyStroke(input: {
 
   const paddleNear = input.paddle
     ?.filter((observation) => Math.abs(observation.timestampMs - contactMs) <= 80)
-    .sort(
-      (a, b) =>
-        Math.abs(a.timestampMs - contactMs) - Math.abs(b.timestampMs - contactMs),
-    )[0];
+    .sort((a, b) => Math.abs(a.timestampMs - contactMs) - Math.abs(b.timestampMs - contactMs))[0];
 
   if (paddleNear && wristInfo.point) {
     const wristDistance = Math.hypot(
@@ -375,7 +370,9 @@ export function classifyStroke(input: {
   // Facing sign: rear view keeps anatomical right on image right (+1);
   // front view mirrors it (-1).
   const facing = rightShoulder.x >= leftShoulder.x ? 1 : -1;
-  evidence.push(facing === 1 ? "rear-ish view (shoulder order)" : "front-ish view (shoulder order)");
+  evidence.push(
+    facing === 1 ? "rear-ish view (shoulder order)" : "front-ish view (shoulder order)",
+  );
   const offset = ((contactPoint.x - midX) / shoulderWidth) * facing;
   // offset > 0 = contact on the player's RIGHT side.
   const dominantRight = input.handedness === "right";
@@ -403,11 +400,12 @@ export function classifyStroke(input: {
   const sideConfidence = clamp(0.45 + sideMargin * 0.5, 0.45, sideConfidenceCap);
 
   // ── Level 3: intensity class (dink vs drive) ───────────────────────────
-  const speeds = input.paddleSpeeds && input.paddleSpeeds.length >= 5
-    ? { series: input.paddleSpeeds, source: "paddle" }
-    : input.wristSpeeds && input.wristSpeeds.length >= 5
-      ? { series: input.wristSpeeds, source: "wrist" }
-      : null;
+  const speeds =
+    input.paddleSpeeds && input.paddleSpeeds.length >= 5
+      ? { series: input.paddleSpeeds, source: "paddle" }
+      : input.wristSpeeds && input.wristSpeeds.length >= 5
+        ? { series: input.wristSpeeds, source: "wrist" }
+        : null;
   if (!speeds) {
     limitingFactors.push("no_speed_series_for_intensity");
     return {
@@ -473,10 +471,7 @@ function unknown(
   };
 }
 
-function nearestFrame(
-  frames: ReturnType<typeof toLegacyPoseFrames>,
-  timestampMs: number,
-) {
+function nearestFrame(frames: ReturnType<typeof toLegacyPoseFrames>, timestampMs: number) {
   let best: (typeof frames)[number] | null = null;
   let bestDelta = Infinity;
   for (const frame of frames) {
@@ -495,9 +490,7 @@ function dominantWristInfo(
   frames: ReturnType<typeof toLegacyPoseFrames>,
   contactMs: number,
 ): { side: "left" | "right"; point: { x: number; y: number } | null; visibility: number } {
-  const nearby = frames.filter(
-    (frame) => Math.abs(frame.timestampMs - contactMs) <= 200,
-  );
+  const nearby = frames.filter((frame) => Math.abs(frame.timestampMs - contactMs) <= 200);
   const travel = { left: 0, right: 0 };
   const previous: { left?: { x: number; y: number }; right?: { x: number; y: number } } = {};
   for (const frame of nearby) {

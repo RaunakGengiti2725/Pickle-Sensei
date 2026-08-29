@@ -3,12 +3,7 @@ import type { Measurement } from "@pickle/shared-types";
 import type { StrokeEvent } from "@pickle/vision-contracts";
 import { PoseGeometryFeatureExtractor } from "../src/featureExtractor.js";
 import { GeometricPhaseSegmenter } from "../src/phaseSegmenter.js";
-import {
-  DEFAULT_TRUTH,
-  generateSwing,
-  mirrorFrames,
-  type SwingTruth,
-} from "@pickle/evaluation";
+import { DEFAULT_TRUTH, generateSwing, mirrorFrames, type SwingTruth } from "@pickle/evaluation";
 
 /**
  * Ground-truth validation: every athlete profile is a parametric skeleton

@@ -51,7 +51,11 @@ const sparsePostContact = (withPostSamples: boolean) => {
 describe("segmentPhasesTemporalV2 — ANCHORED path byte-identity regression (W5 hard invariant)", () => {
   // Pinned JSON.stringify outputs captured from the PRE-W5 implementation.
   // If any of these change, the anchored path is no longer byte-identical.
-  const pins: Array<{ name: string; input: Parameters<typeof segmentPhasesTemporalV2>[0]; expected: string }> = [
+  const pins: Array<{
+    name: string;
+    input: Parameters<typeof segmentPhasesTemporalV2>[0];
+    expected: string;
+  }> = [
     {
       name: "paddle-source anchored segmentation",
       input: { event, contactMs: 1520, paddleSpeeds: speeds, wristSpeeds: null },
@@ -84,7 +88,8 @@ describe("segmentPhasesTemporalV2 — ANCHORED path byte-identity regression (W5
     {
       name: "wrong-event abstention (contact outside the event)",
       input: { event, contactMs: 2600, paddleSpeeds: speeds, wristSpeeds: null },
-      expected: '{"status":"abstained","reason":"PHASE_WRONG_EVENT: contact estimate lies outside the target event"}',
+      expected:
+        '{"status":"abstained","reason":"PHASE_WRONG_EVENT: contact estimate lies outside the target event"}',
     },
     {
       name: "coverage abstention (too little series inside the event)",
@@ -97,7 +102,8 @@ describe("segmentPhasesTemporalV2 — ANCHORED path byte-identity regression (W5
         ],
         wristSpeeds: null,
       },
-      expected: '{"status":"abstained","reason":"insufficient event-local kinematic coverage (paddle and wrist)"}',
+      expected:
+        '{"status":"abstained","reason":"insufficient event-local kinematic coverage (paddle and wrist)"}',
     },
   ];
 
@@ -338,7 +344,8 @@ describe("segmentPhasesTemporalV2 — anchored accel≤contact ordering invarian
       paddleSpeeds: series,
       wristSpeeds: null,
     });
-    if (outcome.status !== "segmented") throw new Error(`expected segmentation, got ${outcome.reason}`);
+    if (outcome.status !== "segmented")
+      throw new Error(`expected segmentation, got ${outcome.reason}`);
     expect(outcome.boundaries.accelerationStartMs).toBeLessThanOrEqual(1505);
     expect(outcome.boundaries.followThroughEndMs).toBeGreaterThan(1505);
   });

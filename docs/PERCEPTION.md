@@ -135,11 +135,11 @@ artifact.
 
 Real-video results (2026-08-28, Apple M-series, MPS):
 
-| clip (real, CC BY) | quality gate | paddle track | contact |
-|---|---|---|---|
-| wm-dink-01 (rear dink) | REJECTED body_not_fully_visible | TRACKED 50% window coverage, wrist dist 0.064 | paddle+wrist fused, motion-only |
-| wm-volley-02 (rear-side volley) | ANALYZABLE | TRACKED 73%, paddle=true reached fusion | paddle@6700 + wrist@6680 → conf 0.64 |
-| wm-far-03 (far court, walk-in) | REJECTED player_too_small | excluded from benchmark: primary subject ill-defined (failure exhibit) | — |
+| clip (real, CC BY)              | quality gate                    | paddle track                                                           | contact                              |
+| ------------------------------- | ------------------------------- | ---------------------------------------------------------------------- | ------------------------------------ |
+| wm-dink-01 (rear dink)          | REJECTED body_not_fully_visible | TRACKED 50% window coverage, wrist dist 0.064                          | paddle+wrist fused, motion-only      |
+| wm-volley-02 (rear-side volley) | ANALYZABLE                      | TRACKED 73%, paddle=true reached fusion                                | paddle@6700 + wrist@6680 → conf 0.64 |
+| wm-far-03 (far court, walk-in)  | REJECTED player_too_small       | excluded from benchmark: primary subject ill-defined (failure exhibit) | —                                    |
 
 REAL PADDLE BENCHMARK (`pnpm lab:paddle-bench`, point labels, hit radius
 0.08 norm): **videos 2 · annotated frames 28 · annotators 1** —
@@ -260,6 +260,7 @@ midpoint fallback was removed everywhere (event PEAK is the only permitted
 reference, explicitly flagged, never called contact).
 
 Measured effects (no detector/phase threshold changes):
+
 - rally1: 4 proposals → honest ambiguity → resolved to E3 by a
   ball+paddle-confirmed contact 2973ms (label 2900±1 frame)
 - held-out dink: contact un-abstained → 1407ms ball+paddle-confirmed
@@ -279,15 +280,15 @@ From the commercial licensing survey (key risks: Ultralytics YOLO is
 AGPL/paid-enterprise; VideoMAE/TimeSformer/V-JEPA-1 weights are
 non-commercial; many "MIT code" repos ship unlicensed weights):
 
-| Task | Safe path (code + weights) | Notes |
-|---|---|---|
-| Pose | Apple Vision / MediaPipe (shipping) | already the phone baseline |
-| Paddle detection | RF-DETR Nano–Large or D-FINE (Apache-2.0), custom-trained | needs our labeled data; no pretrained paddle model exists |
-| Ball tracking | WASB / TrackNetV3-style multi-frame heatmap architecture (MIT code), trained on our data | pretrained weights are license-unclear ⇒ treat as architecture only |
-| Track association | ByteTrack / BoT-SORT / Norfair (MIT/BSD) | detector-independent |
-| Ball-flight cue (on device) | `VNDetectTrajectoriesRequest` (shipping in swing-lab) | stationary camera only, gated as in §4 |
-| Video embeddings (server, offline) | DINOv2 / InternVideo2 / X-CLIP (Apache/MIT) | never on the 60fps path |
-| Avoid | Ultralytics YOLOv8/11 & YOLO-World (AGPL/GPL), FastSAM (license conflict), VideoMAE v1/v2 weights, TimeSformer, V-JEPA-1 (all NC) | unless paid/relicensed |
+| Task                               | Safe path (code + weights)                                                                                                        | Notes                                                               |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Pose                               | Apple Vision / MediaPipe (shipping)                                                                                               | already the phone baseline                                          |
+| Paddle detection                   | RF-DETR Nano–Large or D-FINE (Apache-2.0), custom-trained                                                                         | needs our labeled data; no pretrained paddle model exists           |
+| Ball tracking                      | WASB / TrackNetV3-style multi-frame heatmap architecture (MIT code), trained on our data                                          | pretrained weights are license-unclear ⇒ treat as architecture only |
+| Track association                  | ByteTrack / BoT-SORT / Norfair (MIT/BSD)                                                                                          | detector-independent                                                |
+| Ball-flight cue (on device)        | `VNDetectTrajectoriesRequest` (shipping in swing-lab)                                                                             | stationary camera only, gated as in §4                              |
+| Video embeddings (server, offline) | DINOv2 / InternVideo2 / X-CLIP (Apache/MIT)                                                                                       | never on the 60fps path                                             |
+| Avoid                              | Ultralytics YOLOv8/11 & YOLO-World (AGPL/GPL), FastSAM (license conflict), VideoMAE v1/v2 weights, TimeSformer, V-JEPA-1 (all NC) | unless paid/relicensed                                              |
 
 Every candidate model still enters through the registry with its own
 benchmark report before it can produce a user-visible number.

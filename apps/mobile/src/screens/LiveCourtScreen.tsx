@@ -227,7 +227,8 @@ function EventCard(props: {
               : 'Stroke event'}
           </Text>
           <Text style={[type.caption, { color: color.onDarkSubtle }]}>
-            {formatSessionClock(event.startMs)}–{formatSessionClock(event.endMs)}
+            {formatSessionClock(event.startMs)}–
+            {formatSessionClock(event.endMs)}
             {' · '}
             {Math.round(event.durationMs)}ms ·{' '}
             {CLOSE_REASON_LABEL[event.closeReason]}
@@ -279,7 +280,10 @@ function EventCard(props: {
             value={`${Math.round(event.closedAtMs)}ms (${CLOSE_REASON_LABEL[event.closeReason].toLowerCase()})`}
           />
           <Text
-            style={[type.micro, { color: color.onDarkFaint, marginTop: space.sm }]}
+            style={[
+              type.micro,
+              { color: color.onDarkFaint, marginTop: space.sm },
+            ]}
           >
             MEASURED SEGMENTATION EVIDENCE — MOTION IS NORMALIZED UNITS, NOT
             PHYSICAL SPEED
@@ -386,9 +390,9 @@ export function LiveCourtScreen() {
               { color: color.onDarkSubtle, marginTop: space.sm },
             ]}
           >
-            The session engine splits continuous play into stroke events —
-            E1, E2, E3 — while recording never stops. Live camera streaming
-            is not built yet, so you can watch it run on a recorded rally.
+            The session engine splits continuous play into stroke events — E1,
+            E2, E3 — while recording never stops. Live camera streaming is not
+            built yet, so you can watch it run on a recorded rally.
           </Text>
           <SetupGraphic />
           <Card tone="dark" style={styles.setupCard}>
@@ -422,8 +426,7 @@ export function LiveCourtScreen() {
             <Text style={styles.setupDisclosure}>
               {liveFeed.available ? '' : liveFeed.detail} The replay uses the
               recorded rally “{DEV_REPLAY_RALLY.runId}” (dev split) and is
-              always labeled as a replay. No camera opens and nothing is
-              scored.
+              always labeled as a replay. No camera opens and nothing is scored.
             </Text>
           </View>
         </ScrollView>
@@ -469,8 +472,8 @@ export function LiveCourtScreen() {
             {snapshot.events.length === 0 ? (
               <Card tone="dark" style={styles.emptyEvents}>
                 <Text style={[type.body, { color: color.onDarkSubtle }]}>
-                  Events appear here the moment the engine closes them —
-                  play continues while earlier strokes are segmented.
+                  Events appear here the moment the engine closes them — play
+                  continues while earlier strokes are segmented.
                 </Text>
               </Card>
             ) : (
@@ -495,10 +498,9 @@ export function LiveCourtScreen() {
           <View style={styles.trustNote}>
             <Icon name="shield" size={17} color={color.onDarkFaint} />
             <Text style={styles.setupDisclosure}>
-              Every event above is real segmentation from the session engine
-              on the recorded rally. Per-event video analysis is not built in
-              this build, so events stay Pending — no score or technique is
-              invented.
+              Every event above is real segmentation from the session engine on
+              the recorded rally. Per-event video analysis is not built in this
+              build, so events stay Pending — no score or technique is invented.
             </Text>
           </View>
         </ScrollView>

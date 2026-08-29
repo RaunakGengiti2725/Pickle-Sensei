@@ -33,7 +33,10 @@ export function useHashRoute(): string {
   return hash;
 }
 
-function reviewCountFor(data: CoachReviewData, queueItemId: string): { real: number; synthetic: number } {
+function reviewCountFor(
+  data: CoachReviewData,
+  queueItemId: string,
+): { real: number; synthetic: number } {
   const forItem = data.reviews.filter((entry) => entry.review.queueItemId === queueItemId);
   return {
     real: forItem.filter((entry) => !entry.synthetic).length,
@@ -46,8 +49,8 @@ function QueueList({ data }: { data: CoachReviewData }) {
     <section style={labBox}>
       <h2>Review queue — {data.queue.queue.length} gold StrokeEvents</h2>
       <p style={{ color: "#42505f", maxWidth: 720 }}>
-        Each item needs ≥{data.queue.queue[0]?.requiredReviewsTarget ?? 2} independent qualified-coach
-        reviews. Generated {data.queue.generatedAtIso} · stroke taxonomy{" "}
+        Each item needs ≥{data.queue.queue[0]?.requiredReviewsTarget ?? 2} independent
+        qualified-coach reviews. Generated {data.queue.generatedAtIso} · stroke taxonomy{" "}
         <code style={mono}>{data.schema.strokeTaxonomy.version}</code> · fault taxonomy{" "}
         <code style={mono}>{data.schema.faultTaxonomyVersion}</code> (draft).
       </p>
@@ -66,7 +69,10 @@ function QueueList({ data }: { data: CoachReviewData }) {
           {data.queue.queue.map((item: QueueItem) => {
             const counts = reviewCountFor(data, item.queueItemId);
             return (
-              <tr key={item.queueItemId} style={{ borderBottom: "1px solid #eef2f0", verticalAlign: "top" }}>
+              <tr
+                key={item.queueItemId}
+                style={{ borderBottom: "1px solid #eef2f0", verticalAlign: "top" }}
+              >
                 <td>
                   <strong>{item.queueItemId}</strong>
                   <div style={{ ...mono, color: "#6b7a75" }}>{item.video.split("/").pop()}</div>
@@ -81,7 +87,8 @@ function QueueList({ data }: { data: CoachReviewData }) {
                 </td>
                 <td style={{ fontSize: 12, color: "#42505f", maxWidth: 220 }}>
                   role {item.bundle.role} · annotator {item.bundle.annotatorId} (conf{" "}
-                  {item.bundle.annotatorConfidence}) · {item.bundle.analyzable ? "analyzable" : "NOT analyzable"}
+                  {item.bundle.annotatorConfidence}) ·{" "}
+                  {item.bundle.analyzable ? "analyzable" : "NOT analyzable"}
                   {item.bundle.eventNote ? <div>“{item.bundle.eventNote}”</div> : null}
                 </td>
                 <td>
@@ -90,7 +97,9 @@ function QueueList({ data }: { data: CoachReviewData }) {
                   </strong>{" "}
                   real
                   {counts.synthetic > 0 && (
-                    <div style={{ color: "#b91c1c", fontSize: 12 }}>+{counts.synthetic} SYNTHETIC (dev)</div>
+                    <div style={{ color: "#b91c1c", fontSize: 12 }}>
+                      +{counts.synthetic} SYNTHETIC (dev)
+                    </div>
                   )}
                 </td>
                 <td>
@@ -123,8 +132,9 @@ export function CoachReviewLab() {
         <h2>Coach Review Lab</h2>
         <p style={{ color: "#b91c1c" }}>{error}</p>
         <p>
-          The lab reads <code style={mono}>datasets/coach-review/*</code> via the vite dev middleware. Run{" "}
-          <code style={mono}>pnpm lab:coach-queue</code> at the repo root, then reload.
+          The lab reads <code style={mono}>datasets/coach-review/*</code> via the vite dev
+          middleware. Run <code style={mono}>pnpm lab:coach-queue</code> at the repo root, then
+          reload.
         </p>
       </section>
     );
@@ -135,18 +145,42 @@ export function CoachReviewLab() {
   const realReviews = data.reviews.filter((entry) => !entry.synthetic);
 
   const itemMatch = /^#\/coach\/item\/(.+)$/.exec(hash);
-  const view = itemMatch ? "item" : hash.startsWith("#/coach/agreement") ? "agreement" : hash.startsWith("#/coach/program") ? "program" : "queue";
-  const item = itemMatch ? data.queue.queue.find((entry) => entry.queueItemId === decodeURIComponent(itemMatch[1]!)) : undefined;
+  const view = itemMatch
+    ? "item"
+    : hash.startsWith("#/coach/agreement")
+      ? "agreement"
+      : hash.startsWith("#/coach/program")
+        ? "program"
+        : "queue";
+  const item = itemMatch
+    ? data.queue.queue.find((entry) => entry.queueItemId === decodeURIComponent(itemMatch[1]!))
+    : undefined;
 
   return (
     <div>
       {data.syntheticMode && (
-        <div style={{ ...labBox, background: "#fef2f2", border: "2px solid #b91c1c", color: "#b91c1c", fontWeight: 600 }}>
+        <div
+          style={{
+            ...labBox,
+            background: "#fef2f2",
+            border: "2px solid #b91c1c",
+            color: "#b91c1c",
+            fontWeight: 600,
+          }}
+        >
           {SYNTHETIC_BANNER}
         </div>
       )}
       {data.problems.map((problem) => (
-        <div key={problem} style={{ ...labBox, background: "#fffbeb", border: "1px solid #b45309", color: "#b45309" }}>
+        <div
+          key={problem}
+          style={{
+            ...labBox,
+            background: "#fffbeb",
+            border: "1px solid #b45309",
+            color: "#b45309",
+          }}
+        >
           {problem}
         </div>
       ))}
@@ -158,8 +192,11 @@ export function CoachReviewLab() {
           {activeCoaches.length === 0 && (
             <>
               {" "}
-              — <em>no coach identity provisioned; submissions are disabled (recruitment is a human step, see{" "}
-              <a href="#/coach/program">program &amp; onboarding</a>)</em>
+              —{" "}
+              <em>
+                no coach identity provisioned; submissions are disabled (recruitment is a human
+                step, see <a href="#/coach/program">program &amp; onboarding</a>)
+              </em>
             </>
           )}
         </div>
@@ -168,7 +205,10 @@ export function CoachReviewLab() {
         <a href="#/coach" style={{ marginRight: 16, fontWeight: view === "queue" ? 700 : 400 }}>
           Queue
         </a>
-        <a href="#/coach/agreement" style={{ marginRight: 16, fontWeight: view === "agreement" ? 700 : 400 }}>
+        <a
+          href="#/coach/agreement"
+          style={{ marginRight: 16, fontWeight: view === "agreement" ? 700 : 400 }}
+        >
           Inter-coach agreement
         </a>
         <a href="#/coach/program" style={{ fontWeight: view === "program" ? 700 : 400 }}>
@@ -180,7 +220,9 @@ export function CoachReviewLab() {
         (item ? (
           <EventDetail data={data} item={item} onPersisted={reload} />
         ) : (
-          <p>Unknown queue item. <a href="#/coach">Back to queue</a></p>
+          <p>
+            Unknown queue item. <a href="#/coach">Back to queue</a>
+          </p>
         ))}
       {view === "agreement" && <AgreementView data={data} />}
       {view === "program" && <ProgramView data={data} />}

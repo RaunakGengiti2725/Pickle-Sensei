@@ -178,9 +178,12 @@ describe("ballSpeedSeries", () => {
     expect(gated.length).toBe(1);
     const series = ballSpeedSeries(gated[0]!.observations);
     const maxDt = Math.max(
-      ...gated[0]!.observations.slice(1).map(
-        (observation, index) => observation.timestampMs - gated[0]!.observations[index]!.timestampMs,
-      ),
+      ...gated[0]!.observations
+        .slice(1)
+        .map(
+          (observation, index) =>
+            observation.timestampMs - gated[0]!.observations[index]!.timestampMs,
+        ),
     );
     expect(maxDt).toBe(120); // the hole exists in the track
     // ballSpeedSeries only emits speeds for dt ≤ 150ms BUT the 120ms hole
@@ -346,7 +349,9 @@ describe("body-occlusion state machine", () => {
       expect(point.t).toBeGreaterThan(680);
       expect(point.t).toBeLessThan(1000);
     }
-    const observed = new Set(outcome.track.observations.map((observation) => observation.timestampMs));
+    const observed = new Set(
+      outcome.track.observations.map((observation) => observation.timestampMs),
+    );
     expect(bridge.some((point) => observed.has(Math.round(point.t)))).toBe(false);
     // The lab observations (bench input) carry none of the bridge points.
     expect(outcome.lab.observations.length).toBe(outcome.track.observations.length);
@@ -404,9 +409,7 @@ describe("body-occlusion state machine", () => {
       attempted: true,
       result: "FAILED_NO_CANDIDATE",
     });
-    expect(
-      outcome.timeline.states.some((span) => span.state === "REACQUIRED"),
-    ).toBe(false);
+    expect(outcome.timeline.states.some((span) => span.state === "REACQUIRED")).toBe(false);
   });
 
   it("stays LOST when two comparable emergences exist (ambiguity beats guessing)", () => {

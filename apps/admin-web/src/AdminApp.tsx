@@ -232,7 +232,8 @@ export function AdminApp() {
             </>
           ) : (
             <p>
-              Provide a token to load panels. All admin actions are role-gated and audited by the API.
+              Provide a token to load panels. All admin actions are role-gated and audited by the
+              API.
             </p>
           )}
         </>

@@ -22,9 +22,7 @@ import {
 
 const VIDEO = { path: "test.mp4", width: 1000, height: 1000, fps: 50, durationMs: 4000 };
 
-function detectionFile(
-  frames: RawPaddleDetectionFile["frames"],
-): RawPaddleDetectionFile {
+function detectionFile(frames: RawPaddleDetectionFile["frames"]): RawPaddleDetectionFile {
   return {
     schemaVersion: 1,
     detector: {
@@ -76,10 +74,7 @@ function movingDetections(options: { dropEvery?: number; score?: number } = {}) 
   };
 }
 
-function addStaticFalsePositive(
-  file: RawPaddleDetectionFile,
-  score = 0.9,
-): RawPaddleDetectionFile {
+function addStaticFalsePositive(file: RawPaddleDetectionFile, score = 0.9): RawPaddleDetectionFile {
   return {
     ...file,
     frames: file.frames.map((frame) => ({
@@ -87,7 +82,11 @@ function addStaticFalsePositive(
       detections: [
         ...frame.detections,
         // Crowd racket far from any wrist, high score, perfectly stable.
-        { box: [40, 40, 100, 110] as [number, number, number, number], score, label: "tennis racket" },
+        {
+          box: [40, 40, 100, 110] as [number, number, number, number],
+          score,
+          label: "tennis racket",
+        },
       ],
     })),
   };
@@ -140,7 +139,11 @@ describe("buildPaddleTracks", () => {
         ...frame,
         detections: [
           ...frame.detections,
-          { box: [0, 0, 900, 900] as [number, number, number, number], score: 0.9, label: "tennis racket" },
+          {
+            box: [0, 0, 900, 900] as [number, number, number, number],
+            score: 0.9,
+            label: "tennis racket",
+          },
         ],
       })),
     };
@@ -365,10 +368,7 @@ describe("selectPrimaryPaddleTrack flip-segmentation", () => {
     // long tail glued to the OTHER player's hand (500–2450ms).
     const impostor = candidateOf(
       1,
-      [
-        ...trackObservations(0, 450, PADDLE),
-        ...trackObservations(500, 2450, { x: 0.88, y: 0.88 }),
-      ],
+      [...trackObservations(0, 450, PADDLE), ...trackObservations(500, 2450, { x: 0.88, y: 0.88 })],
       { windowCoverage: 0.99, meanScore: 0.5 }, // STALE pre-cut terms
     );
     // Honest track: near the target's hand for 60% of the window.
@@ -376,12 +376,7 @@ describe("selectPrimaryPaddleTrack flip-segmentation", () => {
       windowCoverage: 0.65,
       meanScore: 0.5,
     });
-    const outcome = selectPrimaryPaddleTrack(
-      [impostor, honest],
-      targetWrists,
-      WINDOW,
-      otherWrists,
-    );
+    const outcome = selectPrimaryPaddleTrack([impostor, honest], targetWrists, WINDOW, otherWrists);
     expect(outcome.status).toBe("tracked");
     if (outcome.status !== "tracked") return;
     // The honest track wins: the impostor's kept head only covers ~11%.

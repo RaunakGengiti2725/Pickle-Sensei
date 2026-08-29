@@ -47,7 +47,8 @@ const bucketOf = {
     .map((r) => r.caseId),
 };
 
-const median = (xs) => (xs.length ? xs.slice().sort((a, b) => a - b)[Math.floor(xs.length / 2)] : null);
+const median = (xs) =>
+  xs.length ? xs.slice().sort((a, b) => a - b)[Math.floor(xs.length / 2)] : null;
 const round = (x, d = 3) => (x === null ? null : Number(x.toFixed(d)));
 
 function summarize(results) {
@@ -72,9 +73,13 @@ function summarize(results) {
     ambiguityEntered: results.filter((r) => r.ambiguityEntered).length,
     unresolvedOrNeverLocked: results.filter((r) => r.outcome !== "locked").length,
     lockSources: Object.fromEntries(
-      [...new Set(locked.map((r) => r.lockSource))].map((s) => [s, locked.filter((r) => r.lockSource === s).length]),
+      [...new Set(locked.map((r) => r.lockSource))].map((s) => [
+        s,
+        locked.filter((r) => r.lockSource === s).length,
+      ]),
     ),
-    driftCorrectLocksBelow50: correct.filter((r) => (r.postLock?.onTargetFraction ?? 1) < 0.5).length,
+    driftCorrectLocksBelow50: correct.filter((r) => (r.postLock?.onTargetFraction ?? 1) < 0.5)
+      .length,
   };
 }
 
@@ -97,7 +102,12 @@ for (const [name, run] of Object.entries(runs)) {
     for (const id of ids) bucketView[bucket][id] = outcomeOf(map.get(id));
   }
   const regressions = results
-    .filter((r) => shippedById.get(r.caseId).lockCorrect === true && r.outcome === "locked" && r.lockCorrect !== true)
+    .filter(
+      (r) =>
+        shippedById.get(r.caseId).lockCorrect === true &&
+        r.outcome === "locked" &&
+        r.lockCorrect !== true,
+    )
     .map((r) => `${r.caseId} (${r.lockSource})`);
   table[name] = {
     variantConfig: run.variant.config,
@@ -110,17 +120,37 @@ for (const [name, run] of Object.entries(runs)) {
 }
 
 const bucketCounts = Object.fromEntries(Object.entries(bucketOf).map(([k, v]) => [k, v.length]));
-const out = { generatedFrom: RUNS, shippedBucketSizes: bucketCounts, shippedBucketCaseIds: bucketOf, variants: table };
+const out = {
+  generatedFrom: RUNS,
+  shippedBucketSizes: bucketCounts,
+  shippedBucketCaseIds: bucketOf,
+  variants: table,
+};
 writeFileSync(join(here, "W3-variant-table.json"), JSON.stringify(out, null, 2));
 
 // Console digest
 console.log("shipped buckets:", JSON.stringify(bucketCounts));
-const cols = ["lockRate", "lockCorrect", "lockCorrectRate", "wrongLocks", "falseGestureLocks", "medianLockLatencyMs", "meanOnTargetFraction", "unresolvedOrNeverLocked"];
+const cols = [
+  "lockRate",
+  "lockCorrect",
+  "lockCorrectRate",
+  "wrongLocks",
+  "falseGestureLocks",
+  "medianLockLatencyMs",
+  "meanOnTargetFraction",
+  "unresolvedOrNeverLocked",
+];
 for (const [name, entry] of Object.entries(table)) {
   console.log(`\n═ ${name}`);
   console.log("  overall  ", cols.map((c) => `${c}=${JSON.stringify(entry.overall[c])}`).join(" "));
-  console.log("  contested", cols.map((c) => `${c}=${JSON.stringify(entry.contested_region[c])}`).join(" "));
-  console.log("  nonCont. ", cols.map((c) => `${c}=${JSON.stringify(entry.nonContested[c])}`).join(" "));
+  console.log(
+    "  contested",
+    cols.map((c) => `${c}=${JSON.stringify(entry.contested_region[c])}`).join(" "),
+  );
+  console.log(
+    "  nonCont. ",
+    cols.map((c) => `${c}=${JSON.stringify(entry.nonContested[c])}`).join(" "),
+  );
   console.log("  sources  ", JSON.stringify(entry.overall.lockSources));
   const flips = {};
   for (const [bucket, view] of Object.entries(entry.shippedBuckets)) {

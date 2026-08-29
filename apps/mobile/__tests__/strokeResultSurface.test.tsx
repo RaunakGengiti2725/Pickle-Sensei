@@ -282,9 +282,21 @@ describe('StrokeResult — honest abstention (same layout)', () => {
 
 describe('StrokeResult — attempt chips (§2)', () => {
   const attempts = [
-    { analysisId: 'a1', capturedAtIso: '2026-08-30T10:00:00Z', sessionId: 's1' },
-    { analysisId: 'a2', capturedAtIso: '2026-08-30T10:05:00Z', sessionId: 's1' },
-    { analysisId: 'a3', capturedAtIso: '2026-08-30T10:09:00Z', sessionId: 's1' },
+    {
+      analysisId: 'a1',
+      capturedAtIso: '2026-08-30T10:00:00Z',
+      sessionId: 's1',
+    },
+    {
+      analysisId: 'a2',
+      capturedAtIso: '2026-08-30T10:05:00Z',
+      sessionId: 's1',
+    },
+    {
+      analysisId: 'a3',
+      capturedAtIso: '2026-08-30T10:09:00Z',
+      sessionId: 's1',
+    },
   ];
 
   it('renders chronological chips that navigate — never rank', async () => {
@@ -349,10 +361,34 @@ describe('StrokeResult — measured rows collapse (§1.4)', () => {
   it('collapses beyond 4 rows behind an honest "See more"', async () => {
     const analysis = analysisFixture({
       measurements: [
-        { metricKey: 'elbow_extension', value: 0.42, confidence: 0.8, unit: 'ratio', source: 'real' },
-        { metricKey: 'swing_duration', value: 700, confidence: 0.9, unit: 'ms', source: 'real' },
-        { metricKey: 'hip_rotation', value: 31, confidence: 0.7, unit: 'degrees', source: 'real' },
-        { metricKey: 'knee_bend', value: 12, confidence: 0.7, unit: 'degrees', source: 'real' },
+        {
+          metricKey: 'elbow_extension',
+          value: 0.42,
+          confidence: 0.8,
+          unit: 'ratio',
+          source: 'real',
+        },
+        {
+          metricKey: 'swing_duration',
+          value: 700,
+          confidence: 0.9,
+          unit: 'ms',
+          source: 'real',
+        },
+        {
+          metricKey: 'hip_rotation',
+          value: 31,
+          confidence: 0.7,
+          unit: 'degrees',
+          source: 'real',
+        },
+        {
+          metricKey: 'knee_bend',
+          value: 12,
+          confidence: 0.7,
+          unit: 'degrees',
+          source: 'real',
+        },
       ],
     });
     const renderer = await render(

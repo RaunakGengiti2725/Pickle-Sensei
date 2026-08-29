@@ -118,8 +118,18 @@ describe("proposeStrokeEventsV2 (body proposes · paddle confirms — decoupling
     // A merged/repaired paddle track with a huge peak elsewhere (the measured
     // rally1 failure mode) — proposals must not move.
     const paddleB = speedBumps([{ peakMs: 3200, height: 3.5, halfWidthMs: 90 }]);
-    const withA = proposeStrokeEventsV2({ paddleSpeeds: paddleA, wristSpeeds: wrist, clipStartMs: 0, clipEndMs: 8000 });
-    const withB = proposeStrokeEventsV2({ paddleSpeeds: paddleB, wristSpeeds: wrist, clipStartMs: 0, clipEndMs: 8000 });
+    const withA = proposeStrokeEventsV2({
+      paddleSpeeds: paddleA,
+      wristSpeeds: wrist,
+      clipStartMs: 0,
+      clipEndMs: 8000,
+    });
+    const withB = proposeStrokeEventsV2({
+      paddleSpeeds: paddleB,
+      wristSpeeds: wrist,
+      clipStartMs: 0,
+      clipEndMs: 8000,
+    });
     expect(withA.source).toBe("wrist");
     expect(withB.source).toBe("wrist");
     expect(withA.events.map((event) => [event.startMs, event.endMs])).toEqual(
@@ -131,7 +141,12 @@ describe("proposeStrokeEventsV2 (body proposes · paddle confirms — decoupling
 
   it("a decisive paddle peak inside a body event confirms it and refines the peak", () => {
     const paddle = speedBumps([{ peakMs: 1560, height: 2.6, halfWidthMs: 80 }]);
-    const { events } = proposeStrokeEventsV2({ paddleSpeeds: paddle, wristSpeeds: wrist, clipStartMs: 0, clipEndMs: 8000 });
+    const { events } = proposeStrokeEventsV2({
+      paddleSpeeds: paddle,
+      wristSpeeds: wrist,
+      clipStartMs: 0,
+      clipEndMs: 8000,
+    });
     const first = events.find((event) => event.startMs < 2000)!;
     expect(first.paddleConfirmed).toBe(true);
     expect(Math.abs(first.peakMs - 1560)).toBeLessThanOrEqual(40); // refined toward paddle
@@ -141,7 +156,12 @@ describe("proposeStrokeEventsV2 (body proposes · paddle confirms — decoupling
 
   it("paddle confirmation breaks prominence ties instead of MULTI_STROKE_AMBIGUOUS", () => {
     const paddle = speedBumps([{ peakMs: 5000, height: 2.6, halfWidthMs: 80 }]);
-    const { events } = proposeStrokeEventsV2({ paddleSpeeds: paddle, wristSpeeds: wrist, clipStartMs: 0, clipEndMs: 8000 });
+    const { events } = proposeStrokeEventsV2({
+      paddleSpeeds: paddle,
+      wristSpeeds: wrist,
+      clipStartMs: 0,
+      clipEndMs: 8000,
+    });
     const selection = selectTargetEventV2(events, null);
     expect(selection.status).toBe("selected");
     if (selection.status !== "selected") return;
@@ -151,11 +171,21 @@ describe("proposeStrokeEventsV2 (body proposes · paddle confirms — decoupling
 
   it("falls back to FLAGGED paddle proposals only when body evidence is absent", () => {
     const paddle = speedBumps([{ peakMs: 2000, height: 2.2, halfWidthMs: 100 }]);
-    const result = proposeStrokeEventsV2({ paddleSpeeds: paddle, wristSpeeds: null, clipStartMs: 0, clipEndMs: 8000 });
+    const result = proposeStrokeEventsV2({
+      paddleSpeeds: paddle,
+      wristSpeeds: null,
+      clipStartMs: 0,
+      clipEndMs: 8000,
+    });
     expect(result.source).toBe("paddle_fallback");
     expect(result.events.length).toBeGreaterThan(0);
     // Penalty relative to the same paddle-only proposal, and no self-confirmation.
-    const paddleOnly = proposeStrokeEvents({ paddleSpeeds: paddle, wristSpeeds: null, clipStartMs: 0, clipEndMs: 8000 });
+    const paddleOnly = proposeStrokeEvents({
+      paddleSpeeds: paddle,
+      wristSpeeds: null,
+      clipStartMs: 0,
+      clipEndMs: 8000,
+    });
     expect(result.events[0]!.confidence).toBeLessThan(paddleOnly.events[0]!.confidence);
     expect(result.events[0]!.paddleConfirmed).toBe(false);
   });

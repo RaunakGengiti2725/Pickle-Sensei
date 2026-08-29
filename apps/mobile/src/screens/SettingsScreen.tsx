@@ -152,20 +152,20 @@ export function SettingsScreen() {
     session === null
       ? '—'
       : session.provider === 'guest'
-      ? 'Guest · this device'
-      : session.displayName ?? session.email ?? session.subject;
+        ? 'Guest · this device'
+        : (session.displayName ?? session.email ?? session.subject);
   const scoringStack = scoringStackStatus();
   const modelLabel = scoringStack.version;
   const liveCourtLabel = 'Camera runtime unavailable';
   const membershipLabel = access?.premium
     ? 'Pro active'
     : access
-    ? access.freeRatings.remaining > 0
-      ? `${access.freeRatings.remaining} free rating${
-          access.freeRatings.remaining === 1 ? '' : 's'
-        } left`
-      : 'Upgrade required'
-    : 'Verify access';
+      ? access.freeRatings.remaining > 0
+        ? `${access.freeRatings.remaining} free rating${
+            access.freeRatings.remaining === 1 ? '' : 's'
+          } left`
+        : 'Upgrade required'
+      : 'Verify access';
 
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
@@ -193,8 +193,8 @@ export function SettingsScreen() {
                 session === null
                   ? 'SIGNED OUT'
                   : session.provider === 'guest'
-                  ? 'LOCAL'
-                  : 'SYNCED'
+                    ? 'LOCAL'
+                    : 'SYNCED'
               }
               tone={session === null ? 'neutral' : 'volt'}
             />

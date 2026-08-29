@@ -272,9 +272,7 @@ describe("AUTO DETECT: declared-null routing", () => {
     if (!result.ok) return;
     expect(result.value.strokeIntent.resolutionBasis).toBe("abstained");
     expect(result.value.result).toBeNull();
-    expect(result.value.uncertainty.limitingFactors).toContain(
-      "auto_stroke_leaf_not_in_registry",
-    );
+    expect(result.value.uncertainty.limitingFactors).toContain("auto_stroke_leaf_not_in_registry");
   });
 });
 

@@ -115,7 +115,11 @@ export function resampleTo30fps(frames: ReplayFrame[]): ReplayFrame[] {
   return out;
 }
 
-export function peopleFileToReplayFrames(file: PeopleFile, startMs: number, endMs: number): ReplayFrame[] {
+export function peopleFileToReplayFrames(
+  file: PeopleFile,
+  startMs: number,
+  endMs: number,
+): ReplayFrame[] {
   return file.frames
     .filter((frame) => frame.t >= startMs && frame.t < endMs)
     .map((frame) => ({ t: frame.t, people: frame.p.map((person) => ({ joints: person.l })) }));
@@ -262,7 +266,11 @@ export function replayAcquisition(
   let ambDominanceStreak = 0;
   let lastAmbDominantTorso: { x: number; y: number } | null = null;
 
-  const lockAt = (t: number, source: NonNullable<ReplayResult["lock"]>["source"], torso: { x: number; y: number }) => {
+  const lockAt = (
+    t: number,
+    source: NonNullable<ReplayResult["lock"]>["source"],
+    torso: { x: number; y: number },
+  ) => {
     lock = { t, source, torso };
     anchor = torso;
     events.push({ t, kind: "locked", source, torso });
@@ -272,7 +280,8 @@ export function replayAcquisition(
     if (lock) {
       // ApplePoseProvider.primaryPerson with the anchor seeded at lock.
       let best: { span: number; mid: { x: number; y: number } | null; score: number } | null = null;
-      let incumbent: { span: number; mid: { x: number; y: number } | null; score: number } | null = null;
+      let incumbent: { span: number; mid: { x: number; y: number } | null; score: number } | null =
+        null;
       for (const person of frame.people) {
         const torso = providerTorso(person);
         const score: number =
@@ -305,7 +314,9 @@ export function replayAcquisition(
       .map((person) => ({ person, torso: captureTorsoMid(person) }))
       .filter((entry): entry is { person: Person; torso: { x: number; y: number } } => {
         if (!entry.torso) return false;
-        return Math.hypot(entry.torso.x - region.x, entry.torso.y - region.y) <= START_REGION_RADIUS;
+        return (
+          Math.hypot(entry.torso.x - region.x, entry.torso.y - region.y) <= START_REGION_RADIUS
+        );
       });
 
     if (ambiguous) {
@@ -332,17 +343,26 @@ export function replayAcquisition(
             ? occupant
             : bestOccupant,
         );
-        const candidateDist = Math.hypot(candidate.torso.x - region.x, candidate.torso.y - region.y);
-        const others = softRegionOccupants(frame.people, region).filter((soft) => soft.person !== candidate.person);
-        const centered = config.centeredRadius === undefined || candidateDist <= config.centeredRadius;
+        const candidateDist = Math.hypot(
+          candidate.torso.x - region.x,
+          candidate.torso.y - region.y,
+        );
+        const others = softRegionOccupants(frame.people, region).filter(
+          (soft) => soft.person !== candidate.person,
+        );
+        const centered =
+          config.centeredRadius === undefined || candidateDist <= config.centeredRadius;
         if (centered && others.every((other) => other.dist >= config.marginRatio * candidateDist)) {
           const continuous =
             !lastAmbDominantTorso ||
-            Math.hypot(candidate.torso.x - lastAmbDominantTorso.x, candidate.torso.y - lastAmbDominantTorso.y) <=
-              DOMINANCE_CONTINUITY_RADIUS;
+            Math.hypot(
+              candidate.torso.x - lastAmbDominantTorso.x,
+              candidate.torso.y - lastAmbDominantTorso.y,
+            ) <= DOMINANCE_CONTINUITY_RADIUS;
           ambDominanceStreak = continuous ? ambDominanceStreak + 1 : 1;
           lastAmbDominantTorso = candidate.torso;
-          if (ambDominanceStreak >= config.frames) lockAt(frame.t, "ambiguity_dominance", candidate.torso);
+          if (ambDominanceStreak >= config.frames)
+            lockAt(frame.t, "ambiguity_dominance", candidate.torso);
         } else {
           ambDominanceStreak = 0;
           lastAmbDominantTorso = null;
@@ -380,7 +400,9 @@ export function replayAcquisition(
     streak += 1;
     if (variant.occupancyDominance) {
       const gate = variant.occupancyDominance;
-      const others = softRegionOccupants(frame.people, region).filter((soft) => soft.person !== occupant.person);
+      const others = softRegionOccupants(frame.people, region).filter(
+        (soft) => soft.person !== occupant.person,
+      );
       const occupantDist = Math.hypot(occupant.torso.x - region.x, occupant.torso.y - region.y);
       const centered = gate.centeredRadius === undefined || occupantDist <= gate.centeredRadius;
       if (others.length > 0) {
@@ -393,8 +415,10 @@ export function replayAcquisition(
         if (centered && others.every((other) => other.dist >= gate.marginRatio * occupantDist)) {
           const continuous =
             !lastDominantTorso ||
-            Math.hypot(occupant.torso.x - lastDominantTorso.x, occupant.torso.y - lastDominantTorso.y) <=
-              DOMINANCE_CONTINUITY_RADIUS;
+            Math.hypot(
+              occupant.torso.x - lastDominantTorso.x,
+              occupant.torso.y - lastDominantTorso.y,
+            ) <= DOMINANCE_CONTINUITY_RADIUS;
           dominanceStreak = continuous ? dominanceStreak + 1 : 1;
           lastDominantTorso = occupant.torso;
           if (dominanceStreak >= gate.framesToDominate) {

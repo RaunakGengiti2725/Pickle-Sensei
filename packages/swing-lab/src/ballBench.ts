@@ -280,13 +280,14 @@ if (isMain) {
     // Confidence classes are NOT equivalent; report them separately.
     const byClass = new Map<string, ContactBenchResult[]>();
     for (const contact of withEstimate) {
-      const key = contact.ballConfirmed && contact.paddleConfirmed
-        ? "BALL+PADDLE"
-        : contact.paddleConfirmed
-          ? "PADDLE ONLY"
-          : contact.ballConfirmed
-            ? "BALL ONLY"
-            : "MOTION ONLY";
+      const key =
+        contact.ballConfirmed && contact.paddleConfirmed
+          ? "BALL+PADDLE"
+          : contact.paddleConfirmed
+            ? "PADDLE ONLY"
+            : contact.ballConfirmed
+              ? "BALL ONLY"
+              : "MOTION ONLY";
       byClass.set(key, [...(byClass.get(key) ?? []), contact]);
     }
     for (const [klass, classContacts] of byClass) {
@@ -325,7 +326,10 @@ if (isMain) {
   const outDir = join(baseDir, "results");
   mkdirSync(outDir, { recursive: true });
   const outPath = join(outDir, `ball-bench-${Date.now()}.json`);
-  writeFileSync(outPath, JSON.stringify({ manifest: manifestPath, results, contacts, ablations }, null, 2));
+  writeFileSync(
+    outPath,
+    JSON.stringify({ manifest: manifestPath, results, contacts, ablations }, null, 2),
+  );
   console.log(`written: ${outPath}`);
 }
 

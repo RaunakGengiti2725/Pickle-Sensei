@@ -115,9 +115,11 @@ describe("resolveBallModality", () => {
     });
     const observations = windowBallObservations(file, WINDOW);
     expect(observations.length).toBe(12);
-    expect(observations.every((entry, index, all) =>
-      index === 0 || all[index - 1]!.timestampMs <= entry.timestampMs,
-    )).toBe(true);
+    expect(
+      observations.every(
+        (entry, index, all) => index === 0 || all[index - 1]!.timestampMs <= entry.timestampMs,
+      ),
+    ).toBe(true);
   });
 });
 
@@ -155,7 +157,10 @@ describe("exportDataset", () => {
     if (options.pose !== false) writeFileSync(join(dir, "pose.json"), `pose-bytes-${name}`);
     if (options.annotated) {
       mkdirSync(join(dir, "annotation"), { recursive: true });
-      writeFileSync(join(dir, "annotation", "coach_a.json"), JSON.stringify({ annotatorId: "coach_a" }));
+      writeFileSync(
+        join(dir, "annotation", "coach_a.json"),
+        JSON.stringify({ annotatorId: "coach_a" }),
+      );
     }
   }
 

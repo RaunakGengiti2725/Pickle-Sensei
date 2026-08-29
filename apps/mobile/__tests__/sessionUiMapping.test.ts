@@ -17,7 +17,9 @@ import {
   type SessionEventView,
 } from '../src/flow/session';
 
-function analysisRecordDouble(shotType: 'forehand_drive' | 'dink'): AnalysisRecord {
+function analysisRecordDouble(
+  shotType: 'forehand_drive' | 'dink',
+): AnalysisRecord {
   return {
     schemaVersion: 1,
     id: `analysis-${shotType}`,
@@ -26,7 +28,13 @@ function analysisRecordDouble(shotType: 'forehand_drive' | 'dink'): AnalysisReco
     engineVersion: 'test-double',
     strokeTaxonomyVersion: 'test-double',
     strokeResolution: { kind: 'declared', shotType },
-    modalities: { pose: true, paddle: false, ball: false, court: false, camera: false },
+    modalities: {
+      pose: true,
+      paddle: false,
+      ball: false,
+      court: false,
+      camera: false,
+    },
     modelRuns: [],
     result: null,
     faults: [],
@@ -93,10 +101,18 @@ function sessionEvent(
   };
 }
 
-function sessionWith(events: SessionStrokeEvent[], notes: string[] = []): Session {
+function sessionWith(
+  events: SessionStrokeEvent[],
+  notes: string[] = [],
+): Session {
   return {
     sessionId: 'ui-session',
-    target: { trackId: null, seedMode: null, lockedAtMs: null, confidence: null },
+    target: {
+      trackId: null,
+      seedMode: null,
+      lockedAtMs: null,
+      confidence: null,
+    },
     captureMeta: { startedAtIso: null, fps: null, source: 'replay' },
     events,
     modelVersions: {
@@ -119,7 +135,13 @@ describe('timelineSegments', () => {
     const segments = timelineSegments(
       [
         view({ eventId: 'E1', startMs: 0, endMs: 1000 }),
-        view({ eventId: 'E2', startMs: 2000, endMs: 3000, family: 'drive', state: 'ready' }),
+        view({
+          eventId: 'E2',
+          startMs: 2000,
+          endMs: 3000,
+          family: 'drive',
+          state: 'ready',
+        }),
         view({ eventId: 'E3', startMs: 3500, endMs: 4200 }),
       ],
       4000,
@@ -192,23 +214,39 @@ describe('family + state resolution', () => {
 
   it('derives a family ONLY from a completed analysis', () => {
     expect(
-      eventTechniqueFamily({ state: 'ready', analysis: analysisRecordDouble('forehand_drive') }),
+      eventTechniqueFamily({
+        state: 'ready',
+        analysis: analysisRecordDouble('forehand_drive'),
+      }),
     ).toBe('drive');
     expect(
-      eventTechniqueFamily({ state: 'pending', analysis: analysisRecordDouble('forehand_drive') }),
+      eventTechniqueFamily({
+        state: 'pending',
+        analysis: analysisRecordDouble('forehand_drive'),
+      }),
     ).toBeNull();
     expect(eventTechniqueFamily({ state: 'ready', analysis: null })).toBeNull();
   });
 
   it('a recorded pending reason overrides an optimistic processing mark', () => {
-    expect(resolveEventViewState('processing', 'NATIVE_CLIP_EXTRACTION_NOT_BUILT', null)).toBe(
-      'pending',
-    );
+    expect(
+      resolveEventViewState(
+        'processing',
+        'NATIVE_CLIP_EXTRACTION_NOT_BUILT',
+        null,
+      ),
+    ).toBe('pending');
     expect(resolveEventViewState('processing', null, null)).toBe('processing');
-    expect(resolveEventViewState('ready', 'stale-reason', analysisRecordDouble('dink'))).toBe(
-      'ready',
+    expect(
+      resolveEventViewState(
+        'ready',
+        'stale-reason',
+        analysisRecordDouble('dink'),
+      ),
+    ).toBe('ready');
+    expect(resolveEventViewState('abstained', 'stale-reason', null)).toBe(
+      'abstained',
     );
-    expect(resolveEventViewState('abstained', 'stale-reason', null)).toBe('abstained');
   });
 });
 
@@ -217,13 +255,20 @@ describe('buildEventViews', () => {
     const session = sessionWith(
       [
         sessionEvent('E1', { startMs: 67, peakMs: 300, endMs: 1401 }),
-        sessionEvent('E2', { startMs: 2703, peakMs: 3403, endMs: 3770 }, { closeReason: 'flush' }),
+        sessionEvent(
+          'E2',
+          { startMs: 2703, peakMs: 3403, endMs: 3770 },
+          { closeReason: 'flush' },
+        ),
       ],
       [
         'SESSION_EVENT_RETRO_SUPPRESSED: E1 (peak 0.60 u/s at 300ms) is no longer proposed by the full-series batch (a later stroke raised the relative proposal floor); kept append-only, flagged',
       ],
     );
-    const views = buildEventViews(session, new Map([['E1', 'NATIVE_CLIP_EXTRACTION_NOT_BUILT']]));
+    const views = buildEventViews(
+      session,
+      new Map([['E1', 'NATIVE_CLIP_EXTRACTION_NOT_BUILT']]),
+    );
     expect(views.length).toBe(2);
     expect(views[0]!.retroSuppressed).toBe(true);
     expect(views[0]!.boundaryUncertain).toBe(false);

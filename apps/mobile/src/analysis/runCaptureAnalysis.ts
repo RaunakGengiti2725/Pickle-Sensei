@@ -4,7 +4,11 @@ import {
   analyzeCapture,
   type CaptureAnalysisRecord,
 } from '@pickle/analysis-pipeline';
-import { parsePoseSequence, sha256Hex, unavailable } from '@pickle/swing-domain';
+import {
+  parsePoseSequence,
+  sha256Hex,
+  unavailable,
+} from '@pickle/swing-domain';
 import { readCaptureArtifact, type CapturedClip } from '../camera/capture';
 import type { LocalDb } from '../data/db';
 import {
@@ -71,7 +75,10 @@ export interface RunCaptureAnalysisRequest {
    * point identifying WHICH person on court is the user. This is an
    * initialization seed for identity, never a spatial constraint.
    */
-  targetSeed?: { point: { x: number; y: number }; selectedAtIso: string } | null;
+  targetSeed?: {
+    point: { x: number; y: number };
+    selectedAtIso: string;
+  } | null;
 }
 
 export async function runCaptureAnalysis(

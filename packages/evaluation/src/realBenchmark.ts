@@ -49,9 +49,7 @@ export interface RealBenchmarkManifest {
   cases: RealBenchmarkCase[];
 }
 
-export function validateRealBenchmarkManifest(
-  raw: unknown,
-): Result<RealBenchmarkManifest> {
+export function validateRealBenchmarkManifest(raw: unknown): Result<RealBenchmarkManifest> {
   const manifest = raw as Partial<RealBenchmarkManifest> | null;
   if (!manifest || typeof manifest !== "object") {
     return invalid("real_benchmark.not_object", "Manifest root must be an object.");
@@ -71,7 +69,9 @@ export function validateRealBenchmarkManifest(
       "real_benchmark.invalid_provenance",
       `Real benchmark provenance must be one of ${BENCHMARK_PROVENANCES.filter(
         (value) => value !== "synthetic",
-      ).join(", ")}; got ${String(manifest.provenance)}. Synthetic data must use the synthetic benchmark path.`,
+      ).join(
+        ", ",
+      )}; got ${String(manifest.provenance)}. Synthetic data must use the synthetic benchmark path.`,
     );
   }
   const ratios = manifest.splitRatios;

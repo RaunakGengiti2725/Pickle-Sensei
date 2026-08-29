@@ -39,11 +39,19 @@ interface EventRow {
 }
 
 const L1_OF: Record<string, string> = {
-  FOREHAND_DRIVE: "SWING", BACKHAND_DRIVE: "SWING",
-  FOREHAND_DINK: "SWING", BACKHAND_DINK: "SWING",
-  FOREHAND_VOLLEY: "SWING", BACKHAND_VOLLEY: "SWING",
-  DROP: "SWING", RESET: "SWING", SPEEDUP: "SWING", RETURN: "SWING",
-  SERVE: "SERVE", OVERHEAD: "OVERHEAD", UNKNOWN: "UNKNOWN",
+  FOREHAND_DRIVE: "SWING",
+  BACKHAND_DRIVE: "SWING",
+  FOREHAND_DINK: "SWING",
+  BACKHAND_DINK: "SWING",
+  FOREHAND_VOLLEY: "SWING",
+  BACKHAND_VOLLEY: "SWING",
+  DROP: "SWING",
+  RESET: "SWING",
+  SPEEDUP: "SWING",
+  RETURN: "SWING",
+  SERVE: "SERVE",
+  OVERHEAD: "OVERHEAD",
+  UNKNOWN: "UNKNOWN",
 };
 const SIDE_OF = (label: string): string =>
   label.startsWith("FOREHAND") ? "FOREHAND" : label.startsWith("BACKHAND") ? "BACKHAND" : "NONE";
@@ -171,7 +179,11 @@ if (isMain) {
     if (annotation.annotatedStrokeV3 && report.strokePrediction) {
       const truth = annotation.annotatedStrokeV3;
       const prediction = report.strokePrediction;
-      const l1 = L1_OF[prediction.leaf ?? prediction.label] ?? (prediction.label === "FOREHAND" || prediction.label === "BACKHAND" ? "SWING" : prediction.label);
+      const l1 =
+        L1_OF[prediction.leaf ?? prediction.label] ??
+        (prediction.label === "FOREHAND" || prediction.label === "BACKHAND"
+          ? "SWING"
+          : prediction.label);
       const truthL1 = L1_OF[truth] ?? "UNKNOWN";
       const predictedSide =
         prediction.taxonomyDepth >= 2 ? SIDE_OF(prediction.leaf ?? prediction.label) : null;
@@ -203,17 +215,23 @@ if (isMain) {
 
     // ── Phase rows ─────────────────────────────────────────────────────
     const labeledPhases = annotation.phases ?? {};
-    const geometric: Record<string, { startMs: number; endMs: number; representativeMs: number }> = {};
+    const geometric: Record<string, { startMs: number; endMs: number; representativeMs: number }> =
+      {};
     if (existsSync(analysisPath)) {
       const analysis = JSON.parse(readFileSync(analysisPath, "utf8")) as {
-        result?: { phases?: Array<{ key: string; startMs: number; endMs: number; representativeMs: number }> };
+        result?: {
+          phases?: Array<{ key: string; startMs: number; endMs: number; representativeMs: number }>;
+        };
       };
       for (const span of analysis.result?.phases ?? []) geometric[span.key] = span;
     }
-    let paddleBoundaries: { accelStartMs: number; contactMs: number; followEndMs: number } | null = null;
+    let paddleBoundaries: { accelStartMs: number; contactMs: number; followEndMs: number } | null =
+      null;
     if (existsSync(debugPath)) {
       const debug = JSON.parse(readFileSync(debugPath, "utf8")) as {
-        paddle: { observations: Array<{ t: number; x: number; y: number; w: number; h: number }> } | null;
+        paddle: {
+          observations: Array<{ t: number; x: number; y: number; w: number; h: number }>;
+        } | null;
       };
       const observations = debug.paddle?.observations ?? [];
       if (observations.length >= 6) {
@@ -225,22 +243,31 @@ if (isMain) {
           const current = observations[index]!;
           speeds.push({
             t: current.t,
-            v: Math.hypot(
-              current.x + current.w / 2 - (previous.x + previous.w / 2),
-              current.y + current.h / 2 - (previous.y + previous.h / 2),
-            ) / dt,
+            v:
+              Math.hypot(
+                current.x + current.w / 2 - (previous.x + previous.w / 2),
+                current.y + current.h / 2 - (previous.y + previous.h / 2),
+              ) / dt,
           });
         }
         if (speeds.length >= 5) {
           const peak = speeds.reduce((best, sample) => (sample.v > best.v ? sample : best));
           const threshold = peak.v * 0.25;
           let accel = peak.t;
-          for (let index = speeds.findIndex((sample) => sample.t === peak.t); index > 0; index -= 1) {
+          for (
+            let index = speeds.findIndex((sample) => sample.t === peak.t);
+            index > 0;
+            index -= 1
+          ) {
             if (speeds[index]!.v < threshold) break;
             accel = speeds[index]!.t;
           }
           let follow = peak.t;
-          for (let index = speeds.findIndex((sample) => sample.t === peak.t); index < speeds.length; index += 1) {
+          for (
+            let index = speeds.findIndex((sample) => sample.t === peak.t);
+            index < speeds.length;
+            index += 1
+          ) {
             if (speeds[index]!.v < threshold) break;
             follow = speeds[index]!.t;
           }
@@ -248,18 +275,57 @@ if (isMain) {
         }
       }
     }
-    const boundaryMap: Array<[string, number | null, number | null, number | null, number | null]> = [
-      ["preparationStart", geometric["prepare"]?.startMs ?? null, null, temporal?.preparationStartMs ?? null, temporalV2?.preparationStartMs ?? null],
-      ["accelerationStart", geometric["accelerate"]?.startMs ?? null, paddleBoundaries?.accelStartMs ?? null, temporal?.accelerationStartMs ?? null, temporalV2?.accelerationStartMs ?? null],
-      ["contact", geometric["contact"]?.representativeMs ?? null, paddleBoundaries?.contactMs ?? null, temporal?.contactMs ?? null, temporalV2?.contactMs ?? null],
-      ["followThroughEnd", geometric["follow_through"]?.endMs ?? null, paddleBoundaries?.followEndMs ?? null, temporal?.followThroughEndMs ?? null, temporalV2?.followThroughEndMs ?? null],
-      ["recoveryEnd", null, null, temporal?.recoveryEndMs ?? null, temporalV2?.recoveryEndMs ?? null],
-    ];
+    const boundaryMap: Array<[string, number | null, number | null, number | null, number | null]> =
+      [
+        [
+          "preparationStart",
+          geometric["prepare"]?.startMs ?? null,
+          null,
+          temporal?.preparationStartMs ?? null,
+          temporalV2?.preparationStartMs ?? null,
+        ],
+        [
+          "accelerationStart",
+          geometric["accelerate"]?.startMs ?? null,
+          paddleBoundaries?.accelStartMs ?? null,
+          temporal?.accelerationStartMs ?? null,
+          temporalV2?.accelerationStartMs ?? null,
+        ],
+        [
+          "contact",
+          geometric["contact"]?.representativeMs ?? null,
+          paddleBoundaries?.contactMs ?? null,
+          temporal?.contactMs ?? null,
+          temporalV2?.contactMs ?? null,
+        ],
+        [
+          "followThroughEnd",
+          geometric["follow_through"]?.endMs ?? null,
+          paddleBoundaries?.followEndMs ?? null,
+          temporal?.followThroughEndMs ?? null,
+          temporalV2?.followThroughEndMs ?? null,
+        ],
+        [
+          "recoveryEnd",
+          null,
+          null,
+          temporal?.recoveryEndMs ?? null,
+          temporalV2?.recoveryEndMs ?? null,
+        ],
+      ];
     for (const [boundary, wristMs, paddleMs, temporalMs, temporalV2Ms] of boundaryMap) {
       const labelKey = `${boundary}Ms`;
       const labelValue = labeledPhases[labelKey];
       if (typeof labelValue !== "number") continue;
-      phaseRows.push({ caseId: benchCase.id, boundary, labelMs: labelValue, wristMs, paddleMs, temporalMs, temporalV2Ms });
+      phaseRows.push({
+        caseId: benchCase.id,
+        boundary,
+        labelMs: labelValue,
+        wristMs,
+        paddleMs,
+        temporalMs,
+        temporalV2Ms,
+      });
     }
   }
 
@@ -272,15 +338,13 @@ if (isMain) {
     `labeled events: ${eventRows.length} (target ${targetEventRows.length}, other-player ${otherEventRows.length}) · proposals: ${totalProposals}`,
   );
   const recallOf = (rowsIn: EventRow[]) =>
-    rowsIn.length > 0
-      ? `${rowsIn.filter((row) => row.matched).length}/${rowsIn.length}`
-      : "n/a";
+    rowsIn.length > 0 ? `${rowsIn.filter((row) => row.matched).length}/${rowsIn.length}` : "n/a";
   console.log(
     `event recall: target ${recallOf(targetEventRows)} · other-swing detected (contamination signal): ${recallOf(otherEventRows)}`,
   );
   const startErrors = eventRows
     .filter((row) => row.startErrMs !== null)
-    .map((row) => row.startErrMs!) 
+    .map((row) => row.startErrMs!)
     .sort((a, b) => a - b);
   const endErrors = eventRows
     .filter((row) => row.endErrMs !== null)
@@ -324,7 +388,9 @@ if (isMain) {
   // ── Print phase benchmark ────────────────────────────────────────────
   console.log("═".repeat(66));
   console.log("REAL PHASE-BOUNDARY BENCHMARK — baselines: A wrist-geometry, B paddle-speed");
-  console.log(`labeled boundaries: ${phaseRows.length} (uncertainty ±2 frames typical; see annotations)`);
+  console.log(
+    `labeled boundaries: ${phaseRows.length} (uncertainty ±2 frames typical; see annotations)`,
+  );
   console.log("═".repeat(66));
   const byBoundary = new Map<string, PhaseRow[]>();
   for (const row of phaseRows) {

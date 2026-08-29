@@ -112,7 +112,12 @@ export function ResultScreen() {
       })
       .catch(() => {
         if (!cancelled) {
-          setEvidence({ analysis: null, record: null, clip: null, attempts: [] });
+          setEvidence({
+            analysis: null,
+            record: null,
+            clip: null,
+            attempts: [],
+          });
         }
       });
     return () => {
@@ -505,8 +510,7 @@ export function ResultScreen() {
                         width: `${
                           prescribedItems.length === 0
                             ? 0
-                            : (completedItems.length /
-                                prescribedItems.length) *
+                            : (completedItems.length / prescribedItems.length) *
                               100
                         }%`,
                       },
@@ -611,9 +615,9 @@ export function ResultScreen() {
                   : 'Turn this read into a plan.'}
               </Text>
               <Text style={[type.body, styles.trainingStateBody]}>
-                The server will create a plan only if this shot has a real
-                score and the exact fault has one reviewed warm-up plus two
-                reviewed targeted drills.
+                The server will create a plan only if this shot has a real score
+                and the exact fault has one reviewed warm-up plus two reviewed
+                targeted drills.
               </Text>
               <View style={styles.trainingAction}>
                 <Button

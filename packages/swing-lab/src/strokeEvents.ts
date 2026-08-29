@@ -29,7 +29,11 @@ export interface StrokeEventProposal {
 }
 
 export type TargetEventSelection =
-  | { status: "selected"; event: StrokeEventProposal; via: "contact" | "prominence" | "paddle_confirmation" }
+  | {
+      status: "selected";
+      event: StrokeEventProposal;
+      via: "contact" | "prominence" | "paddle_confirmation";
+    }
   | { status: "ambiguous"; reason: string; leaders: string[] }
   | { status: "none"; reason: string };
 
@@ -103,8 +107,7 @@ export function proposeStrokeEvents(input: {
     }
     const shallow =
       valley >
-      EVENT_GATES.mergeValleyFraction *
-        Math.min(smoothed[previous]!.value, smoothed[peak]!.value);
+      EVENT_GATES.mergeValleyFraction * Math.min(smoothed[previous]!.value, smoothed[peak]!.value);
     if (shallow) {
       if (smoothed[peak]!.value > smoothed[previous]!.value) merged[merged.length - 1] = peak;
     } else {
@@ -315,11 +318,14 @@ export function proposeStrokeEventsV2(input: {
   // paddle_fallback path the paddle already sourced the events — letting it
   // also "confirm" itself would double-count the same evidence.
   const paddle =
-    source === "wrist" ? (input.paddleSpeeds ?? []).slice().sort((a, b) => a.timestampMs - b.timestampMs) : [];
+    source === "wrist"
+      ? (input.paddleSpeeds ?? []).slice().sort((a, b) => a.timestampMs - b.timestampMs)
+      : [];
   const paddleMax = paddle.reduce((best, sample) => Math.max(best, sample.value), 0);
   const events: StrokeEventProposalV2[] = baseEvents.map((event) => {
     const inside = paddle.filter(
-      (sample) => sample.timestampMs >= event.startMs - 80 && sample.timestampMs <= event.endMs + 80,
+      (sample) =>
+        sample.timestampMs >= event.startMs - 80 && sample.timestampMs <= event.endMs + 80,
     );
     let paddlePeakMs: number | null = null;
     let bestInside = 0;
@@ -329,7 +335,8 @@ export function proposeStrokeEventsV2(input: {
         paddlePeakMs = sample.timestampMs;
       }
     }
-    const decisive = paddleMax > 0 && bestInside >= 0.5 * paddleMax && bestInside >= EVENT_GATES.minPeakSpeed;
+    const decisive =
+      paddleMax > 0 && bestInside >= 0.5 * paddleMax && bestInside >= EVENT_GATES.minPeakSpeed;
     const some = bestInside >= EVENT_GATES.minPeakSpeed * 0.6;
     const paddleSupport = decisive ? 1 : some ? 0.5 : 0;
     const paddleConfirmed = decisive;
@@ -343,7 +350,9 @@ export function proposeStrokeEventsV2(input: {
       0.15,
       Math.min(
         0.95,
-        event.confidence + 0.15 * paddleSupport - (paddle.length > 0 && paddleSupport === 0 ? 0.1 : 0),
+        event.confidence +
+          0.15 * paddleSupport -
+          (paddle.length > 0 && paddleSupport === 0 ? 0.1 : 0),
       ),
     );
     return {

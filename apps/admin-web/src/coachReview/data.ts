@@ -68,7 +68,9 @@ export async function loadCoachReviewData(): Promise<CoachReviewData> {
 export function validationContextFrom(data: CoachReviewData): ValidationContext {
   return {
     knownQueueItemIds: data.queue.queue.map((item) => item.queueItemId),
-    knownFaultIds: data.taxonomy.families.flatMap((family) => family.faults.map((fault) => fault.id)),
+    knownFaultIds: data.taxonomy.families.flatMap((family) =>
+      family.faults.map((fault) => fault.id),
+    ),
     knownDrillIds: data.drills.drills.map((drill) => drill.id),
     strokeTaxonomyVersion: data.schema.strokeTaxonomy.version,
     strokeLabels: data.schema.strokeTaxonomy.labels,
@@ -90,9 +92,12 @@ export async function submitReview(review: CoachReview): Promise<SubmitResult> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(review),
   });
-  const body = (await response.json().catch(() => null)) as
-    | { ok?: boolean; message?: string; path?: string; problems?: string[] }
-    | null;
+  const body = (await response.json().catch(() => null)) as {
+    ok?: boolean;
+    message?: string;
+    path?: string;
+    problems?: string[];
+  } | null;
   const problems = body?.problems ? ` — ${body.problems.join("; ")}` : "";
   const result: SubmitResult = {
     ok: response.ok,

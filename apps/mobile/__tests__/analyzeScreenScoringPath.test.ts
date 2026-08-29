@@ -65,7 +65,10 @@ const captureEvidence = {
 const automaticClipWithoutPoseSequence = assertCapturedClip({
   ...baseClip,
   captureMode: 'automatic_pose_trigger',
-  recognition: { status: 'unknown', reason: 'validated_classifier_unavailable' },
+  recognition: {
+    status: 'unknown',
+    reason: 'validated_classifier_unavailable',
+  },
   trigger,
   captureEvidence,
   ballSpeed: {
@@ -79,7 +82,10 @@ const automaticClipWithoutPoseSequence = assertCapturedClip({
 const automaticClipWithPoseSequence = assertCapturedClip({
   ...baseClip,
   captureMode: 'automatic_pose_trigger',
-  recognition: { status: 'unknown', reason: 'validated_classifier_unavailable' },
+  recognition: {
+    status: 'unknown',
+    reason: 'validated_classifier_unavailable',
+  },
   trigger,
   captureEvidence,
   ballSpeed: {

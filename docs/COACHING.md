@@ -79,7 +79,7 @@ Fields (see `CoachReview` in coachReview.ts / `schema.json`):
   in the form; the anchors themselves are draft pending coach revision) or
   null when not assessable;
 - `faults[]`: `{faultId, severity 1–3, evidence {timestampsMs[], region?},
-  rationale}` — evidence timestamps are mandatory, prose is mandatory;
+rationale}` — evidence timestamps are mandatory, prose is mandatory;
 - `drillSuggestions[]`: optional drill-library id + free text (seeds for the
   future curated library — never user-facing recommendations);
 - `confidence` 0–1 (the coach's own), `cannotEvaluate {reason}` as a
@@ -88,8 +88,8 @@ Fields (see `CoachReview` in coachReview.ts / `schema.json`):
 The **fault taxonomy** (`datasets/coach-review/taxonomy/
 fault-taxonomy.v0-draft.json`) is stroke-family-specific
 (dink/volley/drive/overhead/serve/return/drop_reset/speedup + global) and is
-an *engineering draft — pending expert validation, will be revised by
-coaches*. `global.other_see_rationale` + mandatory prose exist precisely so
+an _engineering draft — pending expert validation, will be revised by
+coaches_. `global.other_see_rationale` + mandatory prose exist precisely so
 the real taxonomy grows from coach language, not our guesses. The **drill
 library** (`datasets/coach-review/drills/drill-library.v0.json`) is schema
 plus two well-known public drills marked UNVALIDATED with
@@ -105,7 +105,7 @@ Two equivalent paths, both requiring a provisioned identity:
   reviewId).
 - **File drop** — a coach (or a facilitator) writes the exported JSON to
   `datasets/coach-review/reviews/` in a reviewed commit; `pnpm
-  lab:coach-queue` picks real files up into `existingReviews` on
+lab:coach-queue` picks real files up into `existingReviews` on
   regeneration. The validator can be run in code against any record.
 
 Either way the repo, not a database, is the system of record; reviews are
@@ -131,7 +131,7 @@ Triggers (computed and displayed per item): stroke mismatch · rating gap ≥2
    clip blind, then with the disagreeing reviews visible, and records
    `datasets/coach-review/adjudications/<queueItemId>.json`:
    `{adjudicatorId, credentialRef, outcome (uphold-A / uphold-B / new
-   verdict / unresolvable), rationale, createdAtIso}` — same identity rules,
+verdict / unresolvable), rationale, createdAtIso}` — same identity rules,
    same append-only discipline.
 3. Downstream consumers use adjudicated truth where it exists and keep the
    disagreement record alongside it (calibration needs the variance, not

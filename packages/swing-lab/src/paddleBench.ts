@@ -132,7 +132,10 @@ const isMain = process.argv[1]?.endsWith("paddleBench.ts");
 if (isMain) {
   const manifestPath = resolve(
     process.argv[2] ??
-      join(dirname(fileURLToPath(import.meta.url)), "../../../datasets/paddle-bench/paddle-bench.json"),
+      join(
+        dirname(fileURLToPath(import.meta.url)),
+        "../../../datasets/paddle-bench/paddle-bench.json",
+      ),
   );
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as BenchManifest;
   const baseDir = dirname(manifestPath);
@@ -152,7 +155,9 @@ if (isMain) {
     const labelsPath = resolve(baseDir, benchCase.labels);
     const debugPath = resolve(baseDir, benchCase.runDir, "debug.json");
     if (!existsSync(labelsPath) || !existsSync(debugPath)) {
-      console.error(`case ${benchCase.id}: missing ${!existsSync(labelsPath) ? labelsPath : debugPath}`);
+      console.error(
+        `case ${benchCase.id}: missing ${!existsSync(labelsPath) ? labelsPath : debugPath}`,
+      );
       continue;
     }
     const annotation = JSON.parse(readFileSync(labelsPath, "utf8")) as {
@@ -182,9 +187,7 @@ if (isMain) {
       wrongPlayerChecks += 1;
       const prediction = (debug.paddle?.observations ?? [])
         .filter((observation) => Math.abs(observation.t - other.tMs) <= MATCH_TOLERANCE_MS)
-        .sort(
-          (a, b) => Math.abs(a.t - other.tMs) - Math.abs(b.t - other.tMs),
-        )[0];
+        .sort((a, b) => Math.abs(a.t - other.tMs) - Math.abs(b.t - other.tMs))[0];
       if (!prediction) continue;
       const dTarget = Math.hypot(
         prediction.x + prediction.w / 2 - target.point!.x,
