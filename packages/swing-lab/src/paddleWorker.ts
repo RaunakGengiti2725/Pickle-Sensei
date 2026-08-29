@@ -167,6 +167,11 @@ export class PaddleServeWorker {
     return !this.exited;
   }
 
+  /** OS pid of the underlying worker process (undefined if spawn failed). */
+  get pid(): number | undefined {
+    return this.child.pid;
+  }
+
   /** Resolves once the worker has loaded the model and reported ready. */
   ready(): Promise<PaddleReadyEvent> {
     return this.readyPromise;
@@ -271,6 +276,11 @@ export class PaddleWorkerSupervisor {
 
   get restarts(): number {
     return this.restartsUsed;
+  }
+
+  /** OS pid of the CURRENT underlying worker process. */
+  get pid(): number | undefined {
+    return this.worker.pid;
   }
 
   ready(): Promise<PaddleReadyEvent> {

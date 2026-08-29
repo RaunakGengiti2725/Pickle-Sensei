@@ -1,0 +1,66 @@
+{
+  "workstream": "e18-warm-worker-soak — warm paddle worker soak test",
+  "branch": "devin/wave-e/e18-warm-worker-soak",
+  "base": "origin/devin/1787988068-wave-c-integration",
+  "baseCommit": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+  "date": "2026-08-29",
+  "environmentLabel": "LINUX-CPU NOT-MAC",
+  "environment": {
+    "os": "Ubuntu Linux, CPU-only, Node v20.18.1",
+    "python": "3.10.12 venv (recreated this session; venv is gitignored)",
+    "torch": "2.13.0+cpu",
+    "transformers": "5.16.1",
+    "model": "D-FINE medium COCO via HF cache, device=cpu",
+    "clipsUsed": ["wm-volley-02", "afn-sasebo-rally1"],
+    "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"]
+  },
+  "whatWasBuilt": [
+    "packages/swing-lab/src/paddleWorkerSoak.ts — committed soak harness (pnpm --filter @pickle/swing-lab worker:soak): sequential + concurrent load, RSS-over-time sampling via /proc/<pid>/status, crash/restart recovery with mid-flight SIGKILL, fallback-correctness accounting (detectPaddleWindow), timing-stripped payload equality on repeated request shapes, and post-dispose orphan-process scan. Backends: --mode fake (paddle-serve-v1 stub, high request counts) and --mode real (detect_paddle.py --serve on committed dev clips only).",
+    "packages/swing-lab/src/paddleWorker.ts — added pid getters on PaddleServeWorker and PaddleWorkerSupervisor (ops/forensics surface needed for RSS sampling and restart verification; no behavior change).",
+    "packages/swing-lab/test/paddleWorker.test.ts — new regression test: supervisor exposes the current worker pid and it changes across a crash restart."
+  ],
+  "soakResults": {
+    "provenance": "artifacts committed at datasets/experiments/wave-e/e18-soak-report-real.json and e18-soak-report-fake.json (full leak curves inline in phase notes); harness run at baseCommit on this box",
+    "fakeProtocolSoak": {
+      "sequential": "500/500 ok in 385 ms; stub-worker RSS 41.9→46.3 MB (slope +4.2 kB/req), client RSS 73.6→74.6 MB (slope +2.0 kB/req) — stub-process numbers, not the real model worker",
+      "concurrent": "25 rounds x 16 = 400/400 ok; every response id matched its artifact (no cross-request mixups)",
+      "crashRestart": "200 windows with the worker crashing every 50th request: 196 served warm, 4 crashed windows each fell back exactly once, supervisor restarts=3 (spawns=4), zero contract violations",
+      "errorFallback": "200 windows with ok=false every 25th request: 192 warm, 8 fallbacks exactly where injected, worker kept serving after every error",
+      "cleanup": "0 orphan stub processes after dispose"
+    },
+    "realWorkerSoak": {
+      "sequential": {
+        "requests": 200,
+        "ok": 200,
+        "wallMs": 817122,
+        "shapes": "4 shapes (2 clips x 2 windows, 500 ms windows, stride 3)",
+        "ready": "modelLoadSec 0.625, warmupSec 2.323, device cpu",
+        "workerRss": "first 625984 kB, last 645304 kB, band 625984-710224 kB, least-squares slope -28.9 kB/request over 41 samples — NO monotonic growth across 200 requests",
+        "clientRss": "63.6-66.0 MB band, slope -1.5 kB/request",
+        "payloadEquality": "every repeat of a request shape byte-compared (timing-stripped) against its first response: 0 drifts across 200 requests"
+      },
+      "concurrent": {
+        "requests": 40,
+        "ok": 40,
+        "note": "10 rounds x 4 concurrent; worker RSS first 607740 kB, last 607768 kB (max 640944); the +177 kB/req slope over only 10 samples is band noise (last-first = +28 kB total)"
+      },
+      "crashRestart": "worker SIGKILLed 300 ms into an in-flight request: the killed window fell back exactly once (never a partial worker artifact), supervisor respawned (pid 9599 -> 9668, restarts=1), and the post-restart request's detection payload was byte-identical (timing-stripped) to the pre-crash baseline",
+      "cleanup": "0 orphan 'detect_paddle.py --serve' processes after dispose"
+    }
+  },
+  "leakVerdict": "No memory leak detected in the real worker: 200-request sequential leak curve is flat (slope -28.9 kB/request, RSS oscillating in a 626-710 MB band with no monotonic trend); Node client RSS also flat. Fake-backend slopes (+2-4 kB/req) are stub/harness-side accumulation over tiny absolute values, not the production worker.",
+  "defectsFound": "None in the worker lifecycle. All D09 hardening held under soak: 1300 fake + 243 real requests, 4 injected crash cycles + 1 real SIGKILL, 8 injected error responses — every failed window fell back exactly once, every subsequent window rode a restarted worker, zero orphans, zero payload drift. The only code change to the worker is the additive pid getter used for RSS sampling and restart forensics.",
+  "checks": {
+    "typecheck": "pnpm typecheck: PASS (root)",
+    "tests": "packages/swing-lab suite: 37/38 files pass (462 tests incl. paddleWorker.test.ts 19/19 with the new pid/restart test). test/oodGateRedTeam.test.ts has 2-3 5s-timeout failures on this box — PREEXISTING/ENVIRONMENTAL: that file and everything it exercises are byte-unchanged from the base branch (git diff vs origin/devin/1787988068-wave-c-integration touches only paddleWorker*, package.json script, and wave-e artifacts); the failing tests synthesize adversarial clips with ffmpeg and exceed the 5s vitest timeout on this CPU, timing out standalone as well.",
+    "lint": "pnpm lint: PASS",
+    "format": "pnpm format:check: PASS"
+  },
+  "honestNegatives": [
+    "All numbers are LINUX-CPU NOT-MAC; nothing here measures Mac/MPS or iPhone behavior.",
+    "Real-worker soak used 500 ms stride-3 windows to make 200 sequential requests tractable on CPU (~4 s/request); full-window (200-frame) requests were not soaked at this count — D09/C07 cover those shapes at low counts.",
+    "The paddle-lab venv is gitignored and was recreated this session (torch 2.13.0+cpu / transformers 5.16.1, matching D09); HF model weights were re-downloaded, so absolute RSS values may shift with library versions.",
+    "Request timeouts were exercised only via the fake backend (silent worker) in the existing unit tests, not against the real model."
+  ],
+  "blocked": []
+}

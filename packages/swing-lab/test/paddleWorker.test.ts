@@ -225,6 +225,23 @@ describe("PaddleWorkerSupervisor restart", () => {
     supervisor.dispose();
   });
 
+  it("exposes the current worker pid and changes it across a restart", async () => {
+    let spawns = 0;
+    const supervisor = new PaddleWorkerSupervisor(() => {
+      spawns += 1;
+      return spawnFake(spawns === 1 ? "crash-on-request" : "ok");
+    });
+    await supervisor.ready();
+    const firstPid = supervisor.pid;
+    expect(firstPid).toBeGreaterThan(0);
+    await expect(supervisor.detect(request(join(dir, "pid1.json")))).rejects.toThrow(/exited/);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await supervisor.detect(request(join(dir, "pid2.json")));
+    expect(supervisor.pid).toBeGreaterThan(0);
+    expect(supervisor.pid).not.toBe(firstPid);
+    supervisor.dispose();
+  });
+
   it("does not restart after dispose", async () => {
     const supervisor = new PaddleWorkerSupervisor(() => spawnFake("ok"));
     supervisor.dispose();
