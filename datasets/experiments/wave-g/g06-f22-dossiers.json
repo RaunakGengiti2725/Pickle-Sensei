@@ -1,0 +1,1025 @@
+{
+  "workstream": "g06-f22-dossiers",
+  "date": "2026-08-29T17:38:12.788Z",
+  "workDir": "/tmp/g06-dossiers-1788025041176",
+  "environment": "Linux CPU; pose-gated downstream stages (target/paddle/stroke/phase/contact) NOT runnable here (Apple-Vision-only) — nothing fabricated",
+  "heldOutExcluded": [
+    "wm-dink-01",
+    "afn-vic-rally1"
+  ],
+  "downstreamStagesMeasured": [
+    "pre-analysis OOD gate (frame-analyzability-3): extractFrameStats -> evaluateFrameAnalyzability",
+    "ball candidate generation (ball-diff-candidates-1): tools/paddle-lab/ball_candidates.py"
+  ],
+  "clips": [
+    {
+      "clip": "control_base",
+      "envelope": {
+        "measurements": {
+          "shortSidePx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 127.48893988715278,
+          "brightnessStdLuma": 0.5633452099656474,
+          "laplacianVarianceMedian": 376.40972818006355,
+          "meanAbsFrameDiff": 3.4684999999999993,
+          "frameIntervalCv": 0.000014171564512138608,
+          "clipDurationMs": 4000
+        },
+        "dimensionStatuses": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        },
+        "overall": "SUPPORTED",
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ]
+      },
+      "oodGate": {
+        "analyzable": true,
+        "reasons": [],
+        "medianInterFrameDiff": 1.5533854166666667,
+        "medianSpatialLumaStd": 62.93199203698019
+      },
+      "ballCandidates": {
+        "framesProcessed": 118,
+        "meanCandidatesPerFrame": 16.533898305084747,
+        "meanRawComponentsPerFrame": 76.67796610169492,
+        "maxRawComponentsPerFrame": 119,
+        "framesWithZeroCandidates": 0,
+        "chronicCellFraction": 0.013888888888888888,
+        "backgroundActivityMax": 1
+      },
+      "candidateSignals": {
+        "lapVar320": 376.40972818006355,
+        "lapVarDenoised320": 318.74149303387185,
+        "denoiseSurvivalRatio": 0.8467939831815269,
+        "lapVar640": 279.29828922126865,
+        "detailRatio640over320": 0.7420060330844064,
+        "lapVarLongSide320": 376.40972818006355,
+        "clippedPixelFraction": 0.0005425347222222222,
+        "offBandFrameFraction": 0,
+        "sharpEdgeGradientTop1pct": 186.3974160777385,
+        "contrastNormalizedDiff": 0.05400511195512725,
+        "movingSubjectHeightFraction": 0.13055555555555554
+      }
+    },
+    {
+      "clip": "b1_blur_grain",
+      "envelope": {
+        "measurements": {
+          "shortSidePx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 126.71460069444444,
+          "brightnessStdLuma": 0.5389247209973803,
+          "laplacianVarianceMedian": 173.7800514976155,
+          "meanAbsFrameDiff": 6.059268518518519,
+          "frameIntervalCv": 0.000014171564512138608,
+          "clipDurationMs": 4000
+        },
+        "dimensionStatuses": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        },
+        "overall": "SUPPORTED",
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ]
+      },
+      "oodGate": {
+        "analyzable": true,
+        "reasons": [],
+        "medianInterFrameDiff": 1.6328125,
+        "medianSpatialLumaStd": 61.188380493444186
+      },
+      "ballCandidates": {
+        "framesProcessed": 118,
+        "meanCandidatesPerFrame": 39.932203389830505,
+        "meanRawComponentsPerFrame": 912.6440677966102,
+        "maxRawComponentsPerFrame": 1299,
+        "framesWithZeroCandidates": 0,
+        "chronicCellFraction": 0.9878472222222222,
+        "backgroundActivityMax": 0.839
+      },
+      "candidateSignals": {
+        "lapVar320": 173.7800514976155,
+        "lapVarDenoised320": 21.853522730415946,
+        "denoiseSurvivalRatio": 0.12575392021169823,
+        "lapVar640": 635.2767208773816,
+        "detailRatio640over320": 3.6556366245874807,
+        "lapVarLongSide320": 173.7800514976155,
+        "clippedPixelFraction": 0.00011284722222222222,
+        "offBandFrameFraction": 0,
+        "sharpEdgeGradientTop1pct": 67.77848939929329,
+        "contrastNormalizedDiff": 0.09894766641202,
+        "movingSubjectHeightFraction": 0.12222222222222222
+      }
+    },
+    {
+      "clip": "control_b1_blur_only",
+      "envelope": {
+        "measurements": {
+          "shortSidePx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 126.93419270833336,
+          "brightnessStdLuma": 0.5411753591228726,
+          "laplacianVarianceMedian": 5.115482090818204,
+          "meanAbsFrameDiff": 2.989487268518518,
+          "frameIntervalCv": 0.000014171564512138608,
+          "clipDurationMs": 4000
+        },
+        "dimensionStatuses": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "UNSUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        },
+        "overall": "UNSUPPORTED",
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ]
+      },
+      "oodGate": {
+        "analyzable": true,
+        "reasons": [],
+        "medianInterFrameDiff": 0.9683159722222222,
+        "medianSpatialLumaStd": 61.19127462140399
+      },
+      "ballCandidates": {
+        "framesProcessed": 118,
+        "meanCandidatesPerFrame": 17.52542372881356,
+        "meanRawComponentsPerFrame": 27.872881355932204,
+        "maxRawComponentsPerFrame": 62,
+        "framesWithZeroCandidates": 0,
+        "chronicCellFraction": 0,
+        "backgroundActivityMax": 0.322
+      },
+      "candidateSignals": {
+        "lapVar320": 5.115482090818204,
+        "lapVarDenoised320": 5.210954185521585,
+        "denoiseSurvivalRatio": 1.0186633621247045,
+        "lapVar640": 1.0967202114301222,
+        "detailRatio640over320": 0.2143923469888848,
+        "lapVarLongSide320": 5.115482090818204,
+        "clippedPixelFraction": 0,
+        "offBandFrameFraction": 0,
+        "sharpEdgeGradientTop1pct": 63.256956713780916,
+        "contrastNormalizedDiff": 0.048901070450342726,
+        "movingSubjectHeightFraction": 0.11666666666666667
+      }
+    },
+    {
+      "clip": "b2_bimodal_exposure",
+      "envelope": {
+        "measurements": {
+          "shortSidePx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 127.98546223958334,
+          "brightnessStdLuma": 0.0017860638580727854,
+          "laplacianVarianceMedian": 248.982695567189,
+          "meanAbsFrameDiff": 0.003177083333333333,
+          "frameIntervalCv": 0.000014171564512138608,
+          "clipDurationMs": 4000
+        },
+        "dimensionStatuses": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        },
+        "overall": "SUPPORTED",
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ]
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "still_image_video"
+        ],
+        "medianInterFrameDiff": 0,
+        "medianSpatialLumaStd": 124.72093875170816
+      },
+      "ballCandidates": {
+        "framesProcessed": 118,
+        "meanCandidatesPerFrame": 0,
+        "meanRawComponentsPerFrame": 0,
+        "maxRawComponentsPerFrame": 0,
+        "framesWithZeroCandidates": 118,
+        "chronicCellFraction": 0,
+        "backgroundActivityMax": 0
+      },
+      "candidateSignals": {
+        "lapVar320": 248.982695567189,
+        "lapVarDenoised320": 249.972139776547,
+        "denoiseSurvivalRatio": 1.0039739476958591,
+        "lapVar640": 133.25840177930334,
+        "detailRatio640over320": 0.535211499239886,
+        "lapVarLongSide320": 248.982695567189,
+        "clippedPixelFraction": 0.996875,
+        "offBandFrameFraction": 0,
+        "sharpEdgeGradientTop1pct": 155.43286219081273,
+        "contrastNormalizedDiff": 0.000025036300761122135,
+        "movingSubjectHeightFraction": null
+      }
+    },
+    {
+      "clip": "b2_bimodal_moving",
+      "envelope": {
+        "measurements": {
+          "shortSidePx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 122.36756944444446,
+          "brightnessStdLuma": 0.01417667608760762,
+          "laplacianVarianceMedian": 231.89944173275742,
+          "meanAbsFrameDiff": 0.05745601851851852,
+          "frameIntervalCv": 0.000014171564512138608,
+          "clipDurationMs": 4000
+        },
+        "dimensionStatuses": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        },
+        "overall": "SUPPORTED",
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ]
+      },
+      "oodGate": {
+        "analyzable": true,
+        "reasons": [],
+        "medianInterFrameDiff": 0.029513888888888888,
+        "medianSpatialLumaStd": 122.04149037452589
+      },
+      "ballCandidates": {
+        "framesProcessed": 118,
+        "meanCandidatesPerFrame": 0.025423728813559324,
+        "meanRawComponentsPerFrame": 0.2033898305084746,
+        "maxRawComponentsPerFrame": 1,
+        "framesWithZeroCandidates": 115,
+        "chronicCellFraction": 0,
+        "backgroundActivityMax": 0.025
+      },
+      "candidateSignals": {
+        "lapVar320": 231.89944173275742,
+        "lapVarDenoised320": 234.50430181597,
+        "denoiseSurvivalRatio": 1.0112327139028408,
+        "lapVar640": 122.7101493640125,
+        "detailRatio640over320": 0.5291524138528308,
+        "lapVarLongSide320": 231.89944173275742,
+        "clippedPixelFraction": 0.996875,
+        "offBandFrameFraction": 0,
+        "sharpEdgeGradientTop1pct": 148.5157906360424,
+        "contrastNormalizedDiff": 0.0004697322103209269,
+        "movingSubjectHeightFraction": null
+      }
+    },
+    {
+      "clip": "b3_strobing_exposure",
+      "envelope": {
+        "measurements": {
+          "shortSidePx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 125.99444444444444,
+          "brightnessStdLuma": 109.00555555555555,
+          "laplacianVarianceMedian": 0.0056179775280898875,
+          "meanAbsFrameDiff": 101.73851851851853,
+          "frameIntervalCv": 0.000014171564512138608,
+          "clipDurationMs": 4000
+        },
+        "dimensionStatuses": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "UNSUPPORTED",
+          "camera_motion": "UNSUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        },
+        "overall": "UNSUPPORTED",
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ]
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "solid_color_frames"
+        ],
+        "medianInterFrameDiff": 219,
+        "medianSpatialLumaStd": 0.3632415786239469
+      },
+      "ballCandidates": {
+        "framesProcessed": 118,
+        "meanCandidatesPerFrame": 0,
+        "meanRawComponentsPerFrame": 0,
+        "maxRawComponentsPerFrame": 0,
+        "framesWithZeroCandidates": 118,
+        "chronicCellFraction": 0,
+        "backgroundActivityMax": 0
+      },
+      "candidateSignals": {
+        "lapVar320": 0.0056179775280898875,
+        "lapVarDenoised320": 0.0056179775280898875,
+        "denoiseSurvivalRatio": 1,
+        "lapVar640": 0,
+        "detailRatio640over320": 0,
+        "lapVarLongSide320": 0.0056179775280898875,
+        "clippedPixelFraction": 0.5055555555555555,
+        "offBandFrameFraction": 1,
+        "sharpEdgeGradientTop1pct": 0.5618374558303887,
+        "contrastNormalizedDiff": 1941.1670510031172,
+        "movingSubjectHeightFraction": null
+      }
+    },
+    {
+      "clip": "b4_upscaled_240p",
+      "envelope": {
+        "measurements": {
+          "shortSidePx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 125.67602864583334,
+          "brightnessStdLuma": 0.5791781328846553,
+          "laplacianVarianceMedian": 607.9770315700259,
+          "meanAbsFrameDiff": 9.096493055555555,
+          "frameIntervalCv": 0.000014171564512138608,
+          "clipDurationMs": 4000
+        },
+        "dimensionStatuses": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        },
+        "overall": "SUPPORTED",
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ]
+      },
+      "oodGate": {
+        "analyzable": true,
+        "reasons": [],
+        "medianInterFrameDiff": 2.3519965277777777,
+        "medianSpatialLumaStd": 64.1279473516208
+      },
+      "ballCandidates": {
+        "framesProcessed": 118,
+        "meanCandidatesPerFrame": 40,
+        "meanRawComponentsPerFrame": 395.43220338983053,
+        "maxRawComponentsPerFrame": 578,
+        "framesWithZeroCandidates": 0,
+        "chronicCellFraction": 0.06076388888888889,
+        "backgroundActivityMax": 1
+      },
+      "candidateSignals": {
+        "lapVar320": 607.9770315700259,
+        "lapVarDenoised320": 306.66370951338916,
+        "denoiseSurvivalRatio": 0.5044001559096202,
+        "lapVar640": 193.3505707902427,
+        "detailRatio640over320": 0.31802282117621883,
+        "lapVarLongSide320": 607.9770315700259,
+        "clippedPixelFraction": 0.0069487847222222225,
+        "offBandFrameFraction": 0,
+        "sharpEdgeGradientTop1pct": 199.12610424028267,
+        "contrastNormalizedDiff": 0.13881364932022433,
+        "movingSubjectHeightFraction": 0.18611111111111112
+      }
+    },
+    {
+      "clip": "control_b4_true240",
+      "envelope": {
+        "measurements": {
+          "shortSidePx": 240,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 125.68044053819447,
+          "brightnessStdLuma": 0.5773516349431859,
+          "laplacianVarianceMedian": 633.5222053337754,
+          "meanAbsFrameDiff": 9.101565972222224,
+          "frameIntervalCv": 0.000014171564512138608,
+          "clipDurationMs": 4000
+        },
+        "dimensionStatuses": {
+          "resolution": "UNSUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        },
+        "overall": "UNSUPPORTED",
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ]
+      },
+      "oodGate": {
+        "analyzable": true,
+        "reasons": [],
+        "medianInterFrameDiff": 2.3667534722222223,
+        "medianSpatialLumaStd": 64.30522552748212
+      },
+      "ballCandidates": {
+        "framesProcessed": 118,
+        "meanCandidatesPerFrame": 15.169491525423728,
+        "meanRawComponentsPerFrame": 105.92372881355932,
+        "maxRawComponentsPerFrame": 143,
+        "framesWithZeroCandidates": 0,
+        "chronicCellFraction": 0.022569444444444444,
+        "backgroundActivityMax": 1
+      },
+      "candidateSignals": {
+        "lapVar320": 633.5222053337754,
+        "lapVarDenoised320": 324.84768349737465,
+        "denoiseSurvivalRatio": 0.5127644789123476,
+        "lapVar640": 210.8377759386837,
+        "detailRatio640over320": 0.3328025034696336,
+        "lapVarLongSide320": 633.5222053337754,
+        "clippedPixelFraction": 0.0048480902777777776,
+        "offBandFrameFraction": 0,
+        "sharpEdgeGradientTop1pct": 198.0322438162544,
+        "contrastNormalizedDiff": 0.13890575757448329,
+        "movingSubjectHeightFraction": 0.18611111111111112
+      }
+    },
+    {
+      "clip": "b5_tiny_subject",
+      "envelope": {
+        "measurements": {
+          "shortSidePx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 127.25247938368055,
+          "brightnessStdLuma": 0.0011954643961317251,
+          "laplacianVarianceMedian": 381.9104853643007,
+          "meanAbsFrameDiff": 0.0022187500000000002,
+          "frameIntervalCv": 0.000014171564512138608,
+          "clipDurationMs": 4000
+        },
+        "dimensionStatuses": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        },
+        "overall": "SUPPORTED",
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ]
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "still_image_video"
+        ],
+        "medianInterFrameDiff": 0.00043402777777777775,
+        "medianSpatialLumaStd": 62.79771473376708
+      },
+      "ballCandidates": {
+        "framesProcessed": 118,
+        "meanCandidatesPerFrame": 0.00847457627118644,
+        "meanRawComponentsPerFrame": 0.05084745762711865,
+        "maxRawComponentsPerFrame": 3,
+        "framesWithZeroCandidates": 117,
+        "chronicCellFraction": 0,
+        "backgroundActivityMax": 0.025
+      },
+      "candidateSignals": {
+        "lapVar320": 381.9104853643007,
+        "lapVarDenoised320": 330.5382127672488,
+        "denoiseSurvivalRatio": 0.8654860901552667,
+        "lapVar640": 308.97707746225603,
+        "detailRatio640over320": 0.8090300981590641,
+        "lapVarLongSide320": 381.9104853643007,
+        "clippedPixelFraction": 0.0006087239583333333,
+        "offBandFrameFraction": 0,
+        "sharpEdgeGradientTop1pct": 178.64719522968198,
+        "contrastNormalizedDiff": 0.00003460652725129923,
+        "movingSubjectHeightFraction": 0.005555555555555556
+      }
+    },
+    {
+      "clip": "control_b5_big_subject",
+      "envelope": {
+        "measurements": {
+          "shortSidePx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 127.24786458333334,
+          "brightnessStdLuma": 0.07710689284690124,
+          "laplacianVarianceMedian": 532.5332861514996,
+          "meanAbsFrameDiff": 0.8959976851851852,
+          "frameIntervalCv": 0.000014171564512138608,
+          "clipDurationMs": 4000
+        },
+        "dimensionStatuses": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        },
+        "overall": "SUPPORTED",
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ]
+      },
+      "oodGate": {
+        "analyzable": true,
+        "reasons": [],
+        "medianInterFrameDiff": 0.17317708333333334,
+        "medianSpatialLumaStd": 57.73132149835382
+      },
+      "ballCandidates": {
+        "framesProcessed": 118,
+        "meanCandidatesPerFrame": 19.6864406779661,
+        "meanRawComponentsPerFrame": 103.87288135593221,
+        "maxRawComponentsPerFrame": 130,
+        "framesWithZeroCandidates": 0,
+        "chronicCellFraction": 0.015625,
+        "backgroundActivityMax": 1
+      },
+      "candidateSignals": {
+        "lapVar320": 532.5332861514996,
+        "lapVarDenoised320": 458.5791993186584,
+        "denoiseSurvivalRatio": 0.8611277665527896,
+        "lapVar640": 404.41882966420894,
+        "detailRatio640over320": 0.7594245095679454,
+        "lapVarLongSide320": 532.5332861514996,
+        "clippedPixelFraction": 0.0006195746527777778,
+        "offBandFrameFraction": 0,
+        "sharpEdgeGradientTop1pct": 188.2317800353357,
+        "contrastNormalizedDiff": 0.015035429232073355,
+        "movingSubjectHeightFraction": 0.06111111111111111
+      }
+    },
+    {
+      "clip": "b5_tiny_subject_moving_bg",
+      "envelope": {
+        "measurements": {
+          "shortSidePx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 127.23577256944444,
+          "brightnessStdLuma": 0.5648259803617975,
+          "laplacianVarianceMedian": 397.2441237607085,
+          "meanAbsFrameDiff": 3.4630104166666666,
+          "frameIntervalCv": 0.000014171564512138608,
+          "clipDurationMs": 4000
+        },
+        "dimensionStatuses": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        },
+        "overall": "SUPPORTED",
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ]
+      },
+      "oodGate": {
+        "analyzable": true,
+        "reasons": [],
+        "medianInterFrameDiff": 1.5355902777777777,
+        "medianSpatialLumaStd": 62.83215111098519
+      },
+      "ballCandidates": {
+        "framesProcessed": 118,
+        "meanCandidatesPerFrame": 16.5,
+        "meanRawComponentsPerFrame": 74.01694915254237,
+        "maxRawComponentsPerFrame": 121,
+        "framesWithZeroCandidates": 0,
+        "chronicCellFraction": 0.013888888888888888,
+        "backgroundActivityMax": 1
+      },
+      "candidateSignals": {
+        "lapVar320": 397.2441237607085,
+        "lapVarDenoised320": 342.1568348213186,
+        "denoiseSurvivalRatio": 0.8613263591720912,
+        "lapVar640": 300.48574432421265,
+        "detailRatio640over320": 0.7564259012304961,
+        "lapVarLongSide320": 397.2441237607085,
+        "clippedPixelFraction": 0.0008355034722222222,
+        "offBandFrameFraction": 0,
+        "sharpEdgeGradientTop1pct": 190.76866166077738,
+        "contrastNormalizedDiff": 0.05396981828329055,
+        "movingSubjectHeightFraction": 0.125
+      }
+    },
+    {
+      "clip": "b6_rotate_tag",
+      "envelope": {
+        "measurements": {
+          "shortSidePx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 127.50506884077905,
+          "brightnessStdLuma": 0.5618643154980495,
+          "laplacianVarianceMedian": 265.9991882450258,
+          "meanAbsFrameDiff": 3.5415074823943664,
+          "frameIntervalCv": 0.000014171564512138608,
+          "clipDurationMs": 4000
+        },
+        "dimensionStatuses": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        },
+        "overall": "SUPPORTED",
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ]
+      },
+      "oodGate": {
+        "analyzable": true,
+        "reasons": [],
+        "medianInterFrameDiff": 1.8815104166666667,
+        "medianSpatialLumaStd": 63.067184645849494
+      },
+      "ballCandidates": {
+        "framesProcessed": 118,
+        "meanCandidatesPerFrame": 34.99152542372882,
+        "meanRawComponentsPerFrame": 176.05084745762713,
+        "maxRawComponentsPerFrame": 257,
+        "framesWithZeroCandidates": 0,
+        "chronicCellFraction": 0.012152777777777778,
+        "backgroundActivityMax": 1
+      },
+      "candidateSignals": {
+        "lapVar320": 265.9991882450258,
+        "lapVarDenoised320": 213.25261859356317,
+        "denoiseSurvivalRatio": 0.8017040202285317,
+        "lapVar640": 245.39676069512313,
+        "detailRatio640over320": 0.9225470284859492,
+        "lapVarLongSide320": 376.76526867924986,
+        "clippedPixelFraction": 0.00043154434419014087,
+        "offBandFrameFraction": 0,
+        "sharpEdgeGradientTop1pct": 153.764497534551,
+        "contrastNormalizedDiff": 0.055006036947358346,
+        "movingSubjectHeightFraction": 0.22887323943661972
+      }
+    },
+    {
+      "clip": "fr1_low_texture_sharp",
+      "envelope": {
+        "measurements": {
+          "shortSidePx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 116.46368055555557,
+          "brightnessStdLuma": 1.4210854715202004e-14,
+          "laplacianVarianceMedian": 78.58356299908134,
+          "meanAbsFrameDiff": 4.778351851851852,
+          "frameIntervalCv": 0.000014171564512138608,
+          "clipDurationMs": 4000
+        },
+        "dimensionStatuses": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "DEGRADED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        },
+        "overall": "DEGRADED",
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ]
+      },
+      "oodGate": {
+        "analyzable": true,
+        "reasons": [],
+        "medianInterFrameDiff": 0.6727430555555556,
+        "medianSpatialLumaStd": 23.87651936448796
+      },
+      "ballCandidates": {
+        "framesProcessed": 118,
+        "meanCandidatesPerFrame": 0.01694915254237288,
+        "meanRawComponentsPerFrame": 0.01694915254237288,
+        "maxRawComponentsPerFrame": 1,
+        "framesWithZeroCandidates": 116,
+        "chronicCellFraction": 0,
+        "backgroundActivityMax": 0.008
+      },
+      "candidateSignals": {
+        "lapVar320": 78.58356299908134,
+        "lapVarDenoised320": 85.60949756200975,
+        "denoiseSurvivalRatio": 1.0894071774654777,
+        "lapVar640": 42.43673490832035,
+        "detailRatio640over320": 0.5400204990554633,
+        "lapVarLongSide320": 78.58356299908134,
+        "clippedPixelFraction": 0.03125,
+        "offBandFrameFraction": 0,
+        "sharpEdgeGradientTop1pct": 88.97879858657244,
+        "contrastNormalizedDiff": 0.19340851112349197,
+        "movingSubjectHeightFraction": 0.3333333333333333
+      }
+    },
+    {
+      "clip": "control_fr1_blurred",
+      "envelope": {
+        "measurements": {
+          "shortSidePx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 115.51113932291666,
+          "brightnessStdLuma": 0.0007773309059667545,
+          "laplacianVarianceMedian": 5.767472263444279,
+          "meanAbsFrameDiff": 4.786190972222221,
+          "frameIntervalCv": 0.000014171564512138608,
+          "clipDurationMs": 4000
+        },
+        "dimensionStatuses": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "UNSUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        },
+        "overall": "UNSUPPORTED",
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ]
+      },
+      "oodGate": {
+        "analyzable": true,
+        "reasons": [],
+        "medianInterFrameDiff": 0.671875,
+        "medianSpatialLumaStd": 23.62524137648361
+      },
+      "ballCandidates": {
+        "framesProcessed": 118,
+        "meanCandidatesPerFrame": 0,
+        "meanRawComponentsPerFrame": 2,
+        "maxRawComponentsPerFrame": 2,
+        "framesWithZeroCandidates": 118,
+        "chronicCellFraction": 0,
+        "backgroundActivityMax": 0.169
+      },
+      "candidateSignals": {
+        "lapVar320": 5.767472263444279,
+        "lapVarDenoised320": 7.0678397286410855,
+        "denoiseSurvivalRatio": 1.225465750990927,
+        "lapVar640": 0.6319985639480921,
+        "detailRatio640over320": 0.10957981852012731,
+        "lapVarLongSide320": 5.767472263444279,
+        "clippedPixelFraction": 0.02798611111111111,
+        "offBandFrameFraction": 0,
+        "sharpEdgeGradientTop1pct": 66.26457597173145,
+        "contrastNormalizedDiff": 0.20034902148315517,
+        "movingSubjectHeightFraction": 0.3333333333333333
+      }
+    },
+    {
+      "clip": "b7_synthetic_shake",
+      "envelope": {
+        "measurements": {
+          "shortSidePx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 128.84731879340276,
+          "brightnessStdLuma": 1.8342197502360178,
+          "laplacianVarianceMedian": 335.49028477544016,
+          "meanAbsFrameDiff": 13.051630787037038,
+          "frameIntervalCv": 0.000014171564512138608,
+          "clipDurationMs": 4000
+        },
+        "dimensionStatuses": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        },
+        "overall": "SUPPORTED",
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ]
+      },
+      "oodGate": {
+        "analyzable": true,
+        "reasons": [],
+        "medianInterFrameDiff": 21.46918402777778,
+        "medianSpatialLumaStd": 63.57023591345632
+      },
+      "ballCandidates": {
+        "framesProcessed": 118,
+        "meanCandidatesPerFrame": 24.11864406779661,
+        "meanRawComponentsPerFrame": 96.94067796610169,
+        "maxRawComponentsPerFrame": 642,
+        "framesWithZeroCandidates": 2,
+        "chronicCellFraction": 0.013888888888888888,
+        "backgroundActivityMax": 0.627
+      },
+      "candidateSignals": {
+        "lapVar320": 335.49028477544016,
+        "lapVarDenoised320": 265.6716474741467,
+        "denoiseSurvivalRatio": 0.7918907328478187,
+        "lapVar640": 192.52562764786967,
+        "detailRatio640over320": 0.5738634958587142,
+        "lapVarLongSide320": 335.49028477544016,
+        "clippedPixelFraction": 0.0006759982638888889,
+        "offBandFrameFraction": 0,
+        "sharpEdgeGradientTop1pct": 179.9631183745583,
+        "contrastNormalizedDiff": 0.20112564083405554,
+        "movingSubjectHeightFraction": 1
+      }
+    },
+    {
+      "clip": "control_b7_real_shake",
+      "envelope": {
+        "measurements": {
+          "shortSidePx": 720,
+          "avgFrameRateFps": 29.97002997002997,
+          "brightnessMeanLuma": 103.93330825617284,
+          "brightnessStdLuma": 2.322105862418876,
+          "laplacianVarianceMedian": 2099.8018835374723,
+          "meanAbsFrameDiff": 35.506630923202614,
+          "frameIntervalCv": 0.000014154739438544443,
+          "clipDurationMs": 4404
+        },
+        "dimensionStatuses": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "DEGRADED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        },
+        "overall": "DEGRADED",
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ]
+      },
+      "oodGate": {
+        "analyzable": true,
+        "reasons": [],
+        "medianInterFrameDiff": 34.4296875,
+        "medianSpatialLumaStd": 50.69312122028324
+      },
+      "ballCandidates": {
+        "framesProcessed": 130,
+        "meanCandidatesPerFrame": 39.48461538461538,
+        "meanRawComponentsPerFrame": 269.62307692307695,
+        "maxRawComponentsPerFrame": 1061,
+        "framesWithZeroCandidates": 0,
+        "chronicCellFraction": 0.14583333333333334,
+        "backgroundActivityMax": 0.823
+      },
+      "candidateSignals": {
+        "lapVar320": 2099.8018835374723,
+        "lapVarDenoised320": 748.558935586199,
+        "denoiseSurvivalRatio": 0.3564902677033152,
+        "lapVar640": 1036.5517764086576,
+        "detailRatio640over320": 0.4936426548310407,
+        "lapVarLongSide320": 2099.8018835374723,
+        "clippedPixelFraction": 0.045572916666666664,
+        "offBandFrameFraction": 0,
+        "sharpEdgeGradientTop1pct": 238.9055751864939,
+        "contrastNormalizedDiff": 0.6336838494251508,
+        "movingSubjectHeightFraction": 0.5777777777777777
+      }
+    },
+    {
+      "clip": "control_b7_real_unshaken",
+      "envelope": {
+        "measurements": {
+          "shortSidePx": 1080,
+          "avgFrameRateFps": 29.97002997002997,
+          "brightnessMeanLuma": 104.13461902006173,
+          "brightnessStdLuma": 0.8198594165749556,
+          "laplacianVarianceMedian": 2306.033348495507,
+          "meanAbsFrameDiff": 8.96690053104575,
+          "frameIntervalCv": 0.00001415473943856815,
+          "clipDurationMs": 4404
+        },
+        "dimensionStatuses": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        },
+        "overall": "SUPPORTED",
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ]
+      },
+      "oodGate": {
+        "analyzable": true,
+        "reasons": [],
+        "medianInterFrameDiff": 1.2313368055555556,
+        "medianSpatialLumaStd": 49.06921740365307
+      },
+      "ballCandidates": {
+        "framesProcessed": 130,
+        "meanCandidatesPerFrame": 40,
+        "meanRawComponentsPerFrame": 919.8384615384615,
+        "maxRawComponentsPerFrame": 1373,
+        "framesWithZeroCandidates": 0,
+        "chronicCellFraction": 0.19618055555555555,
+        "backgroundActivityMax": 0.938
+      },
+      "candidateSignals": {
+        "lapVar320": 2306.033348495507,
+        "lapVarDenoised320": 782.4423828303438,
+        "denoiseSurvivalRatio": 0.3393022843060018,
+        "lapVar640": 1226.219417378586,
+        "detailRatio640over320": 0.5317440088967452,
+        "lapVarLongSide320": 2306.033348495507,
+        "clippedPixelFraction": 0.04380208333333333,
+        "offBandFrameFraction": 0,
+        "sharpEdgeGradientTop1pct": 235.6250490773459,
+        "contrastNormalizedDiff": 0.16388033114313935,
+        "movingSubjectHeightFraction": 0.26666666666666666
+      }
+    }
+  ]
+}
