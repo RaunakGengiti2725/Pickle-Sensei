@@ -45,7 +45,6 @@
     "@pickle/scoring": "workspace:*",
     "@pickle/shared-types": "workspace:*",
     "@pickle/swing-domain": "workspace:*",
-    "@pickle/vision-contracts": "workspace:*",
     "@pickle/vision-geometry": "workspace:*"
   },
   "devDependencies": {

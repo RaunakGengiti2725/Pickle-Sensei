@@ -1,0 +1,73 @@
+{
+  "workstream": "D14 — repo hygiene audit (dead code, stale flags, duplicate implementations, temporary wiring)",
+  "branch": "devin/wave-d/d14-repo-hygiene",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "date": "2026-08-29",
+  "annotatorId": "devin-visual-v3-waveD",
+  "method": {
+    "deadExportAnalysis": "knip@5.64.3 run via `pnpm dlx` at repo root (NOT added as a devDependency: knip@6.32.3 fails on this Linux box with an oxc-parser native-binding error — honest negative; v5 pinned instead). Every knip finding was independently verified with repo-wide word-boundary grep across packages/, apps/, services/, tools/, docs/, datasets/experiments/ before classification; knip alone was never trusted.",
+    "otherScans": "TODO/FIXME/HACK/XXX grep across *.ts,*.tsx,*.py,*.swift,*.js,*.mjs; feature-flag scan (process.env.*, ENABLE_*/FEATURE_*, `if (false`/`&& false` unreachable-arm patterns); provisional/temporary/placeholder marker scan; duplicate-implementation diff between swing-lab and vision-geometry counterparts; unused workspace-dependency check (knip dependencies scope, grep-verified).",
+    "gates": "pnpm typecheck 18/18 packages green and `pnpm -r test` all green (18 test suites; media-worker 3 skipped + api 43 skipped are pre-existing DB-gated skips, unchanged) verified AFTER each removal class. Baseline before any change: typecheck 18/18 green."
+  },
+  "executed_REMOVE_SAFE": [
+    {
+      "item": "services/api/src/lib/replies.ts: statusForFailure() + sendOpFailure() (and the now-unused OperationFailure type import)",
+      "evidence": "zero references repo-wide (code, tests, docs, experiment summaries); dead since the initial full-system build commit c297902 (git log -S confirms no consumer ever existed). sendFailure(), the only used export, is untouched.",
+      "locRemoved": 36
+    },
+    {
+      "item": "unused workspace dependencies removed from package.json: @pickle/shared-types (packages/queue), @pickle/shared-types (services/media-worker), @pickle/vision-contracts (packages/swing-lab)",
+      "evidence": "zero imports of each package anywhere in the owning package's src/ or test/ (grep-verified); pnpm-lock.yaml regenerated via pnpm install (-9 lockfile lines).",
+      "locRemoved": 3
+    }
+  ],
+  "totalLocRemoved": "49 deleted / 2 inserted across 5 files (git diff --stat: replies.ts -37, package.json x3 -5, pnpm-lock.yaml -9)",
+  "KEEP_FLAGGED_EXPERIMENT": [
+    "--crop-recovery (default OFF, C02 edge-on crop recovery — named in STATUS_BOARD Wave C board)",
+    "--two-pass (default OFF, C08 adaptive two-pass schedule — named in STATUS_BOARD)",
+    "--no-paddle-worker opt-out (C07 warm worker default ON — named in STATUS_BOARD)",
+    "detect_paddle.py --serve / --legacy-decode (W2 — named in HANDOFF_V3 §5)",
+    "CaptureCompletionStrategyStore default FIXED (D-043 adaptive-completion promotion gate — named in HANDOFF_V3)",
+    "taReplay.ts W3_* bench-variant constants and REPLAY_VARIANTS registry (acquire-v4 bench candidates awaiting the D-027 gate — named in HANDOFF_V3 §6.6); all are used by the in-file variant registry, knip flagged only the export keyword"
+  ],
+  "KEEP_PROVENANCE": [
+    "swing-lab CLI harnesses knip flags as 'unused files' — they are tsx entrypoints, not dead code: contactForensics.ts + paddleSelectionForensics.ts (named commands in HANDOFF_V3 §5), eventBoundsScout.ts + eventWindowSlice.ts + waveaValidate.ts (wave-a Q-summary deliverables), benchRegen.ts (pnpm lab:regen)",
+    "datasets/experiments/**/*.ts|mjs analysis scripts (wave-a I-forensics/*, wave-b W1-diagnose.ts, W3-analyze.mjs, W6-fixture-gen.ts) — under datasets/, never touchable per mandate",
+    "version-provenance constants with no remaining reader: GAMEPLAY_VALIDITY_VERSION (engine/gameplayValidity.ts), SCENE_DETECTOR_VERSION (sceneValidity.ts) — they version measured algorithms; kept",
+    "packages/swing-lab/src/sessionEngine.ts thin re-export shim (documented Wave B/W6 rationale: mobile cannot depend on swing-lab)",
+    "analysis-pipeline verbatim mirror of strokeEvents.ts (drift-guarded two ways by byte-compare tests — documented, intentional)"
+  ],
+  "NEEDS_DECISION": [
+    {
+      "item": "strokeHeuristic duplication: packages/vision-geometry/src/strokeHeuristicLite.ts self-describes as 'PURE PORT of stroke-heuristic-1' with an explicit 'DEDUP FOLLOW-UP (intentionally not done this wave)' note, but packages/swing-lab/src/strokeHeuristic.ts has since advanced to stroke-heuristic-2 (633 vs 304 lines; 504-line diff). The two are NO LONGER byte-equivalent: mobile AUTO DETECT runs v1 semantics, the lab runs v2.",
+      "recommendation": "integrator decision required — either port stroke-heuristic-2's plausibility gating to the Lite copy (behavioral change on mobile; needs measurement, not a hygiene edit) or record the divergence as intentional and update the stale 'byte-equivalent' comment. NOT executed: behavioral risk."
+    },
+    {
+      "item": "services/api/src/modules/billing/entitlements.ts (hasEntitlement/grantEntitlement, 40 LOC): zero code references anywhere, dead since initial build.",
+      "recommendation": "the entitlements architecture (directive §35) is documented across 9 docs/ files (ARCHITECTURE, API, DATABASE, SECURITY, ...) and the entitlement DB table exists — this is unwired product scaffolding, not experiment debris. Left in place; integrator should decide wire-up vs removal alongside the docs."
+    },
+    {
+      "item": "redistributionEligible() in packages/swing-lab/src/engine/rights.ts: unused function, but rights.ts is the documented legal-basis mechanism in docs/DATA_ENGINE.md (C10/C16 consent & rights work).",
+      "recommendation": "keep pending integrator confirmation that no planned dataset-release path needs it."
+    },
+    {
+      "item": "~90 knip 'unused export' findings that are symbols USED inside their own file (only the export keyword is unnecessary), e.g. annotationSchema BALL_OCCLUSION_STATES/CONTACT_UNCERTAINTIES (back exported types), taReplay tuning constants, paddleWorker/paddleSchedule/paddleCropRecovery interfaces (C02/C07/C08 flagged-experiment surfaces), api auth/billing types.",
+      "recommendation": "de-exporting is cosmetic API narrowing with zero LOC win and nonzero churn across freshly-landed Wave C surfaces; deliberately not executed. Full list reproducible with: pnpm dlx knip@5.64.3 --include exports,types."
+    },
+    {
+      "item": "knip false positive worth recording: packages/vision-geometry/test/*.test.ts flagged as 'unused files' — they are the live vitest suite (6 files, all passing in pnpm -r test)."
+    }
+  ],
+  "honestNegatives": [
+    "TODO/FIXME/HACK/XXX count across all ts/tsx/py/swift/js/mjs in packages|apps|services|tools: 0 — nothing to inventory.",
+    "No permanently-ON/OFF flag with an unreachable losing path was found: the only process.env flag in packages/services is SCOUT_OUT (eventBoundsScout CLI output dir), and every capability flag found is a named, gated experiment (see KEEP_FLAGGED_EXPERIMENT).",
+    "knip@6.32.3 (latest) does not run on this box (oxc-parser native binding missing for linux-x64-gnu under pnpm dlx); knip@5.64.3 used instead. No dead-code tool was added as a dependency.",
+    "apps/mobile was NOT dead-export-audited: it is npm-managed and excluded from the pnpm workspace (D-013), and knip at root does not traverse it. Grep-level scans (TODO, unreachable-arm, placeholder) covered it and found nothing actionable. Mobile untouched, so the mobile ci/tsc/jest gate was not required.",
+    "Canonical run dirs absent on Linux (gitignored) — no cascade numbers were produced or claimed by this workstream; all gates here are typecheck + unit/replay suites."
+  ],
+  "gatesAfterChange": {
+    "typecheck": "18/18 packages Done (pnpm typecheck, exit 0)",
+    "tests": "pnpm -r test all green: swing-lab 19 files (231 passed | 4 skipped), vision-geometry 6 files, analysis-pipeline 5 files, api 3 passed | 3 skipped files (43 DB-gated test skips pre-existing), media-worker 2 skipped files (pre-existing DB gate), all other packages passing",
+    "prettier": "pnpm exec prettier --write run on every added/modified file"
+  }
+}
