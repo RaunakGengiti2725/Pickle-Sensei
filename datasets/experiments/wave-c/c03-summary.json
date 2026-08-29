@@ -1,0 +1,47 @@
+{
+  "workstream": "C03",
+  "title": "Scale paddle ownership dual labels — wavea-* priority, visual annotation",
+  "annotatorId": "devin-visual-v2-waveC",
+  "date": "2026-08-29",
+  "whatWasBuilt": "30 new multi-paddle ownership frames, visually annotated from absolute-CFR extracted frames, appended as NEW per-bundle annotation files (bundles/<case>/annotation/devin-visual-v2-waveC.json) plus 30 appended ownership-review.json sidecar entries carrying per-box pixel boxes, wrist-proximity and uncertainty notes. No existing file or label was modified except the append to ownership-review.json; held-out cases (wm-dink-01, afn-vic-rally1) received no new labels. Added datasets/paddle-bench/ownership-review/README.md with recomputed registry counts.",
+  "provenance": {
+    "frameExtraction": "ffmpeg -vf select=eq(n\\,IDX) absolute CFR frame indexing (no seek-based -ss indexing) — extractor and per-frame manifest kept outside the repo (session workspace), all tMs recorded from frame index / fps",
+    "sources": {
+      "wavea-944403-dink / wavea-944403-smash": "dvids-944403.mp4 (60000/1001 fps) — downloaded from committed corpus source URL, SHA-256 verified byte-identical to datasets/corpus/sources.json",
+      "wavea-faead-rally": "DOD_110692879.mp4 (24 fps), SHA-256 verified vs corpus metadata",
+      "wavea-faead-feed": "DOD_110698064.mp4 (24 fps), SHA-256 verified",
+      "wavea-marne-dig": "DOD_111781177.mp4 (24 fps), SHA-256 verified",
+      "afn-sasebo-rally1": "committed bundle clip clock convention (30000/1001 fps), tMs matches existing label convention"
+    },
+    "visualMethod": "every labeled point read off a viewed frame via coordinate-grid zoom crops; ambiguous boxes recorded sidecar-only with uncertainty notes; occluded target frames recorded as visibility=occluded with no point; nothing interpolated"
+  },
+  "exactNumbers": {
+    "framesAnnotated": 30,
+    "bundles": {
+      "wavea-944403-dink": 12,
+      "wavea-944403-smash": 4,
+      "wavea-faead-rally": 5,
+      "wavea-marne-dig": 5,
+      "wavea-faead-feed": 2,
+      "afn-sasebo-rally1": 2
+    },
+    "boxes": { "targetVisible": 20, "targetOccludedNoPoint": 4, "otherVisible": 59, "ambiguous": 6 },
+    "sameTimestampTargetOtherDualFrames": { "before": 30, "after": 50, "definition": "frames with >=1 visible target point AND >=1 visible other point at the same tMs, aggregated across annotator files per bundle; recomputed from committed files" },
+    "annotationFileVisiblePoints": { "targetBefore": 65, "targetAfter": 85, "otherBefore": 81, "otherAfter": 140 },
+    "sidecarEntries": { "before": 70, "after": 100 },
+    "waveaBundlesWithDualsBefore": 0,
+    "waveaBundlesWithDualsAfter": 5
+  },
+  "hardSliceCoverage": "included and flagged in notes: edge-on blades (dink far-center, smash near-left sliver, faead-feed target), dark-on-dark low contrast (smash smasher vs trees, faead-rally target vs fence), motion blur (sasebo partner paddle +-15px), net-post/net-tape partial occlusion (sasebo 0021, marne ARMY red blade)",
+  "honestNegatives": [
+    "Program headline is duals 30 -> 60+; this lands at 50 strict same-timestamp target+other duals (+20). The other 10 annotated frames have the target paddle occluded/uncertain plus >=2 other/ambiguous paddles — occlusion recorded honestly instead of inventing target points.",
+    "wavea bundle-local clip.mp4 files are NOT committed (contrary to the workstream brief); frames were extracted from hash-verified corpus source videos instead, using each bundle's recording clock.",
+    "4 target-occluded frames and 6 ambiguous boxes were deliberately left without coordinates; several visible boxes carry +-8..15px boundary uncertainty notes (blur/edge-on/dark-on-dark) in the sidecar.",
+    "STATUS_BOARD's '78 target / 83 other' uses a counting this work could not reproduce from committed files (annotation-file visible points recompute to 65/81; sidecar per-box verdicts to 38/79); README lists all denominators separately rather than reconciling by guesswork.",
+    "No cascade / S3 P-R numbers are reported: pnpm lab:regen and the pose cascade are macOS-only and runs/ dirs are absent — measuring ownership P/R on the enlarged set remains blocked on a macOS run."
+  ],
+  "remainsBlocked": [
+    "Re-measuring S3 ownership P/R against the enlarged (50-dual) instrument: requires pnpm lab:regen on macOS (Apple Vision pose) with local media; cannot be run in this Linux session and numbers were not fabricated.",
+    "Remaining wavea bundles (wavea-marne-serve, wavea-sasebo-volleys, wavea-wgm-wheelchair) not yet dual-labeled: not reached within this pass; further scaling needs more review passes on their source windows."
+  ]
+}

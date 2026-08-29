@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "afn-sasebo-rally1",
+  "annotatorId": "devin-visual-v2-waveC",
+  "createdAtIso": "2026-08-29T06:00:00.000Z",
+  "revision": 1,
+  "stroke": "volley",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.6,
+  "notes": "WAVE-C ownership dual labels (devin-visual-v2-waveC). case clip clock (clip.mp4, 30000/1001 fps, absolute frame index) - matches existing label tMs convention.\nEvery box below was VISUALLY observed on an extracted absolute-CFR frame (ffmpeg select=eq(n,IDX)); no interpolation. Points are normalized paddle-box centers; per-box pixel boxes, wrist proximity and uncertainty are recorded per frame in ownership-review.json sidecar (annotator devin-visual-v2-waveC). Ambiguous boxes are sidecar-only (never coordinates here).\nt=1901.9: 2 boxes (target, other)\nt=2102.1: 2 boxes (target, other)",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T06:00:00.000Z"
+    }
+  ],
+  "paddleFrames": [
+    {
+      "tMs": 1901.9,
+      "point": {
+        "x": 0.5198,
+        "y": 0.4833
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2102.1,
+      "point": {
+        "x": 0.5115,
+        "y": 0.6
+      },
+      "visibility": "visible"
+    }
+  ],
+  "otherPaddleFrames": [
+    {
+      "tMs": 1901.9,
+      "point": {
+        "x": 0.3854,
+        "y": 0.6593
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2102.1,
+      "point": {
+        "x": 0.3836,
+        "y": 0.6069
+      },
+      "visibility": "visible"
+    }
+  ]
+}

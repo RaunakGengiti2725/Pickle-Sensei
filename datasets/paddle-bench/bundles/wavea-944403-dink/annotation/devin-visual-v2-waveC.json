@@ -1,0 +1,335 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-944403-dink",
+  "annotatorId": "devin-visual-v2-waveC",
+  "createdAtIso": "2026-08-29T06:00:00.000Z",
+  "revision": 1,
+  "stroke": "forehand_drive",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.6,
+  "notes": "WAVE-C ownership dual labels (devin-visual-v2-waveC). RECORDING clock (dvids-944403.mp4, 60000/1001 fps, absolute frame index).\nEvery box below was VISUALLY observed on an extracted absolute-CFR frame (ffmpeg select=eq(n,IDX)); no interpolation. Points are normalized paddle-box centers; per-box pixel boxes, wrist proximity and uncertainty are recorded per frame in ownership-review.json sidecar (annotator devin-visual-v2-waveC). Ambiguous boxes are sidecar-only (never coordinates here).\nt=20003.32: 3 boxes (target, other, other)\nt=20253.57: 4 boxes (target, other, other, other)\nt=20503.82: 4 boxes (target, other, other, other)\nt=20754.07: 4 boxes (target, other, other, other)\nt=21087.73: 3 boxes (target, other, ambiguous)\nt=21171.15: 3 boxes (target, other, ambiguous)\nt=21337.98: 3 boxes (target, other, other)\nt=21588.23: 4 boxes (target, other, other, other)\nt=21838.48: 4 boxes (target, other, other, other)\nt=22088.73: 4 boxes (target, other, other, other)\nt=22338.98: 3 boxes (target, other, other)\nt=22589.23: 3 boxes (target, other, ambiguous)",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T06:00:00.000Z"
+    }
+  ],
+  "paddleFrames": [
+    {
+      "tMs": 20003.32,
+      "point": {
+        "x": 0.338,
+        "y": 0.6194
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 20253.57,
+      "point": {
+        "x": 0.3133,
+        "y": 0.5995
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 20503.82,
+      "point": {
+        "x": 0.2552,
+        "y": 0.5398
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 20754.07,
+      "point": {
+        "x": 0.2188,
+        "y": 0.5139
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 21087.73,
+      "point": {
+        "x": 0.3021,
+        "y": 0.5407
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 21171.15,
+      "point": {
+        "x": 0.3021,
+        "y": 0.5315
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 21337.98,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 21588.23,
+      "point": {
+        "x": 0.2812,
+        "y": 0.5565
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 21838.48,
+      "point": {
+        "x": 0.3333,
+        "y": 0.5602
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 22088.73,
+      "point": {
+        "x": 0.349,
+        "y": 0.5167
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 22338.98,
+      "point": {
+        "x": 0.3417,
+        "y": 0.4556
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 22589.23,
+      "point": {
+        "x": 0.3469,
+        "y": 0.462
+      },
+      "visibility": "visible"
+    }
+  ],
+  "otherPaddleFrames": [
+    {
+      "tMs": 20003.32,
+      "point": {
+        "x": 0.7393,
+        "y": 0.5653
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 20003.32,
+      "point": {
+        "x": 0.3052,
+        "y": 0.3611
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 20253.57,
+      "point": {
+        "x": 0.737,
+        "y": 0.5898
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 20253.57,
+      "point": {
+        "x": 0.324,
+        "y": 0.3472
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 20253.57,
+      "point": {
+        "x": 0.4766,
+        "y": 0.4546
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 20503.82,
+      "point": {
+        "x": 0.6052,
+        "y": 0.563
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 20503.82,
+      "point": {
+        "x": 0.4534,
+        "y": 0.4546
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 20503.82,
+      "point": {
+        "x": 0.3052,
+        "y": 0.3713
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 20754.07,
+      "point": {
+        "x": 0.7323,
+        "y": 0.587
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 20754.07,
+      "point": {
+        "x": 0.3247,
+        "y": 0.3532
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 20754.07,
+      "point": {
+        "x": 0.4318,
+        "y": 0.3981
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 21087.73,
+      "point": {
+        "x": 0.3021,
+        "y": 0.3639
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 21171.15,
+      "point": {
+        "x": 0.3177,
+        "y": 0.3611
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 21337.98,
+      "point": {
+        "x": 0.3164,
+        "y": 0.3611
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 21337.98,
+      "point": {
+        "x": 0.4635,
+        "y": 0.4324
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 21588.23,
+      "point": {
+        "x": 0.3151,
+        "y": 0.3458
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 21588.23,
+      "point": {
+        "x": 0.4695,
+        "y": 0.4551
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 21588.23,
+      "point": {
+        "x": 0.8289,
+        "y": 0.5676
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 21838.48,
+      "point": {
+        "x": 0.4419,
+        "y": 0.463
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 21838.48,
+      "point": {
+        "x": 0.8151,
+        "y": 0.5694
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 21838.48,
+      "point": {
+        "x": 0.3135,
+        "y": 0.3671
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 22088.73,
+      "point": {
+        "x": 0.7161,
+        "y": 0.6093
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 22088.73,
+      "point": {
+        "x": 0.3255,
+        "y": 0.3773
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 22088.73,
+      "point": {
+        "x": 0.4479,
+        "y": 0.4477
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 22338.98,
+      "point": {
+        "x": 0.4536,
+        "y": 0.4491
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 22338.98,
+      "point": {
+        "x": 0.3141,
+        "y": 0.3815
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 22589.23,
+      "point": {
+        "x": 0.3547,
+        "y": 0.3843
+      },
+      "visibility": "visible"
+    }
+  ]
+}
