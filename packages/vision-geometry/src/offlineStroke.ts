@@ -150,6 +150,118 @@ export function detectOfflineStrokeWindow(sequence: PoseSequence): Result<Offlin
 
 export const CONTACT_ESTIMATOR_VERSION = "contact-evidence-4.3";
 
+/**
+ * ownership-posterior-v1 (flag-gated, default OFF): the contact posterior
+ * conditioned on ownership uncertainty. `paddleOwnershipConfidence` is a
+ * GENERAL ownership-confidence input in [0,1] for the paddle track as target
+ * evidence (1 = decisively target-owned, 0 = decisively other-owned /
+ * contradicted; null/undefined = unmeasured — absence of measurement is not
+ * counter-evidence and applies no conditioning). When the flag is ON and the
+ * confidence is weak, paddle-derived evidence degrades proportionally
+ * instead of being treated as fully target-owned:
+ * - paddle speed-peak and ball–paddle-proximity kernel mass scales by the
+ *   ownership factor (the pre-scale mass stays in the confidence
+ *   denominator, so ownership doubt can never RAISE confidence);
+ * - a ball turn gated only by a doubted paddle reference degrades to the
+ *   best of (paddle gate × factor) and the measured wrist gate;
+ * - paddleConfirmed additionally requires the ownership factor to clear a
+ *   confirmation floor — a track whose target ownership is not established
+ *   cannot CONFIRM the estimate.
+ */
+export const CONTACT_OWNERSHIP_POSTERIOR_VERSION = "ownership-posterior-v1";
+
+const OWNERSHIP_POSTERIOR = {
+  /** Ownership factor ramp: full trust at/above, zero at/below. */
+  fullConfidence: 0.7,
+  rejectConfidence: 0.15,
+  /** Minimum ownership factor for the paddle modality to CONFIRM. */
+  paddleConfirmMinFactor: 0.5,
+  /** Hand-affinity ramp for the derived-confidence helper (torso spans):
+   * a paddle is held in a hand, so sustained distance from every measured
+   * target wrist is generic ownership counter-evidence. */
+  handAffinityFullTorso: 0.45,
+  handAffinityRejectTorso: 1.2,
+  /** Kinematic coherence: a held paddle keeps a near-constant offset from
+   * the holding wrist, so during fast paddle motion the paddle→nearest-wrist
+   * distance should change far less than the paddle moves. Intervals slower
+   * than the floor are uninformative. */
+  coherenceSpeedFloorTorsoPerS: 0.6,
+  coherenceFullRatio: 0.25,
+  coherenceRejectRatio: 0.8,
+} as const;
+
+/**
+ * Derives a general paddle-ownership confidence from two generic cues:
+ * sustained hand affinity (mean per-sample affinity of the paddle track to
+ * the nearest measured target wrist — a paddle is held in a hand) and
+ * kinematic coherence (during fast paddle motion, a held paddle's distance
+ * to the holding wrist stays near-constant; a paddle moving independently of
+ * every measured target wrist is ownership counter-evidence). Returns null
+ * when no paddle sample has a measured wrist near it — unmeasured, not
+ * contradicted. This is one possible SOURCE for `paddleOwnershipConfidence`;
+ * upstream trackers with real ownership verdicts should supply their own.
+ */
+export function paddleOwnershipFromHandAffinity(input: {
+  sequence: PoseSequence;
+  paddleCenters: ReadonlyArray<{ timestampMs: number; x: number; y: number }> | null;
+  targetWrists?: ReadonlyArray<{ timestampMs: number; x: number; y: number }> | null;
+}): { confidence: number; samplesMeasured: number; samplesTotal: number } | null {
+  const centers = input.paddleCenters ?? [];
+  if (centers.length === 0) return null;
+  const wrists = input.targetWrists ?? null;
+  const frames = toLegacyPoseFrames(input.sequence);
+  const aspect =
+    input.sequence.video.height > 0 ? input.sequence.video.width / input.sequence.video.height : 1;
+  const torso = medianTorsoSpan(frames, aspect) ?? FUSION.defaultTorsoSpan;
+  const affinities: number[] = [];
+  for (const center of centers) {
+    const distance = nearestWristDistanceTo(
+      center.timestampMs,
+      center.x,
+      center.y,
+      aspect,
+      input.targetWrists ?? null,
+      frames,
+    );
+    if (distance === null) continue;
+    const torsoDistance = distance / torso;
+    affinities.push(
+      clamp01(
+        (OWNERSHIP_POSTERIOR.handAffinityRejectTorso - torsoDistance) /
+          (OWNERSHIP_POSTERIOR.handAffinityRejectTorso - OWNERSHIP_POSTERIOR.handAffinityFullTorso),
+      ),
+    );
+  }
+  if (affinities.length === 0) return null;
+  let coherenceWeighted = 0;
+  let coherenceWeight = 0;
+  for (let index = 1; index < centers.length; index += 1) {
+    const a = centers[index - 1]!;
+    const b = centers[index]!;
+    const dtMs = b.timestampMs - a.timestampMs;
+    if (dtMs <= 0) continue;
+    const moveTorso = Math.hypot((b.x - a.x) * aspect, b.y - a.y) / torso;
+    const speedTorsoPerS = (moveTorso / dtMs) * 1000;
+    if (speedTorsoPerS < OWNERSHIP_POSTERIOR.coherenceSpeedFloorTorsoPerS) continue;
+    const distA = nearestWristDistanceTo(a.timestampMs, a.x, a.y, aspect, wrists, frames);
+    const distB = nearestWristDistanceTo(b.timestampMs, b.x, b.y, aspect, wrists, frames);
+    if (distA === null || distB === null) continue;
+    const ratio = Math.abs(distB - distA) / torso / moveTorso;
+    const score = clamp01(
+      (OWNERSHIP_POSTERIOR.coherenceRejectRatio - ratio) /
+        (OWNERSHIP_POSTERIOR.coherenceRejectRatio - OWNERSHIP_POSTERIOR.coherenceFullRatio),
+    );
+    coherenceWeighted += score * moveTorso;
+    coherenceWeight += moveTorso;
+  }
+  const coherence = coherenceWeight > 0 ? coherenceWeighted / coherenceWeight : 1;
+  return {
+    confidence: (sum(affinities) / affinities.length) * coherence,
+    samplesMeasured: affinities.length,
+    samplesTotal: centers.length,
+  };
+}
+
 /** Coarse stroke family used to pick temporal priors. Derived from the
  * declared stroke or a predicted family; "unknown" is always safe. */
 export type StrokeFamily = "volley" | "dink" | "drive" | "serve" | "overhead" | "unknown";
@@ -377,6 +489,10 @@ interface KernelContribution {
    * underlying uncertainty: the censored-away mass stays in the confidence
    * denominator, so losing information can never RAISE confidence. */
   censorFactor?: number;
+  /** Pre-ownership-scaling confidence-denominator contribution. Set when
+   * ownership conditioning scales the mass, so doubt can never RAISE
+   * confidence by silencing paddle dissent. */
+  dissentMass?: number;
 }
 
 export function estimateContact(input: {
@@ -395,6 +511,13 @@ export function estimateContact(input: {
   strokeFamily?: StrokeFamily | null;
   /** OPTIONAL (v4): attach per-kernel fusion internals (calibration/debug). */
   includeFusionKernels?: boolean;
+  /** OPTIONAL (ownership-posterior-v1): general ownership confidence for the
+   * paddle track as target evidence, in [0,1]. Null/undefined = unmeasured
+   * (no conditioning). Only read when `ownershipConditionedPosterior`. */
+  paddleOwnershipConfidence?: number | null;
+  /** Default-OFF flag enabling ownership-conditioned degradation of
+   * paddle-derived evidence (ownership-posterior-v1). */
+  ownershipConditionedPosterior?: boolean;
 }): ContactEstimate {
   const frames = toLegacyPoseFrames(input.sequence).filter(
     (frame) => frame.timestampMs >= input.window.startMs && frame.timestampMs <= input.window.endMs,
@@ -413,6 +536,17 @@ export function estimateContact(input: {
     : FUSION.wristProximityFullTorso;
   const measuredTorso = medianTorsoSpan(frames, aspect);
   const torso = measuredTorso ?? FUSION.defaultTorsoSpan;
+  // ownership-posterior-v1: factor 1 (no conditioning) when the flag is OFF
+  // or the confidence is unmeasured; a linear ramp otherwise.
+  const ownershipConfidence =
+    input.ownershipConditionedPosterior === true ? (input.paddleOwnershipConfidence ?? null) : null;
+  const ownershipFactor =
+    ownershipConfidence === null
+      ? 1
+      : clamp01(
+          (ownershipConfidence - OWNERSHIP_POSTERIOR.rejectConfidence) /
+            (OWNERSHIP_POSTERIOR.fullConfidence - OWNERSHIP_POSTERIOR.rejectConfidence),
+        );
 
   const kernels: KernelContribution[] = [];
   /** Gating/rejection decisions, routed into the matching family's detail. */
@@ -615,6 +749,32 @@ export function estimateContact(input: {
               : (reject - torsoDistance) / (reject - full);
         gateNote = `${torsoDistance.toFixed(2)} torso from target ${reference.source}${gate === 0 ? " → REJECTED" : gate < 1 ? ` → ×${gate.toFixed(2)}` : ""}`;
       }
+      if (reference !== null && reference.source === "paddle" && ownershipFactor < 1 && gate > 0) {
+        // The gating paddle's target ownership is in doubt: the turn's gate
+        // degrades to the best of (paddle gate × ownership factor) and the
+        // measured wrist gate — a doubted paddle is not a full target tether.
+        const wristDistance = nearestWristDistanceTo(
+          turn.timestampMs,
+          turn.x,
+          turn.y,
+          aspect,
+          input.targetWrists ?? null,
+          frames,
+        );
+        let wristGate = 0;
+        if (wristDistance !== null) {
+          const wristTorso = wristDistance / torso;
+          wristGate =
+            wristTorso <= wristGateFull
+              ? 1
+              : wristTorso >= wristGateReject
+                ? 0
+                : (wristGateReject - wristTorso) / (wristGateReject - wristGateFull);
+        }
+        const degraded = Math.max(gate * ownershipFactor, wristGate);
+        gateNote += `; paddle ownership ×${ownershipFactor.toFixed(2)}${wristGate > gate * ownershipFactor ? " (wrist gate carries)" : ""} → ${degraded.toFixed(2)}`;
+        gate = degraded;
+      }
       if (gate <= 0) {
         rejectedTurns += 1;
         gatingNotes.push({
@@ -765,6 +925,25 @@ export function estimateContact(input: {
     for (const kernel of ballKernels) kernel.mass *= scale;
   }
   kernels.push(...ballKernels);
+
+  // ownership-posterior-v1: paddle-derived kernels scale by the ownership
+  // factor. The pre-scale mass stays in the confidence denominator
+  // (dissentMass), so ownership doubt can never RAISE confidence.
+  if (ownershipFactor < 1) {
+    let scaled = 0;
+    for (const kernel of kernels) {
+      if (kernel.signal !== "paddle_speed_peak" && kernel.signal !== "ball_paddle_proximity") {
+        continue;
+      }
+      kernel.dissentMass = kernel.mass / (kernel.censorFactor ?? 1);
+      kernel.mass *= ownershipFactor;
+      kernel.note += `, paddle ownership ×${ownershipFactor.toFixed(2)}`;
+      scaled += 1;
+    }
+    if (scaled > 0 && !limitingFactors.includes("paddle_ownership_uncertain")) {
+      limitingFactors.push("paddle_ownership_uncertain");
+    }
+  }
 
   // Ball motion with no spatial tie to the target and no target motion
   // evidence at all cannot place a TARGET contact marker: an untethered
@@ -979,16 +1158,20 @@ export function estimateContact(input: {
   const paddlePresent = (paddleCenters ?? []).some(
     (center) => Math.abs(center.timestampMs - estimatedContactMs) <= FUSION.presenceMs,
   );
-  const paddleConfirmed = paddleSignal && paddlePresent;
+  const paddleOwned = ownershipFactor >= OWNERSHIP_POSTERIOR.paddleConfirmMinFactor;
+  const paddleConfirmed = paddleSignal && paddlePresent && paddleOwned;
   if (!paddleSignal) limitingFactors.push("no_paddle_evidence");
   else if (!paddlePresent) limitingFactors.push("paddle_lost_at_contact");
+  else if (!paddleOwned) limitingFactors.push("paddle_ownership_unconfirmed");
 
   // Confidence: how much of the total evidence mass coheres at the estimate,
   // plus modality diversity; unconfirmed modalities cap it (v3 convention).
   // The denominator restores censored-away mass: a censored kernel is lost
   // information, and coherence over the surviving mass alone would let
   // censoring RAISE confidence by silencing dissent.
-  const dissentMass = sum(kernels.map((kernel) => kernel.mass / (kernel.censorFactor ?? 1)));
+  const dissentMass = sum(
+    kernels.map((kernel) => kernel.dissentMass ?? kernel.mass / (kernel.censorFactor ?? 1)),
+  );
   const coherence = chosen.density / dissentMass;
   const familiesNear = new Set(
     kernels

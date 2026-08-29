@@ -1,6 +1,10 @@
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { estimateContact, type StrokeFamily } from "../src/index.js";
+import {
+  estimateContact,
+  paddleOwnershipFromHandAffinity,
+  type StrokeFamily,
+} from "../src/index.js";
 import {
   buildPlayerTracks,
   targetPoseSequence,
@@ -142,7 +146,13 @@ export function loadBallObservations(bundle: string): BallObservation[] {
   return observations.sort((a, b) => a.timestampMs - b.timestampMs);
 }
 
-export function replayAll(options?: { pad?: number }): ReplayRow[] {
+export function replayAll(options?: {
+  pad?: number;
+  /** g05: run with the ownership-conditioned posterior flag ON, deriving the
+   * ownership confidence from hand affinity (null when no paddle track
+   * exists — unmeasured, no conditioning). */
+  ownershipConditionedPosterior?: boolean;
+}): ReplayRow[] {
   const pad = options?.pad ?? 250;
   const rows: ReplayRow[] = [];
   for (const bundle of Object.keys(SESSION)) {
@@ -173,14 +183,25 @@ export function replayAll(options?: { pad?: number }): ReplayRow[] {
           observation.timestampMs >= startMs - 250 && observation.timestampMs <= endMs + 250,
       ).length;
 
+      const targetWrists = wristSeries(frames);
+      const ownership =
+        options?.ownershipConditionedPosterior === true
+          ? paddleOwnershipFromHandAffinity({ sequence, paddleCenters: null, targetWrists })
+          : null;
       const estimate = estimateContact({
         sequence,
         window: { startMs, endMs, peakMotionMs },
         ballObservations: ball.length > 0 ? ball : null,
         paddleSpeeds: null,
         paddleCenters: null,
-        targetWrists: wristSeries(frames),
+        targetWrists,
         strokeFamily: event.family,
+        ...(options?.ownershipConditionedPosterior === true
+          ? {
+              ownershipConditionedPosterior: true,
+              paddleOwnershipConfidence: ownership?.confidence ?? null,
+            }
+          : {}),
       });
 
       rows.push(
