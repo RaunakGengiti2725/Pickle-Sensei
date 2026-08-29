@@ -375,6 +375,15 @@ export function formatSessionClock(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+/** Header pill for the active capture mode. Only a replay session may carry
+ * the replay banner — a live camera session must never be labeled a replay,
+ * and a replay must never pass as live. */
+export function captureModePillLabel(
+  source: LiveSessionSnapshot['source'],
+): string | null {
+  return source === 'replay' ? 'REPLAY · DEV RALLY' : null;
+}
+
 export const CLOSE_REASON_LABEL: Record<SessionEventCloseReason, string> = {
   settle: 'Closed on settle',
   next_stroke_valley: 'Closed at next-stroke valley',
