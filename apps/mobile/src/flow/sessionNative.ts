@@ -216,7 +216,10 @@ export function createNativeSessionAnalysisProvider(
         appVersion: deps.appVersion,
         sessionId: request.sessionId,
       });
-      if (outcome.kind === 'unavailable') {
+      if (
+        outcome.kind === 'unavailable' ||
+        outcome.kind === 'quality_blocked'
+      ) {
         return { status: 'pending', pendingReason: outcome.reason };
       }
       return { status: 'ready', analysis: outcome.record };

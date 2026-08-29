@@ -13,12 +13,15 @@ module.exports = {
       '<rootDir>/../../packages/swing-domain/src/index.ts',
     '^@pickle/model-registry$':
       '<rootDir>/../../packages/model-registry/src/index.ts',
-    '^@pickle/evaluation$':
-      '<rootDir>/../../packages/evaluation/src/index.ts',
+    '^@pickle/evaluation$': '<rootDir>/../../packages/evaluation/src/index.ts',
     '^@pickle/vision-geometry$':
       '<rootDir>/../../packages/vision-geometry/src/index.ts',
     '^@pickle/analysis-pipeline$':
       '<rootDir>/../../packages/analysis-pipeline/src/index.ts',
+    // RN-safe entry: the package's main index also exports the node-only
+    // ffmpeg clip prober, which cannot load here.
+    '^@pickle/capture-envelope$':
+      '<rootDir>/../../packages/capture-envelope/src/core.ts',
     // ESM ".js" specifiers in those packages resolve to ".ts" sources.
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
