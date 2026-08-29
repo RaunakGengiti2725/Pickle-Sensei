@@ -3,9 +3,10 @@ import Fastify, { type FastifyInstance } from "fastify";
 import pg from "pg";
 import { buildOpenApiDocument } from "@pickle/api-contracts";
 import { InMemoryJobQueue, SqsJobQueue, type IJobQueue } from "@pickle/queue";
+import { BufferedAnalytics, type IAnalyticsSink } from "@pickle/analytics";
 import type { ApiConfig } from "./config.js";
 import type { AppContext } from "./context.js";
-import { sendFailure } from "./lib/replies.js";
+import { failureCodeFor, sendFailure } from "./lib/replies.js";
 import { buildVerifier } from "./auth/tokens.js";
 import { registerAuth } from "./plugins/authPlugin.js";
 import { buildObjectStore, type IObjectStore } from "./modules/media/objectStore.js";
@@ -35,6 +36,8 @@ import { registerTrainingRoutes } from "./modules/training/routes.js";
 export interface BuildAppOptions {
   queue?: IJobQueue;
   objectStore?: IObjectStore | null;
+  /** Operational telemetry sink; defaults to structured log lines. */
+  analytics?: IAnalyticsSink;
 }
 
 export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): FastifyInstance {
@@ -60,6 +63,30 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
       options.objectStore !== undefined ? options.objectStore : buildObjectStore(process.env),
   };
   app.decorate("appContext", context);
+
+  // Typed, privacy-safe api_failure telemetry: route TEMPLATE + method +
+  // status + typed error code only — never the URL, body, or user identity.
+  // 5xx are backend errors; 401/403 are the security-sensitive slice.
+  const analytics =
+    options.analytics ??
+    new BufferedAnalytics(async (batch) => {
+      for (const event of batch) app.log.info({ analyticsEvent: event }, "analytics");
+    });
+  app.addHook("onResponse", async (request, reply) => {
+    const status = reply.statusCode;
+    if (status >= 500 || status === 401 || status === 403) {
+      analytics.track({
+        name: "api_failure",
+        at: new Date().toISOString(),
+        platform: "service",
+        route: request.routeOptions.url ?? "unmatched",
+        method: request.method,
+        statusCode: status,
+        errorCode: failureCodeFor(reply) ?? "unknown",
+      });
+      await analytics.flush();
+    }
+  });
 
   app.addHook("onSend", async (request, reply) => {
     reply.header("x-request-id", request.id);

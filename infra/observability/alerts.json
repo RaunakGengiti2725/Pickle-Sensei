@@ -1,0 +1,193 @@
+{
+  "$schema": "./alerts.schema.json",
+  "version": "observability-alerts-v1",
+  "notes": "Alert conditions over the typed analytics event stream (see docs/OBSERVABILITY.md). Every `event` value must be a member of ANALYTICS_EVENT_NAMES in @pickle/analytics — enforced by packages/analytics/test/observability.test.ts. Thresholds are initial operating points to be tuned against real traffic; they are versioned here so tuning is a reviewed change, never a dashboard edit.",
+  "alerts": [
+    {
+      "id": "crash-spike",
+      "name": "Crash spike",
+      "severity": "page",
+      "event": "app_crash",
+      "condition": {
+        "kind": "rate",
+        "numeratorFilter": { "fatal": true },
+        "denominatorEvent": "app_opened",
+        "windowMinutes": 30,
+        "threshold": 0.02,
+        "comparator": ">",
+        "minDenominator": 50
+      },
+      "securitySensitive": false,
+      "runbook": "Group by appBuild + platform; a spike isolated to one build means halt rollout of that build."
+    },
+    {
+      "id": "analysis-failure-spike",
+      "name": "Analysis failure spike",
+      "severity": "page",
+      "event": "analysis_failed",
+      "condition": {
+        "kind": "rate",
+        "denominatorEvent": "analysis_started",
+        "windowMinutes": 60,
+        "threshold": 0.1,
+        "comparator": ">",
+        "minDenominator": 30
+      },
+      "securitySensitive": false,
+      "runbook": "Group by failureKind and modelVersion; correlate with capture_envelope_verdict overall=UNSUPPORTED share to separate capture-quality drift from pipeline regressions."
+    },
+    {
+      "id": "abstention-spike",
+      "name": "Abstention spike on supported captures",
+      "severity": "ticket",
+      "event": "analysis_abstained",
+      "condition": {
+        "kind": "rate",
+        "denominatorEvent": "analysis_started",
+        "windowMinutes": 240,
+        "threshold": 0.5,
+        "comparator": ">",
+        "minDenominator": 30
+      },
+      "securitySensitive": false,
+      "runbook": "Break down by reasonCategory. Excess abstention on SUPPORTED-envelope captures is a P1 (silent product failure); join against capture_envelope_verdict by sessionId."
+    },
+    {
+      "id": "analysis-latency-spike",
+      "name": "Analysis latency spike",
+      "severity": "ticket",
+      "event": "analysis_completed",
+      "condition": {
+        "kind": "percentile",
+        "field": "latencyMs",
+        "percentile": 95,
+        "windowMinutes": 60,
+        "threshold": 60000,
+        "comparator": ">",
+        "minDenominator": 20
+      },
+      "securitySensitive": false,
+      "runbook": "Compare p95 by modelVersion and deviceClass against the previous 24h; a regression isolated to one model version means roll that version back."
+    },
+    {
+      "id": "target-lock-failure-spike",
+      "name": "Target lock failure spike",
+      "severity": "ticket",
+      "event": "target_lock_failed",
+      "condition": {
+        "kind": "rate",
+        "denominatorEvent": "capture_started",
+        "windowMinutes": 240,
+        "threshold": 0.2,
+        "comparator": ">",
+        "minDenominator": 25
+      },
+      "securitySensitive": false,
+      "runbook": "Group by reason (no_lock vs ambiguity_timeout) and algorithmVersion; a spike after an acquisition change is a rollback signal (D-027 gate)."
+    },
+    {
+      "id": "event-proposal-failure-spike",
+      "name": "Event proposal failure spike",
+      "severity": "ticket",
+      "event": "event_proposal_failed",
+      "condition": {
+        "kind": "rate",
+        "denominatorEvent": "capture_started",
+        "windowMinutes": 240,
+        "threshold": 0.3,
+        "comparator": ">",
+        "minDenominator": 25
+      },
+      "securitySensitive": false,
+      "runbook": "Correlate with capture_envelope_verdict; failures on SUPPORTED captures indicate an event-proposal regression, not capture quality."
+    },
+    {
+      "id": "backend-error-spike",
+      "name": "API backend error spike",
+      "severity": "page",
+      "event": "api_failure",
+      "condition": {
+        "kind": "count",
+        "numeratorFilter": { "statusCode": ">=500" },
+        "windowMinutes": 10,
+        "threshold": 25,
+        "comparator": ">"
+      },
+      "securitySensitive": false,
+      "runbook": "Group by route + errorCode; check DB/queue health first (catalog.db_unavailable dominates when Postgres is down)."
+    },
+    {
+      "id": "auth-failure-spike",
+      "name": "Auth failure spike (security-sensitive)",
+      "severity": "page",
+      "event": "api_failure",
+      "condition": {
+        "kind": "count",
+        "numeratorFilter": { "statusCode": "in(401,403)" },
+        "windowMinutes": 10,
+        "threshold": 100,
+        "comparator": ">"
+      },
+      "securitySensitive": true,
+      "runbook": "Sudden 401/403 volume means either a broken client build or credential stuffing; check distribution across routes — a single-route concentration on auth endpoints is an attack signal. Escalate to security review, never silence."
+    },
+    {
+      "id": "worker-failure-spike",
+      "name": "Worker failure spike",
+      "severity": "ticket",
+      "event": "worker_failure",
+      "condition": {
+        "kind": "count",
+        "windowMinutes": 30,
+        "threshold": 10,
+        "comparator": ">"
+      },
+      "securitySensitive": false,
+      "runbook": "handler_exception means a poison job or code bug (check worker logs by timestamp); sustained 'unhandled' means a capability (ffmpeg, object store) is unconfigured in the deployment."
+    },
+    {
+      "id": "queue-backlog-growth",
+      "name": "Queue backlog growth",
+      "severity": "ticket",
+      "event": "queue_backlog",
+      "condition": {
+        "kind": "gauge",
+        "field": "depth",
+        "windowMinutes": 15,
+        "threshold": 100,
+        "comparator": ">"
+      },
+      "securitySensitive": false,
+      "runbook": "Depth persistently above threshold means consumers are down or too slow; deletion/purge jobs backing up is ALSO a privacy-SLA risk (directive §58) — treat sustained backlog as security-adjacent."
+    },
+    {
+      "id": "consent-change-anomaly",
+      "name": "Training-consent change anomaly (security-sensitive)",
+      "severity": "ticket",
+      "event": "ml_training_consent_changed",
+      "condition": {
+        "kind": "count",
+        "numeratorFilter": { "granted": true },
+        "windowMinutes": 60,
+        "threshold": 500,
+        "comparator": ">"
+      },
+      "securitySensitive": true,
+      "runbook": "A grant-rate step change without a matching product release suggests a consent-UI defect enrolling users unintentionally — freeze training-data intake until verified."
+    },
+    {
+      "id": "account-deletion-spike",
+      "name": "Account deletion request spike",
+      "severity": "ticket",
+      "event": "account_delete_requested",
+      "condition": {
+        "kind": "count",
+        "windowMinutes": 1440,
+        "threshold": 50,
+        "comparator": ">"
+      },
+      "securitySensitive": true,
+      "runbook": "Deletion spikes follow trust incidents; verify the §58 deletion pipeline is draining (queue_backlog + worker_failure) so requests complete within SLA."
+    }
+  ]
+}

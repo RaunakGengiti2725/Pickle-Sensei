@@ -12,6 +12,7 @@
     "start": "tsx src/main.ts"
   },
   "dependencies": {
+    "@pickle/analytics": "workspace:*",
     "@pickle/database": "workspace:*",
     "@pickle/queue": "workspace:*",
     "pg": "^8.16.3"
