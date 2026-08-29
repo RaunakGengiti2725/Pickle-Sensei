@@ -1,0 +1,96 @@
+{
+  "id": "f07-phase-remaining-six",
+  "wave": "F",
+  "branch": "devin/wave-f/f07-phase-remaining-six",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "baseCommit": "8588ddd",
+  "commit": "d2139c4",
+  "mission": "Forensically examine the 6 anchor-free phase abstentions remaining after E04 (v2.3, 12/18) and convert to answers ONLY where evidence genuinely supports it, as a versioned v2.4 contract.",
+  "datasetScope": {
+    "goldCases": "the 18 committed wave-a gold phase cases used by E04 / d3-05 (datasets/experiments/wave-d3/d3-05-measure-gold.ts); grouped by source clip (faead, 944403, wgm-wheelchair, sasebo, marne, dense-dink), never random-frame splits",
+    "heldOut": "wm-dink-01 and afn-vic-rally1 untouched (not viewed, labeled, tuned against, or regenerated)",
+    "freshCandidatePool": "not used"
+  },
+  "contractChange": {
+    "from": "phase.paddle-temporal.v2.3 anchor-free",
+    "to": "phase.paddle-temporal.v2.4 anchor-free (PHASE_TEMPORAL_V2_ANCHOR_FREE_VERSION)",
+    "rule": "Measurement-resolution apex adoption: the strongest margin sample above the in-event peak that is motion-connected to it may be adopted as this event's apex ONLY when every motion-connected margin sample above the in-event peak lies within one median inter-sample gap of the event boundary. Event labels are quantized to frames and speeds are sampled at finite intervals, so an apex one sample past the boundary is indistinguishable from an in-event apex at measurement resolution. A connected excess extending farther out is a real spillover and still abstains (PHASE_PEAK_OUTSIDE_EVENT); rest-separated margin motion is never adopted (still a neighboring stroke). No thresholds, floors, sample-count minima, or denominators were weakened; the in-event 0.5 speed floor is applied BEFORE adoption, so weak in-event evidence cannot be rescued by a margin peak. Anchored path untouched.",
+    "anchoredPathChanged": false
+  },
+  "forensics": {
+    "script": "datasets/experiments/wave-f/f07-forensics.ts",
+    "output": "datasets/experiments/wave-f/f07-forensics-output.jsonl (post-v2.4: the 5 remaining abstentions)",
+    "sixCases": [
+      {
+        "case": "wavea-marne-dig@14042",
+        "e04Reason": "PHASE_PEAK_OUTSIDE_EVENT",
+        "forensicFinding": "Strong in-event peak (1.06 at 14333ms); the true apex (1.29 at 14348ms) sits 15ms past the event end with a 15-16ms median sample interval, motion-connected (valley 0.82 of in-event peak), prominence 3.04x padded median, no other sample above the in-event peak, no rivals of the adopted apex.",
+        "decision": "CONVERTED (v2.4): apex within one sampling interval of the boundary and motion-connected — indistinguishable from an in-event apex at measurement resolution.",
+        "v24Outcome": "segmented (motionPeakMs 14348, ordered, invariant-clean after JSON round-trip)"
+      },
+      {
+        "case": "wavea-faead-rally@13417",
+        "e04Reason": "PHASE_NO_MOTION_EVIDENCE (in-event peak 0.45 < 0.5 floor)",
+        "forensicFinding": "In-event peak 0.454 below the floor; padded max 1.3 sits 84ms (>2 sample intervals of 41.7ms) outside and is rest-separated from the in-event motion (valley 0.009) — it is a neighboring stroke, not this event's apex.",
+        "decision": "KEPT ABSTAINED: converting would require weakening the 0.5 in-event floor or adopting a rest-separated neighboring stroke's apex."
+      },
+      {
+        "case": "wavea-944403-dink@22000",
+        "e04Reason": "PHASE_NO_MOTION_EVIDENCE (in-event peak 0.17 < 0.5 floor)",
+        "forensicFinding": "No meaningful swing anywhere: in-event peak 0.171, padded max 0.178 (245ms outside, rest-separated, with a near-equal rival). Anchored path also reports no meaningful swing speed in the window.",
+        "decision": "KEPT ABSTAINED: no motion evidence exists to segment."
+      },
+      {
+        "case": "wavea-wgm-wheelchair@182400",
+        "e04Reason": "PHASE_PEAK_NOT_UNIQUE (in-event rival within 10%)",
+        "forensicFinding": "Periodic multi-burst motion: in-event rival 4.25 at 182933ms vs apex 4.35 at 182467ms (within 10%), plus a stronger margin sample 8.04. In-event rivals always contest — there is no single swing apex.",
+        "decision": "KEPT ABSTAINED: honest ambiguity; regression-pinned in phaseRedTeam (D3-05 B2)."
+      },
+      {
+        "case": "wavea-sasebo-volleys@51900",
+        "e04Reason": "PHASE_NO_MOTION_EVIDENCE (in-event peak 0.32 < 0.5 floor)",
+        "forensicFinding": "In-event peak 0.323 below the floor; the connected margin sample 0.362 (19ms outside) is also below the floor. The floor is applied before adoption, so adoption cannot rescue this case — and should not: total motion is too weak to be a swing.",
+        "decision": "KEPT ABSTAINED: weak evidence throughout; converting would weaken the floor."
+      },
+      {
+        "case": "wavea-sasebo-volleys@52934",
+        "e04Reason": "PHASE_NO_MOTION_EVIDENCE (in-event peak 0.24 < 0.5 floor)",
+        "forensicFinding": "In-event peak 0.239 below the floor; the stronger margin peak 0.676 (48ms outside) is rest-separated (valley 0.013) — a neighboring stroke. The anchored path segments this case using the gold contact; anchor-free evidence alone is insufficient.",
+        "decision": "KEPT ABSTAINED: adopting a rest-separated neighboring stroke's apex would be relabeling motion, not evidence."
+      }
+    ]
+  },
+  "metrics": {
+    "goldCoverage": {
+      "script": "datasets/experiments/wave-d3/d3-05-measure-gold.ts",
+      "before_v2_3": { "anchored": "15/17", "anchorFree": "12/18" },
+      "after_v2_4": { "anchored": "15/17", "anchorFree": "13/18" },
+      "converted": ["wavea-marne-dig@14042"],
+      "remainingAbstentions": 5
+    },
+    "validity": {
+      "anchoredPath": "byte-identical (no code path change; verified anchored 15/17 unchanged)",
+      "preexistingAnchorFreeSegmentations": "all 12 v2.3 segmented cases produce identical boundary values under v2.4; only the version string changed",
+      "invariants": "every segmented output ordered (prep <= accel < peak < followThrough <= recovery) and checkArtifactInvariants-clean after JSON round-trip; contactMs stays NaN in-process / null in JSON; anchorBasis event_peak"
+    },
+    "fuzz": {
+      "d3_05_fuzz": {
+        "script": "datasets/experiments/wave-d3/d3-05-measure-fuzz.ts",
+        "before_v2_3": { "segmented": 147, "anchored": 145, "anchorFree": 2 },
+        "after_v2_4": { "segmented": 147, "anchored": 145, "anchorFree": 2 }
+      },
+      "seededTwoBurstFuzz": "300 seeds (E04 suite) — invariant-clean, segmented and abstained both nonzero",
+      "seededNearBoundaryFuzz": "NEW: 300 seeds with a single swing apex placed ±100ms around the event end (random step 20-50ms, height 0.7-2.2, width 40-200ms) — every segmented output ordered and invariant-clean, both outcomes nonzero"
+    },
+    "tests": {
+      "suite": "packages/swing-lab vitest",
+      "result": "536 passed / 4 skipped (540) before new tests; phaseAnchorFree.test.ts grew 6 -> 10 tests (adoption case, beyond-resolution spillover still abstains, rest-separated neighbor never adopted, near-boundary fuzz)",
+      "regressionPins": "v2.3 fixtures unchanged: connected spillover still abstains, in-event rivals still contest, rest-separated neighbor exemption intact"
+    }
+  },
+  "limitations": [
+    "Committed-gold n=18 is small; the single conversion is one case, not a distributional claim.",
+    "No Mac/Apple Vision or iPhone measurement possible on this Linux box (BLOCKED_EXTERNAL for cascade metrics, unchanged from Wave E).",
+    "Held-out cases wm-dink-01 and afn-vic-rally1 were not evaluated."
+  ]
+}

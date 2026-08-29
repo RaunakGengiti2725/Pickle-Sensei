@@ -21,6 +21,19 @@ import {
  *    past the event boundary and still abstains (PHASE_PEAK_OUTSIDE_EVENT).
  * Every segmented outcome must pass checkArtifactInvariants after a JSON
  * round-trip.
+ *
+ * F07 — v2.4 measurement-resolution apex adoption. Committed-gold forensics
+ * on the 6 remaining abstentions showed one case (wavea-marne-dig@14042)
+ * where the swing's true apex sits ONE SAMPLE (15ms at 60fps) past the
+ * labeled event end, motion-connected to the in-event peak, with every other
+ * sample above the in-event peak inside the event. At the resolution of the
+ * measurement that apex is indistinguishable from an in-event apex. v2.4
+ * adopts the strongest motion-connected margin sample as the apex ONLY when
+ * every motion-connected margin sample above the in-event peak lies within
+ * one median inter-sample gap of the boundary; a swing whose excess extends
+ * farther out genuinely spills past the label and still abstains
+ * (PHASE_PEAK_OUTSIDE_EVENT — the v2.3 spill-over fixture is unchanged).
+ * Rest-separated margin motion is never adopted.
  */
 
 const jsonRoundTrip = (value: unknown): unknown => JSON.parse(JSON.stringify(value));
@@ -181,6 +194,89 @@ describe("E04 — burst-aware apex ownership (neighboring-stroke margin motion, 
     expect(outcome.status).toBe("abstained");
     if (outcome.status !== "abstained") return;
     expect(outcome.reason).toContain("PHASE_PEAK_NOT_UNIQUE");
+  });
+
+  it("an apex ONE SAMPLE past the event boundary, motion-connected, is adopted ≡ measurement resolution ⇒ segments around it", () => {
+    // Narrow swing whose apex sample (1840) sits 30ms past the event end with
+    // a 40ms sampling interval; the only sample above the in-event peak is
+    // that apex sample — the committed marne-dig pattern.
+    const series = bump(1840, 1.4, 60, 1000, 2110);
+    const outcome = segmentPhasesTemporalV2({
+      event: { startMs: 1200, endMs: 1810 },
+      contactMs: null,
+      paddleSpeeds: series,
+      wristSpeeds: null,
+    });
+    expectOrderedAnchorFree(outcome);
+    if (outcome.status !== "segmented") return;
+    expect(outcome.boundaries.motionPeakMs).toBe(1840);
+  });
+
+  it("a connected excess extending BEYOND one sampling interval is a real spillover ⇒ still PHASE_PEAK_OUTSIDE_EVENT", () => {
+    // Wide swing peaking 70ms past the event end: samples above the in-event
+    // peak sit at +30ms AND +70ms out — the apex is resolvably outside.
+    const series = bump(1880, 1.4, 200, 1000, 2180);
+    const outcome = segmentPhasesTemporalV2({
+      event: { startMs: 1200, endMs: 1810 },
+      contactMs: null,
+      paddleSpeeds: series,
+      wristSpeeds: null,
+    });
+    expect(outcome.status).toBe("abstained");
+    if (outcome.status !== "abstained") return;
+    expect(outcome.reason).toContain("PHASE_PEAK_OUTSIDE_EVENT");
+  });
+
+  it("a stronger REST-SEPARATED neighbor one sample past the boundary is never adopted ⇒ segments around the in-event apex", () => {
+    const series = twoBursts(
+      { peakMs: 1500, height: 1.0, halfWidthMs: 60 },
+      { peakMs: 1840, height: 1.6, halfWidthMs: 20 },
+      1000,
+      2110,
+    );
+    const outcome = segmentPhasesTemporalV2({
+      event: { startMs: 1200, endMs: 1810 },
+      contactMs: null,
+      paddleSpeeds: series,
+      wristSpeeds: null,
+    });
+    expectOrderedAnchorFree(outcome);
+    if (outcome.status !== "segmented") return;
+    expect(Math.abs(outcome.boundaries.motionPeakMs! - 1500)).toBeLessThanOrEqual(40);
+  });
+
+  it("fuzz: 300 seeded near-boundary apexes — every segmented output is ordered and invariant-clean", () => {
+    let segmented = 0;
+    let abstained = 0;
+    for (let seed = 0; seed < 300; seed += 1) {
+      let state = seed * 1103515245 + 12345;
+      const rand = () => {
+        state = (state * 1664525 + 1013904223) >>> 0;
+        return state / 2 ** 32;
+      };
+      const apexOffsetMs = Math.floor((rand() - 0.5) * 200); // ±100ms around the event end
+      const height = 0.7 + rand() * 1.5;
+      const width = 40 + rand() * 160;
+      const stepMs = 20 + Math.floor(rand() * 30);
+      const endMs = 1800 + Math.floor(rand() * 30);
+      const series = bump(endMs + apexOffsetMs, height, width, 1000, endMs + 320, stepMs);
+      const outcome = segmentPhasesTemporalV2({
+        event: { startMs: 1200, endMs },
+        contactMs: null,
+        paddleSpeeds: series,
+        wristSpeeds: null,
+      });
+      if (outcome.status === "segmented") {
+        segmented += 1;
+        expectOrderedAnchorFree(outcome);
+      } else {
+        abstained += 1;
+        expect(outcome.reason.length).toBeGreaterThan(0);
+      }
+    }
+    expect(segmented + abstained).toBe(300);
+    expect(segmented).toBeGreaterThan(0);
+    expect(abstained).toBeGreaterThan(0);
   });
 
   it("fuzz: 300 seeded two-burst rallies — every segmented output is ordered and invariant-clean", () => {
