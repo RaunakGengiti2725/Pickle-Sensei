@@ -148,7 +148,7 @@ export function detectOfflineStrokeWindow(sequence: PoseSequence): Result<Offlin
  * rally2 whip −383ms) — the uncertainty lives in the kernel widths instead.
  */
 
-export const CONTACT_ESTIMATOR_VERSION = "contact-evidence-4.2";
+export const CONTACT_ESTIMATOR_VERSION = "contact-evidence-4.3";
 
 /** Coarse stroke family used to pick temporal priors. Derived from the
  * declared stroke or a predicted family; "unknown" is always safe. */
@@ -372,6 +372,11 @@ interface KernelContribution {
    * tracker's constructive floor — such evidence may support timing but
    * never CONFIRM an estimate. */
   lowConfidence?: boolean;
+  /** Product of the boundary/gap censor factors applied to this kernel's
+   * mass (1 when uncensored). Censoring removes an anchor but not the
+   * underlying uncertainty: the censored-away mass stays in the confidence
+   * denominator, so losing information can never RAISE confidence. */
+  censorFactor?: number;
 }
 
 export function estimateContact(input: {
@@ -529,6 +534,7 @@ export function estimateContact(input: {
           FUSION.reliability.paddle_speed_peak * (peak.value / totalValue) * censor * corroboration,
         sigmaMs:
           FUSION.sigmaMs.paddle_speed_peak * (peak.boundary ? FUSION.boundarySigmaFactor : 1),
+        censorFactor: peak.boundary ? FUSION.boundaryCensorFactor : 1,
         note: `${peak.value.toFixed(2)} u/s${peak.boundary ? ", boundary-censored" : ""}${reach < 1 ? `, paddle-reach ×${reach.toFixed(2)}` : ""}${corroboration < 1 ? `, wrist-corroboration ×${corroboration.toFixed(2)}` : ""}`,
       });
     }
@@ -553,6 +559,7 @@ export function estimateContact(input: {
         mass:
           FUSION.reliability.wrist_speed_peak * (peak.value / totalValue) * censor * corroboration,
         sigmaMs: sigma * (peak.boundary ? FUSION.boundarySigmaFactor : 1),
+        censorFactor: censor,
         note: `${peak.value.toFixed(2)} u/s${peak.boundary ? ", boundary-censored" : ""}${corroboration < 1 ? `, paddle-corroboration ×${corroboration.toFixed(2)}` : ""}`,
       });
     }
@@ -648,6 +655,7 @@ export function estimateContact(input: {
         sigmaMs:
           FUSION.sigmaMs.ball_direction_change *
           (entry.gapCensored ? FUSION.boundarySigmaFactor : 1),
+        censorFactor: entry.gapCensored ? FUSION.boundaryCensorFactor : 1,
         note: entry.note,
       });
     }
@@ -675,6 +683,7 @@ export function estimateContact(input: {
             (boundary ? FUSION.boundaryCensorFactor : 1),
           sigmaMs:
             FUSION.sigmaMs.ball_paddle_proximity * (boundary ? FUSION.boundarySigmaFactor : 1),
+          censorFactor: boundary ? FUSION.boundaryCensorFactor : 1,
           note: `min ${torsoDistance.toFixed(2)} torso (${paddleProximity.distance.toFixed(3)} u)${boundary ? ", at track edge/occlusion gap (censored)" : ""}`,
         });
       } else {
@@ -703,6 +712,7 @@ export function estimateContact(input: {
               (boundary ? FUSION.boundaryCensorFactor : 1),
             sigmaMs:
               FUSION.sigmaMs.ball_wrist_proximity * (boundary ? FUSION.boundarySigmaFactor : 1),
+            censorFactor: boundary ? FUSION.boundaryCensorFactor : 1,
             note: `min ${torsoDistance.toFixed(2)} torso (wrist fallback; no paddle track)${boundary ? ", at track edge/occlusion gap (censored)" : ""}`,
           });
         } else {
@@ -975,7 +985,11 @@ export function estimateContact(input: {
 
   // Confidence: how much of the total evidence mass coheres at the estimate,
   // plus modality diversity; unconfirmed modalities cap it (v3 convention).
-  const coherence = chosen.density / totalMass;
+  // The denominator restores censored-away mass: a censored kernel is lost
+  // information, and coherence over the surviving mass alone would let
+  // censoring RAISE confidence by silencing dissent.
+  const dissentMass = sum(kernels.map((kernel) => kernel.mass / (kernel.censorFactor ?? 1)));
+  const coherence = chosen.density / dissentMass;
   const familiesNear = new Set(
     kernels
       .filter((kernel) => Math.abs(kernel.tMs - estimatedContactMs) <= 150)

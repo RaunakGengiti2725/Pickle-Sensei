@@ -156,6 +156,73 @@ describe("contact red-team: paddle track identity (reach tether)", () => {
     expect(estimate.limitingFactors).toContain("paddle_track_beyond_reach");
   });
 
+  it("F3 residual (documented RED): a foreign paddle WITHIN reach of an idle target wrist still yields a confident wrong contact", () => {
+    // Known open failure (e09 F3, wave-f f09): the reach tether is a spatial
+    // envelope, not an identity — a paddle track that switched to the
+    // opponent's paddle while it hovers within ~0.9 torso of the target's
+    // idle off-hand wrist passes the tether, and its arc at the opponent's
+    // hit (truth + 600ms) produces a both-modality-confirmed contact at the
+    // wrong moment. Distinguishing it needs upstream track identity (outside
+    // contact-code ownership); tightening the tether distance would be
+    // tuning against this synthetic attack with no real-gold support. This
+    // test PINS the documented failure so any behavior change here is
+    // noticed and re-root-caused rather than silently shipped.
+    const { sequence, window } = generateSwingSequence();
+    const idleWrist = sequence.frames
+      .map((frame) => frame.landmarks.find((mark) => mark.name === "left_wrist"))
+      .find((mark): mark is NonNullable<typeof mark> => mark !== undefined)!;
+    const oppHitMs = window.peakMs + 600;
+    const paddleCenters = Array.from({ length: 70 }, (_, i) => {
+      const t = window.startMs + i * 30;
+      const arc = Math.exp(-((t - oppHitMs) ** 2) / (2 * 100 * 100));
+      return {
+        timestampMs: t,
+        x: idleWrist.x - 0.12 - 0.1 * arc,
+        y: idleWrist.y + 0.05 - 0.03 * arc,
+      };
+    });
+    const paddleSpeeds: Array<{ timestampMs: number; value: number }> = [];
+    for (let i = 1; i < paddleCenters.length; i += 1) {
+      const a = paddleCenters[i - 1]!;
+      const b = paddleCenters[i]!;
+      paddleSpeeds.push({
+        timestampMs: (a.timestampMs + b.timestampMs) / 2,
+        value: (Math.hypot(b.x - a.x, b.y - a.y) / (b.timestampMs - a.timestampMs)) * 1000,
+      });
+    }
+    const hitAt = { x: idleWrist.x - 0.22, y: idleWrist.y + 0.02 };
+    const ball: BallObservation[] = [];
+    let frameIndex = 0;
+    for (let t = oppHitMs - 400; t <= oppHitMs + 300; t += 30) {
+      const before = t <= oppHitMs;
+      const raw = before ? (t - (oppHitMs - 400)) / 400 : (t - oppHitMs) / 300;
+      ball.push({
+        frameIndex: frameIndex++,
+        timestampMs: t,
+        x: before ? hitAt.x + 0.4 - 0.4 * raw : hitAt.x + 0.35 * raw,
+        y: before ? hitAt.y - 0.35 + 0.35 * raw : hitAt.y - 0.3 * raw,
+        confidence: 0.8,
+      });
+    }
+    const estimate = estimateContact({
+      sequence,
+      window: { startMs: window.startMs, endMs: window.endMs + 500, peakMotionMs: window.peakMs },
+      ballObservations: ball,
+      paddleSpeeds,
+      paddleCenters,
+    });
+    expect(estimate.status).toBe("estimated");
+    if (estimate.status !== "estimated") return;
+    // Pinned failure envelope: contact lands at the opponent's hit, far from
+    // truth, confidently and modality-confirmed. If any assertion here starts
+    // failing, the residual changed — update e09/f09 documentation.
+    expect(Math.abs(estimate.estimatedContactMs - oppHitMs)).toBeLessThanOrEqual(100);
+    expect(Math.abs(estimate.estimatedContactMs - window.peakMs)).toBeGreaterThanOrEqual(450);
+    expect(estimate.confidence).toBeGreaterThanOrEqual(0.7);
+    expect(estimate.ballConfirmed).toBe(true);
+    expect(estimate.paddleConfirmed).toBe(true);
+  });
+
   it("keeps trusting a genuine paddle track that stays within reach", () => {
     // Positive guard for the reach tether: a paddle riding just off the
     // dominant wrist must stay a full-strength target reference.
@@ -189,5 +256,50 @@ describe("contact red-team: paddle track identity (reach tether)", () => {
     expect(Math.abs(estimate.estimatedContactMs - window.peakMs)).toBeLessThanOrEqual(60);
     expect(estimate.paddleConfirmed).toBe(true);
     expect(estimate.limitingFactors).not.toContain("paddle_track_beyond_reach");
+  });
+});
+
+describe("contact red-team: censoring must not raise confidence (contact-evidence-4.3)", () => {
+  // Regression for the committed-gold sasebo-52019 finding (wave-f f09):
+  // gap-censoring the only true-location ball turn crushed its mass, which
+  // RAISED coherence-based confidence (0.70 → 0.79) while the estimate
+  // drifted 144ms wrong on proximity/wrist evidence. Censoring is loss of
+  // information: the censored-away mass stays in the confidence denominator,
+  // so the censored variant of the same scene can never be MORE confident
+  // than the fully-observed one.
+  it("a gap-censored ball track yields no more confidence than the same track fully observed", () => {
+    const { sequence, window } = generateSwingSequence();
+    const at = { x: 0.584, y: 0.6 };
+    const makeBall = (gap: boolean): BallObservation[] => {
+      const ball: BallObservation[] = [];
+      let frameIndex = 0;
+      for (let t = window.peakMs - 500; t <= window.peakMs + 500; t += 30) {
+        if (gap && t > window.peakMs + 30 && t < window.peakMs + 500) continue;
+        const before = t <= window.peakMs;
+        const raw = before ? (t - (window.peakMs - 500)) / 500 : (t - window.peakMs) / 500;
+        ball.push({
+          frameIndex: frameIndex++,
+          timestampMs: t,
+          x: before ? 0.95 - (0.95 - at.x) * raw : at.x + 0.3 * raw,
+          y: before ? at.y - 0.1 + 0.1 * raw : at.y - 0.2 * raw,
+          confidence: 0.8,
+        });
+      }
+      return ball;
+    };
+    const dense = estimateContact({
+      sequence,
+      window: { startMs: window.startMs, endMs: window.endMs, peakMotionMs: window.peakMs },
+      ballObservations: makeBall(false),
+    });
+    const gapped = estimateContact({
+      sequence,
+      window: { startMs: window.startMs, endMs: window.endMs, peakMotionMs: window.peakMs },
+      ballObservations: makeBall(true),
+    });
+    expect(dense.status).toBe("estimated");
+    expect(gapped.status).toBe("estimated");
+    if (dense.status !== "estimated" || gapped.status !== "estimated") return;
+    expect(gapped.confidence).toBeLessThanOrEqual(dense.confidence);
   });
 });
