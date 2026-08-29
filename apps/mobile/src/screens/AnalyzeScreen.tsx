@@ -626,8 +626,6 @@ export function AnalyzeScreen() {
     attemptEvidence.current.beginAttempt();
     setCaptureEnvelope(null);
     setTargetSeed(null);
-    lastReadiness.current = null;
-    lastQuality.current = null;
     if (source === 'camera') usabilityFunnel.log('camera_opened');
     setPhase({
       kind: 'working',
