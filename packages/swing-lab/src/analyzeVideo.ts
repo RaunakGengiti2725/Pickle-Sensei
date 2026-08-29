@@ -93,6 +93,7 @@ import {
   type CropDetectionFrame,
 } from "./paddleCropRecovery.js";
 import { renderReport, type LabRunReport, type PlayerStageReport } from "./report.js";
+import { detectPaddleWindow, startPaddleWorker, type PaddleServeWorker } from "./paddleWorker.js";
 
 /**
  * swing-lab analyze-video — the offline research pipeline, end to end:
@@ -132,6 +133,13 @@ interface CliArgs {
   /** Enable wrist-conditioned crop re-detection in the paddle-lost
    * neighborhood (crop-recovery-v1, W12 winner). OFF by default. */
   cropRecovery: boolean;
+  /** Warm paddle-detector worker (detect_paddle.py --serve): model loads once
+   * per run instead of once per detect invocation. Default ON — worker
+   * requests write bit-equal detection payloads (verified rally2 + volley on
+   * Mac in W2, re-verified on Linux CPU in C07) and every worker failure
+   * falls back to the one-shot path. --no-paddle-worker restores the
+   * one-shot-only behavior. */
+  paddleWorker: boolean;
   /** Product-assisted target selection: one tap during setup. */
   targetSeed: TargetSeed | null;
 }
@@ -169,6 +177,7 @@ function parseArgs(argv: string[]): CliArgs {
     fullScan: argv.includes("--full-scan"),
     mergeTracklets: argv.includes("--merge-tracklets"),
     cropRecovery: argv.includes("--crop-recovery"),
+    paddleWorker: !argv.includes("--no-paddle-worker"),
     targetSeed: (() => {
       const tap = flag("--target-tap");
       if (tap) {
@@ -214,6 +223,24 @@ async function main(): Promise<void> {
     process.exit(2);
   }
   mkdirSync(args.outDir, { recursive: true });
+
+  // Spawn the warm detector worker immediately so its startup (python import
+  // + model load + warmup) overlaps pose extraction; runPaddleStage awaits
+  // ready only when it actually sends a request.
+  const paddleWorker = args.paddleWorker
+    ? startPaddleWorker(
+        join(REPO_ROOT, "tools/paddle-lab/.venv/bin/python"),
+        join(REPO_ROOT, "tools/paddle-lab/detect_paddle.py"),
+      )
+    : null;
+  try {
+    await run(args, paddleWorker);
+  } finally {
+    paddleWorker?.dispose();
+  }
+}
+
+async function run(args: CliArgs, paddleWorker: PaddleServeWorker | null): Promise<void> {
 
   // ── 1. Native extraction (measured pose + ball candidates) ─────────────
   const timings: Record<string, number> = {};
@@ -491,13 +518,14 @@ async function main(): Promise<void> {
   };
 
   // ── 5b. Paddle perception: pixel detector → tracker → gated modality ───
-  const paddleOutcome = runPaddleStage({
+  const paddleOutcome = await runPaddleStage({
     args,
     sequence,
     otherWrists,
     window: strokeWindow,
     detectSpan,
     timings,
+    worker: paddleWorker,
   });
   report.paddle = paddleOutcome.reportEntry;
   const paddleObservations =
@@ -854,7 +882,7 @@ interface PaddleStage {
  * tracker → pose-gated selection. Every failure mode is an honest
  * `unavailable` reason; the wrist is never converted into a paddle.
  */
-function runPaddleStage(input: {
+async function runPaddleStage(input: {
   args: CliArgs;
   sequence: PoseSequence;
   otherWrists: ReturnType<typeof otherPlayersWrists>;
@@ -864,7 +892,9 @@ function runPaddleStage(input: {
    * run on relevant frames only). Falls back to the stroke window. */
   detectSpan: { startMs: number; endMs: number };
   timings: Record<string, number>;
-}): PaddleStage {
+  /** Warm detector worker; null → one-shot path. Worker failures fall back. */
+  worker: PaddleServeWorker | null;
+}): Promise<PaddleStage> {
   const python = join(REPO_ROOT, "tools/paddle-lab/.venv/bin/python");
   const script = join(REPO_ROOT, "tools/paddle-lab/detect_paddle.py");
   if (!existsSync(python) || !existsSync(script)) {
@@ -890,20 +920,32 @@ function runPaddleStage(input: {
       if (!reusable) console.log("existing paddle detections do not cover this window; re-detecting");
     }
     if (!reusable) {
-      console.log("detecting paddle candidates (D-FINE COCO proxy, python)…");
       const started = Date.now();
-      execFileSync(
-        python,
-        [
-          script,
-          "--video", input.args.video,
-          "--out", detsPath,
-          "--start-ms", String(wantedStart),
-          "--end-ms", String(wantedEnd),
-        ],
-        { stdio: "inherit" },
-      );
+      const path = await detectPaddleWindow({
+        worker: input.worker,
+        request: {
+          video: input.args.video,
+          out: detsPath,
+          startMs: wantedStart,
+          endMs: wantedEnd,
+        },
+        oneShot: () => {
+          console.log("detecting paddle candidates (D-FINE COCO proxy, python)…");
+          execFileSync(
+            python,
+            [
+              script,
+              "--video", input.args.video,
+              "--out", detsPath,
+              "--start-ms", String(wantedStart),
+              "--end-ms", String(wantedEnd),
+            ],
+            { stdio: "inherit" },
+          );
+        },
+      });
       input.timings["paddleDetectMs"] = Date.now() - started;
+      input.timings["paddleDetectViaWorker"] = path === "worker" ? 1 : 0;
     }
     const file = JSON.parse(readFileSync(detsPath, "utf8")) as RawPaddleDetectionFile;
     const trackStarted = Date.now();
