@@ -1,0 +1,83 @@
+{
+  "workstreamId": "g14-h6-invariants",
+  "mission": "Invariant/counterfactual robustness sweep of stroke-heuristic-6 (packages/swing-lab/src/strokeHeuristic.ts + the Lite copy): systematic perturbations of existing NON-holdout fixtures, measuring label stability, abstention-reason stability, and dangerous confident-label-to-different-confident-label flips; pin real invariant violations as regression tests.",
+  "method": "Deterministic perturbation sweep (datasets/experiments/wave-g/g14-h6-invariants-sweep.ts) over the 18 evaluable committed wave-a bench rows (the same rows as strokeHeuristicBench: committed pose slices in datasets/paddle-bench/runs-wave-a scored against datasets/paddle-bench/stroke-gold.json). Each row is re-classified under 33 perturbation variants across 6 families; wrist-speed inputs are recomputed from each perturbed sequence; both the lab classifier and the Lite copy run on every evaluation and are checked for exact parity. Seeds are content-hash derived (FNV) + LCG, fully reproducible. Outcomes per evaluation: stable_label, stable_abstain, abstain_reason_changed, label_to_abstain, abstain_to_label, confident_label_flip (committed label -> DIFFERENT committed label).",
+  "datasetScope": {
+    "rows": 18,
+    "grouping": "by corpus sessionKey (5 groups: dvids-marne-2024, dvids-faead-2024, dvids-944403, dvids-wgm-wheelchair, dvids-sasebo-volleys)",
+    "poseSource": "datasets/paddle-bench/runs-wave-a (committed, non-holdout)",
+    "goldSource": "datasets/paddle-bench/stroke-gold.json (Gold, human-annotated; machine labels were never used as truth)"
+  },
+  "holdoutStatement": "The held-out cases wm-dink-01 and afn-vic-rally1 were never touched, read, listed, or referenced. Only committed wave-a bench fixtures (STROKE_BENCH_POSE_CASES) were perturbed.",
+  "configuration": {
+    "classifierBefore": "stroke-heuristic-6 (uncalibrated)",
+    "classifierAfter": "stroke-heuristic-7 (uncalibrated)",
+    "variantsPerRow": 33,
+    "totalEvaluations": 594,
+    "perturbationFamilies": {
+      "torso": "hip-y extent scaled x0.92/x0.96/x1.04/x1.08 plus shoulder-y counterparts (6 variants)",
+      "crop": "zoom x1.1/x1.25 about frame center + translation +-0.05 in x and y (6 variants)",
+      "framerate": "keep-1-of-2 (2 phases) and keep-1-of-3 (3 phases) frame decimation (5 variants)",
+      "noise": "i.i.d. Gaussian coordinate noise sigma 0.002/0.005/0.01 u, 3 seeds each (9 variants)",
+      "dropout": "random landmark dropout p=0.05/0.1/0.2, 3 seeds spread over 6 variants",
+      "reflect": "left/right mirror: x -> 1-x, left/right joint names swapped, declared handedness flipped (1 variant)"
+    }
+  },
+  "measuredResults": {
+    "before_fix_stroke_heuristic_6": {
+      "overall": { "stable_label": 122, "stable_abstain": 309, "abstain_reason_changed": 109, "label_to_abstain": 35, "abstain_to_label": 11, "confident_label_flip": 8, "n": 594 },
+      "byFamily": {
+        "torso": { "stable_label": 30, "stable_abstain": 78, "abstain_reason_changed": 0, "label_to_abstain": 0, "abstain_to_label": 0, "confident_label_flip": 0, "n": 108 },
+        "crop": { "stable_label": 27, "stable_abstain": 74, "abstain_reason_changed": 4, "label_to_abstain": 3, "abstain_to_label": 0, "confident_label_flip": 0, "n": 108 },
+        "framerate": { "stable_label": 16, "stable_abstain": 38, "abstain_reason_changed": 26, "label_to_abstain": 8, "abstain_to_label": 1, "confident_label_flip": 1, "n": 90 },
+        "noise": { "stable_label": 32, "stable_abstain": 71, "abstain_reason_changed": 36, "label_to_abstain": 6, "abstain_to_label": 10, "confident_label_flip": 7, "n": 162 },
+        "dropout": { "stable_label": 12, "stable_abstain": 35, "abstain_reason_changed": 43, "label_to_abstain": 18, "abstain_to_label": 0, "confident_label_flip": 0, "n": 108 },
+        "reflect": { "stable_label": 5, "stable_abstain": 13, "abstain_reason_changed": 0, "label_to_abstain": 0, "abstain_to_label": 0, "confident_label_flip": 0, "n": 18 }
+      },
+      "dangerousFlips": {
+        "count": 8,
+        "detail": [
+          "wavea-faead-rally@13417/target: FOREHAND(0.60) -> BACKHAND(0.60) under noise sigma=0.002 (2 seeds), 0.005 (1 seed), 0.01 (1 seed) — 4 flips; baseline dominant/rival wrist travel ratio 1.27",
+          "wavea-944403-dink@21500/other: FOREHAND(0.80) -> BACKHAND(0.60) under noise sigma=0.005 (2 seeds), 0.01 (1 seed) and fps keep-1-of-3 (1 phase) — 4 flips; baseline travel ratio 1.16"
+        ],
+        "rootCause": "The dominant wrist is an argmax over comparative +-200ms travel. On rows whose two wrists have nearly-tied travels AND sit on opposite sides of the torso midline, sub-pixel noise or resampling swaps the argmax, and the swap mirrors the side call at UNCHANGED confidence."
+      },
+      "parityViolations": 0
+    },
+    "after_fix_stroke_heuristic_7": {
+      "overall": { "stable_label": 80, "stable_abstain": 352, "abstain_reason_changed": 134, "label_to_abstain": 19, "abstain_to_label": 9, "confident_label_flip": 0, "n": 594 },
+      "byFamily": {
+        "torso": { "stable_label": 18, "stable_abstain": 90, "abstain_reason_changed": 0, "label_to_abstain": 0, "abstain_to_label": 0, "confident_label_flip": 0, "n": 108 },
+        "crop": { "stable_label": 17, "stable_abstain": 86, "abstain_reason_changed": 4, "label_to_abstain": 1, "abstain_to_label": 0, "confident_label_flip": 0, "n": 108 },
+        "framerate": { "stable_label": 12, "stable_abstain": 43, "abstain_reason_changed": 31, "label_to_abstain": 3, "abstain_to_label": 1, "confident_label_flip": 0, "n": 90 },
+        "noise": { "stable_label": 22, "stable_abstain": 80, "abstain_reason_changed": 48, "label_to_abstain": 5, "abstain_to_label": 7, "confident_label_flip": 0, "n": 162 },
+        "dropout": { "stable_label": 8, "stable_abstain": 38, "abstain_reason_changed": 51, "label_to_abstain": 10, "abstain_to_label": 1, "confident_label_flip": 0, "n": 108 },
+        "reflect": { "stable_label": 3, "stable_abstain": 15, "abstain_reason_changed": 0, "label_to_abstain": 0, "abstain_to_label": 0, "confident_label_flip": 0, "n": 18 }
+      },
+      "dangerousFlips": { "count": 0 },
+      "parityViolations": 0,
+      "baselineCoverageCost": "Exactly 2 of 18 baseline rows moved committed -> abstained under the new gate: wavea-faead-rally@13417/target (v6 committed FOREHAND 0.60 — WRONG vs gold backhand) and wavea-944403-dink@21500/other (v6 committed FOREHAND 0.80 — gold L2 unknown, unverifiable). Zero gold-correct commits were lost."
+    }
+  },
+  "fix": {
+    "description": "stroke-heuristic-7 adds one gate (both copies: packages/swing-lab/src/strokeHeuristic.ts and packages/vision-geometry/src/strokeHeuristicLite.ts): when both wrists have >= MIN_TRAVEL_SAMPLE_FRAMES measured frames, their +-200ms travels are within DOMINANT_WRIST_NEAR_TIE_RATIO (1.35), AND the two wrists sit on opposite sides of the torso midline (the configuration in which the argmax swap mirrors the side call), abstain with reason dominant_wrist_near_tie_across_midline_side_attribution_unstable. The gate runs AFTER the symmetric-bimanual gate so wheelchair rim propulsion keeps its more specific diagnosis. Two-handed backhands also tie on travel but keep both hands on ONE grip (same side of the midline), so the midline counterfactual keeps them committing (existing test holds).",
+    "thresholdAnchors": "1.35 separates the two measured flip-prone rows (ratios 1.16, 1.27) from the smallest correctly-committed one-armed row (marne-serve, 1.45). Documented anchor, not a calibrated statistic; the gate was designed once from the sweep's root cause, not tuned iteratively against it.",
+    "regressionTests": "packages/swing-lab/test/strokeHeuristicNearTie.redteam.test.ts — near-tie opposite-side fixture must abstain (lab + Lite, exact parity), and a clearly one-armed control (ratio ~5) must still commit FOREHAND."
+  },
+  "findings": [
+    "DANGEROUS INSTABILITY (found, then closed): 8/594 evaluations under stroke-heuristic-6 flipped a confident committed side to the OPPOSITE confident side (FOREHAND->BACKHAND) under sigma=0.002-0.01u coordinate noise or 10-15fps decimation; root cause was the noise-decided dominant-wrist argmax on near-tied travels with wrists straddling the midline. stroke-heuristic-7 abstains on that configuration; the post-fix sweep measures 0/594 dangerous flips.",
+    "REFLECTION INVARIANCE HELD: 18/18 left/right-mirrored rows produced the physically-expected outcome (mirrored side with flipped handedness / identical abstention reason); 0 violations.",
+    "TORSO EXTENT PERTURBATION HELD: 108/108 evaluations stable (0 reason changes, 0 transitions) under +-4-8% extent scaling.",
+    "ABSTENTION-REASON INSTABILITY (open): 134/594 post-fix evaluations abstain with a DIFFERENT reason than baseline (concentrated in dropout 51/108, noise 48/162, framerate 31/90). Labels stay honest (still abstentions) but the reported reason is not a robust diagnostic under measurement degradation.",
+    "NOISE CAN MANUFACTURE CLAIMS (open): 9/594 post-fix evaluations turn a baseline abstention into a committed label (7 noise, 1 framerate, 1 dropout), e.g. wavea-sasebo-volleys@51900/target no_swing_energy_in_window -> FOREHAND(0.80) under sigma=0.005 noise: added coordinate noise inflates apparent wrist travel/energy past commitment floors. These are perturbation-manufactured commits, not baseline behavior, and were NOT 'fixed' by threshold tuning — documented as a known open robustness gap.",
+    "PRE-EXISTING confidently-wrong baseline commit (out of scope, unchanged): wavea-wgm-wheelchair@182400/target commits FOREHAND(0.80) vs gold backhand at baseline; not perturbation-related.",
+    "LAB/LITE PARITY: 0 violations across all 594x2 evaluations, before and after the fix."
+  ],
+  "verdict": "YELLOW",
+  "rationale": "The sweep found a real, dangerous invariant violation (8/594 confident side flips under small perturbations) in stroke-heuristic-6, root-caused it to the near-tie dominant-wrist argmax, and closed it with a principled abstention gate (stroke-heuristic-7) that costs zero gold-correct baseline commits and is pinned by regression tests in both classifier copies; post-fix the dangerous count is 0/594 and reflection/torso invariances held cleanly. YELLOW rather than PROVISIONAL_GREEN because two measured robustness gaps remain open and undisguised: abstention REASONS are unstable under degradation (134/594) and noise can manufacture new confident commits from baseline abstentions (9/594).",
+  "artifacts": [
+    "datasets/experiments/wave-g/g14-h6-invariants-sweep.ts (deterministic sweep harness)",
+    "datasets/experiments/wave-g/g14-h6-invariants-sweep.json (full post-fix report: all 594 evaluations, per-family counts, unlock list)",
+    "packages/swing-lab/test/strokeHeuristicNearTie.redteam.test.ts (regression pins)"
+  ]
+}

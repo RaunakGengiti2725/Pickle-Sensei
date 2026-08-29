@@ -279,6 +279,6 @@ describe("strokeHeuristic ↔ strokeHeuristicLite parity (identical fixtures, id
     const lite = classifyLite(baseInput(swingFrames()));
     const lab = classifyLab(baseInput(swingFrames()) as Parameters<typeof classifyLab>[0]);
     expect(lite.classifierVersion).toBe(lab.classifierVersion);
-    expect(lite.classifierVersion).toContain("stroke-heuristic-6");
+    expect(lite.classifierVersion).toContain("stroke-heuristic-7");
   });
 });
