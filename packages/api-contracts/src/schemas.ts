@@ -350,6 +350,16 @@ export const ConsentGrantRequest = z.object({
   device: z.string().min(1).max(160).nullable().optional(),
   captureMode: z.enum(CONSENT_CAPTURE_MODES),
   strokeIntent: z.string().min(1).max(60).nullable().optional(),
+  /**
+   * Client-minted identity of the consent decision, single-use. Clients that
+   * queue decisions offline must send it: without a decision identity a
+   * captured or re-delivered grant is indistinguishable from a new decision
+   * and can resurrect consent after a withdrawal.
+   */
+  decisionId: z.uuid().optional(),
+  /** When the user made the decision on the device; must not predate the
+   * scope's latest ledger action. */
+  decidedAtIso: z.iso.datetime().optional(),
 });
 export type ConsentGrantRequestT = z.infer<typeof ConsentGrantRequest>;
 
@@ -415,3 +425,22 @@ export const ConsentLedgerExportResponse = z.object({
   records: z.array(ConsentLedgerExportRecordSchema),
 });
 export type ConsentLedgerExportResponseT = z.infer<typeof ConsentLedgerExportResponse>;
+
+/** Export envelope v2: v1 fields plus a keyed signature over the header, so
+ * a consumer holding the key detects tampering that recomputed the hash. */
+export const ConsentLedgerExportSignatureSchema = z.object({
+  alg: z.literal("HMAC-SHA256"),
+  keyId: z.string().min(1).max(64),
+  value: z.string().regex(/^[0-9a-f]{64}$/),
+});
+
+export const ConsentLedgerExportV2Response = ConsentLedgerExportResponse.extend({
+  exportVersion: z.literal("consent-ledger-export-v2"),
+  signature: ConsentLedgerExportSignatureSchema,
+});
+export type ConsentLedgerExportV2ResponseT = z.infer<typeof ConsentLedgerExportV2Response>;
+
+export const ConsentLedgerExportEnvelopeResponse = z.union([
+  ConsentLedgerExportResponse,
+  ConsentLedgerExportV2Response,
+]);

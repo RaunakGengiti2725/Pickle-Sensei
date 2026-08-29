@@ -13,6 +13,8 @@ const config: ApiConfig = {
   oidcAudience: undefined,
   oidcJwksUrl: undefined,
   sqsQueueUrl: undefined,
+  consentExportSigningKey: undefined,
+  consentExportSigningKeyId: "consent-export-k1",
   appleIapConfigured: false,
   googlePlayConfigured: false,
 };

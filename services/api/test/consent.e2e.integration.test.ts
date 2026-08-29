@@ -120,6 +120,8 @@ describe.skipIf(!testUrl)("consent lifecycle E2E (API + training gate + intake)"
       oidcAudience: undefined,
       oidcJwksUrl: undefined,
       sqsQueueUrl: undefined,
+      consentExportSigningKey: undefined,
+      consentExportSigningKeyId: "consent-export-k1",
       appleIapConfigured: false,
       googlePlayConfigured: false,
     };
