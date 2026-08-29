@@ -10,6 +10,17 @@ export {
   type TrajectoryFile,
 } from "./ballCandidates.js";
 export {
+  aggregateBallOcclusionResults,
+  BALL_BUCKET_ORDER,
+  bucketForBallLabel,
+  collectCommittedBallLabels,
+  scoreBallOcclusionCase,
+  type BallBucketScore,
+  type BallGoldBucket,
+  type BallOcclusionCaseResult,
+  type BallOcclusionViolation,
+} from "./ballOcclusionBench.js";
+export {
   BALL_CONFIDENCE_MODEL,
   BALL_GATES2,
   BALL_TRACKER_VERSION,
