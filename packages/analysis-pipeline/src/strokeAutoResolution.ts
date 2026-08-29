@@ -45,8 +45,9 @@ import type { ProviderDescriptor } from "@pickle/vision-contracts";
 /**
  * CONFIDENCE GATE — read this before changing the numbers.
  *
- * The producing classifier today is swing-lab's stroke-heuristic-1
- * (`classifyStroke`): measured geometry, NOT a learned or calibrated model.
+ * The producing classifier today is the canonical stroke heuristic
+ * (`classifyStroke` in @pickle/vision-geometry; version string
+ * STROKE_HEURISTIC_VERSION): measured geometry, NOT a learned or calibrated model.
  * Its confidences are ordinal bookkeeping, not probabilities:
  *  - UNKNOWN is emitted at a fixed 0.2;
  *  - a depth-2 side commitment is 0.45 + 0.5·margin, clamped to [0.45, 0.8],
@@ -65,7 +66,7 @@ import type { ProviderDescriptor } from "@pickle/vision-contracts";
  * auto-detect precision without calibration data, and do NOT lower it.
  *
  * Depth-3 commitments (DINK vs DRIVE vs VOLLEY…) do not exist today —
- * bounce is unobserved and stroke-heuristic-1 refuses L3. The predicted_l3
+ * bounce is unobserved and the stroke heuristic refuses L3. The predicted_l3
  * route is exercised only when a classifier genuinely commits a leaf; this
  * module must never promote a depth-2 prediction to a leaf.
  */
@@ -76,7 +77,7 @@ export type StrokeResolutionBasis = "declared" | "predicted_l3" | "predicted_fam
 
 /**
  * Hierarchical stroke prediction — structurally compatible with the output
- * of swing-lab's `classifyStroke` (stroke-heuristic-1), so an adapter can
+ * of the stroke heuristic's `classifyStroke`, so an adapter can
  * pass it through unchanged. Kept separate from swing-domain's flat
  * StrokePrediction: hierarchy depth is the honesty mechanism here.
  */

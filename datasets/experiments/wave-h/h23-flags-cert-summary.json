@@ -1,0 +1,90 @@
+{
+  "gate": "GATE 14 — model/config/flag safety (h23-flags-cert)",
+  "baseline": "devin/1787988068-wave-c-integration @ 104ea0f",
+  "branch": "devin/wave-h/h23-flags-cert",
+  "environment": "Linux only. No iPhone/Mac measurements were made or claimed. Held-out cases wm-dink-01 and afn-vic-rally1 were never read, listed, or referenced.",
+  "method": [
+    "Static audit of every production-active model version: packages/model-registry/src/defaultManifest.ts (the single production manifest) cross-checked against each implementation's self-reported version string (Swift providers, vision-geometry, scoring, swing-lab).",
+    "Consumed Wave G g26 outcome (datasets/experiments/wave-g/g26-classifier-dedup-summary.json, commit 544cbc9, merged into this baseline): duplicated classifier eliminated; packages/swing-lab/src/strokeHeuristic.ts is a re-export of the canonical packages/vision-geometry/src/strokeHeuristicLite.ts, guarded by a retained 19/19 parity suite.",
+    "Enumerated every feature flag / experimental toggle / fallback path in mobile (apps/mobile), lab CLI (packages/swing-lab), python tooling (tools/paddle-lab), and API service (services/api), with defaults and production effects (see flag_inventory).",
+    "Verified provenance recording: packages/analysis-pipeline/src/analyzeCapture.ts records a ModelRun (providerId, modelVersion, runtime, executionTarget, artifactHash, schema versions, status incl. abstained/failed) for every task, and the final Result records poseModelVersion, paddleModelVersion, strokeDetectorVersion, phaseModelVersion, scoringModelVersion.",
+    "Verified rollback/feature-disable support for every default-on behavior.",
+    "Added a cross-package regression test locking registry version to the live classifier version; ran root gates."
+  ],
+  "measured_results": {
+    "production_model_entries_audited": 8,
+    "production_model_entries": [
+      "pose.apple-vision@apple-vision-bodypose-1 (ios) — matches ApplePoseProvider.swift modelVersion",
+      "pose.mediapipe@mediapipe-pose-landmarker-1 (android)",
+      "trigger.temporal-heuristic@temporal-stroke-heuristic-2 (ios/android) — matches TemporalStrokeDetector.swift modelVersion",
+      "stroke.heuristic-hierarchical@stroke-heuristic-1 (ios/android/server) — MISMATCH vs live classifier STROKE_HEURISTIC_VERSION 'stroke-heuristic-6 (uncalibrated)' (finding F1, FIXED to stroke-heuristic-6)",
+      "phase.geometry@phase-geometry-1 — matches vision-geometry phaseSegmenter.modelVersion",
+      "features.geometry@features-geometry-1 — matches FEATURE_EXTRACTOR_VERSION",
+      "scoring sm-v1 / faults-v1 / uncertainty-v1 / priority-v1 — match packages/scoring adapters"
+    ],
+    "duplicated_classifiers_remaining": 0,
+    "g26_parity_tests": "19/19 retained and green (guards the re-export; a reintroduced local copy fails parity)",
+    "flags_enumerated": 21,
+    "default_on_experimental_features": 0,
+    "default_on_behaviors_without_disable_path": 0,
+    "version_mismatches_found": 1,
+    "version_mismatches_after_fix": 0,
+    "regression_tests_added": 1,
+    "root_gates": "pnpm typecheck && pnpm test && pnpm lint && pnpm format:check — see gate_runs",
+    "mobile_gates": "not run: no apps/mobile code changed (mobile test fixtures reference classifierVersion strings as arbitrary payload data only)"
+  },
+  "flag_inventory": [
+    { "flag": "swing-lab CLI --overlay", "default": "off", "production_effect": "lab-only debug overlay rendering; no mobile/production route", "experimental": false, "disable": "omit flag" },
+    { "flag": "swing-lab CLI --reuse-extract", "default": "off", "production_effect": "lab-only frame-extraction cache reuse", "experimental": false, "disable": "omit flag" },
+    { "flag": "swing-lab CLI --full-scan", "default": "off", "production_effect": "lab-only exhaustive scan mode", "experimental": false, "disable": "omit flag" },
+    { "flag": "swing-lab CLI --merge-tracklets", "default": "off", "production_effect": "research-only tracklet merging, documented as NOT production-safe; opt-in only", "experimental": true, "disable": "omit flag (default)" },
+    { "flag": "swing-lab CLI --crop-recovery", "default": "off", "production_effect": "opt-in crop-recovery-v1 pass", "experimental": false, "disable": "omit flag (default)" },
+    { "flag": "swing-lab CLI --no-paddle-worker", "default": "worker ON", "production_effect": "warm paddle-detector worker (paddle-serve-v1 protocol) is the default route; flag restores legacy one-shot fallback. Worker failure rejects the request and callers can fall back to one-shot — not experimental, versioned protocol", "experimental": false, "disable": "--no-paddle-worker" },
+    { "flag": "swing-lab CLI --two-pass", "default": "off", "production_effect": "opt-in two-pass adaptive detection", "experimental": true, "disable": "omit flag (default)" },
+    { "flag": "swing-lab CLI --tight-window", "default": "off", "production_effect": "opt-in narrow event window", "experimental": false, "disable": "omit flag" },
+    { "flag": "swing-lab CLI --pass1-roi", "default": "off", "production_effect": "opt-in first-pass ROI restriction", "experimental": false, "disable": "omit flag" },
+    { "flag": "swing-lab CLI --sparse-stride N", "default": "3", "production_effect": "sparse sampling stride for lab detection", "experimental": false, "disable": "n/a (numeric param with fixed default)" },
+    { "flag": "swing-lab SCOUT_OUT env (eventBoundsScout)", "default": "unset", "production_effect": "lab-only debug dump path; no effect when unset", "experimental": false, "disable": "unset (default)" },
+    { "flag": "mobile capture completion strategy (fixed|adaptive)", "default": "fixed", "production_effect": "fixed is the shipped default; adaptive is a measured candidate reachable only via explicit native bridge call (setCaptureCompletionStrategy), never persisted — fresh launch always returns to fixed. Under fixed, adaptive runs shadow-only. Params versioned as CAPTURE_COMPLETION_PARAMS_V1; telemetry schemaVersion 1 records completionStrategy + algorithmVersion", "experimental": true, "disable": "default fixed; process restart resets" },
+    { "flag": "model registry resolve status", "default": "production", "production_effect": "ModelRegistry.resolve defaults to deploymentStatus=production; experimental/shadow/candidate entries are never selected implicitly; shadow only via explicit shadowFor()", "experimental": false, "disable": "n/a (safe default)" },
+    { "flag": "api PICKLE_ENV / NODE_ENV", "default": "development", "production_effect": "selects env; invalid values throw at startup", "experimental": false, "disable": "n/a" },
+    { "flag": "api DEV_AUTH_SECRET (dev tokens)", "default": "unset", "production_effect": "dev token auth; hard-forbidden in staging/production (services/api/src/auth/tokens.ts throws if OIDC not configured there) — no privilege bypass route in production", "experimental": false, "disable": "unset; structurally disabled in prod" },
+    { "flag": "api CONSENT_EXPORT_SIGNING_KEY", "default": "unset", "production_effect": "when set, consent exports use signed v2 envelope; unset serves unsigned v1 (documented contract, versioned)", "experimental": false, "disable": "unset (v1 fallback)" },
+    { "flag": "api APPLE_IAP_PRIVATE_KEY / GOOGLE_PLAY_SERVICE_ACCOUNT", "default": "unset", "production_effect": "billing providers configured only when secrets present", "experimental": false, "disable": "unset" },
+    { "flag": "api SQS_QUEUE_URL", "default": "unset", "production_effect": "queue integration only when configured", "experimental": false, "disable": "unset" },
+    { "flag": "api PORT/HOST/APP_VERSION/DATABASE_URL", "default": "3001 / 127.0.0.1 / 0.1.0 / null", "production_effect": "service wiring config, not behavior flags", "experimental": false, "disable": "n/a" },
+    { "flag": "paddle-lab detect_paddle.py --no-warmup / --stride / --floor / ROI args", "default": "warmup on; documented numeric defaults", "production_effect": "lab tooling only; consumed via paddle-serve-v1 versioned protocol", "experimental": false, "disable": "per-flag" },
+    { "flag": "mobile AUTO DETECT availability gate", "default": "on (structural)", "production_effect": "declared-null capture is refused ('unavailable') unless the registry resolves stroke.heuristic-hierarchical for the platform — no silent unregistered-classifier route", "experimental": false, "disable": "n/a (safety gate)" }
+  ],
+  "findings": {
+    "P0": [],
+    "P1": [
+      {
+        "id": "F1",
+        "status": "FIXED",
+        "severity_rationale": "P1 (misleading provenance, not a wrong-result P0): the production model registry declared stroke.heuristic-hierarchical@stroke-heuristic-1 while the only live implementation is STROKE_HEURISTIC_VERSION='stroke-heuristic-6 (uncalibrated)'. Every mobile AUTO DETECT analysis Result therefore recorded modelVersion 'stroke-heuristic-1' in its ModelRun provenance despite running v6 semantics (5 behavior revisions unrecorded, including D11/F20 safety gates). Predictions themselves carry the correct classifierVersion, so records were internally contradictory rather than silently wrong-stroke.",
+        "fix": "defaultManifest.ts entry bumped to stroke-heuristic-6; registry lock test updated; NEW cross-package regression test packages/vision-geometry/test/modelRegistryProvenance.test.ts asserts the registry's production stroke_classification version equals the live STROKE_HEURISTIC_VERSION identifier on every supported platform, so any future classifier version bump fails CI until the manifest is updated in the same change."
+      }
+    ],
+    "P2": [
+      {
+        "id": "F2",
+        "status": "FIXED",
+        "detail": "Stale 'stroke-heuristic-1' references in live source comments (packages/analysis-pipeline/src/strokeAutoResolution.ts, packages/shared-types/src/techniqueIntent.ts) rewritten version-agnostically to reference STROKE_HEURISTIC_VERSION; confidence formulas quoted in those comments were re-verified against the v6 implementation (0.45+0.5·margin sides, 0.5+lift/2 overhead) and remain accurate. Historical dataset artifacts and test fixture payload strings intentionally left untouched."
+      },
+      {
+        "id": "F3",
+        "status": "UNRESOLVED (documentation debt, out of gate scope)",
+        "detail": "Wave C shipped versioned contracts and one default-ON behavior change (paddle worker) without D-044+ decision-log entries (docs decision log ends at D-043; already recorded in docs/HANDOFF_V4_DRAFT.md). Not an unversioned-behavior risk: the worker speaks the versioned paddle-serve-v1 protocol, is disable-able via --no-paddle-worker, and Result provenance is unaffected. Left to the docs/handoff workstream to avoid conflicting decision-log appends across Wave H branches."
+      }
+    ]
+  },
+  "gate_runs": {
+    "root_typecheck": "PASS",
+    "root_test": "PASS",
+    "root_lint": "PASS",
+    "root_format_check": "PASS"
+  },
+  "verdict": "PASS",
+  "rationale": "One authoritative production route exists per task: the ModelRegistry (defaultManifest) is the only mapping from tasks to implementations, resolve() defaults to production status, and AUTO DETECT structurally refuses to run without a registered classifier. The g26 dedup outcome is consumed and holds at this baseline: zero duplicate classifier implementations remain (re-export + 19/19 parity guard). Zero experimental features are default-on (adaptive completion is explicit-opt-in, non-persistent; --merge-tracklets/--two-pass are opt-in lab flags; registry never implicitly serves experimental/shadow entries). Every default-on behavior has a disable/rollback path. Model/config changes are versioned and provenance is recorded per-run in Result.modelRuns and top-level Result version fields. The single real defect found (registry/classifier version drift, P1 F1) was fixed with a regression test that makes recurrence a CI failure. Verdict PASS is Linux-static-audit scoped: no device measurements claimed."
+}
