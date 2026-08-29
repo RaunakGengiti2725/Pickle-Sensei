@@ -145,6 +145,10 @@ export interface BallTrackCandidate {
   nearPaddleFraction: number;
   /** Net displacement / path length — balls travel, limbs oscillate. */
   straightness: number;
+  /** Fraction of steps moving in lockstep with many concurrent tracks —
+   * camera pans / global scene motion produce coherent velocity fields;
+   * a ball is a motion outlier. */
+  coherentMotionFraction: number;
   /** Fraction of observations within bodyRadius of a pose joint. Shirt and
    * limb motion blobs live on the body; a ball only grazes it. */
   bodyDwellFraction: number;
@@ -164,6 +168,7 @@ export interface BallAblation {
   stageB_trackedObsPerSec: number;
   stageC_tracks: number;
   stageC_trackedObsPerSec: number;
+  stageC_coherenceRejected: number;
 }
 
 export type BallState = "TRACKED" | "ENTERING_OCCLUSION" | "OCCLUDED" | "REACQUIRED" | "LOST";
@@ -221,11 +226,20 @@ export const BALL_GATES2 = {
   minMedianSpeedNormPerSec: 0.12,
   maxJerkyFraction: 0.34,
   jerkyTurnDeg: 70,
+  /** Turns are only meaningful between steps of real length: the angle
+   * between two near-zero displacements is centroid measurement noise
+   * (~a few px), not ball physics. */
+  jerkyMinStepNorm: 0.008,
   maxMedianAreaPx: 220,
   maxElongMedian: 3.5,
   /** Context */
   chronicCellThreshold: 0.55,
   maxChronicFraction: 0.6,
+  coherenceMinSpeedNormPerSec: 0.5,
+  coherenceAngleDeg: 25,
+  coherenceSpeedRatioMax: 1.55,
+  coherenceMinPeers: 4,
+  maxCoherentMotionFraction: 0.5,
   bandPadTop: 0.2,
   bandPadBottom: 0.06,
   minInBandFraction: 0.8,
@@ -353,6 +367,9 @@ export function buildBallTracks(
   const associated = finished.filter(
     (track) => track.observations.length >= BALL_GATES2.minObservations,
   );
+  const coherence = computeCoherentMotionFractions(
+    finished.filter((track) => track.observations.length >= 3),
+  );
   // Short chains kept ONLY for occlusion reacquisition, with light sanity
   // gates (size + speed ceiling).
   const fragments = finished
@@ -360,7 +377,17 @@ export function buildBallTracks(
       (track) =>
         track.observations.length >= 3 && track.observations.length < BALL_GATES2.minObservations,
     )
-    .map((track) => describeTrack(track, window, paddle, band, chronicAt, joints))
+    .map((track) =>
+      describeTrack(
+        track,
+        window,
+        paddle,
+        band,
+        chronicAt,
+        joints,
+        coherence.get(track.trackId) ?? 0,
+      ),
+    )
     .filter(
       (candidate) =>
         candidate.maxSpeed <= BALL_GATES2.maxSpeedNormPerSec &&
@@ -369,17 +396,33 @@ export function buildBallTracks(
 
   // ── Physics + context gates (stage C) ───────────────────────────────────
   const allCandidates = associated.map((track) =>
-    describeTrack(track, window, paddle, band, chronicAt, joints),
+    describeTrack(
+      track,
+      window,
+      paddle,
+      band,
+      chronicAt,
+      joints,
+      coherence.get(track.trackId) ?? 0,
+    ),
   );
+  const passesStableGates = (candidate: BallTrackCandidate): boolean =>
+    candidate.maxSpeed <= BALL_GATES2.maxSpeedNormPerSec &&
+    candidate.medianSpeed >= BALL_GATES2.minMedianSpeedNormPerSec &&
+    candidate.jerkyFraction <= BALL_GATES2.maxJerkyFraction &&
+    candidate.chronicFraction <= BALL_GATES2.maxChronicFraction &&
+    candidate.inBandFraction >= BALL_GATES2.minInBandFraction &&
+    candidate.medianArea <= BALL_GATES2.maxMedianAreaPx;
   const gated = allCandidates.filter(
     (candidate) =>
-      candidate.maxSpeed <= BALL_GATES2.maxSpeedNormPerSec &&
-      candidate.medianSpeed >= BALL_GATES2.minMedianSpeedNormPerSec &&
-      candidate.jerkyFraction <= BALL_GATES2.maxJerkyFraction &&
-      candidate.chronicFraction <= BALL_GATES2.maxChronicFraction &&
-      candidate.inBandFraction >= BALL_GATES2.minInBandFraction &&
-      candidate.medianArea <= BALL_GATES2.maxMedianAreaPx,
+      passesStableGates(candidate) &&
+      candidate.coherentMotionFraction <= BALL_GATES2.maxCoherentMotionFraction,
   );
+  const coherenceRejected = allCandidates.filter(
+    (candidate) =>
+      passesStableGates(candidate) &&
+      candidate.coherentMotionFraction > BALL_GATES2.maxCoherentMotionFraction,
+  ).length;
 
   const durationSec = Math.max(
     0.001,
@@ -394,6 +437,7 @@ export function buildBallTracks(
     stageC_tracks: gated.length,
     stageC_trackedObsPerSec:
       gated.reduce((total, track) => total + track.observations.length, 0) / durationSec,
+    stageC_coherenceRejected: coherenceRejected,
   };
   return { gated, all: allCandidates, fragments, ablation };
 }
@@ -917,6 +961,65 @@ function appendBallObservation(
   track.lastMs = timestampMs;
 }
 
+/** Per-track fraction of steps whose velocity matches ≥coherenceMinPeers
+ * OTHER concurrent tracks (same frame timestamp, similar direction and
+ * speed). Camera pans move the whole scene in lockstep; a real ball is a
+ * velocity outlier against that field. */
+function computeCoherentMotionFractions(tracks: readonly ActiveBallTrack[]): Map<number, number> {
+  interface Step {
+    trackId: number;
+    key: number;
+    vx: number;
+    vy: number;
+    speed: number;
+  }
+  const stepsByTime = new Map<number, Step[]>();
+  const trackSteps = new Map<number, Step[]>();
+  for (const track of tracks) {
+    const own: Step[] = [];
+    for (let index = 1; index < track.observations.length; index += 1) {
+      const previous = track.observations[index - 1]!;
+      const current = track.observations[index]!;
+      const dtSec = (current.timestampMs - previous.timestampMs) / 1000;
+      if (dtSec <= 0 || dtSec > 0.15) continue;
+      const vx = (current.x - previous.x) / dtSec;
+      const vy = (current.y - previous.y) / dtSec;
+      const key = Math.round(current.timestampMs);
+      const step: Step = { trackId: track.trackId, key, vx, vy, speed: Math.hypot(vx, vy) };
+      own.push(step);
+      const bucket = stepsByTime.get(key);
+      if (bucket) bucket.push(step);
+      else stepsByTime.set(key, [step]);
+    }
+    trackSteps.set(track.trackId, own);
+  }
+  const cosLimit = Math.cos((BALL_GATES2.coherenceAngleDeg * Math.PI) / 180);
+  const fractions = new Map<number, number>();
+  for (const track of tracks) {
+    const own = trackSteps.get(track.trackId) ?? [];
+    let coherent = 0;
+    for (const step of own) {
+      if (step.speed < BALL_GATES2.coherenceMinSpeedNormPerSec) continue;
+      const peersInFrame = stepsByTime.get(step.key) ?? [];
+      let peers = 0;
+      for (const other of peersInFrame) {
+        if (other.trackId === step.trackId) continue;
+        if (other.speed < BALL_GATES2.coherenceMinSpeedNormPerSec) continue;
+        const ratio =
+          Math.max(other.speed, step.speed) / Math.max(1e-6, Math.min(other.speed, step.speed));
+        if (ratio > BALL_GATES2.coherenceSpeedRatioMax) continue;
+        const cos = (step.vx * other.vx + step.vy * other.vy) / (step.speed * other.speed);
+        if (cos < cosLimit) continue;
+        peers += 1;
+        if (peers >= BALL_GATES2.coherenceMinPeers) break;
+      }
+      if (peers >= BALL_GATES2.coherenceMinPeers) coherent += 1;
+    }
+    fractions.set(track.trackId, own.length === 0 ? 0 : coherent / own.length);
+  }
+  return fractions;
+}
+
 function describeTrack(
   track: ActiveBallTrack,
   window: { startMs: number; endMs: number },
@@ -924,6 +1027,7 @@ function describeTrack(
   band: { top: number; bottom: number },
   chronicAt: (x: number, y: number) => number,
   joints: JointSeries,
+  coherentMotionFraction = 0,
 ): BallTrackCandidate {
   const observations = track.observations;
   const speeds: number[] = [];
@@ -941,7 +1045,7 @@ function describeTrack(
       const v2 = { x: current.x - previous.x, y: current.y - previous.y };
       const m1 = Math.hypot(v1.x, v1.y);
       const m2 = Math.hypot(v2.x, v2.y);
-      if (m1 > 1e-6 && m2 > 1e-6) {
+      if (m1 > BALL_GATES2.jerkyMinStepNorm && m2 > BALL_GATES2.jerkyMinStepNorm) {
         turns += 1;
         const cos = Math.min(1, Math.max(-1, (v1.x * v2.x + v1.y * v2.y) / (m1 * m2)));
         if ((Math.acos(cos) * 180) / Math.PI > BALL_GATES2.jerkyTurnDeg) jerky += 1;
@@ -1080,6 +1184,7 @@ function describeTrack(
     minPaddleDistance,
     nearPaddleFraction: paddleComparisons > 0 ? nearPaddleCount / paddleComparisons : 0,
     straightness: pathLength > 1e-6 ? netDisplacement / pathLength : 0,
+    coherentMotionFraction,
     bodyDwellFraction: bodyDwellCount / observations.length,
     terminalVelocity,
     initialVelocity,

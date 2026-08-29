@@ -1,0 +1,97 @@
+{
+  "id": "e12-ball-hard-slices",
+  "workstream": "Wave E — ball tracking on the D2-06 hard-slice gold labels",
+  "createdAtIso": "2026-08-29T10:15:00.000Z",
+  "branch": "devin/wave-e/e12-ball-hard-slices",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "baseCommit": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+  "goldDataset": {
+    "source": "datasets/experiments/wave-d2/d2-06-ball-hard-slices-summary.json",
+    "labels": 43,
+    "withPoint": 39,
+    "bundles": {
+      "wm-volley-02": 5,
+      "afn-sasebo-rally2": 14,
+      "wavea-wgm-wheelchair": 9,
+      "wavea-sasebo-volleys": 15
+    },
+    "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"]
+  },
+  "grouping": "Evaluation grouped by independent source recording / session (4 bundles from 3 recordings); no random-frame splits. Denominators are the committed D2-06 gold labels; nothing resampled.",
+  "measurementBoundary": {
+    "environment": "LINUX-CPU pose-free proxy (Ubuntu, ffmpeg 4.4.2, tools/paddle-lab/ball_candidates.py 3-frame differencing → real tracker code buildBallTracks → selectPrimaryBallTrack)",
+    "inert": "No Apple Vision pose (macOS-only) so the play-band and body-dwell gates and the body-occlusion machine are inert; no paddle track so paddle-proximity gates are inert (paddleTrackExists=false).",
+    "blockedExternal": "Canonical Mac cascade numbers for these slices remain BLOCKED_EXTERNAL (no Mac/Apple Vision on this box)."
+  },
+  "configuration": {
+    "evaluator": "packages/swing-lab/src/ballHardSliceEval.ts (pnpm --filter @pickle/swing-lab ball:hardslices [reportPath])",
+    "manifest": "datasets/experiments/wave-e/e12-ball-hard-slices/manifest.json (cases, clock offsets, windows, slice membership)",
+    "candidates": "datasets/experiments/wave-e/e12-ball-hard-slices/candidates/*.json (committed, regenerated on this box from the registered PD/CC sources)",
+    "scoring": "scoreBallOcclusionCase (ballOcclusionBench): hit radius 0.05, match tolerance 40ms, per occlusion bucket; bridge honesty (predicted never canonical) checked per window"
+  },
+  "labelVerification": {
+    "claim": "Every one of the 39 labeled points has a raw motion candidate within the 0.05 hit radius in a ±40ms frame window; median nearest-candidate distance ≈ 0.005, worst 0.047 (afn-sasebo-rally2 2736).",
+    "meaning": "Candidate generation (stage A) is NOT the bottleneck on these slices; failures are association/gating/selection."
+  },
+  "forensicRootCauses": [
+    {
+      "failure": "wavea-wgm-wheelchair: BEFORE, the selected primary was a camera-pan streak (whole scene sweeps right→left at ~1.7 u/s from ~182933; ≥14 gate-passing parallel tracks in lockstep). A pan streak was scored as the best 'ball'.",
+      "fix": "Global-motion coherence gate: per-track fraction of steps whose velocity matches ≥4 other concurrent tracks (±25°, speed ratio ≤1.55, ≥0.5 u/s); tracks with >0.5 coherent steps are rejected (BALL_GATES2.maxCoherentMotionFraction, counted in ablation.stageC_coherenceRejected). Camera motion moves the scene in lockstep; a ball is a velocity outlier.",
+      "measured": "stageC_coherenceRejected per window AFTER: wavea-wgm-wheelchair 94, afn-sasebo-rally2 2, all static-camera windows 0 (no collateral damage). The wgm primary is no longer a pan streak.",
+      "secondaryFix": "jerkyMinStepNorm 0.008: direction flips between sub-noise-floor steps (few-px centroid wobble) no longer count as jerky turns — angle between near-zero displacements is measurement noise, not physics."
+    },
+    {
+      "failure": "Remaining dominant failure (NOT fixed, root-caused): pose/paddle-context-free primary selection prefers persistent limb/scene tracks over the true ball transit. Evidence: wm-volley-02 track 582 passes ALL gates and hits 4/4 gold points but loses selection to limb track 579 (goldHits 0/4) because the score rewards window overlap (1480ms vs 320ms) and length (31 vs 9 obs). Similarly afn-sasebo-rally2's best-covering track (8/11 gold hits) fails jerky+chronic gates while decoy track 333 (0/11) passes and is selected — the 2 OCCLUDED 'violations' are canonical observations from that decoy, not a prediction leak; bridge honesty held everywhere (predicted points never entered canonical observations).",
+      "whyNotFixed": "Re-weighting primary selection against these 4 bundles with no usable held-out set (wm-dink-01 / afn-vic-rally1 are untouchable) would be tuning to the training slices, and any regression on the canonical wave-C benchmarks is unverifiable from this Linux box (BLOCKED_EXTERNAL). In production the limb decoys are exactly what the pose body-dwell and paddle gates remove — gates that are inert in this proxy."
+    }
+  ],
+  "perSliceQuality": {
+    "before": {
+      "netCrossing": { "n": 4, "hits": 2, "miss": 0, "wrongLoc": 2, "violations": 0 },
+      "paddleOcclusion": { "n": 3, "hits": 1, "miss": 1, "wrongLoc": 1, "violations": 0 },
+      "multiBallBackground": { "n": 1, "hits": 0, "miss": 1, "wrongLoc": 0, "uncertainExcluded": 1 },
+      "fastBlur": { "n": 6, "hits": 0, "miss": 5, "wrongLoc": 1, "violations": 0 },
+      "occlusionCycle": { "n": 4, "hits": 0, "miss": 0, "wrongLoc": 2, "abstained": 0, "violations": 2 }
+    },
+    "after": {
+      "netCrossing": { "n": 4, "hits": 2, "miss": 0, "wrongLoc": 2, "violations": 0 },
+      "paddleOcclusion": { "n": 3, "hits": 1, "miss": 1, "wrongLoc": 1, "violations": 0 },
+      "multiBallBackground": { "n": 1, "hits": 0, "miss": 1, "wrongLoc": 0, "uncertainExcluded": 1 },
+      "fastBlur": { "n": 6, "hits": 0, "miss": 2, "wrongLoc": 4, "violations": 0 },
+      "occlusionCycle": { "n": 4, "hits": 0, "miss": 0, "wrongLoc": 2, "abstained": 0, "violations": 2 }
+    }
+  },
+  "perBucketAggregate": {
+    "before": {
+      "OBSERVED": { "n": 35, "hits": 4, "miss": 19, "wrongLoc": 12 },
+      "ENTERING_OCCLUSION": { "n": 3, "hits": 1, "miss": 1, "wrongLoc": 1 },
+      "OCCLUDED": { "n": 2, "abstained": 0, "violations": 2 },
+      "REACQUIRED": { "n": 1, "hits": 0, "miss": 0, "wrongLoc": 1 },
+      "UNCERTAIN_EXCLUDED": { "n": 2 }
+    },
+    "after": {
+      "OBSERVED": { "n": 35, "hits": 4, "miss": 11, "wrongLoc": 20 },
+      "ENTERING_OCCLUSION": { "n": 3, "hits": 1, "miss": 1, "wrongLoc": 1 },
+      "OCCLUDED": { "n": 2, "abstained": 0, "violations": 2 },
+      "REACQUIRED": { "n": 1, "hits": 0, "miss": 0, "wrongLoc": 1 },
+      "UNCERTAIN_EXCLUDED": { "n": 2 }
+    }
+  },
+  "honesty": [
+    "Aggregate hit count is UNCHANGED (4/35 OBSERVED before and after): the coherence gate removes the camera-pan artifact class (proven by the 94-vs-0 rejection split between the panning and static windows and by the wgm primary no longer being a pan streak) but the next-best decoy is limb motion, which needs the pose/paddle context this Linux proxy cannot provide.",
+    "fastBlur miss 5→2 / wrongLoc 1→4 reflects the new wgm primary overlapping gold timestamps at wrong locations — reported as-is, not spun as improvement.",
+    "The 2 OCCLUDED violations are decoy-track canonical observations, not predicted-bridge leaks; OBSERVED→OCCLUDED/PREDICTED→REACQUIRED/LOST semantics and the predicted-never-observed contract are untouched (verified by the bridge-honesty check in every window and the 27 passing tracker/occlusion tests).",
+    "No thresholds were weakened; both changes are additive gates/floors with regression tests (camera-pan lockstep rejection; sub-noise-floor wobble).",
+    "Held-out cases wm-dink-01 and afn-vic-rally1 were never viewed, labeled, or evaluated."
+  ],
+  "artifacts": [
+    "datasets/experiments/wave-e/e12-ball-hard-slices/manifest.json",
+    "datasets/experiments/wave-e/e12-ball-hard-slices/candidates/{wm-volley-02,afn-sasebo-rally2,wavea-wgm-wheelchair,wavea-sasebo-volleys}.json",
+    "datasets/experiments/wave-e/e12-ball-hard-slices/report-before.json",
+    "datasets/experiments/wave-e/e12-ball-hard-slices/report-after.json",
+    "packages/swing-lab/src/ballHardSliceEval.ts",
+    "packages/swing-lab/src/ballTracker.ts (coherence gate + jerky noise floor)",
+    "packages/swing-lab/test/ballTracker.test.ts (2 new regression tests)"
+  ],
+  "verdict": "ORANGE"
+}

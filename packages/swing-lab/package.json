@@ -17,6 +17,7 @@
     "paddle:bench": "tsx src/paddleBench.ts",
     "ball:bench": "tsx src/ballBench.ts",
     "ball:occlusion": "tsx src/ballOcclusionBench.ts",
+    "ball:hardslices": "tsx src/ballHardSliceEval.ts",
     "stroke:bench": "tsx src/strokeBench.ts",
     "stroke:taxonomy": "tsx src/strokeTaxonomyBench.ts",
     "dataset:report": "tsx src/datasetReport.ts",
