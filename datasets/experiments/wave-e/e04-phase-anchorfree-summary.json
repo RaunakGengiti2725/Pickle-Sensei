@@ -1,0 +1,104 @@
+{
+  "workstream": "E04 — anchor-free phase coverage (burst-aware apex ownership) without weakening physical-ordering invariants or honest abstention",
+  "branch": "devin/wave-e/e04-phase-anchorfree",
+  "date": "2026-08-29",
+  "base": "origin/devin/1787988068-wave-c-integration",
+  "environment": "Linux, Node 20, pnpm; no Apple Vision / Mac / iPhone (not needed). Held-out cases wm-dink-01 / afn-vic-rally1 were never read, labeled, or touched (they have no bundles under datasets/paddle-bench/runs-wave-a).",
+  "target": "packages/swing-lab/src/phaseTemporal.ts segmentPhasesAnchorFree (v2.2 -> v2.3)",
+  "baseline_note": "The task brief quoted 6/13 anchor-free coverage (D3-05 v2.2 measurement); on the CURRENT wave-c-integration gold (datasets/paddle-bench/stroke-gold.json grew since D3-05) the same measurement script (datasets/experiments/wave-d3/d3-05-measure-gold.ts, unmodified) gives 8/18 anchor-free and 15/17 anchored before this change. Both baselines are honest measurements of different gold snapshots.",
+  "forensics": {
+    "method": "datasets/experiments/wave-e/e04-forensics.ts (committed, read-only over committed wave-a bundles): for each anchor-free abstained gold case, dump in-event peak, padded/in-event medians, margin maximum + its burst separation from the apex (minimum series value between them vs the boundary-walking accel threshold), rival peaks, sample counts, max inter-sample gap.",
+    "finding": "5 of 10 abstentions were PHASE_PEAK_OUTSIDE_EVENT / rival-driven where the contesting sample sits in the ±300ms margin and is REST-SEPARATED from the in-event apex (series drops below 0.25× the smaller contesting peak between them) — i.e. it is the NEIGHBORING stroke of a dense dink/volley rally, not this event's apex. The v2.2 ownership/rival gates judged every margin sample as if it belonged to this event's swing.",
+    "abstained_cases_before": [
+      {
+        "case": "wavea-marne-dig@14042",
+        "reason_code": "PHASE_PEAK_NOT_PROMINENT",
+        "forensic": "in-event peak 0.506 vs padded median 0.258 (needs >= 0.516, misses by 0.01); the true apex 0.785 sits 15ms past the labeled event end and is MOTION-CONNECTED to the in-event maximum (valley 0.27 above the 0.20 burst floor) — the swing spills past the label bounds; segmenting would build a timeline around a truncated apex",
+        "verdict": "honest abstention — kept"
+      },
+      {
+        "case": "wavea-faead-rally@13417",
+        "reason_code": "PHASE_NO_MOTION_EVIDENCE",
+        "forensic": "in-event peak 0.454 below the 0.5 anchor-free floor; the strong motion (1.30) ends 84ms BEFORE event start and is rest-separated (valley 0.009) — the labeled event window itself carries only weak wrist motion",
+        "verdict": "honest abstention — kept (lowering the floor would be threshold-weakening)"
+      },
+      {
+        "case": "wavea-944403-dink@20700",
+        "reason_code": "PHASE_PEAK_OUTSIDE_EVENT",
+        "forensic": "decisive in-event apex 0.551@20821; margin max 1.273@21221 is the NEXT dink (gold event @20950 owns it), rest-separated (valley 0.034)",
+        "verdict": "CONVERTED by v2.3 burst-aware ownership"
+      },
+      {
+        "case": "wavea-944403-dink@21500",
+        "reason_code": "PHASE_PEAK_OUTSIDE_EVENT",
+        "forensic": "decisive in-event apex 0.668@21755; margin max 1.273@21221 is the PREVIOUS dink's apex, rest-separated (valley 0.019)",
+        "verdict": "CONVERTED by v2.3"
+      },
+      {
+        "case": "wavea-944403-dink@22000",
+        "reason_code": "PHASE_NO_MOTION_EVIDENCE",
+        "forensic": "in-event peak 0.171 — no measurable swing in the dominant-wrist series; the ANCHORED path also abstains on this event ('no meaningful swing speed in window')",
+        "verdict": "honest abstention — kept"
+      },
+      {
+        "case": "wavea-944403-smash@4317",
+        "reason_code": "PHASE_PEAK_OUTSIDE_EVENT",
+        "forensic": "in-event apex 1.329@4388; margin peak 1.724@4188 (129ms before event start) separated by a 0.262 valley — below the 0.33 boundary-walking accel threshold, i.e. by the module's own definition the motion had ended between them (the anchored boundary walk would stop at the same valley)",
+        "verdict": "CONVERTED by v2.3"
+      },
+      {
+        "case": "wavea-wgm-wheelchair@182400",
+        "reason_code": "PHASE_PEAK_OUTSIDE_EVENT (v2.2) -> PHASE_PEAK_NOT_UNIQUE (v2.3)",
+        "forensic": "near-equal IN-EVENT rival: 4.254@182933 vs apex 4.352@182467 (466ms apart) — multi-burst in-event motion, exactly the D3-05 B2 pattern; in-event contenders always contest in v2.3",
+        "verdict": "honest abstention — kept (reason code now names the actual evidence problem)"
+      },
+      {
+        "case": "wavea-sasebo-volleys@51900",
+        "reason_code": "PHASE_NO_MOTION_EVIDENCE",
+        "forensic": "in-event peak 0.323 below the 0.5 floor; the ANCHORED path also abstains on this event",
+        "verdict": "honest abstention — kept"
+      },
+      {
+        "case": "wavea-sasebo-volleys@52867",
+        "reason_code": "PHASE_PEAK_OUTSIDE_EVENT",
+        "forensic": "decisive in-event apex 0.676@52886; margin max 1.166@52586 is the neighboring volley, rest-separated (valley 0.045); the trailing 0.661@53253 near-rival is also rest-separated (valley 0.013)",
+        "verdict": "CONVERTED by v2.3"
+      },
+      {
+        "case": "wavea-sasebo-volleys@52934",
+        "reason_code": "PHASE_NO_MOTION_EVIDENCE",
+        "forensic": "in-event peak 0.239 below the 0.5 floor; the neighboring volley's 0.676 apex is rest-separated in the margin — this event's own motion is below the evidence floor",
+        "verdict": "honest abstention — kept"
+      }
+    ]
+  },
+  "change": {
+    "what": "segmentPhasesAnchorFree v2.3: the apex-ownership gate (PHASE_PEAK_OUTSIDE_EVENT) and the rival gate (PHASE_PEAK_NOT_UNIQUE) now EXEMPT margin samples that are rest-separated from the in-event apex — the series drops below 0.25 x min(apex, contender) (the exact boundary-walking accel-threshold criterion the module already uses for 'the swing motion has ended') somewhere between the two samples. In-event samples ALWAYS contest (periodic in-event motion — the D3-05 B2 wheelchair break — still abstains); a margin peak motion-connected to the apex is the same swing spilling past the event boundary and still abstains.",
+    "not_weakened": "no threshold, floor, denominator, or sample-count gate changed; the anchored path is untouched (byte-identical, regression-pinned tests still pass); the B2 wheelchair fixture (event covering multiple pushes) still abstains; PHASE_TEMPORAL_V2_ANCHOR_FREE_VERSION re-versioned v2.2 -> v2.3 because abstention semantics changed (contract versioned, not softened in place)."
+  },
+  "coverage_before_after": {
+    "measurement": "datasets/experiments/wave-d3/d3-05-measure-gold.ts unmodified, on committed wave-a gold (18 anchor-free-eligible labels across 8 dev bundles; grouped by source clip, no random-frame splits; held-out-free)",
+    "committed_gold_anchored": { "before": "15/17", "after": "15/17 (byte-identical path)" },
+    "committed_gold_anchor_free": { "before": "8/18", "after": "12/18" },
+    "converted": [
+      "wavea-944403-dink@20700",
+      "wavea-944403-dink@21500",
+      "wavea-944403-smash@4317",
+      "wavea-sasebo-volleys@52867"
+    ],
+    "validity": "all 12 segmented anchor-free outputs pass ordering + checkArtifactInvariants (asserted by the new test suite's shared expectOrderedAnchorFree helper on identical synthetic reproductions; the D3-05 measure script reports status only, and every segmented gold case flows through the same monotonicity gate that abstains PHASE_DISORDERED_BOUNDARIES)"
+  },
+  "fuzz": {
+    "d3_05_corruption_fuzz": "datasets/experiments/wave-d3/d3-05-measure-fuzz.ts unmodified: 147 segmented (145 anchored / 2 anchor-free) — IDENTICAL before and after this change; the 10 multi-modal random-walk abstentions B2 introduced are all preserved",
+    "e04_two_burst_fuzz": "new 300-seed deterministic two-burst rally fuzz (test/phaseAnchorFree.test.ts): every segmented output passes ordering + checkArtifactInvariants after JSON round-trip; abstentions all carry named reasons"
+  },
+  "residual_risk_disclosed": "if an event selector bounds EXACTLY ONE push of a periodic motion (so all rival pushes fall outside the event and outside motion-connection), v2.3 will segment around that push where v2.2 abstained. On committed gold this does not occur (the wheelchair case keeps an in-event rival and still abstains). The event-local contract already delegates 'is this a stroke event' to the selector; noted here rather than hidden.",
+  "tests": "packages/swing-lab vitest: 39 files, 470 passed / 4 skipped, including new test/phaseAnchorFree.test.ts (6 tests: stronger rest-separated neighbor segments; motion-connected spill-over still PHASE_PEAK_OUTSIDE_EVENT; rest-separated near-equal neighbor not a rival; motion-connected margin rival still PHASE_PEAK_NOT_UNIQUE; in-event rivals always contest; 300-seed fuzz)",
+  "validation": "pnpm typecheck / lint / format:check green at root; full swing-lab suite green",
+  "files_touched": [
+    "packages/swing-lab/src/phaseTemporal.ts",
+    "packages/swing-lab/test/phaseAnchorFree.test.ts (new)",
+    "datasets/experiments/wave-e/e04-forensics.ts (new, read-only diagnostic)",
+    "datasets/experiments/wave-e/e04-phase-anchorfree-summary.json (this file)"
+  ]
+}

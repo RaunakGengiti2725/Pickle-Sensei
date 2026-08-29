@@ -252,7 +252,7 @@ export const PHASE_TEMPORAL_V2_VERSION =
  * "exact contact not established" is embedded verbatim for honest UI labeling.
  */
 export const PHASE_TEMPORAL_V2_ANCHOR_FREE_VERSION =
-  "phase.paddle-temporal.v2.2 (event-local, anchor-free around measured UNIQUE motion peak; timeline from motion evidence — exact contact not established; heuristic, uncalibrated)";
+  "phase.paddle-temporal.v2.3 (event-local, anchor-free around measured UNIQUE motion peak; margin motion in a rest-separated burst belongs to a neighboring stroke; timeline from motion evidence — exact contact not established; heuristic, uncalibrated)";
 
 /**
  * v2 principles (learned from v1's measured failure modes):
@@ -448,12 +448,32 @@ function segmentPhasesAnchorFree(input: {
       reason: `PHASE_PEAK_NOT_PROMINENT: in-event peak ${peakSample.value.toFixed(2)} is not decisive vs the local median ${medianValue.toFixed(2)} (needs ≥ 2×) — no measurable swing apex without an anchor`,
     };
   }
-  const padMax = series.reduce((best, sample) => Math.max(best, sample.value), 0);
-  if (padMax > peakSample.value) {
+  // Margin samples in a DIFFERENT motion burst are a neighboring stroke, not
+  // this event's apex or a rival to it. "Different burst" means the series
+  // drops below the boundary-walking accel threshold (25% of the smaller of
+  // the two contesting peaks) somewhere between the two samples — the exact
+  // criterion the boundary walk itself uses for "the swing motion has ended".
+  // This applies ONLY to samples strictly outside the event: in-event samples
+  // always contest (periodic in-event motion — wheelchair propulsion — must
+  // still abstain), and a margin sample connected to the apex above the
+  // threshold is the same swing spilling past the event boundary.
+  const restSeparatedFromApex = (sample: { timestampMs: number; value: number }): boolean => {
+    const inMargin =
+      sample.timestampMs < input.event.startMs || sample.timestampMs > input.event.endMs;
+    if (!inMargin) return false;
+    const floor = 0.25 * Math.min(peakSample.value, sample.value);
+    const lo = Math.min(sample.timestampMs, peakSample.timestampMs);
+    const hi = Math.max(sample.timestampMs, peakSample.timestampMs);
+    return series.some((s) => s.timestampMs > lo && s.timestampMs < hi && s.value < floor);
+  };
+  const outsideContender = series.find(
+    (sample) => sample.value > peakSample.value && !restSeparatedFromApex(sample),
+  );
+  if (outsideContender) {
     return {
       status: "abstained",
       reason:
-        "PHASE_PEAK_OUTSIDE_EVENT: a stronger kinematic peak sits in the margin just outside the event — the event does not own its swing apex",
+        "PHASE_PEAK_OUTSIDE_EVENT: a stronger kinematic peak in the margin just outside the event is motion-connected to the in-event apex — the event does not own its swing apex",
     };
   }
   // A swing has ONE decisive apex. Periodic motion (e.g. wheelchair
@@ -462,7 +482,8 @@ function segmentPhasesAnchorFree(input: {
   const rival = series.find(
     (sample) =>
       Math.abs(sample.timestampMs - peakSample.timestampMs) > 180 &&
-      sample.value >= 0.9 * peakSample.value,
+      sample.value >= 0.9 * peakSample.value &&
+      !restSeparatedFromApex(sample),
   );
   if (rival) {
     return {
