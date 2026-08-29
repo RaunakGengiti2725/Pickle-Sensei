@@ -57,6 +57,7 @@ export default tseslint.config(
       "packages/swing-lab/src/labelQueueV3.ts",
       "packages/swing-lab/src/coachReview.ts",
       "packages/swing-lab/src/coachAgreement.ts",
+      "packages/swing-lab/src/drillLibrary.ts",
       "packages/swing-lab/src/corpusCheck.ts",
       "packages/swing-lab/src/strokeTaxonomyBench.ts",
       "packages/swing-lab/src/benchRegen.ts",

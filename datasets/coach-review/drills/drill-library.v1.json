@@ -1,0 +1,298 @@
+{
+  "generatedAtIso": "2026-08-29T17:39:58.240Z",
+  "supersedesVersion": "drill-library-v0",
+  "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
+  "version": "drill-library-v1",
+  "status": "curated schema + Tier-C UNVALIDATED seeds. Zero coach endorsements exist; every mapping has empty evidence and the recommendation gate abstains on all of it in every mode. Nothing here may be presented as validated.",
+  "drills": [
+    {
+      "drillId": "drill.wall-dink-rally",
+      "name": "Wall dink rally",
+      "supersedes": "drill.wall-dink-rally",
+      "supportedStrokeFamilies": [
+        "dink"
+      ],
+      "faultMappingIds": [
+        "map.dink.contact_not_out_front.wall-dink-rally",
+        "map.dink.paddle_drops_between.wall-dink-rally"
+      ],
+      "purpose": "Groove out-front contact and a stable paddle face through high-repetition soft dinks.",
+      "instructions": [
+        "Stand 7–8 ft from a wall marked with a net-height line (34 in).",
+        "Rally soft dinks continuously above the line, contacting every ball out in front of the body.",
+        "Keep the paddle up between contacts; reset to ready after each dink."
+      ],
+      "equipment": [
+        "paddle",
+        "ball",
+        "wall with net-height line (34 in)"
+      ],
+      "difficulty": "beginner",
+      "repsOrDuration": "3 × 2 min continuous rally",
+      "progressions": [
+        "alternate forehand/backhand each contact",
+        "target box 6–12 in above the line"
+      ],
+      "regressions": [
+        "allow one bounce between contacts",
+        "stand closer to the wall"
+      ],
+      "safetyNotes": [
+        "clear wall area of obstacles; stop if wrist discomfort appears"
+      ],
+      "mediaRefs": [],
+      "coachProvenance": null,
+      "provenance": "engineering seed — well-known public drill, Tier-C machine/engineer-proposed; NOT coach-validated",
+      "evidenceTier": "C",
+      "validationState": "UNVALIDATED",
+      "version": "drill-library-v1"
+    },
+    {
+      "drillId": "drill.dink-target-boxes",
+      "name": "Dink target boxes",
+      "supersedes": null,
+      "supportedStrokeFamilies": [
+        "dink"
+      ],
+      "faultMappingIds": [
+        "map.dink.lifting_trajectory.dink-target-boxes"
+      ],
+      "purpose": "Flatten the dink arc by demanding depth control into kitchen target zones.",
+      "instructions": [
+        "Place two flat targets in the opponent kitchen: one near the sideline, one center.",
+        "Cooperative crosscourt dink rally; score a point only when the ball lands in a target.",
+        "Emphasize lifting from the legs with a quiet wrist, not scooping upward."
+      ],
+      "equipment": [
+        "paddle",
+        "balls",
+        "court",
+        "2 flat targets (towels or tape boxes)"
+      ],
+      "difficulty": "intermediate",
+      "repsOrDuration": "first to 10 target hits, 3 rounds",
+      "progressions": [
+        "shrink targets",
+        "alternate targets on consecutive dinks"
+      ],
+      "regressions": [
+        "one large target",
+        "feed by hand instead of rallying"
+      ],
+      "safetyNotes": [
+        "use flat targets only — nothing a player could roll an ankle on"
+      ],
+      "mediaRefs": [],
+      "coachProvenance": null,
+      "provenance": "engineering seed — well-known public drill, Tier-C machine/engineer-proposed; NOT coach-validated",
+      "evidenceTier": "C",
+      "validationState": "UNVALIDATED",
+      "version": "drill-library-v1"
+    },
+    {
+      "drillId": "drill.volley-wall-ready",
+      "name": "Volley wall with ready reset",
+      "supersedes": null,
+      "supportedStrokeFamilies": [
+        "volley"
+      ],
+      "faultMappingIds": [
+        "map.volley.paddle_below_net_ready.volley-wall-ready",
+        "map.volley.overswing_follow_through.volley-wall-ready"
+      ],
+      "purpose": "Keep the paddle up and the volley compact: block volleys off a wall with a forced ready reset between contacts.",
+      "instructions": [
+        "Stand 6–7 ft from the wall, paddle at chest height in ready position.",
+        "Volley continuously without letting the ball bounce, returning the paddle to ready between every contact.",
+        "Keep the swing a compact block — hands finish in front of the shoulders."
+      ],
+      "equipment": [
+        "paddle",
+        "ball",
+        "wall"
+      ],
+      "difficulty": "beginner",
+      "repsOrDuration": "4 × 45 s continuous",
+      "progressions": [
+        "alternate forehand/backhand",
+        "step closer to the wall"
+      ],
+      "regressions": [
+        "allow one bounce",
+        "slow, higher-arc feeds"
+      ],
+      "safetyNotes": [
+        "stay balanced — no lunging at the wall"
+      ],
+      "mediaRefs": [],
+      "coachProvenance": null,
+      "provenance": "engineering seed — well-known public drill, Tier-C machine/engineer-proposed; NOT coach-validated",
+      "evidenceTier": "C",
+      "validationState": "UNVALIDATED",
+      "version": "drill-library-v1"
+    },
+    {
+      "drillId": "drill.shadow-unit-turn",
+      "name": "Shadow swing: unit turn ladder",
+      "supersedes": null,
+      "supportedStrokeFamilies": [
+        "drive"
+      ],
+      "faultMappingIds": [
+        "map.drive.no_unit_turn.shadow-unit-turn",
+        "map.drive.late_preparation.shadow-unit-turn"
+      ],
+      "purpose": "Build an early shoulder-hip unit turn on drives through mirror-checked shadow swings, then live feeds.",
+      "instructions": [
+        "Without a ball, rehearse the drive: turn shoulders and hips together as the split-step lands.",
+        "Check in a mirror or phone video that the chest faces the sideline before the forward swing.",
+        "Progress to dropped-ball feeds, calling 'turn' at the feeder's release."
+      ],
+      "equipment": [
+        "paddle",
+        "mirror or phone camera",
+        "balls (for the fed stage)"
+      ],
+      "difficulty": "beginner",
+      "repsOrDuration": "3 × 10 shadow swings + 2 × 10 fed balls",
+      "progressions": [
+        "feeder varies pace",
+        "alternate forehand/backhand feeds"
+      ],
+      "regressions": [
+        "shadow swings only, no feeds"
+      ],
+      "safetyNotes": [
+        "ensure swing radius is clear of people and objects"
+      ],
+      "mediaRefs": [],
+      "coachProvenance": null,
+      "provenance": "engineering seed — well-known public drill, Tier-C machine/engineer-proposed; NOT coach-validated",
+      "evidenceTier": "C",
+      "validationState": "UNVALIDATED",
+      "version": "drill-library-v1"
+    },
+    {
+      "drillId": "drill.serve-drop-consistency",
+      "name": "Serve drop consistency blocks",
+      "supersedes": null,
+      "supportedStrokeFamilies": [
+        "serve"
+      ],
+      "faultMappingIds": [
+        "map.serve.inconsistent_drop_toss.serve-drop-consistency"
+      ],
+      "purpose": "Stabilize the drop/toss so the serve contact point stops wandering: blocked repetitions with an explicit drop checkpoint.",
+      "instructions": [
+        "Serve in blocks of 10, pausing before each serve to set the same drop height and release point.",
+        "Let the ball drop from the same hand position every time; contact below the waist per rules.",
+        "Track how many of 10 drops you would rate identical before adding targets."
+      ],
+      "equipment": [
+        "paddle",
+        "balls",
+        "court"
+      ],
+      "difficulty": "beginner",
+      "repsOrDuration": "5 × 10 serves",
+      "progressions": [
+        "add deep-third targets",
+        "alternate wide/body/T targets"
+      ],
+      "regressions": [
+        "drop-and-catch only (no swing) to groove the release"
+      ],
+      "safetyNotes": [],
+      "mediaRefs": [],
+      "coachProvenance": null,
+      "provenance": "engineering seed — well-known public drill, Tier-C machine/engineer-proposed; NOT coach-validated",
+      "evidenceTier": "C",
+      "validationState": "UNVALIDATED",
+      "version": "drill-library-v1"
+    },
+    {
+      "drillId": "drill.third-shot-drop-ladder",
+      "name": "Third-shot drop ladder",
+      "supersedes": null,
+      "supportedStrokeFamilies": [
+        "drop_reset"
+      ],
+      "faultMappingIds": [
+        "map.drop.overpowered_arc.third-shot-drop-ladder"
+      ],
+      "purpose": "Take pace off the third shot: progressive distance ladder that rewards arc and kitchen landings over power.",
+      "instructions": [
+        "Start at the kitchen line dropping balls into the opposite kitchen; step back 3 ft after 5 makes.",
+        "Continue the ladder until serving-position drops; restart the rung after 3 consecutive longs.",
+        "Focus on lifting with the legs and finishing the paddle toward the target, not across the body."
+      ],
+      "equipment": [
+        "paddle",
+        "balls",
+        "court with net"
+      ],
+      "difficulty": "intermediate",
+      "repsOrDuration": "ladder to baseline, 2 full climbs",
+      "progressions": [
+        "partner returns your drop and you play it out",
+        "backhand-only ladder"
+      ],
+      "regressions": [
+        "shorten the ladder",
+        "hand-feed instead of self-feed"
+      ],
+      "safetyNotes": [],
+      "mediaRefs": [],
+      "coachProvenance": null,
+      "provenance": "engineering seed — well-known public drill, Tier-C machine/engineer-proposed; NOT coach-validated",
+      "evidenceTier": "C",
+      "validationState": "UNVALIDATED",
+      "version": "drill-library-v1"
+    },
+    {
+      "drillId": "drill.skinny-singles",
+      "name": "Skinny singles",
+      "supersedes": "drill.skinny-singles",
+      "supportedStrokeFamilies": [
+        "global",
+        "serve",
+        "return",
+        "drive",
+        "dink",
+        "drop_reset"
+      ],
+      "faultMappingIds": [
+        "map.global.no_recovery_to_ready.skinny-singles"
+      ],
+      "purpose": "Pressure-test whole-point habits (recovery, shot selection) on half the court with full-point consequences.",
+      "instructions": [
+        "Play singles on half the court (straight or crosscourt halves).",
+        "Play full points: serve, return, third shot, kitchen play.",
+        "Between shots, recover to ready position before the opponent's contact."
+      ],
+      "equipment": [
+        "paddle",
+        "ball",
+        "court"
+      ],
+      "difficulty": "intermediate",
+      "repsOrDuration": "games to 7, switch halves",
+      "progressions": [
+        "crosscourt halves only (longer diagonal)",
+        "third shot must be a drop"
+      ],
+      "regressions": [
+        "serve-and-return only, replay the point after the 4th ball"
+      ],
+      "safetyNotes": [
+        "full-court movement — warm up before playing points"
+      ],
+      "mediaRefs": [],
+      "coachProvenance": null,
+      "provenance": "engineering seed — well-known public drill, Tier-C machine/engineer-proposed; NOT coach-validated",
+      "evidenceTier": "C",
+      "validationState": "UNVALIDATED",
+      "version": "drill-library-v1"
+    }
+  ]
+}

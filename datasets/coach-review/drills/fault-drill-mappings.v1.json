@@ -1,0 +1,228 @@
+{
+  "generatedAtIso": "2026-08-29T17:39:58.240Z",
+  "version": "fault-drill-mapping-v1",
+  "status": "Tier-C engineering proposals with ZERO coach endorsements; the recommendation gate abstains on every mapping in this file",
+  "gate": {
+    "minIndependentCoachEndorsements": 2,
+    "minMappingAgreement": 0.7,
+    "minFaultDiagnosisConfidence": 0.7
+  },
+  "mappings": [
+    {
+      "mappingId": "map.dink.contact_not_out_front.wall-dink-rally",
+      "faultId": "dink.contact_not_out_front",
+      "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
+      "drillId": "drill.wall-dink-rally",
+      "drillLibraryVersion": "drill-library-v1",
+      "strokeFamilies": [
+        "dink"
+      ],
+      "severityRestriction": {
+        "min": 1,
+        "max": 3
+      },
+      "contextRestrictions": [],
+      "endorsements": [],
+      "agreement": null,
+      "evidenceTier": "C",
+      "validationState": "UNVALIDATED",
+      "provenance": "engineering proposal (Tier-C) — hypothesis for coaches to endorse or reject; zero endorsements; never recommendable",
+      "version": "fault-drill-mapping-v1"
+    },
+    {
+      "mappingId": "map.dink.paddle_drops_between.wall-dink-rally",
+      "faultId": "dink.paddle_drops_between",
+      "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
+      "drillId": "drill.wall-dink-rally",
+      "drillLibraryVersion": "drill-library-v1",
+      "strokeFamilies": [
+        "dink"
+      ],
+      "severityRestriction": {
+        "min": 1,
+        "max": 2
+      },
+      "contextRestrictions": [],
+      "endorsements": [],
+      "agreement": null,
+      "evidenceTier": "C",
+      "validationState": "UNVALIDATED",
+      "provenance": "engineering proposal (Tier-C) — hypothesis for coaches to endorse or reject; zero endorsements; never recommendable",
+      "version": "fault-drill-mapping-v1"
+    },
+    {
+      "mappingId": "map.dink.lifting_trajectory.dink-target-boxes",
+      "faultId": "dink.lifting_trajectory",
+      "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
+      "drillId": "drill.dink-target-boxes",
+      "drillLibraryVersion": "drill-library-v1",
+      "strokeFamilies": [
+        "dink"
+      ],
+      "severityRestriction": {
+        "min": 1,
+        "max": 3
+      },
+      "contextRestrictions": [
+        "player can sustain a 10-ball cooperative dink rally"
+      ],
+      "endorsements": [],
+      "agreement": null,
+      "evidenceTier": "C",
+      "validationState": "UNVALIDATED",
+      "provenance": "engineering proposal (Tier-C) — hypothesis for coaches to endorse or reject; zero endorsements; never recommendable",
+      "version": "fault-drill-mapping-v1"
+    },
+    {
+      "mappingId": "map.volley.paddle_below_net_ready.volley-wall-ready",
+      "faultId": "volley.paddle_below_net_ready",
+      "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
+      "drillId": "drill.volley-wall-ready",
+      "drillLibraryVersion": "drill-library-v1",
+      "strokeFamilies": [
+        "volley"
+      ],
+      "severityRestriction": {
+        "min": 1,
+        "max": 3
+      },
+      "contextRestrictions": [],
+      "endorsements": [],
+      "agreement": null,
+      "evidenceTier": "C",
+      "validationState": "UNVALIDATED",
+      "provenance": "engineering proposal (Tier-C) — hypothesis for coaches to endorse or reject; zero endorsements; never recommendable",
+      "version": "fault-drill-mapping-v1"
+    },
+    {
+      "mappingId": "map.volley.overswing_follow_through.volley-wall-ready",
+      "faultId": "volley.overswing_follow_through",
+      "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
+      "drillId": "drill.volley-wall-ready",
+      "drillLibraryVersion": "drill-library-v1",
+      "strokeFamilies": [
+        "volley"
+      ],
+      "severityRestriction": {
+        "min": 1,
+        "max": 2
+      },
+      "contextRestrictions": [],
+      "endorsements": [],
+      "agreement": null,
+      "evidenceTier": "C",
+      "validationState": "UNVALIDATED",
+      "provenance": "engineering proposal (Tier-C) — hypothesis for coaches to endorse or reject; zero endorsements; never recommendable",
+      "version": "fault-drill-mapping-v1"
+    },
+    {
+      "mappingId": "map.drive.no_unit_turn.shadow-unit-turn",
+      "faultId": "drive.no_unit_turn",
+      "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
+      "drillId": "drill.shadow-unit-turn",
+      "drillLibraryVersion": "drill-library-v1",
+      "strokeFamilies": [
+        "drive"
+      ],
+      "severityRestriction": {
+        "min": 1,
+        "max": 3
+      },
+      "contextRestrictions": [],
+      "endorsements": [],
+      "agreement": null,
+      "evidenceTier": "C",
+      "validationState": "UNVALIDATED",
+      "provenance": "engineering proposal (Tier-C) — hypothesis for coaches to endorse or reject; zero endorsements; never recommendable",
+      "version": "fault-drill-mapping-v1"
+    },
+    {
+      "mappingId": "map.drive.late_preparation.shadow-unit-turn",
+      "faultId": "drive.late_preparation",
+      "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
+      "drillId": "drill.shadow-unit-turn",
+      "drillLibraryVersion": "drill-library-v1",
+      "strokeFamilies": [
+        "drive"
+      ],
+      "severityRestriction": {
+        "min": 1,
+        "max": 2
+      },
+      "contextRestrictions": [],
+      "endorsements": [],
+      "agreement": null,
+      "evidenceTier": "C",
+      "validationState": "UNVALIDATED",
+      "provenance": "engineering proposal (Tier-C) — hypothesis for coaches to endorse or reject; zero endorsements; never recommendable",
+      "version": "fault-drill-mapping-v1"
+    },
+    {
+      "mappingId": "map.serve.inconsistent_drop_toss.serve-drop-consistency",
+      "faultId": "serve.inconsistent_drop_toss",
+      "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
+      "drillId": "drill.serve-drop-consistency",
+      "drillLibraryVersion": "drill-library-v1",
+      "strokeFamilies": [
+        "serve"
+      ],
+      "severityRestriction": {
+        "min": 1,
+        "max": 3
+      },
+      "contextRestrictions": [],
+      "endorsements": [],
+      "agreement": null,
+      "evidenceTier": "C",
+      "validationState": "UNVALIDATED",
+      "provenance": "engineering proposal (Tier-C) — hypothesis for coaches to endorse or reject; zero endorsements; never recommendable",
+      "version": "fault-drill-mapping-v1"
+    },
+    {
+      "mappingId": "map.drop.overpowered_arc.third-shot-drop-ladder",
+      "faultId": "drop.overpowered_arc",
+      "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
+      "drillId": "drill.third-shot-drop-ladder",
+      "drillLibraryVersion": "drill-library-v1",
+      "strokeFamilies": [
+        "drop_reset"
+      ],
+      "severityRestriction": {
+        "min": 1,
+        "max": 3
+      },
+      "contextRestrictions": [
+        "player has court access with a net"
+      ],
+      "endorsements": [],
+      "agreement": null,
+      "evidenceTier": "C",
+      "validationState": "UNVALIDATED",
+      "provenance": "engineering proposal (Tier-C) — hypothesis for coaches to endorse or reject; zero endorsements; never recommendable",
+      "version": "fault-drill-mapping-v1"
+    },
+    {
+      "mappingId": "map.global.no_recovery_to_ready.skinny-singles",
+      "faultId": "global.no_recovery_to_ready",
+      "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
+      "drillId": "drill.skinny-singles",
+      "drillLibraryVersion": "drill-library-v1",
+      "strokeFamilies": [
+        "global"
+      ],
+      "severityRestriction": {
+        "min": 1,
+        "max": 2
+      },
+      "contextRestrictions": [
+        "player is comfortable with full-point play"
+      ],
+      "endorsements": [],
+      "agreement": null,
+      "evidenceTier": "C",
+      "validationState": "UNVALIDATED",
+      "provenance": "engineering proposal (Tier-C) — hypothesis for coaches to endorse or reject; zero endorsements; never recommendable",
+      "version": "fault-drill-mapping-v1"
+    }
+  ]
+}
