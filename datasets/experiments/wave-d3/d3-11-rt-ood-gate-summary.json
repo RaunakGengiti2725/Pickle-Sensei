@@ -74,6 +74,12 @@
       "delta": "+4 legitimate clips recovered; no blanket abstention introduced"
     }
   },
+  "negativeCorpusDelta": {
+    "context": "After rebasing onto the advanced integration tip, packages/swing-lab/test/oodRealNegatives.test.ts (D08) locked verdicts measured under frame-analyzability-1. Re-measured under frame-analyzability-2.",
+    "change": "5 real negatives (yt--wE27MoX2AM-tennis, yt-RpPe0h9cD5E-tennis, yt-Iw55LinAF0U-badminton, yt-zWQs7kTKcEY-emptycourt, ia-HanfordS1957-titlecard) previously rejected by the median inter-frame-diff still_image_video rule now pass the pose-free gate.",
+    "justification": "That old rule was blanket abstention, not detection: it also rejected 5/6 legitimate fresh-candidate pickleball clips (median diffs overlap: negatives 0.085-0.419 vs legitimate footage 0.095-0.777). No CPU-only frame statistic separates other-racket-sport/low-motion real footage from legitimate pickleball; that discrimination is content/pose-level (macOS). Test expectations were re-measured and updated with this documented rationale; d08-ood-measurements.json (another workstream's artifact) was left untouched.",
+    "status": "OPEN (pose-free gate insufficient for these real negatives; pose-conditioned signals on macOS remain the intended catch)"
+  },
   "evidence": {
     "tests": [
       "packages/swing-lab/test/oodGateRedTeam.test.ts: 8/8 pass",
