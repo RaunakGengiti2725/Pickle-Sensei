@@ -11,6 +11,7 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init-roles.sql:/docker-entrypoint-initdb.d/10-init-roles.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pickle -d pickle_dev"]
       interval: 5s
@@ -25,6 +26,8 @@ services:
       POSTGRES_DB: pickle_test
     ports:
       - "5433:5432"
+    volumes:
+      - ./infra/postgres/init-roles.sql:/docker-entrypoint-initdb.d/10-init-roles.sql:ro
 
   redis:
     image: redis:7-alpine

@@ -23,6 +23,26 @@ pnpm db:seed
 
 `pnpm db:migrate` applies `packages/database/migrations/*.sql` through migration `0014` transactionally with checksum verification. `pnpm db:seed` loads the technique/checkpoint catalog and versioned **validating** scoring hypotheses used by engine tests; it activates none of them, so a fresh database has zero active scoring models. It also does **not** publish placeholder drills or instructional media: training content remains empty until reviewed, rights-cleared records are released. Both commands are idempotent.
 
+### Database roles (least privilege)
+
+Migration `0018_consent_role_separation.sql` creates four cluster-wide NOLOGIN group
+roles — `pickle_migration_owner`, `pickle_application_runtime`, `pickle_worker_runtime`,
+`pickle_readonly` — and grants each schema's privileges to them. The runtime roles get
+full DML on ordinary tables but only the intended paths on the consent system
+(append/read on `consent_record`; no delete on `consent_subject`; read-only on
+`consent_subject_erasure`), and they own nothing, so they cannot alter the consent
+schema or disable its append-only triggers.
+
+On a fresh docker volume, `infra/postgres/init-roles.sql` also creates local login
+users (`pickle_app`, `pickle_worker`, `pickle_ro`, `pickle_migrator`) that hold
+membership in those group roles. Services pick them up through
+`DATABASE_URL_APP` (services/api) and `DATABASE_URL_WORKER` (services/media-worker),
+both optional — everything still falls back to `DATABASE_URL`, so existing local
+setups keep working. Migrations/seed always run with owner credentials
+(`DATABASE_URL`). Existing dev volumes predating the init script keep working via the
+fallback; to adopt the login roles, recreate the volume or apply the init file
+manually with `psql`.
+
 ## Everyday commands
 
 ```bash

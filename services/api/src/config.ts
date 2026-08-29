@@ -4,6 +4,10 @@ export interface ApiConfig {
   port: number;
   host: string;
   appVersion: string;
+  /** Connection string for the API's runtime role (DATABASE_URL_APP), falling
+   * back to DATABASE_URL so existing single-credential local setups keep
+   * working. Migrations never use this — they run with owner credentials
+   * through the @pickle/database CLI. */
   databaseUrl: string | null;
   devAuthSecret: string | undefined;
   oidcIssuer: string | undefined;
@@ -30,7 +34,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     port: Number(env["PORT"] ?? 3001),
     host: env["HOST"] ?? "127.0.0.1",
     appVersion: env["APP_VERSION"] ?? "0.1.0",
-    databaseUrl: env["DATABASE_URL"] ?? null,
+    databaseUrl: env["DATABASE_URL_APP"] ?? env["DATABASE_URL"] ?? null,
     devAuthSecret: env["DEV_AUTH_SECRET"],
     oidcIssuer: env["OIDC_ISSUER"],
     oidcAudience: env["OIDC_AUDIENCE"],
