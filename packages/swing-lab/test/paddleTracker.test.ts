@@ -22,9 +22,7 @@ import {
 
 const VIDEO = { path: "test.mp4", width: 1000, height: 1000, fps: 50, durationMs: 4000 };
 
-function detectionFile(
-  frames: RawPaddleDetectionFile["frames"],
-): RawPaddleDetectionFile {
+function detectionFile(frames: RawPaddleDetectionFile["frames"]): RawPaddleDetectionFile {
   return {
     schemaVersion: 1,
     detector: {
@@ -76,10 +74,7 @@ function movingDetections(options: { dropEvery?: number; score?: number } = {}) 
   };
 }
 
-function addStaticFalsePositive(
-  file: RawPaddleDetectionFile,
-  score = 0.9,
-): RawPaddleDetectionFile {
+function addStaticFalsePositive(file: RawPaddleDetectionFile, score = 0.9): RawPaddleDetectionFile {
   return {
     ...file,
     frames: file.frames.map((frame) => ({
@@ -87,7 +82,11 @@ function addStaticFalsePositive(
       detections: [
         ...frame.detections,
         // Crowd racket far from any wrist, high score, perfectly stable.
-        { box: [40, 40, 100, 110] as [number, number, number, number], score, label: "tennis racket" },
+        {
+          box: [40, 40, 100, 110] as [number, number, number, number],
+          score,
+          label: "tennis racket",
+        },
       ],
     })),
   };
@@ -140,7 +139,11 @@ describe("buildPaddleTracks", () => {
         ...frame,
         detections: [
           ...frame.detections,
-          { box: [0, 0, 900, 900] as [number, number, number, number], score: 0.9, label: "tennis racket" },
+          {
+            box: [0, 0, 900, 900] as [number, number, number, number],
+            score: 0.9,
+            label: "tennis racket",
+          },
         ],
       })),
     };
@@ -222,12 +225,12 @@ function constantWrists(
   return series;
 }
 
-function observationAt(tMs: number, x: number, y: number): TrackedPaddleObservation {
+function observationAt(tMs: number, x: number, y: number, score = 0.5): TrackedPaddleObservation {
   return {
     timestampMs: tMs,
     box: { x: x - 0.03, y: y - 0.03, width: 0.06, height: 0.06 },
     center: { x, y },
-    detectorScore: 0.5,
+    detectorScore: score,
     trackId: 1,
     confidence: 0.5,
     nearWrist: false,
@@ -239,10 +242,11 @@ function trackObservations(
   startMs: number,
   endMs: number,
   at: { x: number; y: number },
+  score = 0.5,
 ): TrackedPaddleObservation[] {
   const observations: TrackedPaddleObservation[] = [];
   for (let tMs = startMs; tMs <= endMs; tMs += STEP_MS) {
-    observations.push(observationAt(tMs, at.x, at.y));
+    observations.push(observationAt(tMs, at.x, at.y, score));
   }
   return observations;
 }
@@ -365,10 +369,7 @@ describe("selectPrimaryPaddleTrack flip-segmentation", () => {
     // long tail glued to the OTHER player's hand (500–2450ms).
     const impostor = candidateOf(
       1,
-      [
-        ...trackObservations(0, 450, PADDLE),
-        ...trackObservations(500, 2450, { x: 0.88, y: 0.88 }),
-      ],
+      [...trackObservations(0, 450, PADDLE), ...trackObservations(500, 2450, { x: 0.88, y: 0.88 })],
       { windowCoverage: 0.99, meanScore: 0.5 }, // STALE pre-cut terms
     );
     // Honest track: near the target's hand for 60% of the window.
@@ -376,12 +377,7 @@ describe("selectPrimaryPaddleTrack flip-segmentation", () => {
       windowCoverage: 0.65,
       meanScore: 0.5,
     });
-    const outcome = selectPrimaryPaddleTrack(
-      [impostor, honest],
-      targetWrists,
-      WINDOW,
-      otherWrists,
-    );
+    const outcome = selectPrimaryPaddleTrack([impostor, honest], targetWrists, WINDOW, otherWrists);
     expect(outcome.status).toBe("tracked");
     if (outcome.status !== "tracked") return;
     // The honest track wins: the impostor's kept head only covers ~11%.
@@ -428,6 +424,142 @@ describe("selectPrimaryPaddleTrack flip-segmentation", () => {
     if (outcome.status !== "untracked") return;
     expect(outcome.reason).toContain("only_other_players_paddles_found");
     expect(outcome.association!.rejectedOtherPlayerTracks).toBe(1);
+  });
+});
+
+// ── D4-01 STRESS FIXTURES (wave-D S4 selection stress) ─────────────────────
+// Flip-truncation family variants, a late-appearing better track, and two
+// tracks alternating quality — hand-built with known ownership per range.
+describe("selectPrimaryPaddleTrack D4-01 stress fixtures", () => {
+  const targetWrists = constantWrists(WINDOW.endMs, TARGET);
+  const THEIRS = { x: 0.88, y: 0.88 };
+
+  it("flip family: sustained flip at the HEAD keeps the target-owned tail", () => {
+    const otherWrists = constantWrists(WINDOW.endMs, OTHER_FAR, (tMs) =>
+      tMs <= 1000 ? PADDLE : null,
+    );
+    const track = candidateOf(1, trackObservations(0, 4000, PADDLE), {
+      windowCoverage: 1,
+      meanScore: 0.5,
+    });
+    const outcome = selectPrimaryPaddleTrack([track], targetWrists, WINDOW, otherWrists);
+    expect(outcome.status).toBe("tracked");
+    if (outcome.status !== "tracked") return;
+    // Head run (0–1000, 21 obs) dropped; tail 1050–4000 (60 obs) survives.
+    expect(outcome.lab.observations.length).toBe(60);
+    expect(outcome.lab.observations[0]!.timestampMs).toBe(1050);
+    expect(outcome.lab.windowCoverage).toBeCloseTo(0.7375, 4);
+  });
+
+  it("flip family: sustained flip at the TAIL keeps the target-owned head", () => {
+    const otherWrists = constantWrists(WINDOW.endMs, OTHER_FAR, (tMs) =>
+      tMs >= 3000 ? PADDLE : null,
+    );
+    const track = candidateOf(1, trackObservations(0, 4000, PADDLE), {
+      windowCoverage: 1,
+      meanScore: 0.5,
+    });
+    const outcome = selectPrimaryPaddleTrack([track], targetWrists, WINDOW, otherWrists);
+    expect(outcome.status).toBe("tracked");
+    if (outcome.status !== "tracked") return;
+    expect(outcome.lab.observations.length).toBe(60);
+    expect(outcome.lab.observations.at(-1)!.timestampMs).toBe(2950);
+    expect(outcome.lab.windowCoverage).toBeCloseTo(0.7375, 4);
+  });
+
+  it("flip family: TWO separated sustained flips drop both runs, keep all target segments", () => {
+    const otherWrists = constantWrists(WINDOW.endMs, OTHER_FAR, (tMs) =>
+      (tMs >= 1000 && tMs <= 1200) || (tMs >= 2500 && tMs <= 2700) ? PADDLE : null,
+    );
+    const track = candidateOf(1, trackObservations(0, 4000, PADDLE), {
+      windowCoverage: 1,
+      meanScore: 0.5,
+    });
+    const outcome = selectPrimaryPaddleTrack([track], targetWrists, WINDOW, otherWrists);
+    expect(outcome.status).toBe("tracked");
+    if (outcome.status !== "tracked") return;
+    expect(outcome.lab.observations.length).toBe(81 - 10); // two 5-obs runs dropped
+    expect(outcome.association.switchEvents.length).toBe(2);
+    expect(outcome.lab.windowCoverage).toBeCloseTo(0.85, 4);
+    const kept = outcome.lab.observations.map((observation) => observation.timestampMs);
+    expect(kept.some((tMs) => tMs >= 1000 && tMs <= 1200)).toBe(false);
+    expect(kept.some((tMs) => tMs >= 2500 && tMs <= 2700)).toBe(false);
+  });
+
+  it("flip family: run exactly at sustainedFlipRunLength splits; one below does not", () => {
+    for (const [runLength, expectSplit] of [
+      [2, false],
+      [3, true],
+    ] as const) {
+      const otherWrists = constantWrists(WINDOW.endMs, OTHER_FAR, (tMs) =>
+        tMs >= 1000 && tMs < 1000 + runLength * STEP_MS ? PADDLE : null,
+      );
+      const track = candidateOf(1, trackObservations(0, 4000, PADDLE), {
+        windowCoverage: 1,
+        meanScore: 0.5,
+      });
+      const outcome = selectPrimaryPaddleTrack([track], targetWrists, WINDOW, otherWrists);
+      expect(outcome.status).toBe("tracked");
+      if (outcome.status !== "tracked") return;
+      expect(outcome.association.switchEvents.length).toBe(expectSplit ? 1 : 0);
+      expect(outcome.lab.observations.length).toBe(expectSplit ? 81 - 3 : 81);
+    }
+  });
+
+  it("late-appearing better track outranks a mediocre early track", () => {
+    const otherWrists = constantWrists(WINDOW.endMs, OTHER_FAR);
+    // Early: farther from the wrist, low score, covers the first 60%.
+    const early = candidateOf(1, trackObservations(0, 2400, { x: 0.56, y: 0.56 }, 0.3), {
+      windowCoverage: 0.6,
+      meanScore: 0.3,
+    });
+    // Late: appears only in the last 50%, glued to the paddle, high score.
+    const late = candidateOf(2, trackObservations(2000, 4000, PADDLE, 0.8), {
+      windowCoverage: 0.5,
+      meanScore: 0.8,
+    });
+    const outcome = selectPrimaryPaddleTrack([early, late], targetWrists, WINDOW, otherWrists);
+    expect(outcome.status).toBe("tracked");
+    if (outcome.status !== "tracked") return;
+    expect(outcome.lab.trackId).toBe(2);
+  });
+
+  it("two tracks alternating quality: winner keeps ONLY its target-owned segments", () => {
+    const otherWrists = constantWrists(WINDOW.endMs, OTHER_FAR);
+    // A rides the target's paddle in quarters 1+3, the other player's in 2+4;
+    // B is the mirror image. Neither track is wholly honest.
+    const trackA = candidateOf(
+      1,
+      [
+        ...trackObservations(0, 1000, PADDLE),
+        ...trackObservations(1050, 2000, THEIRS),
+        ...trackObservations(2050, 3000, PADDLE),
+        ...trackObservations(3050, 4000, THEIRS),
+      ],
+      { windowCoverage: 1, meanScore: 0.6 },
+    );
+    const trackB = candidateOf(
+      2,
+      [
+        ...trackObservations(0, 1000, THEIRS),
+        ...trackObservations(1050, 2000, PADDLE),
+        ...trackObservations(2050, 3000, THEIRS),
+        ...trackObservations(3050, 4000, PADDLE),
+      ],
+      { windowCoverage: 1, meanScore: 0.6 },
+    );
+    const outcome = selectPrimaryPaddleTrack([trackA, trackB], targetWrists, WINDOW, otherWrists);
+    expect(outcome.status).toBe("tracked");
+    if (outcome.status !== "tracked") return;
+    // A winner exists, keeps only its two target-owned quarters (41 obs),
+    // reports honest ~49% coverage, and carries ZERO other-player frames.
+    expect(outcome.lab.observations.length).toBe(41);
+    expect(outcome.lab.windowCoverage).toBeCloseTo(0.4875, 4);
+    const nearTheirs = outcome.lab.observations.filter(
+      (observation) =>
+        Math.hypot(observation.center.x - THEIRS.x, observation.center.y - THEIRS.y) < 0.03,
+    );
+    expect(nearTheirs.length).toBe(0);
   });
 });
 
