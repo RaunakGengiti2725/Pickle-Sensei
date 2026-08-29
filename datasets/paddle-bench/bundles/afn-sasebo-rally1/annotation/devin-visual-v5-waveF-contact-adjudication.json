@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "afn-sasebo-rally1",
+  "annotatorId": "devin-visual-v5-waveF",
+  "createdAtIso": "2026-08-29T11:30:00.000Z",
+  "revision": 1,
+  "kind": "contact-adjudication",
+  "adjudicates": {
+    "auditFile": "datasets/paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v4-waveD2-contact-audit.json",
+    "auditSummary": "datasets/experiments/wave-d2/d2-05-contact-audit-summary.json",
+    "priorLabelFile": "datasets/paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v1.json"
+  },
+  "method": "Independent third pass (D2-05 method: re-derivation + documented criteria). Frames re-extracted with ffmpeg select=eq(n,IDX) (absolute CFR index) from source recording dvids-967848 (datasets/corpus/media/dvids-967848-aba9629c681d.mp4, sha256 aba9629c681d159e0560583865085b8bcceaaa850f9d81f5b26832a86fc90e3c re-verified locally this pass, 29.97fps, 1920x1080). Extracted source frames 808-840 (disputes at 1117/1717) and 888-906 (dispute at 3870). Ball candidates located by connected-component analysis of a green-pixel mask ((G>150) AND (G>R+20) AND (G>B+60), scipy.ndimage.label, blobs >=8px, static blobs at (1611,208) and (11,279) excluded as fixed scene objects); every adjudication-critical frame confirmed by eye on the full frame or a 240px crop. Contact criteria: ball-at-paddle adjacency or ball direction reversal across adjacent source frames. Camera-cut criterion: mean absolute grayscale frame difference spike (>10x baseline). Clip-to-source offset is 779-780 (D2-05 visual alignment); both offsets are considered wherever the +/-1 frame matters. Positions below are source-frame pixel coordinates (x,y).",
+  "adjudicationRecords": [
+    {
+      "adjudicationId": "ADJ-C1",
+      "priorContactMs": 1117,
+      "priorAnnotator": "devin-visual-v2-wave-a",
+      "auditContactMs": 1218,
+      "disputeType": "window_non_overlap",
+      "verdict": "dispute_upheld_no_contact_in_prior_window",
+      "auditReplacementAdopted": false,
+      "evidence": "Third-pass ball tracks over source 808-822 (clip n29-n43 at offset 779) show NO ball at or near the target's paddle in either the prior bracket (1083-1150ms, src ~811.5-813.5) or the audit window (1201-1235ms, clip n36-37, src 815-817 across both offsets). Two concurrent balls are in frame: (a) an incoming fast ball first visible at src814 (65,412) travelling right at ~90px/frame ((158,403)@815 -> (248,399)@816 -> (340,402)@817 -> (417,409)@818), still 600-700px left of the target at the audit window; (b) a slow arcing ball low near the net ((99,782)@812 -> (200,712)@815 -> (231,693)@816), also far from the target's paddle. Visual confirmation on src811-813 and src815 full frames: the target's paddle is extended low with no ball at the face (the yellow object at her grip is the documented spare ball in her left hand). The fast ball's only target contact occurs at src824-826 (ball (828,564)@824, at paddle face (830,576)@825, departing left (740,546)@826), i.e. clip 1468-1568ms across offsets 779-780 - the span already covered by the separately labeled (undisputed) 1484 event within 1-2 frames.",
+      "disposition": "Prior 1117 contact is not supported (likely a double-count of the incoming flight of the 1484 contact). The audit's replacement value 1218 is also not reproducible and is NOT adopted: at clip n36-37 both balls are mid-flight far from the target's paddle; the audit's described reversal does not appear in either track. Recommendation for integrator: mark the 1117 event label not-certifiable / exclude from contact gold; do not substitute 1218."
+    },
+    {
+      "adjudicationId": "ADJ-C2",
+      "priorContactMs": 1717,
+      "priorAnnotator": "devin-visual-v2-wave-a",
+      "auditContactMs": null,
+      "disputeType": "no_contact_observed",
+      "verdict": "dispute_upheld_no_contact_observed",
+      "auditReplacementAdopted": false,
+      "evidence": "At the prior contact time (clip n51.5, src ~830.5-831.5) the fast ball is mid-return travelling LEFT away from the target at ~90px/frame ((740,546)@826 -> (550,500)@828 -> (341,477)@830 -> (225,477)@831 -> (106,479)@832) with no paddle near it and no direction change between the src824-826 target contact and its exit from frame after src832. The second (slow) ball is post-bounce (floor bounce at src827, y-max 797) rising smoothly toward the partner ((567,770)@828 -> (613,729)@830 -> (655,710)@832 -> (672,706)@833) with no paddle near it until the partner's dig at src836-838 - the undisputed 1934 event, whose audit inbound position (752,717) matches this track's (752,719)@837 exactly. New forensic detail refining the D2-05 note: TWO distinct balls are concurrently in frame; the ball the partner digs at 1934 (slow arc, bounce at src827) is not the ball the target struck at src824-826 (fast, exits left). The prior 1717 'dig #3' matches neither ball.",
+      "disposition": "No contact exists at 1717; the audit's no_contact_observed finding is upheld with an identified mechanism (two concurrent balls; prior label likely double-counted the 1484 contact or misread the second ball's transit). Recommendation for integrator: mark the 1717 event label not-certifiable / exclude from contact gold."
+    },
+    {
+      "adjudicationId": "ADJ-C3",
+      "priorContactMs": 3870,
+      "priorAnnotator": "devin-visual-v1",
+      "auditContactMs": null,
+      "disputeType": "not_observable_camera_cut",
+      "verdict": "dispute_upheld_not_observable_camera_cut",
+      "auditReplacementAdopted": false,
+      "evidence": "Hard camera cut MEASURED between source frames 895 and 896: mean absolute grayscale frame difference 54.15 vs baseline 1.71-3.07 over src888-906 (17 other adjacent pairs), an ~18x spike. Visual confirmation: src895 is the close front-oblique framing of the target; src896 is a wide multi-court framing from a different camera position. Cut boundary = source 29.86-29.90s, i.e. clip ~3.85-3.90s (clip n115/116 at offset 780, n116/117 at offset 779). The prior contact time 3870ms is clip n115.98 - the cut boundary itself; no contact is observable from either side of the cut (pre-cut frames show an incoming lob with no contact; post-cut frames show a different framing with a ball already in flight).",
+      "disposition": "Not observable; audit finding upheld with quantified cut evidence. The prior 3870 event (eventStart 3500, eventEnd 4300) spans the cut and cannot be certified from this clip. Recommendation for integrator: mark the 3870 event not-certifiable, and correct the registry - see camera-cut resolution in datasets/experiments/wave-f/f13-contact-dispute-adjudication-summary.json (recordings.json rec-21fb75446a03/afn-sasebo-rally1 'Single continuous shot' declaration is contradicted by measurement; integrator-owned file intentionally not modified by this workstream)."
+    }
+  ],
+  "notes": "Wave F contact-dispute adjudication (third independent pass). Append-only sidecar; prior annotation files and the D2-05 audit sidecars are untouched and remain byte-identical. Media extracted locally only (gitignored path); no media committed. Adjudications reference - never rewrite - the records they adjudicate."
+}
