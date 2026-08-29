@@ -55,6 +55,7 @@
     "lab:silent-retro": "pnpm --filter @pickle/swing-lab silent:retro",
     "lab:label-queue": "pnpm --filter @pickle/swing-lab label:queue",
     "lab:label-queue-v3": "pnpm --filter @pickle/swing-lab label:queue-v3",
+    "lab:al-priority": "pnpm --filter @pickle/swing-lab al:priority",
     "lab:bundle": "pnpm --filter @pickle/swing-lab bundle:experiments"
   },
   "devDependencies": {

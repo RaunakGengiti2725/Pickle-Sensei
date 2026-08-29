@@ -51,6 +51,7 @@
     "silent:retro": "tsx src/silentFailureRetro.ts",
     "label:queue": "tsx src/labelQueueV2.ts",
     "label:queue-v3": "tsx src/labelQueueV3.ts",
+    "al:priority": "tsx src/activeLearningPriority.ts",
     "bundle:experiments": "tsx src/experimentBundle.ts",
     "invariants:corpus": "tsx src/corpusCheck.ts",
     "merge:safety": "tsx src/paddleMergeSafetySweep.ts",
