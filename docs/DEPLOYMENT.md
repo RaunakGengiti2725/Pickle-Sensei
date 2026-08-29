@@ -13,7 +13,7 @@ main: same verification, then Docker builds for `services/api` and `services/med
 
 ## Runtime configuration
 
-All secrets via environment/Secrets Manager (.env.example is the catalog). Hard rules encoded in the binaries:
+All secrets via environment/Secrets Manager (.env.example is the catalog). Database access uses least-privilege role separation: Terraform provisions per-role connection-URL secrets (`db-url-app`, `db-url-worker`, `db-url-migrator`, `db-url-readonly`) and injects `DATABASE_URL_APP`/`DATABASE_URL_WORKER` into the ECS tasks; in-database role provisioning, credential rotation, and the migration procedure are in docs/RUNBOOK_CONSENT_DB_ROLES.md (migrations run as a deliberate operator step with the migrator credential, never from service tasks). Hard rules encoded in the binaries:
 
 - Production binaries contain no deterministic/demo vision provider. The dev token verifier cannot construct outside development/test, and OIDC config is required at boot.
 - Store billing endpoints stay typed-501 until credentials exist.

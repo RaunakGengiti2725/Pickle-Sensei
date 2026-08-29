@@ -12,13 +12,23 @@ variable "api_desired_count" {
   default = 2
 }
 
+# Per-role database credentials (g12-f23): Secrets Manager ARNs holding the
+# full connection URLs for the least-privilege login roles. The api task gets
+# DATABASE_URL_APP, the worker task DATABASE_URL_WORKER — matching the env
+# vars services/api/src/config.ts and services/media-worker/src/main.ts read.
+# Migrations are NOT wired here: they run as a deliberate operator step with
+# the migrator credential (docs/RUNBOOK_CONSENT_DB_ROLES.md).
+variable "api_db_url_secret_arn" { type = string }
+variable "worker_db_url_secret_arn" { type = string }
+variable "secrets_kms_key_arn" { type = string }
+
 resource "aws_ecr_repository" "api" {
-  name                 = "${var.name}-api"
+  name = "${var.name}-api"
   image_scanning_configuration { scan_on_push = true }
 }
 
 resource "aws_ecr_repository" "worker" {
-  name                 = "${var.name}-media-worker"
+  name = "${var.name}-media-worker"
   image_scanning_configuration { scan_on_push = true }
 }
 
@@ -102,6 +112,29 @@ resource "aws_iam_role_policy_attachment" "task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# The execution role (not the task role) resolves container `secrets` at
+# launch; scope it to exactly the two runtime DB-URL secrets and the KMS key
+# that encrypts them.
+resource "aws_iam_role_policy" "task_execution_db_secrets" {
+  name = "${var.name}-db-url-secrets"
+  role = aws_iam_role.task_execution.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "secretsmanager:GetSecretValue"
+        Resource = [var.api_db_url_secret_arn, var.worker_db_url_secret_arn]
+      },
+      {
+        Effect   = "Allow"
+        Action   = "kms:Decrypt"
+        Resource = [var.secrets_kms_key_arn]
+      }
+    ]
+  })
+}
+
 # Least-privilege task role: services get exactly the S3/SQS/Secrets access
 # they need, attached per-service in the env stacks (spec p. 41).
 resource "aws_iam_role" "api_task" {
@@ -130,6 +163,9 @@ resource "aws_ecs_task_definition" "api" {
     essential    = true
     portMappings = [{ containerPort = 3001 }]
     environment  = [{ name = "PICKLE_ENV", value = "production" }]
+    secrets = [
+      { name = "DATABASE_URL_APP", valueFrom = var.api_db_url_secret_arn }
+    ]
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -190,10 +226,13 @@ resource "aws_ecs_task_definition" "worker" {
   execution_role_arn       = aws_iam_role.task_execution.arn
   task_role_arn            = aws_iam_role.api_task.arn
   container_definitions = jsonencode([{
-    name      = "media-worker"
-    image     = var.worker_image
-    essential = true
+    name        = "media-worker"
+    image       = var.worker_image
+    essential   = true
     environment = [{ name = "PICKLE_ENV", value = "production" }]
+    secrets = [
+      { name = "DATABASE_URL_WORKER", valueFrom = var.worker_db_url_secret_arn }
+    ]
     logConfiguration = {
       logDriver = "awslogs"
       options = {
