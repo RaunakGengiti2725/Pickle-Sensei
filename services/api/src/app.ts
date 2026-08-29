@@ -9,6 +9,11 @@ import type { FailureKind } from "@pickle/shared-types";
 import type { ApiConfig } from "./config.js";
 import type { AppContext } from "./context.js";
 import { failureCodeFor, sendFailure } from "./lib/replies.js";
+import {
+  classifySecurityEvent,
+  PG_PRIVILEGE_ANOMALY_CODES,
+  type ISecurityEventSink,
+} from "./lib/securityEvents.js";
 import { buildVerifier } from "./auth/tokens.js";
 import { registerAuth } from "./plugins/authPlugin.js";
 import {
@@ -144,6 +149,8 @@ export interface BuildAppOptions {
   analytics?: IAnalyticsSink;
   /** Backend SLO recorder (availability, latency, 5xx, DB, pool). */
   sloRecorder?: ApiSloRecorder;
+  /** Security-monitoring event sink; defaults to structured warn log lines. */
+  securityEvents?: ISecurityEventSink;
 }
 
 export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): FastifyInstance {
@@ -197,6 +204,25 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
       for (const event of batch) app.log.info({ analyticsEvent: event }, "analytics");
     });
   const sloRecorder = options.sloRecorder ?? new ApiSloRecorder();
+  // Typed security-monitoring events (auth anomalies, authorization denials,
+  // admin anomalies, upload abuse, rate-limit trips, media-access failures,
+  // consent mutations, training-eligibility changes). Same privacy contract
+  // as api_failure: route template + typed code only, never URL/body/identity.
+  const securityEvents: ISecurityEventSink = options.securityEvents ?? {
+    record: (event) => app.log.warn({ securityEvent: event }, "security"),
+  };
+  app.addHook("onResponse", async (request, reply) => {
+    const securityEvent = classifySecurityEvent({
+      at: new Date().toISOString(),
+      requestId: String(request.id),
+      route: request.routeOptions.url ?? "unmatched",
+      method: request.method,
+      statusCode: reply.statusCode,
+      errorCode: failureCodeFor(reply),
+    });
+    if (securityEvent) securityEvents.record(securityEvent);
+  });
+
   app.addHook("onResponse", async (request, reply) => {
     const status = reply.statusCode;
     sloRecorder.recordRequest({
@@ -243,6 +269,31 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
 
   app.setErrorHandler((error, request, reply) => {
     const statusCode = (error as { statusCode?: number }).statusCode;
+    // The API role hitting a Postgres privilege wall means the
+    // least-privilege grants drifted (or someone swapped credentials) —
+    // record it as a security event before answering the client.
+    const pgErrorCode = (error as { code?: string }).code;
+    if (typeof pgErrorCode === "string" && PG_PRIVILEGE_ANOMALY_CODES.has(pgErrorCode)) {
+      securityEvents.record({
+        kind: "db_privilege_anomaly",
+        at: new Date().toISOString(),
+        requestId: String(request.id),
+        route: request.routeOptions.url ?? "unmatched",
+        method: request.method,
+        statusCode: 500,
+        errorCode: "api.internal_error",
+        pgCode: pgErrorCode,
+      });
+      request.log.error({ pgCode: pgErrorCode }, "database privilege anomaly");
+      return sendFailure(
+        reply,
+        request,
+        500,
+        "permanent",
+        "api.internal_error",
+        "Internal server error.",
+      );
+    }
     if (statusCode === 410) {
       return sendFailure(
         reply,
