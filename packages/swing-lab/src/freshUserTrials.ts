@@ -4,6 +4,7 @@ import {
   type EvaluationTrialRecord,
   type SilentFailureEventKind,
 } from "@pickle/shared-types";
+import { detectTriageSignals, type TriageSignalSummary } from "./triageSignals.js";
 
 /**
  * FRESH-USER TRIAL ANALYSIS — the evaluation-pipeline end of the on-device
@@ -189,6 +190,9 @@ export interface FreshUserReport {
   trialCount: number;
   outcomes: Record<string, number>;
   silentFailures: SilentFailureCounts;
+  /** Machine-detected inconsistency signals routed to human triage. Never
+   * labels, never verdicts, never merged into silentFailures. */
+  triage: TriageSignalSummary;
   coverage: IndependenceCoverage;
   userFlagCounts: Record<string, number>;
 }
@@ -213,6 +217,7 @@ export function buildFreshUserReport(
     trialCount: trials.length,
     outcomes,
     silentFailures: countSilentFailures(trials, labels),
+    triage: detectTriageSignals(trials),
     coverage: independenceCoverage(trials),
     userFlagCounts,
   };

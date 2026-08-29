@@ -196,3 +196,22 @@ export {
   type TrialIngestResult,
   type TrialLabel,
 } from "./freshUserTrials.js";
+export {
+  detectClassifierOscillation,
+  detectContactOutsideEventBounds,
+  detectContactWithoutPaddleEvidence,
+  detectDeclaredPredictedMismatch,
+  detectDegradedCaptureConfidentAnalysis,
+  detectHighConfidenceContradictoryModalities,
+  detectImpossiblePhaseOrdering,
+  detectImpossibleSessionEventDensity,
+  detectRapidRepeatedRetries,
+  detectTargetIdentityInstability,
+  detectTriageSignals,
+  TRIAGE_SIGNAL_CONTRACT_VERSION,
+  TRIAGE_SIGNAL_KINDS,
+  TRIAGE_THRESHOLDS,
+  type TriageSignal,
+  type TriageSignalKind,
+  type TriageSignalSummary,
+} from "./triageSignals.js";
