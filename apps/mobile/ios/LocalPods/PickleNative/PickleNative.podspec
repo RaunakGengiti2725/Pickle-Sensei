@@ -13,6 +13,8 @@ Pod::Spec.new do |s|
   s.source_files = [
     "Sources/*.{swift,h,m}",
     "Sources/Core/CameraEngine.swift",
+    "Sources/Core/SessionCaptureCoordinator.swift",
+    "Sources/Core/SessionMotionStream.swift",
     "Sources/Core/ApplePoseProvider.swift",
     "Sources/Core/CaptureEvidenceAccumulator.swift",
     "Sources/Core/PoseMotionTrail.swift",

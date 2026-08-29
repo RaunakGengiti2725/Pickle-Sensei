@@ -43,15 +43,23 @@ public final class CameraEngine: NSObject, @unchecked Sendable {
     public var preset: AVCaptureSession.Preset
     public var targetFps: Int
     public var maximumObservationSeconds: Double
+    /// When set, the movie output writes QuickTime fragments at this interval
+    /// so an IN-PROGRESS recording stays readable up to its last fragment
+    /// boundary. Session capture needs this to cut per-event clips from the
+    /// rolling recording without stopping it; guided capture leaves it nil
+    /// (the default single-moov file, finalized on stop).
+    public var movieFragmentSeconds: Double?
 
     public init(
       preset: AVCaptureSession.Preset = .hd1280x720,
       targetFps: Int = 60,
-      maximumObservationSeconds: Double = 60
+      maximumObservationSeconds: Double = 60,
+      movieFragmentSeconds: Double? = nil
     ) {
       self.preset = preset
       self.targetFps = targetFps
       self.maximumObservationSeconds = maximumObservationSeconds
+      self.movieFragmentSeconds = movieFragmentSeconds
     }
   }
 
@@ -181,6 +189,12 @@ public final class CameraEngine: NSObject, @unchecked Sendable {
       seconds: config.maximumObservationSeconds,
       preferredTimescale: 600
     )
+    if let fragmentSeconds = config.movieFragmentSeconds, fragmentSeconds > 0 {
+      movieOutput.movieFragmentInterval = CMTime(
+        seconds: fragmentSeconds,
+        preferredTimescale: 600
+      )
+    }
 
     if let dataConnection = videoOutput.connection(with: .video), dataConnection.isVideoOrientationSupported {
       dataConnection.videoOrientation = .portrait
@@ -269,6 +283,12 @@ public final class CameraEngine: NSObject, @unchecked Sendable {
     recordingLock.lock()
     defer { recordingLock.unlock() }
     return recordingFirstFrameTimestampMs
+  }
+
+  public var currentRecordingLastFrameTimestampMs: Int? {
+    recordingLock.lock()
+    defer { recordingLock.unlock() }
+    return recordingLastFrameTimestampMs
   }
 
   private func clearRecordingTimestamps() {

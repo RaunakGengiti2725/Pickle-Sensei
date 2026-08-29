@@ -1,0 +1,41 @@
+{
+  "workstream": "C09",
+  "branch": "devin/wave-c/c09-session-native",
+  "scope": "D-040 native session gaps: continuous wrist-motion stream + per-event clip extraction (HANDOFF_V3 \u00a76 item 5)",
+  "built": {
+    "typescript": [
+      "apps/mobile/src/camera/capture.ts \u2014 typed session bridge surface: sessionCaptureAvailable() (requires ALL THREE session methods), startSessionCapture()/stopSessionCapture()/extractSessionEventClip(); the extraction receipt passes the SAME assertCapturedClip('automatic_pose_trigger') validation boundary as guided capture; bounds carry the frozen proposal startMs/endMs/peakMs verbatim plus confidence and detectionModelVersion (SESSION_ENGINE_VERSION)",
+      "apps/mobile/src/flow/sessionNative.ts \u2014 isSessionMotionSampleEvent runtime validation of the frozen {type,tMs,v} contract (malformed payloads dropped and counted, never coerced); connectNativeSessionMotionFeed pushes only validated samples into LiveSessionFlow.pushSample and filters stale captureIds; createNativeSessionEventClipSource forwards exact event bounds and reports missing pose sidecars as honest unavailable; createNativeSessionAnalysisProvider dispatches each closed event through canonical runCaptureAnalysis with declaredStroke: null (AUTO routing)",
+      "apps/mobile/src/flow/session.ts \u2014 SessionEventAnalysisRequest now carries clip + poseSequenceSlice; SessionEventClipSource seam added; replay mode keeps null artifacts and NATIVE_CLIP_EXTRACTION_NOT_BUILT pending reason; append-only closed-event semantics unchanged",
+      "apps/mobile/src/screens/LiveCourtScreen.tsx \u2014 live path when the full bridge exists (start capture, connect motion feed, attach clip source, stop on end/cleanup); honest replay fallback otherwise"
+    ],
+    "swift": [
+      "native/vision-core/Sources/SessionMotionStream.swift \u2014 continuous wrist-speed series with the exact TemporalStrokeDetector constants (visibility \u2265 0.35, gap \u2264 250 ms, pose confidence \u2265 0.5, fastest wrist per frame, normalized-image units/second); O(1) state, no unbounded buffering",
+      "native/camera-engine/Sources/SessionCaptureCoordinator.swift \u2014 rolling AVFoundation recording (QuickTime fragments at 1 s so the in-progress file stays readable), per-frame ApplePoseProvider extraction, motion samples rebased to ms-since-first-frame and emitted via callback, 15 s rolling pose history, per-event extraction: polls readable coverage (10 s timeout), honors exact event bounds (event past readable edge = truthful failure, never a shrunken window), guided-capture pre/post roll convention (2000/1500 ms, clamped and recorded), exports through ClipMediaStore with removeSourceRecording=false",
+      "native/camera-engine/Sources/CameraEngine.swift \u2014 optional movieFragmentSeconds config + currentRecordingLastFrameTimestampMs (guided capture default unchanged: nil fragments)",
+      "apps/mobile/ios/LocalPods/PickleNative/Sources/ClipMediaStore.swift \u2014 removeSourceRecording parameter (default true preserves guided behavior)",
+      "apps/mobile/ios/LocalPods/PickleNative/Sources/PickleVideoCapture.swift + PickleVideoCaptureBridge.m \u2014 startSessionCapture/stopSessionCapture/extractSessionEventClip bridge methods; session_motion_sample events on the existing PickleCameraEvent channel with captureId + emittedAtIso; malformed extraction requests rejected, never coerced",
+      "apps/mobile/ios/LocalPods/PickleNative/Sources/Core/ \u2014 repository-relative symlinks + podspec entries for the two new canonical files (same convention as existing Core sources)",
+      "native/vision-core/Tests/SessionMotionStreamTests.swift \u2014 3 XCTest cases (fastest-wrist speed, confidence/visibility/gap rejection, reset)"
+    ]
+  },
+  "verification": {
+    "mobile_tsc": "PASS \u2014 `cd apps/mobile && npx tsc --noEmit` exit 0 (2026-08-29, this machine)",
+    "mobile_jest": "PASS \u2014 `cd apps/mobile && npx jest`: 31 suites, 227 tests, 0 failures (includes new __tests__/sessionNative.test.ts: 13 tests with a simulated react-native bridge \u2014 receipt validation, exact bound forwarding incl. confidence + SESSION_ENGINE_VERSION, invalid clip rejection, motion payload validation, fixture stream ingestion, malformed/foreign event dropping, honest extraction failures, missing-sidecar handling, declared-null AUTO routing)",
+    "pnpm_typecheck": "PASS \u2014 root `pnpm typecheck`, all packages Done",
+    "swift": "UNVERIFIED-ON-DEVICE \u2014 Swift cannot be compiled on this Linux machine (no Swift toolchain, no Xcode, no iOS device/simulator). SessionMotionStreamTests.swift was written but NOT executed. The coordinator, bridge methods, and fragment-based rolling readability are unvalidated on hardware."
+  },
+  "honest_negatives_and_blockers": [
+    "Swift ships UNVERIFIED-ON-DEVICE: no compile, no unit-test run, no on-device validation of camera, pose throughput, fragment readability latency, or AVAssetExportSession passthrough export from an in-progress fragmented movie. These need a macOS/iOS pass before D-040 can be marked closed.",
+    "Per-event extraction latency floor is the 1 s fragment interval plus export time; events closing at the live edge wait for coverage (bounded 10 s) \u2014 measured latency is unknown until device testing.",
+    "eslint is broken workspace-wide on this machine (eslint 8 in apps/mobile/node_modules loading root pnpm eslint 9 rule internals crashes on UNTOUCHED files, e.g. src/util/uuid.ts); preexisting environment issue, not introduced by C09. tsc + jest are the green gates per the workstream brief.",
+    "Cascade/lab:regen not run (macOS-only pose extraction; canonical runs/ absent on Linux) \u2014 no cascade numbers are claimed.",
+    "LiveCourtScreen passes appVersion '0.1.0' and cameraView 'side' as fixed values matching existing app conventions; no device measurement is claimed for either."
+  ],
+  "semantics_preserved": [
+    "Session engine untouched: append-only closed events, frozen proposals, no mutation or reordering (D-040).",
+    "declaredStroke is always null in session play (AUTO route).",
+    "No fabricated stroke names, scores, coach labels, or measurements; unavailable native capability still reports NATIVE_*_NOT_BUILT pending reasons in replay mode.",
+    "usable-result-v1 untouched; docs/STATUS_BOARD.md, docs/HANDOFF_V3.md, docs/DECISIONS.md untouched."
+  ]
+}
