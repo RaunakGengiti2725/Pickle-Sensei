@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyOwnershipCorrections,
   bucketsFromNote,
   pickIncumbent,
   pickWristDistanceOnly,
   pickTargetGeometry,
   pickTemporalContinuity,
   scoreMethod,
+  type AnnotationPass,
   type DualFrame,
+  type OwnershipCorrectionSet,
   type PoseContext,
 } from "../src/ownershipBench.js";
 
@@ -140,5 +143,76 @@ describe("scoreMethod", () => {
     const report = scoreMethod("b3_temporal_continuity", frames, picks, "pose");
     expect(report.scoredFrames).toBe(1);
     expect(report.correct).toBe(1);
+  });
+});
+
+describe("applyOwnershipCorrections", () => {
+  const passes = (): AnnotationPass[] => [
+    {
+      annotatorId: "waveC",
+      paddleFrames: [{ tMs: 100, point: { x: 0.3, y: 0.54 }, visibility: "visible" }],
+      otherPaddleFrames: [{ tMs: 100, point: { x: 0.7, y: 0.4 }, visibility: "visible" }],
+    },
+  ];
+  const set = (corrections: OwnershipCorrectionSet["corrections"]): OwnershipCorrectionSet => ({
+    kind: "ownership-correction-set",
+    captureBundle: "synthetic",
+    annotatorId: "waveE",
+    corrections,
+  });
+  it("supersedes a matching point in place without touching others", () => {
+    const input = passes();
+    const application = applyOwnershipCorrections(input, [
+      set([
+        {
+          adjudicationId: "ADJ-1",
+          tMs: 100,
+          owner: "target",
+          action: "supersede-point",
+          originalPoint: { x: 0.3, y: 0.54 },
+          point: { x: 0.29, y: 0.45 },
+        },
+      ]),
+    ]);
+    expect(application).toEqual({ superseded: 1, added: 0, unmatched: [] });
+    expect(input[0]!.paddleFrames[0]!.point).toEqual({ x: 0.29, y: 0.45 });
+    expect(input[0]!.otherPaddleFrames[0]!.point).toEqual({ x: 0.7, y: 0.4 });
+  });
+  it("adds visible frames under the correction set's annotatorId", () => {
+    const input = passes();
+    const application = applyOwnershipCorrections(input, [
+      set([
+        {
+          adjudicationId: "ADJ-2",
+          tMs: 100,
+          owner: "other",
+          action: "add-visible",
+          point: { x: 0.65, y: 0.51 },
+        },
+      ]),
+    ]);
+    expect(application).toEqual({ superseded: 0, added: 1, unmatched: [] });
+    expect(input).toHaveLength(2);
+    expect(input[1]!.annotatorId).toBe("waveE");
+    expect(input[1]!.otherPaddleFrames).toEqual([
+      { tMs: 100, point: { x: 0.65, y: 0.51 }, visibility: "visible" },
+    ]);
+  });
+  it("reports supersede corrections whose original cannot be located", () => {
+    const input = passes();
+    const application = applyOwnershipCorrections(input, [
+      set([
+        {
+          adjudicationId: "ADJ-3",
+          tMs: 100,
+          owner: "target",
+          action: "supersede-point",
+          originalPoint: { x: 0.9, y: 0.9 },
+          point: { x: 0.5, y: 0.5 },
+        },
+      ]),
+    ]);
+    expect(application).toEqual({ superseded: 0, added: 0, unmatched: ["ADJ-3"] });
+    expect(input[0]!.paddleFrames[0]!.point).toEqual({ x: 0.3, y: 0.54 });
   });
 });

@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "kind": "ownership-correction-set",
+  "captureBundle": "wavea-944403-smash",
+  "annotatorId": "devin-visual-v4-waveE-e05",
+  "createdAtIso": "2026-08-29T09:50:00.000Z",
+  "appendOnly": true,
+  "corrects": "datasets/paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v2-waveC-ownership.json",
+  "basedOnAudit": "datasets/paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+  "method": "Versioned append-only application of the D2-04 blind-audit adjudications. Original waveC labels are NEVER rewritten; each record references the adjudication it applies and the original value it supersedes (supersede-point) or the omission it fills (add-visible). Only auditor-upheld adjudications become corrections; resolved-to-waveC, downgraded, partial, and unresolved adjudications are recorded as no-change dispositions.",
+  "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"],
+  "corrections": [
+    {
+      "adjudicationId": "ADJ-S6",
+      "tMs": 3970.63,
+      "owner": "other",
+      "action": "add-visible",
+      "point": { "x": 0.478, "y": 0.437 },
+      "note": "auditor-upheld under-label: far-red crouching player's white blade face-on unambiguously visible (ADJ-S6 center (0.478,0.437))"
+    }
+  ],
+  "noChangeDispositions": [
+    {
+      "adjudicationId": "ADJ-S1",
+      "tMs": 2902.9,
+      "disposition": "downgraded-to-ambiguous",
+      "note": "low-contrast sliver not certifiable on re-review; waveC omission defensible — gold unchanged"
+    },
+    {
+      "adjudicationId": "ADJ-S2",
+      "tMs": 3703.7,
+      "disposition": "resolved-to-waveC",
+      "note": "coordinates agree within 0.008; visible (low contrast) stands — gold unchanged"
+    },
+    {
+      "adjudicationId": "ADJ-S3",
+      "tMs": 3703.7,
+      "disposition": "resolved-to-waveC",
+      "note": "audit blind point retracted as black-shorts false positive — gold unchanged"
+    },
+    {
+      "adjudicationId": "ADJ-S4",
+      "tMs": 3903.9,
+      "disposition": "resolved-to-waveC",
+      "note": "auditor blind miss of low-contrast overhead blade; confirmed on re-view, delta 0.002 — gold unchanged"
+    },
+    {
+      "adjudicationId": "ADJ-S5",
+      "tMs": 3970.63,
+      "disposition": "resolved-to-waveC",
+      "note": "auditor blind miss; confirmed on re-view, delta 0.005 — gold unchanged"
+    }
+  ]
+}
