@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-sasebo-volleys",
+  "annotatorId": "devin-visual-v3-waveD",
+  "createdAtIso": "2026-08-29T08:45:00.000Z",
+  "taxonomyVersion": "pickleball-taxonomy-v2",
+  "note": "Wave D D13 stroke-taxonomy pass: L1/L2/L3 labels for existing eventLabels windows that lacked stroke gold. Event bounds copied unchanged from prior passes; labels also appended to datasets/paddle-bench/stroke-gold.json. Append-only; no prior annotation file was modified.",
+  "strokeLabels": [
+    {
+      "eventStartMs": 51900,
+      "contactMs": 52000,
+      "eventEndMs": 52300,
+      "owner": "target",
+      "l1": "volley",
+      "l2": "backhand",
+      "l3": "punch_volley_backhand",
+      "reasoning": "Frame review at 29.97fps shows the camo-shirt target meeting the ball on the paddle face at face height before any bounce with a compact one-handed backhand push and a short punch recovery, supporting a backhand punch volley.",
+      "annotatorId": "devin-visual-v3-waveD",
+      "createdAtIso": "2026-08-29T08:45:00.000Z"
+    },
+    {
+      "eventStartMs": 52267,
+      "contactMs": 52367,
+      "eventEndMs": 52600,
+      "owner": "other",
+      "l1": "volley",
+      "l2": "unknown",
+      "l3": "unknown",
+      "reasoning": "Out-of-air contact by the far white-shirt player is supported by the mid-air ball reversal within the fast kitchen exchange, placing the stroke in the volley family; the figure is too small in frame to establish paddle side or exact subtype.",
+      "annotatorId": "devin-visual-v3-waveD",
+      "createdAtIso": "2026-08-29T08:45:00.000Z"
+    },
+    {
+      "eventStartMs": 52434,
+      "contactMs": 52683,
+      "eventEndMs": 52900,
+      "owner": "target",
+      "l1": "volley",
+      "l2": "backhand",
+      "l3": "unknown",
+      "reasoning": "The target takes the ball out of the air chest-left on the backhand face with a short upward flick follow-through; the compact kitchen exchange supports the volley family and backhand side, but the flick leaves the exact volley subtype visually ambiguous.",
+      "annotatorId": "devin-visual-v3-waveD",
+      "createdAtIso": "2026-08-29T08:45:00.000Z"
+    },
+    {
+      "eventStartMs": 52867,
+      "contactMs": 52967,
+      "eventEndMs": 53201,
+      "owner": "other",
+      "l1": "volley",
+      "l2": "unknown",
+      "l3": "unknown",
+      "reasoning": "The far-left player's counter is evidenced only by a bracketed mid-air ball reversal during the exchange, supporting out-of-air volley-family contact; the small figure prevents any honest side or subtype call.",
+      "annotatorId": "devin-visual-v3-waveD",
+      "createdAtIso": "2026-08-29T08:45:00.000Z"
+    },
+    {
+      "eventStartMs": 52934,
+      "contactMs": 53067,
+      "eventEndMs": 53234,
+      "owner": "target",
+      "l1": "volley",
+      "l2": "backhand",
+      "l3": "unknown",
+      "reasoning": "A second backhand out-of-air flick by the target: re-raise, contact on the backhand face before any bounce, then a full retract; backhand volley is visually supported while the exact subtype remains ambiguous.",
+      "annotatorId": "devin-visual-v3-waveD",
+      "createdAtIso": "2026-08-29T08:45:00.000Z"
+    }
+  ]
+}

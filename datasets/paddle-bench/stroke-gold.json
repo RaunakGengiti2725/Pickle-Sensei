@@ -289,6 +289,97 @@
       "reasoning": "The near player steps and punches the incoming ball before a bounce with a compact forehand face and short follow-through, clearly supporting forehand punch volley.",
       "annotatorId": "devin-visual-v2-waveC",
       "createdAtIso": "2026-08-29T06:29:48.000Z"
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "eventStartMs": 2380,
+      "contactMs": 2620,
+      "eventEndMs": 3050,
+      "owner": "target",
+      "l1": "overhead_lob",
+      "l2": "overhead",
+      "l3": "unknown",
+      "reasoning": "The near gray-shirt target reaches to full extension above the head and strikes the ball at overhead contact with a forward-downward follow-through; overhead contact is visually clear, but the strike's pace and put-away character are not established well enough to separate a full smash from a controlled overhead, so exact technique is withheld.",
+      "annotatorId": "devin-visual-v3-waveD",
+      "createdAtIso": "2026-08-29T08:45:00.000Z"
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "eventStartMs": 3600,
+      "contactMs": 3834,
+      "eventEndMs": 4233,
+      "owner": "target",
+      "l1": "overhead_lob",
+      "l2": "overhead",
+      "l3": "overhead_smash",
+      "reasoning": "The target turns and sets under a visibly descending lob, contacts at full overhead extension, and drives a forceful downward follow-through across the body; the descending-lob setup plus the aggressive downward strike identify an overhead smash.",
+      "annotatorId": "devin-visual-v3-waveD",
+      "createdAtIso": "2026-08-29T08:45:00.000Z"
+    },
+    {
+      "caseId": "wavea-sasebo-volleys",
+      "eventStartMs": 51900,
+      "contactMs": 52000,
+      "eventEndMs": 52300,
+      "owner": "target",
+      "l1": "volley",
+      "l2": "backhand",
+      "l3": "punch_volley_backhand",
+      "reasoning": "Frame review at 29.97fps shows the camo-shirt target meeting the ball on the paddle face at face height before any bounce with a compact one-handed backhand push and a short punch recovery, supporting a backhand punch volley.",
+      "annotatorId": "devin-visual-v3-waveD",
+      "createdAtIso": "2026-08-29T08:45:00.000Z"
+    },
+    {
+      "caseId": "wavea-sasebo-volleys",
+      "eventStartMs": 52267,
+      "contactMs": 52367,
+      "eventEndMs": 52600,
+      "owner": "other",
+      "l1": "volley",
+      "l2": "unknown",
+      "l3": "unknown",
+      "reasoning": "Out-of-air contact by the far white-shirt player is supported by the mid-air ball reversal within the fast kitchen exchange, placing the stroke in the volley family; the figure is too small in frame to establish paddle side or exact subtype.",
+      "annotatorId": "devin-visual-v3-waveD",
+      "createdAtIso": "2026-08-29T08:45:00.000Z"
+    },
+    {
+      "caseId": "wavea-sasebo-volleys",
+      "eventStartMs": 52434,
+      "contactMs": 52683,
+      "eventEndMs": 52900,
+      "owner": "target",
+      "l1": "volley",
+      "l2": "backhand",
+      "l3": "unknown",
+      "reasoning": "The target takes the ball out of the air chest-left on the backhand face with a short upward flick follow-through; the compact kitchen exchange supports the volley family and backhand side, but the flick leaves the exact volley subtype visually ambiguous.",
+      "annotatorId": "devin-visual-v3-waveD",
+      "createdAtIso": "2026-08-29T08:45:00.000Z"
+    },
+    {
+      "caseId": "wavea-sasebo-volleys",
+      "eventStartMs": 52867,
+      "contactMs": 52967,
+      "eventEndMs": 53201,
+      "owner": "other",
+      "l1": "volley",
+      "l2": "unknown",
+      "l3": "unknown",
+      "reasoning": "The far-left player's counter is evidenced only by a bracketed mid-air ball reversal during the exchange, supporting out-of-air volley-family contact; the small figure prevents any honest side or subtype call.",
+      "annotatorId": "devin-visual-v3-waveD",
+      "createdAtIso": "2026-08-29T08:45:00.000Z"
+    },
+    {
+      "caseId": "wavea-sasebo-volleys",
+      "eventStartMs": 52934,
+      "contactMs": 53067,
+      "eventEndMs": 53234,
+      "owner": "target",
+      "l1": "volley",
+      "l2": "backhand",
+      "l3": "unknown",
+      "reasoning": "A second backhand out-of-air flick by the target: re-raise, contact on the backhand face before any bounce, then a full retract; backhand volley is visually supported while the exact subtype remains ambiguous.",
+      "annotatorId": "devin-visual-v3-waveD",
+      "createdAtIso": "2026-08-29T08:45:00.000Z"
     }
   ]
 }
