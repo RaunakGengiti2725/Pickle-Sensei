@@ -1,0 +1,417 @@
+{
+  "benchVersion": "event-recall-1 (wave-e e01)",
+  "generatedAtIso": "2026-08-29T09:54:17.730Z",
+  "scope": {
+    "criterion": "PROPOSED_OK = best proposal overlap ≥0.5 of gold OR gold contact inside proposal ±60ms (D06 oracle / cascade criterion)",
+    "heldOutExcluded": [
+      "wm-dink-01",
+      "afn-vic-rally1"
+    ],
+    "notReplayable": [
+      "wm-volley-02",
+      "afn-sasebo-rally2"
+    ],
+    "unmatchedCaveat": "windows are not exhaustively labeled; unmatchedProposals is an upper bound on false proposals, not a verdict"
+  },
+  "summary": {
+    "goldTargetEvents": 16,
+    "proposedOk": 11,
+    "misBounded": 1,
+    "missed": 4,
+    "recall": 0.688,
+    "meanBestOverlapOfProposedOk": 0.825,
+    "contactInsideRate": 1,
+    "contactInsideDenominator": 11,
+    "totalProposals": 9,
+    "lowAmplitudeProposals": 0,
+    "falseInNonEvent": 0,
+    "nonEventSpans": 5,
+    "unmatchedProposals": 0
+  },
+  "eventRows": [
+    {
+      "eventKey": "afn-sasebo-rally1#1",
+      "goldSpanMs": [
+        2600,
+        3600
+      ],
+      "goldContactMs": 2900,
+      "outcome": "PROPOSED_OK",
+      "bestOverlap": 0.9,
+      "contactInside": true,
+      "matchedProposal": {
+        "startMs": 2703,
+        "endMs": 3770,
+        "lowAmplitude": false
+      }
+    },
+    {
+      "eventKey": "afn-sasebo-rally1#3",
+      "goldSpanMs": [
+        233,
+        500
+      ],
+      "goldContactMs": 317,
+      "outcome": "PROPOSED_OK",
+      "bestOverlap": 0.5,
+      "contactInside": true,
+      "matchedProposal": {
+        "startMs": 367,
+        "endMs": 901,
+        "lowAmplitude": false
+      }
+    },
+    {
+      "eventKey": "afn-sasebo-rally1#4",
+      "goldSpanMs": [
+        1017,
+        1284
+      ],
+      "goldContactMs": 1117,
+      "outcome": "PROPOSED_OK",
+      "bestOverlap": 1,
+      "contactInside": true,
+      "matchedProposal": {
+        "startMs": 968,
+        "endMs": 2636,
+        "lowAmplitude": false
+      }
+    },
+    {
+      "eventKey": "afn-sasebo-rally1#5",
+      "goldSpanMs": [
+        1417,
+        1617
+      ],
+      "goldContactMs": 1484,
+      "outcome": "PROPOSED_OK",
+      "bestOverlap": 1,
+      "contactInside": true,
+      "matchedProposal": {
+        "startMs": 968,
+        "endMs": 2636,
+        "lowAmplitude": false
+      }
+    },
+    {
+      "eventKey": "afn-sasebo-rally1#6",
+      "goldSpanMs": [
+        1651,
+        1818
+      ],
+      "goldContactMs": 1717,
+      "outcome": "PROPOSED_OK",
+      "bestOverlap": 1,
+      "contactInside": true,
+      "matchedProposal": {
+        "startMs": 968,
+        "endMs": 2636,
+        "lowAmplitude": false
+      }
+    },
+    {
+      "eventKey": "wavea-marne-serve#1",
+      "goldSpanMs": [
+        34017,
+        35433
+      ],
+      "goldContactMs": 34689,
+      "outcome": "PROPOSED_OK",
+      "bestOverlap": 0.86,
+      "contactInside": true,
+      "matchedProposal": {
+        "startMs": 34117,
+        "endMs": 35335,
+        "lowAmplitude": false
+      }
+    },
+    {
+      "eventKey": "wavea-marne-dig#1",
+      "goldSpanMs": [
+        14042,
+        14333
+      ],
+      "goldContactMs": 14188,
+      "outcome": "PROPOSED_OK",
+      "bestOverlap": 1,
+      "contactInside": true,
+      "matchedProposal": {
+        "startMs": 13830,
+        "endMs": 14398,
+        "lowAmplitude": false
+      }
+    },
+    {
+      "eventKey": "wavea-faead-feed#1",
+      "goldSpanMs": [
+        33358,
+        34050
+      ],
+      "goldContactMs": 33442,
+      "outcome": "PROPOSED_OK",
+      "bestOverlap": 0.69,
+      "contactInside": true,
+      "matchedProposal": {
+        "startMs": 33125,
+        "endMs": 33833,
+        "lowAmplitude": false
+      }
+    },
+    {
+      "eventKey": "wavea-faead-rally#1",
+      "goldSpanMs": [
+        13417,
+        13833
+      ],
+      "goldContactMs": null,
+      "outcome": "MISSED",
+      "bestOverlap": null,
+      "contactInside": null,
+      "matchedProposal": null
+    },
+    {
+      "eventKey": "wavea-faead-rally#2",
+      "goldSpanMs": [
+        13875,
+        14500
+      ],
+      "goldContactMs": 14042,
+      "outcome": "MISSED",
+      "bestOverlap": null,
+      "contactInside": null,
+      "matchedProposal": null
+    },
+    {
+      "eventKey": "wavea-944403-dink#3",
+      "goldSpanMs": [
+        20950,
+        21500
+      ],
+      "goldContactMs": 21117,
+      "outcome": "PROPOSED_OK",
+      "bestOverlap": 0.37,
+      "contactInside": true,
+      "matchedProposal": {
+        "startMs": 20103,
+        "endMs": 21154,
+        "lowAmplitude": false
+      }
+    },
+    {
+      "eventKey": "wavea-944403-smash#2",
+      "goldSpanMs": [
+        4317,
+        4525
+      ],
+      "goldContactMs": 4379,
+      "outcome": "MISSED",
+      "bestOverlap": null,
+      "contactInside": null,
+      "matchedProposal": null
+    },
+    {
+      "eventKey": "wavea-wgm-wheelchair#1",
+      "goldSpanMs": [
+        182400,
+        183067
+      ],
+      "goldContactMs": 182583,
+      "outcome": "PROPOSED_OK",
+      "bestOverlap": 0.75,
+      "contactInside": true,
+      "matchedProposal": {
+        "startMs": 182567,
+        "endMs": 183300,
+        "lowAmplitude": false
+      }
+    },
+    {
+      "eventKey": "wavea-sasebo-volleys#1",
+      "goldSpanMs": [
+        51900,
+        52300
+      ],
+      "goldContactMs": 52000,
+      "outcome": "MIS_BOUNDED",
+      "bestOverlap": 0.37,
+      "contactInside": false,
+      "matchedProposal": {
+        "startMs": 52152,
+        "endMs": 52920,
+        "lowAmplitude": false
+      }
+    },
+    {
+      "eventKey": "wavea-sasebo-volleys#3",
+      "goldSpanMs": [
+        52434,
+        52900
+      ],
+      "goldContactMs": 52683,
+      "outcome": "PROPOSED_OK",
+      "bestOverlap": 1,
+      "contactInside": true,
+      "matchedProposal": {
+        "startMs": 52152,
+        "endMs": 52920,
+        "lowAmplitude": false
+      }
+    },
+    {
+      "eventKey": "wavea-sasebo-volleys#5",
+      "goldSpanMs": [
+        52934,
+        53234
+      ],
+      "goldContactMs": 53067,
+      "outcome": "MISSED",
+      "bestOverlap": null,
+      "contactInside": null,
+      "matchedProposal": null
+    }
+  ],
+  "caseRows": [
+    {
+      "caseId": "afn-sasebo-rally1",
+      "signalSource": "apps/mobile/__tests__/fixtures/sessionReplay.afn-sasebo-rally1.json",
+      "proposals": 3,
+      "lowAmplitudeProposals": 0,
+      "falseInNonEvent": 0,
+      "unmatchedProposals": 0,
+      "proposalSpans": [
+        {
+          "startMs": 367,
+          "endMs": 901,
+          "peakMs": 467,
+          "peakSpeed": 1.575
+        },
+        {
+          "startMs": 968,
+          "endMs": 2636,
+          "peakMs": 1468,
+          "peakSpeed": 0.533
+        },
+        {
+          "startMs": 2703,
+          "endMs": 3770,
+          "peakMs": 3403,
+          "peakSpeed": 1.059
+        }
+      ]
+    },
+    {
+      "caseId": "wavea-marne-serve",
+      "signalSource": "runs-wave-a/wavea-marne-serve/people.json",
+      "proposals": 1,
+      "lowAmplitudeProposals": 0,
+      "falseInNonEvent": 0,
+      "unmatchedProposals": 0,
+      "proposalSpans": [
+        {
+          "startMs": 34117,
+          "endMs": 35335,
+          "peakMs": 34801,
+          "peakSpeed": 2.751
+        }
+      ]
+    },
+    {
+      "caseId": "wavea-marne-dig",
+      "signalSource": "runs-wave-a/wavea-marne-dig/people.json",
+      "proposals": 1,
+      "lowAmplitudeProposals": 0,
+      "falseInNonEvent": 0,
+      "unmatchedProposals": 0,
+      "proposalSpans": [
+        {
+          "startMs": 13830,
+          "endMs": 14398,
+          "peakMs": 14364,
+          "peakSpeed": 0.568
+        }
+      ]
+    },
+    {
+      "caseId": "wavea-faead-feed",
+      "signalSource": "runs-wave-a/wavea-faead-feed/people.json",
+      "proposals": 1,
+      "lowAmplitudeProposals": 0,
+      "falseInNonEvent": 0,
+      "unmatchedProposals": 0,
+      "proposalSpans": [
+        {
+          "startMs": 33125,
+          "endMs": 33833,
+          "peakMs": 33792,
+          "peakSpeed": 0.899
+        }
+      ]
+    },
+    {
+      "caseId": "wavea-faead-rally",
+      "signalSource": "runs-wave-a/wavea-faead-rally/people.json",
+      "proposals": 0,
+      "lowAmplitudeProposals": 0,
+      "falseInNonEvent": 0,
+      "unmatchedProposals": 0,
+      "proposalSpans": []
+    },
+    {
+      "caseId": "wavea-944403-dink",
+      "signalSource": "runs-wave-a/wavea-944403-dink/people.json",
+      "proposals": 1,
+      "lowAmplitudeProposals": 0,
+      "falseInNonEvent": 0,
+      "unmatchedProposals": 0,
+      "proposalSpans": [
+        {
+          "startMs": 20103,
+          "endMs": 21154,
+          "peakMs": 20437,
+          "peakSpeed": 0.516
+        }
+      ]
+    },
+    {
+      "caseId": "wavea-944403-smash",
+      "signalSource": "runs-wave-a/wavea-944403-smash/people.json",
+      "proposals": 0,
+      "lowAmplitudeProposals": 0,
+      "falseInNonEvent": 0,
+      "unmatchedProposals": 0,
+      "proposalSpans": []
+    },
+    {
+      "caseId": "wavea-wgm-wheelchair",
+      "signalSource": "runs-wave-a/wavea-wgm-wheelchair/people.json",
+      "proposals": 1,
+      "lowAmplitudeProposals": 0,
+      "falseInNonEvent": 0,
+      "unmatchedProposals": 0,
+      "proposalSpans": [
+        {
+          "startMs": 182567,
+          "endMs": 183300,
+          "peakMs": 183233,
+          "peakSpeed": 1.785
+        }
+      ]
+    },
+    {
+      "caseId": "wavea-sasebo-volleys",
+      "signalSource": "runs-wave-a/wavea-sasebo-volleys/people.json",
+      "proposals": 1,
+      "lowAmplitudeProposals": 0,
+      "falseInNonEvent": 0,
+      "unmatchedProposals": 0,
+      "proposalSpans": [
+        {
+          "startMs": 52152,
+          "endMs": 52920,
+          "peakMs": 52553,
+          "peakSpeed": 0.692
+        }
+      ]
+    }
+  ]
+}
