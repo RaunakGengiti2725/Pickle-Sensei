@@ -252,7 +252,7 @@ export const PHASE_TEMPORAL_V2_VERSION =
  * "exact contact not established" is embedded verbatim for honest UI labeling.
  */
 export const PHASE_TEMPORAL_V2_ANCHOR_FREE_VERSION =
-  "phase.paddle-temporal.v2.3 (event-local, anchor-free around measured UNIQUE motion peak; margin motion in a rest-separated burst belongs to a neighboring stroke; timeline from motion evidence — exact contact not established; heuristic, uncalibrated)";
+  "phase.paddle-temporal.v2.4 (event-local, anchor-free around measured UNIQUE motion peak; margin motion in a rest-separated burst belongs to a neighboring stroke; an apex within one sampling interval of the event boundary and motion-connected to the in-event peak is this event's apex at measurement resolution; timeline from motion evidence — exact contact not established; heuristic, uncalibrated)";
 
 /**
  * v2 principles (learned from v1's measured failure modes):
@@ -440,12 +440,64 @@ function segmentPhasesAnchorFree(input: {
       reason: `PHASE_NO_MOTION_EVIDENCE: in-event peak speed ${peakSample.value.toFixed(2)} below the anchor-free floor (0.5)`,
     };
   }
+  // v2.4 — measurement-resolution apex adoption. The event boundary is a
+  // human label quantized to the frame; the kinematic series is sampled at a
+  // finite interval. When the swing's measured excess over the in-event peak
+  // consists ENTIRELY of margin samples that are (a) motion-connected to the
+  // in-event peak (the series never drops below the boundary-walking accel
+  // threshold — 25% of the smaller of the two — between them) and (b) within
+  // ONE median inter-sample gap of the event boundary, the apex position is
+  // indistinguishable from "inside the event" at the resolution of the
+  // measurement: adopt the strongest such sample as the apex and let EVERY
+  // subsequent gate (prominence, ownership, rival, peak-agreement, two-sided
+  // evidence, ordering) judge the adopted apex. If ANY motion-connected
+  // margin sample above the in-event peak lies farther out than one sampling
+  // interval, the swing genuinely spills past the boundary and the ownership
+  // gate below still abstains (PHASE_PEAK_OUTSIDE_EVENT). Rest-separated
+  // margin motion is a neighboring stroke and is never adopted. The in-event
+  // evidence floor above was already applied to the IN-EVENT peak — adoption
+  // cannot rescue an event whose own window lacks motion evidence.
+  const gapsSorted = series
+    .slice(1)
+    .map((sample, index) => sample.timestampMs - series[index]!.timestampMs)
+    .sort((a, b) => a - b);
+  const medianGapMs = gapsSorted[Math.floor(gapsSorted.length / 2)]!;
+  const motionConnected = (
+    a: { timestampMs: number; value: number },
+    b: { timestampMs: number; value: number },
+  ): boolean => {
+    const floor = 0.25 * Math.min(a.value, b.value);
+    const lo = Math.min(a.timestampMs, b.timestampMs);
+    const hi = Math.max(a.timestampMs, b.timestampMs);
+    return !series.some((s) => s.timestampMs > lo && s.timestampMs < hi && s.value < floor);
+  };
+  const distOutsideMs = (sample: { timestampMs: number }): number =>
+    sample.timestampMs < input.event.startMs
+      ? input.event.startMs - sample.timestampMs
+      : sample.timestampMs > input.event.endMs
+        ? sample.timestampMs - input.event.endMs
+        : 0;
+  let apexSample = peakSample;
+  const connectedExcess = series.filter(
+    (sample) =>
+      distOutsideMs(sample) > 0 &&
+      sample.value > peakSample.value &&
+      motionConnected(sample, peakSample),
+  );
+  if (
+    connectedExcess.length > 0 &&
+    connectedExcess.every((sample) => distOutsideMs(sample) <= medianGapMs)
+  ) {
+    apexSample = connectedExcess.reduce((best, sample) =>
+      sample.value > best.value ? sample : best,
+    );
+  }
   const sortedValues = series.map((sample) => sample.value).sort((a, b) => a - b);
   const medianValue = sortedValues[Math.floor(sortedValues.length / 2)]!;
-  if (medianValue > 0 && peakSample.value < 2 * medianValue) {
+  if (medianValue > 0 && apexSample.value < 2 * medianValue) {
     return {
       status: "abstained",
-      reason: `PHASE_PEAK_NOT_PROMINENT: in-event peak ${peakSample.value.toFixed(2)} is not decisive vs the local median ${medianValue.toFixed(2)} (needs ≥ 2×) — no measurable swing apex without an anchor`,
+      reason: `PHASE_PEAK_NOT_PROMINENT: in-event peak ${apexSample.value.toFixed(2)} is not decisive vs the local median ${medianValue.toFixed(2)} (needs ≥ 2×) — no measurable swing apex without an anchor`,
     };
   }
   // Margin samples in a DIFFERENT motion burst are a neighboring stroke, not
@@ -461,13 +513,13 @@ function segmentPhasesAnchorFree(input: {
     const inMargin =
       sample.timestampMs < input.event.startMs || sample.timestampMs > input.event.endMs;
     if (!inMargin) return false;
-    const floor = 0.25 * Math.min(peakSample.value, sample.value);
-    const lo = Math.min(sample.timestampMs, peakSample.timestampMs);
-    const hi = Math.max(sample.timestampMs, peakSample.timestampMs);
+    const floor = 0.25 * Math.min(apexSample.value, sample.value);
+    const lo = Math.min(sample.timestampMs, apexSample.timestampMs);
+    const hi = Math.max(sample.timestampMs, apexSample.timestampMs);
     return series.some((s) => s.timestampMs > lo && s.timestampMs < hi && s.value < floor);
   };
   const outsideContender = series.find(
-    (sample) => sample.value > peakSample.value && !restSeparatedFromApex(sample),
+    (sample) => sample.value > apexSample.value && !restSeparatedFromApex(sample),
   );
   if (outsideContender) {
     return {
@@ -481,26 +533,26 @@ function segmentPhasesAnchorFree(input: {
   // them as "the swing" would invent a timeline around an arbitrary push.
   const rival = series.find(
     (sample) =>
-      Math.abs(sample.timestampMs - peakSample.timestampMs) > 180 &&
-      sample.value >= 0.9 * peakSample.value &&
+      Math.abs(sample.timestampMs - apexSample.timestampMs) > 180 &&
+      sample.value >= 0.9 * apexSample.value &&
       !restSeparatedFromApex(sample),
   );
   if (rival) {
     return {
       status: "abstained",
-      reason: `PHASE_PEAK_NOT_UNIQUE: rival peak ${rival.value.toFixed(2)} at ${Math.round(rival.timestampMs)}ms is within 10% of the apex ${peakSample.value.toFixed(2)} at ${Math.round(peakSample.timestampMs)}ms — periodic/multi-burst motion has no single swing apex`,
+      reason: `PHASE_PEAK_NOT_UNIQUE: rival peak ${rival.value.toFixed(2)} at ${Math.round(rival.timestampMs)}ms is within 10% of the apex ${apexSample.value.toFixed(2)} at ${Math.round(apexSample.timestampMs)}ms — periodic/multi-burst motion has no single swing apex`,
     };
   }
   if (
     input.event.peakMs !== undefined &&
-    Math.abs(peakSample.timestampMs - input.event.peakMs) > 250
+    Math.abs(apexSample.timestampMs - input.event.peakMs) > 250
   ) {
     return {
       status: "abstained",
-      reason: `PHASE_PEAK_MISMATCH: measured kinematic peak ${Math.round(peakSample.timestampMs)}ms disagrees with the event's own peak ${Math.round(input.event.peakMs)}ms by more than 250ms`,
+      reason: `PHASE_PEAK_MISMATCH: measured kinematic peak ${Math.round(apexSample.timestampMs)}ms disagrees with the event's own peak ${Math.round(input.event.peakMs)}ms by more than 250ms`,
     };
   }
-  const peakIndex = series.indexOf(peakSample);
+  const peakIndex = series.indexOf(apexSample);
   if (peakIndex < 2) {
     return {
       status: "abstained",
@@ -518,10 +570,10 @@ function segmentPhasesAnchorFree(input: {
 
   // Same threshold-walking recipe as the anchored path (25% / 10% / 15% of
   // peak with the sustained-neighbor check), around the measured peak.
-  const peakMs = peakSample.timestampMs;
-  const accelThreshold = 0.25 * peakSample.value;
-  const restThreshold = 0.1 * peakSample.value;
-  const recoverThreshold = 0.15 * peakSample.value;
+  const peakMs = apexSample.timestampMs;
+  const accelThreshold = 0.25 * apexSample.value;
+  const restThreshold = 0.1 * apexSample.value;
+  const recoverThreshold = 0.15 * apexSample.value;
   const sustained = (index: number, threshold: number, direction: -1 | 1): boolean => {
     const neighbor = series[index + direction];
     return neighbor !== undefined ? neighbor.value < threshold : true;
