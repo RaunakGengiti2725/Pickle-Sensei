@@ -1,0 +1,72 @@
+{
+  "workstream": "e08-rt-target-fresh",
+  "wave": "E",
+  "branch": "devin/wave-e/e08-rt-target-fresh",
+  "base": "origin/devin/1787988068-wave-c-integration",
+  "mission": "Red-team target acquisition/persistence on the NEWEST lawfully acquired footage in datasets/pickleball/registry.json with usable rights that was not used in prior target evals.",
+  "verdict": "SCIENTIFIC_NEGATIVE",
+  "verdictStatement": "No registry footage can lawfully AND validly be used for a fresh target-acquisition red-team right now. The only usable-rights footage in the registry (8 fresh-candidate clips, added 2026-08-29, none used in any prior target eval) is a registry-declared LABEL-BLIND holdout pool: creating the target-identity ground truth a red-team eval requires (who is who, true track ids, switch/false-lock adjudications) is exactly the labeling the registry prohibits before the freeze, and red-teaming + fixing against these clips would tune the system on the repo's only fresh holdout, destroying its holdout value. Independently, even a label-free run is impossible on this box: TA replay consumes pose PeopleFiles produced by ApplePoseProvider (macOS-only); datasets/corpus/runs/ does not exist on Linux and no Linux pose extractor exists in the repo (BLOCKED_EXTERNAL component).",
+  "registryInventory": {
+    "registryPath": "datasets/pickleball/registry.json",
+    "verifiedAt": "2026-08-29 (this workstream, commit-time recount)",
+    "categories": {
+      "sources": {
+        "count": 2,
+        "items": ["roboflow-pickleball-detection-1oqlw-px8fm", "roboflow-pickleball-pen-ball-tracking-v3"],
+        "whyUnusableForTargetEval": "Still-image object-detection datasets, registered_not_downloaded, commercialTrainingClearance=not_cleared (undocumented provenance). No temporal footage, so no target persistence can be evaluated."
+      },
+      "evaluatedButExcluded": {
+        "count": 6,
+        "whyUnusableForTargetEval": "No distributable temporal media with usable rights: youtube segment metadata without media, video frames without redistribution rights, code/model-weights only, CC BY-NC-SA tabular data (noncommercial term), tabular-only CC BY with no media present, and one non-retrievable dataset claim."
+      },
+      "quarantinedUnknownRights": {
+        "count": 22,
+        "whyUnusableForTargetEval": "All are quarantined_not_downloaded, excluded_noncommercial, duplicate edits, or quarantined_never_eligible_license_laundering_risk. None has media in the repo; none has cleared rights."
+      },
+      "freshCandidates": {
+        "count": 8,
+        "addedAt": "2026-08-29 (newest acquisitions in the registry; acquired by wave-c/c16 and wave-d2/d2-03)",
+        "items": [
+          "yt-tJuJ4MQdYy0", "yt-I5wYCXCL4dY", "yt-hktiyFnghIw", "yt-Y7DOO0j_1P4",
+          "yt-iuVdtmGoTbo", "yt-eK-iPN2XAJQ", "voa-6108955", "voa-6115790"
+        ],
+        "rights": "6x CC BY 3.0 (YouTube page-verified 'reuse allowed'), 2x public domain (VOA-produced). Rights ARE usable (store/analyze/annotate/train/commercial with attribution or PD).",
+        "policyBar": "Registry freshCandidates.policy: 'role=fresh_candidate, label-blind holdout pool; excluded from datasets/corpus and from all splits/training until a future freeze registers them through the acquisition front door.' Per-item notes: 'No labels of any kind exist or may be created for this clip before the freeze.'",
+        "whyUnusableForTargetEval": "A target red-team requires target-identity ground truth (true track ids, switch/false-lock adjudication) — that is label creation, which the registry prohibits pre-freeze. Using the pool to find-and-fix tracker bugs would additionally tune against the only fresh holdout footage, contaminating the planned freeze. Precedent: d3-11 ran only a mechanical label-free OOD gate over these clips and created no labels."
+      }
+    }
+  },
+  "priorTargetEvalScopeCheck": {
+    "taBenchCases": "datasets/ta-bench/cases.json: 301 cases over 12 (recordingId, sessionKey) pairs, all datasets/corpus recordings (dvids/afn/wm sessions). Zero references to any fresh-candidate id (verified programmatically).",
+    "d3-01-rt-target": "Prior TA red-team (wave-d3/d3-01) used SYNTHETIC fixtures only.",
+    "freshCandidateReuseAudit": "grep of every fresh-candidate id across the repo: only acquisition summaries (c16, d2-03), the d2-09 integrity report, and the d3-11 label-free OOD-gate run reference them. None was used in a target eval."
+  },
+  "technicalBlockCheck": {
+    "replayInput": "packages/swing-lab/src/engine/taReplay.ts + targetAcquisitionBench.ts loadRun() require <corpus>/runs/<recordingId>/people.json pose files.",
+    "runsDirOnLinux": "datasets/corpus/runs/ does not exist in the checkout (verified 2026-08-29).",
+    "poseExtraction": "Pose PeopleFiles are produced by ApplePoseProvider (macOS/Apple Vision only, per d3-01 and repo docs). No Linux pose extractor exists in ml/ or tools/ (person-capable detectors there are paddle-bench object detectors, not pose).",
+    "consequence": "Even a label-free hazard-signal run (identityContests, followJumps) on fresh footage is BLOCKED_EXTERNAL on this environment: it needs a Mac to extract pose, and would still be policy-questionable on label-blind holdout."
+  },
+  "dataIntegrityMeasurements": {
+    "method": "Mechanical (label-free) verification of the fresh-candidate pool at commit time.",
+    "sha256": "8/8 files byte-match the registry media.sha256 values.",
+    "directoryContents": "fresh-candidates/ holds exactly the 8 registered mp4 files; zero sidecar/label files.",
+    "crossReferences": "0 fresh-candidate ids in ta-bench cases.json, corpus sources.json, recordings.json, splits.json."
+  },
+  "deliverables": {
+    "regressionFixture": "packages/swing-lab/test/e08FreshHoldoutGuard.test.ts — 5 tests pinning the label-blind boundary: labelBlind flags, exact directory contents (no label sidecars can appear), per-file sha256 byte-match (no silent replacement of holdout footage), zero ta-bench references, zero corpus/split references. Any pre-freeze contamination of the fresh holdout now fails CI.",
+    "summary": "this file"
+  },
+  "heldOutCases": "wm-dink-01 and afn-vic-rally1 were not viewed, labeled, tuned against, or regenerated.",
+  "unblockPath": [
+    "1) Run the planned acquisition freeze: register fresh candidates through the front door (corpus sources/recordings/splits) with session-level grouping.",
+    "2) On a Mac, extract pose runs (people.json/scenes.json) for the newly registered recordings.",
+    "3) Only then propose + human-verify TA cases on the new sessions and run the red-team replay (identity switches, false locks, reacquisition) against them as a true one-shot holdout."
+  ],
+  "gates": {
+    "typecheck": "pnpm typecheck green",
+    "tests": "5 new e08FreshHoldoutGuard tests green in every run. Full swing-lab suite: 463/468 green with 1 flaky failure in the PRE-EXISTING test/oodGateRedTeam.test.ts (untouched by this workstream): its ffmpeg fixture builds exceed vitest's 5000ms testTimeout under load on this Linux box (a different case times out each run; the same file also times out on a clean base-branch worktree, and passes 8/8 when run in isolation on this branch).",
+    "lint": "pnpm lint green",
+    "format": "pnpm format:check green"
+  }
+}
