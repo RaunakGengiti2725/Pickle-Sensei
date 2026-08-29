@@ -19,9 +19,7 @@ export interface OfflineStrokeWindow {
   confidence: number;
 }
 
-export function detectOfflineStrokeWindow(
-  sequence: PoseSequence,
-): Result<OfflineStrokeWindow> {
+export function detectOfflineStrokeWindow(sequence: PoseSequence): Result<OfflineStrokeWindow> {
   const frames = toLegacyPoseFrames(sequence);
   if (frames.length < 12) {
     return fail(
@@ -32,8 +30,7 @@ export function detectOfflineStrokeWindow(
       ),
     );
   }
-  const aspect =
-    sequence.video.height > 0 ? sequence.video.width / sequence.video.height : 1;
+  const aspect = sequence.video.height > 0 ? sequence.video.width / sequence.video.height : 1;
   // The STRIKING wrist is the one with the most PROMINENT peak, not the most
   // total motion — an off-hand fidgeting (or holding a spare ball) can
   // out-sum a compact volley on the hitting side.
@@ -348,13 +345,10 @@ export function estimateContact(input: {
   includeFusionKernels?: boolean;
 }): ContactEstimate {
   const frames = toLegacyPoseFrames(input.sequence).filter(
-    (frame) =>
-      frame.timestampMs >= input.window.startMs && frame.timestampMs <= input.window.endMs,
+    (frame) => frame.timestampMs >= input.window.startMs && frame.timestampMs <= input.window.endMs,
   );
   const aspect =
-    input.sequence.video.height > 0
-      ? input.sequence.video.width / input.sequence.video.height
-      : 1;
+    input.sequence.video.height > 0 ? input.sequence.video.width / input.sequence.video.height : 1;
   const family: StrokeFamily = input.strokeFamily ?? "unknown";
   const compact = family === "volley" || family === "dink";
   const measuredTorso = medianTorsoSpan(frames, aspect);
@@ -369,16 +363,14 @@ export function estimateContact(input: {
   const paddle = input.paddleSpeeds
     ?.filter(
       (sample) =>
-        sample.timestampMs >= input.window.startMs &&
-        sample.timestampMs <= input.window.endMs,
+        sample.timestampMs >= input.window.startMs && sample.timestampMs <= input.window.endMs,
     )
     .sort((a, b) => a.timestampMs - b.timestampMs);
   // Wrist series (dominant wrist by total motion — v3 rule, unchanged).
   const right = consecutiveSpeedSeries(frames, "right_wrist", aspect);
   const leftSeries = consecutiveSpeedSeries(frames, "left_wrist", aspect);
   const wrist =
-    sum(right.map((sample) => sample.value)) >=
-    sum(leftSeries.map((sample) => sample.value))
+    sum(right.map((sample) => sample.value)) >= sum(leftSeries.map((sample) => sample.value))
       ? right
       : leftSeries;
 
@@ -412,10 +404,7 @@ export function estimateContact(input: {
         signal: "paddle_speed_peak",
         tMs: peak.timestampMs - FUSION.offsetMs.paddle_speed_peak,
         mass:
-          FUSION.reliability.paddle_speed_peak *
-          (peak.value / totalValue) *
-          censor *
-          corroboration,
+          FUSION.reliability.paddle_speed_peak * (peak.value / totalValue) * censor * corroboration,
         sigmaMs:
           FUSION.sigmaMs.paddle_speed_peak * (peak.boundary ? FUSION.boundarySigmaFactor : 1),
         note: `${peak.value.toFixed(2)} u/s${peak.boundary ? ", boundary-censored" : ""}${corroboration < 1 ? `, wrist-corroboration ×${corroboration.toFixed(2)}` : ""}`,
@@ -430,15 +419,13 @@ export function estimateContact(input: {
     const sigma = compact ? FUSION.compactWristSigmaMs : FUSION.sigmaMs.wrist_speed_peak;
     for (const peak of maxima) {
       const censor = peak.boundary ? FUSION.boundaryCensorFactor : 1;
-      const corroboration = paddle && paddle.length >= 5 ? corroborationFactor(paddle, peak.timestampMs) : 1;
+      const corroboration =
+        paddle && paddle.length >= 5 ? corroborationFactor(paddle, peak.timestampMs) : 1;
       kernels.push({
         signal: "wrist_speed_peak",
         tMs: peak.timestampMs - FUSION.offsetMs.wrist_speed_peak,
         mass:
-          FUSION.reliability.wrist_speed_peak *
-          (peak.value / totalValue) *
-          censor *
-          corroboration,
+          FUSION.reliability.wrist_speed_peak * (peak.value / totalValue) * censor * corroboration,
         sigmaMs: sigma * (peak.boundary ? FUSION.boundarySigmaFactor : 1),
         note: `${peak.value.toFixed(2)} u/s${peak.boundary ? ", boundary-censored" : ""}${corroboration < 1 ? `, paddle-corroboration ×${corroboration.toFixed(2)}` : ""}`,
       });
@@ -517,9 +504,7 @@ export function estimateContact(input: {
         // q·(q/Σq): a single strong gated turn carries the full reliability;
         // several comparable turns share it (ambiguity is not certainty).
         mass:
-          FUSION.reliability.ball_direction_change *
-          entry.quality *
-          (entry.quality / totalQuality),
+          FUSION.reliability.ball_direction_change * entry.quality * (entry.quality / totalQuality),
         sigmaMs: FUSION.sigmaMs.ball_direction_change,
         note: entry.note,
       });
@@ -548,8 +533,7 @@ export function estimateContact(input: {
             quality *
             (boundary ? FUSION.boundaryCensorFactor : 1),
           sigmaMs:
-            FUSION.sigmaMs.ball_paddle_proximity *
-            (boundary ? FUSION.boundarySigmaFactor : 1),
+            FUSION.sigmaMs.ball_paddle_proximity * (boundary ? FUSION.boundarySigmaFactor : 1),
           note: `min ${torsoDistance.toFixed(2)} torso (${paddleProximity.distance.toFixed(3)} u)${boundary ? ", at track edge (censored)" : ""}`,
         });
       } else {
@@ -560,12 +544,7 @@ export function estimateContact(input: {
         limitingFactors.push("ball_never_near_target_paddle");
       }
     } else {
-      const wristProximity = closestBallToWrist(
-        ball,
-        frames,
-        aspect,
-        input.targetWrists ?? null,
-      );
+      const wristProximity = closestBallToWrist(ball, frames, aspect, input.targetWrists ?? null);
       if (wristProximity) {
         const torsoDistance = wristProximity.distance / torso;
         const quality = clamp01(
@@ -583,8 +562,7 @@ export function estimateContact(input: {
               quality *
               (boundary ? FUSION.boundaryCensorFactor : 1),
             sigmaMs:
-              FUSION.sigmaMs.ball_wrist_proximity *
-              (boundary ? FUSION.boundarySigmaFactor : 1),
+              FUSION.sigmaMs.ball_wrist_proximity * (boundary ? FUSION.boundarySigmaFactor : 1),
             note: `min ${torsoDistance.toFixed(2)} torso (wrist fallback; no paddle track)${boundary ? ", at track edge (censored)" : ""}`,
           });
         } else {
@@ -645,18 +623,14 @@ export function estimateContact(input: {
 
   // ── Temporal kernel density over the scan span ──────────────────────────
   const gridStart =
-    Math.floor(Math.min(input.window.startMs, ...kernels.map((kernel) => kernel.tMs)) / 10) *
-      10 -
+    Math.floor(Math.min(input.window.startMs, ...kernels.map((kernel) => kernel.tMs)) / 10) * 10 -
     50;
   const gridEnd =
-    Math.ceil(Math.max(input.window.endMs, ...kernels.map((kernel) => kernel.tMs)) / 10) * 10 +
-    50;
+    Math.ceil(Math.max(input.window.endMs, ...kernels.map((kernel) => kernel.tMs)) / 10) * 10 + 50;
   const densityAt = (tMs: number): number =>
     sum(
       kernels.map(
-        (kernel) =>
-          kernel.mass *
-          Math.exp(-((tMs - kernel.tMs) ** 2) / (2 * kernel.sigmaMs ** 2)),
+        (kernel) => kernel.mass * Math.exp(-((tMs - kernel.tMs) ** 2) / (2 * kernel.sigmaMs ** 2)),
       ),
     );
   const grid: Array<{ tMs: number; density: number }> = [];
@@ -698,9 +672,10 @@ export function estimateContact(input: {
         status: "abstained",
         reason: `Contact evidence is multi-modal: comparable clusters at ~${Math.round(top.tMs)}ms and ~${Math.round(runnerUp.tMs)}ms (${Math.round((runnerUp.density / top.density) * 100)}% as strong, ${Math.round(Math.abs(runnerUp.tMs - top.tMs))}ms apart); no single moment is defensible.`,
         limitingFactors: [...limitingFactors, "contact_evidence_multimodal"],
-        modes: modes
-          .slice(0, 4)
-          .map((mode) => ({ tMs: Math.round(mode.tMs), share: round3(mode.density / top.density) })),
+        modes: modes.slice(0, 4).map((mode) => ({
+          tMs: Math.round(mode.tMs),
+          share: round3(mode.density / top.density),
+        })),
         contactDistribution: distribution,
       };
     }
@@ -746,9 +721,7 @@ export function estimateContact(input: {
       );
       if (reference === null) continue;
       const limit =
-        reference.source === "paddle"
-          ? FUSION.proximityFullTorso
-          : FUSION.wristProximityFullTorso;
+        reference.source === "paddle" ? FUSION.proximityFullTorso : FUSION.wristProximityFullTorso;
       const ratio = reference.distance / torso / limit;
       if (bestRatio === null || ratio < bestRatio) {
         bestRatio = ratio;
@@ -760,9 +733,10 @@ export function estimateContact(input: {
         status: "abstained",
         reason: `Ball observed away from the target at the fused moment (${bestDetail}, estimate ${estimatedContactMs}ms): the measured ball refutes contact there; the motion cluster is a swing phase, not the hit.`,
         limitingFactors: [...limitingFactors, "ball_observed_away_from_target_at_moment"],
-        modes: modes
-          .slice(0, 4)
-          .map((mode) => ({ tMs: Math.round(mode.tMs), share: round3(mode.density / modes[0]!.density) })),
+        modes: modes.slice(0, 4).map((mode) => ({
+          tMs: Math.round(mode.tMs),
+          share: round3(mode.density / modes[0]!.density),
+        })),
         contactDistribution: distribution,
       };
     }
@@ -780,9 +754,10 @@ export function estimateContact(input: {
       status: "abstained",
       reason: `Fused contact evidence peaks at ${estimatedContactMs}ms but the scanned movement's peak motion is at ${Math.round(input.window.peakMotionMs)}ms (${Math.round(Math.abs(estimatedContactMs - input.window.peakMotionMs))}ms apart): the strongest tracked evidence belongs to a different moment than the stroke under analysis.`,
       limitingFactors: [...limitingFactors, "contact_far_from_motion_peak"],
-      modes: modes
-        .slice(0, 4)
-        .map((mode) => ({ tMs: Math.round(mode.tMs), share: round3(mode.density / modes[0]!.density) })),
+      modes: modes.slice(0, 4).map((mode) => ({
+        tMs: Math.round(mode.tMs),
+        share: round3(mode.density / modes[0]!.density),
+      })),
       contactDistribution: distribution,
     };
   }
@@ -792,16 +767,13 @@ export function estimateContact(input: {
   // cannot confirm it — and kernels discounted to dust are not
   // corroboration either (mass floor).
   const ballMassTotal = sum(
-    kernels
-      .filter((kernel) => kernel.signal.startsWith("ball_"))
-      .map((kernel) => kernel.mass),
+    kernels.filter((kernel) => kernel.signal.startsWith("ball_")).map((kernel) => kernel.mass),
   );
   const ballSignal = kernels.some((kernel) => kernel.signal.startsWith("ball_"));
   const ballPresent = (ball ?? []).some(
     (observation) => Math.abs(observation.timestampMs - estimatedContactMs) <= FUSION.presenceMs,
   );
-  const ballConfirmed =
-    ballSignal && ballPresent && ballMassTotal >= FUSION.ballConfirmMinMass;
+  const ballConfirmed = ballSignal && ballPresent && ballMassTotal >= FUSION.ballConfirmMinMass;
   if (!ballSignal) limitingFactors.push("no_ball_evidence");
   else if (!ballPresent) limitingFactors.push("ball_lost_at_contact");
   else if (ballMassTotal < FUSION.ballConfirmMinMass) {
@@ -826,7 +798,10 @@ export function estimateContact(input: {
   );
   const ballNear = [...familiesNear].some((signal) => signal.startsWith("ball_"));
   let confidence =
-    0.18 + 0.55 * clamp01(coherence) + 0.06 * Math.min(3, familiesNear.size) + (ballNear ? 0.08 : 0);
+    0.18 +
+    0.55 * clamp01(coherence) +
+    0.06 * Math.min(3, familiesNear.size) +
+    (ballNear ? 0.08 : 0);
   confidence = Math.max(0.05, Math.min(0.95, confidence));
   if (!ballConfirmed) confidence = Math.min(confidence, 0.7);
   if (!ballConfirmed && !paddleConfirmed) confidence = Math.min(confidence, 0.55);
@@ -871,9 +846,10 @@ export function estimateContact(input: {
     limitingFactors,
     supportingEvidence,
     contactDistribution: distribution,
-    modes: modes
-      .slice(0, 4)
-      .map((mode) => ({ tMs: Math.round(mode.tMs), share: round3(mode.density / modes[0]!.density) })),
+    modes: modes.slice(0, 4).map((mode) => ({
+      tMs: Math.round(mode.tMs),
+      share: round3(mode.density / modes[0]!.density),
+    })),
     ...(input.includeFusionKernels
       ? {
           fusionKernels: kernels.map((kernel) => ({
@@ -904,17 +880,18 @@ function localMaxima(
     const next = index < series.length - 1 ? series[index + 1]!.value : -Infinity;
     const isBoundary = index === 0 || index === series.length - 1;
     const isMax = isBoundary ? value > Math.max(previous, next) : value > previous && value >= next;
-    if (isMax) candidates.push({ timestampMs: series[index]!.timestampMs, value, boundary: isBoundary });
+    if (isMax)
+      candidates.push({ timestampMs: series[index]!.timestampMs, value, boundary: isBoundary });
   }
   if (keep) candidates = candidates.filter((peak) => keep(peak));
   const maxValue = Math.max(...candidates.map((peak) => peak.value), 0);
-  const filtered = candidates.filter(
-    (peak) => peak.value >= maxValue * FUSION.maximaFloorFraction,
-  );
+  const filtered = candidates.filter((peak) => peak.value >= maxValue * FUSION.maximaFloorFraction);
   filtered.sort((a, b) => b.value - a.value);
   const merged: typeof filtered = [];
   for (const peak of filtered) {
-    if (merged.every((kept) => Math.abs(kept.timestampMs - peak.timestampMs) > FUSION.maximaMergeMs)) {
+    if (
+      merged.every((kept) => Math.abs(kept.timestampMs - peak.timestampMs) > FUSION.maximaMergeMs)
+    ) {
       merged.push(peak);
     }
     if (merged.length >= FUSION.maximaCap) break;
@@ -1036,8 +1013,8 @@ function medianTorsoSpan(
     if (!leftShoulder || !rightShoulder || !leftHip || !rightHip) continue;
     spans.push(
       Math.hypot(
-        (((leftShoulder.x + rightShoulder.x) - (leftHip.x + rightHip.x)) / 2) * aspect,
-        ((leftShoulder.y + rightShoulder.y) - (leftHip.y + rightHip.y)) / 2,
+        ((leftShoulder.x + rightShoulder.x - (leftHip.x + rightHip.x)) / 2) * aspect,
+        (leftShoulder.y + rightShoulder.y - (leftHip.y + rightHip.y)) / 2,
       ),
     );
   }
@@ -1058,8 +1035,7 @@ function nearestTargetReference(
   targetWrists: ReadonlyArray<{ timestampMs: number; x: number; y: number }> | null,
   frames: ReturnType<typeof toLegacyPoseFrames>,
 ): { distance: number; source: "paddle" | "wrist" } | null {
-  const distanceTo = (px: number, py: number) =>
-    Math.hypot((px - x) * aspect, py - y);
+  const distanceTo = (px: number, py: number) => Math.hypot((px - x) * aspect, py - y);
   if (paddleCenters && paddleCenters.length > 0) {
     let best: number | null = null;
     for (const center of paddleCenters) {
@@ -1140,10 +1116,7 @@ function closestBallToPoints(
       }
     }
     if (!nearest || nearestDelta > 60) continue;
-    const distance = Math.hypot(
-      (nearest.x - observation.x) * aspect,
-      nearest.y - observation.y,
-    );
+    const distance = Math.hypot((nearest.x - observation.x) * aspect, nearest.y - observation.y);
     if (!best || distance < best.distance) {
       best = { timestampMs: observation.timestampMs, distance };
     }
@@ -1181,10 +1154,7 @@ function closestBallToWrist(
       if (!nearestFrame || nearestDelta > 50) continue;
       for (const mark of nearestFrame.landmarks) {
         if (!mark.name.endsWith("wrist")) continue;
-        const distance = Math.hypot(
-          (mark.x - observation.x) * aspect,
-          mark.y - observation.y,
-        );
+        const distance = Math.hypot((mark.x - observation.x) * aspect, mark.y - observation.y);
         if (bestDistance === null || distance < bestDistance) bestDistance = distance;
       }
     }

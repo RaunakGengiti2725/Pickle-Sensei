@@ -43,7 +43,10 @@ function latestResult(dir: string): { path: string; results: CaseCounts[] } | nu
   const last = files[files.length - 1];
   if (!last) return null;
   const parsed = JSON.parse(readFileSync(join(dir, last), "utf8")) as { results: CaseCounts[] };
-  return { path: join(dir, last), results: parsed.results.filter((entry) => !HELD_OUT_CASES.has(entry.caseId)) };
+  return {
+    path: join(dir, last),
+    results: parsed.results.filter((entry) => !HELD_OUT_CASES.has(entry.caseId)),
+  };
 }
 
 function pooled(cases: CaseCounts[]): { precision: number | null; recall: number | null } {
@@ -89,12 +92,22 @@ function curve(cases: CaseCounts[], resamples = 1000): CurvePoint[] {
     precisions.sort((a, b) => a - b);
     recalls.sort((a, b) => a - b);
     const mean = (values: number[]) =>
-      values.length ? Number((values.reduce((total, value) => total + value, 0) / values.length).toFixed(3)) : null;
+      values.length
+        ? Number((values.reduce((total, value) => total + value, 0) / values.length).toFixed(3))
+        : null;
     points.push({
       n,
       resamples: draws,
-      precision: { mean: mean(precisions), p5: round(quantile(precisions, 0.05)), p95: round(quantile(precisions, 0.95)) },
-      recall: { mean: mean(recalls), p5: round(quantile(recalls, 0.05)), p95: round(quantile(recalls, 0.95)) },
+      precision: {
+        mean: mean(precisions),
+        p5: round(quantile(precisions, 0.05)),
+        p95: round(quantile(precisions, 0.95)),
+      },
+      recall: {
+        mean: mean(recalls),
+        p5: round(quantile(recalls, 0.05)),
+        p95: round(quantile(recalls, 0.95)),
+      },
     });
   }
   return points;
@@ -114,17 +127,30 @@ function verdict(points: CurvePoint[]): string {
   if (spread > 0.2) {
     return `UNSTABLE at n=${last.n}: leave-one-out recall interval spans ${spread.toFixed(2)} — more labeled cases needed before any reliability claim`;
   }
-  if (delta > 0.05) return `still improving at n=${last.n} (Δrecall ${delta.toFixed(3)} on last added case) — more data has high value`;
+  if (delta > 0.05)
+    return `still improving at n=${last.n} (Δrecall ${delta.toFixed(3)} on last added case) — more data has high value`;
   return `flattening at n=${last.n} (Δrecall ${delta.toFixed(3)}) — inspect slices before adding bulk data`;
 }
 
 const isMain = process.argv[1]?.endsWith("learningCurve.ts");
 if (isMain) {
   const tasks = [
-    { task: "paddle-detection (dev cases, micro-avg)", dir: join(REPO_ROOT, "datasets/paddle-bench/results") },
-    { task: "ball-detection (dev cases, micro-avg)", dir: join(REPO_ROOT, "datasets/ball-bench/results") },
+    {
+      task: "paddle-detection (dev cases, micro-avg)",
+      dir: join(REPO_ROOT, "datasets/paddle-bench/results"),
+    },
+    {
+      task: "ball-detection (dev cases, micro-avg)",
+      dir: join(REPO_ROOT, "datasets/ball-bench/results"),
+    },
   ];
-  const report: Array<{ task: string; source: string; cases: number; points: CurvePoint[]; verdict: string }> = [];
+  const report: Array<{
+    task: string;
+    source: string;
+    cases: number;
+    points: CurvePoint[];
+    verdict: string;
+  }> = [];
   for (const { task, dir } of tasks) {
     const latest = latestResult(dir);
     if (!latest || latest.results.length === 0) {
@@ -142,7 +168,15 @@ if (isMain) {
   }
   writeFileSync(
     join(CORPUS_DIR, "learning-curves.json"),
-    JSON.stringify({ generatedAtIso: new Date().toISOString(), note: "dev cases only; held-out excluded", tasks: report }, null, 2),
+    JSON.stringify(
+      {
+        generatedAtIso: new Date().toISOString(),
+        note: "dev cases only; held-out excluded",
+        tasks: report,
+      },
+      null,
+      2,
+    ),
   );
   console.log("═".repeat(72));
   console.log("LEARNING CURVES (bootstrap-subsampled labeled cases, micro-averaged)");
@@ -151,7 +185,9 @@ if (isMain) {
     console.log("  n  recall mean [p5,p95]      precision mean [p5,p95]");
     for (const point of entry.points) {
       console.log(
-        `  ${String(point.n).padEnd(2)} ${String(point.recall.mean ?? "—").padEnd(6)} [${point.recall.p5 ?? "—"},${point.recall.p95 ?? "—"}]`.padEnd(34) +
+        `  ${String(point.n).padEnd(2)} ${String(point.recall.mean ?? "—").padEnd(6)} [${point.recall.p5 ?? "—"},${point.recall.p95 ?? "—"}]`.padEnd(
+          34,
+        ) +
           ` ${String(point.precision.mean ?? "—").padEnd(6)} [${point.precision.p5 ?? "—"},${point.precision.p95 ?? "—"}]`,
       );
     }

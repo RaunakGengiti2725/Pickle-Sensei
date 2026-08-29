@@ -23,13 +23,20 @@ export function probeMedia(path: string): MediaProbe {
   const parsed = JSON.parse(raw) as {
     format?: { duration?: string; format_name?: string; size?: string };
     streams?: Array<{
-      codec_type?: string; codec_name?: string; width?: number; height?: number;
-      avg_frame_rate?: string; r_frame_rate?: string;
+      codec_type?: string;
+      codec_name?: string;
+      width?: number;
+      height?: number;
+      avg_frame_rate?: string;
+      r_frame_rate?: string;
     }>;
   };
   const video = (parsed.streams ?? []).find((stream) => stream.codec_type === "video");
   if (!video) throw new Error(`no video stream in ${path}`);
-  const rate = video.avg_frame_rate && video.avg_frame_rate !== "0/0" ? video.avg_frame_rate : video.r_frame_rate;
+  const rate =
+    video.avg_frame_rate && video.avg_frame_rate !== "0/0"
+      ? video.avg_frame_rate
+      : video.r_frame_rate;
   const [num, den] = (rate ?? "0/1").split("/").map(Number);
   return {
     durationMs: Math.round(Number(parsed.format?.duration ?? 0) * 1000),

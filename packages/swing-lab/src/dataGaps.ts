@@ -13,7 +13,13 @@ const ROOT = resolve(HERE, "../../..");
 const PB = join(ROOT, "datasets/paddle-bench");
 
 const bundlesDir = join(PB, "bundles");
-const annotations: Array<SwingAnnotation & { annotatedStrokeV3?: string; eventLabels?: Array<{ owner: string }>; otherPaddleFrames?: unknown[] }> = [];
+const annotations: Array<
+  SwingAnnotation & {
+    annotatedStrokeV3?: string;
+    eventLabels?: Array<{ owner: string }>;
+    otherPaddleFrames?: unknown[];
+  }
+> = [];
 for (const bundle of existsSync(bundlesDir) ? readdirSync(bundlesDir) : []) {
   const dir = join(bundlesDir, bundle, "annotation");
   if (!existsSync(dir)) continue;
@@ -31,8 +37,18 @@ for (const annotation of annotations) {
   if (stroke) strokes.set(stroke, (strokes.get(stroke) ?? 0) + 1);
 }
 const ALL_STROKES = [
-  "FOREHAND_DRIVE", "BACKHAND_DRIVE", "SERVE", "RETURN", "FOREHAND_DINK", "BACKHAND_DINK",
-  "FOREHAND_VOLLEY", "BACKHAND_VOLLEY", "DROP", "RESET", "OVERHEAD", "SPEEDUP",
+  "FOREHAND_DRIVE",
+  "BACKHAND_DRIVE",
+  "SERVE",
+  "RETURN",
+  "FOREHAND_DINK",
+  "BACKHAND_DINK",
+  "FOREHAND_VOLLEY",
+  "BACKHAND_VOLLEY",
+  "DROP",
+  "RESET",
+  "OVERHEAD",
+  "SPEEDUP",
 ];
 
 const gap = (label: string, count: number, want: string) =>
@@ -44,13 +60,24 @@ console.log("═".repeat(66));
 console.log("STROKE CLASSES:");
 for (const stroke of ALL_STROKES) gap(`  ${stroke}`, strokes.get(stroke) ?? 0, "labeled");
 console.log("HANDEDNESS:");
-gap("  right-handed", annotations.filter((annotation) => annotation.handedness === "right").length, "clips");
-gap("  LEFT-HANDED", annotations.filter((annotation) => annotation.handedness === "left").length, "clips");
+gap(
+  "  right-handed",
+  annotations.filter((annotation) => annotation.handedness === "right").length,
+  "clips",
+);
+gap(
+  "  LEFT-HANDED",
+  annotations.filter((annotation) => annotation.handedness === "left").length,
+  "clips",
+);
 console.log("HARD CASES:");
 gap(
   "  dual-paddle labeled frames (wrong-player measurement)",
   annotations.reduce((total, annotation) => {
-    const others = (annotation.otherPaddleFrames ?? []) as Array<{ tMs: number; visibility: string }>;
+    const others = (annotation.otherPaddleFrames ?? []) as Array<{
+      tMs: number;
+      visibility: string;
+    }>;
     return (
       total +
       others.filter(

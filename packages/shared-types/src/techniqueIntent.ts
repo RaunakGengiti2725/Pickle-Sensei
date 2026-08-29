@@ -26,19 +26,45 @@ export interface SelectableTechnique {
   displayName: string;
   /** Legacy capture slug consumed by today's pipeline (null = no legacy slot). */
   legacySlug: ShotTypeSlug | null;
-  family: "drive" | "dink" | "volley" | "serve" | "return" | "drop" | "reset" | "overhead" | "speedup";
+  family:
+    "drive" | "dink" | "volley" | "serve" | "return" | "drop" | "reset" | "overhead" | "speedup";
 }
 
 export const SELECTABLE_TECHNIQUES_V1: readonly SelectableTechnique[] = [
-  { canonical: "FOREHAND_DRIVE", displayName: "Forehand Drive", legacySlug: "forehand_drive", family: "drive" },
-  { canonical: "BACKHAND_DRIVE", displayName: "Backhand Drive", legacySlug: "backhand_drive", family: "drive" },
+  {
+    canonical: "FOREHAND_DRIVE",
+    displayName: "Forehand Drive",
+    legacySlug: "forehand_drive",
+    family: "drive",
+  },
+  {
+    canonical: "BACKHAND_DRIVE",
+    displayName: "Backhand Drive",
+    legacySlug: "backhand_drive",
+    family: "drive",
+  },
   { canonical: "FOREHAND_DINK", displayName: "Forehand Dink", legacySlug: "dink", family: "dink" },
   { canonical: "BACKHAND_DINK", displayName: "Backhand Dink", legacySlug: "dink", family: "dink" },
-  { canonical: "FOREHAND_VOLLEY", displayName: "Forehand Volley", legacySlug: "volley", family: "volley" },
-  { canonical: "BACKHAND_VOLLEY", displayName: "Backhand Volley", legacySlug: "volley", family: "volley" },
+  {
+    canonical: "FOREHAND_VOLLEY",
+    displayName: "Forehand Volley",
+    legacySlug: "volley",
+    family: "volley",
+  },
+  {
+    canonical: "BACKHAND_VOLLEY",
+    displayName: "Backhand Volley",
+    legacySlug: "volley",
+    family: "volley",
+  },
   { canonical: "SERVE", displayName: "Serve", legacySlug: "serve", family: "serve" },
   { canonical: "RETURN", displayName: "Return", legacySlug: "return", family: "return" },
-  { canonical: "DROP", displayName: "Third-Shot Drop", legacySlug: "third_shot_drop", family: "drop" },
+  {
+    canonical: "DROP",
+    displayName: "Third-Shot Drop",
+    legacySlug: "third_shot_drop",
+    family: "drop",
+  },
   { canonical: "RESET", displayName: "Reset", legacySlug: "dink", family: "reset" },
   { canonical: "OVERHEAD", displayName: "Overhead", legacySlug: "overhead", family: "overhead" },
   { canonical: "SPEEDUP", displayName: "Speedup", legacySlug: "volley", family: "speedup" },
@@ -88,7 +114,11 @@ const AUTO_WORDS = /\bauto\b|\bdetect\b|\banything\b|\bwhatever\b|\bnot sure\b|\
  * the narrowed option set for the UI to disambiguate — never a silent guess.
  */
 export function resolveTechniqueIntent(rawText: string): IntentResolution {
-  const text = rawText.toLowerCase().replace(/[^a-z0-9\s'-]/g, " ").replace(/\s+/g, " ").trim();
+  const text = rawText
+    .toLowerCase()
+    .replace(/[^a-z0-9\s'-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   if (text.length === 0) return { status: "unknown", reason: "empty input" };
   if (AUTO_WORDS.test(text)) return { status: "auto" };
 
@@ -96,13 +126,17 @@ export function resolveTechniqueIntent(rawText: string): IntentResolution {
   for (const [pattern, value] of SIDE_WORDS) {
     if (pattern.test(text)) side = value;
   }
-  const families = ACTION_WORDS.filter(([pattern]) => pattern.test(text)).map(([, family]) => family);
+  const families = ACTION_WORDS.filter(([pattern]) => pattern.test(text)).map(
+    ([, family]) => family,
+  );
 
   if (families.length > 1) {
     const options = SELECTABLE_TECHNIQUES_V1.filter(
       (technique) =>
         families.includes(technique.family) &&
-        (side === null || technique.canonical.startsWith(side) || !technique.canonical.includes("HAND")),
+        (side === null ||
+          technique.canonical.startsWith(side) ||
+          !technique.canonical.includes("HAND")),
     );
     return { status: "ambiguous", options: [...options], reason: "multiple techniques mentioned" };
   }
@@ -110,7 +144,8 @@ export function resolveTechniqueIntent(rawText: string): IntentResolution {
 
   if (family !== null) {
     const inFamily = SELECTABLE_TECHNIQUES_V1.filter((technique) => technique.family === family);
-    if (inFamily.length === 1) return { status: "resolved", technique: inFamily[0]!, confidence: side ? 0.95 : 0.9 };
+    if (inFamily.length === 1)
+      return { status: "resolved", technique: inFamily[0]!, confidence: side ? 0.95 : 0.9 };
     if (side !== null) {
       const match = inFamily.find((technique) => technique.canonical.startsWith(side));
       if (match) return { status: "resolved", technique: match, confidence: 0.95 };
@@ -118,8 +153,14 @@ export function resolveTechniqueIntent(rawText: string): IntentResolution {
     return { status: "ambiguous", options: [...inFamily], reason: `which side of the ${family}?` };
   }
   if (side !== null) {
-    const options = SELECTABLE_TECHNIQUES_V1.filter((technique) => technique.canonical.startsWith(side));
-    return { status: "ambiguous", options: [...options], reason: `${side.toLowerCase()} what — drive, dink, or volley?` };
+    const options = SELECTABLE_TECHNIQUES_V1.filter((technique) =>
+      technique.canonical.startsWith(side),
+    );
+    return {
+      status: "ambiguous",
+      options: [...options],
+      reason: `${side.toLowerCase()} what — drive, dink, or volley?`,
+    };
   }
   return { status: "unknown", reason: "no known technique words" };
 }

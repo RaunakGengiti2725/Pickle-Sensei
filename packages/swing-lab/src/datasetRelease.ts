@@ -86,7 +86,10 @@ if (isMain) {
     if (!video.source) problems.push(`missing source/provenance: ${video.id}`);
   }
   for (const [hash, ids] of fileHashes) {
-    if (ids.length > 1) problems.push(`byte-identical files registered twice: ${ids.join(", ")} (${hash.slice(0, 12)})`);
+    if (ids.length > 1)
+      problems.push(
+        `byte-identical files registered twice: ${ids.join(", ")} (${hash.slice(0, 12)})`,
+      );
   }
   // Unique SOURCE recordings (subclips of one recording are NOT independent).
   const uniqueSources = new Set(
@@ -124,12 +127,21 @@ if (isMain) {
 
     // Label sanity.
     for (const frame of [...(annotation.paddleFrames ?? []), ...(annotation.ballFrames ?? [])]) {
-      if (frame.point && (frame.point.x < 0 || frame.point.x > 1 || frame.point.y < 0 || frame.point.y > 1)) {
+      if (
+        frame.point &&
+        (frame.point.x < 0 || frame.point.x > 1 || frame.point.y < 0 || frame.point.y > 1)
+      ) {
         problems.push(`${benchCase.id}: label point outside frame at ${frame.tMs}ms`);
       }
     }
     const phases = annotation.phases ?? {};
-    const order = ["preparationStartMs", "accelerationStartMs", "contactMs", "followThroughEndMs", "recoveryEndMs"]
+    const order = [
+      "preparationStartMs",
+      "accelerationStartMs",
+      "contactMs",
+      "followThroughEndMs",
+      "recoveryEndMs",
+    ]
       .map((key) => (phases as unknown as Record<string, number | null>)[key])
       .filter((value): value is number => typeof value === "number");
     for (let index = 1; index < order.length; index += 1) {
@@ -139,7 +151,10 @@ if (isMain) {
       }
     }
     for (const event of annotation.eventLabels ?? []) {
-      if (event.contactMs !== null && (event.contactMs < event.eventStartMs || event.contactMs > event.eventEndMs)) {
+      if (
+        event.contactMs !== null &&
+        (event.contactMs < event.eventStartMs || event.contactMs > event.eventEndMs)
+      ) {
         problems.push(`${benchCase.id}: contact outside event`);
       }
     }
@@ -237,35 +252,54 @@ if (isMain) {
   }
   const rightsUnclear = sources.filter((source) => !trainingEligible(source.rights));
   for (const source of rightsUnclear) {
-    warnings.push(`rights not training-eligible (quarantined from training): ${source.sourceId} (${source.license})`);
+    warnings.push(
+      `rights not training-eligible (quarantined from training): ${source.sourceId} (${source.license})`,
+    );
   }
   // Bench media must be corpus recordings with identical bytes.
-  const recordingByPath = new Map(recordings.map((recording) => [join(ROOT, recording.path), recording]));
+  const recordingByPath = new Map(
+    recordings.map((recording) => [join(ROOT, recording.path), recording]),
+  );
   for (const benchCase of bench.cases) {
     const videoPath = resolve(PB, benchCase.video);
     const recording = recordingByPath.get(videoPath);
     if (!recording) {
-      problems.push(`bench case ${benchCase.id}: video not registered in corpus (${benchCase.video})`);
+      problems.push(
+        `bench case ${benchCase.id}: video not registered in corpus (${benchCase.video})`,
+      );
       continue;
     }
     if (sha256(videoPath) !== recording.sha256) {
-      problems.push(`bench case ${benchCase.id}: bytes differ from corpus recording ${recording.recordingId}`);
+      problems.push(
+        `bench case ${benchCase.id}: bytes differ from corpus recording ${recording.recordingId}`,
+      );
     }
   }
   const ladder: Record<string, { sessions: string[]; rootMinutes: number }> = {};
   for (const recording of recordings.filter((entry) => entry.derivedFrom.length === 0)) {
     const split = splitsFile.assigned[recording.sessionKey]?.split ?? "UNASSIGNED";
     ladder[split] ??= { sessions: [], rootMinutes: 0 };
-    if (!ladder[split]!.sessions.includes(recording.sessionKey)) ladder[split]!.sessions.push(recording.sessionKey);
-    ladder[split]!.rootMinutes = Number((ladder[split]!.rootMinutes + recording.probe.durationMs / 60000).toFixed(1));
+    if (!ladder[split]!.sessions.includes(recording.sessionKey))
+      ladder[split]!.sessions.push(recording.sessionKey);
+    ladder[split]!.rootMinutes = Number(
+      (ladder[split]!.rootMinutes + recording.probe.durationMs / 60000).toFixed(1),
+    );
   }
   const goldLabelCounts = {
-    paddleFrames: 0, otherPaddleFrames: 0, ballFrames: 0, contactEstimates: 0,
-    strokeLabels: 0, phaseBoundaries: 0, eventLabels: 0,
+    paddleFrames: 0,
+    otherPaddleFrames: 0,
+    ballFrames: 0,
+    contactEstimates: 0,
+    strokeLabels: 0,
+    phaseBoundaries: 0,
+    eventLabels: 0,
   };
   for (const benchCase of bench.cases) {
-    const annotation = JSON.parse(readFileSync(resolve(PB, benchCase.labels), "utf8")) as SwingAnnotation & {
-      annotatedStrokeV3?: string; eventLabels?: StrokeEventLabel[];
+    const annotation = JSON.parse(
+      readFileSync(resolve(PB, benchCase.labels), "utf8"),
+    ) as SwingAnnotation & {
+      annotatedStrokeV3?: string;
+      eventLabels?: StrokeEventLabel[];
     };
     goldLabelCounts.paddleFrames += (annotation.paddleFrames ?? []).length;
     goldLabelCounts.otherPaddleFrames += (annotation.otherPaddleFrames ?? []).length;
@@ -279,7 +313,11 @@ if (isMain) {
   }
   const taCasesPath = join(ROOT, "datasets/ta-bench/cases.json");
   const taCases = existsSync(taCasesPath)
-    ? (JSON.parse(readFileSync(taCasesPath, "utf8")) as { cases: Array<{ verification: { state: string } }> }).cases
+    ? (
+        JSON.parse(readFileSync(taCasesPath, "utf8")) as {
+          cases: Array<{ verification: { state: string } }>;
+        }
+      ).cases
     : [];
   const eventsShardRefs = existsSync(corpus.eventsDir)
     ? readdirSync(corpus.eventsDir)
@@ -287,7 +325,9 @@ if (isMain) {
         .map((name) => ({
           path: `datasets/corpus/events/${name}`,
           sha256: sha256(join(corpus.eventsDir, name)),
-          events: readFileSync(join(corpus.eventsDir, name), "utf8").split("\n").filter((line) => line.trim()).length,
+          events: readFileSync(join(corpus.eventsDir, name), "utf8")
+            .split("\n")
+            .filter((line) => line.trim()).length,
         }))
     : [];
   const corpusArtifact = (relativePath: string) => {
@@ -335,9 +375,11 @@ if (isMain) {
     },
     tiers: {
       GOLD: {
-        definition: "human-verified ground truth (single annotator devin-visual-v1 — second annotator still absent, recorded gap)",
+        definition:
+          "human-verified ground truth (single annotator devin-visual-v1 — second annotator still absent, recorded gap)",
         labels: goldLabelCounts,
-        taBenchVerifiedCases: taCases.filter((entry) => entry.verification.state === "verified").length,
+        taBenchVerifiedCases: taCases.filter((entry) => entry.verification.state === "verified")
+          .length,
       },
       SILVER: {
         definition: "verified teacher/prelabel output",
@@ -348,7 +390,8 @@ if (isMain) {
         definition: "machine-mined candidates; NEVER reported as labels",
         candidateStrokeEvents: tierCEvents.length,
         byMiner: [...new Set(tierCEvents.map((event) => event.minerVersion))],
-        taBenchProposedCases: taCases.filter((entry) => entry.verification.state === "proposed").length,
+        taBenchProposedCases: taCases.filter((entry) => entry.verification.state === "proposed")
+          .length,
       },
     },
     corpusArtifacts: {
@@ -373,9 +416,21 @@ if (isMain) {
       "afn-vic-rally1: selected from two stills; single pipeline run; no threshold iteration",
     ],
     exclusions: [
-      { id: "wm-farplayer-return", reason: "PLAYER_ASSOCIATION_FAILURE exhibit — multi-player far-court scene, target-player concept ill-defined" },
-      { id: "afn-vic-rally1 (original 22-28s cut)", reason: "SCENE_CUT_UNDETECTED — spans rally + interview shots; preserved as failure exhibit" },
-      { id: "afn-infocus-pro", reason: "registered, unlabeled (clinic/interview footage; gameplay segments pending annotation)" },
+      {
+        id: "wm-farplayer-return",
+        reason:
+          "PLAYER_ASSOCIATION_FAILURE exhibit — multi-player far-court scene, target-player concept ill-defined",
+      },
+      {
+        id: "afn-vic-rally1 (original 22-28s cut)",
+        reason:
+          "SCENE_CUT_UNDETECTED — spans rally + interview shots; preserved as failure exhibit",
+      },
+      {
+        id: "afn-infocus-pro",
+        reason:
+          "registered, unlabeled (clinic/interview footage; gameplay segments pending annotation)",
+      },
     ],
     hardNegativePool: [
       "datasets/ball-bench/failures/BALL_FALSE_POSITIVE_BACKGROUND-wm-dink-01 (background drift track)",

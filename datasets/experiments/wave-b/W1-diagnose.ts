@@ -80,7 +80,9 @@ if (selection.ok && targetSequence) {
 }
 const wrists = targetSequence ? wristSeries(targetSequence) : [];
 
-function goldHits(observations: ReadonlyArray<{ timestampMs: number; center: { x: number; y: number } }>): number {
+function goldHits(
+  observations: ReadonlyArray<{ timestampMs: number; center: { x: number; y: number } }>,
+): number {
   let hits = 0;
   for (const label of visibleLabels) {
     if (!label.point) continue;
@@ -121,7 +123,12 @@ for (const [name, candidates, others] of [
   if (segTrackId !== null) {
     const track = candidates.find((candidate) => candidate.trackId === segTrackId);
     if (track) {
-      for (const segment of segmentTrackByWristOwnership(track.observations, wrists, others, window)) {
+      for (const segment of segmentTrackByWristOwnership(
+        track.observations,
+        wrists,
+        others,
+        window,
+      )) {
         console.log(
           `  T${segTrackId} seg ${Math.round(segment.startMs)}–${Math.round(segment.endMs)} · n ${segment.observations.length} · ` +
             `flipRun ${segment.sustainedFlipRun} · ownedByOther ${segment.ownedByOtherPlayer} · ` +

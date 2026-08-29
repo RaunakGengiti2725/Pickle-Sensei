@@ -145,36 +145,45 @@ export const FAULT_TAXONOMY_V0_DRAFT: {
         {
           id: "global.late_contact",
           name: "Late contact",
-          description: "Ball is struck later than intended relative to the body, jamming the stroke.",
-          observableEvidence: "At the contact frame the ball is level with or behind the torso midline instead of out front.",
+          description:
+            "Ball is struck later than intended relative to the body, jamming the stroke.",
+          observableEvidence:
+            "At the contact frame the ball is level with or behind the torso midline instead of out front.",
           typicalPhase: "contact",
         },
         {
           id: "global.off_balance_base",
           name: "Off-balance base",
-          description: "The base is unstable through the hit; balance, not the ball, becomes the problem.",
-          observableEvidence: "Feet still moving at contact, torso lean, stumble or hop immediately after the hit.",
+          description:
+            "The base is unstable through the hit; balance, not the ball, becomes the problem.",
+          observableEvidence:
+            "Feet still moving at contact, torso lean, stumble or hop immediately after the hit.",
           typicalPhase: "contact",
         },
         {
           id: "global.eyes_off_ball",
           name: "Eyes leave the ball",
           description: "Head/gaze pulls off the contact zone before the ball is struck.",
-          observableEvidence: "In the frames before contact the chin/gaze visibly turns toward the target early.",
+          observableEvidence:
+            "In the frames before contact the chin/gaze visibly turns toward the target early.",
           typicalPhase: "contact",
         },
         {
           id: "global.no_recovery_to_ready",
           name: "No recovery to ready",
-          description: "After the follow-through the player does not return paddle and base to a neutral ready position.",
-          observableEvidence: "Paddle hangs low / player static while the opponent strikes the next ball.",
+          description:
+            "After the follow-through the player does not return paddle and base to a neutral ready position.",
+          observableEvidence:
+            "Paddle hangs low / player static while the opponent strikes the next ball.",
           typicalPhase: "recovery",
         },
         {
           id: "global.other_see_rationale",
           name: "Other (see rationale)",
-          description: "Anything the draft vocabulary cannot express. The free-text rationale is the record.",
-          observableEvidence: "Cite timestamps in the rationale; this is how the taxonomy grows from coach language.",
+          description:
+            "Anything the draft vocabulary cannot express. The free-text rationale is the record.",
+          observableEvidence:
+            "Cite timestamps in the rationale; this is how the taxonomy grows from coach language.",
           typicalPhase: "any",
         },
       ],
@@ -186,8 +195,10 @@ export const FAULT_TAXONOMY_V0_DRAFT: {
         {
           id: "dink.wristy_flick",
           name: "Wristy flick",
-          description: "Wrist snaps through contact instead of a stable paddle face pushed from the shoulder.",
-          observableEvidence: "Paddle face angle changes rapidly in the frames around contact while the forearm barely moves.",
+          description:
+            "Wrist snaps through contact instead of a stable paddle face pushed from the shoulder.",
+          observableEvidence:
+            "Paddle face angle changes rapidly in the frames around contact while the forearm barely moves.",
           typicalPhase: "contact",
         },
         {
@@ -200,14 +211,17 @@ export const FAULT_TAXONOMY_V0_DRAFT: {
         {
           id: "dink.standing_tall",
           name: "Standing tall (no leg bend)",
-          description: "Player bends at the wrist/back instead of loading the legs to get under the ball.",
-          observableEvidence: "Knees near straight at contact on a below-net ball; torso hinges down instead.",
+          description:
+            "Player bends at the wrist/back instead of loading the legs to get under the ball.",
+          observableEvidence:
+            "Knees near straight at contact on a below-net ball; torso hinges down instead.",
           typicalPhase: "contact",
         },
         {
           id: "dink.contact_not_out_front",
           name: "Contact not out front",
-          description: "Ball is played beside or behind the body instead of in front of the front knee.",
+          description:
+            "Ball is played beside or behind the body instead of in front of the front knee.",
           observableEvidence: "At contact the paddle is inside/behind the front knee line.",
           typicalPhase: "contact",
         },
@@ -215,14 +229,17 @@ export const FAULT_TAXONOMY_V0_DRAFT: {
           id: "dink.lifting_trajectory",
           name: "Lifted, attackable trajectory",
           description: "Upward flick sends the ball high over the net where it can be attacked.",
-          observableEvidence: "Outgoing arc apexes well above the net tape (visible against the net in frame).",
+          observableEvidence:
+            "Outgoing arc apexes well above the net tape (visible against the net in frame).",
           typicalPhase: "follow_through",
         },
         {
           id: "dink.paddle_drops_between",
           name: "Paddle drops between dinks",
-          description: "Paddle falls below knee height between contacts instead of resetting in front.",
-          observableEvidence: "Between dinks the paddle head is visibly below the knees / pointing at the ground.",
+          description:
+            "Paddle falls below knee height between contacts instead of resetting in front.",
+          observableEvidence:
+            "Between dinks the paddle head is visibly below the knees / pointing at the ground.",
           typicalPhase: "recovery",
         },
       ],
@@ -234,43 +251,51 @@ export const FAULT_TAXONOMY_V0_DRAFT: {
         {
           id: "volley.takeback_beyond_shoulder",
           name: "Take-back beyond the shoulder",
-          description: "Punch volley is wound up like a groundstroke; no time to recover at NVZ pace.",
+          description:
+            "Punch volley is wound up like a groundstroke; no time to recover at NVZ pace.",
           observableEvidence: "Paddle drawn behind the shoulder plane before the forward move.",
           typicalPhase: "preparation",
         },
         {
           id: "volley.paddle_below_net_ready",
           name: "Low ready paddle",
-          description: "Paddle carried below net height at the NVZ, so high balls arrive before the paddle does.",
-          observableEvidence: "Between volleys the paddle head is below the tape while the player is at the line.",
+          description:
+            "Paddle carried below net height at the NVZ, so high balls arrive before the paddle does.",
+          observableEvidence:
+            "Between volleys the paddle head is below the tape while the player is at the line.",
           typicalPhase: "recovery",
         },
         {
           id: "volley.wrist_breakdown",
           name: "Wrist breaks down at contact",
           description: "Wrist collapses under pace; the face flips and the ball leaves off-line.",
-          observableEvidence: "Abrupt face-angle change exactly at ball arrival; rebound direction inconsistent with face before contact.",
+          observableEvidence:
+            "Abrupt face-angle change exactly at ball arrival; rebound direction inconsistent with face before contact.",
           typicalPhase: "contact",
         },
         {
           id: "volley.no_split_step",
           name: "No split step",
           description: "Feet are not set when the opponent strikes, so the first move is late.",
-          observableEvidence: "Player mid-stride (weight on one foot) at the opponent's contact frame.",
+          observableEvidence:
+            "Player mid-stride (weight on one foot) at the opponent's contact frame.",
           typicalPhase: "preparation",
         },
         {
           id: "volley.overswing_follow_through",
           name: "Overswing / long follow-through",
           description: "Volley finishes like a drive; compactness is lost and recovery is late.",
-          observableEvidence: "Paddle continues far across the body after contact instead of stopping in front.",
+          observableEvidence:
+            "Paddle continues far across the body after contact instead of stopping in front.",
           typicalPhase: "follow_through",
         },
         {
           id: "volley.contact_low_late",
           name: "Contact low and late",
-          description: "Ball taken beside the torso below net height instead of out front at the highest comfortable point.",
-          observableEvidence: "Contact frame shows paddle below tape height and level with the torso.",
+          description:
+            "Ball taken beside the torso below net height instead of out front at the highest comfortable point.",
+          observableEvidence:
+            "Contact frame shows paddle below tape height and level with the torso.",
           typicalPhase: "contact",
         },
       ],
@@ -297,7 +322,8 @@ export const FAULT_TAXONOMY_V0_DRAFT: {
           id: "drive.arm_only_power",
           name: "Arm-only power",
           description: "Kinetic chain skipped: hips/torso do not rotate into contact.",
-          observableEvidence: "Hips visibly static while the arm accelerates; belt buckle never turns toward target.",
+          observableEvidence:
+            "Hips visibly static while the arm accelerates; belt buckle never turns toward target.",
           typicalPhase: "acceleration",
         },
         {
@@ -311,14 +337,16 @@ export const FAULT_TAXONOMY_V0_DRAFT: {
           id: "drive.open_face_at_contact",
           name: "Open face at contact",
           description: "Paddle face open at impact; ball sails high/long.",
-          observableEvidence: "Slow-motion contact frame shows face angled skyward; outgoing flight climbs.",
+          observableEvidence:
+            "Slow-motion contact frame shows face angled skyward; outgoing flight climbs.",
           typicalPhase: "contact",
         },
         {
           id: "drive.incomplete_follow_through",
           name: "Incomplete follow-through",
           description: "Swing decelerates into/at contact instead of finishing across the body.",
-          observableEvidence: "Paddle stops shortly after the contact frame; no finish over shoulder/across torso.",
+          observableEvidence:
+            "Paddle stops shortly after the contact frame; no finish over shoulder/across torso.",
           typicalPhase: "follow_through",
         },
       ],
@@ -331,20 +359,23 @@ export const FAULT_TAXONOMY_V0_DRAFT: {
           id: "overhead.no_sideways_turn",
           name: "No sideways turn",
           description: "Body stays square to the net; the overhead becomes an arm wave.",
-          observableEvidence: "Chest faces the net for the whole motion; no hip/shoulder line rotation sideways.",
+          observableEvidence:
+            "Chest faces the net for the whole motion; no hip/shoulder line rotation sideways.",
           typicalPhase: "preparation",
         },
         {
           id: "overhead.ball_drifts_behind",
           name: "Ball drifts behind the head",
           description: "Contact point ends up behind the head instead of up-and-slightly-in-front.",
-          observableEvidence: "At contact the ball is above/behind the head plane; back arches to reach it.",
+          observableEvidence:
+            "At contact the ball is above/behind the head plane; back arches to reach it.",
           typicalPhase: "contact",
         },
         {
           id: "overhead.dropped_elbow",
           name: "Dropped elbow",
-          description: "Hitting elbow collapses below the shoulder before acceleration; power and reach are lost.",
+          description:
+            "Hitting elbow collapses below the shoulder before acceleration; power and reach are lost.",
           observableEvidence: "Elbow visibly below the shoulder line as the paddle starts forward.",
           typicalPhase: "acceleration",
         },
@@ -352,20 +383,23 @@ export const FAULT_TAXONOMY_V0_DRAFT: {
           id: "overhead.no_offhand_tracking",
           name: "No off-hand tracking",
           description: "Non-paddle arm never points at / tracks the lob, so spacing is a guess.",
-          observableEvidence: "Off arm hangs at the side during the setup instead of raising toward the ball.",
+          observableEvidence:
+            "Off arm hangs at the side during the setup instead of raising toward the ball.",
           typicalPhase: "preparation",
         },
         {
           id: "overhead.no_feet_under_ball",
           name: "Feet never get under the ball",
-          description: "Player reaches from where they stand instead of repositioning under the lob.",
+          description:
+            "Player reaches from where they stand instead of repositioning under the lob.",
           observableEvidence: "Zero adjustment steps between the lob going up and the swing.",
           typicalPhase: "preparation",
         },
         {
           id: "overhead.off_balance_landing",
           name: "Off-balance landing",
-          description: "Player falls backward/sideways after the smash and cannot play the next ball.",
+          description:
+            "Player falls backward/sideways after the smash and cannot play the next ball.",
           observableEvidence: "Backward stumble or hop after contact; no balanced landing.",
           typicalPhase: "recovery",
         },
@@ -379,7 +413,8 @@ export const FAULT_TAXONOMY_V0_DRAFT: {
           id: "serve.inconsistent_drop_toss",
           name: "Inconsistent drop/toss",
           description: "Ball release point wanders serve to serve, so contact must chase it.",
-          observableEvidence: "Across serves the release/drop point visibly differs relative to the stance.",
+          observableEvidence:
+            "Across serves the release/drop point visibly differs relative to the stance.",
           typicalPhase: "preparation",
         },
         {
@@ -407,7 +442,8 @@ export const FAULT_TAXONOMY_V0_DRAFT: {
           id: "serve.contact_point_wanders",
           name: "Contact point wanders",
           description: "Contact varies between out-front and beside-the-hip across serves.",
-          observableEvidence: "Comparing serve contact frames shows widely different paddle/ball positions.",
+          observableEvidence:
+            "Comparing serve contact frames shows widely different paddle/ball positions.",
           typicalPhase: "contact",
         },
         {
@@ -427,13 +463,15 @@ export const FAULT_TAXONOMY_V0_DRAFT: {
           id: "return.no_split_at_serve",
           name: "No split step at serve contact",
           description: "Returner is flat-footed or mid-stride when the serve is struck.",
-          observableEvidence: "At the server's contact frame the returner's feet are not set/split.",
+          observableEvidence:
+            "At the server's contact frame the returner's feet are not set/split.",
           typicalPhase: "preparation",
         },
         {
           id: "return.overswing_on_pace",
           name: "Overswing against pace",
-          description: "Full groundstroke swing against a fast serve instead of a compact block/drive.",
+          description:
+            "Full groundstroke swing against a fast serve instead of a compact block/drive.",
           observableEvidence: "Long take-back past the torso plane against a visibly fast serve.",
           typicalPhase: "preparation",
         },
@@ -441,14 +479,17 @@ export const FAULT_TAXONOMY_V0_DRAFT: {
           id: "return.jammed_contact",
           name: "Jammed contact",
           description: "Body not cleared; the ball plays the returner at the hip/torso.",
-          observableEvidence: "Elbow pinned against the torso at contact; no space between body and paddle.",
+          observableEvidence:
+            "Elbow pinned against the torso at contact; no space between body and paddle.",
           typicalPhase: "contact",
         },
         {
           id: "return.no_forward_transition",
           name: "No forward transition",
-          description: "Returner stays parked at the baseline after the return instead of advancing.",
-          observableEvidence: "Several frames after contact the returner has not started moving up-court.",
+          description:
+            "Returner stays parked at the baseline after the return instead of advancing.",
+          observableEvidence:
+            "Several frames after contact the returner has not started moving up-court.",
           typicalPhase: "recovery",
         },
       ],
@@ -460,8 +501,10 @@ export const FAULT_TAXONOMY_V0_DRAFT: {
         {
           id: "drop.overpowered_arc",
           name: "Overpowered arc",
-          description: "Drop is driven flat/deep instead of apexing on the hitter's side and dying in the kitchen.",
-          observableEvidence: "Ball apex occurs at/beyond the net plane; landing deep past the NVZ.",
+          description:
+            "Drop is driven flat/deep instead of apexing on the hitter's side and dying in the kitchen.",
+          observableEvidence:
+            "Ball apex occurs at/beyond the net plane; landing deep past the NVZ.",
           typicalPhase: "follow_through",
         },
         {
@@ -482,7 +525,8 @@ export const FAULT_TAXONOMY_V0_DRAFT: {
           id: "reset.stiff_hands",
           name: "Stiff hands on the reset",
           description: "Punching at a defensive reset instead of absorbing pace with soft hands.",
-          observableEvidence: "Paddle moves forward into the ball on a defensive reset; rebound too hot.",
+          observableEvidence:
+            "Paddle moves forward into the ball on a defensive reset; rebound too hot.",
           typicalPhase: "contact",
         },
       ],
@@ -494,15 +538,19 @@ export const FAULT_TAXONOMY_V0_DRAFT: {
         {
           id: "speedup.telegraphed_windup",
           name: "Telegraphed wind-up",
-          description: "Attack is announced by a visibly different preparation than the dink pattern.",
-          observableEvidence: "Distinct pause/backswing before the attack that did not exist on previous dinks.",
+          description:
+            "Attack is announced by a visibly different preparation than the dink pattern.",
+          observableEvidence:
+            "Distinct pause/backswing before the attack that did not exist on previous dinks.",
           typicalPhase: "preparation",
         },
         {
           id: "speedup.attack_from_below_net",
           name: "Attack initiated below net height",
-          description: "Speed-up attempted on a ball below the tape — low-percentage, rises into counters.",
-          observableEvidence: "Contact frame shows the ball clearly below net height at initiation.",
+          description:
+            "Speed-up attempted on a ball below the tape — low-percentage, rises into counters.",
+          observableEvidence:
+            "Contact frame shows the ball clearly below net height at initiation.",
           typicalPhase: "contact",
         },
         {
@@ -582,7 +630,10 @@ export const DRILL_LIBRARY_V0: {
       difficulty: "beginner",
       equipment: ["paddle", "ball", "wall with net-height line (34 in)"],
       repsOrDuration: "3 × 2 min continuous rally",
-      progressions: ["alternate forehand/backhand each contact", "target box 6–12 in above the line"],
+      progressions: [
+        "alternate forehand/backhand each contact",
+        "target box 6–12 in above the line",
+      ],
       regressions: ["allow one bounce between contacts", "stand closer to the wall"],
       coachProvenance: null,
       provenance: "engineering placeholder — well-known public drill; NOT coach-validated",
@@ -593,7 +644,15 @@ export const DRILL_LIBRARY_V0: {
     {
       id: "drill.skinny-singles",
       name: "Skinny singles",
-      supportedTechniques: ["SERVE", "RETURN", "FOREHAND_DRIVE", "BACKHAND_DRIVE", "DROP", "FOREHAND_DINK", "BACKHAND_DINK"],
+      supportedTechniques: [
+        "SERVE",
+        "RETURN",
+        "FOREHAND_DRIVE",
+        "BACKHAND_DRIVE",
+        "DROP",
+        "FOREHAND_DINK",
+        "BACKHAND_DINK",
+      ],
       validatedFaultMappings: [],
       description:
         "Half-court singles (straight or crosscourt halves): full point play with less court to cover, concentrating reps on serve, return, third shot and kitchen play.",
@@ -636,7 +695,10 @@ export interface CoachReview {
     | { kind: "corrected"; stroke: string; note: string }
     | { kind: "cannot_judge"; reason: string };
   /** Anchored 1–5 (TECHNIQUE_QUALITY_SCALE_V1); null when not assessable. */
-  overallQuality: { scaleId: typeof TECHNIQUE_QUALITY_SCALE_V1.id; value: 1 | 2 | 3 | 4 | 5 } | null;
+  overallQuality: {
+    scaleId: typeof TECHNIQUE_QUALITY_SCALE_V1.id;
+    value: 1 | 2 | 3 | 4 | 5;
+  } | null;
   /** Structured faults; order = coach's priority order (first = primary). */
   faults: Array<{
     faultId: string;
@@ -697,15 +759,26 @@ export function validateCoachReview(
     problems.push("coachCredentialRef required (opaque credential record reference)");
   }
   if (!review.queueItemId) problems.push("queueItemId required");
-  if (context?.knownQueueItemIds && review.queueItemId && !context.knownQueueItemIds.includes(review.queueItemId)) {
+  if (
+    context?.knownQueueItemIds &&
+    review.queueItemId &&
+    !context.knownQueueItemIds.includes(review.queueItemId)
+  ) {
     problems.push(`queueItemId ${review.queueItemId} not in the current queue`);
   }
-  if (review.queueItemId && review.coachId && review.reviewId !== reviewIdFor(review.queueItemId, review.coachId)) {
+  if (
+    review.queueItemId &&
+    review.coachId &&
+    review.reviewId !== reviewIdFor(review.queueItemId, review.coachId)
+  ) {
     problems.push("reviewId must equal `${queueItemId}.${coachId}`");
   }
   if (!review.eventRef?.caseId || typeof review.eventRef.eventIndex !== "number") {
     problems.push("eventRef {caseId, eventIndex} required");
-  } else if (review.queueItemId && queueItemIdFor(review.eventRef.caseId, review.eventRef.eventIndex) !== review.queueItemId) {
+  } else if (
+    review.queueItemId &&
+    queueItemIdFor(review.eventRef.caseId, review.eventRef.eventIndex) !== review.queueItemId
+  ) {
     problems.push("eventRef must resolve to queueItemId");
   }
   if (review.strokeTaxonomyVersion !== STROKE_TAXONOMY_V3.version) {
@@ -725,7 +798,10 @@ export function validateCoachReview(
     if (!labels.includes(confirmation.stroke)) {
       problems.push(`stroke ${confirmation.stroke} not in ${STROKE_TAXONOMY_V3.version}`);
     }
-    if (confirmation.kind === "corrected" && (!confirmation.note || confirmation.note.trim().length < 5)) {
+    if (
+      confirmation.kind === "corrected" &&
+      (!confirmation.note || confirmation.note.trim().length < 5)
+    ) {
       problems.push("corrected stroke requires a note");
     }
   }
@@ -735,12 +811,16 @@ export function validateCoachReview(
       problems.push("cannotEvaluate.reason required (≥10 chars)");
     }
   } else if (cannotEvaluate === undefined) {
-    problems.push("cannotEvaluate must be present (null or {reason}) — it is a first-class outcome");
+    problems.push(
+      "cannotEvaluate must be present (null or {reason}) — it is a first-class outcome",
+    );
   }
   const quality = review.overallQuality;
   if (quality !== null && quality !== undefined) {
-    if (quality.scaleId !== TECHNIQUE_QUALITY_SCALE_V1.id) problems.push(`overallQuality.scaleId must be ${TECHNIQUE_QUALITY_SCALE_V1.id}`);
-    if (![1, 2, 3, 4, 5].includes(quality.value)) problems.push("overallQuality.value must be 1..5");
+    if (quality.scaleId !== TECHNIQUE_QUALITY_SCALE_V1.id)
+      problems.push(`overallQuality.scaleId must be ${TECHNIQUE_QUALITY_SCALE_V1.id}`);
+    if (![1, 2, 3, 4, 5].includes(quality.value))
+      problems.push("overallQuality.value must be 1..5");
   } else if (quality === undefined) {
     problems.push("overallQuality must be present (null or anchored value)");
   }
@@ -752,12 +832,23 @@ export function validateCoachReview(
     for (const [index, fault] of review.faults.entries()) {
       if (!fault.faultId) problems.push(`faults[${index}].faultId required`);
       else if (context?.knownFaultIds && !context.knownFaultIds.includes(fault.faultId)) {
-        problems.push(`faults[${index}].faultId ${fault.faultId} not in ${FAULT_TAXONOMY_V0_DRAFT_VERSION}`);
+        problems.push(
+          `faults[${index}].faultId ${fault.faultId} not in ${FAULT_TAXONOMY_V0_DRAFT_VERSION}`,
+        );
       }
-      if (![1, 2, 3].includes(fault.severity as number)) problems.push(`faults[${index}].severity must be 1..3`);
-      if (!fault.evidence || !Array.isArray(fault.evidence.timestampsMs) || fault.evidence.timestampsMs.length === 0) {
+      if (![1, 2, 3].includes(fault.severity as number))
+        problems.push(`faults[${index}].severity must be 1..3`);
+      if (
+        !fault.evidence ||
+        !Array.isArray(fault.evidence.timestampsMs) ||
+        fault.evidence.timestampsMs.length === 0
+      ) {
         problems.push(`faults[${index}].evidence.timestampsMs requires ≥1 video timestamp`);
-      } else if (fault.evidence.timestampsMs.some((t) => typeof t !== "number" || !Number.isFinite(t) || t < 0)) {
+      } else if (
+        fault.evidence.timestampsMs.some(
+          (t) => typeof t !== "number" || !Number.isFinite(t) || t < 0,
+        )
+      ) {
         problems.push(`faults[${index}].evidence.timestampsMs must be non-negative ms numbers`);
       }
       const region = fault.evidence?.region;
@@ -772,13 +863,23 @@ export function validateCoachReview(
       }
     }
   }
-  if (!Array.isArray(review.drillSuggestions)) problems.push("drillSuggestions[] required (may be empty)");
+  if (!Array.isArray(review.drillSuggestions))
+    problems.push("drillSuggestions[] required (may be empty)");
   else {
     for (const [index, suggestion] of review.drillSuggestions.entries()) {
-      if (suggestion.drillId !== null && context?.knownDrillIds && !context.knownDrillIds.includes(suggestion.drillId)) {
-        problems.push(`drillSuggestions[${index}].drillId ${suggestion.drillId} not in ${DRILL_LIBRARY_V0_VERSION}`);
+      if (
+        suggestion.drillId !== null &&
+        context?.knownDrillIds &&
+        !context.knownDrillIds.includes(suggestion.drillId)
+      ) {
+        problems.push(
+          `drillSuggestions[${index}].drillId ${suggestion.drillId} not in ${DRILL_LIBRARY_V0_VERSION}`,
+        );
       }
-      if (suggestion.drillId === null && (!suggestion.freeText || suggestion.freeText.trim().length < 5)) {
+      if (
+        suggestion.drillId === null &&
+        (!suggestion.freeText || suggestion.freeText.trim().length < 5)
+      ) {
         problems.push(`drillSuggestions[${index}] needs a drillId or free text`);
       }
     }
@@ -786,12 +887,16 @@ export function validateCoachReview(
   if (typeof review.confidence !== "number" || review.confidence < 0 || review.confidence > 1) {
     problems.push("confidence must be 0..1");
   }
-  if (!cannotEvaluate && (typeof review.rationale !== "string" || review.rationale.trim().length < 20)) {
+  if (
+    !cannotEvaluate &&
+    (typeof review.rationale !== "string" || review.rationale.trim().length < 20)
+  ) {
     problems.push("rationale required (≥20 chars — the prose is the signal)");
   }
   for (const field of ["createdAtIso", "submittedAtIso"] as const) {
     const value = review[field];
-    if (typeof value !== "string" || Number.isNaN(Date.parse(value))) problems.push(`${field} must be an ISO timestamp`);
+    if (typeof value !== "string" || Number.isNaN(Date.parse(value)))
+      problems.push(`${field} must be an ISO timestamp`);
   }
   return problems;
 }
@@ -803,9 +908,11 @@ export function validateCoachReview(
 const isMain = process.argv[1]?.endsWith("coachReview.ts");
 if (isMain) {
   const PB = join(REPO_ROOT, "datasets/paddle-bench");
-  const bench = (JSON.parse(readFileSync(join(PB, "paddle-bench.json"), "utf8")) as {
-    cases: Array<{ id: string; video: string; labels: string; role?: string }>;
-  }).cases;
+  const bench = (
+    JSON.parse(readFileSync(join(PB, "paddle-bench.json"), "utf8")) as {
+      cases: Array<{ id: string; video: string; labels: string; role?: string }>;
+    }
+  ).cases;
   const outDir = join(REPO_ROOT, "datasets/coach-review");
   const reviewsDir = join(outDir, "reviews");
   mkdirSync(reviewsDir, { recursive: true });
@@ -819,12 +926,17 @@ if (isMain) {
   for (const file of reviewFiles) {
     const stem = file.replace(/\.json$/, "");
     const itemId = stem.slice(0, stem.lastIndexOf("."));
-    reviewsByItem.set(itemId, [...(reviewsByItem.get(itemId) ?? []), `datasets/coach-review/reviews/${file}`]);
+    reviewsByItem.set(itemId, [
+      ...(reviewsByItem.get(itemId) ?? []),
+      `datasets/coach-review/reviews/${file}`,
+    ]);
   }
 
   const queue: object[] = [];
   for (const benchCase of bench) {
-    const annotation = JSON.parse(readFileSync(resolve(PB, benchCase.labels), "utf8")) as SwingAnnotation & {
+    const annotation = JSON.parse(
+      readFileSync(resolve(PB, benchCase.labels), "utf8"),
+    ) as SwingAnnotation & {
       eventLabels?: StrokeEventLabel[];
       annotatedStrokeV3?: string;
     };
@@ -868,9 +980,11 @@ if (isMain) {
       "AWAITING QUALIFIED COACHES — 0 reviews exist; technique scoring stays BLOCKED_ON_VALIDATION until real coach labels arrive and agree",
     program: {
       reviewersPerStroke: "≥2 independent qualified coaches for important strokes",
-      disagreementPolicy: "preserved as data; adjudication recorded separately; never averaged away",
+      disagreementPolicy:
+        "preserved as data; adjudication recorded separately; never averaged away",
       taxonomyPolicy: `${allFaultIds().length}-fault ${FAULT_TAXONOMY_V0_DRAFT_VERSION} (stroke-family-specific) expected to be corrected/extended by coaches; rationale prose is mandatory so the real taxonomy grows from coach language`,
-      agreementMetrics: "stroke confirmation %, rating exact/|Δ|, primary-fault agreement, severity agreement, fault-set overlap",
+      agreementMetrics:
+        "stroke confirmation %, rating exact/|Δ|, primary-fault agreement, severity agreement, fault-set overlap",
       onboarding: "docs/COACHING.md",
       reviewConsole: "apps/admin-web (pnpm --filter @pickle/admin-web dev → Coach Review Lab)",
     },
@@ -889,28 +1003,49 @@ if (isMain) {
     schemaVersion: COACH_REVIEW_SCHEMA_VERSION,
     generatedAtIso: manifest.generatedAtIso,
     reviewRecord: {
-      typescriptSource: "packages/swing-lab/src/coachReview.ts (interface CoachReview + validateCoachReview)",
-      storage: "datasets/coach-review/reviews/<reviewId>.json — append-only; one file per review; never edited in place",
+      typescriptSource:
+        "packages/swing-lab/src/coachReview.ts (interface CoachReview + validateCoachReview)",
+      storage:
+        "datasets/coach-review/reviews/<reviewId>.json — append-only; one file per review; never edited in place",
       reviewIdRule: "`${queueItemId}.${coachId}`; one review per coach per queue item",
       requiredFields: [
-        "schemaVersion", "reviewId", "queueItemId", "coachId", "coachCredentialRef", "eventRef",
-        "strokeTaxonomyVersion", "faultTaxonomyVersion", "drillLibraryVersion", "strokeConfirmation",
-        "overallQuality", "faults", "drillSuggestions", "confidence", "cannotEvaluate", "rationale",
-        "createdAtIso", "submittedAtIso",
+        "schemaVersion",
+        "reviewId",
+        "queueItemId",
+        "coachId",
+        "coachCredentialRef",
+        "eventRef",
+        "strokeTaxonomyVersion",
+        "faultTaxonomyVersion",
+        "drillLibraryVersion",
+        "strokeConfirmation",
+        "overallQuality",
+        "faults",
+        "drillSuggestions",
+        "confidence",
+        "cannotEvaluate",
+        "rationale",
+        "createdAtIso",
+        "submittedAtIso",
       ],
     },
     strokeTaxonomy: { version: STROKE_TAXONOMY_V3.version, labels: STROKE_TAXONOMY_V3.labels },
     qualityScale: TECHNIQUE_QUALITY_SCALE_V1,
     severityScale: FAULT_SEVERITY_SCALE,
     confidenceSemantics: "coach's own 0..1 confidence in this review; not a model output",
-    cannotEvaluateSemantics: "first-class outcome: honest refusal with reason; quality/faults may be empty",
+    cannotEvaluateSemantics:
+      "first-class outcome: honest refusal with reason; quality/faults may be empty",
     faultTaxonomyVersion: FAULT_TAXONOMY_V0_DRAFT_VERSION,
     drillLibraryVersion: DRILL_LIBRARY_V0_VERSION,
   };
   writeFileSync(join(outDir, "schema.json"), JSON.stringify(schemaDescriptor, null, 2));
   writeFileSync(
     join(outDir, "taxonomy", "fault-taxonomy.v0-draft.json"),
-    JSON.stringify({ generatedAtIso: manifest.generatedAtIso, ...FAULT_TAXONOMY_V0_DRAFT }, null, 2),
+    JSON.stringify(
+      { generatedAtIso: manifest.generatedAtIso, ...FAULT_TAXONOMY_V0_DRAFT },
+      null,
+      2,
+    ),
   );
   writeFileSync(
     join(outDir, "drills", "drill-library.v0.json"),
@@ -938,10 +1073,14 @@ if (isMain) {
     );
   }
 
-  console.log(`coach review queue: ${queue.length} gold StrokeEvents → datasets/coach-review/queue.json`);
+  console.log(
+    `coach review queue: ${queue.length} gold StrokeEvents → datasets/coach-review/queue.json`,
+  );
   console.log(
     `derived artifacts: schema.json · taxonomy/fault-taxonomy.v0-draft.json (${allFaultIds().length} faults, ${FAULT_TAXONOMY_V0_DRAFT.families.length} families) · drills/drill-library.v0.json (${DRILL_LIBRARY_V0.drills.length} UNVALIDATED placeholders)`,
   );
-  console.log(`reviews on file: ${reviewFiles.length} (schema + queue ready; recruitment is a human step)`);
+  console.log(
+    `reviews on file: ${reviewFiles.length} (schema + queue ready; recruitment is a human step)`,
+  );
   if (!existsSync(join(outDir, "reviews"))) process.exitCode = 1;
 }

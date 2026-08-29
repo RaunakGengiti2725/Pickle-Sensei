@@ -238,13 +238,13 @@ describe('runCaptureAnalysis with AUTO DETECT (declared-null)', () => {
     expect(
       calls.filter(call => call.sql.includes('INSERT INTO outbox')),
     ).toHaveLength(0);
-    expect(
-      calls.filter(call => call.sql.includes('local_shot')),
-    ).toHaveLength(0);
+    expect(calls.filter(call => call.sql.includes('local_shot'))).toHaveLength(
+      0,
+    );
     // The run is durably recorded for reprocessing history.
-    expect(
-      calls.some(call => call.sql.includes('local_analysis_record')),
-    ).toBe(true);
+    expect(calls.some(call => call.sql.includes('local_analysis_record'))).toBe(
+      true,
+    );
 
     // Honest surface copy for the family-level outcome.
     const presentation = strokeIntentPresentation(outcome.record);
@@ -326,9 +326,9 @@ describe('runCaptureAnalysis with AUTO DETECT (declared-null)', () => {
       call.sql.includes('INSERT INTO outbox'),
     );
     expect(outboxInsert).toBeDefined();
-    expect(
-      JSON.parse(String(outboxInsert!.params[1])).analysisPermitId,
-    ).toBe('permit-auto-1');
+    expect(JSON.parse(String(outboxInsert!.params[1])).analysisPermitId).toBe(
+      'permit-auto-1',
+    );
     expect(finalized).toHaveLength(0); // consumed by sync, never finalized
   });
 

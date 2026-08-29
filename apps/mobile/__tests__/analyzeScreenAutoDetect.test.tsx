@@ -75,7 +75,10 @@ const captureEvidence = {
 const guidedWithPose = assertCapturedClip({
   ...baseClip,
   captureMode: 'automatic_pose_trigger',
-  recognition: { status: 'unknown', reason: 'validated_classifier_unavailable' },
+  recognition: {
+    status: 'unknown',
+    reason: 'validated_classifier_unavailable',
+  },
   trigger,
   captureEvidence,
   ballSpeed: {
@@ -98,7 +101,10 @@ const guidedWithPose = assertCapturedClip({
 const guidedWithoutPose = assertCapturedClip({
   ...baseClip,
   captureMode: 'automatic_pose_trigger',
-  recognition: { status: 'unknown', reason: 'validated_classifier_unavailable' },
+  recognition: {
+    status: 'unknown',
+    reason: 'validated_classifier_unavailable',
+  },
   trigger,
   captureEvidence,
   ballSpeed: {
@@ -135,14 +141,16 @@ function record(
 
 describe('canAutoScoreWithoutDeclaration', () => {
   it('admits declared-null analysis only for guided captures with a pose sequence and an armed auto intent', () => {
-    expect(canAutoScoreWithoutDeclaration(guidedWithPose, autoDetectIntent())).toBe(
-      true,
-    );
+    expect(
+      canAutoScoreWithoutDeclaration(guidedWithPose, autoDetectIntent()),
+    ).toBe(true);
   });
 
   it('refuses when auto is not armed — null and tap intents are not auto', () => {
     expect(canAutoScoreWithoutDeclaration(guidedWithPose, null)).toBe(false);
-    expect(canAutoScoreWithoutDeclaration(guidedWithPose, tapIntent)).toBe(false);
+    expect(canAutoScoreWithoutDeclaration(guidedWithPose, tapIntent)).toBe(
+      false,
+    );
   });
 
   it('refuses pose-less guided captures — there is nothing real to classify', () => {
@@ -152,9 +160,9 @@ describe('canAutoScoreWithoutDeclaration', () => {
   });
 
   it('keeps imported videos declared-only', () => {
-    expect(canAutoScoreWithoutDeclaration(importedClip, autoDetectIntent())).toBe(
-      false,
-    );
+    expect(
+      canAutoScoreWithoutDeclaration(importedClip, autoDetectIntent()),
+    ).toBe(false);
   });
 });
 
@@ -188,7 +196,10 @@ describe('TechniqueIntentPicker AUTO chip', () => {
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       renderer = TestRenderer.create(
-        <TechniqueIntentPicker value={autoDetectIntent()} onChange={jest.fn()} />,
+        <TechniqueIntentPicker
+          value={autoDetectIntent()}
+          onChange={jest.fn()}
+        />,
       );
     });
     const copy = JSON.stringify(renderer.toJSON());

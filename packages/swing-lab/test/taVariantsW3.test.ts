@@ -55,7 +55,14 @@ describe("W3 regression pins — shipped/legacy unchanged by the new fields", ()
   });
 
   it("registry: shipped/legacy entries carry none of the W3 fields", () => {
-    for (const name of ["shipped", "legacy", "hysteresis", "ambiguity-timeout", "sustained-gesture", "candidate"]) {
+    for (const name of [
+      "shipped",
+      "legacy",
+      "hysteresis",
+      "ambiguity-timeout",
+      "sustained-gesture",
+      "candidate",
+    ]) {
       expect(REPLAY_VARIANTS[name]?.occupancyDominance).toBeUndefined();
       expect(REPLAY_VARIANTS[name]?.ambiguityDominance).toBeUndefined();
     }
@@ -92,7 +99,11 @@ describe("W3 (a) occupancy-dominance gate", () => {
   });
 
   it("keeps the plain instant lock (identical timing) when the region is genuinely solo", () => {
-    const result = replayAcquisition(frames(15, () => [person(0.5, 0.5)]), region, gate);
+    const result = replayAcquisition(
+      frames(15, () => [person(0.5, 0.5)]),
+      region,
+      gate,
+    );
     expect(result.lock?.source).toBe("start_region_occupancy");
     expect(result.lock?.t).toBe((OCCUPANCY_FRAMES_TO_LOCK - 1) * 33);
   });
@@ -159,7 +170,9 @@ describe("W3 (b) ambiguity sustained-resolution", () => {
     // resolvable occupant. The target's pose appears at frame 40, on point.
     // (The helper's torso mid sits at y+0.05, hence the y=0.45 placement.)
     const result = replayAcquisition(
-      frames(80, (index) => (index >= 40 ? [person(0.59, 0.45), person(0.5, 0.45)] : [person(0.59, 0.45)])),
+      frames(80, (index) =>
+        index >= 40 ? [person(0.59, 0.45), person(0.5, 0.45)] : [person(0.59, 0.45)],
+      ),
       region,
       REPLAY_VARIANTS["acquire-v4"],
     );
@@ -169,13 +182,21 @@ describe("W3 (b) ambiguity sustained-resolution", () => {
   });
 
   it("W3 (a2) acquire-v4: a CENTERED sole occupant keeps the fast instant lock", () => {
-    const result = replayAcquisition(frames(15, () => [person(0.52, 0.45)]), region, REPLAY_VARIANTS["acquire-v4"]);
+    const result = replayAcquisition(
+      frames(15, () => [person(0.52, 0.45)]),
+      region,
+      REPLAY_VARIANTS["acquire-v4"],
+    );
     expect(result.lock?.source).toBe("start_region_occupancy");
     expect(result.lock?.t).toBe((OCCUPANCY_FRAMES_TO_LOCK - 1) * 33);
   });
 
   it("W3 (a2) acquire-v4: vacuous dominance is blocked — an off-center loner only falls to the 6s last-resort timeout", () => {
-    const result = replayAcquisition(frames(250, () => [person(0.59, 0.5)]), region, REPLAY_VARIANTS["acquire-v4"]);
+    const result = replayAcquisition(
+      frames(250, () => [person(0.59, 0.5)]),
+      region,
+      REPLAY_VARIANTS["acquire-v4"],
+    );
     // patience (30 frames ≈1s) → ambiguity; a sole occupant far from the tap
     // point can never claim dominance (no rivals ⇒ vacuous margin), so only
     // the blind timeout resolves — 6s after ambiguity entry, not at 400ms.
@@ -186,13 +207,19 @@ describe("W3 (b) ambiguity sustained-resolution", () => {
   it("acquire-v3-strict-gesture: a 6-frame raise does NOT lock, 8 sustained frames do", () => {
     const strict = REPLAY_VARIANTS["acquire-v3-strict-gesture"];
     const brief = replayAcquisition(
-      frames(60, (index) => [person(0.44, 0.5), person(0.56, 0.5, { wristRaised: index >= 20 && index < 26 })]),
+      frames(60, (index) => [
+        person(0.44, 0.5),
+        person(0.56, 0.5, { wristRaised: index >= 20 && index < 26 }),
+      ]),
       region,
       strict,
     );
     expect(brief.lock?.source ?? "none").not.toBe("gesture_confirmed");
     const sustainedRaise = replayAcquisition(
-      frames(60, (index) => [person(0.44, 0.5), person(0.56, 0.5, { wristRaised: index >= 20 && index < 30 })]),
+      frames(60, (index) => [
+        person(0.44, 0.5),
+        person(0.56, 0.5, { wristRaised: index >= 20 && index < 30 }),
+      ]),
       region,
       strict,
     );

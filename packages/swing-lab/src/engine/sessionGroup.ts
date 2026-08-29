@@ -50,7 +50,9 @@ if (isMain) {
       }
       for (const recording of recordings.filter((entry) => entry.sourceId === member)) {
         if (recording.sessionKey !== group.session) {
-          console.log(`  ${recording.recordingId}: session ${recording.sessionKey} → ${group.session}`);
+          console.log(
+            `  ${recording.recordingId}: session ${recording.sessionKey} → ${group.session}`,
+          );
           recording.sessionKey = group.session;
           changed += 1;
         }

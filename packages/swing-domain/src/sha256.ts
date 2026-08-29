@@ -16,9 +16,8 @@ const K = [
 ];
 
 function utf8Bytes(text: string): Uint8Array {
-  const Encoder = (
-    globalThis as { TextEncoder?: new () => { encode(input: string): Uint8Array } }
-  ).TextEncoder;
+  const Encoder = (globalThis as { TextEncoder?: new () => { encode(input: string): Uint8Array } })
+    .TextEncoder;
   if (Encoder) return new Encoder().encode(text);
   // Minimal UTF-8 encoder fallback for exotic JS runtimes.
   const bytes: number[] = [];
@@ -66,7 +65,16 @@ export function sha256Hex(text: string): string {
       const s1 = (rotr(w2, 17) ^ rotr(w2, 19) ^ (w2 >>> 10)) | 0;
       w[i] = (((w[i - 16]! + s0) | 0) + ((w[i - 7]! + s1) | 0)) | 0;
     }
-    let [a, b, c, d, e, f, g, hh] = h as [number, number, number, number, number, number, number, number];
+    let [a, b, c, d, e, f, g, hh] = h as [
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+    ];
     for (let i = 0; i < 64; i += 1) {
       const s1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
       const ch = (e & f) ^ (~e & g);

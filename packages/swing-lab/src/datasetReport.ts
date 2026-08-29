@@ -83,9 +83,7 @@ for (const bundle of existsSync(bundlesDir) ? readdirSync(bundlesDir) : []) {
 
 // ── Print ────────────────────────────────────────────────────────────────
 const realVideos = registry.videos.filter((video) => video.realFootage);
-const sources = new Set(
-  realVideos.map((video) => video.source.split("/File:")[1] ?? video.source),
-);
+const sources = new Set(realVideos.map((video) => video.source.split("/File:")[1] ?? video.source));
 const sessions = new Set(realVideos.map((video) => video.sessionKey ?? "unspecified"));
 
 console.log("═".repeat(66));
@@ -127,7 +125,10 @@ console.log(
 );
 console.log(
   `STROKE labels (v3): ${bundles.filter((bundle) => bundle.strokeV3).length} ` +
-    `[${bundles.map((bundle) => bundle.strokeV3).filter(Boolean).join(", ")}]`,
+    `[${bundles
+      .map((bundle) => bundle.strokeV3)
+      .filter(Boolean)
+      .join(", ")}]`,
 );
 console.log(
   `PHASE boundary labels: ${bundles.reduce((total, bundle) => total + bundle.phaseBoundaries, 0)}`,
@@ -146,7 +147,9 @@ for (const video of realVideos) {
 for (const [angle, count] of byAngle) console.log(`  ${angle}: ${count}`);
 console.log("COVERAGE BY SESSION:");
 for (const session of sessions) {
-  const count = realVideos.filter((video) => (video.sessionKey ?? "unspecified") === session).length;
+  const count = realVideos.filter(
+    (video) => (video.sessionKey ?? "unspecified") === session,
+  ).length;
   console.log(`  ${session}: ${count} video files`);
 }
 console.log("─".repeat(66));
@@ -154,20 +157,26 @@ console.log("SPLITS / ROLES:");
 console.log("  development: wm-volley-02, afn-sasebo-rally1 (identity/occlusion debugging)");
 console.log("  HELD-OUT   : wm-dink-01 (not tuned against; regressions reported as-is)");
 console.log("SPLITS: all current labeled data is BENCHMARK/TEST material.");
-console.log(
-  "  No training set exists yet; when training begins, split by sessionKey/player",
-);
+console.log("  No training set exists yet; when training begins, split by sessionKey/player");
 console.log("  BEFORE tuning (players must never leak across train/val/test).");
 console.log("─".repeat(66));
 console.log("STROKE COVERAGE (v3 labels present):");
 const strokesPresent = new Set(bundles.map((bundle) => bundle.strokeV3).filter(Boolean));
 const allStrokes = [
-  "FOREHAND_DRIVE", "BACKHAND_DRIVE", "SERVE", "RETURN", "FOREHAND_DINK", "BACKHAND_DINK",
-  "FOREHAND_VOLLEY", "BACKHAND_VOLLEY", "DROP", "RESET", "OVERHEAD", "SPEEDUP",
+  "FOREHAND_DRIVE",
+  "BACKHAND_DRIVE",
+  "SERVE",
+  "RETURN",
+  "FOREHAND_DINK",
+  "BACKHAND_DINK",
+  "FOREHAND_VOLLEY",
+  "BACKHAND_VOLLEY",
+  "DROP",
+  "RESET",
+  "OVERHEAD",
+  "SPEEDUP",
 ];
 console.log(`  present: ${[...strokesPresent].join(", ") || "none"}`);
-console.log(
-  `  MISSING: ${allStrokes.filter((stroke) => !strokesPresent.has(stroke)).join(", ")}`,
-);
+console.log(`  MISSING: ${allStrokes.filter((stroke) => !strokesPresent.has(stroke)).join(", ")}`);
 console.log("HANDEDNESS: right only labeled; LEFT-HANDED coverage missing.");
 console.log("ENVIRONMENT: outdoor daylight (wm) + indoor gym (afn); low-light missing.");

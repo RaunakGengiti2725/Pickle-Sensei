@@ -1,0 +1,44 @@
+{
+  "workstream": "D01",
+  "title": "Mechanical CI cleanup of main (format + lint)",
+  "branch": "devin/wave-d/d01-ci-cleanup",
+  "baseBranch": "origin/main (52ba173) — special base per instructions, NOT the wave-c integration branch",
+  "date": "2026-08-29",
+  "baseline": {
+    "formatCheck": "FAIL — 350 files (verified on clean clone of main: pnpm format:check)",
+    "lint": "FAIL — 99 errors + 1 warning (97 no-console, 2 prefer-const in apps/admin-web/src/coachReview/agreement.ts, 1 unused eslint-disable directive warning in packages/swing-lab/src/playerTracker.ts:217)"
+  },
+  "formattingClassification": {
+    "totalFailing": 350,
+    "scientificArtifactsIgnored": {
+      "count": 226,
+      "detail": "222 .json + 4 .md under datasets/ (ta-bench/paddle-bench/ball-bench results, runs-wave-a, corpus fingerprints, wave-a/wave-b experiment reports, releases, mining, registries, gold cases). Added to .prettierignore as datasets/**/*.json and datasets/**/*.md with justification: append-only records whose bytes are provenance."
+    },
+    "integratorOwnedDocsIgnored": {
+      "count": 2,
+      "detail": "docs/STATUS_BOARD.md and docs/HANDOFF_V3.md were failing format:check but are integrator-owned (workstream agents must not modify). Added to .prettierignore together with docs/DECISIONS.md (currently passing, ignored preemptively for the same reason)."
+    },
+    "sourceFilesFormatted": {
+      "count": 122,
+      "detail": "109 source files (packages/swing-lab 55, apps/mobile 21, apps/admin-web 12, packages/vision-geometry 7, packages/analysis-pipeline 5, others) + 8 experiment code files under datasets/experiments (*.ts/*.mjs — code, not byte-provenance-sensitive data) + 5 non-integrator docs (CLAIM_REVIEW, COACHING, HANDOFF, HANDOFF_V2, PERCEPTION). All via pnpm exec prettier --write."
+    }
+  },
+  "lintFixes": {
+    "noConsole97": "All 97 no-console errors are in terminal research CLI entrypoints that print reports/artifacts: packages/swing-lab/src/{contactForensics(26), paddleSelectionForensics(14), eventWindowSlice(5), benchRegen(5, wired as pnpm regen), eventBoundsScout(3), waveaValidate(2)} and datasets/experiments/{wave-a/I-forensics/*, wave-b/W1-diagnose, W6-fixture-gen} (42). Fixed by extending the repo's existing per-path no-console override list in eslint.config.mjs (same pattern already used for cascadeWaterfall.ts etc.), with justification comments. No rule weakened or disabled globally.",
+    "preferConst2": "apps/admin-web/src/coachReview/agreement.ts:156-157 — let → const (never reassigned; semantically safe).",
+    "unusedDirective1": "packages/swing-lab/src/playerTracker.ts:217 — removed stale '// eslint-disable-line prefer-const' (chosen IS reassigned later, so prefer-const reports nothing; directive was dead)."
+  },
+  "after": {
+    "formatCheck": "PASS (exit 0)",
+    "lint": "PASS (0 errors, 0 warnings)",
+    "typecheck": "PASS (pnpm typecheck, all packages)",
+    "tests": "PASS (pnpm test: vitest suites all green, e.g. 29, 47, and 147 passed + 4 skipped across packages)",
+    "mobile": "PASS (apps/mobile: npm ci OK, npx tsc --noEmit 0 errors, npx jest 214/214 passed)"
+  },
+  "honestNegatives": [
+    "No behavior was changed or measured; this is mechanical formatting/lint hygiene only. No cascade or bench numbers were regenerated (pose extraction is macOS-only; runs/ absent on Linux).",
+    "docs/STATUS_BOARD.md and docs/HANDOFF_V3.md remain prettier-nonconforming on disk; CI passes only because they are now explicitly prettierignored (integrator ownership constraint). The integrator may prefer to format them and remove the ignore entries.",
+    "One anomaly: after the initial repo-wide prettier --write, format:check still flagged packages/swing-lab/src/contactForensics.ts and packages/vision-geometry/src/offlineStroke.ts once more; a second targeted --write converged. Final format:check exit 0."
+  ],
+  "blocked": "Nothing blocked for this workstream."
+}

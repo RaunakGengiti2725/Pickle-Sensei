@@ -27,10 +27,8 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ENGINE_PATH = join(HERE, "../src/sessionEngine.ts");
 const CANONICAL_PROPOSER_PATH = join(HERE, "../../swing-lab/src/strokeEvents.ts");
-const BEGIN_MARKER =
-  "// === BEGIN VERBATIM MIRROR: packages/swing-lab/src/strokeEvents.ts ===\n";
-const END_MARKER =
-  "// === END VERBATIM MIRROR: packages/swing-lab/src/strokeEvents.ts ===\n";
+const BEGIN_MARKER = "// === BEGIN VERBATIM MIRROR: packages/swing-lab/src/strokeEvents.ts ===\n";
+const END_MARKER = "// === END VERBATIM MIRROR: packages/swing-lab/src/strokeEvents.ts ===\n";
 
 describe("stroke-event-2 proposer mirror — drift guard", () => {
   it("the mirrored section is byte-identical to packages/swing-lab/src/strokeEvents.ts", () => {

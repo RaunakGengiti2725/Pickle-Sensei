@@ -24,7 +24,9 @@ import { buildPlayerTracks, targetPoseSequence, type PeopleFile } from "./player
 
 const [srcRunDirArg, fromArg, toArg, outRunDirArg, markersArg] = process.argv.slice(2);
 if (!srcRunDirArg || !fromArg || !toArg || !outRunDirArg) {
-  console.error("usage: tsx src/eventWindowSlice.ts <srcRunDir> <fromMs> <toMs> <outRunDir> [markersOut.json]");
+  console.error(
+    "usage: tsx src/eventWindowSlice.ts <srcRunDir> <fromMs> <toMs> <outRunDir> [markersOut.json]",
+  );
   process.exit(2);
 }
 const abs = (p: string) => (p.startsWith("/") ? p : join(REPO_ROOT, p));
@@ -64,7 +66,9 @@ if (tracks.length === 0) {
   console.error("no tracks in window");
   process.exit(1);
 }
-const byScore = [...tracks].sort((a, b) => b.coverage * b.meanTorsoSpan - a.coverage * a.meanTorsoSpan);
+const byScore = [...tracks].sort(
+  (a, b) => b.coverage * b.meanTorsoSpan - a.coverage * a.meanTorsoSpan,
+);
 const target = byScore[0]!;
 console.log(`window ${from}-${to}ms frames=${frames.length} tracks=${tracks.length}`);
 for (const track of byScore.slice(0, 5)) {
@@ -79,7 +83,9 @@ for (const track of byScore.slice(0, 5)) {
 const speeds = dominantWristSpeeds(targetPoseSequence(sliced, target).frames);
 console.log(`auto-target wrist samples=${speeds.length}`);
 const peaks = [...speeds].sort((a, b) => b.value - a.value).slice(0, 6);
-console.log(`top wrist speeds: ${peaks.map((sample) => `${sample.timestampMs}ms=${sample.value.toFixed(2)}`).join(" · ")}`);
+console.log(
+  `top wrist speeds: ${peaks.map((sample) => `${sample.timestampMs}ms=${sample.value.toFixed(2)}`).join(" · ")}`,
+);
 
 if (markersArg) {
   const points = target.frames.map((frame) => ({

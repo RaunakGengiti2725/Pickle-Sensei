@@ -14,20 +14,33 @@ const recordings = loadRecordings();
 const splits = loadSplits(paths.splits);
 const events = readAllEvents();
 
-const line = (label: string, value: string | number) => console.log(`${String(label).padEnd(40)} ${value}`);
+const line = (label: string, value: string | number) =>
+  console.log(`${String(label).padEnd(40)} ${value}`);
 console.log("═".repeat(72));
 console.log("CORPUS STATUS (computed live)");
 console.log("═".repeat(72));
 
 const byOrigin = new Map<string, number>();
 for (const source of sources) byOrigin.set(source.origin, (byOrigin.get(source.origin) ?? 0) + 1);
-line("sources", `${sources.length} (${[...byOrigin.entries()].map(([origin, count]) => `${origin} ${count}`).join(" · ")})`);
-line("training-eligible sources", sources.filter((source) => trainingEligible(source.rights)).length);
-line("rights-unclear sources (quarantined)", sources.filter((source) => !trainingEligible(source.rights)).length);
+line(
+  "sources",
+  `${sources.length} (${[...byOrigin.entries()].map(([origin, count]) => `${origin} ${count}`).join(" · ")})`,
+);
+line(
+  "training-eligible sources",
+  sources.filter((source) => trainingEligible(source.rights)).length,
+);
+line(
+  "rights-unclear sources (quarantined)",
+  sources.filter((source) => !trainingEligible(source.rights)).length,
+);
 
 const roots = recordings.filter((recording) => recording.derivedFrom.length === 0);
 const totalSec = roots.reduce((total, recording) => total + recording.probe.durationMs / 1000, 0);
-line("recordings", `${recordings.length} (${roots.length} roots + ${recordings.length - roots.length} derived)`);
+line(
+  "recordings",
+  `${recordings.length} (${roots.length} roots + ${recordings.length - roots.length} derived)`,
+);
 line("root footage", `${(totalSec / 60).toFixed(1)} min`);
 line("sessions", new Set(recordings.map((recording) => recording.sessionKey)).size);
 
@@ -43,7 +56,11 @@ console.log("─".repeat(72));
 console.log("SPLIT LADDER (session-level, lineage-aware):");
 for (const split of ["dev", "val", "locked_test", "shadow", "UNASSIGNED"]) {
   const bucket = splitCounts.get(split);
-  if (bucket) line(`  ${split}`, `${bucket.sessions.size} sessions · ${(bucket.seconds / 60).toFixed(1)} min root footage`);
+  if (bucket)
+    line(
+      `  ${split}`,
+      `${bucket.sessions.size} sessions · ${(bucket.seconds / 60).toFixed(1)} min root footage`,
+    );
 }
 
 console.log("─".repeat(72));
@@ -54,7 +71,10 @@ for (const event of events) bySplit.set(event.split, (bySplit.get(event.split) ?
 for (const [split, count] of [...bySplit.entries()].sort()) line(`  ${split}`, count);
 const multiPerson = events.filter((event) => event.peopleInScene >= 2).length;
 line("  multi-person scenes (TA-bench pool)", multiPerson);
-line("  high-uncertainty (≥0.8, annotate first)", events.filter((event) => event.uncertainty >= 0.8).length);
+line(
+  "  high-uncertainty (≥0.8, annotate first)",
+  events.filter((event) => event.uncertainty >= 0.8).length,
+);
 
 if (existsSync(paths.factoryState)) {
   const state = JSON.parse(readFileSync(paths.factoryState, "utf8")) as {

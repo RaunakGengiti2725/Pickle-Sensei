@@ -1,7 +1,12 @@
 import { buildPlayerTracks, targetPoseSequence, type PeopleFile } from "../playerTracker.js";
 import { proposeStrokeEvents } from "../strokeEvents.js";
 import type { ScenesFile } from "../sceneValidity.js";
-import { eventId, type CandidateEventRecord, type RecordingRecord, type SplitName } from "./corpus.js";
+import {
+  eventId,
+  type CandidateEventRecord,
+  type RecordingRecord,
+  type SplitName,
+} from "./corpus.js";
 import { classifyTrackLiveness, windowValidity } from "./gameplayValidity.js";
 
 /**
@@ -38,13 +43,21 @@ export function mineRecording(input: {
 }): CandidateEventRecord[] {
   const { recording, split, peopleFile, scenes } = input;
   const candidates: CandidateEventRecord[] = [];
-  const usableSegments = scenes.segments.filter((segment) => segment.endMs - segment.startMs >= 1500);
+  const usableSegments = scenes.segments.filter(
+    (segment) => segment.endMs - segment.startMs >= 1500,
+  );
   for (const [sceneIndex, segment] of usableSegments.entries()) {
-    for (let windowStart = segment.startMs; windowStart < segment.endMs; windowStart += WINDOW_STEP_MS) {
+    for (
+      let windowStart = segment.startMs;
+      windowStart < segment.endMs;
+      windowStart += WINDOW_STEP_MS
+    ) {
       const windowEnd = Math.min(windowStart + WINDOW_MS, segment.endMs);
       if (windowEnd - windowStart < 3000 && windowStart > segment.startMs) break; // tail already covered by overlap
       const windowIndex = Math.round((windowStart - segment.startMs) / WINDOW_STEP_MS);
-      const windowFrames = peopleFile.frames.filter((frame) => frame.t >= windowStart && frame.t < windowEnd);
+      const windowFrames = peopleFile.frames.filter(
+        (frame) => frame.t >= windowStart && frame.t < windowEnd,
+      );
       if (windowFrames.length < 20) continue;
       const windowFile: PeopleFile = { ...peopleFile, frames: windowFrames };
       const tracks = buildPlayerTracks(windowFile);
@@ -52,9 +65,11 @@ export function mineRecording(input: {
       // graphics (title cards, portraits) yield no candidates; individual
       // static tracks are skipped even in otherwise-live windows.
       if (!windowValidity(tracks).valid) continue;
-      for (const track of tracks.filter(
-        (entry) => entry.coverage >= 0.25 && classifyTrackLiveness(entry) !== "static_or_graphic",
-      ).slice(0, 4)) {
+      for (const track of tracks
+        .filter(
+          (entry) => entry.coverage >= 0.25 && classifyTrackLiveness(entry) !== "static_or_graphic",
+        )
+        .slice(0, 4)) {
         const sequence = targetPoseSequence(windowFile, track);
         const wristSpeeds = dominantWristSpeeds(sequence.frames);
         const { events } = proposeStrokeEvents({
@@ -87,11 +102,19 @@ export function mineRecording(input: {
             reasons.push("target track has loss periods");
           }
           const peakFrame = track.frames.reduce((best, frame) =>
-            Math.abs(frame.timestampMs - event.peakMs) < Math.abs(best.timestampMs - event.peakMs) ? frame : best,
+            Math.abs(frame.timestampMs - event.peakMs) < Math.abs(best.timestampMs - event.peakMs)
+              ? frame
+              : best,
           );
           candidates.push({
             schemaVersion: 1,
-            eventId: eventId(recording.recordingId, sceneIndex, track.trackId, event.peakMs, windowIndex),
+            eventId: eventId(
+              recording.recordingId,
+              sceneIndex,
+              track.trackId,
+              event.peakMs,
+              windowIndex,
+            ),
             tier: "C",
             recordingId: recording.recordingId,
             sourceId: recording.sourceId,
@@ -150,9 +173,15 @@ function dedupeAcrossWindows(candidates: CandidateEventRecord[]): CandidateEvent
 }
 
 export function dominantWristSpeeds(
-  frames: ReadonlyArray<{ timestampMs: number; landmarks: ReadonlyArray<{ name: string; x: number; y: number; visibility: number }> }>,
+  frames: ReadonlyArray<{
+    timestampMs: number;
+    landmarks: ReadonlyArray<{ name: string; x: number; y: number; visibility: number }>;
+  }>,
 ): Array<{ timestampMs: number; value: number }> {
-  const perWrist: Record<"left" | "right", Array<{ timestampMs: number; value: number }>> = { left: [], right: [] };
+  const perWrist: Record<"left" | "right", Array<{ timestampMs: number; value: number }>> = {
+    left: [],
+    right: [],
+  };
   const travel = { left: 0, right: 0 };
   const last: Record<string, { x: number; y: number } | undefined> = {};
   for (const frame of frames) {
@@ -164,7 +193,9 @@ export function dominantWristSpeeds(
       const prior = last[side];
       if (prior) {
         const previousSample = perWrist[side][perWrist[side].length - 1];
-        const dtSec = previousSample ? (frame.timestampMs - previousSample.timestampMs) / 1000 : 0.04;
+        const dtSec = previousSample
+          ? (frame.timestampMs - previousSample.timestampMs) / 1000
+          : 0.04;
         const step = Math.hypot(mark.x - prior.x, mark.y - prior.y);
         if (dtSec > 0 && dtSec <= 0.15) {
           perWrist[side].push({ timestampMs: frame.timestampMs, value: step / dtSec });

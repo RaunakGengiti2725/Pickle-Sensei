@@ -94,8 +94,7 @@ export function resolveBallModality(input: {
     .filter((trajectory) => trajectory.confidence >= BALL_GATES.minConfidence)
     .map((trajectory) => {
       const points = trajectory.points.filter((point) => point.t >= lo && point.t <= hi);
-      const overlap =
-        Math.min(trajectory.endMs, hi) - Math.max(trajectory.startMs, lo);
+      const overlap = Math.min(trajectory.endMs, hi) - Math.max(trajectory.startMs, lo);
       return { trajectory, points, coverage: Math.max(0, overlap) / windowLength };
     })
     .filter((candidate) => candidate.points.length > 0);

@@ -2,9 +2,18 @@ import { execFileSync } from "node:child_process";
 import { existsSync, renameSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import {
-  CORPUS_DIR, REPO_ROOT, commonsSourceId, ensureCorpus, loadRecordings, loadSources,
-  recordingIdForHash, sanitizeIdPart, upsertRecording, upsertSource,
-  type RecordingRecord, type SourceRecord,
+  CORPUS_DIR,
+  REPO_ROOT,
+  commonsSourceId,
+  ensureCorpus,
+  loadRecordings,
+  loadSources,
+  recordingIdForHash,
+  sanitizeIdPart,
+  upsertRecording,
+  upsertSource,
+  type RecordingRecord,
+  type SourceRecord,
 } from "./corpus.js";
 import { probeMedia, sha256File } from "./probe.js";
 import { rightsForLicense } from "./rights.js";
@@ -44,7 +53,22 @@ async function fetchText(url: string): Promise<string> {
 function curlDownload(url: string, outPath: string): void {
   execFileSync(
     "curl",
-    ["-sS", "-L", "--fail", "--retry", "3", "--retry-delay", "2", "-C", "-", "-A", USER_AGENT, "-o", outPath, url],
+    [
+      "-sS",
+      "-L",
+      "--fail",
+      "--retry",
+      "3",
+      "--retry-delay",
+      "2",
+      "-C",
+      "-",
+      "-A",
+      USER_AGENT,
+      "-o",
+      outPath,
+      url,
+    ],
     { stdio: ["ignore", "inherit", "inherit"] },
   );
 }
@@ -102,8 +126,12 @@ async function dvidsParseVideoPage(url: string): Promise<DvidsPage> {
   if (!mediaUrl) throw new Error(`no direct media URL on ${url}`);
   const credit = html.match(/copyright_info">This work,.*?by(.*?)identified by/s);
   const author = credit
-    ? credit[1]!.replace(/<[^>]+>/g, " ").replace(/[\s,]+/g, " ").trim()
-    : (metaContent(html, "og:description")?.match(/\(([^)]*video by[^)]*)\)/i)?.[1] ?? "U.S. DoD (DVIDS)");
+    ? credit[1]!
+        .replace(/<[^>]+>/g, " ")
+        .replace(/[\s,]+/g, " ")
+        .trim()
+    : (metaContent(html, "og:description")?.match(/\(([^)]*video by[^)]*)\)/i)?.[1] ??
+      "U.S. DoD (DVIDS)");
   return {
     videoId,
     url,
@@ -118,7 +146,11 @@ async function dvidsParseVideoPage(url: string): Promise<DvidsPage> {
   };
 }
 
-async function acquireDvids(query: string, limit: number, dryRun: boolean): Promise<AcquireOutcome[]> {
+async function acquireDvids(
+  query: string,
+  limit: number,
+  dryRun: boolean,
+): Promise<AcquireOutcome[]> {
   const paths = ensureCorpus();
   const known = new Set(loadSources().map((source) => source.sourceId));
   const outcomes: AcquireOutcome[] = [];
@@ -158,7 +190,12 @@ async function acquireDvids(query: string, limit: number, dryRun: boolean): Prom
           "DVIDS requests journalist credit (author recorded)",
           "must not imply DoD endorsement",
         ],
-        description: [page.description, page.virin ? `VIRIN ${page.virin}` : "", page.location ?? "", page.category ?? ""]
+        description: [
+          page.description,
+          page.virin ? `VIRIN ${page.virin}` : "",
+          page.location ?? "",
+          page.category ?? "",
+        ]
           .filter(Boolean)
           .join(" · "),
         // Same venue + same date = one SESSION (the split unit). Two crews
@@ -179,9 +216,14 @@ async function acquireDvids(query: string, limit: number, dryRun: boolean): Prom
 
 // ── Wikimedia Commons ────────────────────────────────────────────────────
 
-const COMMONS_ALLOWED_LICENSE = /^(public domain|pd|cc0|cc[ -]by(?:[ -]sa)?[ -]\d|cc[ -]by(?:[ -]sa)?$)/i;
+const COMMONS_ALLOWED_LICENSE =
+  /^(public domain|pd|cc0|cc[ -]by(?:[ -]sa)?[ -]\d|cc[ -]by(?:[ -]sa)?$)/i;
 
-async function acquireCommons(query: string, limit: number, dryRun: boolean): Promise<AcquireOutcome[]> {
+async function acquireCommons(
+  query: string,
+  limit: number,
+  dryRun: boolean,
+): Promise<AcquireOutcome[]> {
   const paths = ensureCorpus();
   const known = new Set(loadSources().map((source) => source.sourceId));
   const outcomes: AcquireOutcome[] = [];
@@ -209,18 +251,31 @@ async function acquireCommons(query: string, limit: number, dryRun: boolean): Pr
         { headers: { "user-agent": USER_AGENT } },
       )
     ).json()) as {
-      query?: { pages?: Record<string, { imageinfo?: Array<{ url: string; extmetadata?: Record<string, { value: string }> }> }> };
+      query?: {
+        pages?: Record<
+          string,
+          { imageinfo?: Array<{ url: string; extmetadata?: Record<string, { value: string }> }> }
+        >;
+      };
     };
     const pages = Object.values(info.query?.pages ?? {});
     const imageInfo = pages[0]?.imageinfo?.[0];
     const meta = imageInfo?.extmetadata ?? {};
     const licenseShort = (meta.LicenseShortName?.value ?? "unknown").replace(/<[^>]+>/g, "").trim();
     if (!imageInfo || !COMMONS_ALLOWED_LICENSE.test(licenseShort)) {
-      outcomes.push({ sourceId, status: "skipped", detail: `license "${licenseShort}" not in the accepted set` });
+      outcomes.push({
+        sourceId,
+        status: "skipped",
+        detail: `license "${licenseShort}" not in the accepted set`,
+      });
       continue;
     }
     if (dryRun) {
-      outcomes.push({ sourceId, status: "skipped", detail: `dry-run: would acquire ${title} (${licenseShort})` });
+      outcomes.push({
+        sourceId,
+        status: "skipped",
+        detail: `dry-run: would acquire ${title} (${licenseShort})`,
+      });
       continue;
     }
     try {
@@ -230,7 +285,19 @@ async function acquireCommons(query: string, limit: number, dryRun: boolean): Pr
       // AVFoundation cannot decode VP9/AV1 reliably → normalize to H.264 and
       // register the transcode; the original bytes stay next to it.
       const mediaPath = `${originalPath.replace(/\.[a-z0-9]+$/i, "")}.h264.mp4`;
-      execFileSync("ffmpeg", ["-y", "-v", "error", "-i", originalPath, "-c:v", "libx264", "-crf", "18", "-an", mediaPath]);
+      execFileSync("ffmpeg", [
+        "-y",
+        "-v",
+        "error",
+        "-i",
+        originalPath,
+        "-c:v",
+        "libx264",
+        "-crf",
+        "18",
+        "-an",
+        mediaPath,
+      ]);
       const outcome = await registerAcquired({
         origin: "wikimedia_commons",
         originId,
@@ -276,16 +343,27 @@ async function registerAcquired(input: {
   const probe = probeMedia(input.mediaPath);
   if (probe.durationMs < 3000) {
     unlinkSync(input.mediaPath);
-    return { sourceId: input.sourceId, status: "skipped", detail: `too short (${probe.durationMs}ms)` };
+    return {
+      sourceId: input.sourceId,
+      status: "skipped",
+      detail: `too short (${probe.durationMs}ms)`,
+    };
   }
   const sha256 = await sha256File(input.mediaPath);
   const recordingId = recordingIdForHash(sha256);
   const existing = loadRecordings().find((recording) => recording.sha256 === sha256);
   if (existing) {
     unlinkSync(input.mediaPath);
-    return { sourceId: input.sourceId, status: "already_present", detail: `bytes identical to ${existing.recordingId}` };
+    return {
+      sourceId: input.sourceId,
+      status: "already_present",
+      detail: `bytes identical to ${existing.recordingId}`,
+    };
   }
-  const finalPath = input.mediaPath.replace(/(\.[a-z0-9.]+)$/i, `-${recordingId.replace(/^rec-/, "")}$1`);
+  const finalPath = input.mediaPath.replace(
+    /(\.[a-z0-9.]+)$/i,
+    `-${recordingId.replace(/^rec-/, "")}$1`,
+  );
   renameSync(input.mediaPath, finalPath);
 
   const source: SourceRecord = {
@@ -298,7 +376,10 @@ async function registerAcquired(input: {
     author: input.author,
     publishedDate: input.publishedDate,
     license: input.license,
-    rights: rightsForLicense(input.license, "lab:acquire (rule-derived; human spot-check required for unclear)"),
+    rights: rightsForLicense(
+      input.license,
+      "lab:acquire (rule-derived; human spot-check required for unclear)",
+    ),
     acquisition: {
       acquiredAtIso: new Date().toISOString(),
       method: `${input.origin} page parse + direct media download`,
@@ -339,7 +420,7 @@ if (isMain) {
   const mode = process.argv[2];
   const flag = (name: string) => {
     const index = process.argv.indexOf(name);
-    return index >= 0 ? process.argv[index + 1] ?? null : null;
+    return index >= 0 ? (process.argv[index + 1] ?? null) : null;
   };
   const query = flag("--query") ?? "pickleball";
   const limit = Number(flag("--limit") ?? 100);
@@ -348,12 +429,16 @@ if (isMain) {
     console.error("usage: pnpm lab:acquire <dvids|commons> [--query q] [--limit N] [--dry-run]");
     process.exit(2);
   }
-  const run = mode === "dvids" ? acquireDvids(query, limit, dryRun) : acquireCommons(query, limit, dryRun);
+  const run =
+    mode === "dvids" ? acquireDvids(query, limit, dryRun) : acquireCommons(query, limit, dryRun);
   run.then((outcomes) => {
     console.log("═".repeat(66));
-    for (const outcome of outcomes) console.log(`${outcome.status.padEnd(16)} ${outcome.sourceId} · ${outcome.detail}`);
+    for (const outcome of outcomes)
+      console.log(`${outcome.status.padEnd(16)} ${outcome.sourceId} · ${outcome.detail}`);
     const registered = outcomes.filter((outcome) => outcome.status === "registered").length;
-    console.log(`registered ${registered} · present ${outcomes.filter((o) => o.status === "already_present").length} · skipped ${outcomes.filter((o) => o.status === "skipped").length} · failed ${outcomes.filter((o) => o.status === "failed").length}`);
+    console.log(
+      `registered ${registered} · present ${outcomes.filter((o) => o.status === "already_present").length} · skipped ${outcomes.filter((o) => o.status === "skipped").length} · failed ${outcomes.filter((o) => o.status === "failed").length}`,
+    );
     if (!existsSync(join(CORPUS_DIR, "sources.json"))) process.exitCode = 1;
   });
 }
