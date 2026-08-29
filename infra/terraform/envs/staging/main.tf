@@ -37,6 +37,12 @@ module "compute" {
   api_image         = "REPLACED_BY_CI" # CI injects the signed ECR digest
   worker_image      = "REPLACED_BY_CI"
   api_desired_count = 1
+  # Least-privilege DB credentials (g12-f23): tasks read the per-role
+  # connection URLs from Secrets Manager. The in-database LOGIN roles are
+  # provisioned by an operator per docs/RUNBOOK_CONSENT_DB_ROLES.md.
+  api_db_url_secret_arn    = module.data.db_url_app_secret_arn
+  worker_db_url_secret_arn = module.data.db_url_worker_secret_arn
+  secrets_kms_key_arn      = module.data.kms_key_arn
 }
 
 module "data" {

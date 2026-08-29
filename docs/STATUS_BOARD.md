@@ -212,7 +212,7 @@ All 29 branches merged into the integration branch. Per-workstream evidence:
 | f20 | rt stroke hardened           | F20-F1 and F20-F2 both closed post-wave by stroke-heuristic-6 abstention gates (fixture-level; no fresh-clip evidence yet)  | YELLOW           |
 | f21 | rt session scheduler         | storm/race/retry/livelock red team on real scheduler; executor seam scripted (native gap D-040 disclosed)                  | GREEN (bounded)  |
 | f22 | rt envelope bypass           | 8 KNOWN GAP bypasses pinned as regressions (blur+grain, strobing, upscale, tiny subject, crop-jitter…); 2 proven negatives | ORANGE           |
-| f23 | rt consent abuse             | consent abuse leaks found and pinned                                                                                        | ORANGE           |
+| f23 | rt consent abuse             | leaks pinned; Wave G: least-privilege role separation shipped (mig 0018 + init-roles), proven destructively from real login connections (8 tests, 63 denials), IaC secrets/ECS wiring + runbook (docs/RUNBOOK_CONSENT_DB_ROLES.md); internal prep complete — only production credential application external; cloud superuser bypass remains BLOCKED_EXTERNAL | ORANGE → YELLOW  |
 | f24 | rt data provenance           | provenance chain attack found no material break                                                                             | GREEN            |
 | f25 | two-pass verdict             | adaptive two-pass promotion not justified by wall-clock evidence — negative preserved                                     | SCIENTIFIC_NEG.  |
 | f26 | result evidence audit        | 4 fabricated-provenance Result defects found and fixed (+7 regression tests; mobile 397 tests green)                       | GREEN            |
@@ -241,7 +241,13 @@ format:check clean · mobile tsc 0 errors · mobile jest 40 suites / 397 tests g
   at the fixing commit. Evidence is fixture-level only — no fresh-clip measurement of
   the gate's coverage cost yet, so f20 is YELLOW, not GREEN.
 - Contact adversarial failures (f09) and envelope bypasses (f22) remain ORANGE.
-- Consent abuse leaks (f23) remain ORANGE.
+- Consent abuse leaks (f23): Wave G (g10/g11/g12) shipped and destructively verified
+  least-privilege Postgres role separation for the consent system, plus IaC
+  secrets/ECS wiring and an operations runbook (docs/RUNBOOK_CONSENT_DB_ROLES.md).
+  Internal preparation is complete; applying credentials to a real cloud environment
+  is external, and the cloud superuser (RDS master / AWS account admin) can still
+  bypass every in-database boundary — BLOCKED_EXTERNAL, stated explicitly in the
+  runbook's residual-risk section.
 - 2x-speed OOD separation (f10), envelope threshold validation (f18), and two-pass
   promotion (f25) are preserved scientific negatives.
 

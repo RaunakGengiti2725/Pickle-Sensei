@@ -56,6 +56,45 @@ resource "aws_secretsmanager_secret_version" "db_master" {
   secret_string = random_password.db_master.result
 }
 
+# Per-role connection credentials (g12-f23). Terraform manages the secret
+# material only; the Postgres LOGIN roles themselves are created inside the
+# database by an operator following docs/RUNBOOK_CONSENT_DB_ROLES.md (the AWS
+# provider cannot create in-database roles). Each secret stores a full
+# connection URL so ECS tasks can consume it as a single environment variable.
+locals {
+  db_login_roles = ["app", "worker", "migrator", "readonly"]
+  db_login_usernames = {
+    app      = "pickle_app"
+    worker   = "pickle_worker"
+    migrator = "pickle_migrator"
+    readonly = "pickle_ro"
+  }
+}
+
+resource "random_password" "db_role" {
+  for_each = toset(local.db_login_roles)
+  length   = 32
+  special  = false
+}
+
+resource "aws_secretsmanager_secret" "db_url" {
+  for_each   = toset(local.db_login_roles)
+  name       = "${var.name}/db-url-${each.key}"
+  kms_key_id = aws_kms_key.data.arn
+}
+
+resource "aws_secretsmanager_secret_version" "db_url" {
+  for_each  = toset(local.db_login_roles)
+  secret_id = aws_secretsmanager_secret.db_url[each.key].id
+  secret_string = format(
+    "postgres://%s:%s@%s:5432/%s",
+    local.db_login_usernames[each.key],
+    random_password.db_role[each.key].result,
+    aws_db_instance.postgres.address,
+    aws_db_instance.postgres.db_name,
+  )
+}
+
 resource "aws_db_instance" "postgres" {
   identifier                      = "${var.name}-pg"
   engine                          = "postgres"
@@ -114,5 +153,9 @@ resource "aws_elasticache_replication_group" "redis" {
 
 output "db_endpoint" { value = aws_db_instance.postgres.address }
 output "db_secret_arn" { value = aws_secretsmanager_secret.db_master.arn }
+output "db_url_app_secret_arn" { value = aws_secretsmanager_secret.db_url["app"].arn }
+output "db_url_worker_secret_arn" { value = aws_secretsmanager_secret.db_url["worker"].arn }
+output "db_url_migrator_secret_arn" { value = aws_secretsmanager_secret.db_url["migrator"].arn }
+output "db_url_readonly_secret_arn" { value = aws_secretsmanager_secret.db_url["readonly"].arn }
 output "redis_endpoint" { value = aws_elasticache_replication_group.redis.primary_endpoint_address }
 output "kms_key_arn" { value = aws_kms_key.data.arn }
