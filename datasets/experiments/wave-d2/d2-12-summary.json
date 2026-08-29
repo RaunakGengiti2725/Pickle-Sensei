@@ -1,0 +1,56 @@
+{
+  "workstream": "D2-12 first-party capture program",
+  "branch": "devin/wave-d2/d2-12-consent-capture-plan",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "date": "2026-08-29",
+  "verdict": "GREEN_with_BLOCKED_EXTERNAL_capture_gaps",
+  "deliverables": {
+    "protocolDoc": "datasets/pickleball/FIRST_PARTY_CAPTURE_PROTOCOL.md",
+    "intakeCli": "packages/first-party-intake (pnpm --filter @pickle/first-party-intake intake)",
+    "tests": "packages/first-party-intake/test/intake.test.ts"
+  },
+  "measured": {
+    "intakeTests": "9/9 passed (vitest)",
+    "repoTypecheck": "pnpm typecheck green across all workspace packages",
+    "eslintNewPackage": "0 errors, 0 warnings",
+    "cliEndToEnd": "synthetic 1280x720@30fps 3s lavfi clip: status ACCEPTED, envelope SUPPORTED, sha256 12a1bef20871..., frameCount 90, exit 0; 320x240 clip REJECTED exit 1; withdrawn model_training consent REJECTED exit 1",
+    "envelopeThresholdsUsed": "capture-envelope-thresholds-v0.1-provisional (unchanged, C12)",
+    "consentModelUsed": "C10 ConsentRecord ledger fold (deriveConsentStatus), scopes video_analysis + model_training both required",
+    "poseGatedDimensions": "player_pixel_height / player_visibility honestly NOT_MEASURED at intake (pose extraction macOS-only)"
+  },
+  "provenance": {
+    "syntheticFixturesOnly": true,
+    "fixtureMarker": "SYNTHETIC-TEST-FIXTURE pseudonyms; ffmpeg lavfi noise clips generated in tmpdir, never written under datasets/",
+    "realConsentRecords": 0,
+    "realFirstPartyClips": 0,
+    "mediaAddedToCorpusMB": 0,
+    "heldOutCasesTouched": "none (wm-dink-01, afn-vic-rally1 untouched)"
+  },
+  "blockedExternal": [
+    {
+      "item": "consented participants",
+      "detail": "zero signed releases exist; recruiting athletes across skill bands (minors need guardian releases) is a human task"
+    },
+    {
+      "item": "signable legal release document",
+      "detail": "model-training-v1 names a consent version; the release text (commercial training, withdrawal, purge terms) needs counsel review before signature"
+    },
+    {
+      "item": "capture hardware + court time",
+      "detail": "phones >=1080p60, tripod/fence mounts, booked indoor+outdoor court sessions do not exist in any environment Devin controls"
+    },
+    {
+      "item": "recording operator",
+      "detail": "a human must run the session script, keep the per-clip session sheet, and manage consent paperwork on site"
+    },
+    {
+      "item": "pose pass for pose-gated envelope dimensions",
+      "detail": "pose extraction is macOS-only; Linux intake leaves player_pixel_height / player_visibility NOT_MEASURED"
+    },
+    {
+      "item": "coach adjudication",
+      "detail": "manifest review requires a qualified coach; recruitment already BLOCKED_EXTERNAL (docs/COACHING.md)"
+    }
+  ]
+}
