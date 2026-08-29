@@ -110,9 +110,49 @@ export const F18_VALIDATION_CRITERIA: readonly DimensionValidationCriteria[] = [
     },
   },
   {
+    dimension: "exposure_clipping",
+    thresholdId: "clipped-pixel-fraction-v0.1",
+    claim:
+      "Clipped-pixel fraction ≤ 0.3 is analyzable; 0.3–0.6 degraded; above, too much of the frame is crushed/blown to carry signal.",
+    constructValidity: {
+      test: "lutyuv crush/blow ladder covering a known fraction of the frame (0/25/50/75/100%) on downstream-good units; the measured clipped fraction must track the constructed fraction within sampling error.",
+      validates: "The probe counts actually-clipped pixels, not a proxy.",
+      refutes: "Measured fraction deviating materially from the constructed fraction.",
+      runnability: "RUNNABLE_LINUX",
+    },
+    predictiveValidity: {
+      test: "Downstream reruns on the partial-clipping ladder; find the clipped fraction where detection actually fails.",
+      validates: "Failure onset in (0.3, 0.6] confirms both edges.",
+      refutes: "Downstream survival above 0.6 or failure below 0.3.",
+      runnability: "BLOCKED_EXTERNAL",
+      corpusRequirement:
+        "≥10 labeled units per bin {≤0.3, 0.3–0.6, >0.6} from ≥5 sessions; g06 measured genuine footage ≤ 0.051 (n=3 real clips) — band placement rests on synthetic attacks only.",
+    },
+  },
+  {
+    dimension: "exposure_stability",
+    thresholdId: "brightness-std-luma-v0.1",
+    claim:
+      "Std of per-frame mean luma ≤ 40 is stable exposure; 40–80 degraded; above, exposure strobing breaks temporal analysis.",
+    constructValidity: {
+      test: "Alternating-frame luma-shift ladder with known amplitude (0/10/25/50/100 luma) on downstream-good units; measured std must rise monotonically with the injected amplitude.",
+      validates: "The std proxy tracks constructed temporal exposure instability.",
+      refutes: "Non-monotonic std under increasing injected strobing.",
+      runnability: "RUNNABLE_LINUX",
+    },
+    predictiveValidity: {
+      test: "Downstream reruns on the strobing ladder; find the std where tracking actually fails.",
+      validates: "Failure onset in (40, 80] confirms both edges.",
+      refutes: "Downstream survival above 80 or failure below 40.",
+      runnability: "BLOCKED_EXTERNAL",
+      corpusRequirement:
+        "≥10 labeled units per bin {≤40, 40–80, >80} from ≥5 sessions; g06 measured genuine footage ≤ 2.3 (n=3 real clips) — band placement rests on synthetic attacks only.",
+    },
+  },
+  {
     dimension: "motion_blur",
-    thresholdId: "laplacian-variance-320w-median-v0.1",
-    claim: "Median Laplacian variance @320w ≥ 100 is sharp; 30–99 degraded; < 30 too blurred.",
+    thresholdId: "laplacian-variance-320long-median-v0.2",
+    claim: "Median Laplacian variance @320long ≥ 100 is sharp; 30–99 degraded; < 30 too blurred.",
     constructValidity: {
       test: "Gaussian-blur ladder (sigma@320w 0.5→1→2→4) on downstream-good units; measured Laplacian variance must decrease strictly monotonically with sigma, and the sigma at which each unit crosses 100/30 is recorded.",
       validates: "The proxy orders real blur severities correctly on real footage.",
@@ -129,8 +169,28 @@ export const F18_VALIDATION_CRITERIA: readonly DimensionValidationCriteria[] = [
     },
   },
   {
+    dimension: "sensor_noise",
+    thresholdId: "denoise-survival-ratio-v0.1",
+    claim:
+      "Denoise-survival ratio ≥ 0.25 indicates genuine detail; 0.15–0.25 degraded; below, the Laplacian energy is noise, not detail.",
+    constructValidity: {
+      test: "Grain-injection ladder (noise=alls 0/6/12/24 temporal) on downstream-good units; the measured ratio must fall monotonically with injected grain while clean-content controls stay high.",
+      validates: "The ratio separates injected grain from genuine scene detail.",
+      refutes: "Clean real footage measuring below grained synthetic footage.",
+      runnability: "RUNNABLE_LINUX",
+    },
+    predictiveValidity: {
+      test: "Downstream ball-candidate reruns across the grain ladder; find the ratio where the candidate stage floods (g06 measured 39.93 cands/frame at ratio 0.126).",
+      validates: "Flooding onset in [0.15, 0.25) confirms both edges.",
+      refutes: "Downstream survival below 0.15 or flooding above 0.25.",
+      runnability: "RUNNABLE_LINUX",
+      corpusRequirement:
+        "≥10 labeled units per bin from ≥5 sessions; g06 measured real footage 0.339–0.357 (n=3 real clips) — the supported floor rests on that small sample plus synthetic attacks.",
+    },
+  },
+  {
     dimension: "camera_motion",
-    thresholdId: "global-frame-diff-320w-v0.2",
+    thresholdId: "global-frame-diff-320long-v0.3",
     claim:
       "Mean abs frame diff @320w ≤ 33 indicates a stable-enough camera; 34–46 degraded; > 46 unsupported. Implicit construct claim: the proxy measures CAMERA motion.",
     constructValidity: {
@@ -148,6 +208,27 @@ export const F18_VALIDATION_CRITERIA: readonly DimensionValidationCriteria[] = [
       runnability: "BLOCKED_EXTERNAL",
       corpusRequirement:
         "Alternatively ≥10 labeled units per bin {≤33, 34–46, >46} from ≥5 sessions with known camera-mount type; corpus has 9 good units from 3 sessions, none above 33.",
+    },
+  },
+  {
+    dimension: "camera_shake",
+    thresholdId: "contrast-normalized-frame-diff-v0.1",
+    claim:
+      "Contrast-normalized frame diff ≤ 0.18 indicates a stable camera; 0.18–0.45 degraded; above, global shake breaks tracking. Construct claim: dividing by spatial std removes the content-contrast dependence that defeats camera_motion.",
+    constructValidity: {
+      test: "Apply the identical crop-jitter shake to low-contrast synthetic and high-contrast real content; the normalized metric must move both clips out of the supported band while their raw diffs diverge (g06: 3.7x/3.9x shaken/unshaken ratios vs raw diffs 13.05 and 35.51).",
+      validates: "The normalized proxy responds to camera motion independent of content contrast.",
+      refutes:
+        "Content classes whose unshaken normalized diff exceeds shaken values — g06 already observed a sharp low-texture scene at 0.193 (inside the degraded band unshaken), so the supported edge is content-sensitive at low spatial contrast.",
+      runnability: "RUNNABLE_LINUX",
+    },
+    predictiveValidity: {
+      test: "Downstream reruns across a shake-amplitude ladder; find the normalized diff where tracking actually breaks.",
+      validates: "Breakage onset in (0.18, 0.45] confirms both edges.",
+      refutes: "Tracking survival above 0.45 or breakage below 0.18.",
+      runnability: "BLOCKED_EXTERNAL",
+      corpusRequirement:
+        "≥10 labeled units per bin {≤0.18, 0.18–0.45, >0.45} from ≥5 sessions with known mount type; g06 evidence is 2 shaken constructions + 3 real clips.",
     },
   },
   {

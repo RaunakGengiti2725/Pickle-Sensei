@@ -17,8 +17,10 @@ export {
   meanLuma,
   laplacianVariance,
   meanAbsDiff,
+  spatialStd,
+  clippedPixelFraction,
   SAMPLE_FPS,
-  SAMPLE_WIDTH,
+  SAMPLE_LONG_SIDE,
   type ClipStreamInfo,
   type SampledGrayFrames,
 } from "./clipProbe.js";

@@ -77,6 +77,9 @@ function roundMeasurements(m: CaptureEnvelopeMeasurements): CaptureEnvelopeMeasu
     brightnessStdLuma: round(m.brightnessStdLuma, 2),
     laplacianVarianceMedian: round(m.laplacianVarianceMedian, 2),
     meanAbsFrameDiff: round(m.meanAbsFrameDiff, 3),
+    denoiseSurvivalRatio: round(m.denoiseSurvivalRatio, 4),
+    clippedPixelFraction: round(m.clippedPixelFraction, 4),
+    contrastNormalizedFrameDiff: round(m.contrastNormalizedFrameDiff, 4),
     frameIntervalCv: round(m.frameIntervalCv, 4),
   };
 }

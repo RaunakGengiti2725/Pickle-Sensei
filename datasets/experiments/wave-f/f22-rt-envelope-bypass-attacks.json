@@ -1,6 +1,25 @@
 {
   "workstream": "f22-rt-envelope-bypass",
   "thresholdsVersion": "capture-envelope-thresholds-v0.3-provisional",
+  "waveGResolution": {
+    "resolvedBy": "g07-f22-fixes",
+    "date": "2026-08-29",
+    "thresholdsVersionAfterFix": "capture-envelope-thresholds-v0.4-provisional",
+    "note": "Measured values below are the historical v0.3 record and are preserved unchanged. Per the g06 forensic dossier classifications (A=logic bug, B=normalization bug, C=missing pre-capture signal computable today, D=needs labeled real footage), g07 fixed the A/B/C bypasses internally in packages/capture-envelope and flipped the corresponding KNOWN-GAP pins in test/redteamBypassF22.test.ts to FIXED regressions. D items remain pinned: no thresholds were invented for them.",
+    "fixed": {
+      "a1-blur-plus-noise": "C/B1: new sensor_noise dimension (denoise-survival-ratio-v0.1) — attack now UNSUPPORTED (measured ratio ~0.126 vs supported >=0.25)",
+      "a2-bimodal-exposure": "C/B2: new exposure_clipping dimension (clipped-pixel-fraction-v0.1) — attack now UNSUPPORTED (measured fraction ~0.997 vs supported <=0.3)",
+      "a3-strobe-exposure": "C/B3: brightnessStdLuma now consumed by the new exposure_stability dimension (brightness-std-luma-v0.1) — attack now UNSUPPORTED on its true condition (std 109 vs supported <=40), no longer only incidentally caught",
+      "a5-tiny-subject-no-pose": "A/B5: verdict contract fixed — EnvelopeVerdict.overallWithCoverage reports SUPPORTED_UNMEASURED when measured dimensions pass but any dimension is NOT_MEASURED; a partially observed envelope can no longer read as fully verified",
+      "a9-rotation-tag-normalization": "B/B6: sampling re-normalized to 320px LONG side (orientation-invariant); motion_blur/camera_motion threshold ids re-versioned (laplacian-variance-320long-median-v0.2, global-frame-diff-320long-v0.3); rotate-tag Laplacian shift now <5%",
+      "a11-synthetic-shake": "C/B7: new camera_shake dimension (contrast-normalized-frame-diff-v0.1) — the same crop-jitter shake is now detected on low-contrast content too (measured ~0.20 vs supported <=0.18)"
+    },
+    "stillOpen": {
+      "a4-upscale-240p-to-720p": "D/B4: detail-ratio signal separates upscaled from native in g06 (0.318 vs 0.742) but threshold placement needs labeled real footage — left pinned, no threshold invented",
+      "f1-low-texture-sharp": "D/FR1: false reject; edge-conditional sharpness margin is narrow (89 vs 66) and needs labels — left pinned. Note: under v0.4 this clip additionally measures camera_shake DEGRADED (contrast-normalized diff ~0.19 on a near-zero-contrast scene), a known content-sensitivity of the new signal recorded in f18ValidationCriteria"
+    },
+    "openBypassCountAfterG07": 2
+  },
   "date": "2026-08-29T11:10:19.097Z",
   "workDir": "/tmp/f22-redteam-1788001800484",
   "attacks": [
@@ -32,7 +51,8 @@
         "player_visibility": "NOT_MEASURED"
       },
       "overall": "SUPPORTED",
-      "bypass": true
+      "bypass": true,
+      "g07Status": "FIXED in g07 (see waveGResolution)"
     },
     {
       "id": "a2-bimodal-exposure",
@@ -62,7 +82,8 @@
         "player_visibility": "NOT_MEASURED"
       },
       "overall": "SUPPORTED",
-      "bypass": true
+      "bypass": true,
+      "g07Status": "FIXED in g07 (see waveGResolution)"
     },
     {
       "id": "a3-strobe-exposure",
@@ -93,7 +114,8 @@
       },
       "overall": "UNSUPPORTED",
       "bypass": true,
-      "note": "brightnessStdLuma is measured but no threshold dimension consumes it"
+      "note": "brightnessStdLuma is measured but no threshold dimension consumes it",
+      "g07Status": "FIXED in g07 (see waveGResolution)"
     },
     {
       "id": "a4-upscale-240p-to-720p",
@@ -123,7 +145,8 @@
         "player_visibility": "NOT_MEASURED"
       },
       "overall": "SUPPORTED",
-      "bypass": true
+      "bypass": true,
+      "g07Status": "STILL OPEN after g07 (D classification, needs labeled real footage)"
     },
     {
       "id": "a5-tiny-subject-no-pose",
@@ -154,7 +177,8 @@
       },
       "overall": "SUPPORTED",
       "bypass": true,
-      "note": "structural: overall ignores NOT_MEASURED pose dimensions"
+      "note": "structural: overall ignores NOT_MEASURED pose dimensions",
+      "g07Status": "FIXED in g07 (see waveGResolution)"
     },
     {
       "id": "a6-duplicate-pts",
@@ -277,7 +301,8 @@
       },
       "overall": "SUPPORTED",
       "bypass": true,
-      "note": "probe: rotation=90, display=720x1280, lapRatio=0.707"
+      "note": "probe: rotation=90, display=720x1280, lapRatio=0.707",
+      "g07Status": "FIXED in g07 (see waveGResolution)"
     },
     {
       "id": "f1-low-texture-sharp",
@@ -308,7 +333,8 @@
       },
       "overall": "DEGRADED",
       "bypass": true,
-      "note": "false-reject probe: bypass=true here means FALSE REJECT"
+      "note": "false-reject probe: bypass=true here means FALSE REJECT",
+      "g07Status": "STILL OPEN after g07 (D classification, needs labeled real footage)"
     },
     {
       "id": "real-wm-volley-02",
@@ -462,8 +488,10 @@
       },
       "overall": "SUPPORTED",
       "bypass": true,
-      "note": "contrast-dependence of the frame-diff proxy: identical shake, opposite verdict vs a10"
+      "note": "contrast-dependence of the frame-diff proxy: identical shake, opposite verdict vs a10",
+      "g07Status": "FIXED in g07 (see waveGResolution)"
     }
   ],
-  "bypassCount": 8
+  "bypassCount": 8,
+  "bypassCountNote": "historical count under v0.3; 6 of 8 fixed in g07, 2 remain open (see waveGResolution)"
 }

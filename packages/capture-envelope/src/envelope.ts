@@ -1,6 +1,7 @@
 import type {
   EnvelopeDimension,
   EnvelopeDimensionVerdict,
+  EnvelopeOverallWithCoverage,
   EnvelopeStatus,
   EnvelopeVerdict,
 } from "@pickle/shared-types";
@@ -26,10 +27,19 @@ export interface CaptureEnvelopeMeasurements {
   brightnessMeanLuma: number | null;
   /** Std dev of per-frame mean luma over the sampled frames. */
   brightnessStdLuma: number | null;
-  /** Median Laplacian variance over sampled 320px-wide grayscale frames. */
+  /** Median Laplacian variance over sampled 320px-long-side gray frames. */
   laplacianVarianceMedian: number | null;
   /** Mean abs per-pixel luma diff between consecutive sampled frames. */
   meanAbsFrameDiff: number | null;
+  /**
+   * Ratio of median Laplacian variance after a 3x3 median denoise to the
+   * raw value. Genuine detail survives; injected grain collapses.
+   */
+  denoiseSurvivalRatio: number | null;
+  /** Fraction of sampled pixels at/beyond luma clip points (<=16, >=235). */
+  clippedPixelFraction: number | null;
+  /** meanAbsFrameDiff divided by mean spatial luma std of sampled frames. */
+  contrastNormalizedFrameDiff: number | null;
   /**
    * Coefficient of variation of inter-frame presentation intervals
    * (std dev / mean). ~0 for CFR; large for VFR timestamp jitter.
@@ -71,10 +81,18 @@ function measuredValueFor(
       return m.avgFrameRateFps;
     case "brightness":
       return m.brightnessMeanLuma;
+    case "exposure_clipping":
+      return m.clippedPixelFraction;
+    case "exposure_stability":
+      return m.brightnessStdLuma;
     case "motion_blur":
       return m.laplacianVarianceMedian;
+    case "sensor_noise":
+      return m.denoiseSurvivalRatio;
     case "camera_motion":
       return m.meanAbsFrameDiff;
+    case "camera_shake":
+      return m.contrastNormalizedFrameDiff;
     case "timing_stability":
       return m.frameIntervalCv;
     case "clip_duration":
@@ -94,9 +112,12 @@ const STATUS_SEVERITY: Record<Exclude<EnvelopeStatus, "NOT_MEASURED">, number> =
 
 /**
  * Compute the per-dimension and overall envelope verdict for a capture.
- * Overall is the WORST status across measured dimensions; NOT_MEASURED
+ * `overall` is the WORST status across measured dimensions; NOT_MEASURED
  * dimensions never improve it and are listed so callers see degraded
- * observability instead of a silently narrower check.
+ * observability instead of a silently narrower check. `overallWithCoverage`
+ * additionally distinguishes a fully verified SUPPORTED capture from one
+ * whose measured dimensions pass while some dimensions were never measured
+ * (SUPPORTED_UNMEASURED) — consumers must not treat the latter as verified.
  */
 export function evaluateCaptureEnvelope(m: CaptureEnvelopeMeasurements): EnvelopeVerdict {
   const dimensions: EnvelopeDimensionVerdict[] = [];
@@ -122,11 +143,15 @@ export function evaluateCaptureEnvelope(m: CaptureEnvelopeMeasurements): Envelop
     }
   }
 
+  const overallWithCoverage: EnvelopeOverallWithCoverage =
+    worst === "SUPPORTED" && notMeasured.length > 0 ? "SUPPORTED_UNMEASURED" : worst;
+
   return {
     thresholdsVersion: CAPTURE_ENVELOPE_THRESHOLDS_VERSION,
     provisional: CAPTURE_ENVELOPE_THRESHOLDS_PROVISIONAL,
     dimensions,
     overall: worst,
+    overallWithCoverage,
     notMeasured,
   };
 }

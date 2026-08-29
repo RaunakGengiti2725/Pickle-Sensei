@@ -10,14 +10,18 @@ import { measureClip, probeClipStream } from "../src/clipProbe.js";
  * f22-rt-envelope-bypass regression suite. SYNTHETIC clips generated locally
  * with ffmpeg at test time; no committed corpus clips are read or written.
  *
- * Two kinds of assertions:
+ * Three kinds of assertions:
  *  - PROVEN-NEGATIVE pins: attacks the checker DOES catch must stay caught.
+ *  - FIXED-GAP regressions: bypasses closed in wave G (g07) after the g06
+ *    forensic dossiers classified them as logic bugs, normalization bugs,
+ *    or missing pre-capture signals computable today (B1, B2, B3, B5, B6,
+ *    B7). Each asserts the attack is now detected.
  *  - KNOWN-GAP pins: confirmed bypasses that cannot be fixed defensibly
- *    today (a fix needs labeled downstream evidence per the E15 mandate, or
- *    a versioned normalization-contract change). Each pin asserts the
- *    CURRENT bypassed behavior so any silent change to thresholds or the
- *    measurement pipeline surfaces here. If one of these fails because the
- *    gap was FIXED, update the corresponding finding in
+ *    today (a fix needs labeled downstream evidence per the E15 mandate —
+ *    B4 upscale detection, FR1 low-texture false reject). Each pin asserts
+ *    the CURRENT bypassed behavior so any silent change to thresholds or
+ *    the measurement pipeline surfaces here. If one of these fails because
+ *    the gap was FIXED, update the corresponding finding in
  *    datasets/experiments/wave-f/f22-rt-envelope-bypass-attacks.json and
  *    flip the pin — do not delete it.
  */
@@ -65,11 +69,11 @@ describe.skipIf(!hasFfmpeg)("f22 envelope bypass regressions", { timeout: 120_00
   });
 
   // ------------------------------------------------------------------
-  // KNOWN GAP f22-B1: noise defeats the Laplacian blur proxy. Sigma-12
-  // gaussian blur destroys all scene detail (the plain-blur case is
-  // UNSUPPORTED, see redteamEnvelope.test.ts) but adding temporal grain on
-  // top pushes Laplacian variance back above the supported floor.
-  it("KNOWN GAP: heavy blur + grain passes motion_blur", () => {
+  // FIXED f22-B1 (g07): temporal grain still pushes Laplacian variance
+  // above the supported floor, but the injected grain collapses under a
+  // 3x3 median denoise and the sensor_noise dimension (denoise-survival
+  // ratio) rejects the clip.
+  it("FIXED: heavy blur + grain is caught by sensor_noise", () => {
     const clip = join(dir, "blur-noise.mp4");
     ffmpeg([
       "-i",
@@ -84,13 +88,18 @@ describe.skipIf(!hasFfmpeg)("f22 envelope bypass regressions", { timeout: 120_00
       "14",
       clip,
     ]);
-    expect(statusOf(clip, "motion_blur")).toBe("SUPPORTED");
+    const verdict = evaluateCaptureEnvelope(measureClip(clip));
+    expect(verdict.dimensions.find((d) => d.dimension === "sensor_noise")?.status).toBe(
+      "UNSUPPORTED",
+    );
+    expect(verdict.overall).not.toBe("SUPPORTED");
   });
 
-  // KNOWN GAP f22-B2: spatially bimodal exposure (half crushed, half blown)
-  // has a mid-band spatial mean; the whole clip is overall SUPPORTED with no
-  // usable pixels anywhere.
-  it("KNOWN GAP: half-crushed/half-blown frame passes brightness and overall", () => {
+  // FIXED f22-B2 (g07): spatially bimodal exposure (half crushed, half
+  // blown) still has a mid-band spatial mean — brightness alone cannot see
+  // it — but the exposure_clipping dimension (clipped-pixel fraction)
+  // rejects the clip.
+  it("FIXED: half-crushed/half-blown frame is caught by exposure_clipping", () => {
     const clip = join(dir, "bimodal.mp4");
     ffmpeg([
       "-i",
@@ -105,14 +114,17 @@ describe.skipIf(!hasFfmpeg)("f22 envelope bypass regressions", { timeout: 120_00
     ]);
     const verdict = evaluateCaptureEnvelope(measureClip(clip));
     expect(verdict.dimensions.find((d) => d.dimension === "brightness")?.status).toBe("SUPPORTED");
-    expect(verdict.overall).toBe("SUPPORTED");
+    expect(verdict.dimensions.find((d) => d.dimension === "exposure_clipping")?.status).toBe(
+      "UNSUPPORTED",
+    );
+    expect(verdict.overall).toBe("UNSUPPORTED");
   });
 
-  // KNOWN GAP f22-B3: temporally strobing exposure (alternating near-black /
-  // near-white frames) passes the brightness dimension — the temporal mean is
-  // mid-band and brightnessStdLuma (109 here) has no consuming dimension.
-  // The clip is only caught incidentally by motion_blur / camera_motion.
-  it("KNOWN GAP: strobing exposure passes the brightness dimension", () => {
+  // FIXED f22-B3 (g07): temporally strobing exposure (alternating
+  // near-black / near-white frames) still passes the brightness MEAN, but
+  // brightnessStdLuma now feeds the exposure_stability dimension, which
+  // rejects the clip directly instead of relying on incidental catches.
+  it("FIXED: strobing exposure is caught by exposure_stability", () => {
     const clip = join(dir, "strobe.mp4");
     ffmpeg([
       "-f",
@@ -134,6 +146,7 @@ describe.skipIf(!hasFfmpeg)("f22 envelope bypass regressions", { timeout: 120_00
     const m = measureClip(clip);
     expect(m.brightnessStdLuma!).toBeGreaterThan(50);
     expect(statusOf(clip, "brightness")).toBe("SUPPORTED");
+    expect(statusOf(clip, "exposure_stability")).toBe("UNSUPPORTED");
   });
 
   // KNOWN GAP f22-B4: true-240p content upscaled to 720p passes resolution
@@ -159,10 +172,11 @@ describe.skipIf(!hasFfmpeg)("f22 envelope bypass regressions", { timeout: 120_00
     expect(verdict.overall).toBe("SUPPORTED");
   });
 
-  // KNOWN GAP f22-B5 (structural): pose dimensions are NOT_MEASURED without
-  // a pose pass and never worsen the overall verdict, so a subject occupying
-  // 5% of frame height sails through as overall SUPPORTED.
-  it("KNOWN GAP: tiny-subject clip is overall SUPPORTED with pose NOT_MEASURED", () => {
+  // FIXED f22-B5 (g07, verdict-contract): pose dimensions are still
+  // NOT_MEASURED without a pose pass and `overall` still reflects only
+  // measured dimensions, but `overallWithCoverage` refuses to report a
+  // partially observed envelope as fully verified SUPPORTED.
+  it("FIXED: tiny-subject clip with pose NOT_MEASURED is SUPPORTED_UNMEASURED, not verified", () => {
     const bgFrame = join(dir, "bg.png");
     ffmpeg(["-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30", "-frames:v", "1", bgFrame]);
     const clip = join(dir, "tiny-subject.mp4");
@@ -190,20 +204,21 @@ describe.skipIf(!hasFfmpeg)("f22 envelope bypass regressions", { timeout: 120_00
     const verdict = evaluateCaptureEnvelope(measureClip(clip));
     expect(verdict.overall).toBe("SUPPORTED");
     expect(verdict.notMeasured).toContain("player_pixel_height");
+    expect(verdict.overallWithCoverage).toBe("SUPPORTED_UNMEASURED");
   });
 
-  // KNOWN GAP f22-B6: a rotate=90 metadata tag on a landscape clip changes
-  // the sampling geometry (320w of the display-portrait frame vs 320w of the
-  // landscape frame) and shifts the measured Laplacian variance ~30% for
-  // identical pixels. The normalization contract is orientation-sensitive;
-  // fixing it means re-versioning laplacian-variance-320w thresholds.
-  it("KNOWN GAP: rotate-tag metadata alone shifts Laplacian variance materially", () => {
+  // FIXED f22-B6 (g07, normalization): sampling now normalizes the LONG
+  // side to 320px, so a rotate=90 metadata tag on identical pixels can no
+  // longer change the effective sampling scale — Laplacian variance is
+  // orientation-invariant (thresholds re-versioned to
+  // laplacian-variance-320long-median-v0.2).
+  it("FIXED: rotate-tag metadata no longer shifts Laplacian variance", () => {
     const clip = join(dir, "rot90tag.mp4");
     ffmpeg(["-i", base, "-c", "copy", "-metadata:s:v:0", "rotate=90", clip]);
     if (probeClipStream(clip).rotationDegrees !== 90) return; // ffmpeg dropped the tag path
     const plain = measureClip(base).laplacianVarianceMedian!;
     const rotated = measureClip(clip).laplacianVarianceMedian!;
-    expect(Math.abs(1 - rotated / plain)).toBeGreaterThan(0.15);
+    expect(Math.abs(1 - rotated / plain)).toBeLessThan(0.05);
   });
 
   // KNOWN GAP f22-FR1 (false reject): Laplacian variance is a texture
@@ -264,12 +279,12 @@ describe.skipIf(!hasFfmpeg)("f22 envelope bypass regressions", { timeout: 120_00
     expect(statusOf(clip, "timing_stability")).not.toBe("SUPPORTED");
   });
 
-  // KNOWN GAP f22-B7: camera_motion v0.2 bands were widened to max 33 to
-  // stop flagging subject motion (E15), but the mean-abs-frame-diff proxy is
-  // content-contrast-dependent: the same ±40px/frame crop jitter measures
-  // ~35.5 on real high-contrast footage (DEGRADED, harness a10) yet only
-  // ~13 on lower-contrast synthetic content — violent global shake passes.
-  it("KNOWN GAP: violent crop-jitter shake on low-contrast content passes camera_motion", () => {
+  // FIXED f22-B7 (g07): the raw mean-abs-frame-diff proxy (camera_motion)
+  // remains content-contrast-dependent, but the camera_shake dimension
+  // divides the diff by the mean spatial luma std, which is stable across
+  // content contrast — the same crop-jitter shake is detected on synthetic
+  // content too.
+  it("FIXED: violent crop-jitter shake on low-contrast content is caught by camera_shake", () => {
     const clip = join(dir, "shake.mp4");
     ffmpeg([
       "-i",
@@ -283,5 +298,6 @@ describe.skipIf(!hasFfmpeg)("f22 envelope bypass regressions", { timeout: 120_00
       clip,
     ]);
     expect(statusOf(clip, "camera_motion")).toBe("SUPPORTED");
+    expect(statusOf(clip, "camera_shake")).not.toBe("SUPPORTED");
   });
 });

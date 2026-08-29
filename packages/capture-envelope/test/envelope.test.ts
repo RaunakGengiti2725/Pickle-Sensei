@@ -18,6 +18,9 @@ const supportedMeasurements: CaptureEnvelopeMeasurements = {
   brightnessStdLuma: 10,
   laplacianVarianceMedian: 250,
   meanAbsFrameDiff: 3,
+  denoiseSurvivalRatio: 0.85,
+  clippedPixelFraction: 0.01,
+  contrastNormalizedFrameDiff: 0.05,
   frameIntervalCv: 0.02,
   clipDurationMs: 8000,
   playerPixelHeightFraction: 0.4,
@@ -28,8 +31,9 @@ describe("evaluateCaptureEnvelope", () => {
   it("reports SUPPORTED overall when every dimension is inside the supported band", () => {
     const verdict = evaluateCaptureEnvelope(supportedMeasurements);
     expect(verdict.overall).toBe("SUPPORTED");
+    expect(verdict.overallWithCoverage).toBe("SUPPORTED");
     expect(verdict.notMeasured).toEqual([]);
-    expect(verdict.dimensions).toHaveLength(9);
+    expect(verdict.dimensions).toHaveLength(13);
     expect(verdict.dimensions.every((d) => d.status === "SUPPORTED")).toBe(true);
   });
 
@@ -64,7 +68,7 @@ describe("evaluateCaptureEnvelope", () => {
     expect(verdict.overall).toBe("DEGRADED");
   });
 
-  it("null pose signals become NOT_MEASURED and never upgrade or downgrade overall", () => {
+  it("null pose signals become NOT_MEASURED and overallWithCoverage refuses full verification", () => {
     const verdict = evaluateCaptureEnvelope({
       ...supportedMeasurements,
       playerPixelHeightFraction: null,
@@ -72,9 +76,49 @@ describe("evaluateCaptureEnvelope", () => {
     });
     expect(verdict.notMeasured).toEqual(["player_pixel_height", "player_visibility"]);
     expect(verdict.overall).toBe("SUPPORTED");
+    expect(verdict.overallWithCoverage).toBe("SUPPORTED_UNMEASURED");
     const pose = verdict.dimensions.find((d) => d.dimension === "player_pixel_height");
     expect(pose?.status).toBe("NOT_MEASURED");
     expect(pose?.measured).toBeNull();
+  });
+
+  it("overallWithCoverage keeps the measured verdict when it is already non-SUPPORTED", () => {
+    const verdict = evaluateCaptureEnvelope({
+      ...supportedMeasurements,
+      laplacianVarianceMedian: 50,
+      playerPixelHeightFraction: null,
+    });
+    expect(verdict.overall).toBe("DEGRADED");
+    expect(verdict.overallWithCoverage).toBe("DEGRADED");
+  });
+
+  it("clipped-pixel fraction flags a half-crushed/half-blown exposure whose mean is mid-band", () => {
+    expect(classifyDimension(0.997, CAPTURE_ENVELOPE_THRESHOLDS.exposure_clipping)).toBe(
+      "UNSUPPORTED",
+    );
+    expect(classifyDimension(0.05, CAPTURE_ENVELOPE_THRESHOLDS.exposure_clipping)).toBe(
+      "SUPPORTED",
+    );
+  });
+
+  it("brightness std flags strobing exposure whose temporal mean is mid-band", () => {
+    expect(classifyDimension(109, CAPTURE_ENVELOPE_THRESHOLDS.exposure_stability)).toBe(
+      "UNSUPPORTED",
+    );
+    expect(classifyDimension(2.3, CAPTURE_ENVELOPE_THRESHOLDS.exposure_stability)).toBe(
+      "SUPPORTED",
+    );
+  });
+
+  it("denoise-survival ratio separates injected grain from genuine detail", () => {
+    expect(classifyDimension(0.126, CAPTURE_ENVELOPE_THRESHOLDS.sensor_noise)).toBe("UNSUPPORTED");
+    expect(classifyDimension(0.34, CAPTURE_ENVELOPE_THRESHOLDS.sensor_noise)).toBe("SUPPORTED");
+  });
+
+  it("contrast-normalized frame diff bands separate observed shaken from unshaken values", () => {
+    expect(classifyDimension(0.2, CAPTURE_ENVELOPE_THRESHOLDS.camera_shake)).toBe("DEGRADED");
+    expect(classifyDimension(0.63, CAPTURE_ENVELOPE_THRESHOLDS.camera_shake)).toBe("UNSUPPORTED");
+    expect(classifyDimension(0.16, CAPTURE_ENVELOPE_THRESHOLDS.camera_shake)).toBe("SUPPORTED");
   });
 
   it("resolution uses the SHORT side (portrait and landscape are equivalent)", () => {
