@@ -1,0 +1,105 @@
+{
+  "workstreamId": "g13-h6-mining",
+  "wave": "wave-g",
+  "generatedAtIso": "2026-08-29T18:05:00.000Z",
+  "mission": "Attack stroke-heuristic-6's generalization without touching held-out cases: replay BOTH v5 (git d6f951f, pre-F20 gates) and current v6 over every replayable committed pose sequence; rank by v5-vs-v6 disagreement and proximity to the two new v6 gates; mine the mission's target geometries; produce a Tier-C annotation queue; measure how often each new gate fires in the wild.",
+  "method": "Frozen byte-identical v5 replica (packages/swing-lab/src/strokeHeuristicV5Frozen.ts, extracted from commit d6f951f — the last commit before the two v6 gates in 92e0c2c/629a9fc) run side-by-side with current classifyStroke on identical inputs by packages/swing-lab/src/g13H6Mining.ts. Two unit types: (1) all evaluable stroke-gold events (strokeHeuristicBench loading/attribution rules, paddle=null); (2) mined windows — every player track (target AND other) in every committed-pose case, one unit per local maximum of the measured dominant-wrist speed series with >=600ms separation, contactMs=null, eventPeakMs=the measured peak (never a window midpoint). Probe metrics replicate the classifier's internal geometry so gate proximity is measured even where no gate fired.",
+  "datasetScope": {
+    "poseSequences": "All 8 committed wave-a people.json runs under datasets/paddle-bench/runs-wave-a/ — the only replayable footage-derived pose in the repo (no other datasets/ path contains people.json; this Linux box cannot extract new pose).",
+    "grouping": "corpus sessionKey via STROKE_BENCH_POSE_CASES (dvids-marne-2024, afn-sasebo-2025-06, dvids-warriorgames-2026) — never a random frame split.",
+    "unitCounts": { "total": 118, "goldEvents": 18, "minedWindows": 100 },
+    "unitsPerCase": {
+      "wavea-sasebo-volleys": 25,
+      "wavea-944403-dink": 24,
+      "wavea-faead-rally": 15,
+      "wavea-944403-smash": 15,
+      "wavea-wgm-wheelchair": 13,
+      "wavea-marne-serve": 10,
+      "wavea-marne-dig": 10,
+      "wavea-faead-feed": 6
+    },
+    "tier": "Mined windows are Tier-C machine proposals (never truth); gold events carry existing stroke-gold labels used only as context, never relabeled."
+  },
+  "holdoutStatement": "Held-out cases wm-dink-01 and afn-vic-rally1 were never read, listed, replayed, or referenced: no people.json path in the repo matches either id (verified by filesystem search returning 0), STROKE_BENCH_POSE_CASES contains neither, and the harness additionally hard-fails if either id ever appears in the case table and skips any gold label naming them.",
+  "configuration": {
+    "v5": "strokeHeuristic.ts @ d6f951f, STROKE_HEURISTIC_VERSION 'stroke-heuristic-5 (uncalibrated)'",
+    "v6": "current branch strokeHeuristic.ts, 'stroke-heuristic-6 (uncalibrated)'",
+    "inputs": "paddle=null, paddleSpeeds=null, wristSpeeds=measured dominantWristSpeeds; handedness from committed bundle annotations (default right when absent)",
+    "minedWindow": "peak +/-400ms; peaks = local maxima of wrist-speed series with >=600ms separation, all energies kept",
+    "harness": "packages/swing-lab/src/g13H6Mining.ts (g13-h6-mining-v1)"
+  },
+  "measuredResults": {
+    "disagreements": {
+      "n": 118,
+      "identicalLabel": 115,
+      "v6NewGateAbstainWhereV5Committed": 3,
+      "v6AbstainOtherReasonWhereV5Committed": 0,
+      "v5AbstainV6Commit": 0,
+      "bothCommitDifferentLabel": 0,
+      "flippedRows": [
+        "gold:wavea-sasebo-volleys@52434 (v5 BACKHAND 0.60 -> v6 UNKNOWN, sparse gate; gold l1=volley l2=backhand — v5's commit MATCHED gold, so this flip is a measured RECALL COST of the new gate on natural footage: the commit rested on a contradicted arm with the declared wrist glimpsed in 1 frame, i.e. correct possibly by luck, but correct per the only truth available)",
+        "mined:wavea-sasebo-volleys:t1@52586 (v5 BACKHAND -> v6 UNKNOWN, sparse gate; same clip/track as the gold flip)",
+        "mined:wavea-wgm-wheelchair:t2@183133 (v5 BACKHAND -> v6 UNKNOWN, sparse gate; wheelchair other-track — exactly the ambiguous-arm population the gate targets)"
+      ]
+    },
+    "v6GateFiresInTheWild": {
+      "sparse_declared_wrist": {
+        "fired": 4,
+        "of": 118,
+        "note": "4th fire is mined:wavea-944403-smash:t6@3153 where v5 ALSO abstained (different downstream reason) — label unchanged, reason changed.",
+        "armedByGeometry": 19,
+        "armedNote": "19/118 units measure a non-decisive handedness contradiction with declared-wrist frames <5 (the gate's geometric precondition); 15 of those abstain EARLIER in both versions (rival-unmeasured, non-swing, side-margin, facing gates), so the new gate is the deciding factor in only 4. It fires at a moderate, plausible rate — evidence it is live, not dead and not a fire-always trap.",
+        "nearMisses": "3 further units sit just above the floor (rival measured 5-6 frames) — prime annotation targets for threshold sensitivity."
+      },
+      "median_normalization": {
+        "fired": 0,
+        "of": 118,
+        "preconditionCounts": "Only 1/118 units even has its wrist-derived contact above the 0.25 overhead line under reference normalization (gold:wavea-944403-smash@3617, ratio ref/median 1.02 — honest normalization, no compression, and it stays OVERHEAD in both versions); 0/118 satisfy the gate's arming condition (raised point AND reference extent < sequence median).",
+        "interpretation": "The gate NEVER fires in the wild on this corpus. That is evidence of a narrow target: with paddle=null the contact point is the dominant wrist, and wrist-height-above-0.25-torso at reference normalization is itself rare (1/118). F20-F2 remains covered only by its redteam fixture; no natural dev example of the partial-torso-compression overhead exists in committed pose. Real coverage needs either paddle-tracked overheads or footage with genuinely compressed torsos at contact — queued categories torso_collapse (2) and partial_torso_compression (5) are the closest natural candidates."
+      }
+    },
+    "labelDistributions": {
+      "v5": { "UNKNOWN": 90, "FOREHAND": 19, "BACKHAND": 8, "OVERHEAD": 1 },
+      "v6": { "UNKNOWN": 93, "FOREHAND": 19, "BACKHAND": 5, "OVERHEAD": 1 }
+    },
+    "minedCategoryCounts": {
+      "wrong_arm_geometry": 56,
+      "perspective_distortion_near_profile": 30,
+      "partial_torso_compression": 5,
+      "non_overhead_high_wrist": 3,
+      "torso_collapse": 2,
+      "overhead_like_arm_config": 2,
+      "serve_return_raised_arm": 0,
+      "occluded_or_cropped_torso": 0
+    },
+    "categoryNotes": "wrong_arm_geometry (dominant-motion wrist opposite the declared hand) occurs in 56/118 units — far more common in the wild than the redteam fixtures suggested, dominated by far-court/other-player tracks with sparse wrists. serve_return_raised_arm needs gold serve/return labels with raised-arm geometry; the only serve gold (wavea-marne-serve) measured no raised frames at its reference. occluded_or_cropped_torso (>=30% window frames missing a torso joint) never occurs because buildPlayerTracks only emits frames with full torsos — torso cropping manifests upstream as missing FRAMES, which this probe cannot see; disclosed as a mining blind spot.",
+    "annotationQueue": {
+      "path": "datasets/mining/wave-g/g13-h6-annotation-queue.json",
+      "schema": "g13-annotation-queue-v1 (frozen)",
+      "tier": "C",
+      "entries": 76,
+      "ranking": "infoScore = disagreement severity (v6-new-gate flip highest) + proximity to both v6 gate thresholds + category richness + gold-context bonus; top 3 are the three v5->v6 flips."
+    }
+  },
+  "findings": [
+    "The sparse-declared-wrist gate (F20-F1) is LIVE in the wild: 4/118 fires, 3 of which flip a v5 side-commit to abstention. The only flip with gold coverage (wavea-sasebo-volleys@52434, gold volley/backhand) abstained on a commit that MATCHED gold: on measured dev data the gate's net effect so far is -1 correct commit / 0 wrong commits prevented (its benefit exists only in the F20-F1 redteam fixture). Whether the two unlabeled mined flips were wrong commits is exactly what the queue's top entries ask a human to decide.",
+    "The median-normalization overhead cross-check (F20-F2) NEVER fires (0/118) and its arming precondition never occurs (0/118); only 1/118 units even crosses the overhead line. On committed dev pose the gate is inert — untested by nature, not validated by it.",
+    "Wrong-arm geometry is endemic (56/118), but 15/19 of the sparse-gate-armed units are already caught by earlier gates in BOTH versions — v6's marginal effect is small and surgical (3 label flips, 0 regressions, no v5-abstain->v6-commit and no committed-label mismatches anywhere).",
+    "Mining blind spot disclosed: torso cropping/occlusion cannot be observed by this harness because the track builder drops torso-less frames before the classifier ever sees them.",
+    "No unit anywhere in 118 measured a v6 behavior WORSE than v5 (no new commits, no label changes among commits)."
+  ],
+  "verdict": "YELLOW",
+  "verdictRationale": "Honest split result. Gate 11 (sparse declared wrist): fires at a live, surgical rate (4/118) but its ONLY gold-covered wild fire abstained on a commit that matched gold — measured wild net effect is a recall cost (-1 correct commit, 0 wrong commits prevented); its benefit is so far fixture-only. Gate 12 (median normalization): zero wild evidence — never armed on 118 units of committed dev pose, so its generalization is UNTESTED outside its fixture; anyone claiming it 'works in the wild' would be fabricating. Not RED: no confidently-wrong prediction was introduced anywhere (no new commits, no label changes among commits) and one gold flip is far too small an n to condemn the gate. Not GREEN: neither gate has a measured wild win. The 76-entry Tier-C queue (top-ranked: the 3 flips, 3 sparse-gate near-misses, torso-compression and near-profile extremes) is the produced instrument for turning this YELLOW into truth via human labels.",
+  "artifacts": [
+    "packages/swing-lab/src/strokeHeuristicV5Frozen.ts",
+    "packages/swing-lab/src/g13H6Mining.ts",
+    "datasets/experiments/wave-g/g13-h6-mining-report.json",
+    "datasets/mining/wave-g/g13-h6-annotation-queue.json",
+    "datasets/experiments/wave-g/g13-h6-mining-summary.json"
+  ],
+  "gates": {
+    "rootGatesRun": "pnpm typecheck && pnpm test && pnpm lint && pnpm format:check on this branch",
+    "mobile": "apps/mobile untouched by this workstream; mobile gates not run (no mobile claim made)",
+    "swiftMacIphone": "unavailable on this Linux box; no Mac/iPhone numbers claimed"
+  }
+}
