@@ -7,6 +7,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createLabApiMiddleware } from "../labApi";
 import { syntheticAgreeingPair } from "../syntheticFixtures";
+import type { CoachQualification } from "../provisioning";
 import type { CoachReview } from "../types";
 
 /**
@@ -24,6 +25,32 @@ const TEST_COACHES = [
   { coachId: "redteam-test-coach-b", credentialRef: "redteam-test-cred-b" },
   { coachId: "redteam-test-coach-c", credentialRef: "redteam-test-cred-c" },
 ];
+
+/** TEST-ONLY qualification record: obviously fake evidence refs pointing at
+ * nothing, used only inside the throwaway tmp root. Never real coach data. */
+function testQualification(): CoachQualification {
+  return {
+    policyVersion: "coach-qualification-policy-v1",
+    satisfiedCriteria: ["criterion.professional-coaching-history"],
+    verdict: "qualified",
+    assessedBy: "d3-09-redteam-test",
+    assessedAtIso: "2026-08-29T00:00:00.000Z",
+    certifications: [],
+    professionalCoachingHistory: {
+      statement: "TEST-ONLY fixture claim (throwaway root, not a real coach)",
+      verification: {
+        method: "document_reviewed",
+        verifiedBy: "d3-09-redteam-test",
+        verifiedAtIso: "2026-08-29T00:00:00.000Z",
+        evidenceRef: "test-evidence-nonexistent",
+      },
+    },
+    competitiveBackground: null,
+    affiliation: null,
+    yearsCoaching: null,
+    specialties: [],
+  };
+}
 
 let tmpRoot: string;
 let server: Server;
@@ -45,13 +72,18 @@ beforeAll(async () => {
   writeFileSync(
     join(dir, "coaches.json"),
     JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 2,
       note: "TEST-ONLY throwaway registry for red-team endpoint tests. Not a real registry.",
+      qualificationPolicy: {
+        version: "coach-qualification-policy-v1",
+        document: "docs/COACH_QUALIFICATION_POLICY.md",
+      },
       coaches: TEST_COACHES.map((coach) => ({
         ...coach,
         status: "active",
         provisionedAtIso: "2026-08-29T00:00:00.000Z",
         provisionedBy: "d3-09-redteam-test",
+        qualification: testQualification(),
       })),
     }),
   );
@@ -255,5 +287,112 @@ describe("amendment gates (real middleware, throwaway root)", () => {
     const result = await post("/api/coach-review-amendments", JSON.stringify(amendment));
     expect(result.status).toBe(409);
     expect(result.body).toContain("revision must be 2");
+  });
+});
+
+describe("coach provisioning gates (real middleware, throwaway root)", () => {
+  const provisionAction = (coachId: string) => ({
+    schemaVersion: 1,
+    actionId: `${coachId}.a1`,
+    action: "provision",
+    coachId,
+    performedBy: "d3-09-redteam-test-admin",
+    performedAtIso: "2026-08-29T00:00:00.000Z",
+    reason: "TEST-ONLY provisioning inside throwaway root",
+    registryEntry: {
+      coachId,
+      credentialRef: `${coachId}-cred`,
+      status: "active",
+      provisionedAtIso: "2026-08-29T00:00:00.000Z",
+      provisionedBy: "d3-09-redteam-test-admin",
+      qualification: testQualification(),
+    },
+  });
+
+  it("rejects a SYNTHETIC coach id with 422 and writes nothing", async () => {
+    const action = provisionAction("synthetic-coach-x");
+    const result = await post("/api/coach-provisioning", JSON.stringify(action));
+    expect(result.status).toBe(422);
+    expect(result.body).toContain("SYNTHETIC");
+  });
+
+  it("rejects a provision without qualification metadata", async () => {
+    const action = provisionAction("redteam-test-coach-d") as unknown as {
+      registryEntry: Record<string, unknown>;
+    };
+    delete action.registryEntry.qualification;
+    const result = await post("/api/coach-provisioning", JSON.stringify(action));
+    expect(result.status).toBe(422);
+    expect(result.body).toContain("qualification");
+  });
+
+  it("rejects a criterion claimed on unverified_disclosed evidence only", async () => {
+    const action = provisionAction("redteam-test-coach-d");
+    action.registryEntry.qualification.professionalCoachingHistory!.verification.method =
+      "unverified_disclosed";
+    const result = await post("/api/coach-provisioning", JSON.stringify(action));
+    expect(result.status).toBe(422);
+    expect(result.body).toContain("without a verified coaching-history record");
+  });
+
+  it("provisions a qualified coach once, audits it, then refuses the duplicate", async () => {
+    const action = provisionAction("redteam-test-coach-d");
+    const first = await post("/api/coach-provisioning", JSON.stringify(action));
+    expect(first.status).toBe(201);
+    const logFiles = readdirSync(join(tmpRoot, "datasets/coach-review/provisioning-log"));
+    expect(logFiles).toContain("redteam-test-coach-d.a1.json");
+    const duplicate = await post("/api/coach-provisioning", JSON.stringify(action));
+    expect(duplicate.status).toBe(422);
+    expect(duplicate.body).toContain("already in the registry");
+  });
+
+  it("suspends a coach via a sequential audited action and blocks their reviews", async () => {
+    const suspend = {
+      schemaVersion: 1,
+      actionId: "redteam-test-coach-d.a2",
+      action: "suspend",
+      coachId: "redteam-test-coach-d",
+      performedBy: "d3-09-redteam-test-admin",
+      performedAtIso: "2026-08-29T00:00:00.000Z",
+      reason: "TEST-ONLY suspension inside throwaway root",
+      registryEntry: null,
+    };
+    const result = await post("/api/coach-provisioning", JSON.stringify(suspend));
+    expect(result.status).toBe(201);
+    const review = {
+      ...testReview(0, "wm-volley-02-E2"),
+      coachId: "redteam-test-coach-d",
+      coachCredentialRef: "redteam-test-coach-d-cred",
+      reviewId: "wm-volley-02-E2.redteam-test-coach-d",
+    };
+    const rejected = await post("/api/coach-reviews", JSON.stringify(review));
+    expect(rejected.status).toBe(403);
+  });
+
+  it("rejects an action that skips the sequential actionId", async () => {
+    const suspend = {
+      schemaVersion: 1,
+      actionId: "redteam-test-coach-d.a5",
+      action: "reinstate",
+      coachId: "redteam-test-coach-d",
+      performedBy: "d3-09-redteam-test-admin",
+      performedAtIso: "2026-08-29T00:00:00.000Z",
+      reason: "TEST-ONLY sequence-skip attempt",
+      registryEntry: null,
+    };
+    const result = await post("/api/coach-provisioning", JSON.stringify(suspend));
+    expect(result.status).toBe(422);
+    expect(result.body).toContain("sequential");
+  });
+
+  it("GET returns the registry and the audit log", async () => {
+    const response = await fetch(`${baseUrl}/api/coach-provisioning`);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      registry: { coaches: { coachId: string; status: string }[] };
+      log: { actionId: string }[];
+    };
+    expect(body.registry.coaches.map((c) => c.coachId)).toContain("redteam-test-coach-d");
+    expect(body.log.map((entry) => entry.actionId)).toContain("redteam-test-coach-d.a2");
   });
 });

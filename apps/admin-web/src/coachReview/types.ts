@@ -112,19 +112,12 @@ export interface SchemaDescriptor {
   drillLibraryVersion: string;
 }
 
-export interface CoachRegistryEntry {
-  coachId: string;
-  credentialRef: string;
-  status: "active" | "suspended";
-  provisionedAtIso: string;
-  provisionedBy: string;
-}
-
-export interface CoachRegistry {
-  schemaVersion: number;
-  note: string;
-  coaches: CoachRegistryEntry[];
-}
+/** Registry v2 (identity + qualification) lives in ./provisioning, the
+ * mirror of packages/swing-lab/src/coachProvisioning.ts. */
+export type {
+  CoachRegistryEntryV2 as CoachRegistryEntry,
+  CoachRegistryV2 as CoachRegistry,
+} from "./provisioning";
 
 export type StrokeConfirmation =
   | { kind: "confirmed"; stroke: string }

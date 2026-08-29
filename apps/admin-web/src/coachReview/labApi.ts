@@ -22,6 +22,13 @@ import {
   type DrillMappingProposal,
   type ReviewAmendment,
 } from "./records";
+import {
+  EXPECTED_REGISTRY_SCHEMA_VERSION,
+  isEligibleReviewer,
+  validateCoachRegistry,
+  validateProvisioningAction,
+  type ProvisioningAction,
+} from "./provisioning";
 import type {
   CoachRegistry,
   CoachRegistryEntry,
@@ -102,6 +109,7 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
   const AMENDMENTS_DIR = join(COACH_REVIEW_DIR, "amendments");
   const ADJUDICATIONS_DIR = join(COACH_REVIEW_DIR, "adjudications");
   const DRILL_MAPPINGS_DIR = join(COACH_REVIEW_DIR, "drill-mappings");
+  const PROVISIONING_LOG_DIR = join(COACH_REVIEW_DIR, "provisioning-log");
   const ASSIGNMENTS_FILE = join(COACH_REVIEW_DIR, "assignments.json");
 
   /** Static read-only file serving for /datasets/** (+ docs/COACHING.md), with
@@ -187,7 +195,8 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
   }
 
   /** Shared identity gate: every write path requires a provisioned, active,
-   * non-synthetic coach whose credentialRef matches the registry entry. */
+   * non-synthetic, QUALIFIED coach (registry v2 entry with a verdict-qualified
+   * qualification record) whose credentialRef matches the registry entry. */
   function gateIdentity(
     res: ServerResponse,
     coachId: string | undefined,
@@ -214,6 +223,18 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
     if (credentialRef !== active.credentialRef) {
       sendJson(res, 403, {
         message: "credentialRef does not match the provisioned registry entry",
+      });
+      return null;
+    }
+    if (
+      registry.schemaVersion !== EXPECTED_REGISTRY_SCHEMA_VERSION ||
+      !isEligibleReviewer(active)
+    ) {
+      sendJson(res, 403, {
+        message:
+          "coach is not qualification-verified: production writes require a registry v2 entry with a " +
+          "verdict-qualified qualification record under docs/COACH_QUALIFICATION_POLICY.md " +
+          "(provisioned via the audited flow — docs/COACHING.md §2).",
       });
       return null;
     }
@@ -343,7 +364,7 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
     if (entry === null) return;
     const registry = loadRegistry();
     const activeCoachIds = registry.coaches
-      .filter((coach) => coach.status === "active")
+      .filter((coach) => isEligibleReviewer(coach))
       .map((coach) => coach.coachId);
     if (activeCoachIds.length === 0) {
       sendJson(res, 403, {
@@ -405,6 +426,94 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
     );
   }
 
+  async function handleProvisioning(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    if (req.method === "GET") {
+      sendJson(res, 200, {
+        registry: loadRegistry(),
+        log: readJsonDir<ProvisioningAction>(PROVISIONING_LOG_DIR).map((entry) => entry.record),
+      });
+      return;
+    }
+    if (req.method !== "POST") {
+      sendJson(res, 405, { message: "method not allowed" });
+      return;
+    }
+    const action = await readJsonBody<ProvisioningAction>(req, res, 500_000);
+    if (action === null) return;
+    const registry = loadRegistry();
+    if (registry.schemaVersion !== EXPECTED_REGISTRY_SCHEMA_VERSION) {
+      sendJson(res, 409, {
+        message: `registry schemaVersion must be ${EXPECTED_REGISTRY_SCHEMA_VERSION} before provisioning (see docs/COACH_QUALIFICATION_POLICY.md)`,
+      });
+      return;
+    }
+    const log = readJsonDir<ProvisioningAction>(PROVISIONING_LOG_DIR).map((entry) => entry.record);
+    const existingSequencesByCoachId: Record<string, number[]> = {};
+    for (const record of log) {
+      const match = /\.a(\d+)$/.exec(record.actionId);
+      if (!match) continue;
+      existingSequencesByCoachId[record.coachId] = [
+        ...(existingSequencesByCoachId[record.coachId] ?? []),
+        Number(match[1]),
+      ];
+    }
+    const problems = validateProvisioningAction(action, {
+      existingSequencesByCoachId,
+      registryCoachIds: registry.coaches.map((coach) => coach.coachId),
+    });
+    const existing = registry.coaches.find((coach) => coach.coachId === action.coachId);
+    if (action.action === "provision" && existing) {
+      problems.push(`coachId ${action.coachId} is already in the registry`);
+    }
+    if (action.action === "suspend" && existing && existing.status !== "active") {
+      problems.push(`coachId ${action.coachId} is not active`);
+    }
+    if (action.action === "reinstate" && existing && existing.status !== "suspended") {
+      problems.push(`coachId ${action.coachId} is not suspended`);
+    }
+    if (problems.length > 0) {
+      sendJson(res, 422, { message: "provisioning action failed validation", problems });
+      return;
+    }
+    // Audit record FIRST (append-only): the trail records who provisioned
+    // whom, when, and on what qualification basis, before any state change.
+    const auditPath = join(PROVISIONING_LOG_DIR, `${action.actionId}.json`);
+    mkdirSync(PROVISIONING_LOG_DIR, { recursive: true });
+    if (existsSync(auditPath)) {
+      sendJson(res, 409, {
+        message: `append-only: provisioning-log/${action.actionId}.json already exists`,
+      });
+      return;
+    }
+    const nextRegistry: CoachRegistry = {
+      ...registry,
+      coaches:
+        action.action === "provision"
+          ? [...registry.coaches, action.registryEntry!]
+          : registry.coaches.map((coach) =>
+              coach.coachId === action.coachId
+                ? { ...coach, status: action.action === "suspend" ? "suspended" : "active" }
+                : coach,
+            ),
+    };
+    const registryProblems = validateCoachRegistry(nextRegistry);
+    if (registryProblems.length > 0) {
+      sendJson(res, 422, {
+        message: "resulting registry would fail v2 validation",
+        problems: registryProblems,
+      });
+      return;
+    }
+    writeFileSync(auditPath, JSON.stringify(action, null, 2));
+    writeFileSync(join(COACH_REVIEW_DIR, "coaches.json"), JSON.stringify(nextRegistry, null, 2));
+    sendJson(res, 201, {
+      ok: true,
+      message: `provisioning action persisted (append-only audit) and registry updated`,
+      auditPath: `datasets/coach-review/provisioning-log/${action.actionId}.json`,
+      registryPath: "datasets/coach-review/coaches.json",
+    });
+  }
+
   return (req, res, next) => {
     void (async () => {
       const url = req.url ?? "";
@@ -429,6 +538,10 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
         await handleMappingProposals(req, res);
         return;
       }
+      if (route === "/api/coach-provisioning") {
+        await handleProvisioning(req, res);
+        return;
+      }
       if (route !== "/api/coach-reviews") {
         next();
         return;
@@ -450,30 +563,7 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
       }
       const review = await readJsonBody<CoachReview>(req, res, 1_000_000);
       if (review === null) return;
-      const registry = loadRegistry();
-      const activeCoach = registry.coaches.find(
-        (coach) => coach.coachId === review.coachId && coach.status === "active",
-      );
-      if (!activeCoach) {
-        sendJson(res, 403, {
-          message:
-            "no coach identity provisioned: coachId is not an active entry in datasets/coach-review/coaches.json. " +
-            "Reviews can only be persisted by provisioned coaches (docs/COACHING.md §2). Review count remains unchanged.",
-        });
-        return;
-      }
-      if (/synthetic/i.test(review.coachId) || /synthetic/i.test(review.coachCredentialRef ?? "")) {
-        sendJson(res, 403, {
-          message: "SYNTHETIC identities are dev fixtures and can never be persisted",
-        });
-        return;
-      }
-      if (review.coachCredentialRef !== activeCoach.credentialRef) {
-        sendJson(res, 403, {
-          message: "coachCredentialRef does not match the provisioned registry entry",
-        });
-        return;
-      }
+      if (!gateIdentity(res, review.coachId, review.coachCredentialRef)) return;
       const problems = validateReview(review, loadValidationContext());
       if (problems.length > 0) {
         sendJson(res, 422, { message: "review failed schema validation", problems });
