@@ -561,6 +561,21 @@ function scenarios(): ScenarioSpec[] {
       suspendWindow: [12000, 6000],
       restartRecovery: true,
     },
+    {
+      id: "long-session-backlog",
+      title:
+        "Long session with sustained backlog: 120 strokes / 1.5s apart, 2.5–3.5s analyses (overloaded slot for the whole session)",
+      seed: 606,
+      concurrency: 1,
+      maxAttempts: 2,
+      stream: { ...baseStream, strokes: 120, interStrokeMs: 1500 },
+      workload: {
+        serviceMsRange: [2500, 3500],
+        pRetryableFailure: 0.05,
+        pFatalFailure: 0,
+        pAbstain: 0.1,
+      },
+    },
   ];
 }
 

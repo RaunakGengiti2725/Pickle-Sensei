@@ -280,6 +280,26 @@ describe("PaddleWorkerSupervisor restart", () => {
   });
 });
 
+describe("detect_paddle.py serve-mode stdin contract", () => {
+  // Serve mode multiplexes JSONL requests on the worker's stdin. Any child
+  // process (ffmpeg reads its inherited stdin for interactive keys) that
+  // inherits that stdin can swallow queued request lines — the request then
+  // never gets a response, times out, and the worker is killed (H22: 7/60
+  // concurrent requests survived). Every subprocess the detector spawns must
+  // therefore detach from stdin.
+  it("every subprocess.Popen in detect_paddle.py detaches stdin", () => {
+    const script = readFileSync(
+      join(import.meta.dirname, "../../../tools/paddle-lab/detect_paddle.py"),
+      "utf8",
+    );
+    const popenCalls = script.match(/subprocess\.Popen\([^)]*\)/g) ?? [];
+    expect(popenCalls.length).toBeGreaterThan(0);
+    for (const call of popenCalls) {
+      expect(call).toContain("stdin=subprocess.DEVNULL");
+    }
+  });
+});
+
 describe("startPaddleWorker", () => {
   it("returns null when the detector environment is absent", () => {
     expect(startPaddleWorker(join(dir, "missing-python"), join(dir, "missing-script"))).toBeNull();
