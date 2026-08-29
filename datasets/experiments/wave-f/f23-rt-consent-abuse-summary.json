@@ -7,12 +7,13 @@
   "branch": "devin/wave-f/f23-rt-consent-abuse",
   "base_branch": "origin/devin/1787988068-wave-c-integration",
   "base_commit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "commit": "6e2029bb1be4a4afa108ccbc1c0ccd038d19abd2",
   "dataset_scope": {
     "labelled_media_used": "none",
     "holdout_cases_touched": "none (wm-dink-01 and afn-vic-rally1 not read, listed, or referenced)",
     "fresh_candidate_pool_touched": "none",
     "fixtures": "All consent fixtures are synthetic: DB rows created inside a throwaway PostgreSQL schema, and file fixtures whose subject pseudonyms are prefixed SYNTHETIC-TEST-FIXTURE. No dataset records were added or rewritten.",
-    "evaluation_grouping": "n/a — this is an adversarial correctness workstream, not a model evaluation. Every case is grouped by an independent synthetic consent subject (one app_user + one pseudonymous ledger per case); no per-frame or per-clip splits are involved."
+    "evaluation_grouping": "n/a \u2014 this is an adversarial correctness workstream, not a model evaluation. Every case is grouped by an independent synthetic consent subject (one app_user + one pseudonymous ledger per case); no per-frame or per-clip splits are involved."
   },
   "configuration": {
     "os": "Ubuntu",
@@ -56,9 +57,11 @@
       "id": "F23-2",
       "severity": "high",
       "title": "consent_subject pseudonym repointing re-attributes an append-only ledger",
-      "observed": "The service role could UPDATE consent_subject.pseudonym (or user_id), aiming one account at another subject's ledger — inheriting that subject's grants, i.e. a training-eligibility leak — while consent_record itself stayed untouched and 'append-only'.",
+      "observed": "The service role could UPDATE consent_subject.pseudonym (or user_id), aiming one account at another subject's ledger \u2014 inheriting that subject's grants, i.e. a training-eligibility leak \u2014 while consent_record itself stayed untouched and 'append-only'.",
       "fix": "0017 BEFORE UPDATE trigger consent_subject_pseudonym_immutable makes both pseudonym and user_id immutable.",
-      "regression_tests": ["services/api/test/consent.abuse.integration.test.ts F23-2"],
+      "regression_tests": [
+        "services/api/test/consent.abuse.integration.test.ts F23-2"
+      ],
       "status": "fixed"
     },
     {
@@ -67,7 +70,9 @@
       "title": "Silent attribution erasure by deleting the mapping row",
       "observed": "consent_record has no FK to consent_subject (by design), so DELETE FROM consent_subject orphaned the ledger: /status and /export reported an empty history while the rows survived, and the erasure left no trace.",
       "fix": "0017 tombstones every mapping deletion into append-only consent_subject_erasure (BEFORE DELETE trigger; erasure table itself rejects UPDATE/DELETE/TRUNCATE). findOrphanedLedgerSubjects (services/api/src/modules/consent/integrity.ts) surfaces ledger subjects orphaned WITHOUT a tombstone.",
-      "regression_tests": ["services/api/test/consent.abuse.integration.test.ts F23-3"],
+      "regression_tests": [
+        "services/api/test/consent.abuse.integration.test.ts F23-3"
+      ],
       "status": "fixed"
     },
     {
@@ -98,19 +103,23 @@
     {
       "id": "F23-6",
       "severity": "high",
-      "title": "Capture-mode narrowing was unenforced — a narrowed grant authorized every clip",
+      "title": "Capture-mode narrowing was unenforced \u2014 a narrowed grant authorized every clip",
       "observed": "consent_record.capture_mode was recorded on grants but read by no selector. A grant scoped to 'imported_video' therefore authorized the user's automatic-trigger captures too: a training-eligibility leak wider than the consent given.",
-      "fix": "trainingConsent.ts now requires the authorizing grant to be capture_mode = 'all_captures' in selectTrainingEligibleItems and verifyTrainingEligibility. ml_dataset_item carries no capture-mode provenance, so narrowed (or mode-less) grants authorize nothing — fail closed rather than over-select.",
-      "regression_tests": ["services/media-worker/test/trainingConsent.redteam.test.ts F23-6"],
+      "fix": "trainingConsent.ts now requires the authorizing grant to be capture_mode = 'all_captures' in selectTrainingEligibleItems and verifyTrainingEligibility. ml_dataset_item carries no capture-mode provenance, so narrowed (or mode-less) grants authorize nothing \u2014 fail closed rather than over-select.",
+      "regression_tests": [
+        "services/media-worker/test/trainingConsent.redteam.test.ts F23-6"
+      ],
       "status": "fixed"
     },
     {
       "id": "F23-7",
       "severity": "high",
       "title": "PROVEN NEGATIVE: append-only is only as strong as the DB role",
-      "observed": "Through the service connection every mutation is blocked: UPDATE, DELETE and TRUNCATE on consent_record all raise 'consent_record is append-only' (verified). But the test/dev connection owns the tables, and an owner/superuser role can ALTER TABLE consent_record DISABLE TRIGGER ALL and then rewrite or delete history — reproduced during probing. No service-layer code change can prevent this.",
+      "observed": "Through the service connection every mutation is blocked: UPDATE, DELETE and TRUNCATE on consent_record all raise 'consent_record is append-only' (verified). But the test/dev connection owns the tables, and an owner/superuser role can ALTER TABLE consent_record DISABLE TRIGGER ALL and then rewrite or delete history \u2014 reproduced during probing. No service-layer code change can prevent this.",
       "fix": "Not fixable within this ownership boundary. Requires role separation: the application connects as a non-owner role holding INSERT/SELECT only, with table ownership and trigger rights held by a migration role, plus an out-of-band ledger digest witness. Left as an honest negative rather than a weakened claim; migrations 0015/0016 remain unmodified.",
-      "regression_tests": ["services/api/test/consent.abuse.integration.test.ts F23-6 (service-role bypass attempts all rejected)"],
+      "regression_tests": [
+        "services/api/test/consent.abuse.integration.test.ts F23-6 (service-role bypass attempts all rejected)"
+      ],
       "status": "open_external_to_ownership"
     }
   ],
@@ -159,7 +168,7 @@
   },
   "blocked_external": [],
   "honesty_notes": [
-    "No Mac/iPhone/Apple Vision measurements, coach reviews, or Mobbin research are claimed — none were performed.",
+    "No Mac/iPhone/Apple Vision measurements, coach reviews, or Mobbin research are claimed \u2014 none were performed.",
     "F23-5a is deliberately kept as a passing test that DEMONSTRATES the v1 forgery succeeding; the fix is the v2 contract, not a claim that v1 is safe.",
     "F23-7 is reported as an unresolved architectural weakness rather than closed."
   ]
