@@ -243,11 +243,11 @@ export class SessionAnalysisScheduler {
       }
       if (this.queue.length === 0 && this.inFlightIds.size === 0) return;
       if (this.suspendedFlag) {
-        await new Promise((resolve) => setTimeout(resolve, 5));
+        await new Promise<void>((resolve) => setTimeout(() => resolve(), 5));
         continue;
       }
       this.pump();
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise<void>((resolve) => setTimeout(() => resolve(), 0));
     }
   }
 
