@@ -48,7 +48,8 @@
     "invariants:corpus": "tsx src/corpusCheck.ts",
     "merge:safety": "tsx src/paddleMergeSafetySweep.ts",
     "worker:soak": "tsx src/paddleWorkerSoak.ts",
-    "session:scheduler-sim": "tsx src/sessionSchedulerSim.ts"
+    "session:scheduler-sim": "tsx src/sessionSchedulerSim.ts",
+    "ood:speed-gap": "tsx src/oodSpeedGapMeasure.ts"
   },
   "dependencies": {
     "@pickle/analysis-pipeline": "workspace:*",

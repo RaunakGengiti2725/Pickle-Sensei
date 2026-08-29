@@ -1,0 +1,81 @@
+{
+  "id": "f10-ood-2x-speed-gap",
+  "wave": "F",
+  "subsystem": "OOD gate (C15): frame-analyzability pre-analysis gate, 2x-speed playback gap",
+  "branch": "devin/wave-f/f10-ood-2x-speed-gap",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "baseCommit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "measuredAt": "2026-08-29T11:35:00Z",
+  "verdict": "SCIENTIFIC_NEGATIVE",
+  "environment": {
+    "os": "Ubuntu 22.04 Linux, CPU only",
+    "node": "v20.18.1",
+    "ffmpeg": "4.4.2-0ubuntu0.22.04.1",
+    "notes": "No pose extraction (Apple Vision is macOS-only); all signals here are pose-free by design, which is exactly the tier the mission targets."
+  },
+  "mission": "Close, or prove unclosable at the pose-free frame-statistic evidence tier, the documented 2x-speed OOD gap (oodGateRedTeam.test.ts KNOWN OPEN GAP): speed-resampled playback passes evaluateFrameAnalyzability.",
+  "datasetScope": {
+    "tunePositives": ["afn-sasebo-rally1", "wm-volley-02"],
+    "tunePositivesNote": "The only committed bundle clips that are not held out. wm-dink-01 and afn-vic-rally1 were never read, decoded, or resampled.",
+    "speedVariants": "1.5x / 2x / 3x variants of each tune positive, built at experiment time with the exact red-team fixture recipe (ffmpeg -vf setpts=PTS/<factor> -r 30 -an); never committed.",
+    "verificationOnly": "16 fresh-candidate clips (datasets/pickleball/fresh-candidates/) measured strictly as the coverage floor: no threshold was fit to them; they only answer 'would a candidate discriminator falsely reject genuine footage'. No labels were created or used.",
+    "grouping": "Per independent source clip; no random-frame splits. Analysis window bounded to the first 60s of each clip (deterministic prefix).",
+    "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"]
+  },
+  "configuration": {
+    "tool": "packages/swing-lab/src/oodSpeedGapMeasure.ts (pnpm --filter @pickle/swing-lab ood:speed-gap)",
+    "signals": {
+      "motionMagnitude": "inter-frame mean-abs-luma-diff distribution at 64x36 gray (mean, p50, p90, p99) — same raster the gate uses",
+      "temporalSmoothness": "lag-2 / lag-1 median diff ratio",
+      "resamplingAliasing": "diffAlternationIndex: mean |d[i]-d[i-1]| over the lag-1 diff series, normalized by mean diff",
+      "interFrameTiming": "container best-effort presentation-timestamp delta statistics (mean, std, cv) via ffprobe",
+      "opticalFlowProxy": "8x8 block-matching velocity distribution at 128x72 gray, Chebyshev search radius 7, textured blocks only (spatial std > 4): p50/p90/p99 px/frame + search-saturation fraction"
+    }
+  },
+  "metrics": {
+    "clipsMeasured": 23,
+    "perSignalSeparation": {
+      "motionMagnitude_diffP50": {
+        "x2Variants": [1.97, 2.29],
+        "genuineFreshCandidateMax": { "id": "va-O1dLhGGPErc", "value": 3.28 },
+        "separates": false,
+        "why": "Any threshold low enough to catch both 2x variants (<=1.97) also rejects genuine fresh-candidate footage at 3.28 and sits inside the genuine corpus range [0.10, 3.28]."
+      },
+      "opticalFlow_p99PxPerFrame": {
+        "x2Variants": [7.0, 4.0],
+        "genuineFreshCandidateMax": { "id": "va-O1dLhGGPErc", "value": 8.6 },
+        "separates": false,
+        "why": "Genuine fast play (va-O1dLhGGPErc: p90=4.12, p99=8.6, saturation 0.053) exceeds both 2x variants (p99 4.0/7.0, saturation <=0.010) on every flow axis."
+      },
+      "temporalSmoothness_lag2OverLag1": {
+        "x2Variants": [1.618, 1.775],
+        "genuineRange": [1.548, 4.373],
+        "separates": false,
+        "why": "2x values sit strictly inside the genuine range; multiple genuine clips (yt-o_NeuHjTEVE 1.675, yt-eK-iPN2XAJQ 1.682) fall between the two 2x variants."
+      },
+      "resamplingAliasing_diffAlternationIndex": {
+        "x2Variants": [0.572, 0.539],
+        "genuineRange": [0.097, 1.634],
+        "separates": false,
+        "why": "Integer-ratio resampling (30fps -> 2x -> 30fps) is exact frame decimation and leaves no aliasing signature; genuine clips voa-6115790 (1.068) and yt-tJuJ4MQdYy0 (1.634) exceed both 2x variants."
+      },
+      "interFrameTiming_cv": {
+        "x2Variants": [0.0, 0.0],
+        "genuineRange": [0.0, 0.0],
+        "separates": false,
+        "why": "ffmpeg -r 30 re-stamps output frames on a perfectly uniform 33.33ms grid — identical to a genuine constant-frame-rate capture. Timing statistics carry zero information about resampling."
+      }
+    },
+    "falseRejectWitness": "va-O1dLhGGPErc (fresh candidate, 24fps genuine pickleball footage) dominates the 2x variants on motion magnitude (diffP50 3.28 vs 2.29 max) and optical flow (p99 8.6 vs 7.0 max): every motion-scaled discriminator that catches 2x resampling rejects this legitimate clip."
+  },
+  "findings": {
+    "conclusion": "PROVEN NEGATIVE at the pose-free frame-statistic tier: none of the five measured temporal signals (motion magnitude, temporal smoothness, resampling aliasing, inter-frame timing, block-matching optical flow) separates 2x speed-resampled playback from the genuine positive corpus without rejecting legitimate fast play.",
+    "theoreticalCore": "A 2x resample of a 30fps source to 30fps output is exact frame decimation: the output is pixel-identical to what a real camera would have produced filming the same scene at double speed. At any pose-free raster the discrimination problem reduces to 'is the motion fast?', and the genuine corpus already contains faster motion (va-O1dLhGGPErc) than the 2x variants of the committed dev clips. Non-integer ratios could in principle leave aliasing signatures, but the measured alternation index shows genuine footage spans and exceeds the resampled range.",
+    "gateAction": "None. evaluateFrameAnalyzability is unchanged; 'playback_speed' remains honestly declared in notEvaluated, and the oodGateRedTeam.test.ts KNOWN OPEN GAP test remains the documented contract. Closing this gap requires pose-conditioned evidence (e.g. joint-velocity plausibility against human kinematic limits), which is a different evidence tier and is BLOCKED_EXTERNAL on Linux (Apple Vision pose extraction unavailable).",
+    "timingBugCaught": "An initial run showed a spurious timing-cv separation (0.11-0.21 vs 0.017-0.10); root cause was a parsing bug in the experiment tool (blank ffprobe CSV lines coerced to timestamp 0). After the fix, cv = 0 for every clip. Recorded so the false lead is not rediscovered."
+  },
+  "artifacts": [
+    "datasets/experiments/wave-f/f10-speed-gap-measurements.json",
+    "packages/swing-lab/src/oodSpeedGapMeasure.ts"
+  ]
+}
