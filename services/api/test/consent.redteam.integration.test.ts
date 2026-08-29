@@ -26,6 +26,14 @@ import type { FastifyInstance } from "fastify";
  *       deny — presence of the mapping row is never consent.
  * RT-6  Concurrent grant/withdraw requests: the ledger stays append-only
  *       and derived status matches the seq-latest record.
+ *
+ * Wave I i12 additions (training-eligibility ledger):
+ * I12-A  An attacker holding only a video_analysis grant cannot smuggle a
+ *        dataset item into the training-eligibility ledger: the DB rejects
+ *        an 'eligible' entry grounded in the analysis grant.
+ * I12-B  A model_training withdrawal through the public API propagates to
+ *        the eligibility ledger: every eligible item gets a 'withdrawn'
+ *        entry citing the withdrawal record.
  */
 
 const testUrl = process.env["DATABASE_URL_TEST"];
@@ -155,6 +163,8 @@ describe.skipIf(!testUrl)("consent red-team (real Fastify + PostgreSQL)", () => 
       "auth0|rt-version",
       "auth0|rt-empty-subject",
       "auth0|rt-concurrent",
+      "auth0|rt-i12-smuggle",
+      "auth0|rt-i12-withdraw",
     ])
       await makeUser(s);
   }, 60000);
@@ -297,5 +307,82 @@ describe.skipIf(!testUrl)("consent red-team (real Fastify + PostgreSQL)", () => 
   it("seq is exposed on ledger records so clients can order deterministically", async () => {
     const body = await status("auth0|rt-dup-grant");
     for (const r of body.records) expect(typeof r.seq).toBe("number");
+  });
+
+  it("I12-A: analysis-only consent cannot be smuggled into the training-eligibility ledger", async () => {
+    const subject = "auth0|rt-i12-smuggle";
+    const userId = userIds.get(subject)!;
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/me/consent/grant",
+      headers: headers(subject),
+      payload: {
+        scope: "video_analysis",
+        consentVersion: "video-analysis-v1",
+        source: "onboarding",
+        captureMode: "all_captures",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const item = await pool.query<{ id: string }>(
+      "INSERT INTO ml_dataset_item (source_user_id, consent_version) VALUES ($1, 'video-analysis-v1') RETURNING id",
+      [userId],
+    );
+    const grant = await pool.query<{ pseudonym: string; seq: string }>(
+      `SELECT cs.pseudonym, cr.seq
+       FROM consent_subject cs
+       JOIN consent_record cr ON cr.subject_pseudonym = cs.pseudonym
+       WHERE cs.user_id = $1 AND cr.scope = 'video_analysis' AND cr.action = 'granted'
+       ORDER BY cr.seq DESC LIMIT 1`,
+      [userId],
+    );
+    await expect(
+      pool.query(
+        `INSERT INTO training_eligibility_ledger
+           (subject_pseudonym, dataset_item_id, consent_version, consent_seq, state, reason)
+         VALUES ($1, $2, 'video-analysis-v1', $3, 'eligible', 'redteam.smuggle')`,
+        [grant.rows[0]!.pseudonym, item.rows[0]!.id, grant.rows[0]!.seq],
+      ),
+    ).rejects.toThrow(/analysis consent never implies training consent/);
+    const entries = await pool.query(
+      "SELECT count(*)::int AS n FROM training_eligibility_ledger WHERE dataset_item_id = $1",
+      [item.rows[0]!.id],
+    );
+    expect(entries.rows[0].n).toBe(0);
+  });
+
+  it("I12-B: API withdrawal propagates 'withdrawn' entries to the eligibility ledger", async () => {
+    const subject = "auth0|rt-i12-withdraw";
+    const userId = userIds.get(subject)!;
+    expect((await grant(subject)).statusCode).toBe(200);
+    const item = await pool.query<{ id: string }>(
+      "INSERT INTO ml_dataset_item (source_user_id, consent_version) VALUES ($1, 'model-training-v1') RETURNING id",
+      [userId],
+    );
+    const authorizing = await pool.query<{ pseudonym: string; seq: string }>(
+      `SELECT cs.pseudonym, cr.seq
+       FROM consent_subject cs
+       JOIN consent_record cr ON cr.subject_pseudonym = cs.pseudonym
+       WHERE cs.user_id = $1 AND cr.scope = 'model_training' AND cr.action = 'granted'
+       ORDER BY cr.seq DESC LIMIT 1`,
+      [userId],
+    );
+    await pool.query(
+      `INSERT INTO training_eligibility_ledger
+         (subject_pseudonym, dataset_item_id, consent_version, consent_seq, state, reason)
+       VALUES ($1, $2, 'model-training-v1', $3, 'eligible', 'selection.grant_verified')`,
+      [authorizing.rows[0]!.pseudonym, item.rows[0]!.id, authorizing.rows[0]!.seq],
+    );
+
+    expect((await withdraw(subject)).statusCode).toBe(200);
+    const latest = await pool.query(
+      `SELECT state, reason FROM training_eligibility_ledger
+       WHERE dataset_item_id = $1 ORDER BY seq DESC LIMIT 1`,
+      [item.rows[0]!.id],
+    );
+    expect(latest.rows[0]).toEqual({
+      state: "withdrawn",
+      reason: "consent.model_training.withdrawn",
+    });
   });
 });

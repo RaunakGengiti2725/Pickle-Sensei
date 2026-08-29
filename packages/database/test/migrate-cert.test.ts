@@ -141,6 +141,7 @@ describe.skipIf(!testUrl)("migration certification (real PostgreSQL)", () => {
         "0019_hard_case_queue.sql",
         "0019_model_rollout.sql",
         "0019_rollback_known_good.sql",
+        "0019_training_eligibility_ledger.sql",
       ]);
 
       const after = await pool.query(

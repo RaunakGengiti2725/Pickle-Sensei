@@ -4,9 +4,13 @@ import { dirname, join } from "node:path";
 import pg from "pg";
 import { runMigrations, seed } from "@pickle/database";
 import {
+  isDatasetItemTrainingEligible,
+  latestEligibilityEntries,
+  recordTrainingEligibility,
   selectTrainingEligibleItems,
   selectTrainingEligibleItemsWithWatermark,
   verifyTrainingEligibility,
+  type TrainingEligibleItem,
 } from "../src/trainingConsent.js";
 
 /**
@@ -30,6 +34,14 @@ import {
  *       including automatic-trigger captures, because no selector read
  *       capture_mode. ml_dataset_item carries no capture-mode provenance, so
  *       narrowed grants now authorize nothing (fail-closed).
+ *
+ * Wave I i12 additions (training-eligibility ledger):
+ * I12-RT-A the sanctioned flow records eligibility entries keyed by grant
+ *          seq/version + analysis/session provenance, and a withdrawal
+ *          flips the item's future eligibility (DB-propagated entry).
+ * I12-RT-B a compromised caller hand-crafting a TrainingEligibleItem from a
+ *          video_analysis grant cannot record it as eligible: the database
+ *          scope guard rejects it.
  */
 
 const testUrl = process.env["DATABASE_URL_TEST"];
@@ -178,6 +190,73 @@ describe.skipIf(!testUrl)("training consent withdrawal race (real PostgreSQL)", 
     expect(
       (await selectTrainingEligibleItems(pool)).filter((i) => i.source_user_id === narrowedUser),
     ).toHaveLength(1);
+  });
+
+  it("I12-RT-A: eligibility snapshots are ledgered with provenance; withdrawal updates future eligibility", async () => {
+    const flywheelUser = await createUser("auth0|i12-flywheel");
+    await appendConsent(flywheelUser, "granted", "model-training-v2");
+    const itemId = await addDatasetItem(flywheelUser, "model-training-v1");
+    const items = (await selectTrainingEligibleItems(pool)).filter(
+      (i) => i.source_user_id === flywheelUser,
+    );
+    expect(items).toHaveLength(1);
+    const analysisId = "7f0a1f9a-1111-4a67-9a3d-0c0f3a1b2c3d";
+    const sessionId = "7f0a1f9a-2222-4a67-9a3d-0c0f3a1b2c3d";
+    expect(await recordTrainingEligibility(pool, items, { analysisId, sessionId })).toBe(1);
+
+    const ledgered = (await latestEligibilityEntries(pool, [itemId])).get(itemId)!;
+    expect(ledgered.state).toBe("eligible");
+    expect(ledgered.consent_version).toBe("model-training-v2");
+    expect(ledgered.consent_seq).toBe(items[0]!.grant_seq);
+    expect(ledgered.analysis_id).toBe(analysisId);
+    expect(ledgered.session_id).toBe(sessionId);
+    expect(await isDatasetItemTrainingEligible(pool, itemId)).toBe(true);
+
+    // Withdrawal: the consent_record trigger appends the 'withdrawn' entry;
+    // no service path has to remember to do it.
+    await appendConsent(flywheelUser, "withdrawn", "model-training-v2");
+    const afterWithdrawal = (await latestEligibilityEntries(pool, [itemId])).get(itemId)!;
+    expect(afterWithdrawal.state).toBe("withdrawn");
+    expect(afterWithdrawal.analysis_id).toBe(analysisId);
+    expect(await isDatasetItemTrainingEligible(pool, itemId)).toBe(false);
+  });
+
+  it("I12-RT-B: a hand-crafted item grounded in a video_analysis grant cannot be ledgered eligible", async () => {
+    const analysisOnly = await createUser("auth0|i12-analysis-only");
+    const subject = await pool.query(
+      "INSERT INTO consent_subject (user_id) VALUES ($1) RETURNING pseudonym",
+      [analysisOnly],
+    );
+    const pseudonym = subject.rows[0].pseudonym as string;
+    const analysisGrant = await pool.query(
+      `INSERT INTO consent_record
+         (subject_pseudonym, scope, action, consent_version, source, capture_mode)
+       VALUES ($1, 'video_analysis', 'granted', 'video-analysis-v1', 'onboarding', 'all_captures')
+       RETURNING seq`,
+      [pseudonym],
+    );
+    const itemId = await addDatasetItem(analysisOnly, "video-analysis-v1");
+
+    // The sanctioned selector never returns the item (no training grant).
+    const selected = (await selectTrainingEligibleItems(pool)).filter(
+      (i) => i.source_user_id === analysisOnly,
+    );
+    expect(selected).toHaveLength(0);
+
+    // A compromised caller forges the selection anyway; the DB stops it.
+    const forged: TrainingEligibleItem = {
+      id: itemId,
+      source_user_id: analysisOnly,
+      subject_pseudonym: pseudonym,
+      consent_version: "video-analysis-v1",
+      grant_consent_version: "video-analysis-v1",
+      grant_seq: analysisGrant.rows[0].seq as string,
+    };
+    await expect(recordTrainingEligibility(pool, [forged])).rejects.toThrow(
+      /analysis consent never implies training consent/,
+    );
+    expect(await isDatasetItemTrainingEligible(pool, itemId)).toBe(false);
+    expect((await latestEligibilityEntries(pool, [itemId])).has(itemId)).toBe(false);
   });
 
   it("RT: verifyTrainingEligibility keeps consented items and is a no-op on empty batches", async () => {
