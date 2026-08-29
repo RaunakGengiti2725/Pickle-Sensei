@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   abortedSwingFixture,
   generateSwingSequence,
+  nonDominantHandSwingFixture,
   staticReachFixture,
   walkThroughFixture,
   wheelchairDegenerateTorsoFixture,
@@ -85,6 +86,27 @@ describe("classifyStroke lite red-team (adversarial non-strokes)", () => {
     expect(prediction.limitingFactors).toContain(
       "torso_extent_degenerate_normalization_unreliable",
     );
+  });
+
+  it("E10-F2 parity (stroke-heuristic-3.1): a left-hand swing under a right-handed declaration abstains via the handedness cross-check", () => {
+    const fixture = nonDominantHandSwingFixture();
+    const prediction = classifyFixture(fixture, { contactMs: fixture.window.peakMs });
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.leaf).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain(
+      "declared_handedness_contradicted_by_dominant_motion_wrist",
+    );
+  });
+
+  it("E10-F2 parity positive control: the same left-hand swing under a LEFT-handed declaration still commits FOREHAND", () => {
+    const fixture = nonDominantHandSwingFixture();
+    const prediction = classifyFixture(fixture, {
+      contactMs: fixture.window.peakMs,
+      handedness: "left",
+    });
+    expect(prediction.label).toBe("FOREHAND");
+    expect(prediction.taxonomyDepth).toBe(2);
+    expect(prediction.confidence).toBeCloseTo(0.8, 5);
   });
 
   it("ambiguous edge-angle contact near the midline abstains at the side margin floor", () => {

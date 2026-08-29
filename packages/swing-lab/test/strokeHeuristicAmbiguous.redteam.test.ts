@@ -65,17 +65,34 @@ describe("classifyStroke ambiguous-motion OPEN FINDINGS (pinned confidently-wron
     expect(prediction.limitingFactors).toContain("reference_is_event_peak_not_contact");
   });
 
-  it("E10-F2: left-hand swing under a right-handed declaration commits mirrored BACKHAND at 0.8", () => {
-    // Ground truth: a left-hand forehand. ROOT CAUSE: the side decision uses
-    // ONLY declared handedness; the measured dominant-MOTION wrist side
-    // (left, computed by dominantWristInfo and used for every other
-    // judgement) contradicts the declaration and is never cross-checked.
+  it("E10-F2 RESOLVED (stroke-heuristic-5): the handedness cross-check abstains on a left-hand swing under a right-handed declaration", () => {
+    // Ground truth: a left-hand forehand. Originally pinned as a mirrored
+    // BACKHAND at the 0.8 ceiling: the side decision used ONLY declared
+    // handedness and never cross-checked the measured dominant-motion wrist.
+    // stroke-heuristic-5 treats the declaration as context, not evidence:
+    // a decisive off-declaration dominant-motion wrist abstains.
     const prediction = classifyFixture(nonDominantHandSwingFixture(), {
       contactMs: nonDominantHandSwingFixture().window.peakMs,
     });
-    expect(prediction.label).toBe("BACKHAND");
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.leaf).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain(
+      "declared_handedness_contradicted_by_dominant_motion_wrist",
+    );
+  });
+
+  it("E10-F2 positive control: the same left-hand swing under a LEFT-handed declaration still commits FOREHAND", () => {
+    const fixture = nonDominantHandSwingFixture();
+    const prediction = classifyFixture(fixture, {
+      contactMs: fixture.window.peakMs,
+      handedness: "left",
+    });
+    expect(prediction.label).toBe("FOREHAND");
     expect(prediction.taxonomyDepth).toBe(2);
     expect(prediction.confidence).toBeCloseTo(0.8, 5);
+    expect(prediction.limitingFactors).not.toContain(
+      "declared_handedness_contradicted_by_dominant_motion_wrist",
+    );
   });
 
   it("E10-F3 RESOLVED (stroke-heuristic-4): near-profile view now abstains via the rival-wrist attribution gate", () => {
@@ -139,14 +156,14 @@ describe("classifyStroke ambiguous-motion defenses that held (must keep holding)
     );
   });
 
-  it("open-finding fixtures never silently change shape: the four still-open pins commit a leaf-less depth-2 side", () => {
+  it("open-finding fixtures never silently change shape: the three still-open pins commit a leaf-less depth-2 side", () => {
     // Umbrella pin: if any fixture starts abstaining (or committing a leaf),
     // a classifier change touched this surface — re-run the E10 forensics.
-    // F3 (profileViewCollapsedShoulders) was resolved by stroke-heuristic-4
-    // and is covered by its own abstention regression test above.
+    // F3 (profileViewCollapsedShoulders) was resolved by stroke-heuristic-4,
+    // F2 (nonDominantHandSwing) by stroke-heuristic-5; both are covered by
+    // their own regression tests above.
     const fixtures = [
       practiceShadowSwingFixture(),
-      nonDominantHandSwingFixture(),
       facingFlipAtContactFixture(),
       wheelchairRimPushFixture(),
     ];

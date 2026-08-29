@@ -1,0 +1,87 @@
+{
+  "id": "f02-stroke-f2-handedness-crosscheck",
+  "wave": "F",
+  "date": "2026-08-29",
+  "branch": "devin/wave-f/f02-stroke-f2-handedness-crosscheck",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "baseCommit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "mission": "Close E10-F2: side decision used ONLY declared handedness and never cross-checked the measured dominant-motion wrist, so a left-hand swing under a right-handed declaration committed mirrored BACKHAND at 0.80.",
+  "change": {
+    "files": [
+      "packages/swing-lab/src/strokeHeuristic.ts (stroke-heuristic-4 -> stroke-heuristic-5)",
+      "packages/vision-geometry/src/strokeHeuristicLite.ts (stroke-heuristic-3 -> stroke-heuristic-3.1, lockstep port)",
+      "packages/swing-lab/test/strokeHeuristic.test.ts",
+      "packages/swing-lab/test/strokeHeuristicAmbiguous.redteam.test.ts (F2 pin flipped)",
+      "packages/vision-geometry/test/strokeHeuristicLite.redteam.test.ts (lite parity + positive control)"
+    ],
+    "mechanism": "The side decision now cross-checks the measured dominant-motion wrist (dominantWristInfo, ±200ms travel) against the declared handedness. Declared intent stays context, not evidence. If the dominant-motion wrist contradicts the declaration DECISIVELY (both wrists measured in >=MIN_TRAVEL_SAMPLE_FRAMES=5 frames AND off-declaration wrist travel >= 1.5x declared-wrist travel), the heuristic abstains at depth 1 with explicit limiting factor 'declared_handedness_contradicted_by_dominant_motion_wrist'. If the contradiction is non-decisive (sparse rival measurement or ratio < 1.5, e.g. two-handed backhands where both wrists move together), it does NOT abstain but degrades side confidence to the DEGRADED_CONFIDENCE_CAP=0.6 and appends limiting factor 'declared_handedness_unconfirmed_by_dominant_motion_wrist'.",
+    "constants": {
+      "HANDEDNESS_CONTRADICTION_TRAVEL_RATIO": 1.5,
+      "MIN_TRAVEL_SAMPLE_FRAMES": 5,
+      "DEGRADED_CONFIDENCE_CAP": 0.6
+    },
+    "contractVersioning": "No thresholds/denominators weakened; classifier version bumped (stroke-heuristic-5, lite 3.1) instead of softening in place."
+  },
+  "f2Fixture": {
+    "fixture": "non-dominant-hand-swing (packages/evaluation/src/synthetic/adversarialStrokeFixtures.ts)",
+    "groundTruth": "left-hand forehand by a declared right-handed player",
+    "before": {
+      "label": "BACKHAND",
+      "leaf": "BACKHAND",
+      "taxonomyDepth": 2,
+      "confidence": 0.8,
+      "note": "confidently mirrored wrong side; open finding pinned in wave-e"
+    },
+    "after": {
+      "label": "UNKNOWN",
+      "leaf": "UNKNOWN",
+      "taxonomyDepth": 1,
+      "confidence": 0.2,
+      "limitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "declared_handedness_contradicted_by_dominant_motion_wrist"
+      ],
+      "measuredEvidence": "dominant-motion wrist is left (travel 0.471u over 25 frames vs rival 0.000u over 25) — declared right-handed"
+    },
+    "positiveControl": "same fixture with handedness declared 'left' commits FOREHAND depth 2 at 0.80 in both desktop and lite implementations (declaration consistent with measured wrist => no gate)."
+  },
+  "genuineStrokeBench": {
+    "bench": "swing-lab wave-a stroke heuristic bench (strokeHeuristicBench corpus, n=18)",
+    "before": {
+      "n": 18,
+      "l1Correct": 9,
+      "l1Wrong": 0,
+      "l1Abstained": 8,
+      "l1GoldUnknown": 1,
+      "l2Correct": 4,
+      "l2Wrong": 3,
+      "l2Abstained": 4,
+      "l2GoldUnknown": 7,
+      "confidentlyWrong": 3
+    },
+    "after": {
+      "n": 18,
+      "l1Correct": 9,
+      "l1Wrong": 0,
+      "l1Abstained": 8,
+      "l1GoldUnknown": 1,
+      "l2Correct": 4,
+      "l2Wrong": 3,
+      "l2Abstained": 4,
+      "l2GoldUnknown": 7,
+      "confidentlyWrong": 3
+    },
+    "delta": "identical — genuine-stroke commits keep the declared wrist dominant (ratio < 1), so the new gate never fires on the bench"
+  },
+  "openFindingsDelta": "E10 red-team open findings: 4 -> 3 (F2 closed; F1/F3/F4 remain pinned open).",
+  "gates": {
+    "pnpm typecheck": "pass",
+    "pnpm lint": "pass",
+    "pnpm format:check": "pass",
+    "swing-lab tests": "47 files, 537 passed | 4 skipped",
+    "vision-geometry tests": "8 files, 72 passed"
+  },
+  "holdouts": "wm-dink-01, afn-vic-rally1, and datasets/pickleball/fresh-candidates/ untouched.",
+  "verdict": "GREEN"
+}
