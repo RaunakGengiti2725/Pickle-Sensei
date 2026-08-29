@@ -97,6 +97,7 @@ import {
   planTwoPassSchedule,
   type TwoPassSchedule,
 } from "./paddleSchedule.js";
+import { planPass1Roi, type Pass1RoiPlan } from "./paddleRoi.js";
 import { renderReport, type LabRunReport, type PlayerStageReport } from "./report.js";
 import {
   detectPaddleWindow,
@@ -154,6 +155,13 @@ interface CliArgs {
   twoPass: boolean;
   /** Pass-1 stride when --two-pass is on. */
   sparseStride: number;
+  /** OFF-by-default dynamic target-ROI for the two-pass PASS 1 ONLY: crop
+   * sparse-scan inference to the target's expected paddle zone (built from
+   * BOTH target wrists over the detect span — W12: never trust handedness).
+   * Pass 2 (dense, near contact) always stays full-frame, and any plan
+   * abstention falls back to the untouched full-frame pass 1
+   * (see paddleRoi.ts). No effect without --two-pass. */
+  pass1Roi: boolean;
   /** Product-assisted target selection: one tap during setup. */
   targetSeed: TargetSeed | null;
 }
@@ -194,6 +202,7 @@ function parseArgs(argv: string[]): CliArgs {
     paddleWorker: !argv.includes("--no-paddle-worker"),
     twoPass: argv.includes("--two-pass"),
     sparseStride: Number(flag("--sparse-stride") ?? 3),
+    pass1Roi: argv.includes("--pass1-roi"),
     targetSeed: (() => {
       const tap = flag("--target-tap");
       if (tap) {
@@ -549,6 +558,7 @@ async function run(args: CliArgs, paddleWorker: PaddleWorkerSupervisor | null): 
     window: strokeWindow,
     detectSpan,
     eventPeaksMs: prePass.events.map((event) => event.peakMs),
+    targetWrists: args.twoPass && args.pass1Roi ? wristSeries(sequence) : null,
     timings,
     worker: paddleWorker,
   });
@@ -984,6 +994,9 @@ async function preparePaddleDetections(input: {
   detectSpan: { startMs: number; endMs: number };
   /** Kinematic peaks from the pose-only pre-pass (two-pass densification). */
   eventPeaksMs: readonly number[];
+  /** Target wrist series for --pass1-roi planning; null when the flag is
+   * off (the plan is never computed, pass 1 stays full-frame). */
+  targetWrists: ReturnType<typeof wristSeries> | null;
   timings: Record<string, number>;
   /** Warm detector worker; null → one-shot path. Worker failures fall back. */
   worker: PaddleWorkerSupervisor | null;
@@ -1015,10 +1028,11 @@ async function preparePaddleDetections(input: {
       startMs: number,
       endMs: number,
       stride: number,
+      roi: [number, number, number, number] | null = null,
     ): Promise<void> => {
       const path = await detectPaddleWindow({
         worker: input.worker,
-        request: { video: input.args.video, out, startMs, endMs, stride },
+        request: { video: input.args.video, out, startMs, endMs, stride, roi },
         oneShot: () =>
           execFileSync(
             python,
@@ -1034,6 +1048,7 @@ async function preparePaddleDetections(input: {
               String(endMs),
               "--stride",
               String(stride),
+              ...(roi ? ["--roi", roi.join(",")] : []),
             ],
             { stdio: "inherit" },
           ),
@@ -1051,8 +1066,29 @@ async function preparePaddleDetections(input: {
     console.log(
       `two-pass paddle detection: sparse scan (stride ${input.args.sparseStride}) + adaptive densification…`,
     );
+    // ── Dynamic target-ROI for pass 1 only (OFF by default; paddleRoi.ts).
+    // Pass 2 below always runs full-frame — dense regions carry the contact
+    // evidence and must never be cropped.
+    let pass1RoiPlan: Pass1RoiPlan | null = null;
+    if (input.targetWrists) {
+      pass1RoiPlan = planPass1Roi({
+        wrists: input.targetWrists,
+        detectSpan: { startMs: wantedStart, endMs: wantedEnd },
+      });
+      console.log(
+        pass1RoiPlan.status === "roi"
+          ? `pass-1 target ROI [${pass1RoiPlan.roiNorm.join(", ")}] (${Math.round(pass1RoiPlan.areaFraction * 100)}% of frame)`
+          : `pass-1 target ROI unavailable (${pass1RoiPlan.reason}); full-frame pass 1`,
+      );
+    }
     const sparsePath = join(input.args.outDir, "paddle-dets.pass1.json");
-    await detect(sparsePath, wantedStart, wantedEnd, input.args.sparseStride);
+    await detect(
+      sparsePath,
+      wantedStart,
+      wantedEnd,
+      input.args.sparseStride,
+      pass1RoiPlan?.status === "roi" ? pass1RoiPlan.roiNorm : null,
+    );
     input.timings["paddleDetectSparseMs"] = Date.now() - started;
     const sparseFile = JSON.parse(readFileSync(sparsePath, "utf8")) as RawPaddleDetectionFile;
     const sparseTracks = buildPaddleTracks(sparseFile, input.window);
@@ -1082,6 +1118,7 @@ async function preparePaddleDetections(input: {
       JSON.stringify(
         {
           schedule,
+          pass1Roi: pass1RoiPlan,
           realized: {
             sparseFrames: sparseFile.timing.framesProcessed,
             denseFrames: denseFiles.reduce((total, file) => total + file.timing.framesProcessed, 0),

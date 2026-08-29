@@ -24,6 +24,8 @@ export interface PaddleDetectRequest {
   endMs: number;
   stride?: number;
   floor?: number;
+  /** Normalized x0,y0,x1,y1 crop for this window (detect_paddle.py --roi). */
+  roi?: [number, number, number, number] | null;
 }
 
 export interface PaddleReadyEvent {

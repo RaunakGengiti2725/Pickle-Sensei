@@ -1,0 +1,53 @@
+{
+  "workstream": "D4-04",
+  "title": "Dynamic target-ROI detector scheduling (pass-1 only, OFF flag)",
+  "branch": "devin/wave-d4/d4-04-dynamic-roi",
+  "measurementEnv": "LINUX-CPU",
+  "verdict": "ORANGE",
+  "implementation": {
+    "flag": "--pass1-roi (OFF by default; no effect without --two-pass)",
+    "planner": "packages/swing-lab/src/paddleRoi.ts (pass1-roi-v1): ROI from BOTH target wrists over the detect span (W12: handedness never trusted), pad 0.15 norm, min wrist coverage 0.5, ROI > 0.8 of frame falls back",
+    "scope": "PASS 1 (sparse scan) ONLY; pass 2 (dense, near contact) always full-frame; any plan abstention (empty span / insufficient wrist coverage / roi_not_smaller) falls back to untouched full-frame pass 1",
+    "provenance": "plan recorded in paddle-schedule.json (pass1Roi); realized crop recorded by detect_paddle.py as roiNorm",
+    "tests": "packages/swing-lab/test/paddleRoi.test.ts (7 cases) green; pnpm typecheck green; swing-lab suite 29/29 green"
+  },
+  "linuxCpuBench": {
+    "artifact": "datasets/experiments/wave-d4/d4-04-roi-bench.json",
+    "script": "tools/paddle-lab/roi_pass1_bench.py",
+    "cases": ["wm-volley-02", "afn-sasebo-rally1"],
+    "zoneSourceDisclosure": "pose is Apple-Vision-only, so the bench builds the zone from committed annotation paddleFrames points over the contact-centered 3 s window, padded 0.15 like production; the wrist-driven plan itself is unit-tested only",
+    "agreementInsideRoiExactDeltas": {
+      "wm-volley-02": {
+        "roiAreaFraction": 0.2385,
+        "highScoreMatchRate": 0.791,
+        "highScoreMatched": "53/67 (score >= 0.3)",
+        "allDetectionsMatchRate": 0.4717,
+        "meanIoUOfMatches": 0.7687,
+        "meanAbsScoreDelta": 0.133,
+        "fullFrameDetectionsOutsideRoiSuppressedByDesign": 743
+      },
+      "afn-sasebo-rally1": {
+        "roiAreaFraction": 0.2311,
+        "highScoreMatchRate": 0.7841,
+        "highScoreMatched": "69/88 (score >= 0.3)",
+        "allDetectionsMatchRate": 0.3666,
+        "meanIoUOfMatches": 0.7675,
+        "meanAbsScoreDelta": 0.1615,
+        "fullFrameDetectionsOutsideRoiSuppressedByDesign": 359
+      }
+    },
+    "wallClockSaved": {
+      "wm-volley-02": "0.160 s of 2.835 s (5.6%) over 24 stride-3 frames",
+      "afn-sasebo-rally1": "0.107 s of 3.618 s (3.0%) over 30 stride-3 frames",
+      "note": "warmed-up runs; an earlier un-warmed run showed a fake 2.9 s saving that was pure cold-start ordering artifact and is disavowed"
+    }
+  },
+  "honestFindings": [
+    "LATENCY MANDATE NOT MET BY ROI ALONE ON THIS PIPELINE: the D-FINE processor resizes every input to a fixed 640x640 (do_resize=True), so cropping to ~23% of the frame does NOT shrink model compute — only decode/preprocess. Measured wall-clock saving is 3.0-5.6%, not the large win ROI implies on resolution-proportional pipelines.",
+    "AGREEMENT IS NOT ~EQUAL INSIDE THE ZONE: cropping acts as a zoom (different effective resolution), so detections differ. High-score (>=0.3, track-establishing) match rate inside the ROI is 79.1% / 78.4%; down to the 0.08 tracker floor it is 47.2% / 36.7% with mean IoU ~0.77 of matches and mean |score delta| 0.13-0.16. The ROI runs also produce extra detections (zoom finds more small boxes).",
+    "Whether the changed pass-1 evidence helps or hurts the tracker/cascade cannot be judged here: downstream cascade validation is Mac-gated (pose extraction is Apple-Vision-only and canonical run dirs are absent on Linux)."
+  ],
+  "recommendation": "Keep --pass1-roi OFF. The flag, planner, provenance and tests are in place; before enabling, either pair ROI with a resolution-proportional inference path (so the crop shrinks compute) or re-evaluate on-device (Core ML/ANE) where fixed-size resize may not dominate, then run Mac-gated cascade validation.",
+  "heldOut": "wm-dink-01 and afn-vic-rally1 untouched",
+  "docsUntouched": ["docs/STATUS_BOARD.md", "docs/HANDOFF_V3.md", "docs/DECISIONS.md"]
+}
