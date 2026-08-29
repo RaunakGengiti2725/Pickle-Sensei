@@ -20,9 +20,20 @@ export type DeploymentStatus = (typeof DEPLOYMENT_STATUSES)[number];
 export const PLATFORMS = ["ios", "android", "server"] as const;
 export type Platform = (typeof PLATFORMS)[number];
 
+/** Named dataset splits behind a trained artifact. Null until one exists. */
+export interface DatasetSplits {
+  train: string;
+  validation: string;
+  test: string;
+}
+
 export interface ModelManifestEntry {
   /** Stable provider id, e.g. "pose.apple-vision". */
   id: string;
+  /**
+   * Explicit, immutable version. Never an alias — "latest", "current",
+   * "head" and the empty string are rejected at validation.
+   */
   version: string;
   task: ModelTask;
   runtime: ModelRuntime;
@@ -39,6 +50,40 @@ export interface ModelManifestEntry {
   /** Dataset lineage — null until a trained model exists. */
   trainingDatasetVersion: string | null;
   evaluationDatasetVersion: string | null;
+  /**
+   * Source commit that produced a trained artifact. Null for in-repo code
+   * providers, whose implementation lives at the monorepo HEAD by
+   * definition and is versioned by its exported version constant.
+   */
+  commit: string | null;
+  /** Split lineage — requires trainingDatasetVersion when present. */
+  splits: DatasetSplits | null;
+  /**
+   * Frozen, accepted evaluation metrics for THIS id@version. Null until a
+   * real evaluation on a named eval dataset has been accepted; requires
+   * evaluationDatasetVersion when present. Never seeded from wishes.
+   */
+  metrics: Record<string, number> | null;
+  /**
+   * Capture-envelope version this entry is validated to operate inside,
+   * e.g. "capture-envelope-thresholds-v0.4-provisional". Null when the
+   * component does not consume capture-envelope-gated input.
+   */
+  supportedCaptureEnvelope: string | null;
+  /** Confidence-calibration version. Null = honestly uncalibrated. */
+  calibrationVersion: string | null;
+  /** What the runtime needs to execute this entry (frameworks, interpreters). */
+  runtimeRequirements: string[];
+  /**
+   * ISO date the entry entered production. Null when the promotion predates
+   * this registry and was never recorded — never backfilled from guesses.
+   */
+  promotionDate: string | null;
+  /**
+   * "id@version" of the entry to roll back to, which must itself exist in
+   * the manifest. Null when no registered predecessor exists.
+   */
+  rollbackPredecessor: string | null;
   license: string | null;
   notes: string;
 }
@@ -90,11 +135,27 @@ export class ModelRegistry {
     return this.resolve({ ...query, status: "shadow" });
   }
 
-  public byId(id: string, version?: string): ModelManifestEntry | null {
-    const matches = this.entries
-      .filter((entry) => entry.id === id && (version === undefined || entry.version === version))
-      .sort((a, b) => b.version.localeCompare(a.version, undefined, { numeric: true }));
-    return matches[0] ?? null;
+  /**
+   * Exact lookup. Version is REQUIRED: there is no anonymous "latest" —
+   * callers that want the active model for a task use resolve(), which
+   * still returns one concrete, fully-versioned entry.
+   */
+  public byId(id: string, version: string): ModelManifestEntry | null {
+    return this.entries.find((entry) => entry.id === id && entry.version === version) ?? null;
+  }
+
+  /**
+   * Append-only registration. An id@version, once registered, is immutable:
+   * re-registering it — even with identical content — throws. Changing a
+   * model means bumping its version, never overwriting an artifact in place.
+   */
+  public withEntry(entry: ModelManifestEntry): ModelRegistry {
+    if (this.entries.some((e) => e.id === entry.id && e.version === entry.version)) {
+      throw new Error(
+        `Artifact ${entry.id}@${entry.version} is already registered and immutable — bump the version instead of overwriting.`,
+      );
+    }
+    return new ModelRegistry({ schemaVersion: 1, entries: [...this.entries, entry] });
   }
 
   public list(task?: ModelTask): ModelManifestEntry[] {
@@ -118,6 +179,9 @@ function validateManifest(manifest: ModelManifest): void {
     const key = `${entry.id}@${entry.version}`;
     if (seen.has(key)) throw new Error(`Duplicate model manifest entry: ${key}`);
     seen.add(key);
+    if (FORBIDDEN_VERSION_ALIASES.has(entry.version.trim().toLowerCase())) {
+      throw new Error(`Entry ${entry.id} uses a forbidden version alias: "${entry.version}".`);
+    }
     if (!DEPLOYMENT_STATUSES.includes(entry.deploymentStatus)) {
       throw new Error(`Unknown deployment status for ${key}: ${entry.deploymentStatus}`);
     }
@@ -128,5 +192,23 @@ function validateManifest(manifest: ModelManifest): void {
     if (entry.artifactUri !== null && entry.artifactHash === null) {
       throw new Error(`Entry ${key} has an artifact URI but no artifact hash.`);
     }
+    if (entry.splits !== null && entry.trainingDatasetVersion === null) {
+      throw new Error(`Entry ${key} declares splits without a training dataset version.`);
+    }
+    if (entry.metrics !== null && entry.evaluationDatasetVersion === null) {
+      throw new Error(`Entry ${key} declares metrics without an evaluation dataset version.`);
+    }
+  }
+  for (const entry of manifest.entries) {
+    if (entry.rollbackPredecessor !== null && !seen.has(entry.rollbackPredecessor)) {
+      throw new Error(
+        `Entry ${entry.id}@${entry.version} names rollback predecessor ${entry.rollbackPredecessor}, which is not registered.`,
+      );
+    }
+    if (entry.rollbackPredecessor === `${entry.id}@${entry.version}`) {
+      throw new Error(`Entry ${entry.id}@${entry.version} cannot be its own rollback predecessor.`);
+    }
   }
 }
+
+const FORBIDDEN_VERSION_ALIASES = new Set(["", "latest", "current", "head", "newest"]);
