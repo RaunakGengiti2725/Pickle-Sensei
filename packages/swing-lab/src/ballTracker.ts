@@ -252,6 +252,8 @@ export function buildBallTracks(
   pose: PoseSequence,
   window: { startMs: number; endMs: number },
   paddle: readonly TrackedPaddleObservation[] | null,
+  /** Precomputed toLegacyPoseFrames(pose); derived here when absent. */
+  legacyFrames?: ReturnType<typeof toLegacyPoseFrames> | null,
 ): {
   gated: BallTrackCandidate[];
   all: BallTrackCandidate[];
@@ -267,8 +269,9 @@ export function buildBallTracks(
     const cy = Math.min(grid - 1, Math.max(0, Math.floor(y * grid)));
     return chronic.cells[cy * grid + cx] ?? 0;
   };
-  const band = playBand(pose);
-  const joints = jointSeries(pose);
+  const frames = legacyFrames ?? toLegacyPoseFrames(pose);
+  const band = playBand(frames);
+  const joints = jointSeries(frames);
 
   // ── Association (stage B) ────────────────────────────────────────────────
   const active: ActiveBallTrack[] = [];
@@ -1156,8 +1159,8 @@ function distanceToBox(point: { x: number; y: number }, box: BodyBox): number {
 
 type JointSeries = Array<{ timestampMs: number; points: Array<{ x: number; y: number }> }>;
 
-function jointSeries(pose: PoseSequence): JointSeries {
-  return toLegacyPoseFrames(pose).map((frame) => ({
+function jointSeries(frames: ReturnType<typeof toLegacyPoseFrames>): JointSeries {
+  return frames.map((frame) => ({
     timestampMs: frame.timestampMs,
     points: frame.landmarks
       .filter((mark) => mark.visibility >= 0.25)
@@ -1182,10 +1185,10 @@ function nearestJoints(
 }
 
 /** Vertical play band from measured pose: above heads to below ankles. */
-function playBand(pose: PoseSequence): { top: number; bottom: number } {
+function playBand(frames: ReturnType<typeof toLegacyPoseFrames>): { top: number; bottom: number } {
   let minHead = 1;
   let maxAnkle = 0;
-  for (const frame of toLegacyPoseFrames(pose)) {
+  for (const frame of frames) {
     for (const mark of frame.landmarks) {
       if (mark.visibility < 0.3) continue;
       if (mark.name === "head") minHead = Math.min(minHead, mark.y);

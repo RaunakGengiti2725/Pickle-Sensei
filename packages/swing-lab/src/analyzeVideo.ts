@@ -77,7 +77,8 @@ import {
   mergePaddleTracklets,
   paddleSpeedSeries,
   selectPrimaryPaddleTrack,
-  wristSeries,
+  wristSeriesFromFrames,
+  type wristSeries,
   type PaddleAssociationDecision,
   type PaddleTrackingOutcome,
   type RawPaddleDetectionFile,
@@ -508,13 +509,25 @@ async function run(args: CliArgs, paddleWorker: PaddleWorkerSupervisor | null): 
   const ballObservations = sceneTrustworthy
     ? windowBallObservations(trajectoryFile, strokeWindow)
     : [];
+  // ── 5a¹. POSE-DERIVATIVE CACHE — computed ONCE from the canonical
+  // sequence + final stroke window, then threaded through every stage that
+  // previously re-derived it (pre-pass, paddle association, contact wrists,
+  // event isolation, stroke recognition, research sequence, ball gating).
+  // The sequence is frozen at this point (target selected, scene-clamped),
+  // so each entry is byte-identical to the per-stage recomputation it
+  // replaces. Smoothing inside the stroke-event proposer is intentionally
+  // NOT cached: strokeEvents.ts is verbatim-mirrored into analysis-pipeline
+  // (drift-guard byte-compare), so its internals stay self-contained.
+  const poseDerivativesStarted = Date.now();
+  const pose = buildPoseDerivatives(sequence, strokeWindow);
+  timings["poseDerivativesMs"] = Date.now() - poseDerivativesStarted;
+
   // ── 5a². PRE-PASS event proposals from POSE ONLY (cheap) — these gate the
   // expensive paddle detector to the frames that can matter (fast path).
   const prePassStarted = Date.now();
-  const wristSpeedsPre = dominantWristSpeeds(sequence, strokeWindow);
   const prePass = proposeStrokeEventsV2({
     paddleSpeeds: null,
-    wristSpeeds: wristSpeedsPre,
+    wristSpeeds: pose.dominantWristSpeeds,
     clipStartMs: strokeWindow.startMs,
     clipEndMs: strokeWindow.endMs,
   });
@@ -567,7 +580,7 @@ async function run(args: CliArgs, paddleWorker: PaddleWorkerSupervisor | null): 
   // ── 5b. Paddle perception: pixel detector → tracker → gated modality ───
   const paddleOutcome = await runPaddleStage({
     args,
-    sequence,
+    targetWrists: pose.wristSeries,
     otherWrists,
     window: strokeWindow,
     detectSpan,
@@ -578,11 +591,21 @@ async function run(args: CliArgs, paddleWorker: PaddleWorkerSupervisor | null): 
   report.paddleSchedule = paddlePrep.status === "ready" ? paddlePrep.schedule : null;
   const paddleObservations =
     paddleOutcome.tracking?.status === "tracked" ? paddleOutcome.tracking.lab.observations : null;
+  // Paddle derivatives, also computed once (three stages consumed their own
+  // paddleSpeedSeries/centers projections of the SAME track before).
+  const paddleSpeeds = paddleObservations ? paddleSpeedSeries(paddleObservations) : null;
+  const paddleCenters =
+    paddleObservations?.map((observation) => ({
+      timestampMs: observation.timestampMs,
+      x: observation.center.x,
+      y: observation.center.y,
+    })) ?? null;
 
   // ── 5c. Ball perception: motion candidates → temporal track → gates ────
   const ballOutcome = runBallStage({
     args,
     sequence,
+    legacyFrames: pose.legacyFrames,
     window: strokeWindow,
     paddle: paddleObservations,
     timings,
@@ -597,11 +620,9 @@ async function run(args: CliArgs, paddleWorker: PaddleWorkerSupervisor | null): 
   // measured v1 failures were rally1 contact 73→2411ms under merge and a
   // cascade-selected event with 0% gold overlap.
   const eventStarted = Date.now();
-  const wristSpeedsEarly = dominantWristSpeeds(sequence, strokeWindow);
-  const paddleSpeedsEarly = paddleObservations ? paddleSpeedSeries(paddleObservations) : null;
   const proposals = proposeStrokeEventsV2({
-    paddleSpeeds: paddleSpeedsEarly,
-    wristSpeeds: wristSpeedsEarly,
+    paddleSpeeds,
+    wristSpeeds: pose.dominantWristSpeeds,
     clipStartMs: 0,
     clipEndMs: meta.video.durationMs,
   });
@@ -657,11 +678,7 @@ async function run(args: CliArgs, paddleWorker: PaddleWorkerSupervisor | null): 
   // evidence to the target) and the declared stroke's coarse family (picks
   // temporal priors). The declared stroke is context, never ground truth —
   // the family only widens/narrows kernel widths.
-  const targetWristsForContact = toLegacyPoseFrames(sequence).flatMap((frame) =>
-    frame.landmarks
-      .filter((mark) => mark.name.endsWith("wrist") && mark.visibility >= 0.25)
-      .map((mark) => ({ timestampMs: frame.timestampMs, x: mark.x, y: mark.y })),
-  );
+  const targetWristsForContact = pose.targetWrists;
   const contactStrokeFamily = ((): StrokeFamily => {
     switch (args.stroke) {
       case "volley":
@@ -685,13 +702,8 @@ async function run(args: CliArgs, paddleWorker: PaddleWorkerSupervisor | null): 
     sequence,
     window: contactSearchWindow,
     ballObservations: contactBallObservations,
-    paddleSpeeds: paddleObservations ? paddleSpeedSeries(paddleObservations) : null,
-    paddleCenters:
-      paddleObservations?.map((observation) => ({
-        timestampMs: observation.timestampMs,
-        x: observation.center.x,
-        y: observation.center.y,
-      })) ?? null,
+    paddleSpeeds,
+    paddleCenters,
     targetWrists: targetWristsForContact,
     strokeFamily: contactStrokeFamily,
   });
@@ -762,13 +774,8 @@ async function run(args: CliArgs, paddleWorker: PaddleWorkerSupervisor | null): 
         sequence,
         window: contactScope(event),
         ballObservations: contactBallObservations,
-        paddleSpeeds: paddleObservations ? paddleSpeedSeries(paddleObservations) : null,
-        paddleCenters:
-          paddleObservations?.map((observation) => ({
-            timestampMs: observation.timestampMs,
-            x: observation.center.x,
-            y: observation.center.y,
-          })) ?? null,
+        paddleSpeeds,
+        paddleCenters,
         targetWrists: targetWristsForContact,
         strokeFamily: contactStrokeFamily,
       });
@@ -799,8 +806,8 @@ async function run(args: CliArgs, paddleWorker: PaddleWorkerSupervisor | null): 
   report.targetEvent = targetEvent;
 
   // ── 5d. Stroke recognition + research sequence — EVENT-LOCAL ───────────
-  const wristSpeedSeries = wristSpeedsEarly;
-  const paddleSpeedsForStroke = paddleSpeedsEarly;
+  const wristSpeedSeries = pose.dominantWristSpeeds;
+  const paddleSpeedsForStroke = paddleSpeeds;
   const analysisScope =
     targetEvent.status === "selected"
       ? { startMs: targetEvent.event.startMs, endMs: targetEvent.event.endMs }
@@ -815,6 +822,7 @@ async function run(args: CliArgs, paddleWorker: PaddleWorkerSupervisor | null): 
         paddle: paddleObservations,
         paddleSpeeds: paddleSpeedsForStroke,
         wristSpeeds: wristSpeedSeries,
+        legacyFrames: pose.legacyFrames,
       })
     : null;
   report.strokePrediction = strokePrediction;
@@ -826,6 +834,7 @@ async function run(args: CliArgs, paddleWorker: PaddleWorkerSupervisor | null): 
     ball: ballOutcome.tracking?.status === "tracked" ? ballOutcome.tracking.lab.observations : null,
     wristSpeeds: wristSpeedSeries,
     paddleSpeeds: paddleSpeedsForStroke,
+    legacyFrames: pose.legacyFrames,
   });
   writeFileSync(join(args.outDir, "sequence.json"), JSON.stringify(strokeSequence));
   report.kineticEvents = strokeSequence.kinetics.events;
@@ -1144,7 +1153,8 @@ async function preparePaddleDetections(input: {
  */
 async function runPaddleStage(input: {
   args: CliArgs;
-  sequence: PoseSequence;
+  /** Target wrist positions from the pose-derivative cache. */
+  targetWrists: ReturnType<typeof wristSeries>;
   otherWrists: ReturnType<typeof otherPlayersWrists>;
   window: { startMs: number; endMs: number };
   /** Detection span — the union of candidate stroke events when available,
@@ -1191,7 +1201,7 @@ async function runPaddleStage(input: {
       candidates = merged;
       input.timings["paddleMergeLinks"] = links;
     }
-    const targetWrists = wristSeries(input.sequence);
+    const targetWrists = input.targetWrists;
     let tracking = selectPrimaryPaddleTrack(
       candidates,
       targetWrists,
@@ -1305,9 +1315,45 @@ async function runPaddleStage(input: {
   }
 }
 
-/** Dominant-wrist speed series (normalized u/s) from the pose sequence. */
-function dominantWristSpeeds(
+/**
+ * POSE-DERIVATIVE CACHE — every pose-adjacent projection analyzeVideo's
+ * stages consume, computed exactly once from the frozen canonical sequence.
+ * Entries are the SAME pure projections the stages used to re-derive
+ * per-call; sharing the arrays is safe because every consumer treats its
+ * series inputs as read-only (proposer/contact/stroke stages copy before
+ * sorting and never mutate samples).
+ */
+interface PoseDerivatives {
+  /** toLegacyPoseFrames(sequence) — the shared legacy projection. */
+  legacyFrames: ReturnType<typeof toLegacyPoseFrames>;
+  /** Both-wrist positions per timestamp (paddle association gate). */
+  wristSeries: ReturnType<typeof wristSeries>;
+  /** Dominant-wrist speed series (event pre-pass + isolation + stroke). */
+  dominantWristSpeeds: Array<{ timestampMs: number; value: number }>;
+  /** Flat wrist positions, visibility ≥ 0.25 (contact-evidence gating). */
+  targetWrists: Array<{ timestampMs: number; x: number; y: number }>;
+}
+
+function buildPoseDerivatives(
   sequence: PoseSequence,
+  window: { startMs: number; endMs: number },
+): PoseDerivatives {
+  const legacyFrames = toLegacyPoseFrames(sequence);
+  return {
+    legacyFrames,
+    wristSeries: wristSeriesFromFrames(legacyFrames),
+    dominantWristSpeeds: dominantWristSpeeds(legacyFrames, window),
+    targetWrists: legacyFrames.flatMap((frame) =>
+      frame.landmarks
+        .filter((mark) => mark.name.endsWith("wrist") && mark.visibility >= 0.25)
+        .map((mark) => ({ timestampMs: frame.timestampMs, x: mark.x, y: mark.y })),
+    ),
+  };
+}
+
+/** Dominant-wrist speed series (normalized u/s) from the legacy frames. */
+function dominantWristSpeeds(
+  legacy: ReturnType<typeof toLegacyPoseFrames>,
   window: { startMs: number; endMs: number },
 ): Array<{ timestampMs: number; value: number }> {
   // Choose the wrist with more total travel inside the window.
@@ -1317,7 +1363,6 @@ function dominantWristSpeeds(
     left: [],
     right: [],
   };
-  const legacy = toLegacyPoseFrames(sequence);
   for (const frame of legacy) {
     for (const sideName of ["left", "right"] as const) {
       const mark = frame.landmarks.find(
@@ -1450,6 +1495,8 @@ async function prepareBallCandidates(input: {
 function runBallStage(input: {
   args: CliArgs;
   sequence: PoseSequence;
+  /** Shared legacy projection from the pose-derivative cache. */
+  legacyFrames: ReturnType<typeof toLegacyPoseFrames>;
   window: { startMs: number; endMs: number };
   paddle: readonly TrackedPaddleObservation[] | null;
   timings: Record<string, number>;
@@ -1485,6 +1532,7 @@ function runBallStage(input: {
       input.sequence,
       input.window,
       input.paddle,
+      input.legacyFrames,
     );
     const tracking = selectPrimaryBallTrack(gated, ablation, input.window, {
       paddleTrackExists: (input.paddle?.length ?? 0) > 0,

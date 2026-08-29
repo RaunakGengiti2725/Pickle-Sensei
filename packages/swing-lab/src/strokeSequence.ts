@@ -62,9 +62,11 @@ export function buildStrokeSequence(input: {
   ball: readonly BallTrackObservation[] | null;
   wristSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
   paddleSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
+  /** Precomputed toLegacyPoseFrames(sequence); derived here when absent. */
+  legacyFrames?: ReturnType<typeof toLegacyPoseFrames> | null;
 }): StrokeSequence {
   const pad = 400;
-  const frames = toLegacyPoseFrames(input.sequence).filter(
+  const frames = (input.legacyFrames ?? toLegacyPoseFrames(input.sequence)).filter(
     (frame) =>
       frame.timestampMs >= input.window.startMs - pad &&
       frame.timestampMs <= input.window.endMs + pad,

@@ -158,10 +158,12 @@ export function classifyStroke(input: {
   paddle: readonly TrackedPaddleObservation[] | null;
   paddleSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
   wristSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
+  /** Precomputed toLegacyPoseFrames(sequence); derived here when absent. */
+  legacyFrames?: ReturnType<typeof toLegacyPoseFrames> | null;
 }): StrokePrediction {
   const evidence: string[] = [];
   const limitingFactors: string[] = [];
-  const frames = toLegacyPoseFrames(input.sequence);
+  const frames = input.legacyFrames ?? toLegacyPoseFrames(input.sequence);
   let contactMs: number;
   if (input.contactMs !== null) {
     contactMs = input.contactMs;
