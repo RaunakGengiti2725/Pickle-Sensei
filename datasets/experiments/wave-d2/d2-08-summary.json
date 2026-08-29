@@ -1,0 +1,50 @@
+{
+  "workstream": "D2-08 phase gold scaling",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "branch": "devin/wave-d2/d2-08-phase-gold",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "createdAtIso": "2026-08-29T09:15:42.000Z",
+  "scope": ["wavea-944403-dink", "wavea-faead-rally", "afn-sasebo-rally1"],
+  "heldOutTouched": false,
+  "media": {
+    "afn-sasebo-rally1": "bundle clip.mp4 present in repo (30000/1001 fps CFR, 132 frames)",
+    "wavea-944403-dink": "dvids-944403 re-acquired from registered mediaUrl; sha256 == rec-916657917f2b digest (verified)",
+    "wavea-faead-rally": "dvids-944209 re-acquired from registered mediaUrl; sha256 == rec-faead33a362c digest (verified)",
+    "mediaCommitted": false,
+    "note": "media files live under gitignored paths (datasets/corpus/media/, bundle clip already committed previously); 0 MB of new media added to the repo"
+  },
+  "methodology": "Absolute-CFR frame extraction (ffmpeg drawtext %{n} before select=between(n,A,B)); every stated boundary was visually read from an extracted frame; unknown boundaries recorded as null, never interpolated; contacts taken from committed eventLabels (waveC / v1), not re-labeled.",
+  "counts": {
+    "eventsWithCommittedContactInScope": 12,
+    "eventsPhaseAnnotated": 10,
+    "eventsWithSubstantiallyCompletePhaseSequences": 8,
+    "eventsRecordedAsUnknownOnly": 2,
+    "perBundle": {
+      "wavea-944403-dink": { "annotated": 4, "complete": 3, "partial": 1 },
+      "wavea-faead-rally": { "annotated": 1, "complete": 1 },
+      "afn-sasebo-rally1": { "annotated": 7, "complete": 4, "partial": 1, "unknownOnly": 2 }
+    }
+  },
+  "propertyCheck": {
+    "rule": "preparation<=backswing<=acceleration<=contact<=followThroughEnd; acceleration<=contact",
+    "violationsInNewLabels": 0,
+    "violationsInExistingCommittedPhases": 0,
+    "existingChecked": [
+      "wavea-944403-dink committed 21075<=21121 OK",
+      "wavea-faead-rally committed 13958<=14042 OK",
+      "afn-sasebo-rally1 committed 2830<=2900 OK"
+    ]
+  },
+  "findings": [
+    "afn-sasebo-rally1 gold contact 2900 (v1): my frames show ball-paddle adjacency at n84-86 (2803-2869, midpoint 2836), ~2 frames earlier than gold n86.9; consistent with HANDOFF_V3's 'gold 2900 has zero tracked support'. Not relabeled (out of scope); reported.",
+    "afn-sasebo-rally1 contact 1717 (v1 dig #3): no visible ball near the target's paddle n50-53 in a 700x600 crop; simultaneous partner lunge makes local motion ambiguous; phases recorded unknown.",
+    "afn-sasebo-rally1 event 3500-4300 (partner swing, contact 3870): hard scene cut between n115 and n116; committed contact lands at the cut and the post-cut wide shot is too small for phase boundaries; phases recorded unknown.",
+    "wavea-faead-rally volley: committed contact duality 14021 (waveC contact pass) vs 14042 (wave-a) for the same event; both inside my observed window n336-337.",
+    "afn-sasebo-rally1 annotator hazard: the target's yellow grip butt reads as a ball-sized yellow blob near her hand in most frames; naive color-based ball reading near the paddle will false-positive on this case."
+  ],
+  "files": [
+    "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v4-waveD2-phases.json",
+    "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v4-waveD2-phases.json",
+    "datasets/paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v4-waveD2-phases.json"
+  ]
+}
