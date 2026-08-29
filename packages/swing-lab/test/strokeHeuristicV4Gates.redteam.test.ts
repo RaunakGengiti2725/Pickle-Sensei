@@ -58,32 +58,23 @@ function classifyFixture(
 }
 
 describe("stroke-heuristic-4 gate OPEN FINDINGS (pinned confidently-wrong outputs)", () => {
-  it("F20-F1: a rival wrist measured in only 2 frames disarms the attribution gate and the wrong arm still commits BACKHAND (v5 handedness cross-check caps it at 0.6, non-decisive)", () => {
+  it("F20-F1 RESOLVED (stroke-heuristic-6): a rival wrist measured in only 2 frames no longer commits the wrong arm — the sparse-declared-wrist gate abstains", () => {
     // Ground truth: a genuine RIGHT-arm forehand; the striking wrist was
     // glimpsed in 2 adjacent frames (travel 0.02u) while the non-striking
     // left counterbalance arm was measured everywhere (travel ~0.09u).
-    // ROOT CAUSE: the v4 attribution gate fires only at rivalMeasuredFrames
-    // === 0; 1-2 glimpsed frames re-arm the "this wrist moved more"
-    // comparison even though the rival's travel is still dominated by
-    // ABSENCE (its unmeasured mid-swing arc contributes zero path length).
-    // e03 declined raising the floor above 0 as bench-fitting (sasebo
-    // @52434 commits correctly with rival at 1 frame) — this fixture
-    // realizes the attack that decision leaves open.
-    // v5's handedness cross-check sees the dominant-motion wrist (left)
-    // contradict the declared right hand, but the declared wrist's 2
-    // measured frames are below MIN_TRAVEL_SAMPLE_FRAMES so the
-    // contradiction is NOT decisive: the wrong-arm commit survives at the
-    // degraded 0.6 cap instead of 0.76. Still a wrong committed label —
-    // the finding stays open, now at degraded confidence.
+    // History: the v4 attribution gate fires only at rivalMeasuredFrames
+    // === 0; 1-2 glimpsed frames re-armed the "this wrist moved more"
+    // comparison (rival travel dominated by ABSENCE), and v5's
+    // non-decisive handedness contradiction still committed the mirrored
+    // BACKHAND at the degraded 0.6 cap. stroke-heuristic-6 abstains: a
+    // non-decisive contradiction with the declared wrist below
+    // MIN_TRAVEL_SAMPLE_FRAMES is neither confirmable nor refutable.
+    // The e03 sasebo @52434 case (rival at 1 frame, NO contradiction —
+    // the dominant wrist matches the declaration) is unaffected.
     const prediction = classifyFixture(sparseRivalWrongArmFixture());
-    expect(prediction.label).toBe("BACKHAND");
-    expect(prediction.taxonomyDepth).toBe(2);
-    expect(prediction.confidence).toBeCloseTo(0.6, 2);
+    expect(prediction.label).toBe("UNKNOWN");
     expect(prediction.limitingFactors).toContain(
-      "declared_handedness_unconfirmed_by_dominant_motion_wrist",
-    );
-    expect(prediction.limitingFactors).not.toContain(
-      "dominant_wrist_attribution_unverifiable_rival_unmeasured",
+      "declared_wrist_too_sparsely_measured_under_handedness_contradiction",
     );
   });
 
@@ -160,7 +151,7 @@ describe("stroke-heuristic-4 gate COVERAGE FINDINGS (pinned false abstentions on
       paddleSpeeds: null,
       wristSpeeds: fixture.wristSpeeds,
     });
-    expect(prediction.classifierVersion).toContain("stroke-heuristic-5");
+    expect(prediction.classifierVersion).toContain("stroke-heuristic-6");
     expect(prediction.label).toBe("UNKNOWN");
     expect(prediction.limitingFactors).toContain(
       "dominant_wrist_attribution_unverifiable_rival_unmeasured",
@@ -198,16 +189,19 @@ describe("stroke-heuristic-4 gate COVERAGE FINDINGS (pinned false abstentions on
 });
 
 describe("f20 fixtures never silently change shape (umbrella pins)", () => {
-  it("the two confidently-wrong pins commit; the four coverage pins abstain", () => {
+  it("the remaining confidently-wrong pin commits; the resolved F20-F1 and four coverage pins abstain", () => {
     // If any of these flips, a classifier change touched the v4 gate
     // surface — re-run the F20 forensics before accepting it.
-    const committing = [sparseRivalWrongArmFixture(), torsoCollapseBoundaryOverheadFixture()];
+    // F20-F1 moved to the abstaining set when stroke-heuristic-6 closed
+    // the sparse-declared-wrist wrong-arm commit.
+    const committing = [torsoCollapseBoundaryOverheadFixture()];
     for (const fixture of committing) {
       const prediction = classifyFixture(fixture);
       expect(prediction.label, fixture.id).not.toBe("UNKNOWN");
       expect(prediction.confidence, fixture.id).toBeGreaterThanOrEqual(0.6);
     }
     const abstaining = [
+      sparseRivalWrongArmFixture(),
       crouchDinkFixture(),
       occludedRivalGenuineForehandFixture(),
       speedDropoutDuringSwingFixture(),

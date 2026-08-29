@@ -95,7 +95,7 @@ describe("classifyStroke (heuristic, hierarchical)", () => {
   const { sequence, window } = generateSwingSequence();
   const windowArg = { startMs: window.startMs, endMs: window.endMs };
 
-  it("versions its output as stroke-heuristic-5", () => {
+  it("versions its output as stroke-heuristic-6", () => {
     const prediction = classifyStroke({
       sequence,
       window: windowArg,
@@ -105,7 +105,7 @@ describe("classifyStroke (heuristic, hierarchical)", () => {
       paddleSpeeds: null,
       wristSpeeds: null,
     });
-    expect(prediction.classifierVersion).toContain("stroke-heuristic-5");
+    expect(prediction.classifierVersion).toContain("stroke-heuristic-6");
   });
 
   it("stops at depth 2 with a side when bounce is unobservable", () => {

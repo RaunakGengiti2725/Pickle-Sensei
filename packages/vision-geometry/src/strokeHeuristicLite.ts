@@ -103,7 +103,7 @@ export const STROKE_TAXONOMY_V3 = {
 } as const;
 export type StrokeV3 = (typeof STROKE_TAXONOMY_V3.labels)[number];
 
-export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-5 (uncalibrated)";
+export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-6 (uncalibrated)";
 
 /**
  * Constants derived from the DEV sandbox pose/paddle data (W9-forensics.txt,
@@ -683,6 +683,19 @@ export function classifyStroke(input: {
     if (decisive) {
       return unknown(
         "declared_handedness_contradicted_by_dominant_motion_wrist",
+        evidence,
+        limitingFactors,
+        contactPointSource,
+        contactPointReliability,
+      );
+    }
+    // A non-decisive contradiction with the DECLARED wrist glimpsed in
+    // fewer than MIN_TRAVEL_SAMPLE_FRAMES frames leaves the side premise
+    // resting on an arm whose ownership is contradicted while the declared
+    // alternative is unmeasurable: neither confirmable nor refutable.
+    if (wristInfo.rivalMeasuredFrames < MIN_TRAVEL_SAMPLE_FRAMES) {
+      return unknown(
+        "declared_wrist_too_sparsely_measured_under_handedness_contradiction",
         evidence,
         limitingFactors,
         contactPointSource,

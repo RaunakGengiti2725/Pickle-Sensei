@@ -97,6 +97,20 @@ import type { TrackedPaddleObservation } from "./paddleTracker.js";
  *     backhands keep BOTH hands on ONE grip, so their wrist separation
  *     stays small and the gate does not fire.
  *
+ * stroke-heuristic-6 (this file) closes the F20-F1 wrong-arm commit
+ * (strokeHeuristicV4Gates.redteam):
+ *
+ * 11. SPARSE-DECLARED-WRIST ABSTENTION — when the dominant-motion wrist
+ *     contradicts the declared hand NON-decisively and the declared wrist
+ *     was glimpsed in fewer than MIN_TRAVEL_SAMPLE_FRAMES frames, the
+ *     side premise rests on an arm whose ownership is contradicted while
+ *     the declared alternative is unmeasurable (its unmeasured mid-swing
+ *     arc contributes zero travel): the contradiction can be neither
+ *     confirmed nor refuted — abstain instead of committing the mirrored
+ *     side at the degraded cap. Two-handed backhands measure BOTH wrists
+ *     in ≥MIN_TRAVEL_SAMPLE_FRAMES frames and keep the degraded-commit
+ *     path.
+ *
  * declared / annotated / predicted stroke stay separate records everywhere.
  */
 
@@ -120,7 +134,7 @@ export const STROKE_TAXONOMY_V3 = {
 } as const;
 export type StrokeV3 = (typeof STROKE_TAXONOMY_V3.labels)[number];
 
-export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-5 (uncalibrated)";
+export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-6 (uncalibrated)";
 
 /**
  * Constants derived from the DEV sandbox pose/paddle data (W9-forensics.txt,
@@ -679,6 +693,19 @@ export function classifyStroke(input: {
     if (decisive) {
       return unknown(
         "declared_handedness_contradicted_by_dominant_motion_wrist",
+        evidence,
+        limitingFactors,
+        contactPointSource,
+        contactPointReliability,
+      );
+    }
+    // A non-decisive contradiction with the DECLARED wrist glimpsed in
+    // fewer than MIN_TRAVEL_SAMPLE_FRAMES frames leaves the side premise
+    // resting on an arm whose ownership is contradicted while the declared
+    // alternative is unmeasurable: neither confirmable nor refutable.
+    if (wristInfo.rivalMeasuredFrames < MIN_TRAVEL_SAMPLE_FRAMES) {
+      return unknown(
+        "declared_wrist_too_sparsely_measured_under_handedness_contradiction",
         evidence,
         limitingFactors,
         contactPointSource,
