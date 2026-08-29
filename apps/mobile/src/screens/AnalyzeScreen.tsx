@@ -20,6 +20,11 @@ import {
   type CapturedClip,
 } from '../camera/capture';
 import { CaptureEvidenceCard } from '../camera/CaptureEvidenceCard';
+import { CaptureGuidancePanel } from '../camera/CaptureGuidancePanel';
+import {
+  envelopeFromReadinessEvent,
+  type EnvelopeVerdict,
+} from '../camera/captureEnvelope';
 import {
   TargetSelector,
   type TargetSelection,
@@ -400,6 +405,8 @@ export function AnalyzeScreen() {
     rearm ? techniqueIntentFromHandoff(rearm) : null,
   );
   const [targetSeed, setTargetSeed] = useState<TargetSelection | null>(null);
+  const [captureEnvelope, setCaptureEnvelope] =
+    useState<EnvelopeVerdict | null>(null);
   const profile = useAppStore(s => s.profile);
   const operationActive = useRef(false);
   const autoLaunchStarted = useRef(false);
@@ -408,11 +415,13 @@ export function AnalyzeScreen() {
     () =>
       subscribeToCameraEvents((event: CameraEvent) => {
         if (event.type === 'readiness') {
+          setCaptureEnvelope(envelopeFromReadinessEvent(event));
           setPhase({
             kind: 'working',
             message: READINESS_COPY[event.state] ?? 'Reading your position…',
           });
         } else if (event.type === 'stroke_detected') {
+          setCaptureEnvelope(null);
           setPhase({
             kind: 'working',
             message: 'Motion captured — saving the motion window…',
@@ -621,6 +630,9 @@ export function AnalyzeScreen() {
                 ? 'The selected file is copied into protected app storage before anything else happens.'
                 : 'The native camera guides framing, waits for a stable full-body read, and captures the stroke automatically.'}
             </Text>
+            {source !== 'library' ? (
+              <CaptureGuidancePanel envelope={captureEnvelope} />
+            ) : null}
           </View>
         )}
       </SafeAreaView>
