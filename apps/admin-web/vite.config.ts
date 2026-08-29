@@ -1,4 +1,12 @@
-import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  createReadStream,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
@@ -36,7 +44,8 @@ function serveRepoFile(req: IncomingMessage, res: ServerResponse, urlPath: strin
   const decoded = decodeURIComponent(urlPath.split("?")[0] ?? "");
   const filePath = normalize(join(REPO_ROOT, decoded));
   const allowed =
-    filePath.startsWith(join(REPO_ROOT, "datasets") + "/") || filePath === join(REPO_ROOT, "docs/COACHING.md");
+    filePath.startsWith(join(REPO_ROOT, "datasets") + "/") ||
+    filePath === join(REPO_ROOT, "docs/COACHING.md");
   if (!allowed || !existsSync(filePath) || !statSync(filePath).isFile()) {
     sendJson(res, 404, { message: `not found: ${decoded}` });
     return;
@@ -63,7 +72,11 @@ function serveRepoFile(req: IncomingMessage, res: ServerResponse, urlPath: strin
     createReadStream(filePath, { start, end }).pipe(res);
     return;
   }
-  res.writeHead(200, { "content-type": contentType, "content-length": size, "accept-ranges": "bytes" });
+  res.writeHead(200, {
+    "content-type": contentType,
+    "content-length": size,
+    "accept-ranges": "bytes",
+  });
   createReadStream(filePath).pipe(res);
 }
 
@@ -86,8 +99,12 @@ function readBody(req: IncomingMessage, limitBytes: number): Promise<string> {
 }
 
 function loadValidationContext(): ValidationContext {
-  const queue = JSON.parse(readFileSync(join(COACH_REVIEW_DIR, "queue.json"), "utf8")) as QueueManifest;
-  const schema = JSON.parse(readFileSync(join(COACH_REVIEW_DIR, "schema.json"), "utf8")) as SchemaDescriptor;
+  const queue = JSON.parse(
+    readFileSync(join(COACH_REVIEW_DIR, "queue.json"), "utf8"),
+  ) as QueueManifest;
+  const schema = JSON.parse(
+    readFileSync(join(COACH_REVIEW_DIR, "schema.json"), "utf8"),
+  ) as SchemaDescriptor;
   const taxonomy = JSON.parse(
     readFileSync(join(COACH_REVIEW_DIR, "taxonomy/fault-taxonomy.v0-draft.json"), "utf8"),
   ) as FaultTaxonomy;
@@ -124,7 +141,10 @@ function coachReviewLabPlugin(): Plugin {
       server.middlewares.use((req, res, next) => {
         void (async () => {
           const url = req.url ?? "";
-          if (req.method === "GET" && (url.startsWith("/datasets/") || url === "/docs/COACHING.md")) {
+          if (
+            req.method === "GET" &&
+            (url.startsWith("/datasets/") || url === "/docs/COACHING.md")
+          ) {
             serveRepoFile(req, res, url);
             return;
           }
@@ -168,8 +188,13 @@ function coachReviewLabPlugin(): Plugin {
             });
             return;
           }
-          if (/synthetic/i.test(review.coachId) || /synthetic/i.test(review.coachCredentialRef ?? "")) {
-            sendJson(res, 403, { message: "SYNTHETIC identities are dev fixtures and can never be persisted" });
+          if (
+            /synthetic/i.test(review.coachId) ||
+            /synthetic/i.test(review.coachCredentialRef ?? "")
+          ) {
+            sendJson(res, 403, {
+              message: "SYNTHETIC identities are dev fixtures and can never be persisted",
+            });
             return;
           }
           if (review.coachCredentialRef !== activeCoach.credentialRef) {

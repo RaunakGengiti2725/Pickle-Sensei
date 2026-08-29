@@ -133,7 +133,9 @@ describe('replay-driven session flow (recorded rally afn-sasebo-rally1)', () => 
       );
     }
     // Every batch-proposed event was emitted with matching bounds.
-    expect(closed.map(({ startMs, peakMs, endMs }) => ({ startMs, peakMs, endMs }))).toEqual(
+    expect(
+      closed.map(({ startMs, peakMs, endMs }) => ({ startMs, peakMs, endMs })),
+    ).toEqual(
       fixture.batchProposals.map(({ startMs, peakMs, endMs }) => ({
         startMs,
         peakMs,
@@ -193,9 +195,7 @@ describe('replay-driven session flow (recorded rally afn-sasebo-rally1)', () => 
     expect(getCompletedSession(sessionId)?.strokeCount).toBe(3);
     expect(getCompletedSession(sessionId)?.phase).toBe('ended');
     // No samples may follow the flush.
-    expect(() => flow.pushSample({ tMs: 9000, v: 1 })).toThrow(
-      /already ended/,
-    );
+    expect(() => flow.pushSample({ tMs: 9000, v: 1 })).toThrow(/already ended/);
   });
 
   it('available provider: events transition processing → ready and families count in the distribution', async () => {

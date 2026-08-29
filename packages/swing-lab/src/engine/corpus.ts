@@ -1,4 +1,11 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { MediaProbe } from "./probe.js";
@@ -35,10 +42,10 @@ export type SourceOrigin = "dvids" | "wikimedia_commons" | "first_party" | "manu
 
 export interface SourceRecord {
   schemaVersion: 1;
-  sourceId: string;             // src-<origin>-<originId>
+  sourceId: string; // src-<origin>-<originId>
   origin: SourceOrigin;
-  originId: string;             // platform-native id (DVIDS video id, Commons file title)
-  url: string;                  // canonical public page
+  originId: string; // platform-native id (DVIDS video id, Commons file title)
+  url: string; // canonical public page
   title: string;
   author: string;
   publishedDate?: string | undefined;
@@ -46,7 +53,7 @@ export interface SourceRecord {
   rights: RightsProfile;
   acquisition: {
     acquiredAtIso: string;
-    method: string;             // e.g. "lab:acquire dvids-page-parse+cloudfront"
+    method: string; // e.g. "lab:acquire dvids-page-parse+cloudfront"
     mediaUrl?: string | undefined; // direct media URL used
     tool: string;
   };
@@ -67,9 +74,9 @@ export type SplitName = "dev" | "val" | "locked_test" | "shadow";
 
 export interface RecordingRecord {
   schemaVersion: 1;
-  recordingId: string;          // rec-<sha256[:12]> (content-addressed)
+  recordingId: string; // rec-<sha256[:12]> (content-addressed)
   sourceId: string;
-  path: string;                 // repo-relative media path
+  path: string; // repo-relative media path
   sha256: string;
   probe: MediaProbe;
   sessionKey: string;
@@ -81,8 +88,8 @@ export interface RecordingRecord {
 
 export interface CandidateEventRecord {
   schemaVersion: 1;
-  eventId: string;              // evt-<recId12>-s<scene>-p<track>-<peakMs>
-  tier: "C";                    // candidates are NEVER labels
+  eventId: string; // evt-<recId12>-s<scene>-p<track>-<peakMs>
+  tier: "C"; // candidates are NEVER labels
   recordingId: string;
   sourceId: string;
   sessionKey: string;
@@ -161,7 +168,10 @@ export function loadRecordings(root = CORPUS_DIR): RecordingRecord[] {
 }
 
 export function saveSources(sources: SourceRecord[], root = CORPUS_DIR): void {
-  writeJsonAtomic(corpusPaths(root).sources, [...sources].sort((a, b) => a.sourceId.localeCompare(b.sourceId)));
+  writeJsonAtomic(
+    corpusPaths(root).sources,
+    [...sources].sort((a, b) => a.sourceId.localeCompare(b.sourceId)),
+  );
 }
 
 export function saveRecordings(recordings: RecordingRecord[], root = CORPUS_DIR): void {
@@ -201,7 +211,11 @@ export function commonsSourceId(fileTitle: string): string {
 }
 
 export function eventId(
-  recordingId: string, sceneIndex: number, trackId: number, peakMs: number, windowIndex = 0,
+  recordingId: string,
+  sceneIndex: number,
+  trackId: number,
+  peakMs: number,
+  windowIndex = 0,
 ): string {
   return `evt-${recordingId.replace(/^rec-/, "")}-s${sceneIndex}w${windowIndex}-p${trackId}-${Math.round(peakMs)}`;
 }
@@ -213,7 +227,10 @@ export function writeEventsShard(
 ): string {
   const path = join(corpusPaths(root).eventsDir, `${recordingId}.jsonl`);
   const tmp = `${path}.tmp-${process.pid}`;
-  writeFileSync(tmp, events.map((event) => JSON.stringify(event)).join("\n") + (events.length ? "\n" : ""));
+  writeFileSync(
+    tmp,
+    events.map((event) => JSON.stringify(event)).join("\n") + (events.length ? "\n" : ""),
+  );
   renameSync(tmp, path);
   return path;
 }
@@ -258,12 +275,15 @@ export function auditCorpus(root = CORPUS_DIR): string[] {
     byHash.set(recording.sha256, [...(byHash.get(recording.sha256) ?? []), recording.recordingId]);
     for (const lineage of recording.derivedFrom) {
       if (!recordings.some((parent) => parent.recordingId === lineage.parentRecordingId)) {
-        problems.push(`${recording.recordingId}: lineage parent ${lineage.parentRecordingId} not registered`);
+        problems.push(
+          `${recording.recordingId}: lineage parent ${lineage.parentRecordingId} not registered`,
+        );
       }
     }
   }
   for (const [hash, ids] of byHash) {
-    if (ids.length > 1) problems.push(`byte-identical recordings: ${ids.join(", ")} (${hash.slice(0, 12)})`);
+    if (ids.length > 1)
+      problems.push(`byte-identical recordings: ${ids.join(", ")} (${hash.slice(0, 12)})`);
   }
   for (const source of sources) {
     if (!source.license) problems.push(`${source.sourceId}: missing license`);

@@ -259,11 +259,7 @@ export function contactMarkerPresentation(
 // ─── §1.2 REPLAY — phase-colored segments (temporalPhasesV2 only) ───────────
 
 export type PhaseSegmentKey =
-  | 'preparation'
-  | 'acceleration'
-  | 'follow_through'
-  | 'recovery'
-  | 'swing';
+  'preparation' | 'acceleration' | 'follow_through' | 'recovery' | 'swing';
 
 export interface PhaseSegmentView {
   key: PhaseSegmentKey;
@@ -373,10 +369,7 @@ export interface InsightInput {
 
 export interface StrokeInsight {
   basis:
-    | 'disagreement'
-    | 'contact_confirmation'
-    | 'phase_timeline'
-    | 'abstention';
+    'disagreement' | 'contact_confirmation' | 'phase_timeline' | 'abstention';
   sentence: string;
 }
 
@@ -448,10 +441,7 @@ export function selectInsight(input: InsightInput): StrokeInsight {
 // ─── §1.4 MEASURED ROWS — provenance-labeled, collapse >4 ───────────────────
 
 export type MeasurementProvenance =
-  | 'DETECTED'
-  | 'ESTIMATE'
-  | 'MEASURED'
-  | 'PREDICTED';
+  'DETECTED' | 'ESTIMATE' | 'MEASURED' | 'PREDICTED';
 
 export interface MeasuredRowView {
   key: string;

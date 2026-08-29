@@ -73,7 +73,9 @@ describe("SessionEventEngine — streaming segmentation (synthetic)", () => {
     for (const event of emitted) {
       expect(event.proposal.startMs).toBeLessThanOrEqual(event.proposal.peakMs);
       expect(event.proposal.peakMs).toBeLessThanOrEqual(event.proposal.endMs);
-      expect(event.closedAtMs).toBeLessThanOrEqual(event.proposal.endMs + SESSION_COMPLETION.safetyMaxMs);
+      expect(event.closedAtMs).toBeLessThanOrEqual(
+        event.proposal.endMs + SESSION_COMPLETION.safetyMaxMs,
+      );
       expect(event.state).toBe("pending");
     }
   });
@@ -97,7 +99,9 @@ describe("SessionEventEngine — streaming segmentation (synthetic)", () => {
     // The valley close happens as the next stroke rises — long before any
     // settle/stability horizon for E1 (measured 1720ms on this series).
     expect(first!.closedAtMs).toBeLessThan(2000);
-    expect(first!.closedAtMs).toBeLessThanOrEqual(first!.proposal.endMs + SESSION_COMPLETION.safetyMaxMs);
+    expect(first!.closedAtMs).toBeLessThanOrEqual(
+      first!.proposal.endMs + SESSION_COMPLETION.safetyMaxMs,
+    );
   });
 
   it("continuous motion that never settles → the hard safety max closes it (recording continues)", () => {
@@ -118,11 +122,15 @@ describe("SessionEventEngine — streaming segmentation (synthetic)", () => {
     // Bounds stay stroke-event-2's: the end walk is capped at peak+1200.
     expect(rally!.proposal.endMs).toBe(rally!.proposal.peakMs + BOUND_STABILITY_MS);
     // Closure at trigger+2500 (trigger = raw peak inside the proposal).
-    expect(rally!.closedAtMs).toBeGreaterThan(rally!.proposal.peakMs + SESSION_COMPLETION.safetyMaxMs);
+    expect(rally!.closedAtMs).toBeGreaterThan(
+      rally!.proposal.peakMs + SESSION_COMPLETION.safetyMaxMs,
+    );
     expect(rally!.closedAtMs).toBeLessThanOrEqual(
       rally!.proposal.peakMs + SESSION_COMPLETION.safetyMaxMs + 80,
     );
-    expect(rally!.closedAtMs).toBeLessThanOrEqual(rally!.proposal.endMs + SESSION_COMPLETION.safetyMaxMs);
+    expect(rally!.closedAtMs).toBeLessThanOrEqual(
+      rally!.proposal.endMs + SESSION_COMPLETION.safetyMaxMs,
+    );
     // The engine kept listening: the stroke after the dip is its own event.
     expect(after!.closeReason).toBe("settle");
     expect(after!.proposal.startMs).toBeGreaterThan(rally!.proposal.endMs);
@@ -304,7 +312,8 @@ function mirrorDominantWristSpeeds(
       if (prior) {
         const dtSec =
           perWrist[sideName].length > 0
-            ? (frame.timestampMs - perWrist[sideName][perWrist[sideName].length - 1]!.timestampMs) / 1000
+            ? (frame.timestampMs - perWrist[sideName][perWrist[sideName].length - 1]!.timestampMs) /
+              1000
             : 0.04;
         const step = Math.hypot(mark.x - prior.x, mark.y - prior.y);
         if (dtSec > 0 && dtSec <= 0.15) {
@@ -360,7 +369,10 @@ function reconstructRun(runDir: string): {
   let analysisSegment: { startMs: number; endMs: number } | null = null;
   if (existsSync(scenesPath)) {
     const scenes = JSON.parse(readFileSync(scenesPath, "utf8")) as ScenesFile;
-    const scene = decideScene(scenes, sequence.frames.map((frame) => frame.timestampMs));
+    const scene = decideScene(
+      scenes,
+      sequence.frames.map((frame) => frame.timestampMs),
+    );
     if (scene.multiShot) {
       analysisSegment = scene.analysisSegment;
       sequence = {

@@ -20,10 +20,7 @@ import {
   type CapturedClip,
 } from '../camera/capture';
 import { CaptureEvidenceCard } from '../camera/CaptureEvidenceCard';
-import {
-  TargetSelector,
-  type TargetSelection,
-} from '../camera/TargetSelector';
+import { TargetSelector, type TargetSelection } from '../camera/TargetSelector';
 import { getDb } from '../data/db';
 import { savePendingCapture, setDeclaredStroke } from '../data/repository';
 import { runCaptureAnalysis } from '../analysis/runCaptureAnalysis';
@@ -396,9 +393,10 @@ export function AnalyzeScreen() {
   const [declaredStroke, setDeclared] = useState<MvpShotTypeSlug | null>(
     (rearm?.declaredStroke as MvpShotTypeSlug | null) ?? null,
   );
-  const [techniqueIntent, setTechniqueIntent] = useState<TechniqueIntent | null>(
-    rearm ? techniqueIntentFromHandoff(rearm) : null,
-  );
+  const [techniqueIntent, setTechniqueIntent] =
+    useState<TechniqueIntent | null>(
+      rearm ? techniqueIntentFromHandoff(rearm) : null,
+    );
   const [targetSeed, setTargetSeed] = useState<TargetSelection | null>(null);
   const profile = useAppStore(s => s.profile);
   const operationActive = useRef(false);
@@ -581,7 +579,6 @@ export function AnalyzeScreen() {
     return () => clearTimeout(timer);
   }, [rearm, run]);
 
-
   useEffect(
     () => () => {
       if (operationActive.current) cancelCameraOperation();
@@ -677,7 +674,9 @@ export function AnalyzeScreen() {
               styles.stateIcon,
               {
                 backgroundColor:
-                  presentation.tone === 'warn' ? color.warnSoft : color.goodSoft,
+                  presentation.tone === 'warn'
+                    ? color.warnSoft
+                    : color.goodSoft,
               },
             ]}
           >
@@ -687,7 +686,9 @@ export function AnalyzeScreen() {
               size={23}
             />
           </View>
-          <Text style={[type.micro, styles.intentEyebrow, { color: toneColor }]}>
+          <Text
+            style={[type.micro, styles.intentEyebrow, { color: toneColor }]}
+          >
             {presentation.eyebrow}
           </Text>
           <Text style={[type.h1, styles.intentTitle]}>
@@ -699,9 +700,7 @@ export function AnalyzeScreen() {
               <Button
                 label="See the full read"
                 variant="volt"
-                onPress={() =>
-                  navigation.replace('Result', { analysisId })
-                }
+                onPress={() => navigation.replace('Result', { analysisId })}
               />
             ) : null}
             <Button
@@ -799,8 +798,7 @@ export function AnalyzeScreen() {
                   Auto Detect is armed: analyze without declaring and the
                   classifier commits only to what it can defend — usually the
                   swing family, with an honest “couldn’t classify” otherwise.
-                  Declaring a technique instead runs its exact coaching
-                  targets.
+                  Declaring a technique instead runs its exact coaching targets.
                 </Text>
               ) : null}
               {importedClipNeedsTargetTap(clip, declaredStroke, targetSeed) ? (

@@ -20,6 +20,7 @@ research tooling). Long-term standard: world-class perception + temporal stroke
 understanding + expert-validated coaching, at consumer latency (≤2–5s post-capture).
 
 Two product modes:
+
 - **STROKE ANALYSIS (flagship):** one declared movement → zero-touch capture → deep analysis of ONE StrokeEvent.
 - **SESSION ANALYSIS:** long gameplay → many StrokeEvents → per-event analysis + aggregation. (Foundation only today — routes to existing LiveCourt experience; multi-event engine NOT built.)
 
@@ -48,16 +49,17 @@ The atomic unit everywhere: **ONE TARGET PLAYER + ONE STROKE EVENT.** Never anal
 ## 3. CURRENT MEASURED STATE (the numbers that matter)
 
 ### Paddle (THE quality bottleneck — fully diagnosed)
+
 Waterfall on 5 real cases / 3 sources / 27 visible labels (`pnpm lab:paddle-waterfall`):
 
-| Stage | P | R |
-|---|---|---|
-| S0 raw D-FINE detector | 0.68 | **1.00** |
-| S1 candidate filter | 0.65 | 0.96 |
-| S2 track formation | 0.65 | 0.96 |
-| S2b tracklet merge (candidate) | 0.65 | 0.96 |
-| **S3 ownership** | 0.26 | **0.22** ← 74 of 78 lost points die HERE |
-| S4/S5 final (shipped) | 0.27 | 0.22 |
+| Stage                          | P    | R                                        |
+| ------------------------------ | ---- | ---------------------------------------- |
+| S0 raw D-FINE detector         | 0.68 | **1.00**                                 |
+| S1 candidate filter            | 0.65 | 0.96                                     |
+| S2 track formation             | 0.65 | 0.96                                     |
+| S2b tracklet merge (candidate) | 0.65 | 0.96                                     |
+| **S3 ownership**               | 0.26 | **0.22** ← 74 of 78 lost points die HERE |
+| S4/S5 final (shipped)          | 0.27 | 0.22                                     |
 
 - **Oracle ceilings:** perfect selection alone R 0.59; perfect fragment merge R **0.96**. Merging is the right attack.
 - `mergePaddleTracklets` (shipped behind `--merge-tracklets`, NOT default): S3 → P .59/R .48, final P .67/R .30, wrong-player 0/2 — **but causes a downstream cascade**: merged paddle-speed profile changes EVENT selection → rally1 contact 73ms → 2411ms, event recall 4/5→3/5, stroke L2 3/4→2/4. **Fix needed: decouple event proposal from paddle-speed peaks (target body/wrist proposes; paddle/ball/contact confirm).**
@@ -67,10 +69,12 @@ Waterfall on 5 real cases / 3 sources / 27 visible labels (`pnpm lab:paddle-wate
 - **Wrong-player rate now directly measured: 0/2 dual-labeled frames** (only 2 exist — see data gaps).
 
 ### Ball
+
 - `ball.motion-diff-tracker.v1` frozen. Volley: P .83/R .83, 9px median. State machine TRACKED→OCCLUDED→REACQUIRED (contact-aware, 1 real SUCCESS) / LOST (2 honest failures). Held-out BLUE ball tracked (35 obs).
 - Open failure: **BALL_BODY_OVERLAP** (rally1: 0/4 recall when ball crosses white shirt).
 
 ### Contact / Events / Phases / Stroke
+
 - Contact (event-local, per-event scan; contact belongs to exactly one event): **n=5, 0 abstained, median 66ms**; held-out vic **34ms = 1.0 frame**; within-2-frames 3/4. Confidence classes reported separately.
 - Events (`stroke-event-1`): n=9 labels — target recall 4/5, contact-inside-matched 5/5, start/end median 224/281ms, false proposals 8/14. MULTI_STROKE_AMBIGUOUS is a first-class honest outcome; per-event confirmed-contact scan resolves it when evidence exists.
 - Phases 4-way on identical 15 boundaries: geometry.v1 (FROZEN FAILURE, 880–2366ms) · paddle-speed 765–1065ms · v1+anchor 73–197ms · **v2 event-local best (accel 160 / contact 73 / follow 130 / recovery 400ms), anchor-or-abstain** (PHASE_CONTACT_ANCHOR_MISSING / PHASE_WRONG_EVENT). Known v2 defect: one held-out boundary inversion (followEnd < contact) recorded, unfixed.
@@ -78,6 +82,7 @@ Waterfall on 5 real cases / 3 sources / 27 visible labels (`pnpm lab:paddle-wate
 - Player identity: user-tap/seed experiment measured — identity confidence auto→seeded: held-out 0.30→**0.94**, volley .38→.84, dink .50→.83; recovered held-out dink contact to ball+paddle-confirmed. Seeding does NOT move paddle P/R (ownership is the bottleneck, not person selection).
 
 ### Latency (Apple M-series research path, 8s clip — NOT mobile numbers)
+
 - pose+people+scenes ~6.9s · **paddle detect ~14.6s event-gated** (21.6s full) · ball ~0.9s · logic small · **wall ~23s** (was 30s; event-gated detector span = −32% and improved contact).
 - Target: ≤2s ideal / ≤5s max. **NOT MET.** Two known big wins not yet done: capture-time pose reuse (~6.9s) and target-ROI/keyframe detection (~14.6s).
 
@@ -86,6 +91,7 @@ Waterfall on 5 real cases / 3 sources / 27 visible labels (`pnpm lab:paddle-wate
 ## 4. MOBILE APP — WHAT ACTUALLY SHIPPED (verified: Swift parse 0 err, TS 0 err, 21 suites/107 tests, lint 0)
 
 **Live Stroke Analysis flow (zero-touch after walking out):**
+
 1. Home → two mode cards: **Stroke Analysis** (→ Analyze) / **Session Analysis** (→ LiveCourt).
 2. Declare movement → guided camera opens.
 3. **STEP 1 OF 2 · SET YOUR POSITION — "Tap where you'll be standing"** (user is AT the phone; we corrected the physically-absurd "tap yourself from 20ft away"). Persistent dashed region ring.

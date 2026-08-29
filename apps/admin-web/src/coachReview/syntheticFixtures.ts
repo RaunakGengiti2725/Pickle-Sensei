@@ -111,7 +111,11 @@ export function syntheticDisagreeingPair(): CoachReview[] {
       queueItemId: "afn-vic-rally1-E1",
       coachId: "SYNTHETIC-COACH-B",
       eventRef: { caseId: "afn-vic-rally1", eventIndex: 0 },
-      strokeConfirmation: { kind: "corrected", stroke: "FOREHAND_VOLLEY", note: "synthetic: taken out of the air" },
+      strokeConfirmation: {
+        kind: "corrected",
+        stroke: "FOREHAND_VOLLEY",
+        note: "synthetic: taken out of the air",
+      },
       overallQuality: { scaleId: "technique-quality-5pt-v1", value: 2 },
       faults: [
         {

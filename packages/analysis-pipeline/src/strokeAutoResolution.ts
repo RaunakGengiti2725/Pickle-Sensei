@@ -72,11 +72,7 @@ import type { ProviderDescriptor } from "@pickle/vision-contracts";
 export const AUTO_RESOLUTION_MIN_CONFIDENCE = 0.5;
 
 /** How the analysis profile was chosen for this run. */
-export type StrokeResolutionBasis =
-  | "declared"
-  | "predicted_l3"
-  | "predicted_family"
-  | "abstained";
+export type StrokeResolutionBasis = "declared" | "predicted_l3" | "predicted_family" | "abstained";
 
 /**
  * Hierarchical stroke prediction — structurally compatible with the output
@@ -177,9 +173,7 @@ export function resolvePredictedProfile(
     return { kind: "abstain", reason: "auto_stroke_confidence_below_floor" };
   }
   if (prediction.leaf !== null) {
-    const technique = SELECTABLE_TECHNIQUES_V1.find(
-      (entry) => entry.canonical === prediction.leaf,
-    );
+    const technique = SELECTABLE_TECHNIQUES_V1.find((entry) => entry.canonical === prediction.leaf);
     if (!technique || technique.legacySlug === null) {
       // A leaf the registry does not support cannot become a route.
       return { kind: "abstain", reason: "auto_stroke_leaf_not_in_registry" };

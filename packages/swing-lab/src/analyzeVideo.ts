@@ -206,7 +206,11 @@ async function main(): Promise<void> {
   const timings: Record<string, number> = {};
   const posePath = join(args.outDir, "pose.json");
   const ballPath = join(args.outDir, "ball.json");
-  if (!args.reuseExtract || !existsSync(posePath) || !existsSync(join(args.outDir, "people.json"))) {
+  if (
+    !args.reuseExtract ||
+    !existsSync(posePath) ||
+    !existsSync(join(args.outDir, "people.json"))
+  ) {
     const bin = ensureSwiftBinary();
     console.log("extracting pose + trajectories (Apple Vision, upright frames)…");
     const started = Date.now();
@@ -458,7 +462,8 @@ async function main(): Promise<void> {
   const MIN_DETECT_SPAN_MS = 1500;
   let prePassSpan: { startMs: number; endMs: number } = strokeWindow;
   if (prePass.events.length > 0) {
-    const startMs = Math.min(...prePass.events.map((event) => event.startMs)) - EVENT_CONTEXT_PAD_MS;
+    const startMs =
+      Math.min(...prePass.events.map((event) => event.startMs)) - EVENT_CONTEXT_PAD_MS;
     const endMs = Math.max(...prePass.events.map((event) => event.endMs)) + EVENT_CONTEXT_PAD_MS;
     const deficit = MIN_DETECT_SPAN_MS - (endMs - startMs);
     const grow = deficit > 0 ? deficit / 2 : 0;
@@ -530,7 +535,11 @@ async function main(): Promise<void> {
       );
     }
   }
-  report.events = { version: STROKE_EVENT_VERSION_2, source: proposals.source, proposals: proposals.events };
+  report.events = {
+    version: STROKE_EVENT_VERSION_2,
+    source: proposals.source,
+    proposals: proposals.events,
+  };
 
   // Contact evidence priority: the measured temporal ball track; otherwise
   // the (already noise-gated) Apple trajectory points.
@@ -756,9 +765,7 @@ async function main(): Promise<void> {
     : {
         status: "abstained",
         reason:
-          targetEvent.status === "ambiguous"
-            ? targetEvent.reason
-            : "no stroke event isolated",
+          targetEvent.status === "ambiguous" ? targetEvent.reason : "no stroke event isolated",
       };
 
   if (!quality.analyzable) {
@@ -766,7 +773,18 @@ async function main(): Promise<void> {
       kind: "not_analyzable",
       detail: `capture quality gate failed: ${quality.reasons.join(", ")} — perception artifacts written; no score permitted`,
     };
-    finish(report, args, buildDebug(report, null, ballObservations, paddleOutcome.tracking, ballOutcome.tracking, playersDebug));
+    finish(
+      report,
+      args,
+      buildDebug(
+        report,
+        null,
+        ballObservations,
+        paddleOutcome.tracking,
+        ballOutcome.tracking,
+        playersDebug,
+      ),
+    );
     return;
   }
 
@@ -822,12 +840,34 @@ async function main(): Promise<void> {
       kind: "abstained",
       detail: `${analysis.failure.code}: ${analysis.failure.message}`,
     };
-    finish(report, args, buildDebug(report, null, ballObservations, paddleOutcome.tracking, ballOutcome.tracking, playersDebug));
+    finish(
+      report,
+      args,
+      buildDebug(
+        report,
+        null,
+        ballObservations,
+        paddleOutcome.tracking,
+        ballOutcome.tracking,
+        playersDebug,
+      ),
+    );
     return;
   }
   writeFileSync(join(args.outDir, "analysis.json"), JSON.stringify(analysis.value, null, 2));
   report.outcome = { kind: "analyzed", record: analysis.value };
-  finish(report, args, buildDebug(report, analysis.value, ballObservations, paddleOutcome.tracking, ballOutcome.tracking, playersDebug));
+  finish(
+    report,
+    args,
+    buildDebug(
+      report,
+      analysis.value,
+      ballObservations,
+      paddleOutcome.tracking,
+      ballOutcome.tracking,
+      playersDebug,
+    ),
+  );
 }
 
 interface PaddleStage {
@@ -872,9 +912,9 @@ function runPaddleStage(input: {
     if (input.args.reuseExtract && existsSync(detsPath)) {
       const existing = JSON.parse(readFileSync(detsPath, "utf8")) as RawPaddleDetectionFile;
       reusable =
-        existing.window.startMs <= wantedStart + 100 &&
-        existing.window.endMs >= wantedEnd - 100;
-      if (!reusable) console.log("existing paddle detections do not cover this window; re-detecting");
+        existing.window.startMs <= wantedStart + 100 && existing.window.endMs >= wantedEnd - 100;
+      if (!reusable)
+        console.log("existing paddle detections do not cover this window; re-detecting");
     }
     if (!reusable) {
       console.log("detecting paddle candidates (D-FINE COCO proxy, python)…");
@@ -883,10 +923,14 @@ function runPaddleStage(input: {
         python,
         [
           script,
-          "--video", input.args.video,
-          "--out", detsPath,
-          "--start-ms", String(wantedStart),
-          "--end-ms", String(wantedEnd),
+          "--video",
+          input.args.video,
+          "--out",
+          detsPath,
+          "--start-ms",
+          String(wantedStart),
+          "--end-ms",
+          String(wantedEnd),
         ],
         { stdio: "inherit" },
       );
@@ -980,9 +1024,11 @@ function dominantWristSpeeds(
       if (!mark) continue;
       const prior = last[sideName];
       if (prior) {
-        const dtSec = perWrist[sideName].length > 0
-          ? (frame.timestampMs - perWrist[sideName][perWrist[sideName].length - 1]!.timestampMs) / 1000
-          : 0.04;
+        const dtSec =
+          perWrist[sideName].length > 0
+            ? (frame.timestampMs - perWrist[sideName][perWrist[sideName].length - 1]!.timestampMs) /
+              1000
+            : 0.04;
         const step = Math.hypot(mark.x - prior.x, mark.y - prior.y);
         if (dtSec > 0 && dtSec <= 0.15) {
           perWrist[sideName].push({ timestampMs: frame.timestampMs, value: step / dtSec });
@@ -1007,9 +1053,7 @@ interface BallStage {
 
 function summarizeAssociation(
   association: PaddleAssociationDecision,
-): NonNullable<
-  Extract<LabRunReport["paddle"], { status: "tracked" }>["association"]
-> {
+): NonNullable<Extract<LabRunReport["paddle"], { status: "tracked" }>["association"]> {
   return {
     meanTargetWristDistance: association.meanTargetWristDistance,
     meanOtherWristDistance: association.meanOtherWristDistance,
@@ -1029,9 +1073,7 @@ function contactLocation(
 ): { x: number; y: number } | null {
   const paddleNear = paddle
     ?.filter((observation) => Math.abs(observation.timestampMs - contactMs) <= 80)
-    .sort(
-      (a, b) => Math.abs(a.timestampMs - contactMs) - Math.abs(b.timestampMs - contactMs),
-    )[0];
+    .sort((a, b) => Math.abs(a.timestampMs - contactMs) - Math.abs(b.timestampMs - contactMs))[0];
   if (paddleNear) return { x: paddleNear.center.x, y: paddleNear.center.y };
   const ballNear = ball
     .filter((observation) => observation.timestampMs <= contactMs + 40)
@@ -1039,9 +1081,9 @@ function contactLocation(
   return ballNear ? { x: ballNear.x, y: ballNear.y } : null;
 }
 
-function summarizeTimeline(timeline: BallTimeline): NonNullable<
-  Extract<LabRunReport["ballStage"], { status: "tracked" }>["timeline"]
-> {
+function summarizeTimeline(
+  timeline: BallTimeline,
+): NonNullable<Extract<LabRunReport["ballStage"], { status: "tracked" }>["timeline"]> {
   return {
     states: timeline.states.map(
       (span) => `${span.state} ${Math.round(span.fromMs)}-${Math.round(span.toMs)}ms`,
@@ -1094,10 +1136,14 @@ function runBallStage(input: {
         python,
         [
           script,
-          "--video", input.args.video,
-          "--out", candidatesPath,
-          "--start-ms", String(wantedStart),
-          "--end-ms", String(wantedEnd),
+          "--video",
+          input.args.video,
+          "--out",
+          candidatesPath,
+          "--start-ms",
+          String(wantedStart),
+          "--end-ms",
+          String(wantedEnd),
         ],
         { stdio: "inherit" },
       );
@@ -1258,9 +1304,7 @@ function buildDebug(
     events: report.events
       ? {
           target:
-            report.targetEvent?.status === "selected"
-              ? report.targetEvent.event.eventId
-              : null,
+            report.targetEvent?.status === "selected" ? report.targetEvent.event.eventId : null,
           list: report.events.proposals.map((event) => ({
             id: event.eventId,
             startMs: Math.round(event.startMs),

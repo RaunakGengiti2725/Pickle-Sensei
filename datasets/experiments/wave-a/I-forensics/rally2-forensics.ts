@@ -25,7 +25,9 @@ import {
   type PeopleFile,
 } from "../../../../packages/swing-lab/src/playerTracker.js";
 
-const runDir = resolve(process.argv[2] ?? "../../datasets/experiments/wave-a/I-runs/afn-sasebo-rally2");
+const runDir = resolve(
+  process.argv[2] ?? "../../datasets/experiments/wave-a/I-runs/afn-sasebo-rally2",
+);
 const tap = (process.argv[3] ?? "0.7923,0.702").split(",").map(Number);
 const goldContactMs = Number(process.argv[4] ?? 2620);
 
@@ -52,17 +54,21 @@ sequence = targetPoseSequence(peopleFile, seeded.value.target);
 // Paddle observations exactly as the runtime saw them (debug.json boxes).
 const debug = JSON.parse(readFileSync(join(runDir, "debug.json"), "utf8"));
 const paddle =
-  debug.paddle?.observations?.map((o: { t: number; x: number; y: number; w: number; h: number; conf: number }) => ({
-    timestampMs: o.t,
-    box: { x: o.x, y: o.y, width: o.w, height: o.h },
-    center: { x: o.x + o.w / 2, y: o.y + o.h / 2 },
-    detectorScore: o.conf,
-    trackId: debug.paddle.trackId,
-    confidence: o.conf,
-    nearWrist: true,
-  })) ?? null;
+  debug.paddle?.observations?.map(
+    (o: { t: number; x: number; y: number; w: number; h: number; conf: number }) => ({
+      timestampMs: o.t,
+      box: { x: o.x, y: o.y, width: o.w, height: o.h },
+      center: { x: o.x + o.w / 2, y: o.y + o.h / 2 },
+      detectorScore: o.conf,
+      trackId: debug.paddle.trackId,
+      confidence: o.conf,
+      nearWrist: true,
+    }),
+  ) ?? null;
 
-const file = JSON.parse(readFileSync(join(runDir, "ball-candidates.json"), "utf8")) as BallCandidateFile;
+const file = JSON.parse(
+  readFileSync(join(runDir, "ball-candidates.json"), "utf8"),
+) as BallCandidateFile;
 const { gated, fragments, ablation } = buildBallTracks(file, sequence, window, paddle);
 const outcome = selectPrimaryBallTrack(gated, ablation, window, {
   paddleTrackExists: (paddle?.length ?? 0) > 0,
@@ -77,9 +83,11 @@ function describe(c: BallTrackCandidate): string {
     c.windowOverlapMs >= BALL_GATES2.minWindowOverlapMs ? "" : "OVERLAP",
     c.medianSpeed >= BALL_GATES2.minPrimaryMedianSpeed ? "" : "SLOW",
     c.bodyDwellFraction <= BALL_GATES2.maxBodyDwellFraction ? "" : "BODY",
-    (c.minPaddleDistance !== null
-      ? c.minPaddleDistance <= BALL_GATES2.maxPrimaryPaddleDistance
-      : !(paddle?.length ?? 0))
+    (
+      c.minPaddleDistance !== null
+        ? c.minPaddleDistance <= BALL_GATES2.maxPrimaryPaddleDistance
+        : !(paddle?.length ?? 0)
+    )
       ? ""
       : "PADDLE",
   ].filter(Boolean);
@@ -93,7 +101,9 @@ function describe(c: BallTrackCandidate): string {
 }
 
 console.log(`window ${window.startMs}-${window.endMs} · gold contact ${goldContactMs}ms`);
-console.log(`outcome: ${outcome.status}${outcome.status === "untracked" ? " — " + outcome.reason : ""}`);
+console.log(
+  `outcome: ${outcome.status}${outcome.status === "untracked" ? " — " + outcome.reason : ""}`,
+);
 console.log(`gated ${gated.length} · fragments ${fragments.length}`);
 console.log("\n── GATED TRACKS overlapping [contact-800, contact+800] ──");
 for (const c of gated) {
@@ -110,7 +120,8 @@ for (const c of fragments) {
   console.log(describe(c));
 }
 console.log("\n── ALL GATED (whole window) sorted by overlap ──");
-for (const c of [...gated].sort((a, b) => b.windowOverlapMs - a.windowOverlapMs).slice(0, 15)) console.log(describe(c));
+for (const c of [...gated].sort((a, b) => b.windowOverlapMs - a.windowOverlapMs).slice(0, 15))
+  console.log(describe(c));
 
 // Target body region around contact (for the occlusion geometry).
 console.log("\n── TARGET BODY around contact ──");
@@ -128,7 +139,9 @@ for (const frame of toLegacyPoseFrames(sequence)) {
 console.log("\n── PADDLE near contact ──");
 for (const p of paddle ?? []) {
   if (Math.abs(p.timestampMs - goldContactMs) > 300) continue;
-  console.log(`t=${Math.round(p.timestampMs)} center (${p.center.x.toFixed(3)},${p.center.y.toFixed(3)})`);
+  console.log(
+    `t=${Math.round(p.timestampMs)} center (${p.center.x.toFixed(3)},${p.center.y.toFixed(3)})`,
+  );
 }
 
 // Raw candidates near the gold ball labels.

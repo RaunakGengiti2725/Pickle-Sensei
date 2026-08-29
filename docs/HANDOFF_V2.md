@@ -13,6 +13,7 @@
 
 iOS/Android pickleball technique analysis (React Native + native Swift capture + TS analysis
 packages + Python/Swift research tooling). Two modes on ONE intelligence engine:
+
 - **STROKE ANALYSIS (flagship):** choose technique → tap start spot → walk out → auto target
   lock → ONE stroke → auto event → analysis → Result. Zero touches after walking out.
 - **SESSION ANALYSIS:** target lock → play → E1, E2, E3… each analyzed independently, then
@@ -60,7 +61,9 @@ Approved external language: **"Pickle Sensei is still being validated."** (claim
 ```
 TARGET 5/5 → EVENT 3/5 → PADDLE 3/5 → BALL 2/5 → CONTACT 1/5 → PHASE 1/5 → STROKE 1/5
 ```
+
 **1/5 strokes survives end-to-end (wm-volley-02).** Per-case losses (all named):
+
 - `wm-dink-01` [held-out]: EVENT 42% overlap (<50% gate) + CONTACT abstained — compact strokes
   peak wrist speed AFTER contact; disagreement gate fires (307ms spread).
 - `afn-sasebo-rally1` [dev]: honestly MULTI_STROKE_AMBIGUOUS (correct window IS in top-2 at 80%
@@ -68,7 +71,7 @@ TARGET 5/5 → EVENT 3/5 → PADDLE 3/5 → BALL 2/5 → CONTACT 1/5 → PHASE 1
 - `afn-sasebo-rally2` [dev]: BALL untracked (body-overlap slice) + contact 274ms (estimator
   prefers an early paddle whip — pre-existing fusion trait).
 - `afn-vic-rally1` [held-out]: EVENT 88% overlap ✓ but CONTACT abstained (380ms spread).
-**CONTACT FUSION is the binding constraint** — was event identity before D-030.
+  **CONTACT FUSION is the binding constraint** — was event identity before D-030.
 
 ---
 

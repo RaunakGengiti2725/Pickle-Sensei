@@ -85,9 +85,7 @@ export function scoringStackStatus(): ScoringStackStatus {
  * the heuristic reads the dominant wrist at the trigger's motion peak and
  * reports those substitutions in limitingFactors itself.
  */
-class HeuristicHierarchicalStrokeClassifier
-  implements IHierarchicalStrokeClassifier
-{
+class HeuristicHierarchicalStrokeClassifier implements IHierarchicalStrokeClassifier {
   public readonly descriptor: ProviderDescriptor;
 
   public constructor(entry: ModelManifestEntry) {

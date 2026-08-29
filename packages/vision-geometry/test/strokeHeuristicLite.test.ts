@@ -103,9 +103,7 @@ describe("classifyStroke (ported heuristic, hierarchical)", () => {
     });
     expect(prediction.label).toBe("UNKNOWN");
     expect(
-      prediction.limitingFactors.some((factor) =>
-        factor.includes("contact_too_close_to_midline"),
-      ),
+      prediction.limitingFactors.some((factor) => factor.includes("contact_too_close_to_midline")),
     ).toBe(true);
   });
 

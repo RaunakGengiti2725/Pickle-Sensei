@@ -54,7 +54,12 @@ export interface BallFrameLabel {
   radiusNorm?: number;
 }
 
-export const CONTACT_UNCERTAINTIES = ["exact", "plus_minus_1", "plus_minus_2", "uncertain"] as const;
+export const CONTACT_UNCERTAINTIES = [
+  "exact",
+  "plus_minus_1",
+  "plus_minus_2",
+  "uncertain",
+] as const;
 export type ContactUncertainty = (typeof CONTACT_UNCERTAINTIES)[number];
 
 /**
@@ -124,7 +129,8 @@ export function validateAnnotation(raw: unknown): string[] {
     problems.push("annotatorConfidence must be 0..1");
   }
   for (const fault of annotation.faults ?? []) {
-    if (!CHECKPOINTS.includes(fault.checkpoint)) problems.push(`unknown checkpoint ${String(fault.checkpoint)}`);
+    if (!CHECKPOINTS.includes(fault.checkpoint))
+      problems.push(`unknown checkpoint ${String(fault.checkpoint)}`);
     if (![1, 2, 3].includes(fault.severity)) problems.push("fault severity must be 1..3");
   }
   for (const [key, value] of Object.entries(annotation.checkpointScores ?? {})) {

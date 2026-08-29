@@ -13,8 +13,7 @@ module.exports = {
       '<rootDir>/../../packages/swing-domain/src/index.ts',
     '^@pickle/model-registry$':
       '<rootDir>/../../packages/model-registry/src/index.ts',
-    '^@pickle/evaluation$':
-      '<rootDir>/../../packages/evaluation/src/index.ts',
+    '^@pickle/evaluation$': '<rootDir>/../../packages/evaluation/src/index.ts',
     '^@pickle/vision-geometry$':
       '<rootDir>/../../packages/vision-geometry/src/index.ts',
     '^@pickle/analysis-pipeline$':

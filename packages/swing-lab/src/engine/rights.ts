@@ -29,10 +29,18 @@ export interface RightsProfile {
   notes?: string;
 }
 
-const AFFIRMATIVE: ReadonlySet<RightAnswer> = new Set(["yes", "yes_with_attribution", "sharealike"]);
+const AFFIRMATIVE: ReadonlySet<RightAnswer> = new Set([
+  "yes",
+  "yes_with_attribution",
+  "sharealike",
+]);
 
 export function trainingEligible(rights: RightsProfile): boolean {
-  return AFFIRMATIVE.has(rights.train) && AFFIRMATIVE.has(rights.store) && AFFIRMATIVE.has(rights.analyze);
+  return (
+    AFFIRMATIVE.has(rights.train) &&
+    AFFIRMATIVE.has(rights.store) &&
+    AFFIRMATIVE.has(rights.analyze)
+  );
 }
 
 export function redistributionEligible(rights: RightsProfile): boolean {
@@ -43,34 +51,58 @@ export function redistributionEligible(rights: RightsProfile): boolean {
 export function rightsForLicense(license: string, reviewedBy: string): RightsProfile {
   const now = new Date().toISOString();
   const normalized = license.toLowerCase();
-  if (normalized.includes("public domain") || normalized.includes("pd-usgov") || normalized.includes("cc0")) {
+  if (
+    normalized.includes("public domain") ||
+    normalized.includes("pd-usgov") ||
+    normalized.includes("cc0")
+  ) {
     return {
-      store: "yes", analyze: "yes", annotate: "yes", train: "yes",
-      redistributeDerivatives: "yes", commercial: "yes",
+      store: "yes",
+      analyze: "yes",
+      annotate: "yes",
+      train: "yes",
+      redistributeDerivatives: "yes",
+      commercial: "yes",
       basis: `${license} — U.S. federal government works (17 U.S.C. §105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.`,
-      reviewedBy, reviewedAtIso: now,
+      reviewedBy,
+      reviewedAtIso: now,
     };
   }
   if (/cc[ -]by[ -]sa/.test(normalized)) {
     return {
-      store: "yes_with_attribution", analyze: "yes_with_attribution", annotate: "yes_with_attribution",
-      train: "yes_with_attribution", redistributeDerivatives: "sharealike", commercial: "yes_with_attribution",
+      store: "yes_with_attribution",
+      analyze: "yes_with_attribution",
+      annotate: "yes_with_attribution",
+      train: "yes_with_attribution",
+      redistributeDerivatives: "sharealike",
+      commercial: "yes_with_attribution",
       basis: `${license} — CC BY-SA permits any use incl. commercial with attribution; redistributed derivatives must be ShareAlike-licensed.`,
-      reviewedBy, reviewedAtIso: now,
+      reviewedBy,
+      reviewedAtIso: now,
     };
   }
   if (/cc[ -]by/.test(normalized)) {
     return {
-      store: "yes_with_attribution", analyze: "yes_with_attribution", annotate: "yes_with_attribution",
-      train: "yes_with_attribution", redistributeDerivatives: "yes_with_attribution", commercial: "yes_with_attribution",
+      store: "yes_with_attribution",
+      analyze: "yes_with_attribution",
+      annotate: "yes_with_attribution",
+      train: "yes_with_attribution",
+      redistributeDerivatives: "yes_with_attribution",
+      commercial: "yes_with_attribution",
       basis: `${license} — CC BY permits any use incl. commercial with attribution.`,
-      reviewedBy, reviewedAtIso: now,
+      reviewedBy,
+      reviewedAtIso: now,
     };
   }
   return {
-    store: "unclear", analyze: "unclear", annotate: "unclear", train: "unclear",
-    redistributeDerivatives: "unclear", commercial: "unclear",
+    store: "unclear",
+    analyze: "unclear",
+    annotate: "unclear",
+    train: "unclear",
+    redistributeDerivatives: "unclear",
+    commercial: "unclear",
     basis: `Unrecognized license "${license}" — must be reviewed by a human before any use beyond quarantine.`,
-    reviewedBy, reviewedAtIso: now,
+    reviewedBy,
+    reviewedAtIso: now,
   };
 }

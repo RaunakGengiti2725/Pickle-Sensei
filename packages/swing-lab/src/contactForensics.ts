@@ -68,7 +68,10 @@ interface DebugFile {
   ballTimeline: {
     states: Array<{ state: string; fromMs: number; toMs: number }>;
   } | null;
-  events: { target: string | null; list: Array<{ id: string; startMs: number; endMs: number; peakMs: number }> } | null;
+  events: {
+    target: string | null;
+    list: Array<{ id: string; startMs: number; endMs: number; peakMs: number }>;
+  } | null;
 }
 
 function loadGoldContact(caseId: string): number {
@@ -217,9 +220,13 @@ function speedSeriesFromCenters(
  * minus any contact-aware REACQUIRED tail (that relink runs only after the
  * first contact estimate exists, so its points were not inputs to it).
  */
-function firstPassBallObservations(
-  debug: DebugFile,
-): Array<{ frameIndex: number; timestampMs: number; x: number; y: number; confidence: number }> | null {
+function firstPassBallObservations(debug: DebugFile): Array<{
+  frameIndex: number;
+  timestampMs: number;
+  x: number;
+  y: number;
+  confidence: number;
+}> | null {
   const track = debug.ballTrack?.observations;
   if (track && track.length > 0) {
     const reacquired = (debug.ballTimeline?.states ?? []).find(
@@ -251,15 +258,22 @@ function firstPassBallObservations(
  * re-implemented here as the reference the candidate is compared against. */
 function v3ReferenceFusion(
   signals: Array<{ signal: string; timestampMs: number; weight: number }>,
-): { status: "estimated"; estimatedContactMs: number; spreadMs: number } | { status: "abstained"; spreadMs: number } {
+):
+  | { status: "estimated"; estimatedContactMs: number; spreadMs: number }
+  | { status: "abstained"; spreadMs: number } {
   const total = signals.reduce((sum, signal) => sum + signal.weight, 0);
-  const fused = signals.reduce((sum, signal) => sum + signal.timestampMs * signal.weight, 0) / total;
+  const fused =
+    signals.reduce((sum, signal) => sum + signal.timestampMs * signal.weight, 0) / total;
   const spread =
     signals.length > 1
       ? Math.max(...signals.map((signal) => Math.abs(signal.timestampMs - fused)))
       : 0;
   if (spread > 250) return { status: "abstained", spreadMs: Math.round(spread) };
-  return { status: "estimated", estimatedContactMs: Math.round(fused), spreadMs: Math.round(spread) };
+  return {
+    status: "estimated",
+    estimatedContactMs: Math.round(fused),
+    spreadMs: Math.round(spread),
+  };
 }
 
 /** v3's signal extraction (global peaks / sharpest turn / closest approach),
@@ -271,9 +285,13 @@ function v3Signals(input: {
   paddleSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
   paddleCenters: ReadonlyArray<{ timestampMs: number; x: number; y: number }> | null;
 }): Array<{ signal: string; timestampMs: number; weight: number; detail: string }> {
-  const signals: Array<{ signal: string; timestampMs: number; weight: number; detail: string }> = [];
+  const signals: Array<{ signal: string; timestampMs: number; weight: number; detail: string }> =
+    [];
   const paddle = input.paddleSpeeds
-    ?.filter((sample) => sample.timestampMs >= input.window.startMs && sample.timestampMs <= input.window.endMs)
+    ?.filter(
+      (sample) =>
+        sample.timestampMs >= input.window.startMs && sample.timestampMs <= input.window.endMs,
+    )
     .sort((a, b) => a.timestampMs - b.timestampMs);
   if (paddle && paddle.length >= 5) {
     let peak = 0;
@@ -352,7 +370,10 @@ function v3Signals(input: {
       const inMag = Math.hypot(inVec.x, inVec.y);
       const outMag = Math.hypot(outVec.x, outVec.y);
       if (inMag < 1e-6 || outMag < 1e-6) continue;
-      const cos = Math.min(1, Math.max(-1, (inVec.x * outVec.x + inVec.y * outVec.y) / (inMag * outMag)));
+      const cos = Math.min(
+        1,
+        Math.max(-1, (inVec.x * outVec.x + inVec.y * outVec.y) / (inMag * outMag)),
+      );
       const angleDeg = (Math.acos(cos) * 180) / Math.PI;
       if (angleDeg < 35) continue;
       if (!bestTurn || angleDeg > bestTurn.angleDeg) {
@@ -381,7 +402,8 @@ function v3Signals(input: {
         }
         if (!nearest || nearestDelta > 60) continue;
         const distance = Math.hypot(nearest.x - observation.x, nearest.y - observation.y);
-        if (!best || distance < best.distance) best = { timestampMs: observation.timestampMs, distance };
+        if (!best || distance < best.distance)
+          best = { timestampMs: observation.timestampMs, distance };
       }
       if (best) {
         signals.push({
@@ -430,7 +452,8 @@ function main(): void {
     let strokeWindow = window.value;
     if (sceneSegment) {
       const clamped = clampToScene(strokeWindow, sceneSegment);
-      if (clamped) strokeWindow = { ...strokeWindow, startMs: clamped.startMs, endMs: clamped.endMs };
+      if (clamped)
+        strokeWindow = { ...strokeWindow, startMs: clamped.startMs, endMs: clamped.endMs };
     }
 
     const paddleCenters = paddleCentersFromDebug(debug);
@@ -456,7 +479,11 @@ function main(): void {
     const scanWindow =
       provisional.status === "selected"
         ? contactScope(provisional.event)
-        : { startMs: strokeWindow.startMs, endMs: strokeWindow.endMs, peakMotionMs: strokeWindow.peakMotionMs };
+        : {
+            startMs: strokeWindow.startMs,
+            endMs: strokeWindow.endMs,
+            peakMotionMs: strokeWindow.peakMotionMs,
+          };
 
     console.log(`\n${"═".repeat(78)}`);
     console.log(
@@ -562,22 +589,38 @@ function main(): void {
     if (dumpSeries) {
       console.log("paddle speed series (scan window ±300ms):");
       for (const sample of paddleSpeeds ?? []) {
-        if (sample.timestampMs < scanWindow.startMs - 300 || sample.timestampMs > scanWindow.endMs + 300) continue;
+        if (
+          sample.timestampMs < scanWindow.startMs - 300 ||
+          sample.timestampMs > scanWindow.endMs + 300
+        )
+          continue;
         const bar = "#".repeat(Math.min(60, Math.round(sample.value * 20)));
         const mark = Math.abs(sample.timestampMs - gold) <= 20 ? " <== GOLD" : "";
-        console.log(`  ${String(Math.round(sample.timestampMs)).padStart(6)} ${sample.value.toFixed(2).padStart(6)} ${bar}${mark}`);
+        console.log(
+          `  ${String(Math.round(sample.timestampMs)).padStart(6)} ${sample.value.toFixed(2).padStart(6)} ${bar}${mark}`,
+        );
       }
       console.log("dominant wrist speed series (scan window ±300ms):");
       for (const sample of wristSpeeds) {
-        if (sample.timestampMs < scanWindow.startMs - 300 || sample.timestampMs > scanWindow.endMs + 300) continue;
+        if (
+          sample.timestampMs < scanWindow.startMs - 300 ||
+          sample.timestampMs > scanWindow.endMs + 300
+        )
+          continue;
         const bar = "#".repeat(Math.min(60, Math.round(sample.value * 20)));
         const mark = Math.abs(sample.timestampMs - gold) <= 20 ? " <== GOLD" : "";
-        console.log(`  ${String(Math.round(sample.timestampMs)).padStart(6)} ${sample.value.toFixed(2).padStart(6)} ${bar}${mark}`);
+        console.log(
+          `  ${String(Math.round(sample.timestampMs)).padStart(6)} ${sample.value.toFixed(2).padStart(6)} ${bar}${mark}`,
+        );
       }
       if (ballObservations) {
         console.log("ball observations (scan window ±300ms):");
         for (const observation of ballObservations) {
-          if (observation.timestampMs < scanWindow.startMs - 300 || observation.timestampMs > scanWindow.endMs + 300) continue;
+          if (
+            observation.timestampMs < scanWindow.startMs - 300 ||
+            observation.timestampMs > scanWindow.endMs + 300
+          )
+            continue;
           const mark = Math.abs(observation.timestampMs - gold) <= 20 ? " <== GOLD" : "";
           console.log(
             `  ${String(Math.round(observation.timestampMs)).padStart(6)} (${observation.x.toFixed(3)}, ${observation.y.toFixed(3)}) conf ${observation.confidence.toFixed(2)}${mark}`,
@@ -585,7 +628,9 @@ function main(): void {
         }
       }
       const torso = medianTorsoSpan(sequence);
-      console.log(`median torso span: ${torso === null ? "unmeasured" : torso.toFixed(3)} image units`);
+      console.log(
+        `median torso span: ${torso === null ? "unmeasured" : torso.toFixed(3)} image units`,
+      );
       void targetWrists;
     }
   }
@@ -603,10 +648,7 @@ function medianTorsoSpan(sequence: PoseSequence): number | null {
     const rh = get("right_hip");
     if (!ls || !rs || !lh || !rh) continue;
     spans.push(
-      Math.hypot(
-        (ls.x + rs.x) / 2 - (lh.x + rh.x) / 2,
-        (ls.y + rs.y) / 2 - (lh.y + rh.y) / 2,
-      ),
+      Math.hypot((ls.x + rs.x) / 2 - (lh.x + rh.x) / 2, (ls.y + rs.y) / 2 - (lh.y + rh.y) / 2),
     );
   }
   if (spans.length === 0) return null;

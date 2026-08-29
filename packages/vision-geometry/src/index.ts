@@ -33,7 +33,14 @@ export {
   type OfflineStrokeWindow,
   type StrokeFamily,
 } from "./offlineStroke.js";
-export { classifyStroke, STROKE_HEURISTIC_VERSION, STROKE_TAXONOMY_V3, type HeuristicPaddleObservation, type HeuristicStrokePrediction, type StrokeV3 } from "./strokeHeuristicLite.js";
+export {
+  classifyStroke,
+  STROKE_HEURISTIC_VERSION,
+  STROKE_TAXONOMY_V3,
+  type HeuristicPaddleObservation,
+  type HeuristicStrokePrediction,
+  type StrokeV3,
+} from "./strokeHeuristicLite.js";
 
 /**
  * Version of the deterministic measurement bundle. This is a geometry model —

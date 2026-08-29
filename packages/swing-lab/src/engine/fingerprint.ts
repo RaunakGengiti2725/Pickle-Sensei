@@ -30,7 +30,19 @@ export function computeFingerprint(videoPath: string): Fingerprint {
   // 9x8 gray frames, 1fps, raw bytes: each frame = 72 bytes.
   const raw = execFileSync(
     "ffmpeg",
-    ["-v", "error", "-i", videoPath, "-vf", "fps=1,scale=9:8", "-pix_fmt", "gray", "-f", "rawvideo", "-"],
+    [
+      "-v",
+      "error",
+      "-i",
+      videoPath,
+      "-vf",
+      "fps=1,scale=9:8",
+      "-pix_fmt",
+      "gray",
+      "-f",
+      "rawvideo",
+      "-",
+    ],
     { maxBuffer: 512 * 1024 * 1024 },
   );
   const hashes: string[] = [];
@@ -57,7 +69,11 @@ export function loadFingerprint(fingerprintsDir: string, recordingId: string): F
   return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as Fingerprint) : null;
 }
 
-export function saveFingerprint(fingerprintsDir: string, recordingId: string, fingerprint: Fingerprint): void {
+export function saveFingerprint(
+  fingerprintsDir: string,
+  recordingId: string,
+  fingerprint: Fingerprint,
+): void {
   writeFileSync(fingerprintPath(fingerprintsDir, recordingId), JSON.stringify(fingerprint));
 }
 
@@ -100,7 +116,11 @@ export function detectOverlap(
     }
     const mean = total / aligned;
     if (mean <= maxMeanHamming && (!best || mean < best.meanHamming)) {
-      best = { offsetSec: invert ? -offset : offset, alignedSeconds: aligned, meanHamming: Number(mean.toFixed(2)) };
+      best = {
+        offsetSec: invert ? -offset : offset,
+        alignedSeconds: aligned,
+        meanHamming: Number(mean.toFixed(2)),
+      };
     }
   }
   return best;

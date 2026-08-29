@@ -214,7 +214,7 @@ export function initializeTargetFromSeed(
   };
 
   const risks: string[] = [];
-  let chosen: PlayerTrack | undefined; // eslint-disable-line prefer-const
+  let chosen: PlayerTrack | undefined;
   let confidence = 0.5;
 
   if (seed.mode === "user_tapped_person") {
@@ -260,7 +260,9 @@ export function initializeTargetFromSeed(
         `TARGET_HALF_EMPTY: no near-side player started on the ${seed.half}; fell back to the most prominent player`,
       );
     }
-    chosen = pool.sort((a, b) => b.track.coverage * b.track.meanTorsoSpan - a.track.coverage * a.track.meanTorsoSpan)[0]?.track;
+    chosen = pool.sort(
+      (a, b) => b.track.coverage * b.track.meanTorsoSpan - a.track.coverage * a.track.meanTorsoSpan,
+    )[0]?.track;
     confidence = wanted.length === 1 ? 0.9 : wanted.length > 1 ? 0.7 : 0.45;
   } else {
     const ranked = [...tracks].sort(
@@ -305,10 +307,7 @@ export function initializeTargetFromSeed(
 }
 
 /** Track ids that are duplicate detections of the same human as `target`. */
-export function duplicateAliasesOf(
-  target: PlayerTrack,
-  tracks: readonly PlayerTrack[],
-): number[] {
+export function duplicateAliasesOf(target: PlayerTrack, tracks: readonly PlayerTrack[]): number[] {
   const aliases: number[] = [];
   for (const track of tracks) {
     if (track.trackId === target.trackId) continue;
@@ -421,10 +420,7 @@ export function selectTargetPlayer(
 }
 
 /** Canonical PoseSequence built from the TARGET track only. Gaps stay gaps. */
-export function targetPoseSequence(
-  file: PeopleFile,
-  target: PlayerTrack,
-): PoseSequence {
+export function targetPoseSequence(file: PeopleFile, target: PlayerTrack): PoseSequence {
   return {
     schemaVersion: POSE_SEQUENCE_SCHEMA_VERSION,
     format: POSE_SEQUENCE_FORMAT,
@@ -550,20 +546,21 @@ function describePerson(
   if (torso.length < 3) return null; // torso-less fragments cannot carry identity
   const midX = torso.reduce((total, joint) => total + joint.x, 0) / torso.length;
   const midY = torso.reduce((total, joint) => total + joint.y, 0) / torso.length;
-  const shoulder = byName.get("left_shoulder") && byName.get("right_shoulder")
-    ? {
-        x: (byName.get("left_shoulder")!.x + byName.get("right_shoulder")!.x) / 2,
-        y: (byName.get("left_shoulder")!.y + byName.get("right_shoulder")!.y) / 2,
-      }
-    : null;
-  const hip = byName.get("left_hip") && byName.get("right_hip")
-    ? {
-        x: (byName.get("left_hip")!.x + byName.get("right_hip")!.x) / 2,
-        y: (byName.get("left_hip")!.y + byName.get("right_hip")!.y) / 2,
-      }
-    : null;
-  const torsoSpan =
-    shoulder && hip ? Math.hypot(shoulder.x - hip.x, shoulder.y - hip.y) : 0.02;
+  const shoulder =
+    byName.get("left_shoulder") && byName.get("right_shoulder")
+      ? {
+          x: (byName.get("left_shoulder")!.x + byName.get("right_shoulder")!.x) / 2,
+          y: (byName.get("left_shoulder")!.y + byName.get("right_shoulder")!.y) / 2,
+        }
+      : null;
+  const hip =
+    byName.get("left_hip") && byName.get("right_hip")
+      ? {
+          x: (byName.get("left_hip")!.x + byName.get("right_hip")!.x) / 2,
+          y: (byName.get("left_hip")!.y + byName.get("right_hip")!.y) / 2,
+        }
+      : null;
+  const torsoSpan = shoulder && hip ? Math.hypot(shoulder.x - hip.x, shoulder.y - hip.y) : 0.02;
   return {
     timestampMs,
     confidence: person.c,

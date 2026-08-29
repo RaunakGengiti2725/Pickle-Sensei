@@ -1,13 +1,34 @@
 import { spawn } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import type { PeopleFile } from "../playerTracker.js";
 import type { ScenesFile } from "../sceneValidity.js";
 import {
-  CORPUS_DIR, REPO_ROOT, corpusPaths, ensureCorpus, loadRecordings, loadSources,
-  saveRecordings, writeEventsShard, type RecordingRecord, type SplitName,
+  CORPUS_DIR,
+  REPO_ROOT,
+  corpusPaths,
+  ensureCorpus,
+  loadRecordings,
+  loadSources,
+  saveRecordings,
+  writeEventsShard,
+  type RecordingRecord,
+  type SplitName,
 } from "./corpus.js";
-import { computeFingerprint, detectOverlap, loadFingerprint, saveFingerprint, type OverlapMatch } from "./fingerprint.js";
+import {
+  computeFingerprint,
+  detectOverlap,
+  loadFingerprint,
+  saveFingerprint,
+  type OverlapMatch,
+} from "./fingerprint.js";
 import { mineRecording, MINER_VERSION } from "./minerCore.js";
 import { assignSplit, auditSplits, loadSplits, saveSplits, type LeakageFinding } from "./splits.js";
 
@@ -74,7 +95,11 @@ function isDone(state: FactoryState, recordingId: string, stage: StageName): boo
 }
 
 function record(
-  state: FactoryState, statePath: string, recordingId: string, stage: StageName, status: StageStatus,
+  state: FactoryState,
+  statePath: string,
+  recordingId: string,
+  stage: StageName,
+  status: StageStatus,
 ): void {
   state.recordings[recordingId] = { ...state.recordings[recordingId], [stage]: status };
   saveState(statePath, state);
@@ -113,20 +138,40 @@ function adoptLegacyExtraction(recording: RecordingRecord, runDir: string): bool
   const legacyId = recording.notes?.match(/legacy id: ([\w-]+)/)?.[1];
   if (!legacyId) return false;
   for (const candidateDir of [join(REPO_ROOT, "datasets/mining", legacyId)]) {
-    if (!existsSync(join(candidateDir, "people.json")) || !existsSync(join(candidateDir, "scenes.json"))) continue;
+    if (
+      !existsSync(join(candidateDir, "people.json")) ||
+      !existsSync(join(candidateDir, "scenes.json"))
+    )
+      continue;
     mkdirSync(runDir, { recursive: true });
-    for (const file of ["pose.json", "people.json", "scenes.json", "ball.json", "extract-meta.json"]) {
-      if (existsSync(join(candidateDir, file))) copyFileSync(join(candidateDir, file), join(runDir, file));
+    for (const file of [
+      "pose.json",
+      "people.json",
+      "scenes.json",
+      "ball.json",
+      "extract-meta.json",
+    ]) {
+      if (existsSync(join(candidateDir, file)))
+        copyFileSync(join(candidateDir, file), join(runDir, file));
     }
     return true;
   }
   return false;
 }
 
-async function stageExtract(recordings: RecordingRecord[], state: FactoryState, statePath: string, jobs: number) {
+async function stageExtract(
+  recordings: RecordingRecord[],
+  state: FactoryState,
+  statePath: string,
+  jobs: number,
+) {
   const paths = corpusPaths();
-  const pending = recordings.filter((recording) => isRoot(recording) && !isDone(state, recording.recordingId, "extract"));
-  console.log(`extract: ${pending.length} pending of ${recordings.filter(isRoot).length} root recordings`);
+  const pending = recordings.filter(
+    (recording) => isRoot(recording) && !isDone(state, recording.recordingId, "extract"),
+  );
+  console.log(
+    `extract: ${pending.length} pending of ${recordings.filter(isRoot).length} root recordings`,
+  );
   await pool(pending, jobs, async (recording) => {
     const started = Date.now();
     const runDir = join(paths.runsDir, recording.recordingId);
@@ -136,26 +181,46 @@ async function stageExtract(recordings: RecordingRecord[], state: FactoryState, 
         detail = "adopted from datasets/mining (identical content, earlier run)";
       } else {
         mkdirSync(runDir, { recursive: true });
-        await spawnCapture(SWIFT_BIN, ["extract", join(REPO_ROOT, recording.path), "--out", runDir]);
+        await spawnCapture(SWIFT_BIN, [
+          "extract",
+          join(REPO_ROOT, recording.path),
+          "--out",
+          runDir,
+        ]);
       }
       record(state, statePath, recording.recordingId, "extract", {
-        status: "done", stageVersion: STAGE_VERSIONS.extract, atIso: new Date().toISOString(),
-        ms: Date.now() - started, detail,
+        status: "done",
+        stageVersion: STAGE_VERSIONS.extract,
+        atIso: new Date().toISOString(),
+        ms: Date.now() - started,
+        detail,
       });
-      console.log(`  ✓ extract ${recording.recordingId} (${((Date.now() - started) / 1000).toFixed(1)}s · ${detail})`);
+      console.log(
+        `  ✓ extract ${recording.recordingId} (${((Date.now() - started) / 1000).toFixed(1)}s · ${detail})`,
+      );
     } catch (error) {
       record(state, statePath, recording.recordingId, "extract", {
-        status: "failed", stageVersion: STAGE_VERSIONS.extract, atIso: new Date().toISOString(),
-        ms: Date.now() - started, error: String(error).slice(0, 500),
+        status: "failed",
+        stageVersion: STAGE_VERSIONS.extract,
+        atIso: new Date().toISOString(),
+        ms: Date.now() - started,
+        error: String(error).slice(0, 500),
       });
       console.log(`  ✗ extract ${recording.recordingId}: ${String(error).slice(0, 200)}`);
     }
   });
 }
 
-async function stageFingerprint(recordings: RecordingRecord[], state: FactoryState, statePath: string, jobs: number) {
+async function stageFingerprint(
+  recordings: RecordingRecord[],
+  state: FactoryState,
+  statePath: string,
+  jobs: number,
+) {
   const paths = corpusPaths();
-  const pending = recordings.filter((recording) => !isDone(state, recording.recordingId, "fingerprint"));
+  const pending = recordings.filter(
+    (recording) => !isDone(state, recording.recordingId, "fingerprint"),
+  );
   console.log(`fingerprint: ${pending.length} pending of ${recordings.length} recordings`);
   await pool(pending, jobs, async (recording) => {
     const started = Date.now();
@@ -163,13 +228,19 @@ async function stageFingerprint(recordings: RecordingRecord[], state: FactorySta
       const fingerprint = computeFingerprint(join(REPO_ROOT, recording.path));
       saveFingerprint(paths.fingerprintsDir, recording.recordingId, fingerprint);
       record(state, statePath, recording.recordingId, "fingerprint", {
-        status: "done", stageVersion: STAGE_VERSIONS.fingerprint, atIso: new Date().toISOString(),
-        ms: Date.now() - started, detail: `${fingerprint.hashes.length} sampled seconds`,
+        status: "done",
+        stageVersion: STAGE_VERSIONS.fingerprint,
+        atIso: new Date().toISOString(),
+        ms: Date.now() - started,
+        detail: `${fingerprint.hashes.length} sampled seconds`,
       });
     } catch (error) {
       record(state, statePath, recording.recordingId, "fingerprint", {
-        status: "failed", stageVersion: STAGE_VERSIONS.fingerprint, atIso: new Date().toISOString(),
-        ms: Date.now() - started, error: String(error).slice(0, 500),
+        status: "failed",
+        stageVersion: STAGE_VERSIONS.fingerprint,
+        atIso: new Date().toISOString(),
+        ms: Date.now() - started,
+        error: String(error).slice(0, 500),
       });
     }
   });
@@ -188,13 +259,19 @@ interface DedupFinding {
  * without declaration is the dangerous case — the two recordings are merged
  * into one session so they can never land in different splits.
  */
-function stageDedup(recordings: RecordingRecord[]): { findings: DedupFinding[]; leakage: LeakageFinding[] } {
+function stageDedup(recordings: RecordingRecord[]): {
+  findings: DedupFinding[];
+  leakage: LeakageFinding[];
+} {
   const paths = corpusPaths();
   const findings: DedupFinding[] = [];
   const leakage: LeakageFinding[] = [];
   const splits = loadSplits(paths.splits);
   const prints = new Map(
-    recordings.map((recording) => [recording.recordingId, loadFingerprint(paths.fingerprintsDir, recording.recordingId)]),
+    recordings.map((recording) => [
+      recording.recordingId,
+      loadFingerprint(paths.fingerprintsDir, recording.recordingId),
+    ]),
   );
   const declaredPairs = new Set<string>();
   for (const recording of recordings) {
@@ -241,7 +318,13 @@ function stageDedup(recordings: RecordingRecord[]): { findings: DedupFinding[]; 
       } else if (strong && declared) {
         action = "declared lineage confirmed by phash";
       }
-      findings.push({ recordingA: a.recordingId, recordingB: b.recordingId, match, declared, action });
+      findings.push({
+        recordingA: a.recordingId,
+        recordingB: b.recordingId,
+        match,
+        declared,
+        action,
+      });
     }
   }
   if (mutated) {
@@ -255,47 +338,70 @@ function stageDedup(recordings: RecordingRecord[]): { findings: DedupFinding[]; 
       {
         generatedAtIso: new Date().toISOString(),
         algo: STAGE_VERSIONS.fingerprint,
-        limitations: "temporal dHash does not catch SPATIAL crops — those rely on declared lineage at registration",
+        limitations:
+          "temporal dHash does not catch SPATIAL crops — those rely on declared lineage at registration",
         findings,
         leakage,
       },
-      null, 2,
+      null,
+      2,
     ),
   );
   return { findings, leakage };
 }
 
 async function stageMine(
-  recordings: RecordingRecord[], state: FactoryState, statePath: string, jobs: number, includeProtected: boolean,
+  recordings: RecordingRecord[],
+  state: FactoryState,
+  statePath: string,
+  jobs: number,
+  includeProtected: boolean,
 ) {
   const paths = corpusPaths();
   const splits = loadSplits(paths.splits);
   const minable: SplitName[] = includeProtected ? ["dev", "val", "locked_test"] : ["dev", "val"];
   const eligible = recordings.filter((recording) => {
     const split = splits.assigned[recording.sessionKey]?.split;
-    return isRoot(recording) && split !== undefined && minable.includes(split) && isDone(state, recording.recordingId, "extract");
+    return (
+      isRoot(recording) &&
+      split !== undefined &&
+      minable.includes(split) &&
+      isDone(state, recording.recordingId, "extract")
+    );
   });
   const pending = eligible.filter((recording) => !isDone(state, recording.recordingId, "mine"));
-  const shadowCount = recordings.filter((recording) => splits.assigned[recording.sessionKey]?.split === "shadow" && isRoot(recording)).length;
-  console.log(`mine: ${pending.length} pending of ${eligible.length} eligible (${shadowCount} shadow roots untouched by policy)`);
+  const shadowCount = recordings.filter(
+    (recording) => splits.assigned[recording.sessionKey]?.split === "shadow" && isRoot(recording),
+  ).length;
+  console.log(
+    `mine: ${pending.length} pending of ${eligible.length} eligible (${shadowCount} shadow roots untouched by policy)`,
+  );
   await pool(pending, jobs, async (recording) => {
     const started = Date.now();
     try {
       const runDir = join(paths.runsDir, recording.recordingId);
-      const peopleFile = JSON.parse(readFileSync(join(runDir, "people.json"), "utf8")) as PeopleFile;
+      const peopleFile = JSON.parse(
+        readFileSync(join(runDir, "people.json"), "utf8"),
+      ) as PeopleFile;
       const scenes = JSON.parse(readFileSync(join(runDir, "scenes.json"), "utf8")) as ScenesFile;
       const split = splits.assigned[recording.sessionKey]!.split;
       const events = mineRecording({ recording, split, peopleFile, scenes });
       writeEventsShard(recording.recordingId, events);
       record(state, statePath, recording.recordingId, "mine", {
-        status: "done", stageVersion: STAGE_VERSIONS.mine, atIso: new Date().toISOString(),
-        ms: Date.now() - started, detail: `${events.length} candidates · ${scenes.segments.length} scenes`,
+        status: "done",
+        stageVersion: STAGE_VERSIONS.mine,
+        atIso: new Date().toISOString(),
+        ms: Date.now() - started,
+        detail: `${events.length} candidates · ${scenes.segments.length} scenes`,
       });
       console.log(`  ✓ mine ${recording.recordingId}: ${events.length} candidates`);
     } catch (error) {
       record(state, statePath, recording.recordingId, "mine", {
-        status: "failed", stageVersion: STAGE_VERSIONS.mine, atIso: new Date().toISOString(),
-        ms: Date.now() - started, error: String(error).slice(0, 500),
+        status: "failed",
+        stageVersion: STAGE_VERSIONS.mine,
+        atIso: new Date().toISOString(),
+        ms: Date.now() - started,
+        error: String(error).slice(0, 500),
       });
       console.log(`  ✗ mine ${recording.recordingId}: ${String(error).slice(0, 200)}`);
     }
@@ -306,7 +412,7 @@ const isMain = process.argv[1]?.endsWith("factory.ts");
 if (isMain) {
   const flag = (name: string) => {
     const index = process.argv.indexOf(name);
-    return index >= 0 ? process.argv[index + 1] ?? null : null;
+    return index >= 0 ? (process.argv[index + 1] ?? null) : null;
   };
   const stage = (flag("--stage") ?? "all") as "all" | StageName | "dedup";
   const jobs = Number(flag("--jobs") ?? 3);
@@ -315,20 +421,30 @@ if (isMain) {
   const state = loadState(paths.factoryState);
   const recordings = loadRecordings();
   const sources = loadSources();
-  console.log(`factory: ${recordings.length} recordings · ${sources.length} sources · stage=${stage} · jobs=${jobs}`);
+  console.log(
+    `factory: ${recordings.length} recordings · ${sources.length} sources · stage=${stage} · jobs=${jobs}`,
+  );
 
   (async () => {
-    if (stage === "all" || stage === "extract") await stageExtract(recordings, state, paths.factoryState, jobs);
-    if (stage === "all" || stage === "fingerprint") await stageFingerprint(recordings, state, paths.factoryState, jobs);
+    if (stage === "all" || stage === "extract")
+      await stageExtract(recordings, state, paths.factoryState, jobs);
+    if (stage === "all" || stage === "fingerprint")
+      await stageFingerprint(recordings, state, paths.factoryState, jobs);
     if (stage === "all" || stage === "dedup") {
       const { findings, leakage } = stageDedup(loadRecordings());
       const detected = findings.filter((finding) => finding.action.startsWith("MERGED"));
-      console.log(`dedup: ${findings.length} overlap pairs · ${detected.length} undeclared→merged · ${leakage.length} leakage findings`);
-      for (const finding of leakage) console.log(`  ${finding.severity === "problem" ? "✗" : "⚠"} ${finding.message}`);
+      console.log(
+        `dedup: ${findings.length} overlap pairs · ${detected.length} undeclared→merged · ${leakage.length} leakage findings`,
+      );
+      for (const finding of leakage)
+        console.log(`  ${finding.severity === "problem" ? "✗" : "⚠"} ${finding.message}`);
     }
-    if (stage === "all" || stage === "mine") await stageMine(loadRecordings(), state, paths.factoryState, jobs, includeProtected);
+    if (stage === "all" || stage === "mine")
+      await stageMine(loadRecordings(), state, paths.factoryState, jobs, includeProtected);
     const failed = Object.entries(state.recordings).flatMap(([recordingId, stages]) =>
-      Object.entries(stages).filter(([, status]) => status.status === "failed").map(([stageName]) => `${recordingId}:${stageName}`),
+      Object.entries(stages)
+        .filter(([, status]) => status.status === "failed")
+        .map(([stageName]) => `${recordingId}:${stageName}`),
     );
     if (failed.length > 0) {
       console.log(`FAILED STAGES (recorded, resumable): ${failed.join(", ")}`);

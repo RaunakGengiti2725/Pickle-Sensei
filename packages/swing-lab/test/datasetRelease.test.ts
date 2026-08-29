@@ -36,9 +36,7 @@ interface Manifest {
   problems: string[];
 }
 
-const manifest = JSON.parse(
-  readFileSync(join(RELEASE, "manifest.json"), "utf8"),
-) as Manifest;
+const manifest = JSON.parse(readFileSync(join(RELEASE, "manifest.json"), "utf8")) as Manifest;
 
 describe("pickle-real-v0.1 release integrity", () => {
   it("exists, is hash-sealed, and reported zero integrity problems", () => {
@@ -71,7 +69,9 @@ describe("pickle-real-v0.1 release integrity", () => {
 
   it("the latest release snapshots annotation bytes and they hash-match exactly", () => {
     const releasesDir = join(ROOT, "datasets/releases");
-    const versions = readdirSync(releasesDir).filter((name) => name.startsWith("pickle-real-")).sort();
+    const versions = readdirSync(releasesDir)
+      .filter((name) => name.startsWith("pickle-real-"))
+      .sort();
     const latest = versions[versions.length - 1]!;
     const latestManifest = JSON.parse(
       readFileSync(join(releasesDir, latest, "manifest.json"), "utf8"),
@@ -83,7 +83,9 @@ describe("pickle-real-v0.1 release integrity", () => {
       if (!annotationRef!.path.includes(`releases/${latest}/annotations/`)) continue;
       const path = join(ROOT, annotationRef!.path);
       expect(existsSync(path)).toBe(true);
-      expect(createHash("sha256").update(readFileSync(path)).digest("hex")).toBe(annotationRef!.sha256);
+      expect(createHash("sha256").update(readFileSync(path)).digest("hex")).toBe(
+        annotationRef!.sha256,
+      );
       snapshotted += 1;
     }
     // Once a snapshotting release exists it must cover every case.
