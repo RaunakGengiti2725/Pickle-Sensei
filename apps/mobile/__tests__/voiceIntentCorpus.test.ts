@@ -2,7 +2,7 @@
  * Voice-intent phrase corpus — SYNTHETIC transcripts written by hand for
  * this test (no real user speech, no speech engine involved). The contract
  * under test is transcript-in → intent-out only: the deterministic
- * voice-intent-v2 grammar (61-technique taxonomy) plus its projection into
+ * voice-intent-v3 grammar (61-technique taxonomy) plus its projection into
  * the capture-selectable registry the mobile picker declares through.
  *
  * Honesty invariants exercised:
@@ -276,7 +276,7 @@ describe('projection into the capture-selectable registry (declared PRIOR path)'
     }
   });
 
-  it('resolution objects are versioned voice-intent-v2', () => {
+  it('resolution objects are versioned voice-intent-v3', () => {
     for (const [transcript] of LEAF_CORPUS) {
       expect(resolveVoiceTechniqueIntent(transcript).version).toBe(
         VOICE_INTENT_VERSION,
