@@ -1,0 +1,119 @@
+{
+  "id": "d4-03",
+  "title": "Decode/extraction latency micro-optimization (LINUX-CPU)",
+  "date": "2026-08-29",
+  "platform": "LINUX-CPU (Ubuntu 22.04, ffmpeg 4.4.2, python 3.10, torch 2.13.0+cpu)",
+  "branch": "devin/wave-d4/d4-03-decode-latency",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "scope": "ffmpeg frame-extraction paths in tools/paddle-lab/detect_paddle.py (frame_iter windowed decode; decode_frames_at sparse exact-frame decode used by crop mode). No model, threshold, contract, or held-out changes. Held-out clips (wm-dink-01, afn-vic-rally1) untouched.",
+  "changes": [
+    {
+      "what": "decode_frames_at: input -ss seek at the first wanted frame's exact pts (plan_window_seek flooring arithmetic; select rebased to post-seek ordinals) + -frames:v early stop after the last wanted frame (previously the whole clip was decoded and drained regardless of the wanted set).",
+      "byteIdentical": true,
+      "proof": "bench_decode.py --verify: every yielded frame sha256-equal to the direct full-clip decode frame at the same absolute index, on 4 cluster shapes per clip (early/mid-late/sparse-scattered/single-last-frame) on wm-volley-02 and afn-sasebo-rally1. 0 failures."
+    },
+    {
+      "what": "frame_iter: replaced -fps_mode vfr with -vsync vfr (same semantics; -fps_mode exists only on ffmpeg >= 5.1). BUGFIX on Linux ffmpeg 4.4: any stride>1 or --decode-size invocation errored inside ffmpeg and frame_iter SILENTLY yielded zero frames.",
+      "byteIdentical": true,
+      "proof": "test_timestamp_alignment.py green on both default clips (includes stride-3 window; every extracted frame byte-identical to direct full-clip CFR decode). E2E: default stride-1 window artifact frames byte-equal baseline vs fixed (25 frames, wm-volley-02 3750-4750ms)."
+    },
+    {
+      "what": "frame_iter + decode_frames_at now raise RuntimeError on nonzero ffmpeg exit instead of silently yielding a truncated/empty stream.",
+      "byteIdentical": true,
+      "proof": "no pixel-path change; failure-path only."
+    },
+    {
+      "what": "run_crops: fixed 4-value unpack of the 5-tuple ffprobe_meta (start_time added in C01) — crop mode crashed with ValueError before any decode on the integration base.",
+      "byteIdentical": true,
+      "proof": "baseline: ValueError: too many values to unpack (expected 4). Fixed: 2 frames / 3 crops processed on wm-volley-02 (cpu)."
+    }
+  ],
+  "measurements": {
+    "note": "LINUX-CPU only. Decode-only wall clock (no inference), median of 7 runs per scenario, bench_decode.py. Clips: wm-volley-02 (1000x1080@25fps, 8.0s, 200 frames, single keyframe at frame 0) and afn-sasebo-rally1 (1920x1080@29.97fps, 4.4s, 132 frames, keyframes at 0 and 117). Never Mac/iPhone numbers.",
+    "beforeAfterMedianWallSec": [
+      {
+        "clip": "wm-volley-02",
+        "scenario": "decode_frames_at early cluster (21 frames @start)",
+        "before": 0.2394,
+        "after": 0.1295,
+        "deltaPct": -45.9
+      },
+      {
+        "clip": "afn-sasebo-rally1",
+        "scenario": "decode_frames_at early cluster (21 frames @start)",
+        "before": 0.308,
+        "after": 0.2083,
+        "deltaPct": -32.4
+      },
+      {
+        "clip": "wm-volley-02",
+        "scenario": "decode_frames_at late cluster (21 frames @80%)",
+        "before": 0.2373,
+        "after": 0.226,
+        "deltaPct": -4.8
+      },
+      {
+        "clip": "afn-sasebo-rally1",
+        "scenario": "decode_frames_at late cluster (21 frames @80%)",
+        "before": 0.3046,
+        "after": 0.2919,
+        "deltaPct": -4.2
+      },
+      {
+        "clip": "wm-volley-02",
+        "scenario": "frame_iter mid window stride3 (25 frames)",
+        "before": "BROKEN (0 frames, ffmpeg 4.4 rejects -fps_mode)",
+        "after": 0.2004
+      },
+      {
+        "clip": "afn-sasebo-rally1",
+        "scenario": "frame_iter mid window stride3 (25 frames)",
+        "before": "BROKEN (0 frames)",
+        "after": 0.2918
+      },
+      {
+        "clip": "wm-volley-02",
+        "scenario": "frame_iter full clip stride1 (200 frames, unchanged path)",
+        "before": 0.6313,
+        "after": 0.6421
+      },
+      {
+        "clip": "wm-volley-02",
+        "scenario": "frame_iter mid window stride1 (74 frames, unchanged path)",
+        "before": 0.3291,
+        "after": 0.3368
+      },
+      {
+        "clip": "afn-sasebo-rally1",
+        "scenario": "frame_iter full clip stride1 (132 frames, unchanged path)",
+        "before": 0.7857,
+        "after": 0.7992
+      },
+      {
+        "clip": "afn-sasebo-rally1",
+        "scenario": "frame_iter mid window stride1 (73 frames, unchanged path)",
+        "before": 0.5303,
+        "after": 0.5717
+      }
+    ],
+    "contentDigests": "bench digests (order-sensitive sha256 over per-frame sha256 + emitted indices/tMs) identical before vs after on every scenario that produced frames in both runs; the only digest changes are the two stride-3 scenarios that produced ZERO frames at baseline (Linux -fps_mode bug).",
+    "whyLateClusterGainIsSmall": "wm-volley-02 has a single keyframe (frame 0) and rally1 only 0/117, so input seek still decodes from the previous keyframe; the measured win there comes from the -frames:v early stop. On clips with denser keyframes the seek term grows; no quality trade either way.",
+    "e2eSpotCheck": "detect_paddle one-shot on wm-volley-02 3750-6710ms stride 3 (cpu): baseline 0 frames processed (silent), fixed 25 frames / 1114 paddle-proxy detections at 116ms/frame inference (LINUX-CPU)."
+  },
+  "gates": {
+    "pnpmTypecheck": "green (all workspace packages)",
+    "testTimestampAlignment": "green (both default bundle clips)",
+    "benchDecodeVerify": "green (exit 0, 0 byte-identity failures)",
+    "prettier": "not applicable — only Python files touched (prettier has no python parser); repo TS untouched",
+    "mobile": "apps/mobile untouched"
+  },
+  "notFabricated": [
+    "No Mac/iPhone/cascade numbers claimed; all measurements above are LINUX-CPU decode-only or LINUX-CPU inference spot checks.",
+    "Held-out bundles wm-dink-01 and afn-vic-rally1 not read, benched, or referenced by the default bench clips.",
+    "afn-sasebo-rally2 bundle has no committed clip.mp4 on this base; it was not used."
+  ],
+  "reproduce": [
+    "tools/paddle-lab/.venv/bin/python tools/paddle-lab/bench_decode.py --runs 7 --verify",
+    "tools/paddle-lab/.venv/bin/python tools/paddle-lab/test_timestamp_alignment.py"
+  ]
+}
