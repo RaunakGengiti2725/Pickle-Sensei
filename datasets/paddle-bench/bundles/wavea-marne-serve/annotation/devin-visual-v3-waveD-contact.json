@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-marne-serve",
+  "annotatorId": "devin-visual-v3-waveD",
+  "createdAtIso": "2026-08-29T10:05:00.000Z",
+  "revision": 1,
+  "stroke": "serve",
+  "annotatedStrokeV3": "SERVE",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": null,
+  "contactUncertainty": "exact",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.8,
+  "notes": "Wave D contact-only independent frame pass (ffmpeg absolute-CFR extraction from registered source, select+setpts, ts=round(n*1000*fps_den/fps_num)); prior Wave A/C passes not consulted during frame reads for repeat-pass events; held-out cases untouched. 59.94fps CFR; independent relabel of the drop serve.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T10:05:00.000Z"
+    }
+  ],
+  "eventLabels": [
+    {
+      "eventStartMs": 34017,
+      "contactMs": 34718,
+      "eventEndMs": 35433,
+      "owner": "target",
+      "annotator": "devin-visual-v3-waveD",
+      "note": "forehand drop serve; direct-observed (ball ON paddle face n002081 34718ms; approach 34701, leftward departure 34751); contact window 34701-34735 (2 frames at 59.94fps), label 34718 +-1 frame; repeat-pass agreed 34718 (delta 0); disagrees with wave-a 34689 / waveC 34693 by ~25ms (1.5 frames) - recorded, not reconciled"
+    }
+  ]
+}

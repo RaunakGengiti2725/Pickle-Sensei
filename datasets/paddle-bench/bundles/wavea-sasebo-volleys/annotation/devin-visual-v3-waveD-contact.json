@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-sasebo-volleys",
+  "annotatorId": "devin-visual-v3-waveD",
+  "createdAtIso": "2026-08-29T10:05:00.000Z",
+  "revision": 1,
+  "stroke": "volley",
+  "annotatedStrokeV3": "BACKHAND_VOLLEY",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": null,
+  "contactUncertainty": "exact",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.6,
+  "notes": "Wave D contact-only independent frame pass (ffmpeg absolute-CFR extraction from registered source, select+setpts, ts=round(n*1000*fps_den/fps_num)); prior Wave A/C passes not consulted during frame reads for repeat-pass events; held-out cases untouched. 29.97fps CFR; far-court figures are small; three defensible contacts labeled, later exchange (52586-53100) left unlabeled as unresolvable at this scale.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T10:05:00.000Z"
+    }
+  ],
+  "eventLabels": [
+    {
+      "eventStartMs": 51952,
+      "contactMs": 52019,
+      "eventEndMs": 52119,
+      "owner": "target",
+      "annotator": "devin-visual-v3-waveD",
+      "note": "near camo target backhand punch volley at face height; direct-observed (ball at paddle n001559 52019ms, clear leftward departure by 52052); contact window 51985-52052 (2 frames at 29.97fps), label 52019 +-1 frame; wave-a labeled 52000 (delta 19ms, sub-frame)"
+    },
+    {
+      "eventStartMs": 52319,
+      "contactMs": 52352,
+      "eventEndMs": 52419,
+      "owner": "other",
+      "annotator": "devin-visual-v3-waveD",
+      "note": "far-center player counter-volley (small figure); direct-observed at small scale (ball at raised paddle n001569 52352ms, rightward return by 52386); contact window 52319-52386, label 52352 +-1 frame; wave-a labeled 52367 (delta 15ms, sub-frame)"
+    },
+    {
+      "eventStartMs": 52452,
+      "contactMs": 52502,
+      "eventEndMs": 52586,
+      "owner": "target",
+      "annotator": "devin-visual-v3-waveD",
+      "note": "near camo target low backhand flick; direct-observed (ball at low backhand paddle n001573 52486ms, rising outgoing 52519-52552); contact bracketed 52486/52519 -> 52502 +-1 frame; no matching wave-a contact (their nearest target label 52683 conflicts with this read; discrepancy recorded, not reconciled)"
+    }
+  ]
+}

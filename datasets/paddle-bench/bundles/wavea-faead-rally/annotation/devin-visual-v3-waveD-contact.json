@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-faead-rally",
+  "annotatorId": "devin-visual-v3-waveD",
+  "createdAtIso": "2026-08-29T10:05:00.000Z",
+  "revision": 1,
+  "stroke": "volley",
+  "annotatedStrokeV3": "FOREHAND_VOLLEY",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": null,
+  "contactUncertainty": "exact",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.75,
+  "notes": "Wave D contact-only independent frame pass (ffmpeg absolute-CFR extraction from registered source, select+setpts, ts=round(n*1000*fps_den/fps_num)); prior Wave A/C passes not consulted during frame reads for repeat-pass events; held-out cases untouched. 24fps CFR; independent relabel of the 14021 volley plus a contact label for the wave-a event 13417-13833 whose contactMs was previously null (contact occluded per wave-a); my read places ball-at-paddle earlier than the wave-a event start (13333 vs 13417) - discrepancy recorded, not reconciled.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T10:05:00.000Z"
+    }
+  ],
+  "eventLabels": [
+    {
+      "eventStartMs": 13292,
+      "contactMs": 13333,
+      "eventEndMs": 13458,
+      "owner": "target",
+      "annotator": "devin-visual-v3-waveD",
+      "note": "low forehand off the bounce at the near-right player's front foot; direct-observed (ball at low paddle n000320 13333ms, rising leftward-up 13375-13458); contact window 13292-13375, label 13333 +-1 frame; repeat-pass agreed 13333 (delta 0); fills the null contactMs on wave-a event 13417-13833 with an earlier-than-event-start read"
+    },
+    {
+      "eventStartMs": 13875,
+      "contactMs": 14021,
+      "eventEndMs": 14500,
+      "owner": "target",
+      "annotator": "devin-visual-v3-waveD",
+      "note": "high forehand volley punch above head; direct-observed adjacency (ball at raised paddle bracket n000336-n000337 14000-14042ms); contact window 14000-14042 (1 frame at 24fps), label 14021; waveC labeled 14021 (delta 0)"
+    }
+  ]
+}
