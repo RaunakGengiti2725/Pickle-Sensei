@@ -38,6 +38,7 @@
     "lab:factory": "pnpm --filter @pickle/swing-lab factory",
     "lab:ta-bench": "pnpm --filter @pickle/swing-lab ta:bench",
     "lab:learning-curve": "pnpm --filter @pickle/swing-lab learning:curve",
+    "lab:learning-curve-modality": "pnpm --filter @pickle/swing-lab learning:curve-modality",
     "lab:corpus-sessions": "pnpm --filter @pickle/swing-lab corpus:sessions",
     "lab:failure-mine": "pnpm --filter @pickle/swing-lab failure:mine",
     "lab:own": "pnpm --filter @pickle/swing-lab own",

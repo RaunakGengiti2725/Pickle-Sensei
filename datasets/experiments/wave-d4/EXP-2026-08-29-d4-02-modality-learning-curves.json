@@ -1,0 +1,297 @@
+{
+  "experimentId": "EXP-2026-08-29-d4-02-modality-learning-curves",
+  "curveVersion": "modality-learning-curve-v1",
+  "generatedAtIso": "2026-08-29T09:16:17.153Z",
+  "question": "Per modality (ownership, contact, event, stroke): is the current accuracy data-limited, model-limited, or domain-shifted — measured as label-count-vs-accuracy curves with group-aware (sessionKey) splits?",
+  "method": "pnpm lab:learning-curve-modality — joins committed labels to committed prediction artifacts (latest lab:cascade rows; ownership wrong-player snapshots quoted from L-summary). Group-aware bootstrap resamples SESSIONS, never frames. Curves stop where committed predictions run out; nothing is fabricated. Held-out cases excluded from all curves; their committed rows quoted read-only as domain-shift evidence.",
+  "environment": "LINUX-CPU artifact-join only — no pipeline was run; no cascade numbers were re-measured on this box",
+  "cascadeSource": "datasets/cascade/cascade-1787971753680.json",
+  "modalities": [
+    {
+      "modality": "ownership",
+      "labelSupply": {
+        "devUnits": 72,
+        "heldOutUnits": 26,
+        "devGroups": ["afn-sasebo-2025-06", "dvids-marne-2024", "wm-tournament-2014"],
+        "perGroup": {
+          "afn-sasebo-2025-06": 29,
+          "wm-tournament-2014": 15,
+          "dvids-marne-2024": 28
+        },
+        "definition": "ownership-review.json sidecar frames with ≥1 target/other box verdict"
+      },
+      "joined": {
+        "devUnits": 0,
+        "devGroups": [],
+        "predictionSource": "none committed",
+        "perUnit": []
+      },
+      "curve": [],
+      "curveStops": "no committed per-unit predictions exist for this modality's labels — accuracy curve has zero points (label counts and quoted snapshots only)",
+      "snapshots": [
+        {
+          "labelCount": 19,
+          "accuracy": 0.947,
+          "counts": "18/19 dual pairs on the correct player",
+          "source": "datasets/experiments/wave-a/L-summary.json .baseline.wrongPlayer",
+          "caveat": "single measurement, mixed dev+held-out pairs as originally reported"
+        },
+        {
+          "labelCount": 41,
+          "accuracy": 0.902,
+          "counts": "37/41 dual pairs on the correct player",
+          "source": "datasets/experiments/wave-a/L-summary.json .measured.wrongPlayer",
+          "caveat": "all 4 wrong-player pairs are ONE held-out episode (wm-dink-01 @1680-2160, edge-on dink) per the quoted artifact — the dev slice of this measurement has 0 wrong-player pairs"
+        }
+      ],
+      "domainShift": null,
+      "verdict": {
+        "classification": "MEASUREMENT_LIMITED",
+        "reasoning": "Curve stops at 0 session group(s) / 0 joined units while the dev label supply is 72 units: committed prediction artifacts do not cover the newer labels, so data-limited vs model-limited cannot be separated at this n. The binding constraint is PREDICTION coverage (Mac regen over the grown label set), not label supply."
+      }
+    },
+    {
+      "modality": "contact",
+      "labelSupply": {
+        "devUnits": 28,
+        "heldOutUnits": 3,
+        "devGroups": [
+          "afn-sasebo-2025-06",
+          "dvids-marne-2024",
+          "dvids-warriorgames-2026",
+          "wm-tournament-2014"
+        ],
+        "perGroup": {
+          "afn-sasebo-2025-06": 14,
+          "dvids-marne-2024": 11,
+          "dvids-warriorgames-2026": 1,
+          "wm-tournament-2014": 2
+        },
+        "definition": "unique labeled contact events across committed bundle annotations (44 records deduped at 60ms → 31 events)"
+      },
+      "joined": {
+        "devUnits": 3,
+        "devGroups": ["afn-sasebo-2025-06", "wm-tournament-2014"],
+        "predictionSource": "datasets/cascade/cascade-1787971753680.json rows[].stages.CONTACT",
+        "perUnit": [
+          {
+            "unitId": "wm-volley-02:CONTACT",
+            "group": "wm-tournament-2014",
+            "correct": true,
+            "detail": "error 30ms (est 6650 vs gold 6680)"
+          },
+          {
+            "unitId": "afn-sasebo-rally1:CONTACT",
+            "group": "afn-sasebo-2025-06",
+            "correct": false,
+            "detail": "status abstained"
+          },
+          {
+            "unitId": "afn-sasebo-rally2:CONTACT",
+            "group": "afn-sasebo-2025-06",
+            "correct": true,
+            "detail": "error 30ms (est 2650 vs gold 2620)"
+          }
+        ]
+      },
+      "curve": [
+        {
+          "groups": 1,
+          "resamples": 1000,
+          "meanUnits": 1.5,
+          "accuracy": {
+            "mean": 0.755,
+            "p5": 0.5,
+            "p95": 1
+          }
+        },
+        {
+          "groups": 2,
+          "resamples": 1,
+          "meanUnits": 3,
+          "accuracy": {
+            "mean": 0.667,
+            "p5": 0.667,
+            "p95": 0.667
+          }
+        }
+      ],
+      "curveStops": "curve stops at 2 session group(s) / 3 joined dev units — committed predictions (latest lab:cascade artifact, n=5 gold events) do not cover the remaining 25 dev labels",
+      "snapshots": [],
+      "domainShift": {
+        "devAccuracy": 0.667,
+        "heldOutAccuracy": 0,
+        "evidence": [
+          "wm-dink-01: FAIL — error 250ms (est 1510 vs gold 1260)",
+          "afn-vic-rally1: FAIL — error 245ms (est 435 vs gold 680)"
+        ]
+      },
+      "verdict": {
+        "classification": "MEASUREMENT_LIMITED",
+        "reasoning": "Curve stops at 2 session group(s) / 3 joined units while the dev label supply is 28 units: committed prediction artifacts do not cover the newer labels, so data-limited vs model-limited cannot be separated at this n. The binding constraint is PREDICTION coverage (Mac regen over the grown label set), not label supply. Committed held-out rows additionally show a domain-shift signature (dev 0.667 vs held-out 0) — observation from committed artifacts only, never tuned against."
+      }
+    },
+    {
+      "modality": "event",
+      "labelSupply": {
+        "devUnits": 29,
+        "heldOutUnits": 5,
+        "devGroups": [
+          "afn-sasebo-2025-06",
+          "dvids-marne-2024",
+          "dvids-warriorgames-2026",
+          "wm-tournament-2014"
+        ],
+        "perGroup": {
+          "afn-sasebo-2025-06": 14,
+          "dvids-marne-2024": 12,
+          "dvids-warriorgames-2026": 1,
+          "wm-tournament-2014": 2
+        },
+        "definition": "eventLabels entries by devin-visual-v2-wave-a + devin-visual-v1 (the 34-label event gold)"
+      },
+      "joined": {
+        "devUnits": 3,
+        "devGroups": ["afn-sasebo-2025-06", "wm-tournament-2014"],
+        "predictionSource": "datasets/cascade/cascade-1787971753680.json rows[].stages.EVENT",
+        "perUnit": [
+          {
+            "unitId": "wm-volley-02:EVENT",
+            "group": "wm-tournament-2014",
+            "correct": true,
+            "detail": "selected 5600–6840 vs gold 6300–7100 (overlap 68%, contact inside)"
+          },
+          {
+            "unitId": "afn-sasebo-rally1:EVENT",
+            "group": "afn-sasebo-2025-06",
+            "correct": false,
+            "detail": "targetEvent status ambiguous"
+          },
+          {
+            "unitId": "afn-sasebo-rally2:EVENT",
+            "group": "afn-sasebo-2025-06",
+            "correct": true,
+            "detail": "selected 2236–2836 vs gold 2380–3050 (overlap 68%, contact inside)"
+          }
+        ]
+      },
+      "curve": [
+        {
+          "groups": 1,
+          "resamples": 1000,
+          "meanUnits": 1.5,
+          "accuracy": {
+            "mean": 0.755,
+            "p5": 0.5,
+            "p95": 1
+          }
+        },
+        {
+          "groups": 2,
+          "resamples": 1,
+          "meanUnits": 3,
+          "accuracy": {
+            "mean": 0.667,
+            "p5": 0.667,
+            "p95": 0.667
+          }
+        }
+      ],
+      "curveStops": "curve stops at 2 session group(s) / 3 joined dev units — committed predictions (latest lab:cascade artifact, n=5 gold events) do not cover the remaining 26 dev labels",
+      "snapshots": [],
+      "domainShift": {
+        "devAccuracy": 0.667,
+        "heldOutAccuracy": 0.5,
+        "evidence": [
+          "wm-dink-01: FAIL — selected 1400–1960 vs gold 1050–1650 (overlap 42%)",
+          "afn-vic-rally1: pass — selected 100–1068 vs gold 450–1150 (overlap 88%, contact inside)"
+        ]
+      },
+      "verdict": {
+        "classification": "MEASUREMENT_LIMITED",
+        "reasoning": "Curve stops at 2 session group(s) / 3 joined units while the dev label supply is 29 units: committed prediction artifacts do not cover the newer labels, so data-limited vs model-limited cannot be separated at this n. The binding constraint is PREDICTION coverage (Mac regen over the grown label set), not label supply."
+      }
+    },
+    {
+      "modality": "stroke",
+      "labelSupply": {
+        "devUnits": 22,
+        "heldOutUnits": 0,
+        "devGroups": [
+          "afn-sasebo-2025-06",
+          "dvids-marne-2024",
+          "dvids-warriorgames-2026",
+          "wm-tournament-2014"
+        ],
+        "perGroup": {
+          "dvids-marne-2024": 12,
+          "dvids-warriorgames-2026": 1,
+          "afn-sasebo-2025-06": 7,
+          "wm-tournament-2014": 2
+        },
+        "definition": "stroke-gold.json labels (pickleball-taxonomy-v2)"
+      },
+      "joined": {
+        "devUnits": 3,
+        "devGroups": ["afn-sasebo-2025-06", "wm-tournament-2014"],
+        "predictionSource": "datasets/cascade/cascade-1787971753680.json rows[].stages.STROKE",
+        "perUnit": [
+          {
+            "unitId": "wm-volley-02:STROKE",
+            "group": "wm-tournament-2014",
+            "correct": true,
+            "detail": "predicted FOREHAND vs gold FOREHAND_VOLLEY"
+          },
+          {
+            "unitId": "afn-sasebo-rally1:STROKE",
+            "group": "afn-sasebo-2025-06",
+            "correct": false,
+            "detail": "predicted none vs gold BACKHAND_VOLLEY"
+          },
+          {
+            "unitId": "afn-sasebo-rally2:STROKE",
+            "group": "afn-sasebo-2025-06",
+            "correct": true,
+            "detail": "predicted OVERHEAD vs gold OVERHEAD"
+          }
+        ]
+      },
+      "curve": [
+        {
+          "groups": 1,
+          "resamples": 1000,
+          "meanUnits": 1.5,
+          "accuracy": {
+            "mean": 0.755,
+            "p5": 0.5,
+            "p95": 1
+          }
+        },
+        {
+          "groups": 2,
+          "resamples": 1,
+          "meanUnits": 3,
+          "accuracy": {
+            "mean": 0.667,
+            "p5": 0.667,
+            "p95": 0.667
+          }
+        }
+      ],
+      "curveStops": "curve stops at 2 session group(s) / 3 joined dev units — committed predictions (latest lab:cascade artifact, n=5 gold events) do not cover the remaining 19 dev labels",
+      "snapshots": [],
+      "domainShift": {
+        "devAccuracy": 0.667,
+        "heldOutAccuracy": 0.5,
+        "evidence": [
+          "wm-dink-01: pass — predicted BACKHAND vs gold BACKHAND_DINK",
+          "afn-vic-rally1: FAIL — predicted BACKHAND vs gold FOREHAND_DRIVE"
+        ]
+      },
+      "verdict": {
+        "classification": "MEASUREMENT_LIMITED",
+        "reasoning": "Curve stops at 2 session group(s) / 3 joined units while the dev label supply is 22 units: committed prediction artifacts do not cover the newer labels, so data-limited vs model-limited cannot be separated at this n. The binding constraint is PREDICTION coverage (Mac regen over the grown label set), not label supply."
+      }
+    }
+  ]
+}

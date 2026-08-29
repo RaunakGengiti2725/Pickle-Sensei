@@ -47,6 +47,7 @@ export default tseslint.config(
       "packages/swing-lab/src/paddleWaterfall.ts",
       "packages/swing-lab/src/targetAcquisitionBench.ts",
       "packages/swing-lab/src/learningCurve.ts",
+      "packages/swing-lab/src/learningCurveModality.ts",
       "packages/swing-lab/src/ownershipAnnotate.ts",
       "packages/swing-lab/src/eventCompletionBench.ts",
       "packages/swing-lab/src/cascadeWaterfall.ts",
