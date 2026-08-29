@@ -37,6 +37,7 @@
     "own": "tsx src/ownershipAnnotate.ts",
     "ownership:bench": "tsx src/ownershipBench.ts",
     "own:synchrony": "tsx src/ownershipSynchrony.ts",
+    "identity:eval": "tsx src/paddleIdentityEval.ts",
     "completion:bench": "tsx src/eventCompletionBench.ts",
     "cascade": "tsx src/cascadeWaterfall.ts",
     "coach:queue": "tsx src/coachReview.ts",
