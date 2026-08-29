@@ -55,6 +55,7 @@ export default tseslint.config(
       "packages/swing-lab/src/silentFailureRetro.ts",
       "packages/swing-lab/src/labelQueueV2.ts",
       "packages/swing-lab/src/labelQueueV3.ts",
+      "packages/swing-lab/src/activeLearningPriority.ts",
       "packages/swing-lab/src/coachReview.ts",
       "packages/swing-lab/src/coachAgreement.ts",
       "packages/swing-lab/src/drillLibrary.ts",
