@@ -45,7 +45,8 @@
     "lab:cascade": "pnpm --filter @pickle/swing-lab cascade",
     "lab:coach-queue": "pnpm --filter @pickle/swing-lab coach:queue",
     "lab:regen": "pnpm --filter @pickle/swing-lab regen",
-    "lab:risk-curves": "pnpm --filter @pickle/swing-lab risk:curves"
+    "lab:risk-curves": "pnpm --filter @pickle/swing-lab risk:curves",
+    "lab:bundle": "pnpm --filter @pickle/swing-lab bundle:experiments"
   },
   "devDependencies": {
     "@eslint/js": "^9.34.0",

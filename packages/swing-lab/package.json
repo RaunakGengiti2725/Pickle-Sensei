@@ -37,6 +37,7 @@
     "coach:queue": "tsx src/coachReview.ts",
     "regen": "tsx src/benchRegen.ts",
     "risk:curves": "tsx src/coverageRisk.ts",
+    "bundle:experiments": "tsx src/experimentBundle.ts",
     "invariants:corpus": "tsx src/corpusCheck.ts"
   },
   "dependencies": {
