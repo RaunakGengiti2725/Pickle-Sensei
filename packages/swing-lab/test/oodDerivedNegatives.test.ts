@@ -7,77 +7,72 @@ import { preAnalysisGate } from "@pickle/analysis-pipeline";
 import { extractFrameStats } from "../src/frameStats.js";
 
 /**
- * OOD gate against the REAL (non-synthetic) rights-cleared negative corpus in
- * datasets/ood/ (D08). Expectations below are the verdicts MEASURED on this
- * corpus (datasets/experiments/wave-d/d08-ood-measurements.json); the test
- * locks that measured behavior, it does not assert the gate is sufficient.
+ * OOD gate against the derived/synthetic probe corpus in
+ * datasets/ood/registry.json derivedItems (wave-e/e11-ood-expansion): still
+ * images, still-image-as-video, program-generated graphics, corrupt/truncated
+ * media, and extreme aspect ratios. Expectations are the verdicts MEASURED on
+ * this corpus under frame-analyzability-3
+ * (datasets/experiments/wave-e/e11-ood-gate-measurements.json); the test locks
+ * that measured behavior, it does not assert the gate is sufficient.
  *
  * Pose-conditioned signals (no_person_found, person_implausible_scale) cannot
  * run here: pose extraction is Apple-Vision/macOS-only, so pose is null and
- * only contract-level assertions are made about it. Negatives the pose-free
- * gate passes through are known findings — asserting they pass is honest
- * reporting, not endorsement.
+ * only contract-level assertions are made about it. Probes the pose-free gate
+ * passes through are known findings — asserting they pass is honest reporting,
+ * not endorsement.
  */
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const registryPath = join(root, "datasets", "ood", "registry.json");
 
-interface RegistryItem {
+interface RegistryEntry {
   id: string;
   category: string;
   path: string;
 }
 
 const registry = JSON.parse(readFileSync(registryPath, "utf8")) as {
-  items: RegistryItem[];
+  derivedItems: { items: RegistryEntry[] };
 };
 
 /**
- * Measured on Linux CPU, 2026-08-29, under frame-analyzability-2 (D3-11);
- * every id must appear in exactly one set.
- *
- * Under frame-analyzability-1 the five ids now listed as pass-through
- * findings were rejected by the median inter-frame-diff still_image_video
- * rule — but so were 5/6 legitimate fresh-candidate pickleball clips
- * (medians overlap: negatives 0.085-0.419 vs legitimate 0.095-0.777), so
- * that rule was blanket abstention, not detection. frame-analyzability-2
- * replaced it with a frozen-pair-fraction rule that keeps true slideshows
- * rejected without rejecting real footage; distinguishing other racket
- * sports from pickleball is content-level and remains pose/macOS territory
- * (see datasets/experiments/wave-d3/d3-11-rt-ood-gate-summary.json).
+ * Measured on Linux CPU, 2026-08-29, under frame-analyzability-3; every id
+ * must appear in exactly one map/set. The value is the set of reason codes the
+ * pose-free gate must emit for the id.
  */
-const POSE_FREE_DETECTED = new Set<string>([]);
-const KNOWN_PASS_THROUGH_FINDINGS = new Set([
-  "yt--wE27MoX2AM-tennis",
-  "yt-RpPe0h9cD5E-tennis",
-  "yt-Iw55LinAF0U-badminton",
-  "yt-zWQs7kTKcEY-emptycourt",
-  "ia-HanfordS1957-titlecard",
-  "yt-2wV0Gs9r384-tabletennis",
-  "yt-BCJGL5E9huM-tabletennis",
-  "commons-ronpaul-crowd",
-  "ia-ProfileJ26-interview",
-  // wave-e/e11-ood-expansion additions, measured 2026-08-29 under
-  // frame-analyzability-3: distinguishing squash/racquetball from pickleball
-  // is content-level and remains pose/macOS territory.
-  "yt-x8T5I4YAKNw-squash",
-  "yt-EckAW5V1wv0-racquetball",
+const POSE_FREE_DETECTED = new Map<string, string[]>([
+  ["derived-still-image", ["single_frame_clip"]],
+  ["derived-still-image-video", ["still_image_video"]],
+  ["derived-graphics-testsrc", ["static_overlay_suspected"]],
+  ["derived-extreme-wide", ["implausible_aspect_ratio"]],
+  ["derived-extreme-tall", ["implausible_aspect_ratio"]],
+  ["derived-truncated", ["decoded_frame_deficit"]],
+  ["derived-corrupt-bytes", ["single_frame_clip", "undecodable_media"]],
+  ["derived-garbage", ["single_frame_clip", "undecodable_media"]],
 ]);
+/**
+ * Animated program-generated graphics carry real motion and texture, so no
+ * pose-free frame statistic separates them from real footage; rejecting them
+ * is pose/content-level territory (no person will be found on macOS).
+ */
+const KNOWN_PASS_THROUGH_FINDINGS = new Set(["derived-graphics-life"]);
 
-describe("OOD gate on the real negative corpus (datasets/ood)", () => {
+describe("OOD gate on the derived probe corpus (datasets/ood derivedItems)", () => {
   it("registry covers every expectation and every file exists", () => {
-    const ids = registry.items.map((item) => item.id).sort();
-    expect(ids).toEqual([...POSE_FREE_DETECTED, ...KNOWN_PASS_THROUGH_FINDINGS].sort());
-    for (const item of registry.items) {
+    const ids = registry.derivedItems.items.map((item) => item.id).sort();
+    expect(ids).toEqual([...POSE_FREE_DETECTED.keys(), ...KNOWN_PASS_THROUGH_FINDINGS].sort());
+    for (const item of registry.derivedItems.items) {
       expect(existsSync(join(root, item.path))).toBe(true);
     }
   });
 
-  for (const item of registry.items) {
-    if (POSE_FREE_DETECTED.has(item.id)) {
+  for (const item of registry.derivedItems.items) {
+    const expectedReasons = POSE_FREE_DETECTED.get(item.id);
+    if (expectedReasons !== undefined) {
       it(`abstains (no confident analysis) on ${item.id} via pose-free signals`, () => {
         const frame = evaluateFrameAnalyzability(extractFrameStats(join(root, item.path)));
         expect(frame.analyzable).toBe(false);
+        expect(frame.reasons).toEqual(expectedReasons);
         const result = preAnalysisGate({ frame, pose: null, poseQuality: null });
         expect(result.ok).toBe(false);
         if (result.ok) return;
