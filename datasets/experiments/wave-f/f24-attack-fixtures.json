@@ -1,0 +1,290 @@
+{
+  "schemaVersion": 1,
+  "workstream": "wave-f/f24-rt-data-provenance",
+  "note": "Provenance red-team attack corpus. Each attack is applied by f24-attack-harness.py to a hardlink sandbox copy of datasets/ (never to the working tree), the audit under test is run inside the sandbox, and the new issues relative to the clean-sandbox baseline are matched against `expect`. No corrupted data is ever committed; these fixtures are the only committed representation of the attacks.",
+  "attacks": [
+    {
+      "id": "A01-label-edit-stroke-gold",
+      "class": "append_only",
+      "description": "Edit an existing stroke-gold label's contactMs in place (silent relabel).",
+      "ops": [
+        {
+          "op": "json_edit",
+          "file": "datasets/paddle-bench/stroke-gold.json",
+          "pointer": ["labels", 0],
+          "set": { "contactMs": 34500 }
+        }
+      ],
+      "expect": { "severity": "append_only_violation", "where": "stroke-gold" }
+    },
+    {
+      "id": "A02-label-delete-stroke-gold",
+      "class": "append_only",
+      "description": "Delete an existing stroke-gold label record.",
+      "ops": [
+        {
+          "op": "json_delete",
+          "file": "datasets/paddle-bench/stroke-gold.json",
+          "pointer": ["labels", 3]
+        }
+      ],
+      "expect": { "severity": "append_only_violation", "where": "stroke-gold" }
+    },
+    {
+      "id": "A03-annotation-silent-rewrite",
+      "class": "append_only",
+      "description": "Rewrite a value inside an existing bundle annotation file without bumping revision.",
+      "ops": [
+        {
+          "op": "json_string_replace",
+          "file": "datasets/paddle-bench/bundles/wavea-marne-serve/annotation/devin-visual-v2-wave-a.json",
+          "find": "\"contactMs\": 34689",
+          "replace": "\"contactMs\": 34489",
+          "firstOnly": true
+        }
+      ],
+      "expect": {
+        "severity": "append_only_violation",
+        "where": "wavea-marne-serve/annotation/devin-visual-v2-wave-a.json"
+      }
+    },
+    {
+      "id": "A04-held-out-stroke-gold-caseid",
+      "class": "held_out_contamination",
+      "description": "Append a stroke-gold label referencing held-out wm-dink-01 via the caseId key (e24 only inspects the unused `bundle` key).",
+      "ops": [
+        {
+          "op": "json_append",
+          "file": "datasets/paddle-bench/stroke-gold.json",
+          "pointer": ["labels"],
+          "record": {
+            "caseId": "wm-dink-01",
+            "eventStartMs": 1000,
+            "contactMs": 1260,
+            "eventEndMs": 1650,
+            "owner": "target",
+            "l1": "dink",
+            "l2": "forehand",
+            "l3": "dink_forehand",
+            "reasoning": "ATTACK FIXTURE — held-out contamination attempt",
+            "annotatorId": "f24-attacker",
+            "createdAtIso": "2026-08-29T00:00:00.000Z"
+          }
+        }
+      ],
+      "expect": { "severity": "held_out_violation", "where": "stroke-gold" }
+    },
+    {
+      "id": "A05-held-out-event-bounds-qa",
+      "class": "held_out_contamination",
+      "description": "Append a new event-bounds QA record labeling held-out wm-dink-01 (collection unchecked by e24 held-out gold checks; bundle dir exists so sidecar check passes).",
+      "ops": [
+        {
+          "op": "json_append",
+          "file": "datasets/paddle-bench/event-bounds-qa-wave-c.json",
+          "pointer": ["events"],
+          "record": {
+            "bundle": "wm-dink-01",
+            "idx": 99,
+            "bounds": [7000, 7210, 7500],
+            "verdict": "PASS_VERIFIED",
+            "evidence": "ATTACK FIXTURE — new held-out label attempt"
+          }
+        }
+      ],
+      "expect": { "severity": "held_out_violation", "where": "event-bounds-qa-wave-c" }
+    },
+    {
+      "id": "A06-held-out-annotation-file",
+      "class": "held_out_contamination",
+      "description": "Drop a new annotation file into the held-out wm-dink-01 bundle.",
+      "ops": [
+        {
+          "op": "file_write_json",
+          "file": "datasets/paddle-bench/bundles/wm-dink-01/annotation/f24-attacker.json",
+          "content": {
+            "schemaVersion": 1,
+            "captureBundle": "wm-dink-01",
+            "annotatorId": "f24-attacker",
+            "createdAtIso": "2026-08-29T00:00:00.000Z",
+            "revision": 1,
+            "note": "ATTACK FIXTURE"
+          }
+        }
+      ],
+      "expect": { "severity": "held_out_violation", "where": "wm-dink-01/annotation/f24-attacker.json" }
+    },
+    {
+      "id": "A07-held-out-ta-bench",
+      "class": "held_out_contamination",
+      "description": "Add a ta-bench case referencing held-out wm-dink-01.",
+      "ops": [
+        {
+          "op": "json_append",
+          "file": "datasets/ta-bench/cases.json",
+          "pointer": ["cases"],
+          "record": {
+            "caseId": "f24-attack-wm-dink-01",
+            "sourceBundle": "wm-dink-01",
+            "note": "ATTACK FIXTURE"
+          }
+        }
+      ],
+      "expect": { "severity": "held_out_violation", "where": "ta-bench" }
+    },
+    {
+      "id": "A08-ghost-media-fresh-candidate",
+      "class": "nonexistent_media",
+      "description": "Register a fresh-candidate item whose media path does not exist on disk.",
+      "ops": [
+        {
+          "op": "json_append",
+          "file": "datasets/pickleball/registry.json",
+          "pointer": ["freshCandidates", "items"],
+          "record": {
+            "id": "f24-attack-ghost",
+            "role": "fresh_candidate",
+            "labelBlind": true,
+            "path": "datasets/pickleball/fresh-candidates/f24-ghost.mp4",
+            "sourceUrl": "https://example.invalid/f24",
+            "title": "ATTACK FIXTURE",
+            "uploader": "f24",
+            "uploadDate": "2026-08-29",
+            "uploaderChannelId": "f24",
+            "license": "cc-by",
+            "licenseVerification": "none",
+            "provenanceAssessment": "attack fixture",
+            "pickleballRelevance": "none",
+            "rights": "none",
+            "restrictions": "none",
+            "notes": "ATTACK FIXTURE",
+            "media": { "clipBytes": 12345, "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+            "acquisition": { "tool": "none" }
+          }
+        }
+      ],
+      "expect": { "severity": "count_drift", "where": "freshCandidates[f24-attack-ghost]" }
+    },
+    {
+      "id": "A09-sha-mismatch-registry",
+      "class": "sha_mismatch",
+      "description": "Corrupt the registered sha256 of an existing fresh-candidate media entry.",
+      "ops": [
+        {
+          "op": "json_edit",
+          "file": "datasets/pickleball/registry.json",
+          "pointer": ["freshCandidates", "items", 0, "media"],
+          "set": { "sha256": "1111111111111111111111111111111111111111111111111111111111111111" }
+        }
+      ],
+      "expect": { "severity": "integrity", "detail": "sha256 mismatch" }
+    },
+    {
+      "id": "A10-sha-mismatch-media-bytes",
+      "class": "sha_mismatch",
+      "description": "Flip one byte of a committed OOD media file (registry sha unchanged).",
+      "ops": [{ "op": "byte_flip_first_ood_item" }],
+      "expect": { "severity": "integrity", "detail": "sha256 mismatch" }
+    },
+    {
+      "id": "A11-dangling-bundle-ref",
+      "class": "nonexistent_media",
+      "description": "Append a stroke-gold label whose `bundle` references a nonexistent bundle dir.",
+      "ops": [
+        {
+          "op": "json_append",
+          "file": "datasets/paddle-bench/stroke-gold.json",
+          "pointer": ["labels"],
+          "record": {
+            "labelId": "f24-attack-dangling",
+            "bundle": "f24-ghost-bundle",
+            "caseId": "f24-ghost-bundle",
+            "eventStartMs": 1,
+            "contactMs": 2,
+            "eventEndMs": 3,
+            "owner": "target",
+            "l1": "dink",
+            "l2": "forehand",
+            "l3": "dink_forehand",
+            "reasoning": "ATTACK FIXTURE",
+            "annotatorId": "f24-attacker",
+            "createdAtIso": "2026-08-29T00:00:00.000Z"
+          }
+        }
+      ],
+      "expect": { "severity": "sidecar_inconsistency", "where": "stroke-gold" }
+    },
+    {
+      "id": "A12-dangling-caseid-ref",
+      "class": "nonexistent_media",
+      "description": "Append a stroke-gold label whose caseId (the key actually used by every committed label) references a nonexistent bundle; no `bundle` key present.",
+      "ops": [
+        {
+          "op": "json_append",
+          "file": "datasets/paddle-bench/stroke-gold.json",
+          "pointer": ["labels"],
+          "record": {
+            "caseId": "f24-ghost-case",
+            "eventStartMs": 1,
+            "contactMs": 2,
+            "eventEndMs": 3,
+            "owner": "target",
+            "l1": "dink",
+            "l2": "forehand",
+            "l3": "dink_forehand",
+            "reasoning": "ATTACK FIXTURE",
+            "annotatorId": "f24-attacker",
+            "createdAtIso": "2026-08-29T00:00:00.000Z"
+          }
+        }
+      ],
+      "expect": { "severity": "dangling_reference", "where": "stroke-gold" }
+    },
+    {
+      "id": "A13-corpus-unknown-source",
+      "class": "nonexistent_media",
+      "description": "Register a corpus recording pointing at an unregistered sourceId.",
+      "ops": [
+        {
+          "op": "json_append",
+          "file": "datasets/corpus/recordings.json",
+          "pointer": [],
+          "record": {
+            "schemaVersion": 1,
+            "recordingId": "rec-f24-attack",
+            "sourceId": "src-f24-ghost",
+            "sessionKey": "f24-attack",
+            "path": "datasets/corpus/media/f24-ghost.mp4",
+            "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+            "registeredAtIso": "2026-08-29T00:00:00.000Z",
+            "notes": "ATTACK FIXTURE",
+            "derivedFrom": [],
+            "probe": {}
+          }
+        }
+      ],
+      "expect": { "severity": "integrity", "where": "corpus/recordings[rec-f24-attack]" }
+    },
+    {
+      "id": "A14-release-manifest-tamper",
+      "class": "sha_mismatch",
+      "description": "Edit an immutable release manifest count in place (manifest.sha256 left stale).",
+      "ops": [
+        {
+          "op": "json_edit",
+          "file": "datasets/releases/pickle-real-v0.3/manifest.json",
+          "pointer": ["counts"],
+          "set": { "f24Attack": 1 }
+        }
+      ],
+      "expect": { "severity": "integrity", "where": "releases/pickle-real-v0.3" }
+    },
+    {
+      "id": "A15-duplicate-registry-id",
+      "class": "duplicate",
+      "description": "Register a second fresh-candidate item reusing an existing id.",
+      "ops": [{ "op": "duplicate_first_fresh_candidate_id" }],
+      "expect": { "severity": "duplicate_id", "where": "pickleball/registry" }
+    }
+  ]
+}

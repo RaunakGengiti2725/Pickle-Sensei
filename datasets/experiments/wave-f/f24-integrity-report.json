@@ -1,0 +1,2615 @@
+{
+  "schemaVersion": 1,
+  "workstream": "wave-f/f24-rt-data-provenance",
+  "annotatorId": "devin-audit-v1-waveF",
+  "extends": "datasets/experiments/wave-e/e24-data-integrity-audit.py",
+  "generatedAtIso": "2026-08-29T11:08:49.130468+00:00",
+  "heldOutCasesUntouched": [
+    "afn-vic-rally1",
+    "wm-dink-01"
+  ],
+  "issues": [
+    {
+      "severity": "stale_assignment_explained",
+      "where": "corpus/splits.json",
+      "detail": "assigned session dvids-956784 has no recordings \u2014 session was merged away by dedup (see dedup-report.json MERGED SESSIONS); stale entry retained, not removed here because deterministic split reuse semantics are owned by the data engine"
+    },
+    {
+      "severity": "stale_assignment_explained",
+      "where": "corpus/splits.json",
+      "detail": "assigned session dvids-957519 has no recordings \u2014 session was merged away by dedup (see dedup-report.json MERGED SESSIONS); stale entry retained, not removed here because deterministic split reuse semantics are owned by the data engine"
+    },
+    {
+      "severity": "stale_assignment_explained",
+      "where": "corpus/splits.json",
+      "detail": "assigned session dvids-967848 has no recordings \u2014 session was merged away by dedup (see dedup-report.json MERGED SESSIONS); stale entry retained, not removed here because deterministic split reuse semantics are owned by the data engine"
+    },
+    {
+      "severity": "schema_violation",
+      "where": "paddle-bench/bundles/afn-sasebo-rally2/annotation/devin-visual-v3-waveD.json",
+      "detail": "missing envelope fields ['revision']"
+    },
+    {
+      "severity": "schema_violation",
+      "where": "paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+      "detail": "missing envelope fields ['revision']"
+    },
+    {
+      "severity": "schema_violation",
+      "where": "paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v4-waveE-ownership-corrections.json",
+      "detail": "missing envelope fields ['revision']"
+    },
+    {
+      "severity": "schema_violation",
+      "where": "paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v4-waveE-ownership-corrections.json",
+      "detail": "annotatorId 'devin-visual-v4-waveE-e05' does not prefix filename 'devin-visual-v4-waveE-ownership-corrections'"
+    },
+    {
+      "severity": "schema_violation",
+      "where": "paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+      "detail": "missing envelope fields ['revision']"
+    },
+    {
+      "severity": "schema_violation",
+      "where": "paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v4-waveD2-ta.json",
+      "detail": "missing envelope fields ['revision']"
+    },
+    {
+      "severity": "schema_violation",
+      "where": "paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v4-waveE-ownership-corrections.json",
+      "detail": "missing envelope fields ['revision']"
+    },
+    {
+      "severity": "schema_violation",
+      "where": "paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v4-waveE-ownership-corrections.json",
+      "detail": "annotatorId 'devin-visual-v4-waveE-e05' does not prefix filename 'devin-visual-v4-waveE-ownership-corrections'"
+    },
+    {
+      "severity": "schema_violation",
+      "where": "paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v4-waveD2-ta.json",
+      "detail": "missing envelope fields ['revision']"
+    },
+    {
+      "severity": "schema_violation",
+      "where": "paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+      "detail": "missing envelope fields ['revision']"
+    },
+    {
+      "severity": "schema_violation",
+      "where": "paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v4-waveE-ownership-corrections.json",
+      "detail": "missing envelope fields ['revision']"
+    },
+    {
+      "severity": "schema_violation",
+      "where": "paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v4-waveE-ownership-corrections.json",
+      "detail": "annotatorId 'devin-visual-v4-waveE-e05' does not prefix filename 'devin-visual-v4-waveE-ownership-corrections'"
+    },
+    {
+      "severity": "schema_violation",
+      "where": "paddle-bench/bundles/wavea-sasebo-volleys/annotation/devin-visual-v3-waveD.json",
+      "detail": "missing envelope fields ['revision']"
+    },
+    {
+      "severity": "schema_violation",
+      "where": "paddle-bench/bundles/wm-volley-02/annotation/devin-visual-v4-waveD2-ta.json",
+      "detail": "missing envelope fields ['revision']"
+    },
+    {
+      "severity": "held_out_baseline_drift",
+      "where": "releases/pickle-real-v0.3/annotations/wm-dink-01.json",
+      "detail": "release copy (rev 5) != live baseline (rev 8); release is an immutable snapshot \u2014 baseline was revised after the freeze; needs adjudication on when/why the held-out baseline moved"
+    }
+  ],
+  "registry": {
+    "schemaVersion": 2,
+    "counts": {
+      "sources": 2,
+      "evaluatedButExcluded": 6,
+      "officialSearchChecks": 15,
+      "freshCandidates": 15,
+      "quarantinedUnknownRights": 23
+    },
+    "freshCandidateMediaVerification": {
+      "items": [
+        {
+          "id": "yt-tJuJ4MQdYy0",
+          "path": "datasets/pickleball/fresh-candidates/yt-tJuJ4MQdYy0.mp4",
+          "fileExists": true,
+          "bytesActual": 31043189,
+          "bytesRegistered": 31043189,
+          "bytesMatch": true,
+          "sha256Actual": "34942348e22f4d43fa4ce10d1451fb085cfb42164770994c9042dd6b91b9eb8d",
+          "sha256Registered": "34942348e22f4d43fa4ce10d1451fb085cfb42164770994c9042dd6b91b9eb8d",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-I5wYCXCL4dY",
+          "path": "datasets/pickleball/fresh-candidates/yt-I5wYCXCL4dY.mp4",
+          "fileExists": true,
+          "bytesActual": 48532209,
+          "bytesRegistered": 48532209,
+          "bytesMatch": true,
+          "sha256Actual": "c0a327452feb7ec4bf3bc805cebbef695dee7a11f8a42a3cc74f404218b0b3c7",
+          "sha256Registered": "c0a327452feb7ec4bf3bc805cebbef695dee7a11f8a42a3cc74f404218b0b3c7",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-hktiyFnghIw",
+          "path": "datasets/pickleball/fresh-candidates/yt-hktiyFnghIw.mp4",
+          "fileExists": true,
+          "bytesActual": 24656295,
+          "bytesRegistered": 24656295,
+          "bytesMatch": true,
+          "sha256Actual": "f24520258593d7d11effd4b8655d108b42f1878aff0281f2fe60ae7af4715a88",
+          "sha256Registered": "f24520258593d7d11effd4b8655d108b42f1878aff0281f2fe60ae7af4715a88",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-Y7DOO0j_1P4",
+          "path": "datasets/pickleball/fresh-candidates/yt-Y7DOO0j_1P4.mp4",
+          "fileExists": true,
+          "bytesActual": 25365777,
+          "bytesRegistered": 25365777,
+          "bytesMatch": true,
+          "sha256Actual": "33949eb30efdf59b65389cf5b3dcbadefd77a855ff654a1a63ee896d32f6a6e5",
+          "sha256Registered": "33949eb30efdf59b65389cf5b3dcbadefd77a855ff654a1a63ee896d32f6a6e5",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-iuVdtmGoTbo",
+          "path": "datasets/pickleball/fresh-candidates/yt-iuVdtmGoTbo.mp4",
+          "fileExists": true,
+          "bytesActual": 23799127,
+          "bytesRegistered": 23799127,
+          "bytesMatch": true,
+          "sha256Actual": "c1a5391109fb32581419cf082c97839de3b638afd58fc8ac558035947ba12c0d",
+          "sha256Registered": "c1a5391109fb32581419cf082c97839de3b638afd58fc8ac558035947ba12c0d",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-eK-iPN2XAJQ",
+          "path": "datasets/pickleball/fresh-candidates/yt-eK-iPN2XAJQ.mp4",
+          "fileExists": true,
+          "bytesActual": 27683931,
+          "bytesRegistered": 27683931,
+          "bytesMatch": true,
+          "sha256Actual": "fca94767321a0c6f302db8b34b1b64c798b840613baa493d29feb3eb4c941468",
+          "sha256Registered": "fca94767321a0c6f302db8b34b1b64c798b840613baa493d29feb3eb4c941468",
+          "sha256Match": true
+        },
+        {
+          "id": "voa-6108955",
+          "path": "datasets/pickleball/fresh-candidates/voa-6108955.mp4",
+          "fileExists": true,
+          "bytesActual": 89063575,
+          "bytesRegistered": 89063575,
+          "bytesMatch": true,
+          "sha256Actual": "e95c7ce92b16d7a526a17db14d7185310d948dd5e6df36fbc4fcb4c2856e3600",
+          "sha256Registered": "e95c7ce92b16d7a526a17db14d7185310d948dd5e6df36fbc4fcb4c2856e3600",
+          "sha256Match": true
+        },
+        {
+          "id": "voa-6115790",
+          "path": "datasets/pickleball/fresh-candidates/voa-6115790.mp4",
+          "fileExists": true,
+          "bytesActual": 57493258,
+          "bytesRegistered": 57493258,
+          "bytesMatch": true,
+          "sha256Actual": "d002effb42d00c2d6f2984b1f937394cec4590c9871b7d7d7133bb2d836cbc9b",
+          "sha256Registered": "d002effb42d00c2d6f2984b1f937394cec4590c9871b7d7d7133bb2d836cbc9b",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-o_NeuHjTEVE",
+          "path": "datasets/pickleball/fresh-candidates/yt-o_NeuHjTEVE.mp4",
+          "fileExists": true,
+          "bytesActual": 52288985,
+          "bytesRegistered": 52288985,
+          "bytesMatch": true,
+          "sha256Actual": "1bc758763707884b7ea380f973dc0fad1519f8cb7af507a9d6637e69274be969",
+          "sha256Registered": "1bc758763707884b7ea380f973dc0fad1519f8cb7af507a9d6637e69274be969",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-n-QrBfQVK_w",
+          "path": "datasets/pickleball/fresh-candidates/yt-n-QrBfQVK_w.mp4",
+          "fileExists": true,
+          "bytesActual": 23545444,
+          "bytesRegistered": 23545444,
+          "bytesMatch": true,
+          "sha256Actual": "e11d1508a07fc8e6ff21e581e750fd973deab9c73b05e5ca967159db51b9e443",
+          "sha256Registered": "e11d1508a07fc8e6ff21e581e750fd973deab9c73b05e5ca967159db51b9e443",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-94KNxpNTyCw",
+          "path": "datasets/pickleball/fresh-candidates/yt-94KNxpNTyCw.mp4",
+          "fileExists": true,
+          "bytesActual": 17503619,
+          "bytesRegistered": 17503619,
+          "bytesMatch": true,
+          "sha256Actual": "9ab0964d6ee3625fa11ddbe06c636271f209732c100e44fd2e20478ebf74d2c6",
+          "sha256Registered": "9ab0964d6ee3625fa11ddbe06c636271f209732c100e44fd2e20478ebf74d2c6",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-9ru97zKV8mk",
+          "path": "datasets/pickleball/fresh-candidates/yt-9ru97zKV8mk.mp4",
+          "fileExists": true,
+          "bytesActual": 26794630,
+          "bytesRegistered": 26794630,
+          "bytesMatch": true,
+          "sha256Actual": "21ebbf11ad27d4c2896e91503d42a8e4448cfeaf7044c0a6b9fb0c50fa683686",
+          "sha256Registered": "21ebbf11ad27d4c2896e91503d42a8e4448cfeaf7044c0a6b9fb0c50fa683686",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-6r4fOxRuKmM",
+          "path": "datasets/pickleball/fresh-candidates/yt-6r4fOxRuKmM.mp4",
+          "fileExists": true,
+          "bytesActual": 28983974,
+          "bytesRegistered": 28983974,
+          "bytesMatch": true,
+          "sha256Actual": "f4261b3296bbe0a42b76edcd88f37d7cfcada70eae790efae42958431e57d976",
+          "sha256Registered": "f4261b3296bbe0a42b76edcd88f37d7cfcada70eae790efae42958431e57d976",
+          "sha256Match": true
+        },
+        {
+          "id": "va-6N3Yc184a_c",
+          "path": "datasets/pickleball/fresh-candidates/va-6N3Yc184a_c.mp4",
+          "fileExists": true,
+          "bytesActual": 37467057,
+          "bytesRegistered": 37467057,
+          "bytesMatch": true,
+          "sha256Actual": "9f0505e916df3ece1a703b431f535fa97580a2e19b7c01730e5864fb5543d9df",
+          "sha256Registered": "9f0505e916df3ece1a703b431f535fa97580a2e19b7c01730e5864fb5543d9df",
+          "sha256Match": true
+        },
+        {
+          "id": "va-O1dLhGGPErc",
+          "path": "datasets/pickleball/fresh-candidates/va-O1dLhGGPErc.mp4",
+          "fileExists": true,
+          "bytesActual": 7108712,
+          "bytesRegistered": 7108712,
+          "bytesMatch": true,
+          "sha256Actual": "a4443e85b6d8ee2cd7af4ef51d9ebdabf7be4b7ad80ed36f5d77b029735838a2",
+          "sha256Registered": "a4443e85b6d8ee2cd7af4ef51d9ebdabf7be4b7ad80ed36f5d77b029735838a2",
+          "sha256Match": true
+        }
+      ],
+      "totalBytesRegistered": 521329782,
+      "totalBytesActual": 521329782,
+      "totalBytesMatch": true
+    },
+    "urlChecks": [],
+    "acceptedNewQuarantineStatuses": {
+      "statuses": [
+        "excluded_not_downloaded_into_corpus",
+        "not_downloaded_duplicate"
+      ],
+      "reclassifiedEntries": [
+        "quarantinedUnknownRights[voa-7050366]",
+        "quarantinedUnknownRights[voa-5831583-duplicate-edit]",
+        "quarantinedUnknownRights[voa-5356510-12-13-duplicate-edits]",
+        "quarantinedUnknownRights[voathai-7917842]"
+      ]
+    }
+  },
+  "ood": {
+    "present": true,
+    "schemaVersion": 1,
+    "counts": {
+      "items": 11,
+      "quarantinedUnknownRights": 3,
+      "searchLog": 4
+    },
+    "mediaVerification": {
+      "items": [
+        {
+          "id": "yt--wE27MoX2AM-tennis",
+          "path": "datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4",
+          "fileExists": true,
+          "bytesActual": 21899905,
+          "bytesRegistered": 21899905,
+          "bytesMatch": true,
+          "sha256Actual": "a583fcacf429c3f3377ee257ad770b617ba5c0b5f7fdd59eea212f69f925778a",
+          "sha256Registered": "a583fcacf429c3f3377ee257ad770b617ba5c0b5f7fdd59eea212f69f925778a",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-RpPe0h9cD5E-tennis",
+          "path": "datasets/ood/negatives/yt-RpPe0h9cD5E-tennis.mp4",
+          "fileExists": true,
+          "bytesActual": 16212911,
+          "bytesRegistered": 16212911,
+          "bytesMatch": true,
+          "sha256Actual": "f36c96cf572a46bfd9e2325b31d50592fffc67b8090c27c29523b3e3ed51e0fd",
+          "sha256Registered": "f36c96cf572a46bfd9e2325b31d50592fffc67b8090c27c29523b3e3ed51e0fd",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-Iw55LinAF0U-badminton",
+          "path": "datasets/ood/negatives/yt-Iw55LinAF0U-badminton.mp4",
+          "fileExists": true,
+          "bytesActual": 5523328,
+          "bytesRegistered": 5523328,
+          "bytesMatch": true,
+          "sha256Actual": "2e6c562a761bf65afcd5d3ef0b15ed1d237f0350e972a066726cc66a5351ac27",
+          "sha256Registered": "2e6c562a761bf65afcd5d3ef0b15ed1d237f0350e972a066726cc66a5351ac27",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-2wV0Gs9r384-tabletennis",
+          "path": "datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4",
+          "fileExists": true,
+          "bytesActual": 12150777,
+          "bytesRegistered": 12150777,
+          "bytesMatch": true,
+          "sha256Actual": "b2cf44b2dd505091c011dcbb167b219919296de071ca4d919a715e1af902f21e",
+          "sha256Registered": "b2cf44b2dd505091c011dcbb167b219919296de071ca4d919a715e1af902f21e",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-BCJGL5E9huM-tabletennis",
+          "path": "datasets/ood/negatives/yt-BCJGL5E9huM-tabletennis.mp4",
+          "fileExists": true,
+          "bytesActual": 945451,
+          "bytesRegistered": 945451,
+          "bytesMatch": true,
+          "sha256Actual": "dbc0e3869643cc27d571bb785f54563de52a3ed8f7377184bbba764b693b3e2f",
+          "sha256Registered": "dbc0e3869643cc27d571bb785f54563de52a3ed8f7377184bbba764b693b3e2f",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-zWQs7kTKcEY-emptycourt",
+          "path": "datasets/ood/negatives/yt-zWQs7kTKcEY-emptycourt.mp4",
+          "fileExists": true,
+          "bytesActual": 9838060,
+          "bytesRegistered": 9838060,
+          "bytesMatch": true,
+          "sha256Actual": "3b8e042325e3fef2f96ab35f9128a0040289ec49b6ee422dad00d5fa2715dc27",
+          "sha256Registered": "3b8e042325e3fef2f96ab35f9128a0040289ec49b6ee422dad00d5fa2715dc27",
+          "sha256Match": true
+        },
+        {
+          "id": "commons-ronpaul-crowd",
+          "path": "datasets/ood/negatives/commons-ronpaul-crowd.mp4",
+          "fileExists": true,
+          "bytesActual": 3914648,
+          "bytesRegistered": 3914648,
+          "bytesMatch": true,
+          "sha256Actual": "acf5d2dd7ea36c343f7d84ca79a9a2df91f712570b5e6d2cdfd31e0ec42d6e8f",
+          "sha256Registered": "acf5d2dd7ea36c343f7d84ca79a9a2df91f712570b5e6d2cdfd31e0ec42d6e8f",
+          "sha256Match": true
+        },
+        {
+          "id": "ia-ProfileJ26-interview",
+          "path": "datasets/ood/negatives/ia-ProfileJ26-interview.mp4",
+          "fileExists": true,
+          "bytesActual": 1548017,
+          "bytesRegistered": 1548017,
+          "bytesMatch": true,
+          "sha256Actual": "0fe651a49ef6f55129a9aa98ea42b6003bd464e63552526200984e35decfc70a",
+          "sha256Registered": "0fe651a49ef6f55129a9aa98ea42b6003bd464e63552526200984e35decfc70a",
+          "sha256Match": true
+        },
+        {
+          "id": "ia-HanfordS1957-titlecard",
+          "path": "datasets/ood/negatives/ia-HanfordS1957-titlecard.mp4",
+          "fileExists": true,
+          "bytesActual": 812425,
+          "bytesRegistered": 812425,
+          "bytesMatch": true,
+          "sha256Actual": "d29bf312395ed2281164f695bcc467747dcd736f83a28ccb28d4f6bdf45ff965",
+          "sha256Registered": "d29bf312395ed2281164f695bcc467747dcd736f83a28ccb28d4f6bdf45ff965",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-x8T5I4YAKNw-squash",
+          "path": "datasets/ood/negatives/yt-x8T5I4YAKNw-squash.mp4",
+          "fileExists": true,
+          "bytesActual": 3495145,
+          "bytesRegistered": 3495145,
+          "bytesMatch": true,
+          "sha256Actual": "d2f845d62fdc4594e7f68b6e2d5736031b8db5ac859a1b7309272d359fce43f1",
+          "sha256Registered": "d2f845d62fdc4594e7f68b6e2d5736031b8db5ac859a1b7309272d359fce43f1",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-EckAW5V1wv0-racquetball",
+          "path": "datasets/ood/negatives/yt-EckAW5V1wv0-racquetball.mp4",
+          "fileExists": true,
+          "bytesActual": 6651339,
+          "bytesRegistered": 6651339,
+          "bytesMatch": true,
+          "sha256Actual": "431f6deb2e800d7a7787ad18a496187b2a1fae0dacf651342bce89c422635df7",
+          "sha256Registered": "431f6deb2e800d7a7787ad18a496187b2a1fae0dacf651342bce89c422635df7",
+          "sha256Match": true
+        }
+      ],
+      "totalBytesRegistered": 82992006,
+      "totalBytesActual": 82992006,
+      "totalBytesMatch": true
+    },
+    "urlChecks": []
+  },
+  "paddleBench": {
+    "registryVideoCount": 13,
+    "eventBoundsQaWaveC": {
+      "events": 34,
+      "corrections": 1
+    },
+    "eventBoundsWaveA": {
+      "cases": 8,
+      "rejectedCandidates": 9
+    },
+    "strokeGoldLabels": 29,
+    "paddleBenchCases": 5,
+    "paddleBenchExcludedCases": 1,
+    "resultFiles": 14,
+    "videosDirGitignored": true,
+    "videosOnDisk": [],
+    "bundleCount": 13,
+    "bundles": {
+      "afn-sasebo-rally1": {
+        "annotationFiles": [
+          "devin-visual-v1.json",
+          "devin-visual-v2-waveC.json",
+          "devin-visual-v4-waveD2-contact-audit.json",
+          "devin-visual-v4-waveD2-phases.json"
+        ],
+        "hasClip": true,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v1.json": 42,
+          "devin-visual-v2-waveC.json": 4,
+          "devin-visual-v4-waveD2-contact-audit.json": 0,
+          "devin-visual-v4-waveD2-phases.json": 0
+        }
+      },
+      "afn-sasebo-rally2": {
+        "annotationFiles": [
+          "devin-visual-v1.json",
+          "devin-visual-v3-waveD.json",
+          "devin-visual-v4-waveD2-ball.json",
+          "devin-visual-v4-waveD2-contact-audit.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v1.json": 23,
+          "devin-visual-v3-waveD.json": 0,
+          "devin-visual-v4-waveD2-ball.json": 14,
+          "devin-visual-v4-waveD2-contact-audit.json": 0
+        }
+      },
+      "afn-vic-rally1": {
+        "annotationFiles": [
+          "devin-visual-v1.json"
+        ],
+        "hasClip": false,
+        "heldOut": true,
+        "labelAtomsPerFile": {
+          "devin-visual-v1.json": 24
+        }
+      },
+      "wavea-944403-dink": {
+        "annotationFiles": [
+          "devin-visual-v2-wave-a.json",
+          "devin-visual-v2-waveC-contact.json",
+          "devin-visual-v2-waveC-ownership.json",
+          "devin-visual-v2-waveC.json",
+          "devin-visual-v3-waveD-contact.json",
+          "devin-visual-v4-waveD2-ownership-audit.json",
+          "devin-visual-v4-waveD2-phases.json",
+          "devin-visual-v4-waveE-ownership-corrections.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v2-wave-a.json": 0,
+          "devin-visual-v2-waveC-contact.json": 0,
+          "devin-visual-v2-waveC-ownership.json": 39,
+          "devin-visual-v2-waveC.json": 7,
+          "devin-visual-v3-waveD-contact.json": 0,
+          "devin-visual-v4-waveD2-ownership-audit.json": 46,
+          "devin-visual-v4-waveD2-phases.json": 0,
+          "devin-visual-v4-waveE-ownership-corrections.json": 8
+        }
+      },
+      "wavea-944403-smash": {
+        "annotationFiles": [
+          "devin-visual-v2-wave-a.json",
+          "devin-visual-v2-waveC-contact.json",
+          "devin-visual-v2-waveC-ownership.json",
+          "devin-visual-v2-waveC.json",
+          "devin-visual-v3-waveD-contact.json",
+          "devin-visual-v4-waveD2-ownership-audit.json",
+          "devin-visual-v4-waveD2-ta.json",
+          "devin-visual-v4-waveE-ownership-corrections.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v2-wave-a.json": 0,
+          "devin-visual-v2-waveC-contact.json": 0,
+          "devin-visual-v2-waveC-ownership.json": 12,
+          "devin-visual-v2-waveC.json": 9,
+          "devin-visual-v3-waveD-contact.json": 0,
+          "devin-visual-v4-waveD2-ownership-audit.json": 16,
+          "devin-visual-v4-waveD2-ta.json": 4,
+          "devin-visual-v4-waveE-ownership-corrections.json": 6
+        }
+      },
+      "wavea-faead-feed": {
+        "annotationFiles": [
+          "devin-visual-v2-wave-a.json",
+          "devin-visual-v2-waveC-contact.json",
+          "devin-visual-v2-waveC-ownership.json",
+          "devin-visual-v2-waveC.json",
+          "devin-visual-v3-waveD-contact.json",
+          "devin-visual-v4-waveD2-contact-audit.json",
+          "devin-visual-v4-waveD2-ta.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v2-wave-a.json": 0,
+          "devin-visual-v2-waveC-contact.json": 0,
+          "devin-visual-v2-waveC-ownership.json": 4,
+          "devin-visual-v2-waveC.json": 5,
+          "devin-visual-v3-waveD-contact.json": 0,
+          "devin-visual-v4-waveD2-contact-audit.json": 0,
+          "devin-visual-v4-waveD2-ta.json": 4
+        }
+      },
+      "wavea-faead-rally": {
+        "annotationFiles": [
+          "devin-visual-v2-wave-a.json",
+          "devin-visual-v2-waveC-contact.json",
+          "devin-visual-v2-waveC-ownership.json",
+          "devin-visual-v2-waveC.json",
+          "devin-visual-v3-waveD-contact.json",
+          "devin-visual-v4-waveD2-ownership-audit.json",
+          "devin-visual-v4-waveD2-phases.json",
+          "devin-visual-v4-waveE-ownership-corrections.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v2-wave-a.json": 0,
+          "devin-visual-v2-waveC-contact.json": 0,
+          "devin-visual-v2-waveC-ownership.json": 11,
+          "devin-visual-v2-waveC.json": 9,
+          "devin-visual-v3-waveD-contact.json": 0,
+          "devin-visual-v4-waveD2-ownership-audit.json": 21,
+          "devin-visual-v4-waveD2-phases.json": 0,
+          "devin-visual-v4-waveE-ownership-corrections.json": 3
+        }
+      },
+      "wavea-marne-dig": {
+        "annotationFiles": [
+          "devin-visual-v2-wave-a.json",
+          "devin-visual-v2-waveC-contact.json",
+          "devin-visual-v2-waveC-ownership.json",
+          "devin-visual-v2-waveC.json",
+          "devin-visual-v3-waveD-contact.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v2-wave-a.json": 0,
+          "devin-visual-v2-waveC-contact.json": 0,
+          "devin-visual-v2-waveC-ownership.json": 13,
+          "devin-visual-v2-waveC.json": 5,
+          "devin-visual-v3-waveD-contact.json": 0
+        }
+      },
+      "wavea-marne-serve": {
+        "annotationFiles": [
+          "devin-visual-v2-wave-a.json",
+          "devin-visual-v2-waveC.json",
+          "devin-visual-v3-waveD-contact.json",
+          "devin-visual-v4-waveD2-events.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v2-wave-a.json": 0,
+          "devin-visual-v2-waveC.json": 0,
+          "devin-visual-v3-waveD-contact.json": 0,
+          "devin-visual-v4-waveD2-events.json": 0
+        }
+      },
+      "wavea-sasebo-volleys": {
+        "annotationFiles": [
+          "devin-visual-v2-wave-a.json",
+          "devin-visual-v3-waveD-contact.json",
+          "devin-visual-v3-waveD.json",
+          "devin-visual-v4-waveD2-ball.json",
+          "devin-visual-v4-waveD2-events.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v2-wave-a.json": 0,
+          "devin-visual-v3-waveD-contact.json": 0,
+          "devin-visual-v3-waveD.json": 0,
+          "devin-visual-v4-waveD2-ball.json": 15,
+          "devin-visual-v4-waveD2-events.json": 0
+        }
+      },
+      "wavea-wgm-wheelchair": {
+        "annotationFiles": [
+          "devin-visual-v2-wave-a.json",
+          "devin-visual-v2-waveC.json",
+          "devin-visual-v3-waveD-contact.json",
+          "devin-visual-v4-waveD2-ball.json",
+          "devin-visual-v4-waveD2-events.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v2-wave-a.json": 0,
+          "devin-visual-v2-waveC.json": 0,
+          "devin-visual-v3-waveD-contact.json": 0,
+          "devin-visual-v4-waveD2-ball.json": 9,
+          "devin-visual-v4-waveD2-events.json": 0
+        }
+      },
+      "wm-dink-01": {
+        "annotationFiles": [
+          "devin-visual-v1.json"
+        ],
+        "hasClip": true,
+        "heldOut": true,
+        "labelAtomsPerFile": {
+          "devin-visual-v1.json": 51
+        }
+      },
+      "wm-volley-02": {
+        "annotationFiles": [
+          "devin-visual-v1.json",
+          "devin-visual-v2-waveC-contact.json",
+          "devin-visual-v2-waveC.json",
+          "devin-visual-v4-waveD2-ball.json",
+          "devin-visual-v4-waveD2-ta.json"
+        ],
+        "hasClip": true,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v1.json": 43,
+          "devin-visual-v2-waveC-contact.json": 0,
+          "devin-visual-v2-waveC.json": 3,
+          "devin-visual-v4-waveD2-ball.json": 5,
+          "devin-visual-v4-waveD2-ta.json": 4
+        }
+      }
+    },
+    "notes": "videos/ is gitignored by design (media stays local); README documents this. Held-out bundles were not viewed; only file listings and JSON structure counted.",
+    "unusedCheck": []
+  },
+  "ballBench": {
+    "topLevelKeys": [
+      "schemaVersion",
+      "provenance",
+      "note",
+      "cameraType",
+      "cases",
+      "coverageGaps",
+      "splitNote"
+    ],
+    "caseCount": [
+      "cases",
+      10
+    ],
+    "failureDirs": [
+      "BALL_BODY_OVERLAP-afn-sasebo-rally1",
+      "BALL_FALSE_POSITIVE_BACKGROUND-wm-dink-01",
+      "PADDLE_WRONG_RACKET_LIKE_OBJECT-afn-sasebo-rally1",
+      "PLAYER_ASSOCIATION_FAILURE-wm-far-03",
+      "SCENE_CUT_UNDETECTED-afn-vic-rally1"
+    ],
+    "resultFiles": 11
+  },
+  "corpus": {
+    "sources": 20,
+    "recordings": 26,
+    "rootRecordings": 17,
+    "sessions": 12,
+    "splitAssignments": {
+      "afn-sasebo-2025-06": "dev",
+      "afn-sigonella-2025": "dev",
+      "afn-vic-2025": "locked_test",
+      "dvids-1007845": "dev",
+      "dvids-1008415": "dev",
+      "dvids-906546": "shadow",
+      "dvids-943757": "dev",
+      "dvids-956784": "dev",
+      "dvids-957519": "dev",
+      "dvids-967848": "val",
+      "dvids-986421": "dev",
+      "dvids-espn-oneyearout-2026": "shadow",
+      "dvids-marne-2024": "dev",
+      "dvids-warriorgames-2026": "dev",
+      "wm-tournament-2014": "dev"
+    },
+    "splitCounts": {
+      "dev": 11,
+      "locked_test": 1,
+      "shadow": 2,
+      "val": 1
+    },
+    "unassignedSessions": [],
+    "orphanAssignments": [
+      "dvids-956784",
+      "dvids-957519",
+      "dvids-967848"
+    ],
+    "undeclaredDuplicateFindings": 5,
+    "dedupFindingsTotal": 7,
+    "recordingsMediaMissingOnDisk": 26,
+    "recordingsMediaNote": "media is gitignored by design; paths verified as declared only",
+    "minedEventCandidateFiles": 13,
+    "minedEventCandidateFilesEmpty": 3,
+    "minedEventCandidates": 199,
+    "minedEventCandidateTiers": {
+      "C": 199
+    },
+    "fingerprintFiles": 26
+  },
+  "releases": {
+    "paddle-distill-v0.1": {
+      "files": [
+        "examples.jsonl",
+        "manifest.json"
+      ],
+      "manifestCounts": {
+        "byCase": {
+          "afn-sasebo-rally1": {
+            "pixelsCommitted": 124,
+            "total": 124,
+            "trainingEligible": 124,
+            "withOwnership": 19,
+            "withTeacher": 124
+          },
+          "afn-sasebo-rally2": {
+            "pixelsCommitted": 0,
+            "total": 137,
+            "trainingEligible": 137,
+            "withOwnership": 11,
+            "withTeacher": 137
+          },
+          "afn-vic-rally1": {
+            "pixelsCommitted": 0,
+            "total": 7,
+            "trainingEligible": 0,
+            "withOwnership": 7,
+            "withTeacher": 0
+          },
+          "wavea-944403-dink": {
+            "pixelsCommitted": 0,
+            "total": 12,
+            "trainingEligible": 12,
+            "withOwnership": 12,
+            "withTeacher": 0
+          },
+          "wavea-944403-smash": {
+            "pixelsCommitted": 0,
+            "total": 4,
+            "trainingEligible": 4,
+            "withOwnership": 4,
+            "withTeacher": 0
+          },
+          "wavea-faead-feed": {
+            "pixelsCommitted": 0,
+            "total": 2,
+            "trainingEligible": 2,
+            "withOwnership": 2,
+            "withTeacher": 0
+          },
+          "wavea-faead-rally": {
+            "pixelsCommitted": 0,
+            "total": 5,
+            "trainingEligible": 5,
+            "withOwnership": 5,
+            "withTeacher": 0
+          },
+          "wavea-marne-dig": {
+            "pixelsCommitted": 0,
+            "total": 5,
+            "trainingEligible": 5,
+            "withOwnership": 5,
+            "withTeacher": 0
+          },
+          "wm-dink-01": {
+            "pixelsCommitted": 28,
+            "total": 28,
+            "trainingEligible": 0,
+            "withOwnership": 19,
+            "withTeacher": 13
+          },
+          "wm-volley-02": {
+            "pixelsCommitted": 93,
+            "total": 93,
+            "trainingEligible": 93,
+            "withOwnership": 16,
+            "withTeacher": 93
+          }
+        },
+        "examples": 417,
+        "firstPartyConsentGranted": 0,
+        "firstPartyExamples": 0,
+        "quarantineReasons": {
+          "held_out_case:held_out": 28,
+          "held_out_case:test_held_out": 7
+        },
+        "quarantined": 35,
+        "trainingEligible": 382,
+        "trainingEligibleWithPixels": 217,
+        "withOwnershipOutcome": 100,
+        "withTeacherDetections": 367
+      },
+      "immutable": null
+    },
+    "pickle-real-v0.1": {
+      "files": [
+        "manifest.json",
+        "manifest.sha256",
+        "training-justification.json"
+      ],
+      "manifestCounts": {
+        "uniqueSources": 5,
+        "registeredFiles": 10,
+        "sessions": 4,
+        "annotatedCases": 5,
+        "targetEvents": 5,
+        "annotators": 1,
+        "expertCoaches": 0
+      },
+      "immutable": true,
+      "manifestSha256Match": true
+    },
+    "pickle-real-v0.2": {
+      "files": [
+        "manifest.json",
+        "manifest.sha256"
+      ],
+      "manifestCounts": {
+        "uniqueSources": 8,
+        "registeredFiles": 13,
+        "sessions": 7,
+        "annotatedCases": 5,
+        "targetEvents": 5,
+        "annotators": 1,
+        "expertCoaches": 0
+      },
+      "immutable": true,
+      "manifestSha256Match": true
+    },
+    "pickle-real-v0.3": {
+      "files": [
+        "annotations",
+        "manifest.json",
+        "manifest.sha256"
+      ],
+      "manifestCounts": {
+        "uniqueSources": 8,
+        "registeredFiles": 13,
+        "sessions": 7,
+        "annotatedCases": 5,
+        "targetEvents": 5,
+        "annotators": 1,
+        "expertCoaches": 0
+      },
+      "immutable": true,
+      "manifestSha256Match": true
+    }
+  },
+  "misc": {
+    "taBenchCases": 301,
+    "taBenchResultFiles": 35,
+    "coachReviewQueue": 5,
+    "coaches": 0,
+    "faultTaxonomy": {
+      "families": 9,
+      "faults": 46
+    },
+    "drills": 2,
+    "cascadeRunFiles": 11,
+    "completionBenchFiles": 8,
+    "mining": {
+      "dvids-marne-outdoor": {
+        "mining.json": {
+          "candidates": 8
+        },
+        "scenes.json": {
+          "cuts": 6,
+          "scores": 4049,
+          "segments": 7
+        },
+        "extract-meta.json": [
+          "framesSeen",
+          "framesWithPose",
+          "poseMisses",
+          "poseModelVersion",
+          "trajectoryCount",
+          "video",
+          "wallTimeMs"
+        ]
+      },
+      "dvids-warriorgames-match": {
+        "mining.json": {
+          "candidates": 6
+        },
+        "scenes.json": {
+          "cuts": 9,
+          "scores": 9224,
+          "segments": 10
+        },
+        "extract-meta.json": [
+          "framesSeen",
+          "framesWithPose",
+          "poseMisses",
+          "poseModelVersion",
+          "trajectoryCount",
+          "video",
+          "wallTimeMs"
+        ]
+      }
+    },
+    "experimentSummaries": {
+      "wave-a": 34,
+      "wave-b": 33,
+      "wave-c": 21,
+      "wave-d": 17,
+      "wave-d2": 16,
+      "wave-d3": 14,
+      "wave-d4": 17,
+      "wave-e": 52,
+      "wave-f": 5
+    }
+  },
+  "dataCards": {
+    "ball-bench": {
+      "dataCardExists": true,
+      "referencedPaths": 4,
+      "missingReferencedPaths": []
+    },
+    "cascade": {
+      "dataCardExists": true,
+      "referencedPaths": 2,
+      "missingReferencedPaths": []
+    },
+    "coach-review": {
+      "dataCardExists": true,
+      "referencedPaths": 2,
+      "missingReferencedPaths": []
+    },
+    "completion-bench": {
+      "dataCardExists": true,
+      "referencedPaths": 2,
+      "missingReferencedPaths": []
+    },
+    "corpus": {
+      "dataCardExists": true,
+      "referencedPaths": 1,
+      "missingReferencedPaths": []
+    },
+    "mining": {
+      "dataCardExists": true,
+      "referencedPaths": 4,
+      "missingReferencedPaths": []
+    },
+    "ood": {
+      "dataCardExists": true,
+      "referencedPaths": 5,
+      "missingReferencedPaths": []
+    },
+    "paddle-bench": {
+      "dataCardExists": true,
+      "referencedPaths": 3,
+      "missingReferencedPaths": []
+    },
+    "pickleball": {
+      "dataCardExists": true,
+      "referencedPaths": 2,
+      "missingReferencedPaths": []
+    },
+    "releases": {
+      "dataCardExists": true,
+      "referencedPaths": 1,
+      "missingReferencedPaths": []
+    },
+    "ta-bench": {
+      "dataCardExists": true,
+      "referencedPaths": 4,
+      "missingReferencedPaths": []
+    }
+  },
+  "labelSchema": {
+    "annotationFilesChecked": 65,
+    "requiredEnvelope": [
+      "schemaVersion",
+      "captureBundle",
+      "annotatorId",
+      "createdAtIso",
+      "revision"
+    ]
+  },
+  "sidecarConsistency": {
+    "registrySourceVideos": 13,
+    "bundleDirs": 13,
+    "activeCasesWithBundles": [
+      "afn-sasebo-rally1",
+      "afn-sasebo-rally2",
+      "afn-vic-rally1",
+      "wm-dink-01",
+      "wm-volley-02"
+    ],
+    "orphanBundles": []
+  },
+  "duplicates": {
+    "collections": {
+      "pickleball/registry ids (all sections)": {
+        "count": 46,
+        "duplicates": []
+      },
+      "paddle-bench/registry video ids": {
+        "count": 13,
+        "duplicates": []
+      },
+      "paddle-bench/stroke-gold labelIds": {
+        "count": 0,
+        "duplicates": []
+      },
+      "paddle-bench/stroke-gold (bundle,eventStartMs)": {
+        "count": 29,
+        "duplicates": []
+      },
+      "paddle-bench/event-bounds-qa (bundle,idx)": {
+        "count": 34,
+        "duplicates": []
+      },
+      "ta-bench caseIds": {
+        "count": 301,
+        "duplicates": []
+      },
+      "corpus recordingIds": {
+        "count": 26,
+        "duplicates": []
+      },
+      "corpus sourceIds": {
+        "count": 20,
+        "duplicates": []
+      }
+    },
+    "registeredMediaSha256Checked": 52,
+    "sha256Duplicates": {}
+  },
+  "heldOutIsolation": {
+    "cases": {
+      "afn-vic-rally1": {
+        "annotationFiles": [
+          "devin-visual-v1.json"
+        ],
+        "nonBaselineAnnotations": []
+      },
+      "wm-dink-01": {
+        "annotationFiles": [
+          "devin-visual-v1.json"
+        ],
+        "nonBaselineAnnotations": []
+      }
+    },
+    "goldCollectionChecks": {
+      "stroke-gold labels": [],
+      "ta-bench cases": [],
+      "event-bounds-wave-a cases": []
+    },
+    "releaseBaselineComparison": [
+      {
+        "case": "afn-vic-rally1",
+        "byteIdentical": true,
+        "releaseRevision": 4,
+        "bundleRevision": 4
+      },
+      {
+        "case": "wm-dink-01",
+        "byteIdentical": false,
+        "releaseRevision": 5,
+        "bundleRevision": 8
+      }
+    ],
+    "textualReferences": [
+      {
+        "file": "datasets/cascade/cascade-1787963165545.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/cascade/cascade-1787960997164.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/cascade/cascade-1787968886850.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/cascade/cascade-1787965901691.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/cascade/cascade-1787966875746.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/cascade/cascade-1787971618835.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/cascade/cascade-1787963173891.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/cascade/cascade-1787971517129.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/cascade/cascade-1787967090683.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/cascade/cascade-1787971753680.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/pickleball/FIRST_PARTY_CAPTURE_PROTOCOL.md",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/completion-bench/completion-1787960830246.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/completion-bench/completion-1787970684355.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/completion-bench/completion-1787960872303.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/completion-bench/completion-1787970656406.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/completion-bench/completion-1787971765969.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/completion-bench/completion-1787970351905.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/completion-bench/completion-1787967063880.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/coach-review/queue.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/ball-bench/DATA_CARD.md",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/ball-bench/ball-bench.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/ball-bench/baselines.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/ball-bench/failure-review.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/ball-bench/results/ball-bench-1787937540918.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/ball-bench/results/ball-bench-1787944792427.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/ball-bench/results/ball-bench-1787948852065.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/ball-bench/results/ball-bench-1787942246132.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/ball-bench/results/ball-bench-1787966975192.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/ball-bench/results/ball-bench-1787948816494.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/ball-bench/results/ball-bench-1787943554778.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/ball-bench/results/ball-bench-1787949609503.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/ball-bench/results/ball-bench-1787938666349.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/ball-bench/results/ball-bench-1787942576648.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/ball-bench/results/ball-bench-1787971765368.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/corpus/recordings.json",
+        "cases": [
+          "afn-vic-rally1"
+        ]
+      },
+      {
+        "file": "datasets/corpus/splits.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/EXP-2026-08-28-event-decoupling.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/EXP-2026-08-28-paddle-waterfall.json",
+        "cases": [
+          "afn-vic-rally1"
+        ]
+      },
+      {
+        "file": "datasets/experiments/EXP-2026-08-28-ownership-gold-expansion.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/EXP-2026-08-28-paddle-teacher.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/EXP-2026-08-28-user-target-seed.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-c/c05-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-c/c11-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-c/c01-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-c/c02-edgeon-crop-production-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-c/c04-ball-gold-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-c/c03-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-c/C06-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-c/c12-envelope-measurements.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-c/c12-summary.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W5-summary.json",
+        "cases": [
+          "afn-vic-rally1"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W13-summary.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W1-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W13-data-report.md",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W12-summary.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W2-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W6-summary.json",
+        "cases": [
+          "afn-vic-rally1"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W9-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W5-anchor-free-measurement.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W1-forensics-rerun-after-fix.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W14-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W9-stroke-bench.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W14-overlap/worklist.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W12-probe/probe-dets.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W12-probe/visual-truth.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W12-probe/README.md",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W12-probe/strategy-report.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-b/W12-probe/frames-manifest.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d3/d3-07-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d3/d3-02-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d3/d3-05-rt-phase-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d3/d3-11-rt-ood-gate-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d3/d3-09-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d3/d3-12-rt-api-errors-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d3/d3-01-rt-target-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d3/d3-06-rt-session-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d3/d3-03-rt-ownership-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d3/d3-10-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d3/d3-04-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-a/U-usable-result-v1-measurement.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-a/U-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-a/I-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-a/L-verdicts-3.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-a/L-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-a/L-verdicts-1.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-a/P-latency-plan.md",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-a/Q-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-a/B-selection-forensics.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-a/H-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-a/L-verdicts-2.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-a/H-config.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-a/E-summary.json",
+        "cases": [
+          "afn-vic-rally1"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-a/B-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-a/P-runs/P-measurements.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-a/I-bench/ball-bench.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d4/EXP-2026-08-29-d4-02-modality-learning-curves.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d4/d4-10-voice-intent-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d4/d4-11-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d4/d4-06-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d4/d4-08-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d4/d4-07-clip-trim-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d4/d4-03-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d4/d4-05-pose-reuse-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d4/d4-02-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d4/d4-01-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d4/d4-04-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d4/d4-01-dets/PROVENANCE.md",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-f/f24-label-ledger.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-f/f24-attack-fixtures.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d2/d2-10-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d2/d2-04-ownership-audit-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d2/d2-09-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d2/d2-01-acq-nara-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d2/d2-09-integrity-report.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d2/d2-03-acq-milgov-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d2/label-queue-v2.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d2/d2-06-ball-hard-slices-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d2/d2-02-acq-commons-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d2/d2-12-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e15-envelope-thresholds-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e20-voice-robustness-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e08-rt-target-fresh-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e23-active-learning-queue-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e24-integrity-report.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e26-dead-code-audit-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e05-ownership-adjudication-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e01-event-recall-baseline.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e25-docs-evidence-pack-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e15-media-rederivation.json",
+        "cases": [
+          "afn-vic-rally1"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/EXP-2026-08-29-e14-learning-curves.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e01-event-recall-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e09-rt-contact-adversarial-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e18-warm-worker-soak-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e10-rt-stroke-ambiguous-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e01-event-recall-after.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e02-contact-gold-replay-metrics.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e01-oracle-after.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e21-consent-e2e-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e17-latency-e2e-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e23-label-queue-v3.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e07-silent-failure-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e24-data-integrity-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e02-contact-transfer-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e11-ood-expansion-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e14-learning-curves-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e13-event-bounds-eval-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e04-phase-anchorfree-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e12-ball-hard-slices-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e06-cascade-replay-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e25-docs-evidence-pack.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e03-stroke-l1l2-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e15-envelope-corpus-measurements-v0.2.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e16-session-scheduler-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-e/e15-envelope-corpus-measurements-v0.3.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d/d05-ball-occlusion-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d/d11-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d/d04-contact-gold-scale-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d/d09-warm-worker-hardening-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d/d06-attribution.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d/d10-mac-harness-summary.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d/d02-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/experiments/wave-d/d06-summary.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/releases/paddle-distill-v0.1/manifest.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/releases/paddle-distill-v0.1/examples.jsonl",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/releases/pickle-real-v0.1/manifest.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/releases/pickle-real-v0.2/manifest.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/releases/pickle-real-v0.3/manifest.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/releases/pickle-real-v0.3/annotations/afn-vic-rally1.json",
+        "cases": [
+          "afn-vic-rally1"
+        ]
+      },
+      {
+        "file": "datasets/releases/pickle-real-v0.3/annotations/wm-dink-01.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/stroke-gold.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/DATA_CARD.md",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/event-bounds-qa-wave-c.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/regen-manifest.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/baselines.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/failure-review.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/event-bounds-wave-a.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/registry.json",
+        "cases": [
+          "afn-vic-rally1"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/paddle-bench.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/results/paddle-bench-1787938638602.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/results/paddle-bench-1787937635457.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/results/paddle-bench-1787968828222.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/results/paddle-bench-1787944792002.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/results/paddle-bench-1787960696084.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/results/paddle-bench-1787943554343.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/results/paddle-bench-1787967160729.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/results/paddle-bench-1787901598168.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/results/paddle-bench-1787949609071.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/results/paddle-bench-1787900848362.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/results/paddle-bench-1787901391692.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/results/paddle-bench-1787948852494.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/results/paddle-bench-1787948738602.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/results/paddle-bench-1787942245695.json",
+        "cases": [
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/ownership-review/queue.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/ownership-review/README.md",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/ownership-review/ownership-review.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v4-waveE-ownership-corrections.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v4-waveE-ownership-corrections.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v4-waveE-ownership-corrections.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      },
+      {
+        "file": "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+        "cases": [
+          "afn-vic-rally1",
+          "wm-dink-01"
+        ]
+      }
+    ],
+    "textualReferenceNote": "references are id mentions in bench case listings, run artifacts, QA records, registries and exclusion notes \u2014 recorded for review, not isolation violations; no held-out label content was viewed"
+  },
+  "ledger": {
+    "ledgerFile": "datasets/experiments/wave-f/f24-label-ledger.json",
+    "collections": {
+      "ball-bench cases": {
+        "ledgered": 10,
+        "current": 10,
+        "missingLedgeredHashes": 0,
+        "unledgeredAdditions": 0
+      },
+      "corpus recordings": {
+        "ledgered": 26,
+        "current": 26,
+        "missingLedgeredHashes": 0,
+        "unledgeredAdditions": 0
+      },
+      "corpus sources": {
+        "ledgered": 20,
+        "current": 20,
+        "missingLedgeredHashes": 0,
+        "unledgeredAdditions": 0
+      },
+      "event-bounds-qa-wave-c corrections": {
+        "ledgered": 1,
+        "current": 1,
+        "missingLedgeredHashes": 0,
+        "unledgeredAdditions": 0
+      },
+      "event-bounds-qa-wave-c events": {
+        "ledgered": 34,
+        "current": 34,
+        "missingLedgeredHashes": 0,
+        "unledgeredAdditions": 0
+      },
+      "event-bounds-wave-a cases": {
+        "ledgered": 8,
+        "current": 8,
+        "missingLedgeredHashes": 0,
+        "unledgeredAdditions": 0
+      },
+      "event-bounds-wave-a rejectedCandidates": {
+        "ledgered": 9,
+        "current": 9,
+        "missingLedgeredHashes": 0,
+        "unledgeredAdditions": 0
+      },
+      "ood registry items": {
+        "ledgered": 11,
+        "current": 11,
+        "missingLedgeredHashes": 0,
+        "unledgeredAdditions": 0
+      },
+      "paddle-bench cases": {
+        "ledgered": 5,
+        "current": 5,
+        "missingLedgeredHashes": 0,
+        "unledgeredAdditions": 0
+      },
+      "paddle-bench registry videos": {
+        "ledgered": 13,
+        "current": 13,
+        "missingLedgeredHashes": 0,
+        "unledgeredAdditions": 0
+      },
+      "pickleball registry freshCandidates": {
+        "ledgered": 15,
+        "current": 15,
+        "missingLedgeredHashes": 0,
+        "unledgeredAdditions": 0
+      },
+      "pickleball registry sources": {
+        "ledgered": 2,
+        "current": 2,
+        "missingLedgeredHashes": 0,
+        "unledgeredAdditions": 0
+      },
+      "stroke-gold labels": {
+        "ledgered": 29,
+        "current": 29,
+        "missingLedgeredHashes": 0,
+        "unledgeredAdditions": 0
+      },
+      "ta-bench cases": {
+        "ledgered": 301,
+        "current": 301,
+        "missingLedgeredHashes": 0,
+        "unledgeredAdditions": 0
+      }
+    },
+    "unledgeredAdditions": [],
+    "revisedAnnotations": [],
+    "annotationFilesLedgered": 65
+  },
+  "caseReferences": {
+    "strokeGoldCaseIds": [
+      "afn-sasebo-rally1",
+      "afn-sasebo-rally2",
+      "wavea-944403-dink",
+      "wavea-944403-smash",
+      "wavea-faead-feed",
+      "wavea-faead-rally",
+      "wavea-marne-dig",
+      "wavea-marne-serve",
+      "wavea-sasebo-volleys",
+      "wavea-wgm-wheelchair",
+      "wm-volley-02"
+    ],
+    "bundleDirs": 13,
+    "unknownCaseIds": []
+  },
+  "issueCounts": {
+    "stale_assignment_explained": 3,
+    "schema_violation": 14,
+    "held_out_baseline_drift": 1
+  }
+}
