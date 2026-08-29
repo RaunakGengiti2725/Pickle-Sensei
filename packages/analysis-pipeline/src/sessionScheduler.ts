@@ -138,11 +138,17 @@ export interface SessionSchedulerOptions {
 interface QueuedTask {
   event: SessionStrokeEvent;
   attempt: number;
+  /** Last attempt number this task's budget allows (recovery leases carry
+   * their own fresh budget: readmission ceiling = attempts-so-far + maxAttempts). */
+  attemptCeiling: number;
 }
 
 export class SessionAnalysisScheduler {
   private readonly engine: SessionEventEngine;
   private readonly executor: SessionAnalysisExecutor;
+  /** Immutable for the engine's lifetime; cached so dispatch never pays for
+   * a full snapshot (which copies every event) just to read the id. */
+  private readonly sessionId: string;
   private readonly concurrency: number;
   private readonly maxAttempts: number;
   private readonly now: () => number;
@@ -161,6 +167,7 @@ export class SessionAnalysisScheduler {
 
   constructor(options: SessionSchedulerOptions) {
     this.engine = options.engine;
+    this.sessionId = options.engine.snapshot().sessionId;
     this.executor = options.executor;
     this.concurrency = Math.max(1, options.concurrency ?? 1);
     this.maxAttempts = Math.max(1, options.maxAttempts ?? 2);
@@ -219,10 +226,11 @@ export class SessionAnalysisScheduler {
       if (exhausted && !options?.readmitExhausted) continue;
       if (record) {
         // Fresh recovery lease: the terminal verdict is superseded by an
-        // explicit recovery decision; prior failures stay recorded.
+        // explicit recovery decision; prior failures stay recorded. The lease
+        // carries its own full attempt budget.
         record.outcome = null;
         record.finishedAt = null;
-        this.enqueueExisting(event, record.attempts + 1);
+        this.enqueueExisting(event, record.attempts + 1, record.attempts + this.maxAttempts);
       } else {
         this.enqueue(event, 1);
       }
@@ -301,12 +309,16 @@ export class SessionAnalysisScheduler {
       outcome: null,
       failures: [],
     });
-    this.queue.push({ event, attempt });
+    this.queue.push({ event, attempt, attemptCeiling: this.maxAttempts });
     this.maxQueueDepth = Math.max(this.maxQueueDepth, this.queue.length);
   }
 
-  private enqueueExisting(event: SessionStrokeEvent, attempt: number): void {
-    this.queue.push({ event, attempt });
+  private enqueueExisting(
+    event: SessionStrokeEvent,
+    attempt: number,
+    attemptCeiling: number,
+  ): void {
+    this.queue.push({ event, attempt, attemptCeiling });
     this.maxQueueDepth = Math.max(this.maxQueueDepth, this.queue.length);
   }
 
@@ -331,17 +343,27 @@ export class SessionAnalysisScheduler {
     record.attempts = attempt;
     const startedAt = this.now();
     record.startedAt ??= startedAt;
-    record.queueWaitMs ??= startedAt - record.enqueuedAt;
+    // Clamped at 0: a wall clock may step backwards (NTP correction, device
+    // clock reset); measured durations are never negative.
+    record.queueWaitMs ??= Math.max(0, startedAt - record.enqueuedAt);
     this.engine.markEvent(event.eventId, "processing");
-    const settle = this.executor
-      .execute({
-        sessionId: this.engine.snapshot().sessionId,
+    let executed: Promise<SessionAnalysisTaskOutcome>;
+    try {
+      // A misbehaving executor may throw synchronously instead of returning
+      // a rejected promise; both are the same honest failure, and neither may
+      // escape into the sample-feeding path or leak the dispatch slot.
+      executed = this.executor.execute({
+        sessionId: this.sessionId,
         eventId: event.eventId,
         proposal: event.proposal,
         closeReason: event.closeReason,
         closedAtMs: event.closedAtMs,
         attempt,
-      })
+      });
+    } catch (error) {
+      executed = Promise.reject(error);
+    }
+    const settle = executed
       .then(
         (outcome) => outcome,
         (error): SessionAnalysisTaskOutcome => {
@@ -354,9 +376,9 @@ export class SessionAnalysisScheduler {
         },
       )
       .then((outcome) => {
-        record.serviceMs += this.now() - startedAt;
+        record.serviceMs += Math.max(0, this.now() - startedAt);
         this.inFlightIds.delete(event.eventId);
-        this.applyOutcome(event, attempt, outcome, record);
+        this.applyOutcome(task, outcome, record);
         this.pump();
       });
     const tracked: Promise<void> = settle.finally(() => {
@@ -366,11 +388,11 @@ export class SessionAnalysisScheduler {
   }
 
   private applyOutcome(
-    event: SessionStrokeEvent,
-    attempt: number,
+    task: QueuedTask,
     outcome: SessionAnalysisTaskOutcome,
     record: SessionTaskRecord,
   ): void {
+    const { event, attempt } = task;
     if (outcome.status === "ready") {
       this.engine.markEvent(event.eventId, "ready", { analysis: outcome.analysis });
       this.finish(record, "ready");
@@ -387,9 +409,9 @@ export class SessionAnalysisScheduler {
     // the reason is recorded on the task record — never silent.
     record.failures.push(`attempt ${attempt}: ${outcome.reason}`);
     this.engine.markEvent(event.eventId, "pending");
-    if (outcome.retryable && attempt < this.maxAttempts) {
+    if (outcome.retryable && attempt < task.attemptCeiling) {
       // Back of the queue: a flaky event may never starve newer events.
-      this.enqueueExisting(event, attempt + 1);
+      this.enqueueExisting(event, attempt + 1, task.attemptCeiling);
       return;
     }
     this.finish(record, outcome.retryable ? "retry_exhausted" : "failed_final");
@@ -398,6 +420,6 @@ export class SessionAnalysisScheduler {
   private finish(record: SessionTaskRecord, outcome: SessionTaskTerminal): void {
     record.outcome = outcome;
     record.finishedAt = this.now();
-    record.totalLatencyMs = record.finishedAt - record.enqueuedAt;
+    record.totalLatencyMs = Math.max(0, record.finishedAt - record.enqueuedAt);
   }
 }
