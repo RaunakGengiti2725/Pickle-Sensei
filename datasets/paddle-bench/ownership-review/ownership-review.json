@@ -812,5 +812,364 @@
     },
     "note": "1 = gray-shirt opponent's pale paddle at chest; 0 = dark object over the near-net band at left — possibly his blade tip mid-reach but he already holds the box-1 paddle, not certifiable; 2 = red-shirt opponent's WHITE CAP boxed as paddle (cap FP family, matches wm-volley 5490); 3 = his face/neck directly below the cap. Target's green paddle not detected this frame",
     "appliedAtIso": "2026-08-29T02:00:07.870Z"
+  },
+  {
+    "caseId": "wavea-944403-dink",
+    "tMs": 20003.32,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "target",
+      "1": "other",
+      "2": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=near-left crest TARGET blue-gray blade face-on low, grip in right hand, wrist just left of blade top-left (~0.30,0.60); box px [596,632,702,706]; 1=near-right player's blue paddle face-on, hand at grip top-right wrist ~(0.75,0.51); px [1374,566,1465,655]; 2=far-left cap player's gray blade face-on at chest, both hands below-left wrist ~(0.29,0.38); px [552,366,620,414]; far-center player's paddle also present but not certifiably boxed this frame (omitted, not interpolated)",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-944403-dink",
+    "tMs": 20253.57,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "target",
+      "1": "other",
+      "2": "other",
+      "3": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=TARGET blade face-on low, fingers at grip upper-left wrist ~(0.28,0.56); px [558,605,645,690]; 1=near-right blue blade hanging down-left, hand top-right wrist ~(0.76,0.55); px [1365,592,1465,682]; 2=far-left cap gray blade at chest, hands below wrist ~(0.30,0.38); px [592,350,652,400]; 3=far-center dark blade edge-on hanging behind net, EDGE-ON hard slice, owner's leg below; px [898,450,932,532]",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-944403-dink",
+    "tMs": 20503.82,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "target",
+      "1": "other",
+      "2": "other",
+      "3": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=TARGET blade face-on tilted down-right, hand at grip left wrist ~(0.23,0.52); px [446,542,534,624]; grid-label uncertainty +-8px x; 1=near-right blue blade face-up large, hand top-right wrist ~(0.64,0.50); px [1076,556,1248,660]; 2=far-center dark blade edge-on behind net, EDGE-ON hard slice; px [848,452,893,530]; 3=far-left cap gray blade w/ logo at chest, wrist below-left ~(0.28,0.39); px [552,372,620,430]",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-944403-dink",
+    "tMs": 20754.07,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "target",
+      "1": "other",
+      "2": "other",
+      "3": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=TARGET dark blade pointing down seen THROUGH net mesh, hand top-left wrist ~(0.20,0.46); px [392,508,448,602]; near-edge-on; 1=near-right blue blade partially occluded by own thigh, hand above wrist ~(0.72,0.53); px [1380,600,1432,668]; 2=far-left cap gray blade at chest wrist ~(0.29,0.38); px [592,355,655,408]; 3=far-center dark blade horizontal at net-tape level, hand right wrist ~(0.45,0.39); px [800,418,858,442]",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-944403-dink",
+    "tMs": 21087.73,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "target",
+      "1": "other",
+      "2": "ambiguous"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=TARGET blade extended forward (drive contact bracket 21117+-2), hand left wrist ~(0.24,0.53); px [500,558,660,610]; 1=far-left cap gray blade at chest wrist ~(0.27,0.37); px [545,368,615,418]; 2=AMBIGUOUS: dark mass near ball at px [745,282,815,335] may be far-side paddle held up (fingers at lower right) but face not certifiable against dark clothing/fence; near-right player's paddle hidden behind his body this frame (no box)",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-944403-dink",
+    "tMs": 21171.15,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "target",
+      "1": "other",
+      "2": "ambiguous"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=TARGET blade just after contact, near-edge-on thin profile, hand left wrist ~(0.26,0.52); px [525,550,635,598]; 1=far-left cap gray blade w/ logo, wrist below-left ~(0.29,0.38); px [572,362,648,418]; 2=AMBIGUOUS: dark rounded shape px [498,332,562,382] below ball, plausibly far-side paddle face but boundary/owner not certifiable; near-right player's paddle hidden this frame",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-944403-dink",
+    "tMs": 21337.98,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "target",
+      "1": "other",
+      "2": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=TARGET paddle fully occluded in front of his body (back to camera) - no point, honest occlusion; 1=far-left cap dark blade face-on w/ V logo, hand below-left wrist ~(0.29,0.39); px [565,365,650,415]; 2=far-center dark blade horizontal near net tape, hand right; px [855,452,925,482]",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-944403-dink",
+    "tMs": 21588.23,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "target",
+      "1": "other",
+      "2": "other",
+      "3": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=TARGET blue-gray blade face-on tilted, fingers at grip top-left wrist ~(0.25,0.53); px [492,562,588,640]; 1=far-left cap gray blade face-on tilted big, wrist below-left ~(0.28,0.38); px [558,345,652,402]; 2=far-center dark blade pointing down behind net, EDGE-ON dark hard slice; px [875,455,928,528]; 3=near-right big blue paddle face-on, hand top-left wrist ~(0.80,0.55); px [1533,568,1650,658]",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-944403-dink",
+    "tMs": 21838.48,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "target",
+      "1": "other",
+      "2": "other",
+      "3": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=TARGET blue-gray blade face-on tilted down-right, fingers top-left wrist ~(0.31,0.53); px [602,562,678,648]; 1=far-center dark blade face-on hanging below fingertips over net tape; px [815,465,882,535]; 2=near-right big blue paddle face-up, hand left wrist ~(0.77,0.56); px [1490,582,1640,648]; 3=far-left cap dark blade EDGE-ON pointing down at his left side, hand occluded behind body, dark-on-dark hard slice; px [572,318,632,475]",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-944403-dink",
+    "tMs": 22088.73,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "target",
+      "1": "other",
+      "2": "other",
+      "3": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=TARGET blade face-on w/ white logo extended toward net, hand at grip lower-left wrist ~(0.32,0.53); px [628,526,712,590]; 1=near-right blue blade low near ground, hand above wrist ~(0.71,0.57); px [1348,638,1402,678]; tip may clip crop ~5px; 2=far-left cap dark blade angled down-right, hand left wrist ~(0.29,0.37); px [580,385,670,430]; 3=far-center dark blade hanging below hand behind net mesh; px [838,455,882,512]",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-944403-dink",
+    "tMs": 22338.98,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "target",
+      "1": "other",
+      "2": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=TARGET big gray blade face-on w/ white streaks, fingers at grip upper-left wrist ~(0.32,0.42); px [600,452,712,532]; 1=far-center dark blade hanging vertical behind net mesh; px [850,450,892,520]; 2=far-left cap dark round blade w/ V logo; LEFT EDGE UNCERTAIN +-10px (partially behind own arm); px [578,388,628,436]",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-944403-dink",
+    "tMs": 22589.23,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "target",
+      "1": "other",
+      "2": "ambiguous"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=TARGET gray blade face-on tilted down-right seen through net mesh, fingers at grip left wrist ~(0.33,0.44); px [626,465,706,533]; 1=far-left cap dark blade w/ X logo partially behind own arm, wrist right ~(0.37,0.39); px [658,393,704,437]; 2=AMBIGUOUS: slim dark object px [846,450,872,474] behind net at far-center player, plausibly edge-on blade sliver but not certifiable; near-right player's paddle not visible this frame",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-944403-smash",
+    "tMs": 2902.9,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "other",
+      "1": "target",
+      "2": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=near-LEFT black-shirt player's white/gray paddle face-on out over net (ball just below blade - his contact imminent), hand from upper-left wrist ~(0.49,0.56); px [943,618,1042,705]; 1=near-right TARGET dark blade face-on low; blade merges w/ own black shorts, RIGHT BOUNDARY UNCERTAIN +-10px; hand+yellow band wrist ~(0.83,0.55); px [1515,528,1622,612]; 2=far-left red player's white-rim gray blade face-on at chest behind net tape, both hands left wrist ~(0.48,0.44); px [950,428,1032,498]",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-944403-smash",
+    "tMs": 3703.7,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "other",
+      "1": "ambiguous",
+      "2": "target"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=far-right red SMASHER's dark blade raised overhead, dark-on-dark vs trees LOW CONTRAST hard slice, grip/hand below wrist ~(0.61,0.25); px [1145,192,1228,245]; 1=AMBIGUOUS ownership: gray blade w/ white grip-end px [885,482,978,538] between near-left black player and crouching far-left red player; hands near both ends, owner not certifiable this frame; 2=TARGET's paddle not distinguishable from his black clothing this frame - occluded, no point",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-944403-smash",
+    "tMs": 3903.9,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "other",
+      "1": "other",
+      "2": "target",
+      "3": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=far-right red SMASHER's dark blade overhead pre-contact vs dark trees, LOW CONTRAST, white grip+hand below wrist ~(0.59,0.15); px [1082,100,1152,152]; 1=near-left black player's paddle pointing straight down, EDGE-ON white sliver hard slice, bare arm above wrist ~(0.45,0.48); px [848,512,893,625]; 2=near-right TARGET dark blade in front of shorts, blade-vs-black-clothing RIGHT BOUNDARY UNCERTAIN +-10px, hand left wrist ~(0.76,0.52); px [1445,542,1512,608]; 3=crouching far-left red player's gray blade horizontal above net tape, white grip left wrist ~(0.47,0.44); px [908,465,988,497]",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-944403-smash",
+    "tMs": 3970.63,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "other",
+      "1": "other",
+      "2": "target"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=SMASHER's blade at BALL CONTACT (ball overlaps blade left edge), dark vs trees LOW CONTRAST, right edge fades into foliage +-8px; px [1080,95,1158,150]; 1=near-left black player's white EDGE-ON sliver pointing down, hard slice; px [835,528,878,608]; 2=near-right TARGET dark blade left of shorts, boundary-vs-shorts uncertain +-10px, hand left wrist ~(0.76,0.52); px [1438,545,1502,615]",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-faead-rally",
+    "tMs": 12833.33,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "other",
+      "1": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=X-strap partner's dark blade pointing DOWN at his turquoise shoe, EDGE-ON-ish, hand above wrist ~(0.42,0.40); px [792,428,840,505]; 1=far blue-shirt player's navy white-rim blade, half-face, small; px [1196,405,1248,462]; TARGET (red-shirt) paddle not certifiably visible this frame (no box); near fence bystanders ignored",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-faead-rally",
+    "tMs": 13333.33,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "other",
+      "1": "other",
+      "2": "target"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=partner's big dark blade pointing down, hand above wrist ~(0.42,0.44); px [766,468,852,562]; 1=blue player's pale blade sliver at net tape, BLUR/small hard slice; px [1215,393,1260,422]; 2=TARGET red-shirt backhand takeaway: dark blade behind him vs dark fence/spectators LOW CONTRAST, white grip-knob at hand below wrist ~(0.91,0.28); px [1698,232,1788,302]",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-faead-rally",
+    "tMs": 13750.0,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "other",
+      "1": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=partner's dark blade hanging down, white grip streak above wrist ~(0.435,0.40); px [828,425,892,488]; 1=blue player's navy white-rim blade face-on at hip; GRID-LABEL UNCERTAINTY +-20px x; px [1165,418,1248,452]; TARGET follow-through has arm/paddle high above head, outside reviewed crops - omitted, not interpolated",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-faead-rally",
+    "tMs": 14083.33,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "other",
+      "1": "other",
+      "2": "ambiguous"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=partner's dark blade pointing down-right, grip at hand wrist ~(0.437,0.42); px [840,452,902,530]; 1=blue player's gray blade horizontal, overlaps white bench rail LOW CONTRAST; hand right wrist ~(0.57,0.35); px [1040,360,1095,388]; 2=AMBIGUOUS boundaries: TARGET's overhead paddle just after volley contact (14042), foreshortened edge-on vs dark trees px ~[1305,220,1350,272]; paddle certainly his but box not certifiable",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-faead-rally",
+    "tMs": 14166.67,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "other",
+      "1": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=partner's dark blade diagonal, grip top-left wrist ~(0.44,0.40); px [848,442,902,508]; 1=blue player's blade partially behind white rail, LEFT EDGE UNCERTAIN, hand right wrist ~(0.57,0.32); px [1028,342,1068,368]; TARGET's blade foreshortened behind his hands (only grip-butt visible) - omitted as unobservable",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-faead-feed",
+    "tMs": 34375.0,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "target",
+      "1": "other",
+      "2": "ambiguous"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=TARGET (white-cap, back to camera) dark blade diagonal down-right vs net shadow, EDGE-ON hard slice, grip/hand above wrist ~(0.44,0.43); px [836,477,902,543]; 1=far dark-blue player's white blade vertical below hand, EDGE-ON small hard slice; px [1110,402,1136,434]; 2=AMBIGUOUS: near-right red player's white grip/knuckles visible px ~[1708,398,1730,430] but blade blends into his black shorts - not certifiable",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-faead-feed",
+    "tMs": 34625.0,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "target",
+      "1": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=TARGET dark blade face-on at his right side, grip top-left wrist ~(0.44,0.415); px [850,452,910,533]; 1=far dark-blue player's white-rim blade tilted, ball just below-left (about to hit); px [1105,420,1152,463]; near-right red player's paddle hidden behind his body this frame",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-marne-dig",
+    "tMs": 12862.85,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "other",
+      "1": "other",
+      "2": "target"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=far red player's blade EDGE-ON vertical at chest (ball dropping to him), both hands below wrist ~(0.485,0.415); px [898,415,928,472]; 1=partner woman's black blade EDGE-ON thin pointing down at her right side, hard slice, hand above wrist ~(0.69,0.60); px [1326,658,1354,714]; 2=TARGET (near-left big man) hands in front of body, paddle fully occluded - no point",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-marne-dig",
+    "tMs": 13263.25,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "other",
+      "1": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=far red player's GREEN blade face-on mid-swing (ball adjacent right - contact bracket), hand right wrist ~(0.49,0.45); px [850,452,920,508]; 1=partner woman's dark blade near-vertical below hand, EDGE-ON, wrist above ~(0.665,0.605); px [1262,652,1292,698]; TARGET's paddle occluded in front of his body",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-marne-dig",
+    "tMs": 13596.92,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "other",
+      "1": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=far red player's green blade face-on reaching down, hand right wrist ~(0.47,0.46); px [835,478,902,532]; 1=partner woman's tan striped blade FACE-ON large below grip, wrist above ~(0.66,0.575); px [1215,650,1302,750]; TARGET's paddle occluded in front of his body",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-marne-dig",
+    "tMs": 14130.78,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "other",
+      "1": "other",
+      "2": "target"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=far red player's green blade face-on up near face, hand right w/ red wristband wrist ~(0.50,0.42); px [898,404,952,458]; 1=far-right ARMY player's RED blade partially behind net tape, PARTIAL OCCLUSION, hand right behind net; px [1216,520,1260,548]; 2=TARGET reaching for the dig (contact 14188+-2) but paddle not yet visible at frame edge - occluded, no point",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "wavea-marne-dig",
+    "tMs": 14264.25,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "target",
+      "1": "other",
+      "2": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=TARGET's dark-gray blade face-on low at frame-left just after dig deflection, hand below wrist ~(0.08,0.60); px [135,597,180,652]; 1=ARMY player's red blade behind net tape, partial occlusion; px [1216,526,1254,554]; 2=far red player's green blade at chest pointing left, hand below-left wrist ~(0.47,0.43); px [908,442,962,478]",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "afn-sasebo-rally1",
+    "tMs": 1901.9,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "target",
+      "1": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=TARGET woman's dark JOOLA blade w/ white rim face-on at her right, floral-band wrist below ~(0.53,0.53); SPARE BALL in her left hand at (0.57,0.50) is a confuser, not labeled; px [938,472,1058,572]; 1=partner's paddle (pink grip) low near ball, HEAVY MOTION BLUR +-15px box uncertainty, wrong-paddle trap; px [700,682,780,742]",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
+  },
+  {
+    "caseId": "afn-sasebo-rally1",
+    "tMs": 2102.1,
+    "annotator": "devin-visual-v2-waveC",
+    "owners": {
+      "0": "target",
+      "1": "other"
+    },
+    "note": "manual visual boxes (no detector queue; indexes ordered as listed): 0=TARGET dark blade face-on w/ white rim low-center, wrist right ~(0.55,0.57); spare ball still in her left hand; px [930,596,1034,700]; 1=partner's gray blade PARTIALLY OCCLUDED by black net post, pink grip visible top-right, adjacent to target blade = wrong-paddle trap; px [703,613,770,698]",
+    "appliedAtIso": "2026-08-29T06:00:00.000Z"
   }
 ]
