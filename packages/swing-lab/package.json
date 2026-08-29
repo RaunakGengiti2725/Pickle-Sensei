@@ -35,7 +35,8 @@
     "cascade": "tsx src/cascadeWaterfall.ts",
     "coach:queue": "tsx src/coachReview.ts",
     "regen": "tsx src/benchRegen.ts",
-    "risk:curves": "tsx src/coverageRisk.ts"
+    "risk:curves": "tsx src/coverageRisk.ts",
+    "invariants:corpus": "tsx src/corpusCheck.ts"
   },
   "dependencies": {
     "@pickle/analysis-pipeline": "workspace:*",

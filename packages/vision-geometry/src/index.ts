@@ -22,6 +22,14 @@ export {
   type CaptureQualityReport,
 } from "./captureQuality.js";
 export {
+  evaluateFrameAnalyzability,
+  FRAME_ANALYZABILITY_REASONS,
+  FRAME_ANALYZABILITY_VERSION,
+  FRAME_THRESHOLDS,
+  type FrameAnalyzabilityReport,
+  type FrameStats,
+} from "./frameAnalyzability.js";
+export {
   detectOfflineStrokeWindow,
   estimateContact,
   CONTACT_ESTIMATOR_VERSION,
