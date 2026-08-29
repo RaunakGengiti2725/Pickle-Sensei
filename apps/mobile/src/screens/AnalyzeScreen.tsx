@@ -55,6 +55,7 @@ import {
   techniqueIntentFromHandoff,
 } from './tryAgainHandoff';
 import { usabilityFunnel } from '../analysis/usabilityTelemetry';
+import { stabilitySlo } from '../analysis/stabilityTelemetry';
 
 type Phase =
   | { kind: 'ready' }
@@ -659,6 +660,9 @@ export function AnalyzeScreen() {
         source === 'library'
           ? await importStrokeVideo()
           : await captureStrokeVideo();
+      if (source === 'camera') {
+        stabilitySlo.record({ kind: 'camera_startup_succeeded' });
+      }
       const captureId = makeUuid();
       const shotType =
         clip.recognition.status === 'recognized'
@@ -697,10 +701,17 @@ export function AnalyzeScreen() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message.toLowerCase().includes('cancel')) {
+        // User cancel is not a startup failure.
         usabilityFunnel.log('attempt_abandoned');
         if (source === 'library') navigation.goBack();
         else setPhase({ kind: 'ready' });
       } else {
+        if (source === 'camera') {
+          stabilitySlo.record({
+            kind: 'camera_startup_failed',
+            reason: 'guided_capture_error',
+          });
+        }
         usabilityFunnel.log('error_shown', message);
         setPhase({ kind: 'error', message });
       }

@@ -8,6 +8,7 @@ import {
   Platform,
   type EmitterSubscription,
 } from 'react-native';
+import { stabilitySlo } from '../analysis/stabilityTelemetry';
 
 export type StrokeRecognition =
   | {
@@ -453,16 +454,34 @@ export interface SessionEventClipBounds {
 
 export async function startSessionCapture(): Promise<SessionCaptureReceipt> {
   if (!native?.startSessionCapture) {
+    stabilitySlo.record({
+      kind: 'camera_startup_failed',
+      reason: 'session_capture_unavailable',
+    });
     throw new Error('Native session capture is not available on this device.');
   }
-  const receipt = await native.startSessionCapture();
+  let receipt: unknown;
+  try {
+    receipt = await native.startSessionCapture();
+  } catch (error) {
+    stabilitySlo.record({
+      kind: 'camera_startup_failed',
+      reason: 'native_session_start_error',
+    });
+    throw error;
+  }
   if (
     !isRecord(receipt) ||
     typeof receipt.sessionCaptureId !== 'string' ||
     receipt.sessionCaptureId.length === 0
   ) {
+    stabilitySlo.record({
+      kind: 'camera_startup_failed',
+      reason: 'invalid_session_receipt',
+    });
     throw new Error('The native camera returned an invalid session receipt.');
   }
+  stabilitySlo.record({ kind: 'camera_startup_succeeded' });
   return { sessionCaptureId: receipt.sessionCaptureId };
 }
 
