@@ -862,7 +862,7 @@ function dropUnverifiableRuns(
 }
 
 /** A contiguous run of track observations with one wrist-ownership verdict. */
-export interface PaddleTrackSegment {
+interface PaddleTrackSegment {
   observations: TrackedPaddleObservation[];
   startMs: number;
   endMs: number;

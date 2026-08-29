@@ -8,12 +8,12 @@ import { many } from "../../lib/db.js";
  * (flagKey, userId) — a user's cohort never flaps between requests.
  */
 
-export function rolloutBucket(flagKey: string, userId: string): number {
+function rolloutBucket(flagKey: string, userId: string): number {
   const digest = createHash("sha256").update(`${flagKey}:${userId}`).digest();
   return ((digest[0]! << 8) | digest[1]!) % 100;
 }
 
-export function evaluateFlag(
+function evaluateFlag(
   flag: { key: string; enabled: boolean; rollout_percent: number },
   userId: string,
 ): boolean {

@@ -67,12 +67,7 @@ export interface BallFrameLabel {
   note?: string;
 }
 
-export const CONTACT_UNCERTAINTIES = [
-  "exact",
-  "plus_minus_1",
-  "plus_minus_2",
-  "uncertain",
-] as const;
+const CONTACT_UNCERTAINTIES = ["exact", "plus_minus_1", "plus_minus_2", "uncertain"] as const;
 export type ContactUncertainty = (typeof CONTACT_UNCERTAINTIES)[number];
 
 /**

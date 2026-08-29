@@ -1,0 +1,120 @@
+{
+  "workstream": "f29-dead-code-execution",
+  "branch": "devin/wave-f/f29-dead-code-execution",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "baseCommit": "8588ddd",
+  "date": "2026-08-29",
+  "mission": "execute the safe removals deferred by the e26 dead-code audit (datasets/experiments/wave-e/e26-dead-code-audit.md, 'Pre-existing' and apps sections): per-item repo-wide grep re-verification, removal, and gate re-run",
+  "method": "for every candidate: repo-wide grep across packages/, services/, apps/ (incl. npm-managed apps/mobile), tools/, native/, ml/, datasets/experiments/**/*.ts for imports or references outside the defining file; only zero-external-reference items acted on; removals are export-surface-only unexports except the one whole-module delete; root pnpm typecheck/lint/test/format:check re-run after",
+  "removed": [
+    {
+      "item": "services/api/src/modules/billing/entitlements.ts",
+      "action": "file deleted (whole module)",
+      "before": "module existed, imported nowhere (grep for modules/billing/entitlements and from-imports: 0 hits outside the file; entitlement logic lives in access.ts/revenueCat.ts)",
+      "after": "file removed; services/api typecheck/lint/tests green"
+    },
+    {
+      "item": "rolloutBucket, evaluateFlag (services/api/src/modules/flags/routes.ts)",
+      "action": "unexported (used only inside the file)",
+      "before": "exported, 0 external references",
+      "after": "internal functions; gates green"
+    },
+    {
+      "item": "OidcTokenVerifier, DEV_ISSUER (services/api/src/auth/tokens.ts)",
+      "action": "unexported (OidcTokenVerifier constructed only via buildVerifier in the same file; DEV_ISSUER used only by DevTokenVerifier internally)",
+      "before": "exported, 0 external references (tests import only DevTokenVerifier/buildVerifier/ITokenVerifier)",
+      "after": "internal; gates green"
+    },
+    {
+      "item": "LIFETIME_FREE_RATING_LIMIT (services/api/src/modules/billing/access.ts)",
+      "action": "unexported (referenced 5x inside the file only, incl. via typeof in an exported interface field — permitted for non-exported consts)",
+      "before": "exported, 0 external references",
+      "after": "internal; gates green"
+    },
+    {
+      "item": "S3ObjectStore (services/api/src/modules/media/objectStore.ts)",
+      "action": "unexported (instantiated only by buildObjectStore in the same file; media-worker's S3ObjectStore mention is a comment about its own deps, not an import)",
+      "before": "exported, 0 external references",
+      "after": "internal; gates green"
+    },
+    {
+      "item": "CONTACT_UNCERTAINTIES (packages/swing-lab/src/annotationSchema.ts)",
+      "action": "unexported (used internally for validation and via typeof in the still-exported ContactUncertainty type)",
+      "before": "exported, 0 external references (wave-d d14-summary.json mentions it as an audit finding, not a code reference)",
+      "after": "internal; prettier reflowed the declaration; gates green"
+    },
+    {
+      "item": "saveSources, readEventsShard (packages/swing-lab/src/engine/corpus.ts)",
+      "action": "unexported (each used only inside corpus.ts)",
+      "before": "exported, 0 external references (research CLIs import only REPO_ROOT and other symbols from corpus.ts)",
+      "after": "internal; gates green"
+    },
+    {
+      "item": "fingerprintPath (packages/swing-lab/src/engine/fingerprint.ts)",
+      "action": "unexported (used 2x inside the file only)",
+      "before": "exported, 0 external references",
+      "after": "internal; gates green"
+    },
+    {
+      "item": "MIN_LANDMARK_VISIBILITY (packages/vision-geometry/src/kinematics.ts)",
+      "action": "unexported (used only by findLandmark in the same file; not in the kinematics.test.ts import list)",
+      "before": "exported, 0 external references",
+      "after": "internal; gates green"
+    },
+    {
+      "item": "PaddleTrackSegment (packages/swing-lab/src/paddleTracker.ts)",
+      "action": "unexported (type appears only in same-file signatures; not re-exported by the swing-lab index barrel)",
+      "before": "exported, 0 external references",
+      "after": "internal; gates green"
+    },
+    {
+      "item": "SequenceTimestep (packages/swing-lab/src/strokeSequence.ts)",
+      "action": "unexported (used only in same-file declarations; not in the index barrel's strokeSequence export list)",
+      "before": "exported, 0 external references",
+      "after": "internal; gates green"
+    },
+    {
+      "item": "JobOutcome (services/media-worker/src/worker.ts)",
+      "action": "unexported (appears only in same-file signatures; worker-redteam.test.ts imports handleJob but never names JobOutcome)",
+      "before": "exported, 0 external references",
+      "after": "internal; media-worker tests green"
+    },
+    {
+      "item": "isSyntheticMode (apps/admin-web/src/coachReview/data.ts)",
+      "action": "unexported (called only inside data.ts)",
+      "before": "exported, 0 external references",
+      "after": "internal; admin-web typecheck green"
+    }
+  ],
+  "keptWithReason": [
+    {
+      "item": "GAMEPLAY_VALIDITY_VERSION (engine/gameplayValidity.ts), SCENE_DETECTOR_VERSION (sceneValidity.ts)",
+      "reason": "version identifiers for scientific tooling / artifact stamping — same category as DETECT_SPAN_PLAN_VERSION which e26 explicitly kept; mandate forbids removing provenance tooling. Both are also referenced in wave-d d14-summary.json artifacts."
+    },
+    {
+      "item": "redistributionEligible (engine/rights.ts)",
+      "reason": "rights/provenance compliance helper; removing rights tooling is out of the 'safe mechanical' mandate (never remove scientific/provenance tooling)."
+    },
+    {
+      "item": "duplicateAliasesOf (playerTracker.ts)",
+      "reason": "NOT dead: imported by paddleSelectionForensics.ts (research CLI) and datasets/experiments/wave-b/W1-diagnose.ts (hands-off wave artifact)."
+    },
+    {
+      "item": "TemporalPhaseBoundaries (phaseTemporal.ts)",
+      "reason": "ambiguous: doc-referenced (invariants.ts contract comments), appears in the exported SegmentationResult union, and mirrors apps/mobile strokeResultModel.ts TemporalPhaseBoundariesV2; unexporting would strip consumers' ability to name the boundaries type of an exported API."
+    },
+    {
+      "item": "DETECT_SPAN_PLAN_VERSION, taReplay tuning constants, research CLIs (contactForensics.ts, detectSpanAudit.ts, eventBoundsScout.ts, eventWindowSlice.ts, oodNegativesMeasure.ts, ownershipGuardBench.ts, paddleS4StressReplay.ts, paddleSelectionForensics.ts, waveaValidate.ts, capture-envelope evalBundles.ts), analysis-pipeline strokeEvents mirror, strokeHeuristicLite port, swing-lab sessionEngine shim, dominantWristSpeeds x5, sha256Hex, calibrationReport",
+      "reason": "explicitly kept by e26 with documented rationale (drift-guarded mirrors, semantic near-duplicates, provenance/research tooling mandate); unchanged here."
+    }
+  ],
+  "gates": {
+    "typecheck": "pnpm typecheck — exit 0 (19/19 packages), before and after",
+    "lint": "pnpm lint — exit 0, 0 problems",
+    "format": "pnpm format:check — exit 0 (after prettier --write on annotationSchema.ts)",
+    "test": "pnpm test — exit 0 full workspace (swing-lab 536 passed | 4 skipped; media-worker, api, all other packages green)"
+  },
+  "diffStat": "13 files changed: 1 file deleted (entitlements.ts), 12 files export-keyword-only edits",
+  "heldOut": "wm-dink-01 and afn-vic-rally1 untouched; fresh-candidates untouched; no runs/ directories touched; datasets append-only respected",
+  "verdict": "GREEN"
+}

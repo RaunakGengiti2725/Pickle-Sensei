@@ -2,7 +2,7 @@ import type pg from "pg";
 import type { AppContext } from "../../context.js";
 import { many, one, withTransaction } from "../../lib/db.js";
 
-export const LIFETIME_FREE_RATING_LIMIT = 2;
+const LIFETIME_FREE_RATING_LIMIT = 2;
 const PERMIT_LIFETIME_HOURS = 24;
 
 export type PermitAccessSource = "free" | "premium";

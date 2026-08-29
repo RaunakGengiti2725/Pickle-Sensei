@@ -60,7 +60,7 @@ export function computeFingerprint(videoPath: string): Fingerprint {
   return { algo: FINGERPRINT_ALGO, hashes };
 }
 
-export function fingerprintPath(fingerprintsDir: string, recordingId: string): string {
+function fingerprintPath(fingerprintsDir: string, recordingId: string): string {
   return join(fingerprintsDir, `${recordingId}.json`);
 }
 

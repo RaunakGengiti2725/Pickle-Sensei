@@ -48,7 +48,7 @@ export interface CoachReviewData {
   problems: string[];
 }
 
-export function isSyntheticMode(): boolean {
+function isSyntheticMode(): boolean {
   return new URLSearchParams(window.location.search).get("synthetic") === "1";
 }
 

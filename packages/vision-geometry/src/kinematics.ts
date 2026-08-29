@@ -15,7 +15,7 @@ export interface Point {
   visibility: number;
 }
 
-export const MIN_LANDMARK_VISIBILITY = 0.3;
+const MIN_LANDMARK_VISIBILITY = 0.3;
 
 export function landmark(
   frame: PoseFrame,
