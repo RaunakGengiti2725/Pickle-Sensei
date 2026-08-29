@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wm-volley-02",
+  "annotatorId": "devin-visual-v2-waveC",
+  "createdAtIso": "2026-08-29T06:00:00.000Z",
+  "revision": 1,
+  "stroke": "unsure",
+  "handedness": "unsure",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": null,
+    "accelerationStartMs": null,
+    "contactMs": null,
+    "followThroughEndMs": null
+  },
+  "contactUncertainty": null,
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.7,
+  "notes": "Ball-only gold pass (workstream C04): stroke/phase/checkpoint fields intentionally unlabeled (stroke=unsure means out of scope for this pass, see the wave-a annotation for stroke truth where present). Method: frames decoded by frame index at the exact container frame rate (no -ss seeking); tMs=round(n*1000/fps) on the RECORDING clock for wavea-* bundles and the CLIP clock for wm-volley-02. Ball centers measured as color+motion blob centroids on the decoded frame, each visually verified in zoomed grid crops; radiusNorm = ball radius in px / frame height. Occluded frames carry NO point by rule. Committed clip.mp4 (25fps, 1000x1080), CLIP clock; extends the v1 ball labels (which end 6760) past the far player's reply: ball climbs toward the right frame edge and is then lost against the crowd.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T06:00:00.000Z"
+    }
+  ],
+  "ballFrames": [
+    {
+      "tMs": 6800,
+      "point": {
+        "x": 0.9684,
+        "y": 0.461
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0059,
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 6840,
+      "point": {
+        "x": 0.9955,
+        "y": 0.4282
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "clipped by right frame edge; fragment centroid, radius not measurable"
+    },
+    {
+      "tMs": 6880,
+      "point": null,
+      "visibility": "uncertain",
+      "note": "cannot commit: ball indistinguishable against crowd background"
+    }
+  ]
+}

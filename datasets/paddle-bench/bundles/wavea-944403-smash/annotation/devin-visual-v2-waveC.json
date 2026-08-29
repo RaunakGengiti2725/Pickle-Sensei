@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-944403-smash",
+  "annotatorId": "devin-visual-v2-waveC",
+  "createdAtIso": "2026-08-29T06:00:00.000Z",
+  "revision": 1,
+  "stroke": "unsure",
+  "handedness": "unsure",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": null,
+    "accelerationStartMs": null,
+    "contactMs": null,
+    "followThroughEndMs": null
+  },
+  "contactUncertainty": null,
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.7,
+  "notes": "Ball-only gold pass (workstream C04): stroke/phase/checkpoint fields intentionally unlabeled (stroke=unsure means out of scope for this pass, see the wave-a annotation for stroke truth where present). Method: frames decoded by frame index at the exact container frame rate (no -ss seeking); tMs=round(n*1000/fps) on the RECORDING clock for wavea-* bundles and the CLIP clock for wm-volley-02. Ball centers measured as color+motion blob centroids on the decoded frame, each visually verified in zoomed grid crops; radiusNorm = ball radius in px / frame height. Occluded frames carry NO point by rule. dvids-944403, fps 60000/1001. Lob descends and bounces (~4638), rises into the black-shirt near player's paddle: ball slips behind the paddle blade (entering 4821), is fully hidden 4838-4855 (contact happens while hidden - no point invented), re-emerges 4872 moving up-left.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T06:00:00.000Z"
+    }
+  ],
+  "ballFrames": [
+    {
+      "tMs": 4571,
+      "point": {
+        "x": 0.6249,
+        "y": 0.6372
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0108,
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 4638,
+      "point": {
+        "x": 0.6303,
+        "y": 0.6568
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0104,
+      "occlusionState": "observed",
+      "note": "near bounce"
+    },
+    {
+      "tMs": 4805,
+      "point": {
+        "x": 0.6363,
+        "y": 0.5275
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0101,
+      "occlusionState": "observed",
+      "note": "rising toward paddle"
+    },
+    {
+      "tMs": 4821,
+      "point": {
+        "x": 0.6335,
+        "y": 0.517
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0074,
+      "occlusionState": "entering_occlusion",
+      "note": "~60% hidden behind paddle blade; centroid of visible fragment"
+    },
+    {
+      "tMs": 4838,
+      "point": null,
+      "visibility": "occluded",
+      "occlusionState": "occluded",
+      "note": "fully behind paddle"
+    },
+    {
+      "tMs": 4855,
+      "point": null,
+      "visibility": "occluded",
+      "occlusionState": "occluded",
+      "note": "fully behind paddle; contact occurs while hidden"
+    },
+    {
+      "tMs": 4872,
+      "point": {
+        "x": 0.6253,
+        "y": 0.4795
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0093,
+      "occlusionState": "reacquired",
+      "note": "re-emerges left of paddle moving up-left"
+    },
+    {
+      "tMs": 4888,
+      "point": {
+        "x": 0.619,
+        "y": 0.4677
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0103,
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 4905,
+      "point": {
+        "x": 0.6118,
+        "y": 0.4543
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0095,
+      "occlusionState": "observed"
+    }
+  ]
+}
