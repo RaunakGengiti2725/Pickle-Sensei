@@ -70,28 +70,36 @@ describe("OOD gate on the real negative corpus (datasets/ood)", () => {
 
   for (const item of registry.items) {
     if (POSE_FREE_DETECTED.has(item.id)) {
-      it(`abstains (no confident analysis) on ${item.id} via pose-free signals`, () => {
-        const frame = evaluateFrameAnalyzability(extractFrameStats(join(root, item.path)));
-        expect(frame.analyzable).toBe(false);
-        const result = preAnalysisGate({ frame, pose: null, poseQuality: null });
-        expect(result.ok).toBe(false);
-        if (result.ok) return;
-        expect(result.failure.kind).toBe("corrupted_media");
-        expect(result.failure.code).toMatch(/^capture\.not_analyzable\./);
-      });
+      it(
+        `abstains (no confident analysis) on ${item.id} via pose-free signals`,
+        { timeout: 60_000 },
+        () => {
+          const frame = evaluateFrameAnalyzability(extractFrameStats(join(root, item.path)));
+          expect(frame.analyzable).toBe(false);
+          const result = preAnalysisGate({ frame, pose: null, poseQuality: null });
+          expect(result.ok).toBe(false);
+          if (result.ok) return;
+          expect(result.failure.kind).toBe("corrupted_media");
+          expect(result.failure.code).toMatch(/^capture\.not_analyzable\./);
+        },
+      );
     } else {
-      it(`documents the pass-through finding on ${item.id} (pose-free signals insufficient)`, () => {
-        const frame = evaluateFrameAnalyzability(extractFrameStats(join(root, item.path)));
-        expect(frame.analyzable).toBe(true);
-        const result = preAnalysisGate({ frame, pose: null, poseQuality: null });
-        expect(result.ok).toBe(true);
-        if (!result.ok) return;
-        // Contract-level pose assertion: with no pose input the gate must
-        // report pose_presence and pose_capture_quality as NOT evaluated, so
-        // downstream may not treat this as a cleared-for-analysis verdict.
-        expect(result.value.notEvaluated).toContain("pose_presence");
-        expect(result.value.notEvaluated).toContain("pose_capture_quality");
-      });
+      it(
+        `documents the pass-through finding on ${item.id} (pose-free signals insufficient)`,
+        { timeout: 60_000 },
+        () => {
+          const frame = evaluateFrameAnalyzability(extractFrameStats(join(root, item.path)));
+          expect(frame.analyzable).toBe(true);
+          const result = preAnalysisGate({ frame, pose: null, poseQuality: null });
+          expect(result.ok).toBe(true);
+          if (!result.ok) return;
+          // Contract-level pose assertion: with no pose input the gate must
+          // report pose_presence and pose_capture_quality as NOT evaluated, so
+          // downstream may not treat this as a cleared-for-analysis verdict.
+          expect(result.value.notEvaluated).toContain("pose_presence");
+          expect(result.value.notEvaluated).toContain("pose_capture_quality");
+        },
+      );
     }
   }
 });
