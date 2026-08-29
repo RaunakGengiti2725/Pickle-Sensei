@@ -1,0 +1,672 @@
+{
+  "tool": "paddleS4StressReplay (D4-01)",
+  "generatedAtIso": "2026-08-29T09:17:46.010Z",
+  "measurementLabel": "LINUX-CPU",
+  "hitRadius": 0.08,
+  "matchToleranceMs": 40,
+  "notes": [
+    "wavea dets regenerated on Linux CPU from SHA-256-verified corpus sources over committed window-meta windows",
+    "core_dev rows are pose-free (no committed pose/people): ownership + flip-segmentation structurally inert, disclosed",
+    "held-out cases untouched"
+  ],
+  "cases": [
+    {
+      "id": "wavea-944403-dink",
+      "family": "wavea",
+      "poseFree": false,
+      "nGold": 11,
+      "window": {
+        "startMs": 20000,
+        "endMs": 23400
+      },
+      "tracks": {
+        "raw": 29,
+        "merged": 27
+      },
+      "s4": {
+        "status": "tracked",
+        "reason": null,
+        "winnerTrackId": 9
+      },
+      "waterfall": {
+        "s0Raw": 10,
+        "s2Tracks": 9,
+        "s3Ownership": 9,
+        "s4Selected": 1,
+        "s4SelectedFullTrack": 1,
+        "lostAtSelection": 8,
+        "lostToSegmentDeletion": 0
+      },
+      "perLabel": [
+        {
+          "tMs": 20003.32,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 20253.57,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 20503.82,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 20754.07,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": true
+        },
+        {
+          "tMs": 21087.73,
+          "s0": false,
+          "s2": false,
+          "s3": false,
+          "s4": false
+        },
+        {
+          "tMs": 21171.15,
+          "s0": true,
+          "s2": false,
+          "s3": false,
+          "s4": false
+        },
+        {
+          "tMs": 21588.23,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 21838.48,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 22088.73,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 22338.98,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 22589.23,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        }
+      ]
+    },
+    {
+      "id": "wavea-944403-smash",
+      "family": "wavea",
+      "poseFree": false,
+      "nGold": 3,
+      "window": {
+        "startMs": 2900,
+        "endMs": 4900
+      },
+      "tracks": {
+        "raw": 30,
+        "merged": 30
+      },
+      "s4": {
+        "status": "tracked",
+        "reason": null,
+        "winnerTrackId": 2
+      },
+      "waterfall": {
+        "s0Raw": 3,
+        "s2Tracks": 3,
+        "s3Ownership": 3,
+        "s4Selected": 3,
+        "s4SelectedFullTrack": 3,
+        "lostAtSelection": 0,
+        "lostToSegmentDeletion": 0
+      },
+      "perLabel": [
+        {
+          "tMs": 2902.9,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": true
+        },
+        {
+          "tMs": 3903.9,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": true
+        },
+        {
+          "tMs": 3970.63,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": true
+        }
+      ]
+    },
+    {
+      "id": "wavea-faead-rally",
+      "family": "wavea",
+      "poseFree": false,
+      "nGold": 1,
+      "window": {
+        "startMs": 12500,
+        "endMs": 14900
+      },
+      "tracks": {
+        "raw": 20,
+        "merged": 20
+      },
+      "s4": {
+        "status": "tracked",
+        "reason": null,
+        "winnerTrackId": 19
+      },
+      "waterfall": {
+        "s0Raw": 1,
+        "s2Tracks": 1,
+        "s3Ownership": 1,
+        "s4Selected": 0,
+        "s4SelectedFullTrack": 0,
+        "lostAtSelection": 1,
+        "lostToSegmentDeletion": 0
+      },
+      "perLabel": [
+        {
+          "tMs": 13333.33,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        }
+      ]
+    },
+    {
+      "id": "wavea-faead-feed",
+      "family": "wavea",
+      "poseFree": false,
+      "nGold": 2,
+      "window": {
+        "startMs": 32800,
+        "endMs": 34900
+      },
+      "tracks": {
+        "raw": 16,
+        "merged": 16
+      },
+      "s4": {
+        "status": "tracked",
+        "reason": null,
+        "winnerTrackId": 2
+      },
+      "waterfall": {
+        "s0Raw": 2,
+        "s2Tracks": 2,
+        "s3Ownership": 2,
+        "s4Selected": 0,
+        "s4SelectedFullTrack": 0,
+        "lostAtSelection": 2,
+        "lostToSegmentDeletion": 0
+      },
+      "perLabel": [
+        {
+          "tMs": 34375,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 34625,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        }
+      ]
+    },
+    {
+      "id": "wavea-marne-dig",
+      "family": "wavea",
+      "poseFree": false,
+      "nGold": 1,
+      "window": {
+        "startMs": 12200,
+        "endMs": 14400
+      },
+      "tracks": {
+        "raw": 21,
+        "merged": 21
+      },
+      "s4": {
+        "status": "tracked",
+        "reason": null,
+        "winnerTrackId": 9
+      },
+      "waterfall": {
+        "s0Raw": 1,
+        "s2Tracks": 1,
+        "s3Ownership": 1,
+        "s4Selected": 1,
+        "s4SelectedFullTrack": 1,
+        "lostAtSelection": 0,
+        "lostToSegmentDeletion": 0
+      },
+      "perLabel": [
+        {
+          "tMs": 14264.25,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": true
+        }
+      ]
+    },
+    {
+      "id": "afn-sasebo-rally1",
+      "family": "core_dev",
+      "poseFree": true,
+      "nGold": 20,
+      "window": {
+        "startMs": 0,
+        "endMs": 4121
+      },
+      "tracks": {
+        "raw": 33,
+        "merged": 30
+      },
+      "s4": {
+        "status": "untracked",
+        "reason": "no_wrist_measurements_to_gate_against",
+        "winnerTrackId": null
+      },
+      "waterfall": {
+        "s0Raw": 20,
+        "s2Tracks": 20,
+        "s3Ownership": 20,
+        "s4Selected": 0,
+        "s4SelectedFullTrack": 0,
+        "lostAtSelection": 20,
+        "lostToSegmentDeletion": 0
+      },
+      "perLabel": [
+        {
+          "tMs": 0,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 433.77,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 800.8,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 1001,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 1201.2,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 1401.4,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 1601.6,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 1801.8,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 2002,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 2202.2,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 2435.77,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 2602.6,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 2700,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 2830,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 2836.17,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 2900,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 2960,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 3003,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 3030,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 3300,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        }
+      ]
+    },
+    {
+      "id": "afn-sasebo-rally2",
+      "family": "core_dev",
+      "poseFree": true,
+      "nGold": 3,
+      "window": {
+        "startMs": 502,
+        "endMs": 4403
+      },
+      "tracks": {
+        "raw": 33,
+        "merged": 30
+      },
+      "s4": {
+        "status": "untracked",
+        "reason": "no_wrist_measurements_to_gate_against",
+        "winnerTrackId": null
+      },
+      "waterfall": {
+        "s0Raw": 3,
+        "s2Tracks": 2,
+        "s3Ownership": 2,
+        "s4Selected": 0,
+        "s4SelectedFullTrack": 0,
+        "lostAtSelection": 2,
+        "lostToSegmentDeletion": 0
+      },
+      "perLabel": [
+        {
+          "tMs": 2203.7,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 2500,
+          "s0": true,
+          "s2": false,
+          "s3": false,
+          "s4": false
+        },
+        {
+          "tMs": 2682,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        }
+      ]
+    },
+    {
+      "id": "wm-volley-02",
+      "family": "core_dev",
+      "poseFree": true,
+      "nGold": 17,
+      "window": {
+        "startMs": 4250,
+        "endMs": 8210
+      },
+      "tracks": {
+        "raw": 30,
+        "merged": 30
+      },
+      "s4": {
+        "status": "untracked",
+        "reason": "no_wrist_measurements_to_gate_against",
+        "winnerTrackId": null
+      },
+      "waterfall": {
+        "s0Raw": 17,
+        "s2Tracks": 17,
+        "s3Ownership": 17,
+        "s4Selected": 0,
+        "s4SelectedFullTrack": 0,
+        "lostAtSelection": 17,
+        "lostToSegmentDeletion": 0
+      },
+      "perLabel": [
+        {
+          "tMs": 4250,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 4290,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 4600,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 4650,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 5450,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 5490,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 6100,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 6250,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 6290,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 6400,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 6650,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 6690,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 6700,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 7490,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 7600,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 7890,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        },
+        {
+          "tMs": 7900,
+          "s0": true,
+          "s2": true,
+          "s3": true,
+          "s4": false
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "wavea": {
+      "n": 18,
+      "s3": 16,
+      "s4": 5
+    },
+    "core_dev": {
+      "n": 40,
+      "s3": 39,
+      "s4": 0
+    }
+  }
+}

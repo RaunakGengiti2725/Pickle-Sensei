@@ -1,0 +1,89 @@
+{
+  "workstreamId": "d4-01-s4-stress",
+  "wave": "D4",
+  "title": "S4 selection stress on expanded gold: W1 segmented-selection replay + S3\u2192S4 loss waterfall + stress fixtures",
+  "branch": "devin/wave-d4/d4-01-s4-stress",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "measurementLabel": "LINUX-CPU",
+  "measurementBoundary": [
+    "Canonical runs/ dirs absent on Linux; pose extraction is Apple Vision/macOS-only.",
+    "wavea-* detections regenerated on Linux CPU from SHA-256-verified corpus sources over committed window-meta windows (see d4-01-dets/PROVENANCE.md).",
+    "core dev cases replayed from committed wave-a H-logs baseline-rerun dets; NO pose/people artifacts are committed for them, so they are pose-free: ownership gating and flip-segmentation are structurally inert and the selector returns untracked (no_wrist_measurements_to_gate_against). Disclosed, not remeasured as cascade movement.",
+    "Nothing here is Mac/iPhone/canonical cascade evidence."
+  ],
+  "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"],
+  "replay": {
+    "tool": "packages/swing-lab/src/paddleS4StressReplay.ts (real selectPrimaryPaddleTrack + segmentTrackByWristOwnership, no copies)",
+    "artifact": "datasets/experiments/wave-d4/d4-01-s4-stress-replay.json",
+    "gold": "wave-C ownership annotations (devin-visual-v2-waveC-ownership.json) for wavea-*; devin-visual-v1 for core dev cases",
+    "hitRadius": 0.08,
+    "matchToleranceMs": 40,
+    "waterfall": {
+      "wavea_with_pose": {
+        "cases": 5,
+        "nGold": 18,
+        "s0Raw": 17,
+        "s2Tracks": 16,
+        "s3Ownership": 16,
+        "s4Selected": 5,
+        "lostAtSelection": 11,
+        "lostToFlipSegmentationDeletion": 0
+      },
+      "core_dev_pose_free": {
+        "cases": 3,
+        "nGold": 40,
+        "s0Raw": 40,
+        "s2Tracks": 39,
+        "s3Ownership": 39,
+        "s4Selected": 0,
+        "note": "S4=0 solely because the selector refuses to select without wrist measurements (no_wrist_measurements_to_gate_against); ownership/S3 is inert here. This is a Linux pose-availability boundary, not a selection regression."
+      }
+    },
+    "keyFinding": "Across all 8 replayed cases (n=58 gold frames), W1 flip-segmentation deleted ZERO correct-ownership frames from the selected track (lostToSegmentDeletion=0 everywhere). The remaining wavea S3\u2192S4 loss (16\u21925, -11) is top-1 RANKING loss among many overlapping target-owned tracks produced by noisy LINUX-CPU proxy detections \u2014 e.g. wavea-944403-dink: winner track 9 hits 1/11 gold while sibling target-owned tracks 15 and 7 each hit 4/11; scores are within the coverage\u00d7meanScore\u00d7proximity band. This mirrors the known 'rally1 13/20 ceiling' class, not a new destructive segmentation case.",
+    "perCase": [
+      { "id": "wavea-944403-dink", "n": 11, "s3": 9, "s4": 1, "status": "tracked" },
+      { "id": "wavea-944403-smash", "n": 3, "s3": 3, "s4": 3, "status": "tracked" },
+      { "id": "wavea-faead-rally", "n": 1, "s3": 1, "s4": 0, "status": "tracked" },
+      { "id": "wavea-faead-feed", "n": 2, "s3": 2, "s4": 0, "status": "tracked" },
+      { "id": "wavea-marne-dig", "n": 1, "s3": 1, "s4": 1, "status": "tracked" },
+      { "id": "afn-sasebo-rally1", "n": 20, "s3": 20, "s4": 0, "status": "untracked (pose-free)" },
+      { "id": "afn-sasebo-rally2", "n": 3, "s3": 2, "s4": 0, "status": "untracked (pose-free)" },
+      { "id": "wm-volley-02", "n": 17, "s3": 17, "s4": 0, "status": "untracked (pose-free)" }
+    ]
+  },
+  "stressFixtures": {
+    "location": "packages/swing-lab/test/paddleTracker.test.ts \u2014 describe('selectPrimaryPaddleTrack D4-01 stress fixtures')",
+    "results": [
+      {
+        "fixture": "flip at HEAD",
+        "outcome": "target tail (60/81 obs) kept, coverage 0.7375 honest"
+      },
+      {
+        "fixture": "flip at TAIL",
+        "outcome": "target head (60/81 obs) kept, coverage 0.7375 honest"
+      },
+      {
+        "fixture": "two separated sustained flips",
+        "outcome": "both runs dropped (71/81 kept), 2 switch events, coverage 0.85"
+      },
+      {
+        "fixture": "flip run at threshold boundary",
+        "outcome": "run=3 splits (1 switch), run=2 transient (no split)"
+      },
+      {
+        "fixture": "late-appearing better track",
+        "outcome": "late high-quality track wins (score 0.400 vs 0.164)"
+      },
+      {
+        "fixture": "two tracks alternating quality",
+        "outcome": "winner keeps ONLY target-owned segments (41 obs, 0 other-player frames), coverage 0.4875 honest"
+      }
+    ],
+    "destructiveCasesFound": 0,
+    "note": "All six fixtures behave per W1 design; the six new tests are committed as permanent regressions. No thresholds/denominators/contracts were changed."
+  },
+  "gates": {
+    "typecheck": "pnpm typecheck green (LINUX-CPU)",
+    "tests": "swing-lab vitest green incl. 6 new D4-01 fixtures (LINUX-CPU)"
+  }
+}
