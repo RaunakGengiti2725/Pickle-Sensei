@@ -399,6 +399,9 @@ export interface LiveSessionSnapshot {
   distribution: TechniqueDistributionChip[];
   qualityNotes: string[];
   droppedLateSamples: number;
+  /** onUpdate callbacks that threw — isolated and counted, never allowed to
+   * corrupt event states or kill the motion feed. */
+  onUpdateFailures: number;
   engineVersion: string;
   analysisProviderId: string;
 }
@@ -423,6 +426,7 @@ export class LiveSessionFlow {
   private readonly dispatches: Array<Promise<void>> = [];
   private phase: SessionFlowPhase = 'running';
   private lastSampleMs = 0;
+  private onUpdateFailures = 0;
 
   constructor(private readonly options: LiveSessionFlowOptions) {
     this.engine = new SessionEventEngine({
@@ -433,6 +437,12 @@ export class LiveSessionFlow {
         source: options.source,
       },
     });
+  }
+
+  /** True once end() has run; late samples (e.g. a queued native emission
+   * delivered after stop) must not be pushed. */
+  ended(): boolean {
+    return this.phase === 'ended';
   }
 
   /** Feed one wrist-speed sample; returns the events CLOSED by this sample
@@ -456,8 +466,8 @@ export class LiveSessionFlow {
   end(): LiveSessionSnapshot {
     if (this.phase === 'running') {
       const closed = this.engine.flush();
-      for (const event of closed) this.dispatchAnalysis(event);
       this.phase = 'ended';
+      for (const event of closed) this.dispatchAnalysis(event);
       const snapshot = this.snapshot();
       completedSessions.set(this.options.sessionId, snapshot);
       this.notify();
@@ -485,6 +495,7 @@ export class LiveSessionFlow {
       distribution: techniqueDistribution(events),
       qualityNotes: session.qualityState.notes,
       droppedLateSamples: session.qualityState.droppedLateSamples,
+      onUpdateFailures: this.onUpdateFailures,
       engineVersion: SESSION_ENGINE_VERSION,
       analysisProviderId: this.options.provider.providerId,
     };
@@ -501,8 +512,10 @@ export class LiveSessionFlow {
     const run = this.extractClip(event)
       .then(extraction => {
         if (extraction.status === 'unavailable') {
-          // Could not produce per-event inputs — honest 'pending', no analysis.
+          // Could not produce per-event inputs — honest 'pending', no
+          // analysis. The ENGINE state reverts too: nothing is processing.
           this.pendingReasons.set(event.eventId, extraction.pendingReason);
+          this.engine.markEvent(event.eventId, 'pending');
           this.notify();
           return null;
         }
@@ -529,12 +542,19 @@ export class LiveSessionFlow {
             abstainReason: outcome.abstainReason,
           });
         } else {
-          // Could not start after all — the view resolves back to 'pending'.
+          // Could not start after all — honest revert to 'pending' (engine
+          // state included), never a fake terminal outcome.
           this.pendingReasons.set(event.eventId, outcome.pendingReason);
+          this.engine.markEvent(event.eventId, 'pending');
         }
         this.notify();
       })
       .catch((error: unknown) => {
+        // A terminal state already recorded for this event is append-only:
+        // a late dispatch failure (e.g. from a notify subscriber) must never
+        // rewrite a real outcome into ANALYSIS_DISPATCH_FAILED.
+        const state = this.engine.eventState(event.eventId);
+        if (state === 'ready' || state === 'abstained') return;
         const message = error instanceof Error ? error.message : String(error);
         this.engine.markEvent(event.eventId, 'abstained', {
           abstainReason: `ANALYSIS_DISPATCH_FAILED: ${message}`,
@@ -569,7 +589,21 @@ export class LiveSessionFlow {
   }
 
   private notify(): void {
-    this.options.onUpdate?.(this.snapshot());
+    // Analysis outcomes can settle after end(): keep the completed-session
+    // registry (what LiveSummary reads) in sync with every state change
+    // instead of freezing the summary at whatever was in flight at stop.
+    if (this.phase === 'ended') {
+      completedSessions.set(this.options.sessionId, this.snapshot());
+    }
+    if (!this.options.onUpdate) return;
+    try {
+      this.options.onUpdate(this.snapshot());
+    } catch {
+      // A throwing UI subscriber must not corrupt event states, break the
+      // dispatch chain, or take down the native motion feed. Counted, and
+      // surfaced on every snapshot — never silent.
+      this.onUpdateFailures += 1;
+    }
   }
 }
 

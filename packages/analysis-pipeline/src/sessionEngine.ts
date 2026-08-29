@@ -841,18 +841,46 @@ export class SessionEventEngine {
   }
 
   /** Per-event analysis lifecycle. The PROPOSAL is frozen; only the analysis
-   * slot and state may move (pending → processing → ready|abstained). */
+   * slot and state may move (pending → processing → ready|abstained, with an
+   * honest processing → pending revert when analysis could not start).
+   * `ready` and `abstained` are TERMINAL: a second outcome signal for the
+   * same event is a caller bug and throws instead of rewriting history.
+   * `ready` requires a real AnalysisRecord — an event can never be counted
+   * as analyzed without one. */
   markEvent(
     eventId: string,
-    state: Exclude<SessionEventState, "pending">,
+    state: SessionEventState,
     outcome?: { analysis?: AnalysisRecord | null; abstainReason?: string | null },
   ): SessionStrokeEvent {
     const event = this.events.find((entry) => entry.eventId === eventId);
     if (!event) throw new Error(`unknown session event '${eventId}'`);
+    if (event.state === "ready" || event.state === "abstained") {
+      throw new Error(
+        `session event '${eventId}' is already terminal ('${event.state}') — ` +
+          `per-event outcomes are append-only and cannot be rewritten (got '${state}')`,
+      );
+    }
+    if (state === "pending" && event.state !== "processing") {
+      throw new Error(
+        `session event '${eventId}' cannot revert to 'pending' from '${event.state}'`,
+      );
+    }
+    if (state === "ready" && !outcome?.analysis) {
+      throw new Error(
+        `session event '${eventId}' cannot be marked 'ready' without an AnalysisRecord — ` +
+          `an unanalyzed event must stay pending/processing or abstain`,
+      );
+    }
     event.state = state;
     if (outcome?.analysis !== undefined) event.analysis = outcome.analysis;
     if (outcome?.abstainReason !== undefined) event.abstainReason = outcome.abstainReason;
     return event;
+  }
+
+  /** Read-only per-event state lookup (for callers that must not risk a
+   * terminal-overwrite throw before deciding whether to record an outcome). */
+  eventState(eventId: string): SessionEventState | null {
+    return this.events.find((entry) => entry.eventId === eventId)?.state ?? null;
   }
 
   private lastSampleMs(): number | null {
