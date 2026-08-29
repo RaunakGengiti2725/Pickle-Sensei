@@ -60,6 +60,15 @@ describe("api_failure telemetry", () => {
     });
   });
 
+  it("carries the flag-state fingerprint so failures tie to flag configuration", async () => {
+    const res = await app.inject({ method: "GET", url: "/v1/me" });
+    expect(res.statusCode).toBe(401);
+    const failures = tracked.filter((e) => e.name === "api_failure");
+    expect(failures).toHaveLength(1);
+    const failure = failures[0] as { flagStateHash?: string };
+    expect(failure.flagStateHash).toMatch(/^[0-9a-f]{16}$/);
+  });
+
   it("emits nothing for successful requests", async () => {
     const res = await app.inject({ method: "GET", url: "/v1/health" });
     expect(res.statusCode).toBe(200);

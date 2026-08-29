@@ -9,6 +9,7 @@ import {
 import { CHECKPOINTS, FAULT_DIRECTIONS, SHOT_TYPES } from "@pickle/shared-types";
 import type { AppContext } from "../../context.js";
 import { audit, many, one, withTransaction } from "../../lib/db.js";
+import { killSwitchPulled } from "../flags/registry.js";
 import { sendFailure } from "../../lib/replies.js";
 import {
   TRAINING_PLAN_ALGORITHM_VERSION,
@@ -419,6 +420,15 @@ export function registerTrainingRoutes(app: FastifyInstance, context: AppContext
   );
 
   app.post("/v1/training-plans", { preHandler: app.authenticate }, async (request, reply) => {
+    if (killSwitchPulled("drill_ranker", process.env))
+      return sendFailure(
+        reply,
+        request,
+        503,
+        "retryable",
+        "api.feature_disabled",
+        "Training-plan generation is temporarily disabled.",
+      );
     const parsed = TrainingPlanCreateRequest.safeParse(request.body);
     if (!parsed.success) {
       return sendFailure(

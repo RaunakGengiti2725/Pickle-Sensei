@@ -140,6 +140,12 @@ export type AnalyticsEvent = Base &
         method: string;
         statusCode: number;
         errorCode: string;
+        /**
+         * Fingerprint of the serving process's feature-flag configuration
+         * (registry version + safe defaults + pulled kill switches) — ties a
+         * failure to the exact flag state that served it. Never per-user.
+         */
+        flagStateHash?: string;
       }
     | { name: "score_viewed"; shotType: ShotTypeSlug }
     | { name: "checkpoint_opened"; checkpoint: CheckpointKey }

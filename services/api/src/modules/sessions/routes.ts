@@ -4,6 +4,7 @@ import { SessionCreateRequest, ShotsSyncRequest } from "@pickle/api-contracts";
 import type { AppContext } from "../../context.js";
 import { sendFailure } from "../../lib/replies.js";
 import { many, one } from "../../lib/db.js";
+import { killSwitchPulled } from "../flags/registry.js";
 import { upsertShots } from "../shots/routes.js";
 import { computeSessionSummaryStats, writeSessionSummary } from "./summary.js";
 
@@ -151,6 +152,15 @@ export function registerSessionRoutes(app: FastifyInstance, context: AppContext)
     "/v1/sessions/:id/finalize",
     { preHandler: app.authenticate },
     async (request, reply) => {
+      if (killSwitchPulled("session_processing", process.env))
+        return sendFailure(
+          reply,
+          request,
+          503,
+          "retryable",
+          "api.feature_disabled",
+          "Session processing is temporarily disabled.",
+        );
       const { id } = request.params as { id: string };
       const userId = request.user!.id;
       const session = await one<{ id: string; focus_checkpoint_id: string | null }>(
