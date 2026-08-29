@@ -82,6 +82,24 @@ const record: CaptureAnalysisRecord = {
     camera: true,
   },
   modelRuns: [],
+  provenance: {
+    appVersion: '0.1.0',
+    pipelineVersion: 'fusion-1',
+    providerVersions: [
+      {
+        providerId: 'pose.apple-vision',
+        modelVersion: 'pose-1',
+        runtime: 'vision_framework',
+        executionTarget: 'on_device',
+        artifactHash: null,
+      },
+    ],
+    scoreVersion: 'score-1',
+    taxonomyVersion: 'v3',
+    drillMappingVersion: 'none',
+    captureEnvelopeVersion: 'capture-envelope-not-measured',
+    recordedAtIso: '2026-08-29T00:00:01.000Z',
+  },
   result: shotResult,
   faults: [],
   uncertainty: {
