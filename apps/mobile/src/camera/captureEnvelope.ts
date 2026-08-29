@@ -76,6 +76,7 @@ export function liveCaptureEnvelope(
   if (!readiness && !quality) return null;
   return evaluateCaptureEnvelope({
     ...qualityMeasurements(quality),
+    frameIntervalCv: null,
     brightnessStdLuma: null,
     clipDurationMs: null,
     playerPixelHeightFraction: null,
@@ -100,6 +101,7 @@ export function attemptCaptureEnvelope(
     frameWidthPx: clip.width,
     frameHeightPx: clip.height,
     avgFrameRateFps: clip.fps,
+    frameIntervalCv: null,
     brightnessStdLuma: null,
     clipDurationMs: clip.durationMs,
     playerPixelHeightFraction: null,
@@ -143,6 +145,12 @@ const GUIDANCE_COPY: Record<
     DEGRADED:
       'The camera is moving a little — a steadier mount improves the read.',
     UNSUPPORTED: 'The camera is moving too much — prop it on something stable.',
+  },
+  timing_stability: {
+    DEGRADED:
+      'Frame timing is uneven — closing other apps or a device restart helps.',
+    UNSUPPORTED:
+      'Frame timing is too uneven to follow a swing — close other apps and try again.',
   },
   clip_duration: {
     DEGRADED: 'The clip length is outside the ideal range for a clean read.',

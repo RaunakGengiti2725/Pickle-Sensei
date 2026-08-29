@@ -56,7 +56,7 @@ describe('liveCaptureEnvelope', () => {
       CAPTURE_ENVELOPE_THRESHOLDS_VERSION,
     );
     expect(verdict!.provisional).toBe(true);
-    expect(verdict!.dimensions).toHaveLength(8);
+    expect(verdict!.dimensions).toHaveLength(9);
   });
 
   it('reports unmeasured dimensions NOT_MEASURED, never SUPPORTED', () => {
@@ -140,6 +140,7 @@ describe('captureGuidanceLines', () => {
       frameWidthPx: 640, // DEGRADED (480 ≤ 640 < 720)
       frameHeightPx: 1280,
       avgFrameRateFps: 60,
+      frameIntervalCv: null,
       brightnessMeanLuma: 10, // UNSUPPORTED (too dark)
       brightnessStdLuma: null,
       laplacianVarianceMedian: null,
