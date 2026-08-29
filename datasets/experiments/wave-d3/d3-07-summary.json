@@ -1,0 +1,45 @@
+{
+  "workstream": "D3-07 red-team capture-envelope checker (C12)",
+  "date": "2026-08-29",
+  "branch": "devin/wave-d3/d3-07-rt-envelope",
+  "method": "Synthetic adversarial clips generated locally with ffmpeg (clearly labeled synthetic, generated at test time into a temp dir — no committed corpus clips modified; committed bundle clips were only READ for the before/after coverage check). One degraded dimension per clip: 8fps, 426x240, near-black exposure (eq brightness=-0.45), heavy gaussian blur (gblur sigma=12), 0.5s duration, 90/180-degree rotation metadata (stream copy, byte-identical video), VFR timestamps (alternating 58.3ms/8.3ms intervals, avg ~29.9fps).",
+  "breaks": [
+    {
+      "id": "vfr-avg-fps-passes",
+      "status": "FIXED",
+      "finding": "VFR clip with alternating 58.3ms/8.3ms frame intervals (interval CV ~0.75) was verdicted SUPPORTED overall: only ffprobe avg_frame_rate (~29.9fps, inside supported band) was checked; timestamp irregularity was invisible.",
+      "fix": "New timing_stability dimension: coefficient of variation of inter-frame presentation intervals from packet pts (sorted). Thresholds provisional: supported max 0.15, degraded max 0.35. Thresholds set re-versioned to capture-envelope-thresholds-v0.2-provisional (dimension set changed); verdicts remain provisional:true.",
+      "regression_test": "packages/capture-envelope/test/redteamEnvelope.test.ts: 'VFR timestamps are detected on timing_stability even when avg fps passes'"
+    },
+    {
+      "id": "rotation-metadata-distorts-normalization",
+      "status": "FIXED",
+      "finding": "90-degree rotation metadata (byte-identical video stream, -c copy) silently violated the normalization contract: ffmpeg auto-rotates on decode but sampling used stored (pre-rotation) dims, so frames were scaled to the wrong aspect — measured Laplacian variance changed 387.6 -> 577.9 (+49%) on identical pixels. Overall verdict stayed SUPPORTED here, but blur/camera-motion measurements were corrupted for every rotated phone capture (the common mobile case).",
+      "fix": "probeClipStream now reads rotation from stream side_data (Display Matrix) / rotate tag and exposes display dims (swapped for 90/270); measureClip samples and reports display dims. 180-degree rotation now provably measurement-identical to unrotated.",
+      "regression_test": "packages/capture-envelope/test/redteamEnvelope.test.ts: rotation tests (90-degree swap + 180-degree identity)"
+    }
+  ],
+  "detected_correctly": [
+    "8fps -> frame_rate UNSUPPORTED (measured 8.0)",
+    "426x240 -> resolution UNSUPPORTED (short side 240)",
+    "near-black -> brightness UNSUPPORTED (mean luma 24.1)",
+    "heavy blur -> motion_blur UNSUPPORTED (laplacian var 5.7)",
+    "0.5s -> clip_duration UNSUPPORTED (500ms)"
+  ],
+  "open": [
+    {
+      "id": "duplicate-pts-invisible",
+      "status": "OPEN",
+      "finding": "Encoder/mux timebase quantization can collapse VFR jitter into duplicate pts (delta=0); probeFrameIntervalCv drops non-positive deltas, so a clip whose jitter rounds to duplicated timestamps measures CV 0 and passes timing_stability. Duplicate-pts frames are themselves a timing anomaly; a duplicate-fraction signal would be a follow-up dimension. Not fixed here to keep the v0.2 change minimal and honestly reported."
+    }
+  ],
+  "coverage_on_committed_positive_gold": {
+    "clips": ["afn-sasebo-rally1", "wm-dink-01", "wm-volley-02"],
+    "before": "per wave-c/c12-envelope-measurements.json: DEGRADED / DEGRADED / DEGRADED",
+    "after": "DEGRADED / DEGRADED / DEGRADED — every pre-existing per-dimension status identical; new timing_stability measures SUPPORTED (interval CV 0.0000) on all 3",
+    "delta": "0 regressions, 0 new abstentions; fixes are not blanket abstention"
+  },
+  "contracts": "usable-result-v1 / silent-failure-v1 untouched; envelope thresholds re-versioned v0.1 -> v0.2 (provisional) because the dimension set changed; verdicts still carry provisional:true.",
+  "held_out": "wm-dink-01 / afn-vic-rally1 not modified (wm-dink-01 read-only measured, exactly as the existing C12 eval already does).",
+  "tests": "pnpm --filter @pickle/capture-envelope test: 23/23 green (13 unit + 10 red-team synthetic); typecheck green."
+}

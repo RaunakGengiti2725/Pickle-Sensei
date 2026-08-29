@@ -30,6 +30,11 @@ export interface CaptureEnvelopeMeasurements {
   laplacianVarianceMedian: number | null;
   /** Mean abs per-pixel luma diff between consecutive sampled frames. */
   meanAbsFrameDiff: number | null;
+  /**
+   * Coefficient of variation of inter-frame presentation intervals
+   * (std dev / mean). ~0 for CFR; large for VFR timestamp jitter.
+   */
+  frameIntervalCv: number | null;
   clipDurationMs: number | null;
   /** Pose-derived; null when no pose is available. */
   playerPixelHeightFraction: number | null;
@@ -70,6 +75,8 @@ function measuredValueFor(
       return m.laplacianVarianceMedian;
     case "camera_motion":
       return m.meanAbsFrameDiff;
+    case "timing_stability":
+      return m.frameIntervalCv;
     case "clip_duration":
       return m.clipDurationMs;
     case "player_pixel_height":

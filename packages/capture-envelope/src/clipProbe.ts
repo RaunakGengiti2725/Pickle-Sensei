@@ -16,8 +16,14 @@ export const SAMPLE_FPS = 4;
 export const SAMPLE_WIDTH = 320;
 
 export interface ClipStreamInfo {
+  /** Stored (pre-rotation) dimensions. */
   width: number;
   height: number;
+  /** Rotation metadata in degrees (0 when absent), normalized to 0/90/180/270. */
+  rotationDegrees: number;
+  /** Dimensions as displayed after applying rotation metadata. */
+  displayWidth: number;
+  displayHeight: number;
   avgFrameRateFps: number;
   durationMs: number;
 }
@@ -37,7 +43,7 @@ export function probeClipStream(clipPath: string): ClipStreamInfo {
     "-select_streams",
     "v:0",
     "-show_entries",
-    "stream=width,height,avg_frame_rate,duration",
+    "stream",
     "-show_entries",
     "format=duration",
     "-of",
@@ -50,6 +56,8 @@ export function probeClipStream(clipPath: string): ClipStreamInfo {
       height?: number;
       avg_frame_rate?: string;
       duration?: string;
+      tags?: { rotate?: string };
+      side_data_list?: Array<{ rotation?: number }>;
     }>;
     format?: { duration?: string };
   };
@@ -61,12 +69,61 @@ export function probeClipStream(clipPath: string): ClipStreamInfo {
   const [num, den] = rate.split("/").map(Number);
   const fps = num !== undefined && den !== undefined && den !== 0 ? num / den : 0;
   const durationSec = Number(stream.duration ?? parsed.format?.duration ?? "0");
+  const sideDataRotation = stream.side_data_list?.find(
+    (entry) => typeof entry.rotation === "number",
+  )?.rotation;
+  const tagRotation = stream.tags?.rotate !== undefined ? Number(stream.tags.rotate) : undefined;
+  const rawRotation = sideDataRotation ?? tagRotation ?? 0;
+  const rotationDegrees = Number.isFinite(rawRotation)
+    ? ((Math.round(rawRotation) % 360) + 360) % 360
+    : 0;
+  const swapped = rotationDegrees === 90 || rotationDegrees === 270;
   return {
     width: stream.width,
     height: stream.height,
+    rotationDegrees,
+    displayWidth: swapped ? stream.height : stream.width,
+    displayHeight: swapped ? stream.width : stream.height,
     avgFrameRateFps: fps,
     durationMs: Math.round(durationSec * 1000),
   };
+}
+
+/**
+ * Coefficient of variation (std dev / mean) of inter-frame presentation
+ * intervals, from packet timestamps sorted into presentation order. Returns
+ * null when fewer than 3 usable intervals exist (too short to judge timing).
+ */
+export function probeFrameIntervalCv(clipPath: string): number | null {
+  const out = run("ffprobe", [
+    "-v",
+    "error",
+    "-select_streams",
+    "v:0",
+    "-show_entries",
+    "packet=pts_time",
+    "-of",
+    "csv=p=0",
+    clipPath,
+  ]).toString();
+  const times = out
+    .split("\n")
+    .map((line) => line.trim().replace(/,+$/, ""))
+    .filter((line) => line.length > 0)
+    .map((line) => Number(line))
+    .filter((value) => Number.isFinite(value))
+    .sort((left, right) => left - right);
+  const intervals: number[] = [];
+  for (let index = 1; index < times.length; index += 1) {
+    const delta = times[index]! - times[index - 1]!;
+    if (delta > 0) intervals.push(delta);
+  }
+  if (intervals.length < 3) return null;
+  const mean = intervals.reduce((acc, value) => acc + value, 0) / intervals.length;
+  if (mean <= 0) return null;
+  const variance =
+    intervals.reduce((acc, value) => acc + (value - mean) * (value - mean), 0) / intervals.length;
+  return Math.sqrt(variance) / mean;
 }
 
 export interface SampledGrayFrames {
@@ -75,6 +132,12 @@ export interface SampledGrayFrames {
   frames: Uint8Array[];
 }
 
+/**
+ * Decode sampled grayscale frames. ffmpeg auto-applies rotation metadata
+ * when decoding, so callers must pass DISPLAY dimensions (post-rotation) —
+ * passing stored dimensions for a 90°/270°-rotated clip silently distorts
+ * the aspect ratio and corrupts the Laplacian/frame-diff normalization.
+ */
 export function extractSampledGrayFrames(
   clipPath: string,
   sourceWidth: number,
@@ -152,7 +215,7 @@ function stdDev(values: number[]): number | null {
 /** Measure the video-only envelope signals for a clip on CPU. */
 export function measureClip(clipPath: string): CaptureEnvelopeMeasurements {
   const info = probeClipStream(clipPath);
-  const sampled = extractSampledGrayFrames(clipPath, info.width, info.height);
+  const sampled = extractSampledGrayFrames(clipPath, info.displayWidth, info.displayHeight);
 
   const lumaMeans = sampled.frames.map((frame) => meanLuma(frame));
   const lapVars = sampled.frames.map((frame) =>
@@ -169,14 +232,15 @@ export function measureClip(clipPath: string): CaptureEnvelopeMeasurements {
       : null;
 
   return {
-    frameWidthPx: info.width,
-    frameHeightPx: info.height,
+    frameWidthPx: info.displayWidth,
+    frameHeightPx: info.displayHeight,
     avgFrameRateFps: info.avgFrameRateFps,
     brightnessMeanLuma: brightnessMean,
     brightnessStdLuma: stdDev(lumaMeans),
     laplacianVarianceMedian: median(lapVars),
     meanAbsFrameDiff:
       diffs.length > 0 ? diffs.reduce((acc, value) => acc + value, 0) / diffs.length : null,
+    frameIntervalCv: probeFrameIntervalCv(clipPath),
     clipDurationMs: info.durationMs,
     playerPixelHeightFraction: null,
     playerMeanJointVisibility: null,

@@ -18,6 +18,7 @@ const supportedMeasurements: CaptureEnvelopeMeasurements = {
   brightnessStdLuma: 10,
   laplacianVarianceMedian: 250,
   meanAbsFrameDiff: 3,
+  frameIntervalCv: 0.02,
   clipDurationMs: 8000,
   playerPixelHeightFraction: 0.4,
   playerMeanJointVisibility: 0.8,
@@ -28,7 +29,7 @@ describe("evaluateCaptureEnvelope", () => {
     const verdict = evaluateCaptureEnvelope(supportedMeasurements);
     expect(verdict.overall).toBe("SUPPORTED");
     expect(verdict.notMeasured).toEqual([]);
-    expect(verdict.dimensions).toHaveLength(8);
+    expect(verdict.dimensions).toHaveLength(9);
     expect(verdict.dimensions.every((d) => d.status === "SUPPORTED")).toBe(true);
   });
 
@@ -38,7 +39,7 @@ describe("evaluateCaptureEnvelope", () => {
     expect(verdict.thresholdsVersion).toMatch(/provisional/);
     expect(verdict.provisional).toBe(true);
     for (const dimension of verdict.dimensions) {
-      expect(dimension.thresholdId).toMatch(/v0\.1/);
+      expect(dimension.thresholdId).toMatch(/v0\.\d+/);
     }
   });
 
@@ -91,6 +92,28 @@ describe("evaluateCaptureEnvelope", () => {
     expect(classifyDimension(20, CAPTURE_ENVELOPE_THRESHOLDS.camera_motion)).toBe("UNSUPPORTED");
     expect(classifyDimension(10, CAPTURE_ENVELOPE_THRESHOLDS.camera_motion)).toBe("DEGRADED");
     expect(classifyDimension(2, CAPTURE_ENVELOPE_THRESHOLDS.camera_motion)).toBe("SUPPORTED");
+  });
+
+  it("VFR timestamp jitter is flagged via timing_stability even when avg fps passes", () => {
+    const verdict = evaluateCaptureEnvelope({
+      ...supportedMeasurements,
+      avgFrameRateFps: 29.9,
+      frameIntervalCv: 0.75,
+    });
+    expect(verdict.dimensions.find((d) => d.dimension === "frame_rate")?.status).toBe("SUPPORTED");
+    expect(verdict.dimensions.find((d) => d.dimension === "timing_stability")?.status).toBe(
+      "UNSUPPORTED",
+    );
+    expect(verdict.overall).toBe("UNSUPPORTED");
+  });
+
+  it("timing_stability is NOT_MEASURED when interval data is unavailable", () => {
+    const verdict = evaluateCaptureEnvelope({
+      ...supportedMeasurements,
+      frameIntervalCv: null,
+    });
+    expect(verdict.notMeasured).toContain("timing_stability");
+    expect(verdict.overall).toBe("SUPPORTED");
   });
 
   it("clip duration bands are two-sided", () => {
