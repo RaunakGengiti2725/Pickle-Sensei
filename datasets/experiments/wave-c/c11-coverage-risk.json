@@ -1,0 +1,224 @@
+{
+  "generatedAtIso": "2026-08-29T06:14:42.659Z",
+  "caveat": "confidences are annotator self-reports; correctness is agreement with the primary annotator (proxy). Model-confidence curves require canonical run dirs, absent on this box.",
+  "datasets": [
+    {
+      "name": "W14 TA blind overlap (n=12 verdicts)",
+      "provenance": "committed artifact wave-b/W14-overlap/ta-overlap.json; correct = 3-class agreement with primary annotator (agreement.json) — inter-annotator proxy, not gold",
+      "n": 12,
+      "ece10": 0.12083333333333336,
+      "aurc": 0.07646103896103897,
+      "reliabilityBins": [
+        {
+          "lower": 0.5,
+          "upper": 0.6,
+          "count": 1,
+          "meanConfidence": 0.55,
+          "accuracy": 1
+        },
+        {
+          "lower": 0.7,
+          "upper": 0.8,
+          "count": 2,
+          "meanConfidence": 0.725,
+          "accuracy": 0.5
+        },
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "count": 4,
+          "meanConfidence": 0.8250000000000001,
+          "accuracy": 0.75
+        },
+        {
+          "lower": 0.9,
+          "upper": 1,
+          "count": 5,
+          "meanConfidence": 0.95,
+          "accuracy": 1
+        }
+      ],
+      "coverageRiskCurve": [
+        {
+          "threshold": 0.98,
+          "coverage": 0.08333333333333333,
+          "risk": 0,
+          "nAnswered": 1,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.97,
+          "coverage": 0.16666666666666666,
+          "risk": 0,
+          "nAnswered": 2,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.95,
+          "coverage": 0.3333333333333333,
+          "risk": 0,
+          "nAnswered": 4,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.9,
+          "coverage": 0.4166666666666667,
+          "risk": 0,
+          "nAnswered": 5,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.85,
+          "coverage": 0.5833333333333334,
+          "risk": 0.14285714285714285,
+          "nAnswered": 7,
+          "nWrongAnswered": 1
+        },
+        {
+          "threshold": 0.8,
+          "coverage": 0.75,
+          "risk": 0.1111111111111111,
+          "nAnswered": 9,
+          "nWrongAnswered": 1
+        },
+        {
+          "threshold": 0.75,
+          "coverage": 0.8333333333333334,
+          "risk": 0.2,
+          "nAnswered": 10,
+          "nWrongAnswered": 2
+        },
+        {
+          "threshold": 0.7,
+          "coverage": 0.9166666666666666,
+          "risk": 0.18181818181818182,
+          "nAnswered": 11,
+          "nWrongAnswered": 2
+        },
+        {
+          "threshold": 0.55,
+          "coverage": 1,
+          "risk": 0.16666666666666666,
+          "nAnswered": 12,
+          "nWrongAnswered": 2
+        }
+      ]
+    },
+    {
+      "name": "W14 ownership blind overlap (n=31 boxes)",
+      "provenance": "committed artifact wave-b/W14-overlap/ownership-overlap.json; correct = 3-class agreement with primary annotator (agreement.json) — inter-annotator proxy, not gold",
+      "n": 31,
+      "ece10": 0.09774193548387092,
+      "aurc": 0.017596952865530858,
+      "reliabilityBins": [
+        {
+          "lower": 0.5,
+          "upper": 0.6,
+          "count": 2,
+          "meanConfidence": 0.5,
+          "accuracy": 0.5
+        },
+        {
+          "lower": 0.6,
+          "upper": 0.7,
+          "count": 3,
+          "meanConfidence": 0.6166666666666667,
+          "accuracy": 0.6666666666666666
+        },
+        {
+          "lower": 0.7,
+          "upper": 0.8,
+          "count": 7,
+          "meanConfidence": 0.7214285714285714,
+          "accuracy": 0.8571428571428571
+        },
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "count": 6,
+          "meanConfidence": 0.8250000000000001,
+          "accuracy": 1
+        },
+        {
+          "lower": 0.9,
+          "upper": 1,
+          "count": 13,
+          "meanConfidence": 0.9323076923076924,
+          "accuracy": 1
+        }
+      ],
+      "coverageRiskCurve": [
+        {
+          "threshold": 0.97,
+          "coverage": 0.03225806451612903,
+          "risk": 0,
+          "nAnswered": 1,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.95,
+          "coverage": 0.25806451612903225,
+          "risk": 0,
+          "nAnswered": 8,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.9,
+          "coverage": 0.41935483870967744,
+          "risk": 0,
+          "nAnswered": 13,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.85,
+          "coverage": 0.5161290322580645,
+          "risk": 0,
+          "nAnswered": 16,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.8,
+          "coverage": 0.6129032258064516,
+          "risk": 0,
+          "nAnswered": 19,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.75,
+          "coverage": 0.7096774193548387,
+          "risk": 0.045454545454545456,
+          "nAnswered": 22,
+          "nWrongAnswered": 1
+        },
+        {
+          "threshold": 0.7,
+          "coverage": 0.8387096774193549,
+          "risk": 0.038461538461538464,
+          "nAnswered": 26,
+          "nWrongAnswered": 1
+        },
+        {
+          "threshold": 0.65,
+          "coverage": 0.8709677419354839,
+          "risk": 0.037037037037037035,
+          "nAnswered": 27,
+          "nWrongAnswered": 1
+        },
+        {
+          "threshold": 0.6,
+          "coverage": 0.9354838709677419,
+          "risk": 0.06896551724137931,
+          "nAnswered": 29,
+          "nWrongAnswered": 2
+        },
+        {
+          "threshold": 0.5,
+          "coverage": 1,
+          "risk": 0.0967741935483871,
+          "nAnswered": 31,
+          "nWrongAnswered": 3
+        }
+      ]
+    }
+  ]
+}
