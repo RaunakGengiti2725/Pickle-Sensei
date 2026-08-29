@@ -32,15 +32,27 @@ const registry = JSON.parse(readFileSync(registryPath, "utf8")) as {
   items: RegistryItem[];
 };
 
-/** Measured on Linux CPU, 2026-08-29; every id must appear in exactly one set. */
-const POSE_FREE_DETECTED = new Set([
+/**
+ * Measured on Linux CPU, 2026-08-29, under frame-analyzability-2 (D3-11);
+ * every id must appear in exactly one set.
+ *
+ * Under frame-analyzability-1 the five ids now listed as pass-through
+ * findings were rejected by the median inter-frame-diff still_image_video
+ * rule — but so were 5/6 legitimate fresh-candidate pickleball clips
+ * (medians overlap: negatives 0.085-0.419 vs legitimate 0.095-0.777), so
+ * that rule was blanket abstention, not detection. frame-analyzability-2
+ * replaced it with a frozen-pair-fraction rule that keeps true slideshows
+ * rejected without rejecting real footage; distinguishing other racket
+ * sports from pickleball is content-level and remains pose/macOS territory
+ * (see datasets/experiments/wave-d3/d3-11-rt-ood-gate-summary.json).
+ */
+const POSE_FREE_DETECTED = new Set<string>([]);
+const KNOWN_PASS_THROUGH_FINDINGS = new Set([
   "yt--wE27MoX2AM-tennis",
   "yt-RpPe0h9cD5E-tennis",
   "yt-Iw55LinAF0U-badminton",
   "yt-zWQs7kTKcEY-emptycourt",
   "ia-HanfordS1957-titlecard",
-]);
-const KNOWN_PASS_THROUGH_FINDINGS = new Set([
   "yt-2wV0Gs9r384-tabletennis",
   "yt-BCJGL5E9huM-tabletennis",
   "commons-ronpaul-crowd",
