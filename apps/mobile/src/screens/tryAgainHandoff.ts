@@ -48,9 +48,14 @@ export function peekTryAgainHandoff(): TryAgainHandoff | null {
   return pendingHandoff;
 }
 
-const SELECTABLE_CANONICALS = new Set(
-  SELECTABLE_TECHNIQUES_V1.map(technique => technique.canonical),
-);
+/** True when the registry maps this canonical to this exact legacy slug —
+ * a canonical belonging to a different technique never seeds a re-arm. */
+function canonicalMatchesSlug(canonical: string, slug: ShotTypeSlug): boolean {
+  return SELECTABLE_TECHNIQUES_V1.some(
+    technique =>
+      technique.canonical === canonical && technique.legacySlug === slug,
+  );
+}
 
 /**
  * Derive the re-arm intent from what the ORIGINAL run actually recorded.
@@ -70,7 +75,7 @@ export function tryAgainFromResult(
       const canonical =
         intent.resolutionBasis === 'declared' &&
         intent.resolvedProfileId !== null &&
-        SELECTABLE_CANONICALS.has(intent.resolvedProfileId)
+        canonicalMatchesSlug(intent.resolvedProfileId, intent.declaredStroke)
           ? intent.resolvedProfileId
           : null;
       return {
