@@ -50,6 +50,7 @@ import { TechniqueIntentPicker } from '../flow/TechniqueIntentPicker';
 import type { RootStackParams } from '../navigation/params';
 import { StrokeResultAnalyzing } from '../components/StrokeResult';
 import {
+  clearTryAgainHandoff,
   consumeTryAgainHandoff,
   techniqueIntentFromHandoff,
 } from './tryAgainHandoff';
@@ -449,9 +450,13 @@ export function AnalyzeScreen() {
   // run's technique intent back here; it is consumed exactly once (lazy
   // initializer) and seeds the picker/zero-touch gate so the player skips
   // re-picking and goes straight back to their spot.
-  const [rearm] = useState(() =>
-    source === 'camera' ? consumeTryAgainHandoff() : null,
-  );
+  const [rearm] = useState(() => {
+    if (source === 'camera') return consumeTryAgainHandoff();
+    // An import run is not a re-arm: drop any armed handoff so it cannot
+    // seed a later capture with the abandoned run's declaration.
+    clearTryAgainHandoff();
+    return null;
+  });
   const [phase, setPhase] = useState<Phase>({ kind: 'ready' });
   const [declaredStroke, setDeclared] = useState<MvpShotTypeSlug | null>(
     (rearm?.declaredStroke as MvpShotTypeSlug | null) ?? null,

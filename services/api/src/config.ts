@@ -20,6 +20,10 @@ export interface ApiConfig {
   consentExportSigningKeyId: string;
   appleIapConfigured: boolean;
   googlePlayConfigured: boolean;
+  /** Auth subjects allowed to hold the admin role. An `admin` token claim is
+   * honoured only for these subjects; outside development the claim alone is
+   * never enough (a mis-mapped IdP claim must not mint an administrator). */
+  adminAuthSubjects?: readonly string[];
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
@@ -42,6 +46,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     sqsQueueUrl: env["SQS_QUEUE_URL"],
     consentExportSigningKey: env["CONSENT_EXPORT_SIGNING_KEY"],
     consentExportSigningKeyId: env["CONSENT_EXPORT_SIGNING_KEY_ID"] ?? "consent-export-k1",
+    adminAuthSubjects: (env["ADMIN_AUTH_SUBJECTS"] ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0),
     appleIapConfigured: Boolean(env["APPLE_IAP_PRIVATE_KEY"]),
     googlePlayConfigured: Boolean(env["GOOGLE_PLAY_SERVICE_ACCOUNT"]),
   };

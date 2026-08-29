@@ -5,6 +5,7 @@ import type { AppContext } from "../../context.js";
 import { sendFailure } from "../../lib/replies.js";
 import { many, one } from "../../lib/db.js";
 import { upsertShots } from "../shots/routes.js";
+import { computeSessionSummaryStats, writeSessionSummary } from "./summary.js";
 
 /** Sessions module: Live Court / guided sessions, batch sync, canonical summary. */
 
@@ -167,78 +168,16 @@ export function registerSessionRoutes(app: FastifyInstance, context: AppContext)
           "Session not found.",
         );
 
-      const stats = await one<{
-        valid_count: string;
-        avg_score: string | null;
-        best_score: string | null;
-        first_score: string | null;
-        last_score: string | null;
-        best_shot_id: string | null;
-      }>(
+      const stats = await computeSessionSummaryStats(
         context.pool!,
-        `WITH scored AS (
-         SELECT id, overall_score, captured_at FROM shot
-         WHERE session_id = $1 AND user_id = $2
-           AND source = 'real' AND result_kind = 'scored'
-       )
-       SELECT count(*)::text AS valid_count,
-              avg(overall_score)::text AS avg_score,
-              max(overall_score)::text AS best_score,
-              (SELECT overall_score::text FROM scored ORDER BY captured_at ASC LIMIT 1) AS first_score,
-              (SELECT overall_score::text FROM scored ORDER BY captured_at DESC LIMIT 1) AS last_score,
-              (SELECT id::text FROM scored ORDER BY overall_score DESC, captured_at ASC LIMIT 1) AS best_shot_id
-       FROM scored`,
-        [id, userId],
+        userId,
+        id,
+        session.focus_checkpoint_id,
       );
-
-      let focusDelta: number | null = null;
-      if (session.focus_checkpoint_id) {
-        const focus = await one<{ first_avg: string | null; last_avg: string | null }>(
-          context.pool!,
-          `WITH cp AS (
-           SELECT scs.score_0_100, s.captured_at,
-                  ntile(2) OVER (ORDER BY s.captured_at) AS half
-           FROM shot_checkpoint_score scs
-           JOIN shot s ON s.id = scs.shot_id
-           WHERE s.session_id = $1 AND s.user_id = $2 AND s.source = 'real'
-             AND scs.checkpoint_definition_id = $3 AND scs.score_0_100 IS NOT NULL
-         )
-         SELECT avg(score_0_100) FILTER (WHERE half = 1)::text AS first_avg,
-                avg(score_0_100) FILTER (WHERE half = 2)::text AS last_avg
-         FROM cp`,
-          [id, userId, session.focus_checkpoint_id],
-        );
-        if (focus?.first_avg && focus.last_avg) {
-          focusDelta = Math.round((Number(focus.last_avg) - Number(focus.first_avg)) * 10) / 10;
-        }
-      }
-
-      const validCount = Number(stats?.valid_count ?? 0);
-      const avg = stats?.avg_score ? Number(stats.avg_score) : null;
-      await context.pool!.query(
-        `INSERT INTO session_summary (session_id, valid_shot_count, start_score, end_score, average_score, best_score, focus_checkpoint_id, focus_delta, best_shot_id, summary)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-       ON CONFLICT (session_id) DO UPDATE SET
-         valid_shot_count = EXCLUDED.valid_shot_count, start_score = EXCLUDED.start_score,
-         end_score = EXCLUDED.end_score, average_score = EXCLUDED.average_score,
-         best_score = EXCLUDED.best_score, focus_delta = EXCLUDED.focus_delta,
-         best_shot_id = EXCLUDED.best_shot_id, summary = EXCLUDED.summary, generated_at = now()`,
-        [
-          id,
-          validCount,
-          stats?.first_score ? Number(stats.first_score) : null,
-          stats?.last_score ? Number(stats.last_score) : null,
-          avg,
-          stats?.best_score ? Number(stats.best_score) : null,
-          session.focus_checkpoint_id,
-          focusDelta,
-          stats?.best_shot_id ?? null,
-          JSON.stringify({ generatedBy: "api", version: 1 }),
-        ],
-      );
+      await writeSessionSummary(context.pool!, id, session.focus_checkpoint_id, stats);
       await context.pool!.query(
         "UPDATE practice_session SET completed = true, ended_at = COALESCE(ended_at, now()), avg_score = $3 WHERE id = $1 AND user_id = $2",
-        [id, userId, avg],
+        [id, userId, stats.avg],
       );
       const summary = await one(
         context.pool!,
