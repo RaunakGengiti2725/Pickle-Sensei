@@ -405,6 +405,37 @@ export function wheelchairRimPushFixture(peakMs = 2000): AdversarialStrokeFixtur
 }
 
 /**
+ * Genuine two-handed backhand by a right-handed player: BOTH hands on ONE
+ * grip, wrists ~0.05u apart, sweeping together across the body to a contact
+ * left of the midline. Symmetric-bimanual-gate control: both wrists move
+ * with full synchrony and identical magnitude — exactly like a rim push —
+ * but the SEPARATION stays small (hands share the grip), so the classifier
+ * must still commit BACKHAND, not abstain. Ground truth: a stroke.
+ */
+export function twoHandedBackhandFixture(peakMs = 2000): AdversarialStrokeFixture {
+  const frames = buildFrames(peakMs, (tMs) => {
+    const s = Math.max(0, Math.min(1, (tMs - (peakMs - 300)) / 300));
+    const wristX = 0.7 - 0.25 * s;
+    const wristY = 0.6 - 0.08 * s;
+    return [
+      ...torsoMarks(STANDING),
+      mark("right_wrist", wristX, wristY),
+      mark("right_elbow", (0.8 + wristX) / 2, (0.4 + wristY) / 2),
+      mark("left_wrist", wristX + 0.05, wristY + 0.02),
+      mark("left_elbow", (0.6 + wristX + 0.05) / 2, (0.4 + wristY) / 2),
+    ];
+  });
+  return {
+    id: "two-handed-backhand",
+    description:
+      "Two-handed backhand (right-handed): both wrists on one grip, ~0.05u apart, sweeping to a contact 1.25 shoulder-widths left of the midline. A genuine stroke.",
+    sequence: toSequence(frames),
+    window: { startMs: peakMs - 300, endMs: peakMs + 300, peakMs },
+    wristSpeeds: speedSeries(peakMs, 0.9),
+  };
+}
+
+/**
  * Energetic aborted swing: a FAST backswing pull (1.0 u/s) inside the event
  * window, then the swing is checked — the wrist freezes well before the
  * reference instant. Ground truth: NOT a stroke (checked swing, no contact).

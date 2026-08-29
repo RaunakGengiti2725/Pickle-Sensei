@@ -3,8 +3,10 @@ import {
   abortedSwingFixture,
   generateSwingSequence,
   staticReachFixture,
+  twoHandedBackhandFixture,
   walkThroughFixture,
   wheelchairDegenerateTorsoFixture,
+  wheelchairRimPushFixture,
   wheelchairSeatedStrokeFixture,
   type AdversarialStrokeFixture,
 } from "@pickle/evaluation";
@@ -84,6 +86,18 @@ describe("classifyStroke lite red-team (adversarial non-strokes)", () => {
     expect(prediction.leaf === null || prediction.leaf === "UNKNOWN").toBe(true);
     expect(prediction.limitingFactors).toContain(
       "torso_extent_degenerate_normalization_unreliable",
+    );
+  });
+
+  it("wheelchair rim propulsion (symmetric bimanual push) abstains via the bimanual gate (E10-F5)", () => {
+    // Parity with swing-lab stroke-heuristic-5: both wrists move
+    // step-for-step with similar magnitude at wide (rim-width) separation —
+    // no single-arm stroke identity is attributable.
+    const prediction = classifyFixture(wheelchairRimPushFixture());
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.leaf).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain(
+      "symmetric_bimanual_motion_rim_propulsion_signature",
     );
   });
 
@@ -168,6 +182,19 @@ describe("classifyStroke lite red-team coverage guards (real strokes must surviv
     expect(prediction.taxonomyDepth).toBe(2);
     expect(prediction.limitingFactors).not.toContain(
       "torso_extent_degenerate_normalization_unreliable",
+    );
+  });
+
+  it("a genuine two-handed backhand is NOT rejected by the symmetric-bimanual gate", () => {
+    // Both wrists share one grip and move with full synchrony — exactly
+    // like a rim push — but the inter-wrist separation stays small (≈0.27
+    // shoulder-widths), below the gate's wide-grip floor.
+    const fixture = twoHandedBackhandFixture();
+    const prediction = classifyFixture(fixture, { contactMs: fixture.window.peakMs });
+    expect(prediction.label).toBe("BACKHAND");
+    expect(prediction.taxonomyDepth).toBe(2);
+    expect(prediction.limitingFactors).not.toContain(
+      "symmetric_bimanual_motion_rim_propulsion_signature",
     );
   });
 

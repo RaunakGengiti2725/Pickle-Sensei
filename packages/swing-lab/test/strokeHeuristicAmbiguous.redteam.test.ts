@@ -5,6 +5,7 @@ import {
   nonDominantHandSwingFixture,
   practiceShadowSwingFixture,
   profileViewCollapsedShouldersFixture,
+  twoHandedBackhandFixture,
   wheelchairRimPushFixture,
   type AdversarialStrokeFixture,
 } from "@pickle/evaluation";
@@ -19,7 +20,7 @@ import type { StrokePrediction } from "../src/index.js";
  *
  * Two kinds of tests, explicitly separated:
  *
- *  1. OPEN FINDINGS (E10-F1…F5) — measured confidently-wrong outputs of
+ *  1. OPEN FINDINGS (E10-F1…F4; F5 resolved) — measured confidently-wrong outputs of
  *     stroke-heuristic-3, PINNED as characterization tests. Each records
  *     the ground truth and the forensic root cause. These tests assert the
  *     CURRENT WRONG behavior on purpose: fixing the classifier must flip
@@ -111,20 +112,39 @@ describe("classifyStroke ambiguous-motion OPEN FINDINGS (pinned confidently-wron
     expect(prediction.evidence).toContain("front-ish view (shoulder order)");
   });
 
-  it("E10-F5: wheelchair rim propulsion commits FOREHAND at 0.8", () => {
+  it("E10-F5 RESOLVED (stroke-heuristic-5): wheelchair rim propulsion abstains via the symmetric-bimanual gate", () => {
     // Ground truth: NOT a stroke — symmetric bimanual wheel push between
-    // shots. ROOT CAUSE: the push (0.9 u/s, large wrist travel) passes both
-    // non-stroke gates, which only test energy and travel of the single
-    // dominant wrist; there is no discriminator for symmetric two-arm
-    // motion, the signature of rim propulsion.
+    // shots. Originally pinned as a confidently-wrong FOREHAND at 0.8: the
+    // push (0.9 u/s, large wrist travel) passed both non-stroke gates,
+    // which only tested energy and travel of the single dominant wrist.
+    // stroke-heuristic-5's symmetric-bimanual gate now abstains: both
+    // wrists move step-for-step with similar magnitude at wide (rim-width)
+    // separation, so no single-arm stroke identity is attributable.
     const prediction = classifyFixture(wheelchairRimPushFixture());
-    expect(prediction.label).toBe("FOREHAND");
-    expect(prediction.taxonomyDepth).toBe(2);
-    expect(prediction.confidence).toBeCloseTo(0.8, 5);
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.leaf).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain(
+      "symmetric_bimanual_motion_rim_propulsion_signature",
+    );
   });
 });
 
 describe("classifyStroke ambiguous-motion defenses that held (must keep holding)", () => {
+  it("genuine two-handed backhand is NOT rejected by the symmetric-bimanual gate", () => {
+    // Control for the E10-F5 fix: both wrists share one grip and move with
+    // full synchrony and identical magnitude — exactly like a rim push —
+    // but the inter-wrist separation stays small (≈0.27 shoulder-widths),
+    // below the gate's wide-grip floor. The stroke must still commit.
+    const fixture = twoHandedBackhandFixture();
+    const prediction = classifyFixture(fixture, { contactMs: fixture.window.peakMs });
+    expect(prediction.label).toBe("BACKHAND");
+    expect(prediction.taxonomyDepth).toBe(2);
+    expect(prediction.confidence).toBeCloseTo(0.8, 5);
+    expect(prediction.limitingFactors).not.toContain(
+      "symmetric_bimanual_motion_rim_propulsion_signature",
+    );
+  });
+
   it("energetic aborted swing (fast pull, then checked) abstains on the travel gate", () => {
     // The window-wide speed peak (1.0 u/s) defeats the energy gate. Under
     // stroke-heuristic-3 the ±200ms travel gate abstained
@@ -139,16 +159,16 @@ describe("classifyStroke ambiguous-motion defenses that held (must keep holding)
     );
   });
 
-  it("open-finding fixtures never silently change shape: the four still-open pins commit a leaf-less depth-2 side", () => {
+  it("open-finding fixtures never silently change shape: the three still-open pins commit a leaf-less depth-2 side", () => {
     // Umbrella pin: if any fixture starts abstaining (or committing a leaf),
     // a classifier change touched this surface — re-run the E10 forensics.
-    // F3 (profileViewCollapsedShoulders) was resolved by stroke-heuristic-4
-    // and is covered by its own abstention regression test above.
+    // F3 (profileViewCollapsedShoulders) was resolved by stroke-heuristic-4,
+    // F5 (wheelchairRimPush) by stroke-heuristic-5; each is covered by its
+    // own abstention regression test above.
     const fixtures = [
       practiceShadowSwingFixture(),
       nonDominantHandSwingFixture(),
       facingFlipAtContactFixture(),
-      wheelchairRimPushFixture(),
     ];
     for (const fixture of fixtures) {
       const prediction = classifyFixture(fixture, {

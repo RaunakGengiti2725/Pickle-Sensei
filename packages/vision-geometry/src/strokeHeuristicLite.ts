@@ -32,6 +32,18 @@ import { toLegacyPoseFrames, type PoseSequence } from "@pickle/swing-domain";
  * (a walk-through, an aborted/checked swing, a static reach) and degenerate
  * torso normalization must abstain instead of committing an identity.
  *
+ * stroke-heuristic-3.1 adds the SYMMETRIC BIMANUAL gate (E10-F5, ported in
+ * lockstep with swing-lab's stroke-heuristic-5): wheelchair rim propulsion
+ * moves BOTH wrists in a synchronized, similar-magnitude, WIDE-SEPARATION
+ * arc — a shape the single-dominant-wrist energy/travel gates cannot see.
+ * When the rival wrist mirrors the dominant wrist's motion step-for-step
+ * AND the wrists stay far apart (each hand on its own wheel rim), no
+ * single-arm stroke identity is attributable — abstain. Genuine two-handed
+ * backhands keep BOTH hands on ONE grip, so their wrist separation stays
+ * small and the gate does not fire. (swing-lab's stroke-heuristic-4
+ * absence-of-measurement gates are NOT yet ported here — that dedup/port
+ * remains a follow-up.)
+ *
  * declared / annotated / predicted stroke stay separate records everywhere.
  */
 
@@ -55,7 +67,7 @@ export const STROKE_TAXONOMY_V3 = {
 } as const;
 export type StrokeV3 = (typeof STROKE_TAXONOMY_V3.labels)[number];
 
-export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-3 (uncalibrated)";
+export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-3.1 (uncalibrated)";
 
 /**
  * Constants derived from the DEV sandbox pose/paddle data (W9-forensics.txt,
@@ -126,6 +138,34 @@ const NON_SWING_SPEED_FLOOR = 0.25;
 const NON_SWING_TRAVEL_FLOOR = 0.05;
 const MIN_TRAVEL_SAMPLE_FRAMES = 5;
 const TORSO_MIN_EXTENT = 0.04;
+
+/**
+ * Symmetric-bimanual (rim-propulsion) gate constants (stroke-heuristic-3.1,
+ * red-team derived from the E10-F5 fixture — conservative floors, NOT
+ * calibrated statistics):
+ * BIMANUAL_MIN_PAIRED_STEPS — the gate only judges MEASUREMENTS: it needs
+ *   ≥5 consecutive-frame steps (±200ms) where BOTH wrists were measured in
+ *   both frames. Sparse rival visibility never fires it.
+ * BIMANUAL_TRAVEL_RATIO — rival-wrist path length ≥ 0.7× the dominant
+ *   wrist's. One-armed strokes measure near-still off hands (the synthetic
+ *   dev swing's off wrist is static, ratio ≈ 0); a symmetric rim push is
+ *   ratio ≈ 1.0 by construction.
+ * BIMANUAL_SYNC_FRACTION / BIMANUAL_STEP_MOTION_FLOOR — of the paired steps
+ *   where either wrist moved ≥ 0.01u, ≥70% must be synchronized: vertical
+ *   displacements share a sign and step magnitudes are within 2× of each
+ *   other. The rim-push fixture measures 1.0; a swing with an incidentally
+ *   moving off hand (balance arm) shares neither consistently.
+ * BIMANUAL_WIDE_SEPARATION_SW — mean inter-wrist distance ≥ 0.9
+ *   shoulder-widths across the paired steps. Hands on separate wheel rims
+ *   sit ≈1.4 shoulder-widths apart (fixture); a genuine two-handed backhand
+ *   keeps both hands on ONE grip (≈0.2–0.4 shoulder-widths), so wide
+ *   separation is what makes symmetric motion a NON-stroke signature.
+ */
+const BIMANUAL_MIN_PAIRED_STEPS = 5;
+const BIMANUAL_TRAVEL_RATIO = 0.7;
+const BIMANUAL_SYNC_FRACTION = 0.7;
+const BIMANUAL_STEP_MOTION_FLOOR = 0.01;
+const BIMANUAL_WIDE_SEPARATION_SW = 0.9;
 
 /**
  * Minimal paddle observation the heuristic actually reads. swing-lab's
@@ -220,6 +260,31 @@ export function classifyStroke(input: {
   }
 
   const wristInfo = dominantWristInfo(frames, contactMs);
+
+  // ── Gate: symmetric bimanual motion is not a stroke (v3.1) ────────────
+  // Wheelchair rim propulsion pushes BOTH wheel rims at once: the wrists
+  // move with high synchrony and similar magnitude while staying roughly a
+  // wheelbase apart. No single-arm stroke identity is attributable to that
+  // shape. The gate acts only on paired MEASUREMENTS of both wrists, and
+  // wide separation keeps genuine two-handed backhands (both hands on one
+  // grip, small separation) out of its reach.
+  const bimanual = bimanualMotionInfo(frames, contactMs);
+  if (
+    bimanual.pairedSteps >= BIMANUAL_MIN_PAIRED_STEPS &&
+    wristInfo.travel >= NON_SWING_TRAVEL_FLOOR &&
+    bimanual.rivalTravel >= BIMANUAL_TRAVEL_RATIO * wristInfo.travel &&
+    bimanual.movingSteps > 0 &&
+    bimanual.synchronizedSteps / bimanual.movingSteps >= BIMANUAL_SYNC_FRACTION &&
+    bimanual.meanSeparation / shoulderWidth >= BIMANUAL_WIDE_SEPARATION_SW
+  ) {
+    evidence.push(
+      `both wrists move together ±200ms: rival travel ${bimanual.rivalTravel.toFixed(3)}u vs dominant ${wristInfo.travel.toFixed(3)}u ` +
+        `(ratio floor ${BIMANUAL_TRAVEL_RATIO}), ${bimanual.synchronizedSteps}/${bimanual.movingSteps} moving steps synchronized ` +
+        `(floor ${BIMANUAL_SYNC_FRACTION}), mean wrist separation ${(bimanual.meanSeparation / shoulderWidth).toFixed(2)} shoulder-widths ` +
+        `(wide-grip floor ${BIMANUAL_WIDE_SEPARATION_SW}) — rim-propulsion signature`,
+    );
+    return unknown("symmetric_bimanual_motion_rim_propulsion_signature", evidence, limitingFactors);
+  }
 
   // ── Gates: measured non-motion is not a stroke (stroke-heuristic-3) ────
   // Both gates act only on MEASUREMENTS: a speed series that never reaches
@@ -612,6 +677,75 @@ function dominantWristInfo(
     visibility: mark?.visibility ?? 0,
     travel: travel[chosen],
     measuredFrames: measured[chosen],
+  };
+}
+
+/**
+ * Paired two-wrist motion statistics across ±200ms of the reference, for
+ * the symmetric-bimanual gate (v3.1). Only consecutive-frame steps where
+ * BOTH wrists are measured (visibility ≥ 0.25) in both frames count —
+ * absence of measurement never contributes. A step is "moving" when either
+ * wrist displaces ≥ BIMANUAL_STEP_MOTION_FLOOR, and "synchronized" when
+ * both vertical displacements share a sign and the step magnitudes are
+ * within 2× of each other. rivalTravel is the NON-dominant wrist's path
+ * length over the same paired steps; meanSeparation is the mean inter-wrist
+ * distance.
+ */
+function bimanualMotionInfo(
+  frames: ReturnType<typeof toLegacyPoseFrames>,
+  contactMs: number,
+): {
+  pairedSteps: number;
+  movingSteps: number;
+  synchronizedSteps: number;
+  rivalTravel: number;
+  meanSeparation: number;
+} {
+  const nearby = frames.filter((frame) => Math.abs(frame.timestampMs - contactMs) <= 200);
+  const travel = { left: 0, right: 0 };
+  let pairedSteps = 0;
+  let movingSteps = 0;
+  let synchronizedSteps = 0;
+  let separationSum = 0;
+  let separationSamples = 0;
+  let prior: { left: { x: number; y: number }; right: { x: number; y: number } } | null = null;
+  for (const frame of nearby) {
+    const left = frame.landmarks.find(
+      (landmark) => landmark.name === "left_wrist" && landmark.visibility >= 0.25,
+    );
+    const right = frame.landmarks.find(
+      (landmark) => landmark.name === "right_wrist" && landmark.visibility >= 0.25,
+    );
+    if (!left || !right) {
+      prior = null;
+      continue;
+    }
+    separationSum += Math.hypot(right.x - left.x, right.y - left.y);
+    separationSamples += 1;
+    if (prior) {
+      pairedSteps += 1;
+      const dL = { x: left.x - prior.left.x, y: left.y - prior.left.y };
+      const dR = { x: right.x - prior.right.x, y: right.y - prior.right.y };
+      const magL = Math.hypot(dL.x, dL.y);
+      const magR = Math.hypot(dR.x, dR.y);
+      travel.left += magL;
+      travel.right += magR;
+      if (Math.max(magL, magR) >= BIMANUAL_STEP_MOTION_FLOOR) {
+        movingSteps += 1;
+        const verticalAgree = dL.y * dR.y > 0;
+        const similarMagnitude = Math.min(magL, magR) * 2 >= Math.max(magL, magR);
+        if (verticalAgree && similarMagnitude) synchronizedSteps += 1;
+      }
+    }
+    prior = { left: { x: left.x, y: left.y }, right: { x: right.x, y: right.y } };
+  }
+  const rivalTravel = Math.min(travel.left, travel.right);
+  return {
+    pairedSteps,
+    movingSteps,
+    synchronizedSteps,
+    rivalTravel,
+    meanSeparation: separationSamples > 0 ? separationSum / separationSamples : 0,
   };
 }
 
