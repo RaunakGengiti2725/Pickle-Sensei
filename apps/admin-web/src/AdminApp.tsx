@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { CoachReviewLab, useHashRoute } from "./coachReview/CoachReviewLab";
+import { SupportDiagnosticsPanel } from "./supportDiagnostics/SupportDiagnosticsPanel";
 
 /**
  * Internal admin console (directive §45): feature flags, model bundles,
@@ -229,6 +230,7 @@ export function AdminApp() {
               <FlagsPanel token={token} />
               <ModelBundlePanel token={token} />
               <UserLookupPanel token={token} />
+              <SupportDiagnosticsPanel token={token} />
             </>
           ) : (
             <p>

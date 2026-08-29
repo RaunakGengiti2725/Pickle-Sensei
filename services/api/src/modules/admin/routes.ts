@@ -3,6 +3,13 @@ import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { sendFailure } from "../../lib/replies.js";
 import { audit, many, one, withTransaction } from "../../lib/db.js";
+import {
+  buildSupportDiagnostics,
+  categorizeAnalysisFailure,
+  computeLatency,
+  type AnalysisJobDiagnosticsRow,
+  type DeviceDiagnosticsRow,
+} from "./supportDiagnostics.js";
 
 /**
  * Admin module (directive §45): elevated role required; every access audited.
@@ -325,6 +332,113 @@ export function registerAdminRoutes(app: FastifyInstance, context: AppContext): 
         metadata: { featureKey: parsed.data.featureKey },
       });
       return { granted: true };
+    },
+  );
+
+  // Support diagnostics (privacy-limited): "why did this analysis fail".
+  // Allowlisted job/pipeline/device state only — no raw media, no storage
+  // coordinates, no account identity beyond the pseudonymous user id.
+  app.get(
+    "/v1/admin/support/analyses/:id",
+    { preHandler: app.requireAdmin },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const job = await one<AnalysisJobDiagnosticsRow>(
+        context.pool!,
+        `SELECT j.id, j.user_id, j.status, j.inference_mode, j.failure_code,
+                j.requested_at, j.started_at, j.finished_at,
+                (j.media_asset_id IS NOT NULL) AS has_media,
+                m.status AS media_status,
+                (j.session_id IS NOT NULL) AS has_session,
+                p.status AS permit_status,
+                p.outcome AS permit_outcome,
+                s.result_kind AS shot_result_kind,
+                s.version_vector AS shot_version_vector
+         FROM analysis_job j
+         LEFT JOIN media_asset m ON m.id = j.media_asset_id
+         LEFT JOIN analysis_permit p ON p.id = j.analysis_permit_id
+         LEFT JOIN LATERAL (
+           SELECT result_kind, version_vector FROM shot
+           WHERE analysis_job_id = j.id ORDER BY created_at DESC LIMIT 1
+         ) s ON true
+         WHERE j.id = $1`,
+        [id],
+      );
+      if (!job)
+        return sendFailure(
+          reply,
+          request,
+          404,
+          "permanent",
+          "support.analysis_not_found",
+          "Analysis not found.",
+        );
+      const device = await one<DeviceDiagnosticsRow>(
+        context.pool!,
+        `SELECT platform, app_version, os_version, model, device_tier, model_bundle_version
+         FROM user_device WHERE user_id = $1
+         ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT 1`,
+        [job.user_id],
+      );
+      await audit(context.pool!, {
+        actorUserId: request.user!.id,
+        action: "admin.support_analysis_diagnostics",
+        targetKind: "analysis_job",
+        targetId: id,
+        requestId: request.id,
+      });
+      return { diagnostics: buildSupportDiagnostics(job, device) };
+    },
+  );
+
+  app.get(
+    "/v1/admin/support/users/:id/analyses",
+    { preHandler: app.requireAdmin },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const user = await one(context.pool!, "SELECT id FROM app_user WHERE id = $1", [id]);
+      if (!user)
+        return sendFailure(
+          reply,
+          request,
+          404,
+          "permanent",
+          "admin.user_not_found",
+          "User not found.",
+        );
+      const jobs = await many<{
+        id: string;
+        status: string;
+        inference_mode: string;
+        failure_code: string | null;
+        requested_at: Date;
+        started_at: Date | null;
+        finished_at: Date | null;
+      }>(
+        context.pool!,
+        `SELECT id, status, inference_mode, failure_code, requested_at, started_at, finished_at
+         FROM analysis_job WHERE user_id = $1
+         ORDER BY requested_at DESC LIMIT 50`,
+        [id],
+      );
+      await audit(context.pool!, {
+        actorUserId: request.user!.id,
+        action: "admin.support_analysis_list",
+        targetKind: "app_user",
+        targetId: id,
+        requestId: request.id,
+      });
+      return {
+        analyses: jobs.map((row) => ({
+          analysisId: row.id,
+          serverJobState: row.status,
+          inferenceMode: row.inference_mode,
+          failureCode: row.failure_code,
+          failureCategory: categorizeAnalysisFailure(row.status, row.failure_code),
+          requestedAt: row.requested_at.toISOString(),
+          latency: computeLatency(row.requested_at, row.started_at, row.finished_at),
+        })),
+      };
     },
   );
 }
