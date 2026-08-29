@@ -39,6 +39,8 @@
     "completion:bench": "tsx src/eventCompletionBench.ts",
     "cascade": "tsx src/cascadeWaterfall.ts",
     "coach:queue": "tsx src/coachReview.ts",
+    "coach:gates": "tsx src/coachGates.ts",
+    "score:stability": "tsx src/scoreStability.ts",
     "regen": "tsx src/benchRegen.ts",
     "risk:curves": "tsx src/coverageRisk.ts",
     "silent:retro": "tsx src/silentFailureRetro.ts",
