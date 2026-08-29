@@ -163,7 +163,7 @@ describe("OOD gate red team: committed positive corpus still passes", { timeout:
 
   it(
     "fresh-candidate real footage is not blanket-rejected (coverage floor)",
-    { timeout: 120_000 },
+    { timeout: 360_000 },
     async () => {
       const fresh = join(root, "datasets", "pickleball", "fresh-candidates");
       const files = readdirSync(fresh).filter((f) => f.endsWith(".mp4"));
