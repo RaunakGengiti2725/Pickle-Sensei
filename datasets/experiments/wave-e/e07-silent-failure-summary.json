@@ -1,0 +1,79 @@
+{
+  "workstream": "e07-silent-failure",
+  "branch": "devin/wave-e/e07-silent-failure",
+  "base": "origin/devin/1787988068-wave-c-integration",
+  "baseCommit": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+  "date": "2026-08-29",
+  "mission": "recompute silent-failure-v1 metric and calibration on the fully integrated branch; compare with the Wave C baseline; flag any subsystem whose integration increased silent failure",
+  "environment": "Ubuntu Linux, node v20.18.1, pnpm 10.15.1, no Mac/Apple Vision available",
+  "measured": {
+    "freshCascadeOnIntegratedBranch": {
+      "command": "pnpm lab:cascade",
+      "result": "n=0 gold target events — SILENT FAILURES 0/0 ALL TRIALS · 0/0 ANSWERED TRIALS (contract silent-failure-v1.1)",
+      "provenance": "MEASURED on this Linux box at base commit 8fc388e; canonical run dirs (datasets/paddle-bench/runs/) are gitignored and absent, and regeneration requires the macOS Apple Vision pose extractor (regen-manifest paths are Mac-local, no videos or pose.json committed)",
+      "verdict": "BLOCKED_EXTERNAL for a fresh integrated-branch cascade measurement — same honest 0/0 as the Wave C baseline (c11-summary.json)"
+    },
+    "retrospectiveSilentFailure": {
+      "tool": "packages/swing-lab/src/silentFailureRetro.ts (new, pnpm lab:silent-retro)",
+      "artifact": "datasets/experiments/wave-e/e07-silent-failure-retro.json",
+      "scope": "the 10 committed macOS cascade runs datasets/cascade/cascade-*.json, DEVELOPMENT split only (n=3 dev cases: wm-volley-02, afn-sasebo-rally1, afn-sasebo-rally2); held-out rows (wm-dink-01, afn-vic-rally1) excluded and never parsed",
+      "method": "re-derive silent-failure-v1.1 claim verdicts from the frozen per-stage pass/detail strings in committed cascade rows; strict parsers that throw on unrecognized formats; contact 66<err<=132ms is unverifiable_retro (rows lack ball/paddle confirmation) — 0 such claims occurred",
+      "trajectory": [
+        { "run": "cascade-1787960997164 (2026-08-28T23:49Z)", "silentFailTrials": "2/3 answered", "claims": "EVENT:1 STROKE_L1:2" },
+        { "run": "cascade-1787963165545..1787968886850 (6 runs)", "silentFailTrials": "1/3 answered", "claims": "STROKE_L1:1 CONTACT_MARKER:1" },
+        { "run": "cascade-1787971517129..1787971753680 (3 runs, latest 2026-08-29T02:49Z)", "silentFailTrials": "0/3 answered", "claims": "none" }
+      ],
+      "latestRun": {
+        "answeredTrials": 3,
+        "silentFailureTrials": 0,
+        "abstentions": "afn-sasebo-rally1 abstains on EVENT (targetEvent ambiguous), CONTACT, PHASE, STROKE — honest abstention, not silent failure; coverage: 2/3 dev cases fully answered on all 5 claims",
+        "silentFailureRate": "0/3 answered dev trials (development counts, not a stable population rate)"
+      },
+      "subsystemFlag": "NO subsystem shows increased silent failure across the committed run sequence: EVENT (1→0), STROKE_L1 (2→0), CONTACT_MARKER (1→0), TARGET_IDENTITY and PHASE_RENDER 0 throughout. Caveat: committed cascade JSONs carry no commit hash, so runs cannot be attributed to specific D/D2/D3/D4 integrations; the sequence spans 2026-08-28T23:49Z–2026-08-29T02:49Z on the macOS box."
+    },
+    "calibrationRecompute": {
+      "tool": "pnpm lab:risk-curves (coverageRisk.ts extended; output moved to wave-e so the Wave C baseline artifact stays frozen)",
+      "artifact": "datasets/experiments/wave-e/e07-coverage-risk.json",
+      "w14VsWaveCBaseline": {
+        "taOverlap": { "n": 12, "ece10": 0.1208, "aurc": 0.0765 },
+        "ownershipOverlap": { "n": 31, "ece10": 0.0977, "aurc": 0.0176 },
+        "comparison": "IDENTICAL to the Wave C baseline (wave-c/c11-coverage-risk.json) to 4 decimals — integration introduced no calibration tooling regression on the W14 datasets"
+      },
+      "newD204Datasets": {
+        "provenance": "D2-04 blind ownership audit sidecars (devin-visual-v4-waveD2-ownership-audit.json, 3 bundles); correct = 3-class agreement with committed waveC ownership labels — inter-annotator proxy, not gold; grouped per capture bundle (independent source) plus a disclosed pooled view",
+        "pooled": { "n": 80, "correct": 66, "ece10": 0.1094, "aurc": 0.1245, "fullCoverageRisk": 0.175 },
+        "perBundle": {
+          "wavea-944403-dink": { "n": 44, "ece10": 0.1193, "aurc": 0.1379 },
+          "wavea-944403-smash": { "n": 16, "ece10": 0.2438, "aurc": 0.2695, "flag": "worst-calibrated bundle: full-coverage risk 6/16 (0.375); annotator confidence poorly separates agreement here" },
+          "wavea-faead-rally": { "n": 20, "ece10": 0.2, "aurc": 0.0209 }
+        },
+        "caveat": "n=80 slots clustered in 3 bundles; per-bundle curves are exact over the samples, not stable population estimates"
+      }
+    },
+    "gates": {
+      "typecheck": "pnpm typecheck clean (all workspace packages)",
+      "tests": "swing-lab vitest: full suite 460 passed / 4 skipped (pre-existing skips) at base; new silentFailureRetro.test.ts (5 tests) + extended calibration.test.ts D2-04 loader test pass",
+      "lint": "pnpm lint clean",
+      "format": "pnpm format:check clean"
+    }
+  },
+  "honestNegatives": [
+    "No fresh silent-failure measurement on the integrated branch is possible on this box: cascade inputs are Mac-gated (Apple Vision pose extraction, Mac-local regen-manifest paths, no committed videos/pose.json). Fresh 0/0 output confirms the code path is honest, not that the product is silent-failure-free.",
+    "The retrospective trajectory cannot attribute the 2/3→0/3 improvement to specific subsystem integrations: committed cascade runs record no commit hash.",
+    "No committed artifact pairs MODEL confidences with gold; all calibration curves use annotator self-reported confidence with agreement-as-correctness proxies.",
+    "n=3 development cases and n=80 audit slots: all rates are exact counts over these samples, not stable estimates."
+  ],
+  "heldOut": "wm-dink-01 and afn-vic-rally1 untouched: excluded from retro evaluation by split filter before any parsing; not viewed, labeled, tuned against, or regenerated",
+  "filesChanged": [
+    "packages/swing-lab/src/silentFailureRetro.ts (new)",
+    "packages/swing-lab/src/coverageRisk.ts (D2-04 loader added; output redirected to wave-e/e07-coverage-risk.json, Wave C baseline artifact left frozen)",
+    "packages/swing-lab/test/silentFailureRetro.test.ts (new)",
+    "packages/swing-lab/test/calibration.test.ts (D2-04 loader test added)",
+    "packages/swing-lab/package.json + package.json (silent:retro / lab:silent-retro scripts)",
+    "eslint.config.mjs (silentFailureRetro.ts added to CLI no-console allowlist)",
+    "datasets/experiments/wave-e/e07-silent-failure-retro.json (generated)",
+    "datasets/experiments/wave-e/e07-coverage-risk.json (generated)",
+    "datasets/experiments/wave-e/e07-silent-failure-summary.json (this file)"
+  ],
+  "verdict": "GREEN"
+}

@@ -8,7 +8,7 @@ import {
   reliabilityBins,
   type ConfidenceSample,
 } from "../src/calibration.js";
-import { loadW14Datasets } from "../src/coverageRisk.js";
+import { loadD204OwnershipAuditDatasets, loadW14Datasets } from "../src/coverageRisk.js";
 
 const samples = (pairs: Array<[number, boolean]>): ConfidenceSample[] =>
   pairs.map(([confidence, correct]) => ({ confidence, correct }));
@@ -239,6 +239,26 @@ describe("loadW14Datasets (committed artifacts)", () => {
     expect(ta?.samples.filter((sample) => !sample.correct)).toHaveLength(2);
     expect(ownership?.samples).toHaveLength(31);
     expect(ownership?.samples.filter((sample) => !sample.correct)).toHaveLength(3);
+    for (const dataset of datasets) {
+      expect(dataset.provenance).toContain("not gold");
+      for (const sample of dataset.samples) {
+        expect(sample.confidence).toBeGreaterThanOrEqual(0);
+        expect(sample.confidence).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+});
+
+describe("loadD204OwnershipAuditDatasets (committed artifacts)", () => {
+  it("loads the pooled + per-bundle D2-04 audit datasets with the documented sizes and agreement counts", () => {
+    const datasets = loadD204OwnershipAuditDatasets();
+    expect(datasets).toHaveLength(4);
+    const [pooled, ...perBundle] = datasets;
+    expect(pooled?.samples).toHaveLength(80);
+    expect(pooled?.samples.filter((sample) => sample.correct)).toHaveLength(66);
+    expect(pooled?.provenance).toContain("POOLED");
+    const bundleSizes = perBundle.map((dataset) => dataset.samples.length);
+    expect(bundleSizes).toEqual([44, 16, 20]);
     for (const dataset of datasets) {
       expect(dataset.provenance).toContain("not gold");
       for (const sample of dataset.samples) {
