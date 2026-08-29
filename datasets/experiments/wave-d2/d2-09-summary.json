@@ -4,6 +4,7 @@
   "branch": "devin/wave-d2/d2-09-registry-datacards",
   "baseBranch": "devin/1787988068-wave-c-integration",
   "completedAtIso": "2026-08-29",
+  "rebasedOntoIntegrationTip": "1edb176 (Wave D winners merged); audit re-run and cards refreshed against the advanced tip",
   "verdict": "GREEN",
   "deliverables": {
     "integrityReport": "datasets/experiments/wave-d2/d2-09-integrity-report.json",
@@ -18,7 +19,8 @@
       "datasets/mining/DATA_CARD.md",
       "datasets/coach-review/DATA_CARD.md",
       "datasets/cascade/DATA_CARD.md",
-      "datasets/completion-bench/DATA_CARD.md"
+      "datasets/completion-bench/DATA_CARD.md",
+      "datasets/ood/DATA_CARD.md"
     ],
     "dataCardSchema": "data-card-v1 (no prior convention existed): Identity / Contents (programmatic recount) / Provenance & rights / Roles-splits / Lineage / Integrity / Caveats"
   },
@@ -27,13 +29,13 @@
       "sources": 2,
       "evaluatedButExcluded": 6,
       "freshCandidates": 6,
-      "quarantinedUnknownRights": 4,
+      "quarantinedUnknownRights": 13,
       "freshCandidateSha256Match": "6/6",
       "freshCandidateBytesMatch": "6/6",
       "freshCandidateTotalBytes": 181080528,
       "totalBytesMatchesRegistry": true,
-      "urlsProbed": 24,
-      "urls2xx": 22,
+      "urlsProbed": 33,
+      "urls2xx": 31,
       "urls403BotBlocked": 2,
       "missingProvenanceFields": 0,
       "clericalErrorsFound": 0,
@@ -57,7 +59,7 @@
       "registryVideos": 13,
       "bundles": 13,
       "eventBoundsQaEvents": 34,
-      "strokeGoldLabels": 22,
+      "strokeGoldLabels": 29,
       "goldCascadeCases": 5
     },
     "other": {
@@ -67,6 +69,16 @@
       "coaches": 0,
       "faultTaxonomy": "9 families / 46 faults (draft)",
       "miningCandidates": 14
+    },
+    "ood": {
+      "items": 9,
+      "quarantinedNotCommitted": 3,
+      "itemSha256Match": "9/9",
+      "itemBytesMatch": "9/9",
+      "totalBytes": 72845522,
+      "totalBytesMatchesRegistry": true,
+      "urlsProbed": 12,
+      "urls2xx": 12
     }
   },
   "rules": {
@@ -78,7 +90,8 @@
   },
   "findings": [
     "datasets/pickleball/registry.json is internally consistent: all 6 fresh-candidate sha256/byte counts match on-disk media exactly, totalBytes matches to the byte, and no required provenance field is missing — zero clerical fixes required.",
-    "Both Roboflow project URLs return HTTP 403 to non-browser clients (bot challenge); recorded as status-403 rather than confirmed dead. All 22 other registered URLs returned 2xx.",
+    "Both Roboflow project URLs return HTTP 403 to non-browser clients (bot challenge); recorded as status-403 rather than confirmed dead. All 43 other probed URLs (registry + ood) returned 2xx.",
+    "Integration tip advanced after the initial audit: d2-02 added 9 quarantined items to datasets/pickleball/registry.json (all provenance fields present; two new never-eligible license-laundering statuses documented), d13 grew stroke-gold to 29 labels, and d08 added datasets/ood (9 negatives, 9/9 sha256/bytes verified, new DATA_CARD).",
     "3 stale split assignments in datasets/corpus/splits.json (dvids-956784, dvids-957519, dvids-967848) reference sessions merged away by phash dedup; retained and flagged, not deleted, because deterministic split-reuse semantics belong to the data engine.",
     "pickle-real-v0.1/v0.2/v0.3 manifest.sha256 all verify; v0.3 corpus claims (20/26/17/12) match the live recount exactly.",
     "ta-bench cases.json holds 301 replay cases; the HANDOFF 'verified TA 59' figure counts verified labels, a different unit — documented in the ta-bench DATA_CARD, no drift."

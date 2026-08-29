@@ -11,11 +11,11 @@
 - `registry.json`: 13 registered videos (schemaVersion 1), all with id/file/
   source/license/provenance/realFootage/sessionKey present; no duplicate ids.
 - `bundles/`: 13 case bundles; annotation sidecars per bundle are append-only
-  (`devin-visual-v1`, `devin-visual-v2-wave-a`, `devin-visual-v2-waveC[*]`
-  families observed). 3 bundles carry a local `clip.mp4`.
+  (`devin-visual-v1`, `devin-visual-v2-wave-a`, `devin-visual-v2-waveC[*]`,
+  `devin-visual-v3-waveD` families observed). 3 bundles carry a local `clip.mp4`.
 - Gold/label files: `event-bounds-qa-wave-c.json` 34 events + 1 correction ·
   `event-bounds-wave-a.json` 8 cases + 9 rejected candidates ·
-  `stroke-gold.json` 22 labels · `paddle-bench.json` 5 cases + 1 excluded ·
+  `stroke-gold.json` 29 labels · `paddle-bench.json` 5 cases + 1 excluded ·
   `failure-review.json` 8-item taxonomy · `results/` 14 run files ·
   `runs-wave-a/` 8 case run dirs · `baselines.json` 1 baseline.
 - `videos/` is gitignored by design (media stays local); README documents this.
