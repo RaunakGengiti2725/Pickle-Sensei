@@ -259,6 +259,17 @@ const FUSION = {
    * right/left-censored — the true extremum may lie beyond the data. */
   boundaryCensorFactor: 0.3,
   boundarySigmaFactor: 1.5,
+  /** A ball sample adjacent to a temporal gap larger than this (occlusion)
+   * is censored the same way as a track edge: a turn or proximity minimum
+   * measured across the gap actually happened somewhere INSIDE it, so its
+   * time cannot anchor a contact at the sample. */
+  gapCensorMs: 150,
+  /** A paddle is held in the hand: a paddle center farther than this from
+   * every measured target wrist at that moment cannot be the target's
+   * paddle (an identity-switched track, e.g. the opponent's paddle). Ramp,
+   * in torso spans; no wrist measured near the moment → no discount. */
+  paddleReachFullTorso: 1.2,
+  paddleReachRejectTorso: 2.0,
   /** Paddle and wrist are rigidly coupled: a speed peak in one modality with
    * the other modality measured-quiet at that moment is discounted. */
   corroborationBandMs: 60,
@@ -403,6 +414,62 @@ export function estimateContact(input: {
   const gatingNotes: Array<{ signal: ContactEvidenceSignal["signal"]; note: string }> = [];
   const limitingFactors: string[] = [];
 
+  // A paddle is held in the target's hand: paddle centers beyond arm+paddle
+  // reach of every measured target wrist at their moment belong to a
+  // different object (identity-switched track — e.g. the opponent's paddle)
+  // and must not act as a target reference, proximity anchor, or presence.
+  // No wrist measured near the moment → the center is kept (absence of
+  // measurement is not counter-evidence).
+  const paddleCentersAll = input.paddleCenters ?? null;
+  const paddleCenters = paddleCentersAll
+    ? paddleCentersAll.filter((center) => {
+        const wristDistance = nearestWristDistanceTo(
+          center.timestampMs,
+          center.x,
+          center.y,
+          aspect,
+          input.targetWrists ?? null,
+          frames,
+        );
+        return wristDistance === null || wristDistance / torso < FUSION.paddleReachRejectTorso;
+      })
+    : null;
+  if (paddleCentersAll && paddleCenters && paddleCenters.length < paddleCentersAll.length) {
+    limitingFactors.push("paddle_track_beyond_reach");
+    gatingNotes.push({
+      signal: "paddle_speed_peak",
+      note: `${paddleCentersAll.length - paddleCenters.length}/${paddleCentersAll.length} paddle center(s) beyond ${FUSION.paddleReachRejectTorso} torso of every measured target wrist → not the target's paddle, excluded`,
+    });
+  }
+  const paddleReachAt = (tMs: number): number => {
+    if (!paddleCentersAll || paddleCentersAll.length === 0) return 1;
+    let nearest: { timestampMs: number; x: number; y: number } | null = null;
+    for (const center of paddleCentersAll) {
+      if (Math.abs(center.timestampMs - tMs) > 60) continue;
+      if (
+        nearest === null ||
+        Math.abs(center.timestampMs - tMs) < Math.abs(nearest.timestampMs - tMs)
+      ) {
+        nearest = center;
+      }
+    }
+    if (nearest === null) return 1;
+    const wristDistance = nearestWristDistanceTo(
+      nearest.timestampMs,
+      nearest.x,
+      nearest.y,
+      aspect,
+      input.targetWrists ?? null,
+      frames,
+    );
+    if (wristDistance === null) return 1;
+    const torsoDistance = wristDistance / torso;
+    return clamp01(
+      (FUSION.paddleReachRejectTorso - torsoDistance) /
+        (FUSION.paddleReachRejectTorso - FUSION.paddleReachFullTorso),
+    );
+  };
+
   // ── Motion family 1: paddle speed peaks ─────────────────────────────────
   const paddle = input.paddleSpeeds
     ?.filter(
@@ -442,7 +509,18 @@ export function estimateContact(input: {
     // a flat multi-peak profile stays honestly spread.
     const totalValue = sum(maxima.map((peak) => peak.value));
     for (const peak of maxima) {
-      const censor = peak.boundary ? FUSION.boundaryCensorFactor : 1;
+      const reach = paddleReachAt(peak.timestampMs);
+      if (reach <= 0) {
+        gatingNotes.push({
+          signal: "paddle_speed_peak",
+          note: `peak ${peak.value.toFixed(2)} u/s @${Math.round(peak.timestampMs)}ms rejected: paddle center beyond reach of every measured target wrist → not the target's paddle`,
+        });
+        if (!limitingFactors.includes("paddle_track_beyond_reach")) {
+          limitingFactors.push("paddle_track_beyond_reach");
+        }
+        continue;
+      }
+      const censor = (peak.boundary ? FUSION.boundaryCensorFactor : 1) * reach;
       const corroboration = corroborationFactor(wrist, peak.timestampMs);
       kernels.push({
         signal: "paddle_speed_peak",
@@ -451,7 +529,7 @@ export function estimateContact(input: {
           FUSION.reliability.paddle_speed_peak * (peak.value / totalValue) * censor * corroboration,
         sigmaMs:
           FUSION.sigmaMs.paddle_speed_peak * (peak.boundary ? FUSION.boundarySigmaFactor : 1),
-        note: `${peak.value.toFixed(2)} u/s${peak.boundary ? ", boundary-censored" : ""}${corroboration < 1 ? `, wrist-corroboration ×${corroboration.toFixed(2)}` : ""}`,
+        note: `${peak.value.toFixed(2)} u/s${peak.boundary ? ", boundary-censored" : ""}${reach < 1 ? `, paddle-reach ×${reach.toFixed(2)}` : ""}${corroboration < 1 ? `, wrist-corroboration ×${corroboration.toFixed(2)}` : ""}`,
       });
     }
   }
@@ -496,6 +574,7 @@ export function estimateContact(input: {
     const gated: Array<{
       turn: (typeof turns)[number];
       quality: number;
+      gapCensored: boolean;
       note: string;
       tethered: boolean;
     }> = [];
@@ -506,7 +585,7 @@ export function estimateContact(input: {
         turn.x,
         turn.y,
         aspect,
-        input.paddleCenters ?? null,
+        paddleCenters,
         input.targetWrists ?? null,
         frames,
       );
@@ -539,11 +618,17 @@ export function estimateContact(input: {
       }
       const angleFactor = Math.min(1, turn.angleDeg / 90);
       const ratioFactor = Math.min(1, Math.max(FUSION.turnSpeedRatioFloor, turn.speedRatio));
-      const quality = angleFactor * ratioFactor * gate;
+      // A turn measured across an occlusion gap happened somewhere INSIDE
+      // the gap; its sample time cannot anchor a contact (censored like a
+      // track edge).
+      const gapCensored = turn.dtInMs > FUSION.gapCensorMs || turn.dtOutMs > FUSION.gapCensorMs;
+      const quality =
+        angleFactor * ratioFactor * gate * (gapCensored ? FUSION.boundaryCensorFactor : 1);
       gated.push({
         turn,
         quality,
-        note: `${turn.angleDeg.toFixed(0)}°, speed ratio ${turn.speedRatio.toFixed(2)}, ${gateNote}`,
+        gapCensored,
+        note: `${turn.angleDeg.toFixed(0)}°, speed ratio ${turn.speedRatio.toFixed(2)}, ${gateNote}${gapCensored ? ", across occlusion gap (censored)" : ""}`,
         tethered: reference !== null,
       });
     }
@@ -560,7 +645,9 @@ export function estimateContact(input: {
         // several comparable turns share it (ambiguity is not certainty).
         mass:
           FUSION.reliability.ball_direction_change * entry.quality * (entry.quality / totalQuality),
-        sigmaMs: FUSION.sigmaMs.ball_direction_change,
+        sigmaMs:
+          FUSION.sigmaMs.ball_direction_change *
+          (entry.gapCensored ? FUSION.boundarySigmaFactor : 1),
         note: entry.note,
       });
     }
@@ -568,17 +655,15 @@ export function estimateContact(input: {
     // Proximity minimum: ball–paddle when a paddle track exists, wrist
     // fallback otherwise. Boundary minima are censored (track died there).
     const paddleProximity =
-      input.paddleCenters && input.paddleCenters.length > 0
-        ? closestBallToPoints(ball, input.paddleCenters, aspect)
+      paddleCenters && paddleCenters.length > 0
+        ? closestBallToPoints(ball, paddleCenters, aspect)
         : null;
     if (paddleProximity) {
       const torsoDistance = paddleProximity.distance / torso;
       const quality = clamp01(
         (FUSION.proximityFullTorso - torsoDistance) / FUSION.proximitySpanTorso,
       );
-      const boundary =
-        paddleProximity.timestampMs === ball[0]!.timestampMs ||
-        paddleProximity.timestampMs === ball[ball.length - 1]!.timestampMs;
+      const boundary = censoredBallSample(ball, paddleProximity.timestampMs);
       if (quality > 0) {
         ballKernels.push({
           signal: "ball_paddle_proximity",
@@ -590,7 +675,7 @@ export function estimateContact(input: {
             (boundary ? FUSION.boundaryCensorFactor : 1),
           sigmaMs:
             FUSION.sigmaMs.ball_paddle_proximity * (boundary ? FUSION.boundarySigmaFactor : 1),
-          note: `min ${torsoDistance.toFixed(2)} torso (${paddleProximity.distance.toFixed(3)} u)${boundary ? ", at track edge (censored)" : ""}`,
+          note: `min ${torsoDistance.toFixed(2)} torso (${paddleProximity.distance.toFixed(3)} u)${boundary ? ", at track edge/occlusion gap (censored)" : ""}`,
         });
       } else {
         gatingNotes.push({
@@ -606,9 +691,7 @@ export function estimateContact(input: {
         const quality = clamp01(
           (wristProximityFull - torsoDistance) / FUSION.wristProximitySpanTorso,
         );
-        const boundary =
-          wristProximity.timestampMs === ball[0]!.timestampMs ||
-          wristProximity.timestampMs === ball[ball.length - 1]!.timestampMs;
+        const boundary = censoredBallSample(ball, wristProximity.timestampMs);
         if (quality > 0) {
           ballKernels.push({
             signal: "ball_wrist_proximity",
@@ -620,7 +703,7 @@ export function estimateContact(input: {
               (boundary ? FUSION.boundaryCensorFactor : 1),
             sigmaMs:
               FUSION.sigmaMs.ball_wrist_proximity * (boundary ? FUSION.boundarySigmaFactor : 1),
-            note: `min ${torsoDistance.toFixed(2)} torso (wrist fallback; no paddle track)${boundary ? ", at track edge (censored)" : ""}`,
+            note: `min ${torsoDistance.toFixed(2)} torso (wrist fallback; no paddle track)${boundary ? ", at track edge/occlusion gap (censored)" : ""}`,
           });
         } else {
           gatingNotes.push({
@@ -811,7 +894,7 @@ export function estimateContact(input: {
         observation.x,
         observation.y,
         aspect,
-        input.paddleCenters ?? null,
+        paddleCenters,
         input.targetWrists ?? null,
         frames,
       );
@@ -883,7 +966,7 @@ export function estimateContact(input: {
   }
 
   const paddleSignal = kernels.some((kernel) => kernel.signal === "paddle_speed_peak");
-  const paddlePresent = (input.paddleCenters ?? []).some(
+  const paddlePresent = (paddleCenters ?? []).some(
     (center) => Math.abs(center.timestampMs - estimatedContactMs) <= FUSION.presenceMs,
   );
   const paddleConfirmed = paddleSignal && paddlePresent;
@@ -1180,16 +1263,26 @@ function nearestTargetReference(
   return bestWrist !== null ? { distance: bestWrist, source: "wrist" } : null;
 }
 
-/** Every direction change ≥ minTurnAngleDeg along the ball track. */
-function directionChanges(
-  ball: readonly BallObservation[],
-): Array<{ timestampMs: number; angleDeg: number; speedRatio: number; x: number; y: number }> {
+/** Every direction change ≥ minTurnAngleDeg along the ball track. dtIn/dtOut
+ * report the temporal step to the neighboring samples so callers can censor
+ * turns measured across an occlusion gap. */
+function directionChanges(ball: readonly BallObservation[]): Array<{
+  timestampMs: number;
+  angleDeg: number;
+  speedRatio: number;
+  x: number;
+  y: number;
+  dtInMs: number;
+  dtOutMs: number;
+}> {
   const turns: Array<{
     timestampMs: number;
     angleDeg: number;
     speedRatio: number;
     x: number;
     y: number;
+    dtInMs: number;
+    dtOutMs: number;
   }> = [];
   for (let index = 1; index < ball.length - 1; index += 1) {
     const previous = ball[index - 1]!;
@@ -1212,9 +1305,51 @@ function directionChanges(
       speedRatio: outMag / inMag,
       x: current.x,
       y: current.y,
+      dtInMs: current.timestampMs - previous.timestampMs,
+      dtOutMs: next.timestampMs - current.timestampMs,
     });
   }
   return turns;
+}
+
+/** A ball sample at a track edge or adjacent to a temporal gap larger than
+ * gapCensorMs: an extremum attained there is censored — the true extremum
+ * may lie beyond the edge or inside the gap. */
+function censoredBallSample(ball: readonly BallObservation[], timestampMs: number): boolean {
+  const index = ball.findIndex((observation) => observation.timestampMs === timestampMs);
+  if (index < 0) return false;
+  const previousGap = index > 0 ? timestampMs - ball[index - 1]!.timestampMs : Infinity;
+  const nextGap = index < ball.length - 1 ? ball[index + 1]!.timestampMs - timestampMs : Infinity;
+  return previousGap > FUSION.gapCensorMs || nextGap > FUSION.gapCensorMs;
+}
+
+/** Nearest measured target wrist distance (provided targetWrists first, then
+ * sequence wrist landmarks) to a point at a moment; null when no wrist was
+ * measured within the band. */
+function nearestWristDistanceTo(
+  tMs: number,
+  x: number,
+  y: number,
+  aspect: number,
+  targetWrists: ReadonlyArray<{ timestampMs: number; x: number; y: number }> | null,
+  frames: ReturnType<typeof toLegacyPoseFrames>,
+): number | null {
+  const distanceTo = (px: number, py: number) => Math.hypot((px - x) * aspect, py - y);
+  let best: number | null = null;
+  for (const wristPoint of targetWrists ?? []) {
+    if (Math.abs(wristPoint.timestampMs - tMs) > 80) continue;
+    const distance = distanceTo(wristPoint.x, wristPoint.y);
+    if (best === null || distance < best) best = distance;
+  }
+  for (const frame of frames) {
+    if (Math.abs(frame.timestampMs - tMs) > 80) continue;
+    for (const mark of frame.landmarks) {
+      if (!mark.name.endsWith("wrist")) continue;
+      const distance = distanceTo(mark.x, mark.y);
+      if (best === null || distance < best) best = distance;
+    }
+  }
+  return best;
 }
 
 function closestBallToPoints(
