@@ -36,6 +36,7 @@
     "failure:mine": "tsx src/engine/failureMine.ts",
     "own": "tsx src/ownershipAnnotate.ts",
     "ownership:bench": "tsx src/ownershipBench.ts",
+    "own:synchrony": "tsx src/ownershipSynchrony.ts",
     "completion:bench": "tsx src/eventCompletionBench.ts",
     "cascade": "tsx src/cascadeWaterfall.ts",
     "coach:queue": "tsx src/coachReview.ts",

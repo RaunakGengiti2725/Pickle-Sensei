@@ -443,7 +443,7 @@ export interface MethodBucketRow {
 }
 
 export interface MethodReport {
-  method: MethodId;
+  method: string;
   scoredFrames: number;
   correct: number;
   abstained: number;
@@ -460,7 +460,7 @@ export interface MethodReport {
 const SMALL_N_THRESHOLD = 10;
 
 export function scoreMethod(
-  method: MethodId,
+  method: string,
   frames: DualFrame[],
   picks: Array<Pick | TemporalPick>,
   subset: "all" | "pose" = "all",

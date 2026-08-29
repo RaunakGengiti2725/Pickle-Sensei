@@ -1,0 +1,79 @@
+{
+  "workstreamId": "g04-f09-synchrony",
+  "wave": "G",
+  "generatedAtIso": "2026-08-29T17:45:00Z",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "baseCommit": "104ea0f",
+  "mission": "Quantify wrist-paddle motion synchrony as an ownership signal: correlation/lag metrics between paddle tracks and player wrist trajectories, separability of target-owned vs foreign paddles on the dual-labeled ownership set, and whether synchrony adds discriminative power beyond the current S3 features under a frozen protocol.",
+  "method": {
+    "tool": "packages/swing-lab/src/ownershipSynchrony.ts (pnpm own:synchrony)",
+    "detailedReport": "datasets/experiments/wave-g/g04-f09-synchrony-report.json",
+    "signal": "Per (paddle track, player, wrist): mean per-axis Pearson r between paddle-center velocity and interpolated wrist velocity at lag 0 (best of left/right wrist). Lag scan -333..+333 ms in 67 ms steps recorded as DESCRIPTIVE evidence only; all decisions use lag 0.",
+    "trackTruth": "Gold dual-label candidate points matched to Tier-C paddle tracks within 40 ms and 0.035 normalized units; tracks classified target-owned / foreign / conflicted by matched labels.",
+    "frameMethods": [
+      "incumbent_wrist_ratio (current S3 baseline, pickIncumbent)",
+      "s1_synchrony (pure synchrony pick: candidate whose matched track has positive target-vs-others margin)",
+      "s2_incumbent_plus_synchrony (incumbent pick kept whenever it answers; synchrony used only on incumbent abstentions)"
+    ],
+    "decisionRule": "Frozen before measurement: synchrony adds power iff s2 has strictly more correct picks than the incumbent on the same 38 scored frames AND no source-session group loses correct picks."
+  },
+  "datasetScopeAndGrouping": {
+    "split": "dev only; loadDualFrames(false, true) with adjudicated E05 corrections applied append-only in memory",
+    "cases": [
+      "wavea-944403-dink",
+      "wavea-944403-smash",
+      "wavea-faead-feed",
+      "wavea-faead-rally",
+      "wavea-marne-dig",
+      "afn-sasebo-rally1",
+      "wm-volley-02"
+    ],
+    "grouping": "source-session groups (dvids-944403, dvids-faead, dvids-marne-2024, afn-sasebo-2025-06, wm-tournament-2014); all results reported per group, never pooled per-frame without the per-group table",
+    "dataTier": "Paddle detections/tracks and pose are Tier-C machine artifacts (never Gold). Pose provenance disclosed per case: apple-vision (Wave A windows) vs mediapipe-linux-bench (afn-sasebo-rally1, wm-volley-02). No canonical Mac cascade run is claimed or measured here."
+  },
+  "holdoutStatement": "Held-out cases wm-dink-01 and afn-vic-rally1 were never read, listed, or referenced: they are structurally absent from the SYNCHRONY_CASES registry and loadDualFrames(false, ...) excludes held_out splits.",
+  "configuration": {
+    "version": "ownership-synchrony-v1",
+    "poseInterpolationMaxGapMs": 100,
+    "maxPaddleStepMs": 200,
+    "minVelocitySteps": 8,
+    "trackMatchToleranceMs": 40,
+    "trackMatchRadiusNorm": 0.035,
+    "lagScanMs": [-333, -267, -200, -133, -67, 0, 67, 133, 200, 267, 333],
+    "decisionLagMs": 0
+  },
+  "measuredResults": {
+    "frameLevel": {
+      "scoredFrames": 38,
+      "incumbent_wrist_ratio": { "correct": 28, "abstained": 2, "coverage": 0.947, "accuracyWhenAnswering": 0.778 },
+      "s1_synchrony": { "correct": 7, "abstained": 25, "coverage": 0.342, "accuracyWhenAnswering": 0.538 },
+      "s2_incumbent_plus_synchrony": { "correct": 28, "abstained": 1, "coverage": 0.974, "accuracyWhenAnswering": 0.757 }
+    },
+    "trackSeparabilityByGroup": [
+      { "group": "dvids-944403", "poseTier": "apple-vision", "targetOwnedTracks": 4, "targetOwnedPositiveMargin": 2, "foreignTracks": 14, "foreignNegativeMargin": 10, "conflictedTracks": 3, "abstainedTracks": 0 },
+      { "group": "dvids-faead", "poseTier": "apple-vision", "targetOwnedTracks": 2, "targetOwnedPositiveMargin": 0, "foreignTracks": 4, "foreignNegativeMargin": 2, "conflictedTracks": 0, "abstainedTracks": 0 },
+      { "group": "dvids-marne-2024", "poseTier": "apple-vision", "targetOwnedTracks": 1, "targetOwnedPositiveMargin": 1, "foreignTracks": 2, "foreignNegativeMargin": 1, "conflictedTracks": 0, "abstainedTracks": 0 },
+      { "group": "afn-sasebo-2025-06", "poseTier": "mediapipe-linux-bench", "targetOwnedTracks": 0, "foreignTracks": 0, "conflictedTracks": 1, "abstainedTracks": 12, "note": "single-person mediapipe pose gives no foreign-player wrist series; cross-player margin structurally unavailable" },
+      { "group": "wm-tournament-2014", "poseTier": "mediapipe-linux-bench", "targetOwnedTracks": 0, "foreignTracks": 0, "conflictedTracks": 0, "abstainedTracks": 5, "note": "same structural abstention as afn-sasebo-2025-06" }
+    ],
+    "trackSeparabilityAppleVisionTotals": {
+      "targetOwnedTracks": 7,
+      "targetOwnedPositiveMargin": 3,
+      "foreignTracks": 20,
+      "foreignNegativeMargin": 13
+    },
+    "decision": { "incumbentCorrect": 28, "s2Correct": 28, "scoredFrames": 38, "groupsWorse": [], "addsPower": false }
+  },
+  "findings": [
+    "Under the frozen rule, synchrony does NOT add discriminative power beyond the current S3 incumbent: s2 correct 28/38 vs incumbent 28/38, with no group improved.",
+    "Track-level lag-0 margin separability is near chance on apple-vision groups: target-owned positive-margin 3/7, foreign negative-margin 13/20.",
+    "Pure synchrony (s1) is far weaker than the incumbent: 7/38 correct, coverage 13/38 answered (0.342).",
+    "s2 raised coverage (abstentions 2 -> 1) but the extra answered frame was wrong, i.e. synchrony converted one honest abstention into an error while net correct picks stayed at 28.",
+    "Lag-0 cross-player wrist correlations are uniformly low and mutually similar (typically |r| < 0.3), consistent with common-mode scene/camera motion dominating per-player wrist signal at these paddle-track sampling rates.",
+    "MediaPipe linux-bench pose is effectively single-person here, so cross-player synchrony margins are structurally unavailable on afn-sasebo-2025-06 and wm-tournament-2014 (17 of 27 truth-matched tracks abstained). A full measurement of those groups is externally gated on multi-person (Apple Vision / Mac) pose extraction.",
+    "Nonzero best-lag values in the descriptive scan are not evidence of a usable lead/lag structure: best-lag scores remain small and inconsistent in sign across tracks."
+  ],
+  "verdict": "SCIENTIFIC_NEGATIVE",
+  "rationale": "The synchrony signal was implemented and measured end-to-end with a frozen protocol on committed dev-only Tier-C artifacts. Measured counts show it neither separates target-owned from foreign paddle tracks reliably (3/7 and 13/20 on apple-vision groups) nor adds correct frame-level picks over the S3 incumbent (28 vs 28 of 38, no group improved). This is an honest negative at current data scale and pose availability; the mediapipe-covered groups remain unmeasurable for cross-player synchrony until multi-person pose exists for them.",
+  "productionMutation": "Minimal: MethodReport.method / scoreMethod method parameter widened from the MethodId union to string in packages/swing-lab/src/ownershipBench.ts so research method IDs can be scored; no behavior change to the ownership heuristic. New research module ownershipSynchrony.ts, its unit tests, and the own:synchrony script are additive."
+}
