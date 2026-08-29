@@ -24,11 +24,18 @@ import { describe, expect, it } from "vitest";
  *    re-encode/replacement of holdout footage),
  *  - no ta-bench case and no corpus source/recording/split references a
  *    fresh-candidate id.
+ *
+ * Wave F (f11-e22-intake) extension: the registry now also carries a devPool
+ * section — clips graduated to dev_label_eligible by an intake record. The
+ * guard pins that boundary too: the two pools stay disjoint, dev-pool media
+ * byte-matches its registered sha256, and the dev-pool directory holds exactly
+ * the registered dev media files.
  */
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const registryPath = join(root, "datasets", "pickleball", "registry.json");
 const freshDir = join(root, "datasets", "pickleball", "fresh-candidates");
+const devDir = join(root, "datasets", "pickleball", "dev-pool");
 
 interface FreshItem {
   id: string;
@@ -38,11 +45,22 @@ interface FreshItem {
   media: { sha256: string };
 }
 
-function freshItems(): FreshItem[] {
-  const registry = JSON.parse(readFileSync(registryPath, "utf8")) as {
+function readRegistry(): {
+  freshCandidates: { items: FreshItem[] };
+  devPool?: { items: FreshItem[] };
+} {
+  return JSON.parse(readFileSync(registryPath, "utf8")) as {
     freshCandidates: { items: FreshItem[] };
+    devPool?: { items: FreshItem[] };
   };
-  return registry.freshCandidates.items;
+}
+
+function freshItems(): FreshItem[] {
+  return readRegistry().freshCandidates.items;
+}
+
+function devItems(): FreshItem[] {
+  return readRegistry().devPool?.items ?? [];
 }
 
 describe("E08 fresh-holdout guard: label-blind pool stays uncontaminated", () => {
@@ -86,6 +104,39 @@ describe("E08 fresh-holdout guard: label-blind pool stays uncontaminated", () =>
       for (const item of freshItems()) {
         expect(content.includes(item.id), `${file} must not reference ${item.id}`).toBe(false);
       }
+    }
+  });
+});
+
+describe("F11 dev-pool guard: graduated dev clips stay disjoint from the holdout pool", () => {
+  it("every dev-pool item is dev_label_eligible and not labelBlind", () => {
+    const items = devItems();
+    expect(items.length).toBeGreaterThan(0);
+    for (const item of items) {
+      expect(item.role, `${item.id} role`).toBe("dev_label_eligible");
+      expect(item.labelBlind, `${item.id} labelBlind`).toBe(false);
+    }
+  });
+
+  it("the fresh-candidate and dev pools share no clip id", () => {
+    const freshIds = new Set(freshItems().map((item) => item.id));
+    for (const item of devItems()) {
+      expect(freshIds.has(item.id), `${item.id} must not be in both pools`).toBe(false);
+    }
+  });
+
+  it("dev-pool directory holds exactly the registered dev media files", () => {
+    const registered = new Set(devItems().map((item) => item.path.split("/").pop()));
+    const onDisk = readdirSync(devDir).filter((name) => !name.startsWith("."));
+    expect(new Set(onDisk)).toEqual(registered);
+  });
+
+  it("each dev-pool file byte-matches its registered sha256", () => {
+    for (const item of devItems()) {
+      const absolute = join(root, item.path);
+      expect(existsSync(absolute), `${item.path} must exist`).toBe(true);
+      const digest = createHash("sha256").update(readFileSync(absolute)).digest("hex");
+      expect(digest, `${item.id} content hash`).toBe(item.media.sha256);
     }
   });
 });

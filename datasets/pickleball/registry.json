@@ -342,7 +342,7 @@
     "addedAt": "2026-08-29",
     "workstream": "wave-c/c16-data-acquisition + wave-d2/d2-03-acq-milgov (per-item acquisition.workstream) + wave-e/e22-acquisition-wave2 (per-item acquisition.workstream)",
     "policy": "role=fresh_candidate, label-blind holdout pool; excluded from datasets/corpus and from all splits/training until a future freeze registers them through the acquisition front door.",
-    "totalBytes": 521329782,
+    "totalBytes": 414070121,
     "items": [
       {
         "id": "yt-tJuJ4MQdYy0",
@@ -723,53 +723,6 @@
         }
       },
       {
-        "id": "yt-o_NeuHjTEVE",
-        "role": "fresh_candidate",
-        "labelBlind": true,
-        "path": "datasets/pickleball/fresh-candidates/yt-o_NeuHjTEVE.mp4",
-        "sourceUrl": "https://www.youtube.com/watch?v=o_NeuHjTEVE",
-        "title": "Pickleball Doubles Mixed 3.5 to 4.5 in Melbourne, FL 06/04/2023 Game 1",
-        "uploader": "BT Pickleball",
-        "uploaderChannelId": "UCSUhWFY9_gvq3C4eBLWjppg",
-        "uploadDate": "2023-06-10",
-        "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
-        "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
-        "provenanceAssessment": "Uploader is a personal channel publishing self-recorded games from a fixed camera at the recorder's own venue; channel context is consistent with the uploader being the videographer and rights holder. Uploader authority is assessed from channel context, not independently confirmed by the rights holder — recorded as a residual caveat.",
-        "rights": {
-          "store": "yes_with_attribution",
-          "analyze": "yes_with_attribution",
-          "annotate": "yes_with_attribution",
-          "train": "yes_with_attribution",
-          "redistributeDerivatives": "yes_with_attribution",
-          "commercial": "yes_with_attribution",
-          "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
-          "reviewedBy": "wave-e:e22-acquisition-wave2 (page-verified license; channel-context provenance assessment)",
-          "reviewedAtIso": "2026-08-29"
-        },
-        "restrictions": [
-          "attribution to the uploader required on redistribution",
-          "uploader authority assessed from channel context, not independently confirmed"
-        ],
-        "media": {
-          "type": "video/mp4 (H.264, no audio)",
-          "segment": "~60s segment re-encoded (libx264) from the 846s source video",
-          "sourceResolutionFps": "3840x2160@30 (downscaled to 1920x1080)",
-          "clipWidth": 1920,
-          "clipHeight": 1080,
-          "clipFps": 29.97,
-          "clipDurationSeconds": 60.027,
-          "clipBytes": 52288985,
-          "sha256": "1bc758763707884b7ea380f973dc0fad1519f8cb7af507a9d6637e69274be969"
-        },
-        "pickleballRelevance": "Outdoor mixed doubles 3.5-4.5 rec play in Florida, elevated behind-court fixed camera with on-screen score overlay, daylight hard court",
-        "acquisition": {
-          "acquiredAt": "2026-08-29",
-          "method": "yt-dlp download of the CC BY source video (video stream only, no audio), 60s segment re-encode with ffmpeg (libx264 crf20)",
-          "workstream": "wave-e/e22-acquisition-wave2"
-        },
-        "notes": "FRESH HOLDOUT candidate: label-blind until a future freeze. No labels of any kind exist or may be created for this clip before the freeze."
-      },
-      {
         "id": "yt-n-QrBfQVK_w",
         "role": "fresh_candidate",
         "labelBlind": true,
@@ -809,53 +762,6 @@
           "sha256": "e11d1508a07fc8e6ff21e581e750fd973deab9c73b05e5ca967159db51b9e443"
         },
         "pickleballRelevance": "Indoor commercial pickleball venue, fixed camera, mixed doubles social play; venue signage and hall lighting distinct from existing footage",
-        "acquisition": {
-          "acquiredAt": "2026-08-29",
-          "method": "yt-dlp download of the CC BY source video (video stream only, no audio), 60s segment re-encode with ffmpeg (libx264 crf20)",
-          "workstream": "wave-e/e22-acquisition-wave2"
-        },
-        "notes": "FRESH HOLDOUT candidate: label-blind until a future freeze. No labels of any kind exist or may be created for this clip before the freeze."
-      },
-      {
-        "id": "yt-94KNxpNTyCw",
-        "role": "fresh_candidate",
-        "labelBlind": true,
-        "path": "datasets/pickleball/fresh-candidates/yt-94KNxpNTyCw.mp4",
-        "sourceUrl": "https://www.youtube.com/watch?v=94KNxpNTyCw",
-        "title": "WORST FOOT FAULT EVER!!! Game 9 Indoor REC",
-        "uploader": "MR. PICKLEBALL",
-        "uploaderChannelId": "UCqnYQvrNoCCUpYQdVdatP-g",
-        "uploadDate": "2025-09-13",
-        "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
-        "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
-        "provenanceAssessment": "Uploader is a personal channel publishing self-recorded games from a fixed camera at the recorder's own venue; channel context is consistent with the uploader being the videographer and rights holder. Uploader authority is assessed from channel context, not independently confirmed by the rights holder — recorded as a residual caveat.",
-        "rights": {
-          "store": "yes_with_attribution",
-          "analyze": "yes_with_attribution",
-          "annotate": "yes_with_attribution",
-          "train": "yes_with_attribution",
-          "redistributeDerivatives": "yes_with_attribution",
-          "commercial": "yes_with_attribution",
-          "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
-          "reviewedBy": "wave-e:e22-acquisition-wave2 (page-verified license; channel-context provenance assessment)",
-          "reviewedAtIso": "2026-08-29"
-        },
-        "restrictions": [
-          "attribution to the uploader required on redistribution",
-          "uploader authority assessed from channel context, not independently confirmed"
-        ],
-        "media": {
-          "type": "video/mp4 (H.264, no audio)",
-          "segment": "~60s segment re-encoded (libx264) from the 1221s source video",
-          "sourceResolutionFps": "1920x1080@30",
-          "clipWidth": 1920,
-          "clipHeight": 1080,
-          "clipFps": 30.0,
-          "clipDurationSeconds": 60.0,
-          "clipBytes": 17503619,
-          "sha256": "9ab0964d6ee3625fa11ddbe06c636271f209732c100e44fd2e20478ebf74d2c6"
-        },
-        "pickleballRelevance": "Indoor rec doubles with score overlay; casual rec players of varied body types",
         "acquisition": {
           "acquiredAt": "2026-08-29",
           "method": "yt-dlp download of the CC BY source video (video stream only, no audio), 60s segment re-encode with ffmpeg (libx264 crf20)",
@@ -958,53 +864,6 @@
         "notes": "FRESH HOLDOUT candidate: label-blind until a future freeze. No labels of any kind exist or may be created for this clip before the freeze."
       },
       {
-        "id": "va-6N3Yc184a_c",
-        "role": "fresh_candidate",
-        "labelBlind": true,
-        "path": "datasets/pickleball/fresh-candidates/va-6N3Yc184a_c.mp4",
-        "sourceUrl": "https://www.youtube.com/watch?v=6N3Yc184a_c",
-        "title": "The Pickleball Experience | 2026 National Veterans Golden Age Games",
-        "uploader": "U.S. Dept. of Veterans Affairs (official YouTube channel)",
-        "uploadDate": "2026-07-03",
-        "license": "Public domain (PD-USGov, 17 U.S.C. §105) as a U.S. Department of Veterans Affairs production; YouTube page license field is the standard YouTube license (no CC declaration), so the PD basis is the federal-work doctrine, not the YouTube license field",
-        "licenseVerification": "Works produced by U.S. federal government employees in the course of their duties are not subject to copyright (17 U.S.C. §105). The videos are published on the U.S. Department of Veterans Affairs' official YouTube channel and are VA productions covering VA's own National Veterans Golden Age Games. YouTube license field read via yt-dlp on 2026-08-29 (standard license). Full-duration frame screening on 2026-08-29 (dense contact sheet) shows only VA/Golden Age Games branding and event graphics, with no third-party agency watermarks or embedded broadcast footage.",
-        "provenanceAssessment": "Published on the verified official VA YouTube channel; content is VA's own adaptive-sports event (National Veterans Golden Age Games) with VA-branded graphics and interview lower-thirds, consistent with in-house VA production. Residual caveat: per-video confirmation that no contractor-produced (copyrightable) footage is included was not obtainable; assessed from channel authority and frame screening.",
-        "rights": {
-          "store": "yes",
-          "analyze": "yes",
-          "annotate": "yes",
-          "train": "yes",
-          "redistributeDerivatives": "yes",
-          "commercial": "yes",
-          "basis": "Public domain as a U.S. federal government work (17 U.S.C. §105); courtesy credit to the U.S. Department of Veterans Affairs recorded.",
-          "reviewedBy": "wave-e:e22-acquisition-wave2 (federal-work doctrine + official-channel provenance + full-duration frame screening)",
-          "reviewedAtIso": "2026-08-29"
-        },
-        "restrictions": [
-          "courtesy credit to the U.S. Department of Veterans Affairs; no implied VA endorsement",
-          "PD-USGov basis assessed from official-channel provenance and frame screening, not confirmed per-video in writing by VA",
-          "on-screen persons include identified veterans (event participants); publicity/persona rights for non-news commercial contexts remain a separate consideration"
-        ],
-        "media": {
-          "type": "video/mp4 (AV1, video stream only, no audio)",
-          "segment": "full source video (video stream only, no audio downloaded)",
-          "sourceResolutionFps": "1920x1080@29.97",
-          "clipWidth": 1920,
-          "clipHeight": 1080,
-          "clipDurationSeconds": 171.67,
-          "clipBytes": 37467057,
-          "sha256": "9f0505e916df3ece1a703b431f535fa97580a2e19b7c01730e5864fb5543d9df",
-          "clipFps": 29.97
-        },
-        "pickleballRelevance": "Indoor convention-center pickleball at the National Veterans Golden Age Games: older-adult and wheelchair (adaptive) doubles rallies, interview segments; adaptive play and senior athletes extend corpus diversity",
-        "acquisition": {
-          "acquiredAt": "2026-08-29",
-          "method": "yt-dlp download of the video stream only (no audio track downloaded, avoiding any potentially licensed music) from the official VA YouTube channel",
-          "workstream": "wave-e/e22-acquisition-wave2"
-        },
-        "notes": "FRESH HOLDOUT candidate: label-blind until a future freeze. Resolves quarantinedUnknownRights entry yt-6N3Yc184a_c (registered by wave-d2/d2-03-acq-milgov when YouTube downloads were blocked): license field verified as standard YouTube license, PD-USGov basis applied per federal-work doctrine, frame screening clean."
-      },
-      {
         "id": "va-O1dLhGGPErc",
         "role": "fresh_candidate",
         "labelBlind": true,
@@ -1052,7 +911,8 @@
         },
         "notes": "FRESH HOLDOUT candidate: label-blind until a future freeze. Resolves quarantinedUnknownRights entry yt-O1dLhGGPErc (wave-d2/d2-03-acq-milgov): downloaded video-only (music concern moot), PD-USGov basis per federal-work doctrine, frame screening shows VA-produced content only."
       }
-    ]
+    ],
+    "intakeNote": "wave-f/f11-e22-intake (2026-08-29) classified the 7 wave-e/e22 clips: 3 graduated to the devPool section (yt-o_NeuHjTEVE, yt-94KNxpNTyCw, va-6N3Yc184a_c); 4 remain here as label-blind fresh-holdout candidates. See intakeRecords."
   },
   "quarantinedUnknownRights": [
     {
@@ -1289,5 +1149,273 @@
       "reason": "Full-duration contact-sheet screening showed AP-watermarked footage throughout; third-party agency footage inside VOA videos is not public domain and cannot be cleared for training. Downloaded to a temp dir for screening only; not added to the corpus. The English text article of the same story (voanews.com/a/pickleball-picks-away-at-american-tennis/7763499.html) embeds no video.",
       "workstream": "wave-e/e22-acquisition-wave2"
     }
-  ]
+  ],
+  "devPool": {
+    "addedAt": "2026-08-29",
+    "workstream": "wave-f/f11-e22-intake",
+    "policy": "role=dev_label_eligible: DEV material — labels MAY be created (append-only, versioned taxonomy). These clips must NEVER be used as holdout/locked_test/shadow material. Corpus registration, split assignment, and any training use still require the acquisition front door (lab:acquire) per D-025; session-level grouping must be preserved (no clip or derivative of the same source/session may cross split boundaries).",
+    "totalBytes": 107259661,
+    "items": [
+      {
+        "id": "yt-o_NeuHjTEVE",
+        "role": "dev_label_eligible",
+        "labelBlind": false,
+        "path": "datasets/pickleball/dev-pool/yt-o_NeuHjTEVE.mp4",
+        "sourceUrl": "https://www.youtube.com/watch?v=o_NeuHjTEVE",
+        "title": "Pickleball Doubles Mixed 3.5 to 4.5 in Melbourne, FL 06/04/2023 Game 1",
+        "uploader": "BT Pickleball",
+        "uploaderChannelId": "UCSUhWFY9_gvq3C4eBLWjppg",
+        "uploadDate": "2023-06-10",
+        "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+        "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+        "provenanceAssessment": "Uploader is a personal channel publishing self-recorded games from a fixed camera at the recorder's own venue; channel context is consistent with the uploader being the videographer and rights holder. Uploader authority is assessed from channel context, not independently confirmed by the rights holder — recorded as a residual caveat.",
+        "rights": {
+          "store": "yes_with_attribution",
+          "analyze": "yes_with_attribution",
+          "annotate": "yes_with_attribution",
+          "train": "yes_with_attribution",
+          "redistributeDerivatives": "yes_with_attribution",
+          "commercial": "yes_with_attribution",
+          "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+          "reviewedBy": "wave-e:e22-acquisition-wave2 (page-verified license; channel-context provenance assessment)",
+          "reviewedAtIso": "2026-08-29"
+        },
+        "restrictions": [
+          "attribution to the uploader required on redistribution",
+          "uploader authority assessed from channel context, not independently confirmed"
+        ],
+        "media": {
+          "type": "video/mp4 (H.264, no audio)",
+          "segment": "~60s segment re-encoded (libx264) from the 846s source video",
+          "sourceResolutionFps": "3840x2160@30 (downscaled to 1920x1080)",
+          "clipWidth": 1920,
+          "clipHeight": 1080,
+          "clipFps": 29.97,
+          "clipDurationSeconds": 60.027,
+          "clipBytes": 52288985,
+          "sha256": "1bc758763707884b7ea380f973dc0fad1519f8cb7af507a9d6637e69274be969"
+        },
+        "pickleballRelevance": "Outdoor mixed doubles 3.5-4.5 rec play in Florida, elevated behind-court fixed camera with on-screen score overlay, daylight hard court",
+        "acquisition": {
+          "acquiredAt": "2026-08-29",
+          "method": "yt-dlp download of the CC BY source video (video stream only, no audio), 60s segment re-encode with ffmpeg (libx264 crf20)",
+          "workstream": "wave-e/e22-acquisition-wave2"
+        },
+        "notes": "FRESH HOLDOUT candidate: label-blind until a future freeze. No labels of any kind exist or may be created for this clip before the freeze. INTAKE (wave-f/f11-e22-intake, 2026-08-29): graduated from fresh_candidate to dev_label_eligible; the pre-freeze label-blind note above is superseded for this clip by the f11 intake classification (see intakeRecords). No labels were created by the intake itself."
+      },
+      {
+        "id": "yt-94KNxpNTyCw",
+        "role": "dev_label_eligible",
+        "labelBlind": false,
+        "path": "datasets/pickleball/dev-pool/yt-94KNxpNTyCw.mp4",
+        "sourceUrl": "https://www.youtube.com/watch?v=94KNxpNTyCw",
+        "title": "WORST FOOT FAULT EVER!!! Game 9 Indoor REC",
+        "uploader": "MR. PICKLEBALL",
+        "uploaderChannelId": "UCqnYQvrNoCCUpYQdVdatP-g",
+        "uploadDate": "2025-09-13",
+        "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+        "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+        "provenanceAssessment": "Uploader is a personal channel publishing self-recorded games from a fixed camera at the recorder's own venue; channel context is consistent with the uploader being the videographer and rights holder. Uploader authority is assessed from channel context, not independently confirmed by the rights holder — recorded as a residual caveat.",
+        "rights": {
+          "store": "yes_with_attribution",
+          "analyze": "yes_with_attribution",
+          "annotate": "yes_with_attribution",
+          "train": "yes_with_attribution",
+          "redistributeDerivatives": "yes_with_attribution",
+          "commercial": "yes_with_attribution",
+          "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+          "reviewedBy": "wave-e:e22-acquisition-wave2 (page-verified license; channel-context provenance assessment)",
+          "reviewedAtIso": "2026-08-29"
+        },
+        "restrictions": [
+          "attribution to the uploader required on redistribution",
+          "uploader authority assessed from channel context, not independently confirmed"
+        ],
+        "media": {
+          "type": "video/mp4 (H.264, no audio)",
+          "segment": "~60s segment re-encoded (libx264) from the 1221s source video",
+          "sourceResolutionFps": "1920x1080@30",
+          "clipWidth": 1920,
+          "clipHeight": 1080,
+          "clipFps": 30.0,
+          "clipDurationSeconds": 60.0,
+          "clipBytes": 17503619,
+          "sha256": "9ab0964d6ee3625fa11ddbe06c636271f209732c100e44fd2e20478ebf74d2c6"
+        },
+        "pickleballRelevance": "Indoor rec doubles with score overlay; casual rec players of varied body types",
+        "acquisition": {
+          "acquiredAt": "2026-08-29",
+          "method": "yt-dlp download of the CC BY source video (video stream only, no audio), 60s segment re-encode with ffmpeg (libx264 crf20)",
+          "workstream": "wave-e/e22-acquisition-wave2"
+        },
+        "notes": "FRESH HOLDOUT candidate: label-blind until a future freeze. No labels of any kind exist or may be created for this clip before the freeze. INTAKE (wave-f/f11-e22-intake, 2026-08-29): graduated from fresh_candidate to dev_label_eligible; the pre-freeze label-blind note above is superseded for this clip by the f11 intake classification (see intakeRecords). No labels were created by the intake itself."
+      },
+      {
+        "id": "va-6N3Yc184a_c",
+        "role": "dev_label_eligible",
+        "labelBlind": false,
+        "path": "datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4",
+        "sourceUrl": "https://www.youtube.com/watch?v=6N3Yc184a_c",
+        "title": "The Pickleball Experience | 2026 National Veterans Golden Age Games",
+        "uploader": "U.S. Dept. of Veterans Affairs (official YouTube channel)",
+        "uploadDate": "2026-07-03",
+        "license": "Public domain (PD-USGov, 17 U.S.C. §105) as a U.S. Department of Veterans Affairs production; YouTube page license field is the standard YouTube license (no CC declaration), so the PD basis is the federal-work doctrine, not the YouTube license field",
+        "licenseVerification": "Works produced by U.S. federal government employees in the course of their duties are not subject to copyright (17 U.S.C. §105). The videos are published on the U.S. Department of Veterans Affairs' official YouTube channel and are VA productions covering VA's own National Veterans Golden Age Games. YouTube license field read via yt-dlp on 2026-08-29 (standard license). Full-duration frame screening on 2026-08-29 (dense contact sheet) shows only VA/Golden Age Games branding and event graphics, with no third-party agency watermarks or embedded broadcast footage.",
+        "provenanceAssessment": "Published on the verified official VA YouTube channel; content is VA's own adaptive-sports event (National Veterans Golden Age Games) with VA-branded graphics and interview lower-thirds, consistent with in-house VA production. Residual caveat: per-video confirmation that no contractor-produced (copyrightable) footage is included was not obtainable; assessed from channel authority and frame screening.",
+        "rights": {
+          "store": "yes",
+          "analyze": "yes",
+          "annotate": "yes",
+          "train": "yes",
+          "redistributeDerivatives": "yes",
+          "commercial": "yes",
+          "basis": "Public domain as a U.S. federal government work (17 U.S.C. §105); courtesy credit to the U.S. Department of Veterans Affairs recorded.",
+          "reviewedBy": "wave-e:e22-acquisition-wave2 (federal-work doctrine + official-channel provenance + full-duration frame screening)",
+          "reviewedAtIso": "2026-08-29"
+        },
+        "restrictions": [
+          "courtesy credit to the U.S. Department of Veterans Affairs; no implied VA endorsement",
+          "PD-USGov basis assessed from official-channel provenance and frame screening, not confirmed per-video in writing by VA",
+          "on-screen persons include identified veterans (event participants); publicity/persona rights for non-news commercial contexts remain a separate consideration"
+        ],
+        "media": {
+          "type": "video/mp4 (AV1, video stream only, no audio)",
+          "segment": "full source video (video stream only, no audio downloaded)",
+          "sourceResolutionFps": "1920x1080@29.97",
+          "clipWidth": 1920,
+          "clipHeight": 1080,
+          "clipDurationSeconds": 171.67,
+          "clipBytes": 37467057,
+          "sha256": "9f0505e916df3ece1a703b431f535fa97580a2e19b7c01730e5864fb5543d9df",
+          "clipFps": 29.97
+        },
+        "pickleballRelevance": "Indoor convention-center pickleball at the National Veterans Golden Age Games: older-adult and wheelchair (adaptive) doubles rallies, interview segments; adaptive play and senior athletes extend corpus diversity",
+        "acquisition": {
+          "acquiredAt": "2026-08-29",
+          "method": "yt-dlp download of the video stream only (no audio track downloaded, avoiding any potentially licensed music) from the official VA YouTube channel",
+          "workstream": "wave-e/e22-acquisition-wave2"
+        },
+        "notes": "FRESH HOLDOUT candidate: label-blind until a future freeze. Resolves quarantinedUnknownRights entry yt-6N3Yc184a_c (registered by wave-d2/d2-03-acq-milgov when YouTube downloads were blocked): license field verified as standard YouTube license, PD-USGov basis applied per federal-work doctrine, frame screening clean. INTAKE (wave-f/f11-e22-intake, 2026-08-29): graduated from fresh_candidate to dev_label_eligible; the pre-freeze label-blind note above is superseded for this clip by the f11 intake classification (see intakeRecords). No labels were created by the intake itself."
+      }
+    ]
+  },
+  "intakeRecords": {
+    "authority": "Role classification of the wave-e/e22 cohort performed by wave-f/f11-e22-intake under the Wave F integrator mission, acting as the acquisition front door for role assignment of these 7 clips. The e22 per-item label-blind notes are superseded ONLY for the 3 dev_label_eligible clips; the 4 fresh_holdout_candidate clips (and all pre-e22 fresh candidates) remain strictly label-blind. No labels of any kind were created by this intake. No uploaderChannelId is split across roles; the two VA clips cover different event years (2026 vs 2025 Golden Age Games) and are treated as separate sessions — recorded as a same-producer caveat.",
+    "records": [
+      {
+        "clipId": "yt-o_NeuHjTEVE",
+        "intakeWorkstream": "wave-f/f11-e22-intake",
+        "intakeDate": "2026-08-29",
+        "acquiredBy": "wave-e/e22-acquisition-wave2",
+        "verification": {
+          "sha256Recomputed": "byte-match against registry media.sha256",
+          "clipBytesMatch": true,
+          "fullDecodeCheck": "ffprobe -count_frames full-stream decode, zero errors",
+          "rightsRecordComplete": "license, licenseVerification, provenanceAssessment, restrictions, and all 9 rights fields present",
+          "decodedFrames": 1798
+        },
+        "assignedRole": "dev_label_eligible",
+        "labelBlind": false,
+        "rationale": "Standard target capture geometry (elevated behind-court fixed camera, 4K-source 1080p30, dense continuous doubles rallies with score overlay) — the exact envelope the dev pipeline needs new labels on (D-035: next contact tuning must come from NEW dev labels). Holdout retains two independent outdoor elevated behind-court sources (yt-tJuJ4MQdYy0, yt-I5wYCXCL4dY), so this assignment does not thin holdout coverage of the setting family."
+      },
+      {
+        "clipId": "yt-94KNxpNTyCw",
+        "intakeWorkstream": "wave-f/f11-e22-intake",
+        "intakeDate": "2026-08-29",
+        "acquiredBy": "wave-e/e22-acquisition-wave2",
+        "verification": {
+          "sha256Recomputed": "byte-match against registry media.sha256",
+          "clipBytesMatch": true,
+          "fullDecodeCheck": "ffprobe -count_frames full-stream decode, zero errors",
+          "rightsRecordComplete": "license, licenseVerification, provenanceAssessment, restrictions, and all 9 rights fields present",
+          "decodedFrames": 1800
+        },
+        "assignedRole": "dev_label_eligible",
+        "labelBlind": false,
+        "rationale": "Indoor rec doubles, 1080p30, gameplay-dense with score overlay and varied body types — high dev-label utility. Holdout retains five independent indoor sources (yt-iuVdtmGoTbo, yt-eK-iPN2XAJQ, voa-6108955, voa-6115790, yt-n-QrBfQVK_w)."
+      },
+      {
+        "clipId": "va-6N3Yc184a_c",
+        "intakeWorkstream": "wave-f/f11-e22-intake",
+        "intakeDate": "2026-08-29",
+        "acquiredBy": "wave-e/e22-acquisition-wave2",
+        "verification": {
+          "sha256Recomputed": "byte-match against registry media.sha256",
+          "clipBytesMatch": true,
+          "fullDecodeCheck": "ffprobe -count_frames full-stream decode, zero errors",
+          "rightsRecordComplete": "license, licenseVerification, provenanceAssessment, restrictions, and all 9 rights fields present",
+          "decodedFrames": 5145,
+          "quarantineResolutionChecked": "quarantinedUnknownRights entry yt-6N3Yc184a_c carries a resolvedBy pointer to this clip's e22 acceptance"
+        },
+        "assignedRole": "dev_label_eligible",
+        "labelBlind": false,
+        "rationale": "Strongest rights basis in the cohort (PD-USGov federal work, no attribution dependency). Adaptive/wheelchair and senior-athlete play is unrepresented in the labeled dev corpus, so labels here extend dev diversity the most. Adaptive-play representation remains in the holdout pool via va-O1dLhGGPErc (2025 Games — a separate event year/session)."
+      },
+      {
+        "clipId": "yt-n-QrBfQVK_w",
+        "intakeWorkstream": "wave-f/f11-e22-intake",
+        "intakeDate": "2026-08-29",
+        "acquiredBy": "wave-e/e22-acquisition-wave2",
+        "verification": {
+          "sha256Recomputed": "byte-match against registry media.sha256",
+          "clipBytesMatch": true,
+          "fullDecodeCheck": "ffprobe -count_frames full-stream decode, zero errors",
+          "rightsRecordComplete": "license, licenseVerification, provenanceAssessment, restrictions, and all 9 rights fields present",
+          "decodedFrames": 1800
+        },
+        "assignedRole": "fresh_holdout_candidate",
+        "labelBlind": true,
+        "rationale": "Only commercial indoor-venue setting (distinct signage/hall lighting) in either pool — highest marginal holdout diversity; kept unseen."
+      },
+      {
+        "clipId": "yt-9ru97zKV8mk",
+        "intakeWorkstream": "wave-f/f11-e22-intake",
+        "intakeDate": "2026-08-29",
+        "acquiredBy": "wave-e/e22-acquisition-wave2",
+        "verification": {
+          "sha256Recomputed": "byte-match against registry media.sha256",
+          "clipBytesMatch": true,
+          "fullDecodeCheck": "ffprobe -count_frames full-stream decode, zero errors",
+          "rightsRecordComplete": "license, licenseVerification, provenanceAssessment, restrictions, and all 9 rights fields present",
+          "decodedFrames": 1800
+        },
+        "assignedRole": "fresh_holdout_candidate",
+        "labelBlind": true,
+        "rationale": "Close behind-court outdoor camera geometry differs from the existing elevated behind-court holdout sources; kept unseen."
+      },
+      {
+        "clipId": "yt-6r4fOxRuKmM",
+        "intakeWorkstream": "wave-f/f11-e22-intake",
+        "intakeDate": "2026-08-29",
+        "acquiredBy": "wave-e/e22-acquisition-wave2",
+        "verification": {
+          "sha256Recomputed": "byte-match against registry media.sha256",
+          "clipBytesMatch": true,
+          "fullDecodeCheck": "ffprobe -count_frames full-stream decode, zero errors",
+          "rightsRecordComplete": "license, licenseVerification, provenanceAssessment, restrictions, and all 9 rights fields present",
+          "decodedFrames": 3596
+        },
+        "assignedRole": "fresh_holdout_candidate",
+        "labelBlind": true,
+        "rationale": "Only daytime singles clip and only 60fps clip in the e22 cohort; singles movement patterns are underrepresented — maximal holdout value; kept unseen."
+      },
+      {
+        "clipId": "va-O1dLhGGPErc",
+        "intakeWorkstream": "wave-f/f11-e22-intake",
+        "intakeDate": "2026-08-29",
+        "acquiredBy": "wave-e/e22-acquisition-wave2",
+        "verification": {
+          "sha256Recomputed": "byte-match against registry media.sha256",
+          "clipBytesMatch": true,
+          "fullDecodeCheck": "ffprobe -count_frames full-stream decode, zero errors",
+          "rightsRecordComplete": "license, licenseVerification, provenanceAssessment, restrictions, and all 9 rights fields present",
+          "decodedFrames": 1461,
+          "quarantineResolutionChecked": "quarantinedUnknownRights entry yt-O1dLhGGPErc carries a resolvedBy pointer to this clip's e22 acceptance"
+        },
+        "assignedRole": "fresh_holdout_candidate",
+        "labelBlind": true,
+        "rationale": "Vertical 608x1080@24 low-gameplay-density footage with persistent stylized overlays — an OOD-leaning capture envelope worth keeping unseen; low dev-label utility in any case."
+      }
+    ]
+  }
 }
