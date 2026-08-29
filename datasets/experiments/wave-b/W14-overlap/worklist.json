@@ -1,0 +1,58 @@
+{
+  "workstream": "W14 independent second-annotator overlap",
+  "annotatorId": "devin-visual-overlap-w14",
+  "createdAtIso": "2026-08-29T02:00:00Z",
+  "blindnessProtocol": {
+    "statement": "Worklist built BEFORE viewing any primary verdict values. TA selection read ONLY caseId, split, situation, verification.by from datasets/ta-bench/cases.json (never verification.state or verification.note). Ownership selection read ONLY caseId, tMs, and owners key-indices from datasets/experiments/wave-a/L-verdicts-*.json (never owners values or notes). K-summary.json and L-summary.json were NOT opened at selection time (only K-summary's top-level key names were listed; it contains no id list at top level). ownership-review.json sidecar NOT opened. Verdicts in this workstream are formed from rendered frames only, written to disk, and only then compared to primary labels.",
+    "taSelectionRule": "All 29 cases with verification.by=devin-visual-v2-wave-a are split=dev. Stratified by machine-generated situation tags (verdict-agnostic), taking cases in cases.json file order within each stratum: solo x1, two_players+contested x2, multi_player x2, multi+contested x3, multi+contested+loss x4 = 12.",
+    "ownershipSelectionRule": "L-labeled frames restricted to role=development bench cases (wm-volley-02, afn-sasebo-rally1, afn-sasebo-rally2); wm-dink-01 excluded (role=held_out) and afn-vic-rally1 never labeled by L (role=test_held_out). Within each case, L-labeled tMs sorted ascending and picked evenly spaced: volley 5 of 13 (idx 0,3,6,9,12), rally1 4 of 9 (idx 0,3,5,8), rally2 3 of 6 (idx 0,2,5) = 12 frames."
+  },
+  "taTaxonomy": {
+    "correct-lock": "lime true-target box sits on a real live player and that player is the plausible occupant/owner of the yellow start region for this window",
+    "wrong-lock": "a visible different person is clearly the region's occupant, or the lime box is not on a live player while a valid person exists for the region",
+    "reject": "case unusable as gold: no live player, static/graphic person, irreducible region ambiguity, or broken render (reason recorded)"
+  },
+  "ownershipTaxonomy": {
+    "TARGET": "box is the target player's paddle (target per bench-case definition below)",
+    "NOT_TARGET": "box is not the target player's paddle: another player's paddle OR not a paddle at all (sub-reason recorded in note)",
+    "AMBIGUOUS": "cannot commit from this frame (occlusion/blur/crowding); legitimate uncertainty"
+  },
+  "ownershipTargetDefinitions": {
+    "wm-volley-02": "near white-shirt player, rear-side view (video wm-volley-nearplayer.mp4, registry description)",
+    "afn-sasebo-rally1": "white-shirt woman, front-oblique view, forehand with gray paddle; second player behind (registry description)",
+    "afn-sasebo-rally2": "rear-view net player lunging at the net; multiple background players (registry description)"
+  },
+  "taCases": [
+    { "caseId": "ta-96ae65019c30-s2w0-p1", "stratum": "solo" },
+    { "caseId": "ta-faead33a362c-s3w1-p1", "stratum": "two_players+contested_region" },
+    { "caseId": "ta-faead33a362c-s3w5-p2", "stratum": "two_players+contested_region" },
+    { "caseId": "ta-44c0c451500c-s0w1-p2", "stratum": "multi_player" },
+    { "caseId": "ta-960a1a200d6d-s8w2-p1", "stratum": "multi_player" },
+    { "caseId": "ta-6e06a3157947-s2w3-p1", "stratum": "multi_player+contested_region" },
+    { "caseId": "ta-916657917f2b-s1w0-p1", "stratum": "multi_player+contested_region" },
+    { "caseId": "ta-b6f280b2900c-s0w3-p2", "stratum": "multi_player+contested_region" },
+    { "caseId": "ta-44c0c451500c-s1w0-p6", "stratum": "multi_player+contested_region+target_loss_periods" },
+    { "caseId": "ta-5bf0e6a85afb-s1w2-p20", "stratum": "multi_player+contested_region+target_loss_periods" },
+    { "caseId": "ta-960a1a200d6d-s8w0-p1", "stratum": "multi_player+contested_region+target_loss_periods" },
+    { "caseId": "ta-d230484fbaa5-s3w0-p1", "stratum": "multi_player+contested_region+target_loss_periods" }
+  ],
+  "ownershipFrames": [
+    { "caseId": "wm-volley-02", "tMs": 4290, "png": "datasets/paddle-bench/ownership-review/wm-volley-02-4290.png", "boxIndices": [0, 1, 2, 3], "queueGeneration": "current" },
+    { "caseId": "wm-volley-02", "tMs": 5850, "png": "datasets/paddle-bench/ownership-review/wm-volley-02-5850.png", "boxIndices": [0, 1, 2], "queueGeneration": "old (PNG retained)" },
+    { "caseId": "wm-volley-02", "tMs": 6290, "png": "datasets/paddle-bench/ownership-review/wm-volley-02-6290.png", "boxIndices": [0, 1, 2], "queueGeneration": "current" },
+    { "caseId": "wm-volley-02", "tMs": 7050, "png": "datasets/paddle-bench/ownership-review/wm-volley-02-7050.png", "boxIndices": [0, 1], "queueGeneration": "old (PNG retained)" },
+    { "caseId": "wm-volley-02", "tMs": 7890, "png": "datasets/paddle-bench/ownership-review/wm-volley-02-7890.png", "boxIndices": [0, 1], "queueGeneration": "current" },
+    { "caseId": "afn-sasebo-rally1", "tMs": 434, "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-434.png", "boxIndices": [0, 1, 2], "queueGeneration": "current" },
+    { "caseId": "afn-sasebo-rally1", "tMs": 1802, "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-1802.png", "boxIndices": [0, 1], "queueGeneration": "current" },
+    { "caseId": "afn-sasebo-rally1", "tMs": 2603, "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-2603.png", "boxIndices": [0, 1], "queueGeneration": "current" },
+    { "caseId": "afn-sasebo-rally1", "tMs": 3837, "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-3837.png", "boxIndices": [0, 1, 2], "queueGeneration": "current" },
+    { "caseId": "afn-sasebo-rally2", "tMs": 2204, "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally2-2204.png", "boxIndices": [0, 1, 2], "queueGeneration": "current" },
+    { "caseId": "afn-sasebo-rally2", "tMs": 2604, "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally2-2604.png", "boxIndices": [0, 1], "queueGeneration": "current" },
+    { "caseId": "afn-sasebo-rally2", "tMs": 3372, "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally2-3372.png", "boxIndices": [0, 1, 2], "queueGeneration": "old (PNG retained)" }
+  ],
+  "boxColorLegend": "index 0=yellow, 1=lime, 2=red, 3=cyan (color tab above each box)",
+  "exclusions": [
+    { "item": "wm-dink-01 (13 L-labeled frames)", "reason": "bench role=held_out; W14 restricted to development-role material per DEV-only hard rule" },
+    { "item": "locked_test TA cases", "reason": "none present: all 29 wave-a-verified cases are split=dev" }
+  ]
+}

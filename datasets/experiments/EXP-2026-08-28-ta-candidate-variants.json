@@ -1,0 +1,32 @@
+{
+  "experimentId": "EXP-2026-08-28-ta-candidate-variants",
+  "question": "Can the three measured acquisition failures (sticky ambiguity dead-end, natural false gestures, unstable post-lock following) be fixed by logic changes, measured BEFORE touching the shipped Swift?",
+  "variants": {
+    "hysteresis": "post-lock follower: incumbent within 0.12 of anchor keeps identity unless challenger beats its score by ~1.43x (playerTracker gate applied to the live follower)",
+    "ambiguity-timeout": "sticky ambiguity falls back after 3s to locking the occupant closest to the region center",
+    "sustained-gesture": "gesture requires 5 consecutive elevated frames (~165ms@30fps) instead of 1",
+    "candidate": "all three combined"
+  },
+  "results_tierC_n288": {
+    "shipped":            { "lockRate": 0.729, "lockCorrectRate": 0.700, "gestureLocks": 37, "postLockStable90": 59, "meanOnTargetFraction": 0.493 },
+    "hysteresis":         { "lockRate": 0.729, "lockCorrectRate": 0.700, "gestureLocks": 37, "postLockStable90": 66, "meanOnTargetFraction": 0.545 },
+    "ambiguity-timeout":  { "lockRate": 0.979, "lockCorrectRate": 0.720, "gestureLocks": 19, "postLockStable90": 82, "meanOnTargetFraction": 0.495 },
+    "sustained-gesture":  { "lockRate": 0.670, "lockCorrectRate": 0.736, "gestureLocks": 20, "postLockStable90": 55, "meanOnTargetFraction": 0.505 },
+    "candidate":          { "lockRate": 0.969, "lockCorrectRate": 0.731, "gestureLocks": 9,  "postLockStable90": 90, "meanOnTargetFraction": 0.554 }
+  },
+  "results_verified_n7": {
+    "shipped":   { "lockRate": 0.571, "lockCorrectRate": 0.75, "meanOnTargetFraction": 0.584 },
+    "candidate": { "lockRate": 1.0,   "lockCorrectRate": 0.714, "meanOnTargetFraction": 0.457 }
+  },
+  "findings": [
+    "On the 288-case Tier-C aggregate the combined candidate dominates shipped: lock 0.729→0.969, false gesture locks 37→9 (−76%), ≥90%-stable locks 59→90 (+53%), mean on-target 0.493→0.554, correctness 0.700→0.731.",
+    "On the 7 verified cases the picture is NOT confirmatory: timeout locks the 3 previously-dead crowd cases but 2 lock the wrong person (correct 5/7), and mean on-target drops because the newly locked crowd cases are the hardest to follow.",
+    "Hysteresis improves following in aggregate (+0.05 on-target over 210 locks) but reads slightly worse on the 4 verified locks — n far too small to decide; this is exactly the small-n instability the learning-curve harness quantifies."
+  ],
+  "decision": "DO NOT port to Swift yet. The candidate is promising on aggregate; the verified set (n=7) is too small to confirm and shows a correctness regression risk in crowd fallback locks. Next: verify ≥30 TA cases (queue exists), re-run all variants, then decide. The bench makes that decision a 5-minute measurement.",
+  "artifacts": "datasets/ta-bench/results/ (5 runs, one per variant), packages/swing-lab/src/engine/taReplay.ts (ReplayVariant)",
+  "caveats": [
+    "Tier-C aggregate uses machine-proposed regions/true-targets (unverified); systematic proposal bias is possible.",
+    "Timeout fallback 'closest occupant' can systematically pick a bystander standing dead-center in a contested region — measured as the 2 wrong verified locks."
+  ]
+}

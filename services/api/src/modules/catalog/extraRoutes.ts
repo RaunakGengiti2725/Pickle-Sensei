@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { sendFailure } from "../../lib/replies.js";
 import { many, one } from "../../lib/db.js";
+import { publishedInstructionalMedia } from "../training/media.js";
 
 /** Drills, model bundles, references, goals, share cards, achievements. */
 
@@ -27,16 +28,21 @@ export function registerCatalogExtraRoutes(app: FastifyInstance, context: AppCon
     const q = parsed.data;
     const items = await many(
       context.pool!,
-      `SELECT DISTINCT d.id, d.slug, d.title, d.description, d.coach_name, d.difficulty_min, d.difficulty_max, d.is_dev_fixture
+      `SELECT DISTINCT d.id, d.slug, d.title, d.description, d.coach_name,
+              d.difficulty_min, d.difficulty_max, d.is_dev_fixture,
+              EXISTS (
+                SELECT 1 FROM user_saved_drill usd
+                WHERE usd.user_id = $4 AND usd.drill_id = d.id
+              ) AS saved
        FROM drill d
        LEFT JOIN drill_checkpoint_map m ON m.drill_id = d.id
        LEFT JOIN shot_type st ON st.id = m.shot_type_id
        LEFT JOIN checkpoint_definition cd ON cd.id = m.checkpoint_definition_id
-       WHERE d.active
+       WHERE d.active AND NOT d.is_dev_fixture
          AND ($1::text IS NULL OR st.slug = $1)
          AND ($2::text IS NULL OR cd.slug = $2)
        ORDER BY d.title LIMIT $3`,
-      [q.shotType ?? null, q.checkpoint ?? null, q.limit],
+      [q.shotType ?? null, q.checkpoint ?? null, q.limit, request.user!.id],
     );
     return { items, cursor: null };
   });
@@ -45,21 +51,36 @@ export function registerCatalogExtraRoutes(app: FastifyInstance, context: AppCon
     const { slug } = request.params as { slug: string };
     const drill = await one(
       context.pool!,
-      "SELECT id, slug, title, description, coach_name, equipment, difficulty_min, difficulty_max, is_dev_fixture FROM drill WHERE slug = $1 AND active",
-      [slug],
+      `SELECT d.id, d.slug, d.title, d.description, d.coach_name, d.equipment,
+              d.difficulty_min, d.difficulty_max, d.is_dev_fixture,
+              EXISTS (
+                SELECT 1 FROM user_saved_drill usd
+                WHERE usd.user_id = $2 AND usd.drill_id = d.id
+              ) AS saved
+       FROM drill d WHERE d.slug = $1 AND d.active AND NOT d.is_dev_fixture`,
+      [slug, request.user!.id],
     );
     if (!drill)
       return sendFailure(reply, request, 404, "permanent", "drill.not_found", "Drill not found.");
     const mappings = await many(
       context.pool!,
-      `SELECT cd.slug AS checkpoint, st.slug AS shot_type, m.priority
+      `SELECT cd.slug AS checkpoint, st.slug AS shot_type, m.priority,
+              m.plan_role, m.fault_directions, m.cue_text, m.target_sets,
+              m.target_repetitions_per_set, m.target_duration_seconds,
+              m.rest_seconds
        FROM drill_checkpoint_map m
        JOIN checkpoint_definition cd ON cd.id = m.checkpoint_definition_id
        JOIN shot_type st ON st.id = m.shot_type_id
-       WHERE m.drill_id = $1`,
+       WHERE m.drill_id = $1 AND m.coach_reviewed_at IS NOT NULL`,
       [drill["id"] as string],
     );
-    return { drill, mappings, mediaPlayback: null };
+    const instructionalMedia = await publishedInstructionalMedia(context, drill["id"] as string);
+    return {
+      drill,
+      mappings,
+      mediaPlayback: instructionalMedia[0] ?? null,
+      instructionalMedia,
+    };
   });
 
   // Latest compatible signed model bundle for this device (spec p. 18).
@@ -215,10 +236,11 @@ export function registerCatalogExtraRoutes(app: FastifyInstance, context: AppCon
       );
     const b = parsed.data;
     if (b.shotId) {
-      const owned = await one(context.pool!, "SELECT id FROM shot WHERE id = $1 AND user_id = $2", [
-        b.shotId,
-        request.user!.id,
-      ]);
+      const owned = await one(
+        context.pool!,
+        "SELECT id FROM shot WHERE id = $1 AND user_id = $2 AND source = 'real'",
+        [b.shotId, request.user!.id],
+      );
       if (!owned)
         return sendFailure(reply, request, 404, "permanent", "shot.not_found", "Shot not found.");
     }

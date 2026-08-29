@@ -1,0 +1,57 @@
+{
+  "workstream": "I — BALL body-occlusion state machine + reacquisition",
+  "status": "complete",
+  "baseline": {
+    "source": "canonical frozen runs (datasets/paddle-bench/runs), lab:ball-bench results/ball-bench-1787966975192.json + lab:cascade",
+    "cascade": { "BALL_unconditional": "4/5", "BALL_conditional": "2/5", "rally2": "LOST AT BALL" },
+    "ballBench": {
+      "wm-volley-02": { "precision": 0.83, "recall": 0.83, "medianErrPx": 9, "contactErrMs": 43, "contactClass": "ball+paddle" },
+      "afn-sasebo-rally1": { "precision": null, "recall": 0.0, "contact": "abstained", "timeline": "TRACKED 1802-2002 → LOST" },
+      "afn-sasebo-rally2": { "precision": null, "recall": 0.0, "ballStage": "untracked (no_gated_track_is_a_plausible_in-play_ball)", "contactErrMs": 274, "contactClass": "paddle-only (est 2346 vs gold 2620)" },
+      "bodyOverlapSlice_afn-sasebo-indoor": { "recall": "0/6 visible = 0.00", "precision": null }
+    }
+  },
+  "candidate": {
+    "code": "ball-track-2: explicit occlusion state machine in ballTracker.ts — TRACKED → ENTERING_OCCLUSION (pose-derived body region + robust terminal velocity) → OCCLUDED (bounded, hard max 500ms) → REACQUIRED | LOST; body-occlusion PRIMARY fallback (fires ONLY when no paddle-aligned candidate exists; requires ≥8 obs, straightness ≥0.4, median speed ≥0.3, body-dwell ≤0.4, paddle TIME-alignment when a paddle exists, window-edge margin 150ms, 1.3× ambiguity margin); body-emergence reacquisition path (start ≤0.15 from body region, region-EXIT motion, body-dwell ≤0.4, capped relaxed corridor from robust pre-occlusion velocity, ±55°, speed ratio 0.4–2.5, expires at 500ms); predictions stay predicted:true, bridge only on confirmed links, decoys refused via FAILED_AMBIGUOUS/-NO_CANDIDATE",
+    "measurementSandbox": "datasets/experiments/wave-a/I-runs (canonical dirs untouched); bench manifest datasets/experiments/wave-a/I-bench/ball-bench.json (3 dev cases; held-out never regenerated)"
+  },
+  "measured": {
+    "ballBenchAfter_devSandbox": {
+      "wm-volley-02": { "precision": 0.83, "recall": 0.83, "medianErrPx": 9, "contactErrMs": 25, "ballStage": "byte-identical to canonical (same track 312, 9 obs, same states, same contact-aware reacquisition)" },
+      "afn-sasebo-rally1": { "precision": null, "recall": 0.0, "contactErrMs": 925, "note": "delta vs baseline is working-tree contact-estimator drift, NOT workstream I: primary #269 has endsIntoBody=false (probe artifact I-forensics/rally1-probe.ts) so every linking decision took the unchanged legacy branches; the old tracker + current estimator produces the same outcome" },
+      "afn-sasebo-rally2": {
+        "ballStage": "untracked → TRACKED (selection=body_occlusion, track #121, 43 observed-only obs 936–2504ms)",
+        "timeline": "TRACKED 936-2371 → ENTERING_OCCLUSION 2371-2504 → OCCLUDED 2504-2855 → LOST 2855-3603; reacquisition FAILED_AMBIGUOUS (contact-aware): 2 comparable outgoing candidates — honest refusal, bridge 0 points",
+        "precision": 0.5,
+        "recall": 0.5,
+        "hits": "gold 2500ms label HIT (err 0.042 norm); gold 2682ms label honest MISS (ball occluded by body, no candidate within ±40ms, nothing fabricated); 1 FP where annotator marked 2200ms not_visible but a real motion candidate sits on the measured ball trail",
+        "contactErrMs": 165,
+        "contactDetail": "est 2455 vs gold 2620 (was 274ms); ballConfirmed honestly false (turns rejected far from target); target event stays E1"
+      },
+      "bodyOverlapSlice_afn-sasebo-indoor": { "recall": "1/6 visible = 0.17 (was 0.00)", "precision": 0.5 }
+    },
+    "cascadeCriteriaImpact_devSandbox": {
+      "BALL(tracked)": "volley PASS→PASS · rally1 PASS→PASS · rally2 FAIL→PASS",
+      "CONTACT(err≤66ms)": "volley PASS 43→25ms · rally1 FAIL (abstained→925ms, estimator drift, see note) · rally2 FAIL 274→165ms (starvation relieved; remaining error is paddle perception of the raised overhead paddle)",
+      "canonicalCascadeUnchanged": "frozen dirs untouched; lab:cascade still BALL 4/5 unconditional / 2/5 conditional"
+    },
+    "tests": "packages/swing-lab: 104/104 vitest green (16 in ballTracker.test.ts: occlusion entry, strict-selection precedence, body-emergence reacquisition, predicted-vs-observed distinctness, bounded prediction expiry, decoy rejection, emergence ambiguity, primary ambiguity, window-edge refusal); pnpm typecheck green repo-wide"
+  },
+  "filesChanged": [
+    "packages/swing-lab/src/ballTracker.ts",
+    "packages/swing-lab/test/ballTracker.test.ts",
+    "datasets/experiments/wave-a/I-runs/* (sandbox copies + reruns of 3 dev cases)",
+    "datasets/experiments/wave-a/I-bench/ball-bench.json (+ results/)",
+    "datasets/experiments/wave-a/I-forensics/* (rally2-forensics.ts, rally2-owners.ts, rally1-owners.ts, rally1-probe.ts, synth-check.ts)",
+    "datasets/experiments/wave-a/I-summary.json"
+  ],
+  "recommendation": "Adopt ball-track-2. rally2 BALL now tracked honestly (occlusion flagged, zero fabricated observations) and the body-overlap slice has recall 0.17 > 0 with no precision collapse elsewhere (volley byte-identical). To regen canonical runs, coordinate with the contact-estimator owner first: the working tree's estimator already drifts from frozen artifacts (volley 43→25ms benign; rally1 abstained→925ms harmful) independent of this change. Next lever for rally2 CONTACT ≤66ms is paddle perception of the raised overhead paddle (tracked paddle sat at mid-body during the smash), outside workstream I.",
+  "risks": [
+    "Working-tree contact-estimator drift (pre-existing, measured): canonical artifacts were produced by an older estimator; any regen changes contact numbers regardless of this workstream (rally1 abstained→925ms with a contact-aware junk grab through the UNCHANGED legacy branch).",
+    "Body-occlusion primary fallback is uncalibrated on unseen footage: a non-ball object flying into the target's body region with ≥8 obs, straightness ≥0.4 and speed ≥0.3 could be promoted where the stage was previously untracked. Guards: fires only when no paddle-aligned candidate exists, paddle time-alignment required, 1.3× ambiguity margin, window-edge margin.",
+    "Body-emergence reacquisition can introduce FAILED_AMBIGUOUS where the legacy corridor found a single winner (only for endsIntoBody primaries) — biased toward staying LOST by design; a future afn-vic-rally1 regen could flip its corridor SUCCESS to ambiguous if a body-emergence competitor appears (held-out artifacts frozen today).",
+    "rally2 precision 0.5 on n=2 labels: the FP is a real measured motion candidate at 2204ms on the ball's trail where the annotator marked 2200ms not_visible — label/candidate disagreement, not fabrication.",
+    "maxOcclusionMs=500 hard cap: slower/longer body crossings stay LOST (honest ceiling; rally2's own outgoing smash was never detected by the candidate generator, so it stays LOST there).",
+    "Held-out cases (wm-dink-01, afn-vic-rally1) intentionally unmeasured against the new code (frozen artifacts only) per split discipline."
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "reviewedAtIso": "2026-08-28T11:05:00.000Z",
+  "reviewer": "devin-visual-v1 (manual still-frame review; approximate)",
+  "taxonomy": ["PADDLE_EDGE_ON", "PADDLE_MOTION_BLUR", "PADDLE_BODY_OCCLUSION", "PADDLE_SMALL_IN_FRAME", "PADDLE_CLASS_PROXY_FAILURE", "WRONG_RACKET_LIKE_OBJECT", "PLAYER_ASSOCIATION_FAILURE", "OTHER"],
+  "counts": {
+    "wm-dink-01": {
+      "misses": { "PADDLE_EDGE_ON": 3, "PADDLE_CLASS_PROXY_FAILURE": 2 },
+      "notes": "Dark paddle held low/edge-on at hip (600/800ms) and right-side carry frames: COCO 'tennis racket' proxy fires weakly on edge-on dark paddles."
+    },
+    "wm-volley-02": {
+      "misses": { "PADDLE_EDGE_ON": 2, "PADDLE_MOTION_BLUR": 1 },
+      "falsePositives": { "PADDLE_BODY_OCCLUSION": 5 },
+      "notes": "FPs are tracker boxes on frames labeled occluded; single-annotator conservative labels may explain part."
+    },
+    "afn-sasebo-rally1": {
+      "wrongLocation": { "WRONG_RACKET_LIKE_OBJECT": 3 },
+      "notes": "Tracker selected the PARTNER's pink/dark paddle behind the primary player; primary's gray paddle track had lower window coverage. Player-adjacent paddle disambiguation needed (paddle-to-dominant-wrist binding is too weak when partners overlap)."
+    }
+  }
+}

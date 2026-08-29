@@ -1,0 +1,60 @@
+{
+  "workstream": "W4 — AUTO DETECT chip made real end-to-end on the guided-capture path (mobile wiring of D's declared-null routing; declared/predicted separate; abstention never burns a rating)",
+  "status": "GREEN",
+  "baseline": {
+    "behavior": "AUTO chip emitted onChange(null) — indistinguishable from unselected — with 'arrives with the verified stroke classifier' gating copy. AnalyzeScreen hard-required declaredStroke on every path (scoreCapture bail, zero-touch gate, CTA disabled). runCaptureAnalysis typed declaredStroke as non-null ShotTypeSlug; createFusionProviders required a slug for the per-stroke scorer gate and wired no hierarchical classifier (declared-null would fail 'fusion.stroke_unresolved' if it could even be sent). No mobile surface rendered the strokeIntent envelope.",
+    "tests": {
+      "mobile_jest": "22 suites / 122 tests passing (session start; grew to 25/143 via parallel workstreams during W4)",
+      "mobile_tsc": "0 errors",
+      "vision_geometry_vitest": "34 tests passing (6 files)",
+      "root_typecheck": "exit 0"
+    }
+  },
+  "candidate": {
+    "behavior": "AUTO chip emits a real TechniqueIntent {source:'auto', canonical:null, legacySlug:null, confidence:null} with honest depth-2/abstention copy (family-level reads, explicit 'couldn't classify', no exact-stroke promise). AnalyzeScreen admits declared-null analysis ONLY via exported gate canAutoScoreWithoutDeclaration(clip,intent): auto intent + guided capture + recorded pose sequence — zero-touch auto-start and the manual saved-phase CTA ('Analyze with Auto Detect') both honor it; imported videos stay declared-only (picker path still requires a concrete technique; runCaptureAnalysis's imported gate untouched, rejects before stroke routing and before any permit). AUTO runs never write the declared_stroke column (setDeclaredStroke skipped — declarations are user statements only). runCaptureAnalysis widened to declaredStroke: ShotTypeSlug|null + declaredCanonical passthrough; outcome records typed as CaptureAnalysisRecord so the strokeIntent envelope is consumable. createFusionProviders(null) skips the per-stroke scorer release gate (Sm1 still fails typed per-slug at score time; unresolved-leaf routes never run slug-conditioned stages) and wires autoStrokeClassifier: an IHierarchicalStrokeClassifier adapter over classifyStroke PORTED into @pickle/vision-geometry (strokeHeuristicLite.ts — pure TS, minimal HeuristicPaddleObservation type, no swing-lab/node deps in the app), registry-resolved from the new model-registry stroke_classification entry (stroke.heuristic-hierarchical @ stroke-heuristic-1, provenance-recorded in every record's modelRuns). Outcome surface: new 'analyzed' phase renders strokeIntentPresentation(record) — 'Auto-detected: FOREHAND (family)' with rating-not-consumed truth, 'Auto-detected: <leaf>' with a See-the-full-read CTA, 'We couldn't identify this stroke — result withheld.', and 'You declared X — the camera read Y' disagreement (declaration kept). Clean declared runs return null from the presenter and keep the exact pre-W4 hop straight to the Result screen.",
+    "permit_accounting": "Unchanged code path, verified + newly locked by tests: scored → permit consumed by shot sync outbox; result:null (predicted_family / abstained) and low-confidence results → permits.release('low_confidence'), record saved via saveAnalysisRecord for reprocessing history, never synced as a rating; provider/pipeline failure → release('failed'). Abstention cannot burn the user's rating allowance."
+  },
+  "measured": {
+    "mobile_jest": "25 suites / 143 tests, all passing (includes +14 W4 tests across __tests__/autoDetectAnalysis.test.ts [4] and __tests__/analyzeScreenAutoDetect.test.tsx [10]; suites from parallel workstreams unbroken)",
+    "mobile_tsc": "cd apps/mobile && npx tsc --noEmit → exit 0",
+    "vision_geometry_vitest": "47 tests / 6 files passing (+6 in test/strokeHeuristicLite.test.ts; offlineStroke.test.ts is another agent's concurrent workstream — transiently red mid-session from their own WIP, green in the final run, untouched by W4)",
+    "model_registry_vitest": "7 tests passing (+1 locking the stroke_classification entry and its no-L3-without-bounce honesty note; 1 existing 'absent tasks' honesty test updated because stroke_classification is genuinely no longer absent — swapped to temporal_encoding)",
+    "analysis_pipeline_vitest": "29 passing (untouched)",
+    "shared_types_vitest": "13 passing (untouched)",
+    "swing_lab_vitest": "143 passing (untouched — keeps its own strokeHeuristic copy this wave)",
+    "root_typecheck": "pnpm typecheck → exit 0 (all packages incl. apps/mobile, services)",
+    "new_coverage": [
+      "auto intent → declared-null invocation: real ported classifier resolves default synthetic swing to predicted_family + SHARED_FOREHAND_SWING; declaredStroke null and leaf null in the envelope (no invented slug); stroke_classification model run recorded with providerId stroke.heuristic-hierarchical; result null; permit finalized {outcome:'low_confidence', ratingId:null}; no outbox/local_shot writes; presenter copy 'Auto-detected: FOREHAND (family)' + 'did not use a rating'",
+      "abstention: midline-contact swing (contactForwardNorm:0) → basis 'abstained', predicted UNKNOWN, resolvedProfileId null, permit released, honest copy 'We couldn’t identify this stroke — result withheld.' + eyebrow RATING NOT CONSUMED",
+      "declared path unchanged: forehand_drive + canonical FOREHAND_DRIVE → scored, strokeResolution declared, profile FOREHAND_DRIVE, permit consumed via sync outbox, zero finalizes, presenter returns null (straight to Result)",
+      "imported video + declared-null → 'Imported videos…' unavailable before any fetch or db write; canAutoScoreWithoutDeclaration false for imported/pose-less/tap/none-intent clips",
+      "AUTO chip emits the exact auto intent; selected state + honest hint copy asserted; old gating promise asserted ABSENT; tap chips still emit concrete intents",
+      "presenter: predicted_l3 leaf → 'Auto-detected: OVERHEAD' with showResult, side_vs_declared disagreement → declaration-kept copy with showResult",
+      "ported heuristic behavior locked in vision-geometry: depth-2 side, OVERHEAD leaf, midline abstention, event-peak-not-midpoint reference, ambidextrous refusal, and the mobile-reality wrist fallback (no paddle) committing FOREHAND ≥0.525"
+    ]
+  },
+  "filesChanged": [
+    "apps/mobile/src/flow/TechniqueIntentPicker.tsx (AUTO chip emits real intent via exported autoDetectIntent(); selected state derived from value.source; honest depth-2/abstention copy; text-resolver 'auto' status also emits the intent)",
+    "apps/mobile/src/screens/AnalyzeScreen.tsx (canAutoScoreWithoutDeclaration + strokeIntentPresentation exported pure helpers; scoreCapture admits declared-null on the auto gate, skips setDeclaredStroke for AUTO, passes declaredCanonical; zero-touch gate accepts armed AUTO; saved-phase CTA/copy for auto; new 'analyzed' phase rendering family/abstention/leaf/disagreement honestly; clean declared hop to Result unchanged)",
+    "apps/mobile/src/analysis/runCaptureAnalysis.ts (declaredStroke widened to ShotTypeSlug|null; optional declaredCanonical forwarded to analyzeCapture; outcomes carry CaptureAnalysisRecord; permit-accounting comments state the AUTO abstention rule)",
+    "apps/mobile/src/vision/providers.ts (createFusionProviders accepts null; per-stroke scorer gate skipped only for declared-null with rationale; HeuristicHierarchicalStrokeClassifier adapter — registry-descriptor provenance, PaddleTrack→minimal observations, null speed series never synthesized; autoStrokeClassifier wired for declared runs too, disagreement-only there; honest unavailable if AUTO requested without a registered classifier)",
+    "apps/mobile/__tests__/autoDetectAnalysis.test.ts (NEW: 4 end-to-end tests over the REAL classifier)",
+    "apps/mobile/__tests__/analyzeScreenAutoDetect.test.tsx (NEW: 10 tests — gate, chip emission/copy, presenter)",
+    "packages/vision-geometry/src/strokeHeuristicLite.ts (NEW: clean port of swing-lab classifyStroke + STROKE_TAXONOMY_V3 + minimal types; dedup follow-up documented in-file)",
+    "packages/vision-geometry/src/index.ts (+1 export line)",
+    "packages/vision-geometry/test/strokeHeuristicLite.test.ts (NEW: 6 behavior-lock tests)",
+    "packages/model-registry/src/defaultManifest.ts (+ stroke.heuristic-hierarchical stroke_classification entry, honesty-ceiling notes)",
+    "packages/model-registry/test/registry.test.ts (absent-task honesty test updated to a still-absent task; +1 test locking the new entry)",
+    "datasets/experiments/wave-b/W4-summary.json (this artifact)"
+  ],
+  "recommendation": "Merge. AUTO DETECT is now a real, honest route on guided captures: declared-null flows through D's registry-terminated ladder with the ported stroke-heuristic-1, family-level outcomes and abstentions are durable records that release the permit and render truthful copy, and declarations still narrow-never-force with disagreements surfaced instead of resolved. Follow-ups for the next wave: (1) dedup — swing-lab should delete its strokeHeuristic.ts body and re-export from @pickle/vision-geometry (both copies byte-equivalent in behavior today; W4 deliberately left swing-lab untouched), and its labProviders can pass the same adapter to exercise AUTO on the desktop lab; (2) expect a high predicted_family/abstained rate on real mobile captures (no paddle track or speed series → wrist-at-contact fallback) — the 'analyzed' surface presents family reads as reads, not failures, but product should watch the rate; (3) if leaf-level auto detection is wanted beyond OVERHEAD, the blocker remains bounce observation — do NOT relax AUTO_RESOLUTION_MIN_CONFIDENCE or promote depth-2; (4) imported-video AUTO stays unavailable until import-time pose extraction ships — the picker on that path still requires a concrete technique by design.",
+  "risks": [
+    "Heuristic confidences are uncalibrated (documented in strokeAutoResolution.ts and the manifest entry); AUTO precision equals the heuristic's structural margins. User-facing copy deliberately claims only family-level ability.",
+    "On-device runs have paddle:null and no speed series, so OVERHEAD is the only reachable predicted_l3 leaf today; everything else is family or abstention. UI copy is written for that reality.",
+    "Declared runs now also execute the hierarchical classifier (disagreement surfacing). A committed contradictory side (≥0.525 + margin) inserts the new 'analyzed' interstitial before the Result screen on a previously direct path — intended honesty behavior, but it is a UX change reviewers should sign off on; clean declared runs are bit-identical in flow.",
+    "strokeIntentPresentation tests in analyzeScreenAutoDetect.test.tsx use narrow cast fixtures for the leaf/disagreement branches (real-record coverage exists for family/abstained/declared-clean in autoDetectAnalysis.test.ts); if the presenter starts reading more record fields, extend the casts.",
+    "model-registry's 'absent tasks' honesty test lost stroke_classification as an example because the task is genuinely no longer absent — any external consumer assuming resolve(stroke_classification)===null must be updated (repo-wide grep found none outside providers.ts).",
+    "packages/vision-geometry/test/offlineStroke.test.ts flapped red (2 tests) mid-session from another agent's concurrent estimateContact work and was green in the final full run; W4 does not touch offlineStroke.ts or its tests — if it regresses later, attribute to that workstream.",
+    "Persisted analysis records now flow through mobile typed as CaptureAnalysisRecord (strokeIntent always present from analyzeCapture); records written before D's pipeline change lack the key — the only new reader (strokeIntentPresentation) is fed exclusively from fresh runCaptureAnalysis outcomes, so no migration is needed, but future readers of stored records must treat strokeIntent as optional."
+  ]
+}

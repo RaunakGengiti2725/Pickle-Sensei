@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "provenance": "licensed",
+  "note": "W9 DEV-ONLY stroke bench manifest — the 3 development cases re-analyzed into W9-runs on the current tree snapshot. Held-out cases (wm-dink-01, afn-vic-rally1) are DELIBERATELY excluded: W9 never re-ran or measured them (no-held-out-tuning protocol). Canonical run dirs are untouched; regen is owned elsewhere.",
+  "cases": [
+    {
+      "id": "wm-volley-02",
+      "video": "../../paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "fps": 25,
+      "labels": "../../paddle-bench/bundles/wm-volley-02/annotation/devin-visual-v1.json",
+      "runDir": "W9-runs/wm-volley-02",
+      "sourceKey": "wm-pickleball-game",
+      "role": "development"
+    },
+    {
+      "id": "afn-sasebo-rally1",
+      "video": "../../paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "fps": 29.97,
+      "labels": "../../paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v1.json",
+      "runDir": "W9-runs/afn-sasebo-rally1",
+      "sourceKey": "afn-sasebo-indoor",
+      "role": "development"
+    },
+    {
+      "id": "afn-sasebo-rally2",
+      "video": "../../paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "fps": 29.97,
+      "labels": "../../paddle-bench/bundles/afn-sasebo-rally2/annotation/devin-visual-v1.json",
+      "runDir": "W9-runs/afn-sasebo-rally2",
+      "sourceKey": "afn-sasebo-indoor",
+      "role": "development"
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-sasebo-volleys",
+  "annotatorId": "devin-visual-v2-wave-a",
+  "createdAtIso": "2026-08-29T00:00:00.000Z",
+  "revision": 1,
+  "stroke": "volley",
+  "annotatedStrokeV3": "BACKHAND_VOLLEY",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 51900,
+    "accelerationStartMs": 51967,
+    "contactMs": 52000,
+    "followThroughEndMs": 52134,
+    "recoveryEndMs": 52300
+  },
+  "contactUncertainty": "plus_minus_1",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.75,
+  "notes": "afn-sasebo-indoor (rec-6e06a3157947, afn-sasebo-2025-06, DEV - the SOURCE recording of the rally1/rally2 dev clips, different timestamps, no overlap with any bundled clip) window [51600..54600], RECORDING clock. Near CAMO-shirt man with red sleeves at the kitchen line, GREEN-face paddle in right hand, back to camera = window auto-target (cov 1.0, torso ~(0.45,0.52)); red-shirt partner crouched right; far side: white-shirt center + far-left player. Reviewed at 12/29.97fps. FAST KITCHEN VOLLEY EXCHANGE, every contact ball-verified at 29.97fps: (T1) paddle raise between 51850/51900, backhand punch volley, contact 52000 (ball ON paddle face, +-1 frame), punch-recovery re-centered 52267-52300. (O1) far WHITE-shirt counter: windup 52267, contact 52367 (ball at his paddle), recovered ~52600 (small figure). (T2) paddle pivots right 52434 tracking, but the ball is taken on the chest-LEFT: backhand flick, contact 52683 (ball ON paddle 52667-52700), follow-through up-left, retracted to chest 52867-52900. (O2) far-LEFT player counter: raise 52867, contact ~52967 (ball reversal bracketed 52934/53000; small figure), recovered 53201. (T3) re-raise 52934, backhand flick #2, contact 53067 (bracketed 53034/53101), retract complete + still 53234. Exchange ends (far side does not return); target relaxes ~53400+; mined 53954 candidate = post-rally milling/ball-toss, REJECTED (not a stroke). T1/T2/T3 are back-to-back with sub-500ms gaps - prime multi-event material for the D-029 valley condition.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T00:00:00.000Z"
+    }
+  ],
+  "eventLabels": [
+    {
+      "eventStartMs": 51900,
+      "contactMs": 52000,
+      "eventEndMs": 52300,
+      "owner": "target",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "backhand punch volley at face height: raise 51850->51900, contact 52000 (ball on paddle, 29.97fps +-1 frame), re-centered ready 52300"
+    },
+    {
+      "eventStartMs": 52267,
+      "contactMs": 52367,
+      "eventEndMs": 52600,
+      "owner": "other",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "far white-shirt counter-volley (small figure): windup 52267, contact 52367 (ball at paddle), recovered 52600"
+    },
+    {
+      "eventStartMs": 52434,
+      "contactMs": 52683,
+      "eventEndMs": 52900,
+      "owner": "target",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "backhand flick volley: track/pivot from 52434, contact 52683 (ball ON paddle 52667-52700, +-1 frame), follow-through up-left, retracted to chest 52900; flows into next event"
+    },
+    {
+      "eventStartMs": 52867,
+      "contactMs": 52967,
+      "eventEndMs": 53201,
+      "owner": "other",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "far-left player counter (small figure): raise 52867, contact from ball reversal bracketed 52934/53000 -> 52967, recovered 53201"
+    },
+    {
+      "eventStartMs": 52934,
+      "contactMs": 53067,
+      "eventEndMs": 53234,
+      "owner": "target",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "backhand flick volley #2: re-raise 52934, contact 53067 (bracketed 53034/53101, +-1 frame), retract complete and still at 53234; rally ends (no far return)"
+    }
+  ]
+}

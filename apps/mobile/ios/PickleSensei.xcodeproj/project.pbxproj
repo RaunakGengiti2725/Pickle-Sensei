@@ -8,9 +8,13 @@
 
 /* Begin PBXBuildFile section */
 		0C80B921A6F3F58F76C31292 /* libPods-PickleSensei.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-PickleSensei.a */; };
+		133042A2D91A434388156271 /* Manrope_500Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 958665834C0B4766A4597419 /* Manrope_500Medium.ttf */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		3F0F20C41A4640CE9691634F /* Manrope_700Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = B8DAFEC0E70A42D9BAA2F65E /* Manrope_700Bold.ttf */; };
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
+		8B865F71BADF43608B1F0AEF /* Manrope_600SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 7C8CE1E4C7FA495EB5D8A3E5 /* Manrope_600SemiBold.ttf */; };
+		977255527D3C40FF8D2FA736 /* Manrope_400Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A2322E717B4E4DE8844CE0D2 /* Manrope_400Regular.ttf */; };
 		9E6182F5C0175ABA960681B5 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
@@ -23,7 +27,11 @@
 		5709B34CF0A7D63546082F79 /* Pods-PickleSensei.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PickleSensei.release.xcconfig"; path = "Target Support Files/Pods-PickleSensei/Pods-PickleSensei.release.xcconfig"; sourceTree = "<group>"; };
 		5DCACB8F33CDC322A6C60F78 /* libPods-PickleSensei.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-PickleSensei.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 		761780EC2CA45674006654EE /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppDelegate.swift; path = PickleSensei/AppDelegate.swift; sourceTree = "<group>"; };
+		7C8CE1E4C7FA495EB5D8A3E5 /* Manrope_600SemiBold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = Manrope_600SemiBold.ttf; path = ../assets/fonts/Manrope_600SemiBold.ttf; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = PickleSensei/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		958665834C0B4766A4597419 /* Manrope_500Medium.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = Manrope_500Medium.ttf; path = ../assets/fonts/Manrope_500Medium.ttf; sourceTree = "<group>"; };
+		A2322E717B4E4DE8844CE0D2 /* Manrope_400Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = Manrope_400Regular.ttf; path = ../assets/fonts/Manrope_400Regular.ttf; sourceTree = "<group>"; };
+		B8DAFEC0E70A42D9BAA2F65E /* Manrope_700Bold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = Manrope_700Bold.ttf; path = ../assets/fonts/Manrope_700Bold.ttf; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
@@ -60,6 +68,17 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		709D1896E6C34723B32DB556 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A2322E717B4E4DE8844CE0D2 /* Manrope_400Regular.ttf */,
+				7C8CE1E4C7FA495EB5D8A3E5 /* Manrope_600SemiBold.ttf */,
+				958665834C0B4766A4597419 /* Manrope_500Medium.ttf */,
+				B8DAFEC0E70A42D9BAA2F65E /* Manrope_700Bold.ttf */,
+			);
+			name = Resources;
+			sourceTree = "<group>";
+		};
 		832341AE1AAA6A7D00B99B32 /* Libraries */ = {
 			isa = PBXGroup;
 			children = (
@@ -75,6 +94,7 @@
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				BBD78D7AC51CEA395F1C20DB /* Pods */,
+				709D1896E6C34723B32DB556 /* Resources */,
 			);
 			indentWidth = 2;
 			sourceTree = "<group>";
@@ -132,6 +152,11 @@
 				TargetAttributes = {
 					13B07F861A680F5B00A75B9A = {
 						LastSwiftMigration = 1120;
+						SystemCapabilities = {
+							com.apple.InAppPurchase = {
+								enabled = 1;
+							};
+						};
 					};
 				};
 			};
@@ -161,6 +186,10 @@
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				9E6182F5C0175ABA960681B5 /* PrivacyInfo.xcprivacy in Resources */,
+				977255527D3C40FF8D2FA736 /* Manrope_400Regular.ttf in Resources */,
+				8B865F71BADF43608B1F0AEF /* Manrope_600SemiBold.ttf in Resources */,
+				133042A2D91A434388156271 /* Manrope_500Medium.ttf in Resources */,
+				3F0F20C41A4640CE9691634F /* Manrope_700Bold.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -191,9 +220,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-PickleSensei/Pods-PickleSensei-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-PickleSensei/Pods-PickleSensei-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -230,9 +263,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-PickleSensei/Pods-PickleSensei-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-PickleSensei/Pods-PickleSensei-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -261,6 +298,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = PickleSensei/PickleSensei.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = H26U6W4K6V;
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = PickleSensei/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
@@ -274,7 +312,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.picklesensei;
 				PRODUCT_NAME = PickleSensei;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -292,6 +330,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = PickleSensei/PickleSensei.entitlements;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = H26U6W4K6V;
 				INFOPLIST_FILE = PickleSensei/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -304,7 +343,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)";
+				PRODUCT_BUNDLE_IDENTIFIER = com.picklesensei;
 				PRODUCT_NAME = PickleSensei;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SWIFT_VERSION = 5.0;

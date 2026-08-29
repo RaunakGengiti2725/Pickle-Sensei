@@ -2,16 +2,32 @@
   "extends": "@react-native/typescript-config",
   "compilerOptions": {
     "paths": {
-      "@pickle/shared-types": ["../../packages/shared-types/src/index.ts"],
-      "@pickle/scoring": ["../../packages/scoring/src/index.ts"],
+      "@pickle/shared-types": [
+        "../../packages/shared-types/src/index.ts"
+      ],
+      "@pickle/scoring": [
+        "../../packages/scoring/src/index.ts"
+      ],
       "@pickle/audio-coach-core": [
         "../../packages/audio-coach-core/src/index.ts"
       ],
       "@pickle/vision-contracts": [
         "../../packages/vision-contracts/src/index.ts"
       ],
+      "@pickle/vision-geometry": [
+        "../../packages/vision-geometry/src/index.ts"
+      ],
       "@pickle/analysis-pipeline": [
         "../../packages/analysis-pipeline/src/index.ts"
+      ],
+      "@pickle/swing-domain": [
+        "../../packages/swing-domain/src/index.ts"
+      ],
+      "@pickle/model-registry": [
+        "../../packages/model-registry/src/index.ts"
+      ],
+      "@pickle/evaluation": [
+        "../../packages/evaluation/src/index.ts"
       ]
     },
     "allowImportingTsExtensions": false,
@@ -25,5 +41,8 @@
     "__tests__/**/*.ts",
     "__tests__/**/*.tsx"
   ],
-  "exclude": ["node_modules", "Pods"]
+  "exclude": [
+    "node_modules",
+    "Pods"
+  ]
 }

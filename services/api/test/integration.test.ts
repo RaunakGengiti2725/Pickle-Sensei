@@ -9,6 +9,7 @@ import { buildApp } from "../src/app.js";
 import { DevTokenVerifier } from "../src/auth/tokens.js";
 import type { ApiConfig } from "../src/config.js";
 import type { FastifyInstance } from "fastify";
+import { publishTestScoringRelease } from "./support/scoringRelease.js";
 
 /**
  * Full-journey integration suite against a REAL PostgreSQL database.
@@ -31,11 +32,11 @@ const migrationsDir = join(
 function versionVector(scoringModelVersion = "sm-v1", shotConfigVersion = "forehand_drive@1") {
   return {
     appVersion: "0.1.0",
-    modelBundleVersion: "fixture-1",
-    poseModelVersion: "fixture-1",
-    paddleModelVersion: "fixture-1",
-    strokeDetectorVersion: "fixture-1",
-    phaseModelVersion: "fixture-1",
+    modelBundleVersion: "test-native-1",
+    poseModelVersion: "test-pose-1",
+    paddleModelVersion: "test-paddle-1",
+    strokeDetectorVersion: "test-stroke-1",
+    phaseModelVersion: "test-phase-1",
     scoringModelVersion,
     shotConfigVersion,
   };
@@ -52,7 +53,7 @@ function shotPayload(overrides: Record<string, unknown> = {}) {
     overallScore: 7.4,
     confidence: 0.91,
     resultKind: "scored",
-    source: "fixture",
+    source: "real",
     phases: [
       { key: "contact", startMs: 1000, representativeMs: 1040, endMs: 1090, confidence: 0.9 },
     ],
@@ -87,12 +88,14 @@ describe.skipIf(!testUrl)("API integration (real PostgreSQL)", () => {
   let userToken: string;
   let adminToken: string;
   let strangerToken: string;
+  let userId: string;
 
   beforeAll(async () => {
     const pool = new pg.Pool({ connectionString: testUrl });
     await pool.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
     await runMigrations(pool, migrationsDir);
     await seed(pool);
+    await publishTestScoringRelease(pool);
     await pool.end();
 
     const config: ApiConfig = {
@@ -129,6 +132,17 @@ describe.skipIf(!testUrl)("API integration (real PostgreSQL)", () => {
     device: { platform: "ios", osVersion: "18.0", appVersion: "0.1.0", model: "iPhone16,1" },
   };
 
+  async function reservePermit(token = userToken): Promise<string> {
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/analysis-permits",
+      headers: auth(token),
+      payload: { idempotencyKey: randomUUID() },
+    });
+    expect(response.statusCode, JSON.stringify(response.json())).toBe(200);
+    return (response.json() as { permit: { id: string } }).permit.id;
+  }
+
   it("bootstrap creates the account; /v1/me works afterwards", async () => {
     const before = await app.inject({ method: "GET", url: "/v1/me", headers: auth(userToken) });
     expect(before.statusCode).toBe(401); // token valid, no account yet
@@ -142,6 +156,7 @@ describe.skipIf(!testUrl)("API integration (real PostgreSQL)", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json() as { onboardingState: string; user: { id: string } };
     expect(body.onboardingState).toBe("pending");
+    userId = body.user.id;
 
     for (const token of [adminToken, strangerToken]) {
       await app.inject({
@@ -195,8 +210,21 @@ describe.skipIf(!testUrl)("API integration (real PostgreSQL)", () => {
   });
 
   it("shots:sync upserts idempotently and rejects unknown scoring models", async () => {
-    const good = shotPayload();
-    const badVersion = shotPayload({ versionVector: versionVector("sm-v999") });
+    // This broad integration journey writes more than two ratings; explicitly
+    // grant its test user premium so the separate allowance test remains able
+    // to verify the exact lifetime-free boundary.
+    const grant = await app.inject({
+      method: "PUT",
+      url: `/v1/admin/users/${userId}/entitlements`,
+      headers: auth(adminToken),
+      payload: { featureKey: "premium", validTo: null },
+    });
+    expect(grant.statusCode).toBe(200);
+    const good = shotPayload({ analysisPermitId: await reservePermit() });
+    const badVersion = shotPayload({
+      analysisPermitId: await reservePermit(),
+      versionVector: versionVector("sm-v999"),
+    });
     const res = await app.inject({
       method: "POST",
       url: "/v1/shots:sync",
@@ -208,7 +236,19 @@ describe.skipIf(!testUrl)("API integration (real PostgreSQL)", () => {
     expect(body.acceptedIds).toEqual([good.id]);
     expect(body.rejected[0]?.code).toBe("shot.unknown_scoring_model");
 
-    // Replay the same batch — idempotent, no duplicates.
+    // Replay remains idempotent even after the release is retired. Retirement
+    // blocks new writes but cannot strand a canonical result already accepted.
+    const retireBundle = await app.inject({
+      method: "PUT",
+      url: "/v1/admin/model-bundles/test-native-1",
+      headers: auth(adminToken),
+      payload: {
+        manifestSha256: "a".repeat(64),
+        status: "retired",
+        rolloutPercent: 0,
+      },
+    });
+    expect(retireBundle.statusCode).toBe(200);
     const replay = await app.inject({
       method: "POST",
       url: "/v1/shots:sync",
@@ -216,6 +256,27 @@ describe.skipIf(!testUrl)("API integration (real PostgreSQL)", () => {
       payload: { shots: [good] },
     });
     expect((replay.json() as { acceptedIds: string[] }).acceptedIds).toEqual([good.id]);
+    const mutatedReplay = await app.inject({
+      method: "POST",
+      url: "/v1/shots:sync",
+      headers: auth(userToken),
+      payload: { shots: [{ ...good, overallScore: 9.9 }] },
+    });
+    expect(mutatedReplay.json()).toMatchObject({
+      acceptedIds: [],
+      rejected: [{ id: good.id, code: "shot.id_conflict" }],
+    });
+    const reactivateBundle = await app.inject({
+      method: "PUT",
+      url: "/v1/admin/model-bundles/test-native-1",
+      headers: auth(adminToken),
+      payload: {
+        manifestSha256: "a".repeat(64),
+        status: "active",
+        rolloutPercent: 100,
+      },
+    });
+    expect(reactivateBundle.statusCode).toBe(200);
     const detail = await app.inject({
       method: "GET",
       url: `/v1/shots/${good.id}`,
@@ -227,12 +288,12 @@ describe.skipIf(!testUrl)("API integration (real PostgreSQL)", () => {
       recommendedDrill: { slug: string } | null;
     };
     expect(detailBody.checkpoints).toHaveLength(2);
-    // Worst checkpoint (contact_position) maps to the seeded contact drill.
-    expect(detailBody.recommendedDrill?.slug).toBe("dev-contact-out-front");
+    // Fixture drills are retired; no recommendation is safer than fake content.
+    expect(detailBody.recommendedDrill).toBeNull();
   });
 
   it("UUID possession never grants access — stranger cannot read my shot", async () => {
-    const mine = shotPayload();
+    const mine = shotPayload({ analysisPermitId: await reservePermit() });
     await app.inject({
       method: "POST",
       url: "/v1/shots:sync",
@@ -265,9 +326,11 @@ describe.skipIf(!testUrl)("API integration (real PostgreSQL)", () => {
     expect(create.statusCode).toBe(200);
 
     const t0 = Date.now();
+    const permits = await Promise.all([6.8, 7.2, 7.9, 8.4].map(() => reservePermit()));
     const shots = [6.8, 7.2, 7.9, 8.4].map((score, i) =>
       shotPayload({
         id: randomUUID(),
+        analysisPermitId: permits[i],
         sessionId,
         overallScore: score,
         capturedAt: new Date(t0 + i * 15000).toISOString(),
@@ -347,31 +410,106 @@ describe.skipIf(!testUrl)("API integration (real PostgreSQL)", () => {
     expect(body.series[0]?.scoring_model_version).toBe("sm-v1");
   });
 
-  it("catalog drills filter by checkpoint; drill detail includes mappings", async () => {
+  it("groups progress series by the account-local day around midnight", async () => {
+    const localToken = await new DevTokenVerifier("test", DEV_SECRET).mint(
+      `auth0|progress-timezone-${randomUUID()}`,
+    );
+    const bootstrap = await app.inject({
+      method: "POST",
+      url: "/v1/account/bootstrap",
+      headers: auth(localToken),
+      payload: {
+        ...bootstrapBody,
+        timezone: "America/Los_Angeles",
+      },
+    });
+    expect(bootstrap.statusCode).toBe(200);
+
+    // Both captures are on January 15 UTC, but they straddle local midnight:
+    // 23:30 on January 14 and 00:30 on January 15 in Los Angeles.
+    const captureTimes = ["2026-01-15T07:30:00.000Z", "2026-01-15T08:30:00.000Z"];
+    const permits = await Promise.all(captureTimes.map(() => reservePermit(localToken)));
+    const shots = captureTimes.map((capturedAt, index) =>
+      shotPayload({
+        id: randomUUID(),
+        analysisPermitId: permits[index],
+        capturedAt,
+        overallScore: index === 0 ? 7.1 : 8.2,
+      }),
+    );
+    const sync = await app.inject({
+      method: "POST",
+      url: "/v1/shots:sync",
+      headers: auth(localToken),
+      payload: { shots },
+    });
+    expect(sync.statusCode, JSON.stringify(sync.json())).toBe(200);
+    expect(sync.json()).toMatchObject({
+      acceptedIds: shots.map((shot) => shot.id),
+      rejected: [],
+    });
+
+    const progress = await app.inject({
+      method: "GET",
+      url: "/v1/progress",
+      headers: auth(localToken),
+    });
+    expect(progress.statusCode).toBe(200);
+    const body = progress.json() as {
+      series: Array<{ day: string; shot_type: string; shot_count: number }>;
+    };
+    expect(
+      body.series.map(({ day, shot_type, shot_count }) => ({ day, shot_type, shot_count })),
+    ).toEqual([
+      { day: "2026-01-14", shot_type: "forehand_drive", shot_count: 1 },
+      { day: "2026-01-15", shot_type: "forehand_drive", shot_count: 1 },
+    ]);
+
+    const checkpointProgress = await app.inject({
+      method: "GET",
+      url: "/v1/progress/checkpoints/contact_position",
+      headers: auth(localToken),
+    });
+    expect(checkpointProgress.statusCode).toBe(200);
+    expect(
+      (
+        checkpointProgress.json() as {
+          series: Array<{ day: string; scoring_model_version: string }>;
+        }
+      ).series.map(({ day, scoring_model_version }) => ({ day, scoring_model_version })),
+    ).toEqual([
+      { day: "2026-01-14", scoring_model_version: "sm-v1" },
+      { day: "2026-01-15", scoring_model_version: "sm-v1" },
+    ]);
+  });
+
+  it("catalog never exposes legacy fixture drills", async () => {
     const res = await app.inject({
       method: "GET",
       url: "/v1/catalog/drills?checkpoint=contact_position&shotType=forehand_drive",
       headers: auth(userToken),
     });
     const items = (res.json() as { items: Array<{ slug: string; is_dev_fixture: boolean }> }).items;
-    expect(items.some((d) => d.slug === "dev-contact-out-front")).toBe(true);
-    expect(items.every((d) => d.is_dev_fixture)).toBe(true); // labeled, not hidden
+    expect(items.some((d) => d.slug === "dev-contact-out-front")).toBe(false);
+    expect(items.every((d) => !d.is_dev_fixture)).toBe(true);
     const detail = await app.inject({
       method: "GET",
       url: "/v1/catalog/drills/dev-contact-out-front",
       headers: auth(userToken),
     });
-    expect((detail.json() as { mappings: unknown[] }).mappings.length).toBeGreaterThan(0);
+    expect(detail.statusCode).toBe(404);
   });
 
-  it("model-bundle endpoint abstains when no bundle is published", async () => {
+  it("model-bundle endpoint exposes the explicitly published test release", async () => {
     const res = await app.inject({
       method: "GET",
       url: "/v1/catalog/model-bundle",
       headers: auth(userToken),
     });
-    expect(res.statusCode).toBe(404);
-    expect((res.json() as { error: { code: string } }).error.code).toBe("model_bundle.none");
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      bundle: { version: "test-native-1", status: "active", rollout_percent: 100 },
+    });
   });
 
   it("feature flags evaluate with stable rollout buckets", async () => {
@@ -390,14 +528,16 @@ describe.skipIf(!testUrl)("API integration (real PostgreSQL)", () => {
       headers: auth(userToken),
     });
     const products = (
-      res.json() as { products: Array<{ product_key: string; price_usd_cents: number }> }
+      res.json() as {
+        products: Array<{ product_key: string; price_usd_cents: number; trial_days: number }>;
+      }
     ).products;
     expect(products.map((p) => p.product_key)).toEqual([
-      "premium_monthly",
-      "premium_annual",
-      "founder_lifetime",
+      "premium_monthly_499",
+      "premium_annual_3999",
     ]);
-    expect(products[0]?.price_usd_cents).toBe(1199);
+    expect(products[0]?.price_usd_cents).toBe(499);
+    expect(products[1]).toMatchObject({ price_usd_cents: 3999, trial_days: 7 });
   });
 
   it("apple sync fails loudly without credentials — validation never faked", async () => {
@@ -413,32 +553,61 @@ describe.skipIf(!testUrl)("API integration (real PostgreSQL)", () => {
     );
   });
 
-  it("cloud deep analysis is quota-gated for free users, unlimited with entitlement", async () => {
+  it("analysis uses exactly two lifetime successful ratings, then premium permits", async () => {
+    const revoke = await app.inject({
+      method: "PUT",
+      url: `/v1/admin/users/${userId}/entitlements`,
+      headers: auth(adminToken),
+      payload: {
+        featureKey: "premium",
+        validTo: new Date(Date.now() - 1_000).toISOString(),
+      },
+    });
+    expect(revoke.statusCode).toBe(200);
     const payload = {
       mediaAssetId: null,
       localAnalysisId: null,
       expectedShotType: "forehand_drive",
-      inferenceMode: "cloud_deep",
+      inferenceMode: "on_device",
       sessionId: null,
     };
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 2; i++) {
+      const permit = await app.inject({
+        method: "POST",
+        url: "/v1/analysis-permits",
+        headers: auth(userToken),
+        payload: { idempotencyKey: randomUUID() },
+      });
+      expect(permit.statusCode).toBe(200);
+      const permitId = (permit.json() as { permit: { id: string } }).permit.id;
       const res = await app.inject({
         method: "POST",
         url: "/v1/analyses",
         headers: auth(userToken),
-        payload,
+        payload: { ...payload, permitId },
       });
       expect(res.statusCode).toBe(200);
+      const ratingId = randomUUID();
+      const finalized = await app.inject({
+        method: "POST",
+        url: "/v1/shots:sync",
+        headers: auth(userToken),
+        payload: {
+          shots: [shotPayload({ id: ratingId, analysisPermitId: permitId })],
+        },
+      });
+      expect(finalized.statusCode).toBe(200);
+      expect(finalized.json()).toMatchObject({ acceptedIds: [ratingId], rejected: [] });
     }
-    const fourth = await app.inject({
+    const thirdPermit = await app.inject({
       method: "POST",
-      url: "/v1/analyses",
+      url: "/v1/analysis-permits",
       headers: auth(userToken),
-      payload,
+      payload: { idempotencyKey: randomUUID() },
     });
-    expect(fourth.statusCode).toBe(402);
-    expect((fourth.json() as { error: { code: string } }).error.code).toBe(
-      "analysis.quota_exceeded",
+    expect(thirdPermit.statusCode).toBe(402);
+    expect((thirdPermit.json() as { error: { code: string } }).error.code).toBe(
+      "access.paywall_required",
     );
 
     // Admin grants premium (the canonical entitlement path) → unlimited.
@@ -451,14 +620,25 @@ describe.skipIf(!testUrl)("API integration (real PostgreSQL)", () => {
       payload: { featureKey: "premium", validTo: null },
     });
     expect(grant.statusCode).toBe(200);
-    const fifth = await app.inject({
+    const premiumPermit = await app.inject({
+      method: "POST",
+      url: "/v1/analysis-permits",
+      headers: auth(userToken),
+      payload: { idempotencyKey: randomUUID() },
+    });
+    expect(premiumPermit.statusCode).toBe(200);
+    expect(premiumPermit.json()).toMatchObject({ permit: { accessSource: "premium" } });
+    const premiumAnalysis = await app.inject({
       method: "POST",
       url: "/v1/analyses",
       headers: auth(userToken),
-      payload,
+      payload: {
+        ...payload,
+        permitId: (premiumPermit.json() as { permit: { id: string } }).permit.id,
+      },
     });
-    expect(fifth.statusCode).toBe(200);
-    expect(await queue.size()).toBeGreaterThan(0); // deep jobs actually queued
+    expect(premiumAnalysis.statusCode).toBe(200);
+    expect((premiumAnalysis.json() as { status: string }).status).toBe("complete");
   });
 
   it("media upload requires cloud-sync consent, then presigns", async () => {

@@ -4,6 +4,7 @@
  * typed not_configured errors, never fake sign-ins.
  */
 import { useAuthStore } from '../src/auth/authStore';
+import { establishApiSession, getApiSession } from '../src/account/apiSession';
 
 // SQLite native module is absent under jest; the store's persistence guard
 // swallows that (session stays in memory), which is what we exercise here.
@@ -19,6 +20,12 @@ beforeEach(() => {
     session: null,
     busy: false,
     error: null,
+  });
+  establishApiSession({
+    apiBaseUrl: 'https://api.example.test',
+    bearerToken: 'transient-test-token',
+    canonicalAppUserId: '7fc2c743-028f-4ec6-942c-a84508f3be38',
+    provider: 'apple',
   });
 });
 
@@ -50,10 +57,16 @@ describe('authStore', () => {
     await useAuthStore.getState().continueAsGuest();
     let state = useAuthStore.getState();
     expect(state.session?.provider).toBe('guest');
-    expect(state.session?.subject).toMatch(/^guest-/);
+    expect(state.session).toMatchObject({
+      subject: 'local-only',
+      canonicalAppUserId: null,
+      localOnly: true,
+    });
+    expect(getApiSession()).toBeNull();
     await useAuthStore.getState().signOut();
     state = useAuthStore.getState();
     expect(state.session).toBeNull();
+    expect(getApiSession()).toBeNull();
   });
 
   it('clearError resets the error state', async () => {

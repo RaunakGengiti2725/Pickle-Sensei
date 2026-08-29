@@ -35,7 +35,7 @@ export function registerLibraryRoutes(app: FastifyInstance, context: AppContext)
        FROM shot s
        JOIN shot_type st ON st.id = s.shot_type_id
        LEFT JOIN checkpoint_definition cd ON cd.id = s.top_fault_checkpoint_id
-       WHERE s.user_id = $1
+       WHERE s.user_id = $1 AND s.source = 'real'
          AND ($2::text IS NULL OR st.slug = $2)
          AND ($3::boolean IS NULL OR s.favorite = $3)
          AND ($4::timestamptz IS NULL OR s.captured_at >= $4)
@@ -81,7 +81,9 @@ export function registerLibraryRoutes(app: FastifyInstance, context: AppContext)
        FROM practice_session ps
        LEFT JOIN shot_type st ON st.id = ps.selected_shot_type_id
        LEFT JOIN session_summary ss ON ss.session_id = ps.id
-       WHERE ps.user_id = $1 AND ($2::timestamptz IS NULL OR ps.started_at < $2)
+       WHERE ps.user_id = $1
+         AND EXISTS (SELECT 1 FROM shot s WHERE s.session_id = ps.id AND s.source = 'real')
+         AND ($2::timestamptz IS NULL OR ps.started_at < $2)
        ORDER BY ps.started_at DESC LIMIT $3`,
       [request.user!.id, q.cursor ?? null, q.limit],
     );
@@ -105,7 +107,7 @@ export function registerLibraryRoutes(app: FastifyInstance, context: AppContext)
           parsed.error.message,
         );
       const result = await context.pool!.query(
-        "UPDATE shot SET favorite = $3 WHERE id = $1 AND user_id = $2",
+        "UPDATE shot SET favorite = $3 WHERE id = $1 AND user_id = $2 AND source = 'real'",
         [id, request.user!.id, parsed.data.favorite],
       );
       if (result.rowCount === 0)

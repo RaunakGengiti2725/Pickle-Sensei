@@ -1,0 +1,236 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wm-volley-02",
+  "annotatorId": "devin-visual-v1",
+  "createdAtIso": "2026-08-28T07:50:00.000Z",
+  "revision": 6,
+  "stroke": "volley",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 5800,
+    "accelerationStartMs": 6440,
+    "contactMs": 6680,
+    "followThroughEndMs": 7050,
+    "recoveryEndMs": 7500
+  },
+  "faults": [],
+  "checkpointScores": {},
+  "paddleFrames": [
+    {
+      "tMs": 4250,
+      "point": {
+        "x": 0.6047,
+        "y": 0.5091
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 4600,
+      "point": {
+        "x": 0.64,
+        "y": 0.488
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 4900,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 5200,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 5450,
+      "point": {
+        "x": 0.5507,
+        "y": 0.5919
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 5500,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 5800,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 6100,
+      "point": {
+        "x": 0.813,
+        "y": 0.526
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 6400,
+      "point": {
+        "x": 0.863,
+        "y": 0.624
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 6700,
+      "point": {
+        "x": 0.83,
+        "y": 0.548
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 7000,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 7300,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 7600,
+      "point": {
+        "x": 0.755,
+        "y": 0.585
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 7900,
+      "point": {
+        "x": 0.675,
+        "y": 0.569
+      },
+      "visibility": "visible"
+    }
+  ],
+  "overallScore": null,
+  "annotatorConfidence": 0.7,
+  "notes": "Center-point labels of the near white-shirt player's paddle (1000x1080 crop). Ball visibly meets the paddle at ~6700ms. Estimated label precision ~±0.02 normalized. Occluded = paddle held in front of body (rear/side view). Rev2: ball center labels added from raw stills; contact corrected to 6680ms (ball visibly ON the paddle face in that frame), uncertainty exact. Rev3: annotatedStrokeV3=FOREHAND_VOLLEY (right-side reach, out of the air at the net); phase boundaries labeled from stills (prep/accel/follow ±2 frames, recoveryEnd rough). Rev4: target stroke event label.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-28T07:50:00.000Z"
+    },
+    {
+      "revision": 2,
+      "savedAtIso": "2026-08-28T09:40:00.000Z"
+    },
+    {
+      "revision": 3,
+      "savedAtIso": "2026-08-28T11:20:00.000Z"
+    },
+    {
+      "revision": 4,
+      "savedAtIso": "2026-08-28T14:10:00.000Z"
+    },
+    {
+      "revision": 5,
+      "savedAtIso": "2026-08-28T23:41:27.194Z"
+    },
+    {
+      "revision": 6,
+      "savedAtIso": "2026-08-28T23:43:33.911Z"
+    }
+  ],
+  "contactUncertainty": "exact",
+  "ballFrames": [
+    {
+      "tMs": 4900,
+      "point": null,
+      "visibility": "not_visible"
+    },
+    {
+      "tMs": 5200,
+      "point": null,
+      "visibility": "not_visible"
+    },
+    {
+      "tMs": 5500,
+      "point": null,
+      "visibility": "not_visible"
+    },
+    {
+      "tMs": 6360,
+      "point": null,
+      "visibility": "uncertain"
+    },
+    {
+      "tMs": 6440,
+      "point": {
+        "x": 0.963,
+        "y": 0.329
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 6520,
+      "point": {
+        "x": 0.912,
+        "y": 0.431
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 6600,
+      "point": {
+        "x": 0.873,
+        "y": 0.512
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 6680,
+      "point": {
+        "x": 0.856,
+        "y": 0.579
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 6720,
+      "point": {
+        "x": 0.887,
+        "y": 0.531
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 6760,
+      "point": {
+        "x": 0.934,
+        "y": 0.494
+      },
+      "visibility": "visible"
+    }
+  ],
+  "annotatedStrokeV3": "FOREHAND_VOLLEY",
+  "eventLabels": [
+    {
+      "eventStartMs": 6300,
+      "contactMs": 6680,
+      "eventEndMs": 7100,
+      "owner": "target",
+      "note": "near player forehand volley"
+    }
+  ],
+  "otherPaddleFrames": [
+    {
+      "tMs": 4250,
+      "point": {
+        "x": 0.8827,
+        "y": 0.4088
+      },
+      "visibility": "visible"
+    }
+  ]
+}

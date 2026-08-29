@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createFixtureVisionProviderSet } from "../src/index.js";
 import type { VideoClipRef } from "../src/index.js";
+import { createFixtureVisionProviderSet } from "./support/fixtureProvider.js";
 
 const clip: VideoClipRef = {
   uri: "fixture://forehand-demo",

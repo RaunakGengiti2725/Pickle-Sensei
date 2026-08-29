@@ -1,11 +1,9 @@
+import { getRuntimePublicConfig } from './runtimeConfig';
+
 /**
- * OAuth client configuration.
- *
- * GOOGLE_IOS_CLIENT_ID: create an iOS OAuth client in Google Cloud Console
- * (APIs & Services → Credentials → OAuth client ID → iOS, bundle id
- * org.reactjs.native.example.PickleSensei until rebranded), paste the client
- * id here, and add the reversed client id as a URL scheme in Info.plist.
- * While null, Google sign-in shows an explicit "not configured" state —
- * it is never faked.
+ * Compatibility exports for the auth UI. Values live with the rest of the
+ * checked-in public runtime configuration so release configuration has one
+ * explicit source of truth.
  */
-export const GOOGLE_IOS_CLIENT_ID: string | null = null;
+export const GOOGLE_IOS_CLIENT_ID = getRuntimePublicConfig().googleIosClientId;
+export const GOOGLE_WEB_CLIENT_ID = getRuntimePublicConfig().googleWebClientId;

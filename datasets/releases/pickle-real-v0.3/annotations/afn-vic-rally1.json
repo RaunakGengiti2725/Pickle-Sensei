@@ -1,0 +1,261 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "afn-vic-rally1",
+  "annotatorId": "devin-visual-v1",
+  "createdAtIso": "2026-08-28T16:40:00.000Z",
+  "revision": 4,
+  "stroke": "forehand_drive",
+  "annotatedStrokeV3": "FOREHAND_DRIVE",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 450,
+    "accelerationStartMs": 580,
+    "contactMs": 680,
+    "followThroughEndMs": 900,
+    "recoveryEndMs": 1150
+  },
+  "contactUncertainty": "plus_minus_1",
+  "eventLabels": [
+    {
+      "eventStartMs": 450,
+      "contactMs": 680,
+      "eventEndMs": 1150,
+      "owner": "target",
+      "note": "near gray-shirt man low forehand, blue ball departs toward net (still at 700ms shows ball just off paddle)"
+    },
+    {
+      "eventStartMs": 1300,
+      "contactMs": null,
+      "eventEndMs": 1650,
+      "owner": "other",
+      "note": "far dark-shirt man return (ball at net center by 1500)"
+    },
+    {
+      "eventStartMs": 1900,
+      "contactMs": null,
+      "eventEndMs": 2350,
+      "owner": "other",
+      "note": "green-shirt partner reach at kitchen (2100 still)"
+    }
+  ],
+  "faults": [],
+  "checkpointScores": {},
+  "paddleFrames": [
+    {
+      "tMs": 0,
+      "point": {
+        "x": 0.2746,
+        "y": 0.8919
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 400.4,
+      "point": {
+        "x": 0.4948,
+        "y": 0.9001
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 700,
+      "point": {
+        "x": 0.459,
+        "y": 0.764
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 800.8,
+      "point": {
+        "x": 0.524,
+        "y": 0.9722
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1601.6,
+      "point": {
+        "x": 0.5429,
+        "y": 0.9715
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2100,
+      "point": {
+        "x": 0.417,
+        "y": 0.826
+      },
+      "visibility": "visible"
+    }
+  ],
+  "otherPaddleFrames": [
+    {
+      "tMs": 0,
+      "point": {
+        "x": 0.4504,
+        "y": 0.6888
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 0,
+      "point": {
+        "x": 0.8781,
+        "y": 0.5555
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 0,
+      "point": {
+        "x": 0.7326,
+        "y": 0.5452
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 400.4,
+      "point": {
+        "x": 0.4391,
+        "y": 0.6596
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 400.4,
+      "point": {
+        "x": 0.7352,
+        "y": 0.5361
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 400.4,
+      "point": {
+        "x": 0.8617,
+        "y": 0.5301
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 800.8,
+      "point": {
+        "x": 0.869,
+        "y": 0.5292
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1201.2,
+      "point": {
+        "x": 0.6843,
+        "y": 0.5877
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1201.2,
+      "point": {
+        "x": 0.8632,
+        "y": 0.5255
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1601.6,
+      "point": {
+        "x": 0.6607,
+        "y": 0.583
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1601.6,
+      "point": {
+        "x": 0.5049,
+        "y": 0.6503
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2002,
+      "point": {
+        "x": 0.6532,
+        "y": 0.509
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2100,
+      "point": {
+        "x": 0.503,
+        "y": 0.641
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2402.4,
+      "point": {
+        "x": 0.6669,
+        "y": 0.539
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2402.4,
+      "point": {
+        "x": 0.4606,
+        "y": 0.7852
+      },
+      "visibility": "visible"
+    }
+  ],
+  "ballFrames": [
+    {
+      "tMs": 700,
+      "point": {
+        "x": 0.605,
+        "y": 0.559
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1500,
+      "point": {
+        "x": 0.665,
+        "y": 0.626
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2100,
+      "point": null,
+      "visibility": "uncertain"
+    }
+  ],
+  "overallScore": null,
+  "annotatorConfidence": 0.6,
+  "notes": "HELD-OUT TEST (session afn-vic-2025, indoor Vicenza, BLUE ball, rear view, doubles). Near gray-shirt man: low forehand at ~680ms (ball visibly just off his blue/pink paddle at 700). Labels from 4 raw stills; no threshold iteration against this case. Ball is BLUE (color-confuser vs yellow assumptions).",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-28T16:40:00.000Z"
+    },
+    {
+      "revision": 2,
+      "savedAtIso": "2026-08-28T23:41:27.194Z"
+    },
+    {
+      "revision": 3,
+      "savedAtIso": "2026-08-28T23:43:33.909Z"
+    },
+    {
+      "revision": 4,
+      "savedAtIso": "2026-08-28T23:44:21.180Z"
+    }
+  ]
+}

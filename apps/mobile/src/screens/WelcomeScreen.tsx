@@ -1,54 +1,103 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button } from '../design/components';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { BrandMark, Button, Pill } from '../design/components';
 import { color, radius, space, type } from '../design/tokens';
 
-/**
- * Launch screen (spec p. 5): one job — communicate the product in five
- * seconds and move to sign-in. The demo transcript IS the pitch (spec p. 59).
- */
-
-const DEMO_LINES = [
-  { who: 'You hit a forehand.', coach: '"7.2. Contact late."' },
-  { who: 'You hit again.', coach: '"7.8. Better — farther in front."' },
-  { who: 'Again.', coach: '"8.4. That\'s it."' },
-];
+function CourtStory() {
+  return (
+    <View style={styles.courtStory}>
+      <Svg width="100%" height="100%" viewBox="0 0 340 300">
+        <Path
+          d="M35 42h270v216H35z"
+          stroke={color.lineDark}
+          strokeWidth="1.5"
+          fill="none"
+        />
+        <Line
+          x1="170"
+          y1="42"
+          x2="170"
+          y2="258"
+          stroke={color.lineDark}
+          strokeWidth="1.5"
+        />
+        <Line
+          x1="35"
+          y1="120"
+          x2="305"
+          y2="120"
+          stroke={color.lineDark}
+          strokeWidth="1.5"
+        />
+        <Line
+          x1="35"
+          y1="180"
+          x2="305"
+          y2="180"
+          stroke={color.lineDark}
+          strokeWidth="1.5"
+        />
+        <Path
+          d="M84 221c35-72 80-87 147-109"
+          stroke={color.volt}
+          strokeWidth="2.5"
+          fill="none"
+          strokeDasharray="4 7"
+          strokeLinecap="round"
+        />
+        <Circle cx="84" cy="221" r="8" fill={color.volt} />
+        <Circle cx="231" cy="112" r="5" fill={color.onDark} />
+      </Svg>
+      <View style={styles.readout}>
+        <Text style={[type.micro, { color: color.volt }]}>POSE-GUIDED</Text>
+        <Text style={[type.h1, styles.readoutTitle]}>
+          Automatic{`\n`}capture.
+        </Text>
+        <Text
+          style={[type.caption, { color: color.onDarkMuted, marginTop: 5 }]}
+        >
+          No shot picker. No timer.
+        </Text>
+      </View>
+      <View style={styles.livePill}>
+        <View style={styles.privateIcon} />
+        <Text style={[type.micro, { color: color.onDark }]}>ON-DEVICE</Text>
+      </View>
+    </View>
+  );
+}
 
 export function WelcomeScreen(props: { onGetStarted: () => void }) {
   return (
-    <SafeAreaView style={styles.screen}>
-      <View style={styles.hero}>
-        <Text style={styles.wordmark}>
-          PICKLE<Text style={{ color: color.volt }}>SENSEI</Text>
-        </Text>
-        <Text style={styles.tagline}>See your game. Fix the right thing.</Text>
+    <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
+      <StatusBar barStyle="light-content" />
+      <View style={styles.topBar}>
+        <BrandMark light />
+        <Pill label="PRIVATE BY DEFAULT" tone="dark" />
       </View>
 
-      <View style={styles.demoCard}>
-        <Text
-          style={[type.micro, { color: color.volt, marginBottom: space.sm }]}
-        >
-          PHONE ON THE FENCE · LIVE COURT
+      <View style={styles.heroCopy}>
+        <Text style={[type.hero, { color: color.onDark }]}>
+          See the stroke.{`\n`}Know the fix.
         </Text>
-        {DEMO_LINES.map(line => (
-          <View key={line.coach} style={styles.demoLine}>
-            <Text style={[type.caption, { color: '#8B98A5' }]}>{line.who}</Text>
-            <Text style={[type.h2, { color: color.onDark }]}>{line.coach}</Text>
-          </View>
-        ))}
+        <Text style={styles.tagline}>
+          A private technique coach that guides each capture and turns validated
+          reads into one clear next step.
+        </Text>
       </View>
+
+      <CourtStory />
 
       <View style={styles.footer}>
-        <Button label="Get Started" onPress={props.onGetStarted} />
-        <Text
-          style={[
-            type.caption,
-            { color: color.inkSoft, textAlign: 'center', marginTop: space.md },
-          ]}
-        >
-          Every rep detected, scored, and coached out loud.{'\n'}Your court
-          video stays on your phone.
+        <Button
+          label="Start your first read"
+          variant="volt"
+          onPress={props.onGetStarted}
+        />
+        <Text style={styles.privacy}>
+          Two successful validated ratings free · Unscored attempts don’t count
         </Text>
       </View>
     </SafeAreaView>
@@ -56,23 +105,61 @@ export function WelcomeScreen(props: { onGetStarted: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: color.ink },
-  hero: { paddingHorizontal: space.lg, paddingTop: space.xxl },
-  wordmark: { ...type.h1, fontSize: 34, letterSpacing: 1, color: color.onDark },
-  tagline: { ...type.body, color: '#B7C2CC', marginTop: space.sm },
-  demoCard: {
+  screen: { flex: 1, backgroundColor: color.surfaceDark },
+  topBar: {
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  heroCopy: { paddingHorizontal: space.lg, paddingTop: space.xl },
+  tagline: {
+    ...type.body,
+    color: color.onDarkMuted,
+    marginTop: space.md,
+    maxWidth: 340,
+  },
+  courtStory: {
     flex: 1,
-    justifyContent: 'center',
     marginHorizontal: space.lg,
+    marginTop: space.lg,
+    minHeight: 270,
+    borderRadius: radius.xl,
+    backgroundColor: color.inkElevated,
+    overflow: 'hidden',
   },
-  demoLine: {
-    borderLeftWidth: 3,
-    borderLeftColor: color.court,
-    paddingLeft: space.md,
-    paddingVertical: space.sm,
-    marginBottom: space.md,
-    backgroundColor: '#111B2A',
-    borderRadius: radius.sm,
+  readout: { position: 'absolute', top: 28, left: 28 },
+  readoutTitle: { color: color.onDark, marginTop: space.sm },
+  livePill: {
+    position: 'absolute',
+    right: 20,
+    bottom: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: radius.pill,
+    backgroundColor: color.overlayDarkSoft,
   },
-  footer: { padding: space.lg, paddingBottom: space.xl },
+  privateIcon: {
+    width: 8,
+    height: 8,
+    borderRadius: 3,
+    borderWidth: 2,
+    borderColor: color.volt,
+    transform: [{ rotate: '45deg' }],
+  },
+  footer: {
+    paddingHorizontal: space.lg,
+    paddingTop: space.lg,
+    paddingBottom: space.sm,
+  },
+  privacy: {
+    ...type.caption,
+    color: color.onDarkFaint,
+    textAlign: 'center',
+    marginTop: space.md,
+  },
 });

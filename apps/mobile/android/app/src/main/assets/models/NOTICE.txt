@@ -1,0 +1,13 @@
+Pose Landmarker Full task bundle
+Source: https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task
+Model card: https://storage.googleapis.com/mediapipe-assets/Model%20Card%20BlazePose%20GHUM%203D.pdf
+Retrieved: 2026-08-27
+Upstream ETag/MD5: 5a9ad88919b2231d02b1fdf4a54090ec
+
+The BlazePose GHUM model is licensed under the Apache License, Version 2.0.
+https://www.apache.org/licenses/LICENSE-2.0
+
+The model is used only for single-person pose landmarks and framing/motion
+capture. It is not a validated pickleball stroke classifier and must not be
+used to invent a stroke label, technique score, medical claim, identity, or
+surveillance result.

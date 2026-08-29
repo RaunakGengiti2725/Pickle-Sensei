@@ -1,0 +1,72 @@
+{
+  "wm-volley-02": {
+    "contact": {
+      "status": "estimated",
+      "estimatedContactMs": 6650,
+      "errMs": 30,
+      "CONTACT_stage_pass": true
+    },
+    "phasesV2_status": "segmented",
+    "ballStage_status": "tracked",
+    "strokePrediction": {
+      "label": "FOREHAND",
+      "leaf": null,
+      "depth": 2,
+      "confidence": 0.8,
+      "contactPointSource": "paddle",
+      "contactPointReliability": "strong",
+      "limitingFactors": [
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "bounce_not_observed_level3_uncommitted"
+      ]
+    },
+    "STROKE_stage": {
+      "pass": true,
+      "detail": "predicted FOREHAND vs gold FOREHAND_VOLLEY",
+      "explicit_abstention": false
+    }
+  },
+  "afn-sasebo-rally1": {
+    "contact": {
+      "status": "abstained",
+      "estimatedContactMs": null,
+      "errMs": null,
+      "CONTACT_stage_pass": false
+    },
+    "phasesV2_status": "abstained",
+    "ballStage_status": "tracked",
+    "strokePrediction": null,
+    "STROKE_stage": {
+      "pass": false,
+      "detail": "predicted none vs gold BACKHAND_VOLLEY",
+      "explicit_abstention": false
+    }
+  },
+  "afn-sasebo-rally2": {
+    "contact": {
+      "status": "estimated",
+      "estimatedContactMs": 2650,
+      "errMs": 30,
+      "CONTACT_stage_pass": true
+    },
+    "phasesV2_status": "segmented",
+    "ballStage_status": "tracked",
+    "strokePrediction": {
+      "label": "OVERHEAD",
+      "leaf": "OVERHEAD",
+      "depth": 1,
+      "confidence": 0.7,
+      "contactPointSource": "paddle",
+      "contactPointReliability": "degraded",
+      "limitingFactors": [
+        "paddle_point_low_track_confidence",
+        "contact_point_contradicts_overhead_but_degraded_window_wins"
+      ]
+    },
+    "STROKE_stage": {
+      "pass": true,
+      "detail": "predicted OVERHEAD vs gold OVERHEAD",
+      "explicit_abstention": false
+    }
+  }
+}

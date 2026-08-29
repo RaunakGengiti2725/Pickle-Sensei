@@ -1,0 +1,178 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "afn-sasebo-rally2",
+  "annotatorId": "devin-visual-v1",
+  "createdAtIso": "2026-08-28T16:40:00.000Z",
+  "revision": 3,
+  "stroke": "volley",
+  "annotatedStrokeV3": "OVERHEAD",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 2350,
+    "accelerationStartMs": 2480,
+    "contactMs": 2620,
+    "followThroughEndMs": 2950,
+    "recoveryEndMs": 3100
+  },
+  "contactUncertainty": "plus_minus_2",
+  "eventLabels": [
+    {
+      "eventStartMs": 2380,
+      "contactMs": 2620,
+      "eventEndMs": 3050,
+      "owner": "target",
+      "note": "near gray-shirt man overhead/high hit; contact interpolated from ball transit 2500->2682 stills"
+    }
+  ],
+  "faults": [],
+  "checkpointScores": {},
+  "paddleFrames": [
+    {
+      "tMs": 2200,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 2500,
+      "point": {
+        "x": 0.742,
+        "y": 0.09
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2682,
+      "point": {
+        "x": 0.641,
+        "y": 0.449
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2850,
+      "point": null,
+      "visibility": "occluded"
+    }
+  ],
+  "ballFrames": [
+    {
+      "tMs": 2200,
+      "point": null,
+      "visibility": "not_visible"
+    },
+    {
+      "tMs": 2500,
+      "point": {
+        "x": 0.586,
+        "y": 0.156
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2682,
+      "point": {
+        "x": 0.698,
+        "y": 0.238
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2850,
+      "point": null,
+      "visibility": "not_visible"
+    }
+  ],
+  "overallScore": null,
+  "annotatorConfidence": 0.6,
+  "notes": "AFN Sasebo rear view. Near large gray-shirt man performs an OVERHEAD (paddle raised high at 2500, ball above at 0.16y; departure by 2682). Paddle motion-blurred at reach. Labels from raw stills (~±0.02); contact plus_minus_2 (interpolated between stills).",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-28T16:40:00.000Z"
+    },
+    {
+      "revision": 2,
+      "savedAtIso": "2026-08-28T23:41:27.193Z"
+    },
+    {
+      "revision": 3,
+      "savedAtIso": "2026-08-28T23:43:33.911Z"
+    }
+  ],
+  "otherPaddleFrames": [
+    {
+      "tMs": 502,
+      "point": {
+        "x": 0.6829,
+        "y": 0.4482
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 902.4,
+      "point": {
+        "x": 0.8527,
+        "y": 0.4614
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 902.4,
+      "point": {
+        "x": 0.6348,
+        "y": 0.4521
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1302.8,
+      "point": {
+        "x": 0.2332,
+        "y": 0.5036
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1302.8,
+      "point": {
+        "x": 0.348,
+        "y": 0.4736
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1703.2,
+      "point": {
+        "x": 0.2503,
+        "y": 0.4902
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1703.2,
+      "point": {
+        "x": 0.9004,
+        "y": 0.6183
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2103.6,
+      "point": {
+        "x": 0.2391,
+        "y": 0.4795
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2103.6,
+      "point": {
+        "x": 0.9139,
+        "y": 0.6074
+      },
+      "visibility": "visible"
+    }
+  ]
+}

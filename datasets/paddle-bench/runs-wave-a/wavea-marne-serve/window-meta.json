@@ -1,0 +1,9 @@
+{
+  "derivedFrom": "datasets/corpus/runs/rec-96ae65019c30",
+  "windowMs": {
+    "from": 33350,
+    "to": 39656
+  },
+  "note": "windowed VIEW of the source people.json (frames filtered, timestamps absolute); created for event-bounds gold labeling (wave-a)",
+  "createdAtIso": "2026-08-29T02:15:09.412Z"
+}

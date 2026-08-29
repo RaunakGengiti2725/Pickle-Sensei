@@ -1,0 +1,470 @@
+{
+  "schemaVersion": 1,
+  "recordings": {
+    "rec-1c1286ce675e": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:12:32.642Z",
+        "ms": 13082,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:30:34.568Z",
+        "ms": 347,
+        "detail": "8 sampled seconds"
+      },
+      "mine": {
+        "status": "done",
+        "stageVersion": "video-mining-4 (windowed + gameplay-validity gate: static/graphic humans produce no candidates)",
+        "atIso": "2026-08-28T23:27:11.758Z",
+        "ms": 13,
+        "detail": "0 candidates · 9 scenes"
+      }
+    },
+    "rec-208ca8beea6d": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:12:56.391Z",
+        "ms": 36826,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:30:35.249Z",
+        "ms": 680,
+        "detail": "60 sampled seconds"
+      }
+    },
+    "rec-274544640cc6": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:13:17.697Z",
+        "ms": 58130,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:30:36.551Z",
+        "ms": 1141,
+        "detail": "60 sampled seconds"
+      }
+    },
+    "rec-5bf0e6a85afb": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:13:34.729Z",
+        "ms": 38337,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:30:43.251Z",
+        "ms": 1021,
+        "detail": "60 sampled seconds"
+      },
+      "mine": {
+        "status": "done",
+        "stageVersion": "video-mining-4 (windowed + gameplay-validity gate: static/graphic humans produce no candidates)",
+        "atIso": "2026-08-28T23:27:12.608Z",
+        "ms": 91,
+        "detail": "19 candidates · 5 scenes"
+      }
+    },
+    "rec-6e06a3157947": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:14:01.853Z",
+        "ms": 44156,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:30:44.444Z",
+        "ms": 1193,
+        "detail": "60 sampled seconds"
+      },
+      "mine": {
+        "status": "done",
+        "stageVersion": "video-mining-4 (windowed + gameplay-validity gate: static/graphic humans produce no candidates)",
+        "atIso": "2026-08-28T23:27:12.678Z",
+        "ms": 70,
+        "detail": "5 candidates · 4 scenes"
+      }
+    },
+    "rec-75c28e175c47": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:14:08.756Z",
+        "ms": 6902,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:30:45.407Z",
+        "ms": 225,
+        "detail": "15 sampled seconds"
+      },
+      "mine": {
+        "status": "done",
+        "stageVersion": "video-mining-4 (windowed + gameplay-validity gate: static/graphic humans produce no candidates)",
+        "atIso": "2026-08-28T23:27:12.679Z",
+        "ms": 1,
+        "detail": "0 candidates · 3 scenes"
+      }
+    },
+    "rec-912aeaa8c30c": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:14:23.486Z",
+        "ms": 14729,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:30:45.996Z",
+        "ms": 326,
+        "detail": "15 sampled seconds"
+      },
+      "mine": {
+        "status": "done",
+        "stageVersion": "video-mining-4 (windowed + gameplay-validity gate: static/graphic humans produce no candidates)",
+        "atIso": "2026-08-28T23:27:12.684Z",
+        "ms": 4,
+        "detail": "0 candidates · 4 scenes"
+      }
+    },
+    "rec-72cd8795bdc2": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:14:25.042Z",
+        "ms": 50313,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:30:45.181Z",
+        "ms": 737,
+        "detail": "60 sampled seconds"
+      }
+    },
+    "rec-960a1a200d6d": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:14:25.216Z",
+        "ms": 173,
+        "detail": "adopted from datasets/mining (identical content, earlier run)"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:30:58.294Z",
+        "ms": 8819,
+        "detail": "308 sampled seconds"
+      },
+      "mine": {
+        "status": "done",
+        "stageVersion": "video-mining-4 (windowed + gameplay-validity gate: static/graphic humans produce no candidates)",
+        "atIso": "2026-08-28T23:27:13.370Z",
+        "ms": 399,
+        "detail": "47 candidates · 10 scenes"
+      }
+    },
+    "rec-96ae65019c30": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:14:25.286Z",
+        "ms": 70,
+        "detail": "adopted from datasets/mining (identical content, earlier run)"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:31:01.062Z",
+        "ms": 2768,
+        "detail": "68 sampled seconds"
+      },
+      "mine": {
+        "status": "done",
+        "stageVersion": "video-mining-4 (windowed + gameplay-validity gate: static/graphic humans produce no candidates)",
+        "atIso": "2026-08-28T23:27:13.501Z",
+        "ms": 131,
+        "detail": "9 candidates · 7 scenes"
+      }
+    },
+    "rec-916657917f2b": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:17:06.884Z",
+        "ms": 163398,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:30:49.474Z",
+        "ms": 3478,
+        "detail": "96 sampled seconds"
+      },
+      "mine": {
+        "status": "done",
+        "stageVersion": "video-mining-4 (windowed + gameplay-validity gate: static/graphic humans produce no candidates)",
+        "atIso": "2026-08-28T23:27:12.970Z",
+        "ms": 285,
+        "detail": "28 candidates · 4 scenes"
+      }
+    },
+    "rec-44c0c451500c": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:17:41.861Z",
+        "ms": 309218,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:30:42.229Z",
+        "ms": 5677,
+        "detail": "109 sampled seconds"
+      },
+      "mine": {
+        "status": "done",
+        "stageVersion": "video-mining-4 (windowed + gameplay-validity gate: static/graphic humans produce no candidates)",
+        "atIso": "2026-08-28T23:27:12.516Z",
+        "ms": 757,
+        "detail": "20 candidates · 5 scenes"
+      }
+    },
+    "rec-aba9629c681d": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:17:57.141Z",
+        "ms": 50256,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:31:22.441Z",
+        "ms": 1553,
+        "detail": "60 sampled seconds"
+      }
+    },
+    "rec-afd0b6bad5d0": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:19:23.963Z",
+        "ms": 102102,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:31:24.806Z",
+        "ms": 2246,
+        "detail": "108 sampled seconds"
+      },
+      "mine": {
+        "status": "done",
+        "stageVersion": "video-mining-4 (windowed + gameplay-validity gate: static/graphic humans produce no candidates)",
+        "atIso": "2026-08-28T23:27:13.561Z",
+        "ms": 59,
+        "detail": "14 candidates · 52 scenes"
+      }
+    },
+    "rec-b6f280b2900c": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:20:41.012Z",
+        "ms": 163870,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:31:29.686Z",
+        "ms": 4879,
+        "detail": "237 sampled seconds"
+      },
+      "mine": {
+        "status": "done",
+        "stageVersion": "video-mining-4 (windowed + gameplay-validity gate: static/graphic humans produce no candidates)",
+        "atIso": "2026-08-28T23:27:13.938Z",
+        "ms": 376,
+        "detail": "24 candidates · 1 scenes"
+      }
+    },
+    "rec-d230484fbaa5": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:22:53.456Z",
+        "ms": 132443,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:31:52.617Z",
+        "ms": 6256,
+        "detail": "122 sampled seconds"
+      },
+      "mine": {
+        "status": "done",
+        "stageVersion": "video-mining-4 (windowed + gameplay-validity gate: static/graphic humans produce no candidates)",
+        "atIso": "2026-08-28T23:27:14.072Z",
+        "ms": 133,
+        "detail": "12 candidates · 27 scenes"
+      }
+    },
+    "rec-aaead01533ed": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:22:55.823Z",
+        "ms": 510537,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:31:20.887Z",
+        "ms": 19825,
+        "detail": "1140 sampled seconds"
+      }
+    },
+    "rec-faead33a362c": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:23:38.250Z",
+        "ms": 42427,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:32:05.483Z",
+        "ms": 1678,
+        "detail": "98 sampled seconds"
+      },
+      "mine": {
+        "status": "done",
+        "stageVersion": "video-mining-4 (windowed + gameplay-validity gate: static/graphic humans produce no candidates)",
+        "atIso": "2026-08-28T23:27:14.145Z",
+        "ms": 73,
+        "detail": "21 candidates · 4 scenes"
+      }
+    },
+    "rec-c1b5580db415": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:28:49.602Z",
+        "ms": 565638,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:31:46.360Z",
+        "ms": 16673,
+        "detail": "705 sampled seconds"
+      }
+    },
+    "rec-d613b17cfef1": {
+      "extract": {
+        "status": "done",
+        "stageVersion": "extract-v5",
+        "atIso": "2026-08-28T22:30:33.628Z",
+        "ms": 460171,
+        "detail": "extracted"
+      },
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:32:03.804Z",
+        "ms": 11186,
+        "detail": "563 sampled seconds"
+      }
+    },
+    "rec-024decaeb66e": {
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:30:34.066Z",
+        "ms": 437,
+        "detail": "3 sampled seconds"
+      }
+    },
+    "rec-0c19a6f0251d": {
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:30:34.221Z",
+        "ms": 155,
+        "detail": "5 sampled seconds"
+      }
+    },
+    "rec-21fb75446a03": {
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:30:35.409Z",
+        "ms": 159,
+        "detail": "4 sampled seconds"
+      }
+    },
+    "rec-7d396a6d6566": {
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:30:45.545Z",
+        "ms": 138,
+        "detail": "8 sampled seconds"
+      }
+    },
+    "rec-8b77606225ba": {
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:30:45.670Z",
+        "ms": 125,
+        "detail": "8 sampled seconds"
+      }
+    },
+    "rec-ac6c9d7b5055": {
+      "fingerprint": {
+        "status": "done",
+        "stageVersion": "dhash64-9x8-gray@1fps",
+        "atIso": "2026-08-28T22:31:22.558Z",
+        "ms": 117,
+        "detail": "8 sampled seconds"
+      }
+    }
+  }
+}

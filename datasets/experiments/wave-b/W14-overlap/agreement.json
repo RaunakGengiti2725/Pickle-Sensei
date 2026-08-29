@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "computedAtIso": "2026-08-29T02:40:00Z",
+  "annotators": {
+    "primary": "devin-visual-v2-wave-a (cases.json verification.by for TA; annotator field in L-verdicts-*.json for ownership — same annotator on both tasks, so this overlap measures one annotator pair, not a pool)",
+    "secondary": "devin-visual-overlap-w14 (this workstream, blind pass)"
+  },
+  "protocolStatement": "Second-annotator verdicts were frozen to ta-overlap.json / ownership-overlap.json BEFORE any primary verdict value or note was read. Selection touched only caseId/split/situation/verification.by (TA) and caseId/tMs/owners-index-keys (ownership). K-summary.json / L-summary.json contents and the ownership-review.json sidecar were not opened pre-freeze.",
+  "ta": {
+    "nCases": 12,
+    "mapping": "primary verification.state → taxonomy: verified→correct-lock, rejected→reject (no primary note among the 12 indicated wrong-person, so no primary wrong-lock present)",
+    "rawAgreement3Class": 0.8333,
+    "kappa3Class": { "value": 0.4419, "po": 0.8333, "pe": 0.7014, "approxSE": 0.3603,
+      "honestCaveats": "n=12 with 11/12 primary correct-lock: pe=0.70 is prevalence-dominated, kappa is unstable (95% CI roughly ±0.71 — statistically uninformative). Raw agreement + qualitative disagreement analysis carry the signal at this n." },
+    "kappaBinaryUsableVsReject": { "value": 0.625, "po": 0.9167, "pe": 0.7778, "approxSE": 0.359 },
+    "confusionMineVsPrimary": { "correct-lock/correct-lock": 9, "wrong-lock/correct-lock": 1, "reject/correct-lock": 1, "reject/reject": 1 },
+    "disagreements": [
+      {
+        "caseId": "ta-44c0c451500c-s1w0-p6",
+        "w14": "wrong-lock (lime on phone-filming staffer; live ARMY player is the plausible region occupant)",
+        "primary": "verified (note: 'black-shirt staff filming on phone behind barrier IS target … occlusion-heavy bystander case')",
+        "perceptionAgreement": "FULL — both annotators independently identified the same person (phone-filming staffer) under the lime box",
+        "divergence": "definitional: is TA gold 'region→person correspondence (any human)' or 'region→valid gameplay target'?",
+        "adjudicationLean": "PRIMARY, conditional: under the bench's operational question ('did we lock the person the user aimed the region at?') a bystander-occupant is a legitimate adversarial case. But this definition is currently unwritten, and such cases need a situation tag (e.g. bystander_target) so lock-correct metrics can be sliced; silently counting them as ordinary correct-locks would flatter product metrics.",
+        "flagForCommander": true
+      },
+      {
+        "caseId": "ta-960a1a200d6d-s8w0-p1",
+        "w14": "reject (region_on_crowd_target_is_spectator; only live player — wheelchair athlete — is outside region)",
+        "primary": "verified (note: 'barrier-lean spectator (tan cap, white tee) as region occupant while AIR FORCE wheelchair athlete plays center court')",
+        "perceptionAgreement": "FULL — identical description of the scene by both annotators",
+        "divergence": "same definitional split as ta-44c0c451500c-s1w0-p6",
+        "adjudicationLean": "PRIMARY, same condition: keep as adversarial case ONLY with an explicit bystander_target tag + written definition; otherwise reject.",
+        "flagForCommander": true
+      }
+    ],
+    "notableAgreementsUnderUncertainty": [
+      "ta-faead33a362c-s3w5-p2: both flagged the crowd-filled region with the server at the edge (primary: 'worst-case crowd-vs-server'; w14 confidence 0.55) — agreement, but the case argues for a video-scrub verification rule",
+      "ta-d230484fbaa5-s3w0-p1: independent identical reject (non-pickleball formation-run b-roll)"
+    ]
+  },
+  "ownership": {
+    "nFrames": 12,
+    "nBoxes": 31,
+    "mapping": "primary 4-class → W14 3-class: target→TARGET, other→NOT_TARGET, reject→NOT_TARGET, ambiguous→AMBIGUOUS. W14 sub-tags (other_player_paddle vs not_a_paddle) allow a 4-class reconstruction.",
+    "rawAgreement3Class": 0.9032,
+    "kappa3Class": { "value": 0.7807, "po": 0.9032, "pe": 0.5588, "approxSE": 0.1204,
+      "honestCaveats": "31 boxes but clustered within 12 frames of 3 videos — effective n is lower than 31 and the nominal SE understates uncertainty. Marginals happen to be symmetric (7/22/2 both sides)." },
+    "rawAgreement4Class": 0.871,
+    "kappa4Class": { "value": 0.8144, "po": 0.871, "pe": 0.3049, "approxSE": 0.0866,
+      "note": "4-class kappa exceeds 3-class because chance agreement drops when NOT_TARGET splits into other/reject" },
+    "confusion3ClassMineVsPrimary": {
+      "TARGET/TARGET": 6, "NOT_TARGET/NOT_TARGET": 21, "AMBIGUOUS/AMBIGUOUS": 1,
+      "AMBIGUOUS/TARGET": 1, "NOT_TARGET/AMBIGUOUS": 1, "TARGET/NOT_TARGET": 1
+    },
+    "disagreements": [
+      {
+        "frame": "afn-sasebo-rally2 @2204 box2 (red)",
+        "w14": "AMBIGUOUS — box mostly on background right of target's motion-blur core; a center-point label would miss the paddle",
+        "primary": "target — 'box clips the blur's right edge, center ~.03 norm right of blur center (acceptable)'",
+        "perceptionAgreement": "same object hypothesis (target's motion-blurred rising paddle); divergence is the center-offset acceptance THRESHOLD",
+        "adjudicationLean": "PRIMARY plausibly right (offset within the bench's center-error tolerance), but the numeric acceptance rule (e.g. 'accept if box center within 0.03-0.05 norm of visible paddle mass') exists only in the primary's head — must go into guidelines or motion-blur frames will drift by annotator.",
+        "flagForCommander": true
+      },
+      {
+        "frame": "afn-sasebo-rally2 @2604 box1 (lime)",
+        "w14": "NOT_TARGET(other_player_paddle, conf 0.6) — white paddle-like blur above far barrier",
+        "primary": "ambiguous — 'likely a far-court player's paddle mid-swing but no resolvable hand'",
+        "perceptionAgreement": "same object hypothesis; divergence is the evidence standard for committing to 'other' vs downgrading to 'ambiguous'",
+        "adjudicationLean": "PRIMARY — schema intent is that uncommittable boxes stay out of P/R; guideline should require resolvable hand/arm continuity before 'other'.",
+        "flagForCommander": true
+      },
+      {
+        "frame": "afn-sasebo-rally2 @3372 box1 (lime)",
+        "w14": "TARGET (conf 0.75) — dark paddle flat at hip height in front of target's hanging hand",
+        "primary": "reject — 'dark GROUND paddle lying flat at target's feet, NO owner (static since 1303 — 3rd occurrence)'",
+        "perceptionAgreement": "GENUINE perception disagreement — the only one in the ownership set",
+        "adjudicationLean": "PRIMARY almost certainly right: temporal evidence (object static across ≥2s, seen in 3 frames) is decisive and was unavailable under W14's single-frame protocol. A floor paddle beside a hand is visually near-identical to a held paddle in one frame. This is the documented failure mode of single-frame ownership review.",
+        "flagForCommander": true
+      },
+      {
+        "frame": "afn-sasebo-rally2 @3372 box0 (yellow) — SUB-CLASS only (3-class agreed NOT_TARGET)",
+        "w14": "other_player_paddle (far-side player's waist paddle)",
+        "primary": "reject ('yellow net-tape logo patch — same static object as 2971 box1')",
+        "adjudicationLean": "PRIMARY (temporal static-object ledger again). Included because it shows the same single-frame weakness at sub-class level.",
+        "flagForCommander": false
+      }
+    ],
+    "notableAgreementsUnderUncertainty": [
+      "wm-volley-02 @5850 box2: BOTH independently chose ambiguous with the same reasoning (possible occluded target-paddle edge at shoulder gap) — the ambiguous class is functioning",
+      "afn-sasebo-rally1 @434 box0: both rejected the union/duplicate box spanning two paddles; both flagged the adjacent-grip two-paddle geometry as the hard case",
+      "banner feather flag (5 frames) and background-court paddles: perfect agreement on repeated static distractors"
+    ]
+  },
+  "guidelineRecommendations": [
+    "TA: write the operational definition — verified = 'lime track is the person occupying the start region', regardless of player status; ADD a required situation tag bystander_target for non-player occupants so product metrics can slice them. (Resolves both TA disagreements.)",
+    "TA: for crowd-heavy regions where the target only clips the region edge at mid-frame (faead-s3w5-p2 pattern), require a 3-frame scrub (start/mid/end renders) before verifying — single mid-frame is insufficient.",
+    "TA: define precedence when both apply: wrong-person beats unusable-scene beats correct (annotators need a deterministic order).",
+    "Ownership: single-frame review is NOT safe for ownership — require ±1-2 adjacent frames (or the propose tool emitting a 3-frame strip) plus a static-object ledger; floor paddles, net-tape patches and banner graphics are named repeat traps (all three appeared in this 12-frame sample).",
+    "Ownership: write the numeric center-offset acceptance rule for motion-blurred paddles (primary used ~0.03 norm; codify a threshold).",
+    "Ownership: 'other' requires resolvable hand/arm continuity; otherwise 'ambiguous'. Union boxes spanning two paddles are always 'reject' (geometry, not ownership).",
+    "Both: record annotator confidence per verdict (W14 did; primary schema has no field) — low-confidence agreements (0.5-0.6) are where the next disagreements hide."
+  ]
+}

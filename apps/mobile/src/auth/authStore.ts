@@ -1,22 +1,49 @@
-import { NativeModules } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 import { create } from 'zustand';
-import { GOOGLE_IOS_CLIENT_ID } from '../config/authConfig';
+import {
+  AccountBootstrapError,
+  bootstrapCanonicalAccount,
+} from '../account/bootstrap';
+import { clearApiSession, establishApiSession } from '../account/apiSession';
+import { getAccountBootstrapEnvironment } from '../account/deviceContext';
+import {
+  GOOGLE_IOS_CLIENT_ID,
+  GOOGLE_WEB_CLIENT_ID,
+} from '../config/authConfig';
+import { getRuntimePublicConfig } from '../config/runtimeConfig';
 import { getDb } from '../data/db';
 import { getKv, setKv } from '../data/repository';
+import {
+  GUEST_DATA_OWNER,
+  SIGNED_OUT_DATA_OWNER,
+  canonicalDataOwner,
+  setActiveDataOwner,
+} from '../data/accountScope';
+import { clearSyncRuntime, configureSyncRuntime } from '../data/syncRuntime';
+import { createBillingAccessDependencies } from '../billing';
+import {
+  clearAccessStoreConfiguration,
+  configureAccessStore,
+} from '../state/accessStore';
+import { createTrainingApi } from '../training/api';
+import {
+  clearTrainingStoreConfiguration,
+  configureTrainingStore,
+} from '../training/store';
 
 /**
- * Auth session state (spec p. 5: Apple / Google / local trial account).
- * Identity tokens are exchanged at API bootstrap; what persists locally is the
- * non-secret session descriptor (provider + subject + display fields), in
- * SQLite kv. Failures are typed — auth.canceled / auth.not_configured /
- * auth.failed — and rendered honestly, never swallowed.
+ * A UI-safe account descriptor. For synced accounts `subject` is retained only
+ * for compatibility with existing display code and is the canonical backend
+ * UUID—not an Apple user identifier or Google subject. Provider tokens live in
+ * the in-memory ApiSession store and are never persisted in SQLite.
  */
-
 export type AuthProvider = 'apple' | 'google' | 'guest';
 
 export interface AuthSession {
   provider: AuthProvider;
   subject: string;
+  canonicalAppUserId: string | null;
+  localOnly: boolean;
   displayName: string | null;
   email: string | null;
 }
@@ -49,9 +76,31 @@ interface AuthState {
   clearError: () => void;
 }
 
-const KV_KEY = 'auth.session';
+const LEGACY_SESSION_KV_KEY = 'auth.session';
+const LOCAL_MODE_KV_KEY = 'auth.local-mode';
+const LOCAL_GUEST_VALUE = JSON.stringify({ version: 1, mode: 'guest' });
+
+function localGuestSession(): AuthSession {
+  return {
+    provider: 'guest',
+    subject: 'local-only',
+    canonicalAppUserId: null,
+    localOnly: true,
+    displayName: null,
+    email: null,
+  };
+}
 
 function toAuthError(error: unknown): AuthError {
+  if (error instanceof AccountBootstrapError) {
+    return {
+      code:
+        error.code === 'account.not_configured'
+          ? 'auth.not_configured'
+          : 'auth.failed',
+      message: error.message,
+    };
+  }
   const err = error as { code?: string; message?: string };
   if (err?.code === 'auth.canceled' || err?.code === 'auth.not_configured') {
     return { code: err.code, message: err.message ?? '' };
@@ -59,13 +108,61 @@ function toAuthError(error: unknown): AuthError {
   return { code: 'auth.failed', message: err?.message ?? 'Sign-in failed.' };
 }
 
-async function persist(session: AuthSession | null): Promise<void> {
+async function persistLocalGuest(enabled: boolean): Promise<void> {
   try {
-    await setKv(getDb(), KV_KEY, JSON.stringify(session));
+    await setKv(getDb(), LOCAL_MODE_KV_KEY, enabled ? LOCAL_GUEST_VALUE : '');
   } catch {
-    // No local DB (e.g. fresh simulator wipe mid-session): session stays in
-    // memory for this run; next launch simply asks again.
+    // Guest mode remains in memory for this run. Synced identity material is
+    // never sent to this fallback and is never persisted here.
   }
+}
+
+function clearSyncedRuntime(): void {
+  clearSyncRuntime();
+  clearApiSession();
+  clearAccessStoreConfiguration();
+  clearTrainingStoreConfiguration();
+}
+
+async function establishSyncedAccount(input: {
+  provider: 'apple' | 'google';
+  identityToken: string | null | undefined;
+  displayName: string | null;
+  providerEmail: string | null;
+}): Promise<AuthSession> {
+  const config = getRuntimePublicConfig();
+  const result = await bootstrapCanonicalAccount({
+    apiBaseUrl: config.apiBaseUrl,
+    bearerToken: input.identityToken,
+    provider: input.provider,
+    environment: getAccountBootstrapEnvironment(config),
+  });
+  setActiveDataOwner(canonicalDataOwner(result.account.id));
+  establishApiSession(result.apiSession);
+  configureAccessStore(
+    createBillingAccessDependencies({
+      revenueCatPublicSdkKey: config.revenueCatPublicSdkKey,
+      canonicalAppUserId: result.apiSession.canonicalAppUserId,
+      apiBaseUrl: result.apiSession.apiBaseUrl,
+      apiToken: result.apiSession.bearerToken,
+    }),
+  );
+  configureTrainingStore(
+    createTrainingApi({
+      baseUrl: result.apiSession.apiBaseUrl,
+      token: result.apiSession.bearerToken,
+    }),
+  );
+  configureSyncRuntime(result.apiSession);
+  await persistLocalGuest(false);
+  return {
+    provider: input.provider,
+    subject: result.account.id,
+    canonicalAppUserId: result.account.id,
+    localOnly: false,
+    displayName: input.displayName,
+    email: result.account.email ?? input.providerEmail,
+  };
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -75,11 +172,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   error: null,
 
   hydrate: async () => {
+    clearSyncedRuntime();
     try {
-      const raw = await getKv(getDb(), KV_KEY);
-      const parsed = raw ? (JSON.parse(raw) as AuthSession | null) : null;
-      set({ session: parsed, hydrated: true });
+      const db = getDb();
+      // Earlier builds wrote provider subjects to SQLite. Blank that legacy
+      // value during migration instead of hydrating it into a trusted session.
+      if (await getKv(db, LEGACY_SESSION_KV_KEY)) {
+        await setKv(db, LEGACY_SESSION_KV_KEY, '');
+      }
+      const raw = await getKv(db, LOCAL_MODE_KV_KEY);
+      const localGuest = raw === LOCAL_GUEST_VALUE;
+      setActiveDataOwner(localGuest ? GUEST_DATA_OWNER : SIGNED_OUT_DATA_OWNER);
+      set({
+        session: localGuest ? localGuestSession() : null,
+        hydrated: true,
+      });
     } catch {
+      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
       set({ hydrated: true });
     }
   },
@@ -103,15 +212,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const result = await native.signInWithApple();
       const name =
         [result.givenName, result.familyName].filter(Boolean).join(' ') || null;
-      const session: AuthSession = {
+      clearSyncedRuntime();
+      const session = await establishSyncedAccount({
         provider: 'apple',
-        subject: result.user,
+        identityToken: result.identityToken,
         displayName: name,
-        email: result.email ?? null,
-      };
-      await persist(session);
+        providerEmail: result.email ?? null,
+      });
       set({ session, busy: false });
     } catch (error) {
+      clearSyncedRuntime();
       set({ busy: false, error: toAuthError(error) });
     }
   },
@@ -119,13 +229,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   signInWithGoogle: async () => {
     if (get().busy) return;
     set({ busy: true, error: null });
-    if (!GOOGLE_IOS_CLIENT_ID) {
+    if (
+      !GOOGLE_WEB_CLIENT_ID ||
+      (Platform.OS === 'ios' && !GOOGLE_IOS_CLIENT_ID)
+    ) {
       set({
         busy: false,
         error: {
           code: 'auth.not_configured',
           message:
-            'Google Sign-In needs an iOS OAuth client id (src/config/authConfig.ts). Not faking it.',
+            'Google Sign-In needs its public native and web OAuth client IDs. The web client ID is required for a backend-verifiable token.',
         },
       });
       return;
@@ -133,7 +246,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const { GoogleSignin } =
         await import('@react-native-google-signin/google-signin');
-      GoogleSignin.configure({ iosClientId: GOOGLE_IOS_CLIENT_ID });
+      GoogleSignin.configure({
+        webClientId: GOOGLE_WEB_CLIENT_ID,
+        ...(GOOGLE_IOS_CLIENT_ID ? { iosClientId: GOOGLE_IOS_CLIENT_ID } : {}),
+      });
       await GoogleSignin.hasPlayServices({
         showPlayServicesUpdateDialog: false,
       });
@@ -146,33 +262,44 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return;
       }
       const user = response.data.user;
-      const session: AuthSession = {
+      clearSyncedRuntime();
+      const session = await establishSyncedAccount({
         provider: 'google',
-        subject: user.id,
+        identityToken: response.data.idToken,
         displayName: user.name ?? null,
-        email: user.email ?? null,
-      };
-      await persist(session);
+        providerEmail: user.email ?? null,
+      });
       set({ session, busy: false });
     } catch (error) {
+      clearSyncedRuntime();
       set({ busy: false, error: toAuthError(error) });
     }
   },
 
   continueAsGuest: async () => {
-    const session: AuthSession = {
-      provider: 'guest',
-      subject: `guest-${Date.now()}`,
-      displayName: null,
-      email: null,
-    };
-    await persist(session);
+    clearSyncedRuntime();
+    const session = localGuestSession();
+    await persistLocalGuest(true);
+    setActiveDataOwner(GUEST_DATA_OWNER);
     set({ session, error: null });
   },
 
   signOut: async () => {
-    await persist(null);
-    set({ session: null, error: null });
+    const provider = get().session?.provider;
+    clearSyncedRuntime();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    set({ session: null, error: null, busy: false });
+    await persistLocalGuest(false);
+    if (provider === 'google') {
+      try {
+        const { GoogleSignin } =
+          await import('@react-native-google-signin/google-signin');
+        await GoogleSignin.signOut();
+      } catch {
+        // Local API and billing material is already gone. Provider SDK cleanup
+        // can safely be retried on the next interactive sign-in.
+      }
+    }
   },
 
   clearError: () => set({ error: null }),

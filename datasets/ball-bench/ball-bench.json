@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "provenance": "licensed",
+  "note": "REAL ball benchmark. Center-point labels from raw stills; uncertain frames are excluded from precision/recall, never guessed. Source footage: CC BY 3.0 (see paddle-bench/registry.json).",
+  "cameraType": "tripod, rear elevated, 25fps 1080p crops",
+  "cases": [
+    {
+      "id": "wm-volley-02",
+      "video": "../paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "fps": 25,
+      "resolution": "1000x1080",
+      "strokeEvents": [
+        "volley exchange, ball visibly meets paddle at 6680ms"
+      ],
+      "players": "near white-shirt primary + 3 others",
+      "labels": "../paddle-bench/bundles/wm-volley-02/annotation/devin-visual-v1.json",
+      "runDir": "../paddle-bench/runs/wm-volley-02",
+      "sourceKey": "wm-pickleball-game",
+      "sessionKey": "wm-tournament-2014",
+      "role": "development"
+    },
+    {
+      "id": "wm-dink-01",
+      "video": "../paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "fps": 25,
+      "resolution": "1100x1080",
+      "strokeEvents": [
+        "kitchen-line dink at ~1260ms"
+      ],
+      "players": "near yellow-cap primary + 3 others",
+      "labels": "../paddle-bench/bundles/wm-dink-01/annotation/devin-visual-v1.json",
+      "runDir": "../paddle-bench/runs/wm-dink-01",
+      "sourceKey": "wm-pickleball-game",
+      "sessionKey": "wm-tournament-2014",
+      "role": "held_out"
+    },
+    {
+      "id": "afn-sasebo-rally1",
+      "video": "../paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "fps": 29.97,
+      "resolution": "1920x1080",
+      "strokeEvents": [
+        "backhand volley at kitchen, contact ~2900ms"
+      ],
+      "players": "white-shirt woman primary + partner + background courts",
+      "labels": "../paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v1.json",
+      "runDir": "../paddle-bench/runs/afn-sasebo-rally1",
+      "sourceKey": "afn-sasebo-indoor",
+      "sessionKey": "afn-sasebo-2025-06",
+      "role": "development"
+    },
+    {
+      "id": "afn-sasebo-rally2",
+      "video": "../paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "fps": 29.97,
+      "resolution": "1920x1080",
+      "strokeEvents": [
+        "overhead by near man, contact ~2620ms"
+      ],
+      "players": "near gray-shirt man + partners + background",
+      "labels": "../paddle-bench/bundles/afn-sasebo-rally2/annotation/devin-visual-v1.json",
+      "runDir": "../paddle-bench/runs/afn-sasebo-rally2",
+      "sourceKey": "afn-sasebo-indoor",
+      "sessionKey": "afn-sasebo-2025-06",
+      "role": "development"
+    },
+    {
+      "id": "afn-vic-rally1",
+      "video": "../paddle-bench/videos/afn-vic-rally1.mp4",
+      "fps": 29.97,
+      "resolution": "1920x1080",
+      "strokeEvents": [
+        "low forehand by near man, contact ~680ms; BLUE ball"
+      ],
+      "players": "near gray-shirt man + green partner + 2 opponents",
+      "labels": "../paddle-bench/bundles/afn-vic-rally1/annotation/devin-visual-v1.json",
+      "runDir": "../paddle-bench/runs/afn-vic-rally1",
+      "sourceKey": "afn-provic",
+      "sessionKey": "afn-vic-2025",
+      "role": "test_held_out"
+    }
+  ],
+  "coverageGaps": [
+    "no serve/return/drive/overhead ball labels",
+    "no bounce events labeled",
+    "outgoing-ball labels sparse (2 frames)",
+    "no low-light or long-flight (lob) labels"
+  ],
+  "splitNote": "development cases were used to debug identity/occlusion this session; wm-dink-01 was NOT tuned against (its regressions are reported as-is). Formal train/val/test splits by sessionKey begin when training begins."
+}

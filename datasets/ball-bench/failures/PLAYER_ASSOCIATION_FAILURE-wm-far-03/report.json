@@ -1,0 +1,84 @@
+{
+  "video": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-farplayer-return.mp4",
+  "outDir": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/runs/wm-far-03",
+  "stroke": "return",
+  "poseSequenceSha256": "86e86e93490e8c929b2385933d6731b1c6d3ebbee816057c8d5fa76c94e0c4fc",
+  "quality": {
+    "analyzable": false,
+    "reasons": [
+      "player_too_small_in_frame"
+    ],
+    "notEvaluated": [
+      "camera_motion",
+      "paddle_visibility",
+      "lighting_failure"
+    ],
+    "stats": {
+      "frameCount": 200,
+      "durationMs": 7960,
+      "effectiveFps": 25,
+      "meanFrameConfidence": 0.6980966421274043,
+      "meanJointsPerFrame": 9.61,
+      "fullBodyFrameRate": 0.835,
+      "medianTorsoLengthNorm": 0.07466717308804266,
+      "largestGapMs": 40
+    }
+  },
+  "window": {
+    "startMs": 3420,
+    "endMs": 5220,
+    "peakMotionMs": 4440,
+    "confidence": 0.95
+  },
+  "contact": {
+    "status": "estimated",
+    "estimatedContactMs": 4493,
+    "confidence": 0.5970588235294126,
+    "ballConfirmed": false,
+    "supportingEvidence": [
+      {
+        "signal": "paddle_speed_peak",
+        "timestampMs": 4540,
+        "weight": 0.45,
+        "detail": "paddle peak 1.13 u/s over 28 samples"
+      },
+      {
+        "signal": "wrist_speed_peak",
+        "timestampMs": 4440,
+        "weight": 0.4,
+        "detail": "peak 6.51 u/s over 41 samples"
+      }
+    ]
+  },
+  "ballDiagnostics": {
+    "trajectoryCount": 2694,
+    "trajectoriesPerSecond": 336.75,
+    "windowCandidates": 0,
+    "chosenId": null,
+    "chosenCoverage": 0,
+    "chosenPoints": 0
+  },
+  "ballModality": "unavailable",
+  "paddle": {
+    "status": "tracked",
+    "trackId": 1,
+    "observationCount": 48,
+    "windowCoverage": 0.6444444444444445,
+    "meanDetectorScore": 0.4113291666666666,
+    "meanWristDistance": 0.05785892555404989,
+    "candidateTracks": 27,
+    "detector": "dfine-medium-coco@transformers",
+    "inferenceMsPerFrame": 71.8,
+    "confidenceModel": "heuristic-v1 (uncalibrated)"
+  },
+  "timings": {
+    "poseExtractMs": 5598,
+    "paddleDetectMs": 19757,
+    "paddleTrackMs": 9,
+    "overlayRenderMs": 671
+  },
+  "outcome": {
+    "kind": "not_analyzable",
+    "detail": "capture quality gate failed: player_too_small_in_frame — perception artifacts written; no score permitted"
+  }
+}

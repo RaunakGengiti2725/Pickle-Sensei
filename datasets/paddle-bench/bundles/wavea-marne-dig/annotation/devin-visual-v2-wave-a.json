@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-marne-dig",
+  "annotatorId": "devin-visual-v2-wave-a",
+  "createdAtIso": "2026-08-29T00:00:00.000Z",
+  "revision": 1,
+  "stroke": "unsure",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 14042,
+    "accelerationStartMs": 14125,
+    "contactMs": 14188,
+    "followThroughEndMs": 14250,
+    "recoveryEndMs": 14333
+  },
+  "contactUncertainty": "plus_minus_2",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.6,
+  "notes": "dvids-marne-outdoor (rec-96ae65019c30, dvids-marne-2024, DEV) window [12200..14400], RECORDING clock. Near-left BIG man (black tee, yellow crest) = window auto-target (cov 1.0 within this window, torso ~(0.14,0.52)); woman partner center; far side pink/black shirts. Reviewed at 12/24fps. A far-side lob (~13500) travels long to the near-left corner; target crouch-steps under it from 14042, reaches UP-LEFT at the frame edge 14125-14167; contact 14188 +-2 frames, evidenced by BALL REVERSAL (descending at 14125-14167 -> popped upward by 14208; touch frame partially cropped at the image edge - same ball-turn convention as the v1 rally1 partner label); the deflection lands back on his own side (bounces near-left 14433-14767) and the point ends. Recovery pivot completes 14292-14333; his walk-off to retrieve the ball (14333+) is locomotion, excluded. WINDOW LIMITATION (disclosed): the tracker loses him at the frame edge at ~14414, so the case window must end at 14400 - post-trigger replay runway is truncated ~65ms after eventEnd; the completion bench discloses end-of-data rows. Labels remain full visual truth.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T00:00:00.000Z"
+    }
+  ],
+  "eventLabels": [
+    {
+      "eventStartMs": 14042,
+      "contactMs": 14188,
+      "eventEndMs": 14333,
+      "owner": "target",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "defensive overhead dig of a deep lob at the near-left frame edge: crouch-step 14042, reach 14125-14167, contact 14188 +-2 frames (ball reversal 14167->14208; touch frame edge-cropped), recovery pivot done 14333; failed dig - ball dies on own side, point over; walk-off excluded"
+    }
+  ]
+}

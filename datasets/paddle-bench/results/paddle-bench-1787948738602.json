@@ -1,0 +1,80 @@
+{
+  "manifest": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/paddle-bench.json",
+  "results": [
+    {
+      "caseId": "wm-dink-01",
+      "labeledFrames": 16,
+      "visibleFrames": 11,
+      "occludedOrAbsentFrames": 5,
+      "hits": 5,
+      "misses": 6,
+      "wrongLocation": 0,
+      "falsePositives": 0,
+      "correctRejections": 5,
+      "precision": 1,
+      "recall": 0.45454545454545453,
+      "meanCenterErrorNorm": 0.026731085540001594,
+      "medianCenterErrorNorm": 0.033288910728701035
+    },
+    {
+      "caseId": "wm-volley-02",
+      "labeledFrames": 12,
+      "visibleFrames": 6,
+      "occludedOrAbsentFrames": 6,
+      "hits": 3,
+      "misses": 3,
+      "wrongLocation": 0,
+      "falsePositives": 4,
+      "correctRejections": 2,
+      "precision": 0.42857142857142855,
+      "recall": 0.5,
+      "meanCenterErrorNorm": 0.023536328182641637,
+      "medianCenterErrorNorm": 0.01769806211443245
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "labeledFrames": 6,
+      "visibleFrames": 6,
+      "occludedOrAbsentFrames": 0,
+      "hits": 0,
+      "misses": 6,
+      "wrongLocation": 0,
+      "falsePositives": 0,
+      "correctRejections": 0,
+      "precision": null,
+      "recall": 0,
+      "meanCenterErrorNorm": null,
+      "medianCenterErrorNorm": null
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "labeledFrames": 4,
+      "visibleFrames": 2,
+      "occludedOrAbsentFrames": 2,
+      "hits": 0,
+      "misses": 2,
+      "wrongLocation": 0,
+      "falsePositives": 0,
+      "correctRejections": 2,
+      "precision": null,
+      "recall": 0,
+      "meanCenterErrorNorm": null,
+      "medianCenterErrorNorm": null
+    },
+    {
+      "caseId": "afn-vic-rally1",
+      "labeledFrames": 2,
+      "visibleFrames": 2,
+      "occludedOrAbsentFrames": 0,
+      "hits": 0,
+      "misses": 2,
+      "wrongLocation": 0,
+      "falsePositives": 0,
+      "correctRejections": 0,
+      "precision": null,
+      "recall": 0,
+      "meanCenterErrorNorm": null,
+      "medianCenterErrorNorm": null
+    }
+  ]
+}

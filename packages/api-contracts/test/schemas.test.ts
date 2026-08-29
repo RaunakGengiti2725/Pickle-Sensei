@@ -3,6 +3,7 @@ import { buildOpenApiDocument, ShotSyncPayload, ShotsSyncRequest } from "../src/
 
 const validShot = {
   id: "1f0e8c1a-2b3c-4d5e-8f90-abcdefabcdef",
+  analysisPermitId: "2f0e8c1a-2b3c-4d5e-8f90-abcdefabcdef",
   sessionId: null,
   shotType: "forehand_drive",
   cameraView: "side",
@@ -26,11 +27,11 @@ const validShot = {
   ],
   versionVector: {
     appVersion: "0.1.0",
-    modelBundleVersion: "fixture-1",
-    poseModelVersion: "fixture-1",
-    paddleModelVersion: "fixture-1",
-    strokeDetectorVersion: "fixture-1",
-    phaseModelVersion: "fixture-1",
+    modelBundleVersion: "test-native-1",
+    poseModelVersion: "test-pose-1",
+    paddleModelVersion: "test-paddle-1",
+    strokeDetectorVersion: "test-stroke-1",
+    phaseModelVersion: "test-phase-1",
     scoringModelVersion: "sm-v1",
     shotConfigVersion: "forehand_drive@1",
   },
@@ -46,6 +47,11 @@ describe("ShotSyncPayload (canonical, spec p. 21)", () => {
     expect(ShotSyncPayload.safeParse(withoutVersions).success).toBe(false);
   });
 
+  it("rejects a score without its server-reserved analysis permit", () => {
+    const { analysisPermitId: _permit, ...withoutPermit } = validShot;
+    expect(ShotSyncPayload.safeParse(withoutPermit).success).toBe(false);
+  });
+
   it("rejects out-of-range scores and unknown shot types", () => {
     expect(ShotSyncPayload.safeParse({ ...validShot, overallScore: 11 }).success).toBe(false);
     expect(ShotSyncPayload.safeParse({ ...validShot, shotType: "smash" }).success).toBe(false);
@@ -59,6 +65,13 @@ describe("ShotSyncPayload (canonical, spec p. 21)", () => {
       confidence: 0.4,
     };
     expect(ShotSyncPayload.safeParse(lowConfidence).success).toBe(true);
+  });
+
+  it("keeps result kind and score presence consistent", () => {
+    expect(ShotSyncPayload.safeParse({ ...validShot, overallScore: null }).success).toBe(false);
+    expect(ShotSyncPayload.safeParse({ ...validShot, resultKind: "low_confidence" }).success).toBe(
+      false,
+    );
   });
 
   it("caps sync batches at 200", () => {

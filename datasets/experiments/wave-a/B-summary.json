@@ -1,0 +1,64 @@
+{
+  "workstream": "B — paddle S4 selection forensics",
+  "status": "GREEN",
+  "baseline": {
+    "source": "pnpm lab:paddle-waterfall (real pipeline replay, merged tracklets, auto target, no alias suppression)",
+    "labelSnapshotNote": "gold labels grew 41→46 visible mid-session (a parallel labeling workstream revised wm-dink-01 +2 and wm-volley-02 +3); afn-sasebo-rally1/rally2 and afn-vic-rally1 labels unchanged. All numbers below re-measured on the final 46-label snapshot; the diagnosis is identical on both snapshots.",
+    "stages": {
+      "S0": { "precision": 0.78, "recall": 1.0, "hits": "46/46" },
+      "S3_ownership": { "precision": 0.66, "recall": 0.5, "hits": "23/46" },
+      "S4_selection": { "precision": 0.74, "recall": 0.3, "hits": "14/46" },
+      "S5_final": { "recall": 0.33, "hits": "15/46" }
+    },
+    "rally1Catastrophe": "afn-sasebo-rally1: S3 9/13 → S4 0/13",
+    "oracleCeilings": { "perfectSelection": 0.52, "perfectMerge": 0.96 }
+  },
+  "candidate": "none shipped (forensics-only workstream; no production file touched). Counterfactual selection objectives implemented inside packages/swing-lab/src/paddleSelectionForensics.ts and measured against all 5 cases' gold labels.",
+  "measured": {
+    "replicationParity": "the forensics replica of selectPrimaryPaddleTrack matches the real selector's status+winner on 5/5 cases and reproduces the waterfall exactly: S3 23/46, S4 14/46, per-case identical (rally1 9/13→0/13).",
+    "rally1RootCause": {
+      "summary": "S4 scoring is NOT the culprit. The selector ranked the oracle track #1 and PICKED it; sustainedOtherPlayerFlip then truncated the picked track at 734.07ms (94→12 obs), deleting all 9 gold-covered observations before S4 was scored. The waterfall counts the winner's FULL observations at S3 (9/13) but the truncated outcome.lab at S4 (0/13) — that interval is exactly the flip deletion.",
+      "winnerNature": "merged chain T6 = raw tracklet T6 (300–1335ms) + raw T15 (1635–3837ms): windowCoverage 0.955, meanScore 0.374, meanWristDistance 0.049, score 0.357, contains 9/13 gold labels — it IS the target's paddle, not a background object or opponent paddle.",
+      "flipMechanism": "3 consecutive observations around 667–734ms sit closer to the PARTNER's wrist (black-shirt player behind target, see gold eventLabels owner=other) than 0.7× the target distance; truncation keeps only the 300–667ms head. All 13 gold labels lie at 800.8–3300ms → 0 hits.",
+      "deletedTailEvidence": "the deleted tail (734–3837ms, 82 obs) is decisively TARGET-owned: meanTargetWristD 0.086 vs meanOtherWristD 0.239, handAffinity 0.88 — a segment-level ownership test keeps it easily.",
+      "notAReplayArtifact": "CF5 (alias-suppressed identity exactly as production builds otherWrists) still fires the same flip at 734ms (gold 9→0). Production S5=5/13 differs only because production does NOT merge tracklets, so it selected raw T9 (46 obs, 5/13, no flip).",
+      "secondaryDefect": "score terms are STALE after truncation: rally2's winner T12 was cut 79→10 obs yet still scored with pre-cut windowCoverage 0.986, beating oracle T15 (coverage 0.652, 1/2 gold) on windowCoverage ×1.51."
+    },
+    "perCaseOracle": {
+      "wm-dink-01": "winner ties oracle at 6 full hits (oracle T4 rank 5 loses on windowCoverage ×2.79 but winner covers same count); loss is fragmentation",
+      "wm-volley-02": "selector picks oracle intact (5/11); loss is fragmentation",
+      "afn-sasebo-rally1": "oracle picked then flip-truncated 9→0 (root cause above)",
+      "afn-sasebo-rally2": "oracle T15 (rank 2, 1/2) loses to long track T12 on stale windowCoverage ×1.51",
+      "afn-vic-rally1": "selector picks oracle intact (2/6); loss is fragmentation"
+    },
+    "counterfactualGoldMatchRecall_devVsHeldOut": {
+      "note": "single selected track; DEV = wm-volley-02 + afn-sasebo-rally1 + afn-sasebo-rally2 (26 labels), HELD-OUT = wm-dink-01 + afn-vic-rally1 (20 labels; evaluated only, never tuned)",
+      "S4_measured_baseline": { "all": "14/46 = 0.30" },
+      "CF0_currentRanking_noFlipDeletion": { "dev": "14/26 = 0.54", "heldOut": "9/20 = 0.45", "all": "23/46 = 0.50" },
+      "CF1_eventGatedCoverage": { "dev": "11/26 = 0.42", "heldOut": "5/20 = 0.25", "all": "16/46 = 0.35" },
+      "CF2_inHandMass": { "dev": "10/26 = 0.38", "heldOut": "2/20 = 0.10", "all": "12/46 = 0.26" },
+      "CF3_wristSpeedCorrelation": { "dev": "13/26 = 0.50", "heldOut": "1/20 = 0.05", "all": "14/46 = 0.30" },
+      "CF4_eventGatedInHandMass": { "dev": "10/26 = 0.38", "heldOut": "5/20 = 0.25", "all": "15/46 = 0.33" },
+      "CF5_currentPlusAliasIdentity_withFlipDeletion": { "dev": "5/26 = 0.19", "heldOut": "9/20 = 0.45", "all": "14/46 = 0.30" },
+      "CF0_top2Union": { "dev": "19/26 = 0.73", "heldOut": "13/20 = 0.65", "all": "32/46 = 0.70" },
+      "oracleSingleTrackCeiling": { "dev": "15/26 = 0.58", "heldOut": "9/20 = 0.45", "all": "24/46 = 0.52" }
+    },
+    "gates": {
+      "pnpmTypecheckRepoRoot": "green (exit 0, 0 TS errors at completion)",
+      "vitestSwingLab": "green (82/82)"
+    }
+  },
+  "filesChanged": [
+    "packages/swing-lab/src/paddleSelectionForensics.ts (new, owned; diagnostic tool, runnable via npx tsx)",
+    "datasets/experiments/wave-a/B-selection-forensics.json (new artifact: per-label, per-candidate score-component dump for all 5 cases)",
+    "datasets/experiments/wave-a/B-summary.json (this file)"
+  ],
+  "recommendation": "Wave B S4 redesign in three ordered moves. (1) KEEP the current ranking objective coverage×meanScore×proximityFactor — it is measured near-optimal (CF0 0.50 vs single-track oracle 0.52 across all 46 labels; every alternative objective measured worse: 0.26–0.35). (2) REPLACE sustainedOtherPlayerFlip truncation-by-deletion with flip-SEGMENTATION: split the candidate at sustained-flip boundaries, recompute score terms per segment (also fixes the rally2 stale-coverage defect), apply the segment-level ownership test (rally1's deleted tail: target 0.086 vs other 0.239 — trivially kept), and select the best segment. Expected S4 recall 0.30 → ~0.50 (measured CF0; +9 hits on rally1 alone) with no change to the ranking objective and precision protected by segment-level ownership. (3) THEN raise the ceiling with top-2 union / fragment merge (measured CF0 top-2 0.70; oracle merge 0.96) — but gate it behind the event-decoupling work, since production merge was previously reverted for downstream contact regressions (EXP-2026-08-28-tracklet-merge.json).",
+  "risks": [
+    "Gold labels for wm-dink-01/wm-volley-02 were revised mid-session by a parallel workstream (41→46 visible); numbers were re-measured on the final snapshot and the diagnosis is snapshot-stable, but any workstream citing the old 41-label totals will disagree numerically.",
+    "Held-out cases (wm-dink-01, afn-vic-rally1) were EVALUATED for the counterfactual table (diagnosis, not tuning); the CF ordering on held-out matches dev (CF0 dominant), so the recommendation is not dev-overfit — but the flip-segmentation change itself must be validated once on held-out after implementation.",
+    "Flip-segmentation must be checked against wrong-player PRECISION (otherPaddleFrames labels exist in the annotations for direct measurement) — the current 3-frame 0.7× flip rule fires on transient partner proximity in doubles, and its replacement must not reintroduce other-player paddles.",
+    "The waterfall replay differs from production in two ways (always-merge, no alias suppression); S4-vs-S5 comparisons across those rows conflate configurations. Suggest the waterfall owner aligns the replay or labels the rows (observation only — file is read-only for this workstream).",
+    "Other workstreams were actively editing packages/swing-lab during this session (sessionEngine.ts appeared and was fixed mid-run); repo-root typecheck was green at completion but should be re-verified at merge time."
+  ]
+}

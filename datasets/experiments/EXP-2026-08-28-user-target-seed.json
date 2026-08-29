@@ -1,0 +1,45 @@
+{
+  "experimentId": "EXP-2026-08-28-user-target-seed",
+  "feature": "product-assisted perception: one-tap target selection (TargetSeed \u2192 locked TargetIdentity)",
+  "modesImplemented": [
+    "user_tapped_person (--target-tap x,y)",
+    "user_selected_court_half (--target-side left|right)",
+    "auto fallback"
+  ],
+  "identityDesign": "Seed resolves ONE person in the first ~1.2s, then identity follows that person; court half never re-decides identity. Duplicate detections of the same human are absorbed as ALIASES (never opponents), and the best-covered alias is promoted as the base track.",
+  "measured_A_auto_vs_B_userTap": {
+    "identityConfidence": {
+      "wm-volley-02": "0.38 \u2192 0.84",
+      "wm-dink-01": "0.50 \u2192 0.83",
+      "afn-sasebo-rally1": "0.59 \u2192 0.55",
+      "afn-sasebo-rally2": "0.71 \u2192 0.63",
+      "afn-vic-rally1(held-out)": "0.30 \u2192 0.94"
+    },
+    "aliasesAbsorbed": {
+      "afn-sasebo-rally1": "P9, P13, P2 folded into P1 (were previously competing 'other players')"
+    },
+    "contact": {
+      "auto": "n=5, median 66ms, 3/4 within 2 frames, dink ABSTAINED",
+      "userTap": "n=5, median 66ms, 3/4 within 2 frames, dink RECOVERED to 1407ms ball+paddle-confirmed"
+    },
+    "strokeL2": {
+      "auto": "2/4",
+      "userTap": "3/4"
+    },
+    "paddleBench": {
+      "auto": "P 0.27 / R 0.22",
+      "userTap": "P 0.27 / R 0.22 (unchanged)"
+    },
+    "wrongPlayerRate": {
+      "auto": "0/2",
+      "userTap": "0/2"
+    }
+  },
+  "honestConclusion": "The tap materially improves IDENTITY (confidence 0.30\u21920.94 on held-out; alias poisoning eliminated) and recovers downstream quality (held-out dink contact un-abstained and became ball+paddle-confirmed; stroke L2 2/4 \u2192 3/4). It does NOT move the paddle waterfall, because the S3 loss is not 'wrong person selected' \u2014 it is selection among many paddle tracklets belonging to the RIGHT person. Product-assisted perception fixed the problem it addresses; it did not fix the one it does not.",
+  "notImplementedThisRun": [
+    "mobile capture UI for the tap (analysis-side contract only)",
+    "target-centered ROI latency experiment",
+    "capture-time pose reuse"
+  ],
+  "regressionRisk": "A tap landing on a short duplicate fragment previously hijacked identity (rally1 chose a 7%-coverage track); fixed by alias promotion and re-verified."
+}

@@ -2,13 +2,18 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { sendFailure } from "../../lib/replies.js";
-import { one } from "../../lib/db.js";
-import { hasEntitlement } from "../billing/entitlements.js";
+import { one, withTransaction } from "../../lib/db.js";
+import {
+  AccessServiceError,
+  assertUsablePermit,
+  finalizeAnalysisPermit,
+  finalizeAnalysisPermitWithDb,
+} from "../billing/access.js";
 
 /**
  * Analysis jobs (spec pp. 18–19). On-device analyses are recorded for
- * traceability; cloud deep analysis is queued to the ml-worker and gated by
- * the free-tier quota (3/month) unless the user has premium entitlements.
+ * traceability; every rating starts with an idempotent access permit. A free
+ * permit is consumed only when a confidence-qualified score is finalized.
  */
 
 const AnalysisCreate = z.object({
@@ -17,9 +22,8 @@ const AnalysisCreate = z.object({
   expectedShotType: z.string().nullable(),
   inferenceMode: z.enum(["on_device", "cloud_deep"]),
   sessionId: z.uuid().nullable(),
+  permitId: z.uuid(),
 });
-
-const FREE_MONTHLY_CLOUD_ANALYSES = 3;
 
 export function registerAnalysisRoutes(app: FastifyInstance, context: AppContext): void {
   app.post("/v1/analyses", { preHandler: app.authenticate }, async (request, reply) => {
@@ -35,6 +39,35 @@ export function registerAnalysisRoutes(app: FastifyInstance, context: AppContext
       );
     const body = parsed.data;
     const userId = request.user!.id;
+
+    if (body.inferenceMode === "cloud_deep") {
+      try {
+        // No cloud model worker is deployed in this repository. Release the
+        // reservation immediately so an unavailable feature can never strand
+        // one of the user's two lifetime ratings for 24 hours.
+        await finalizeAnalysisPermit(context, userId, body.permitId, "failed", null);
+      } catch (error) {
+        if (error instanceof AccessServiceError) {
+          return sendFailure(
+            reply,
+            request,
+            error.statusCode,
+            "permanent",
+            error.code,
+            error.message,
+          );
+        }
+        throw error;
+      }
+      return sendFailure(
+        reply,
+        request,
+        501,
+        "not_implemented",
+        "analysis.cloud_model_unavailable",
+        "Cloud deep analysis is unavailable until a validated model worker is deployed.",
+      );
+    }
 
     if (body.mediaAssetId) {
       const owned = await one(
@@ -53,52 +86,56 @@ export function registerAnalysisRoutes(app: FastifyInstance, context: AppContext
         );
     }
 
-    if (body.inferenceMode === "cloud_deep") {
-      const premium = await hasEntitlement(context, userId, "premium");
-      if (!premium) {
-        const used = await one<{ n: string }>(
-          context.pool!,
-          `SELECT count(*)::text AS n FROM analysis_job
-           WHERE user_id = $1 AND inference_mode = 'cloud_deep'
-             AND requested_at >= date_trunc('month', now())`,
-          [userId],
-        );
-        if (Number(used?.n ?? 0) >= FREE_MONTHLY_CLOUD_ANALYSES) {
-          return sendFailure(
-            reply,
-            request,
-            402,
-            "permission_denied",
-            "analysis.quota_exceeded",
-            "Free plan includes 3 full analyses per month. Upgrade for unlimited.",
-          );
-        }
-      }
-    }
-
     const shotType = body.expectedShotType
       ? await one<{ id: string }>(context.pool!, "SELECT id FROM shot_type WHERE slug = $1", [
           body.expectedShotType,
         ])
       : null;
-    const job = await one<{ id: string; status: string }>(
-      context.pool!,
-      `INSERT INTO analysis_job (user_id, media_asset_id, session_id, expected_shot_type_id, inference_mode, status, metadata)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, status`,
-      [
-        userId,
-        body.mediaAssetId,
-        body.sessionId,
-        shotType?.id ?? null,
-        body.inferenceMode,
-        body.inferenceMode === "cloud_deep" ? "queued" : "complete",
-        JSON.stringify({ localAnalysisId: body.localAnalysisId }),
-      ],
-    );
-    if (body.inferenceMode === "cloud_deep") {
-      await context.queue.enqueue("analysis.deep", { analysisJobId: job!.id });
+    let job: { id: string; status: string; created: boolean };
+    try {
+      job = await withTransaction(context.pool!, async (tx) => {
+        const replay = await one<{ id: string; status: string }>(
+          tx,
+          `SELECT id, status FROM analysis_job
+           WHERE user_id = $1 AND analysis_permit_id = $2 FOR UPDATE`,
+          [userId, body.permitId],
+        );
+        if (replay) return { ...replay, created: false };
+        await assertUsablePermit(tx, userId, body.permitId);
+        const inserted = await one<{ id: string; status: string }>(
+          tx,
+          `INSERT INTO analysis_job
+             (user_id, media_asset_id, session_id, expected_shot_type_id, inference_mode,
+              status, metadata, analysis_permit_id)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id, status`,
+          [
+            userId,
+            body.mediaAssetId,
+            body.sessionId,
+            shotType?.id ?? null,
+            body.inferenceMode,
+            "complete",
+            JSON.stringify({ localAnalysisId: body.localAnalysisId }),
+            body.permitId,
+          ],
+        );
+        if (!inserted) throw new Error("analysis job insert returned no row");
+        return { ...inserted, created: true };
+      });
+    } catch (error) {
+      if (error instanceof AccessServiceError) {
+        return sendFailure(
+          reply,
+          request,
+          error.statusCode,
+          error.statusCode === 402 ? "permission_denied" : "permanent",
+          error.code,
+          error.message,
+        );
+      }
+      throw error;
     }
-    return { analysisId: job!.id, status: job!.status };
+    return { analysisId: job.id, status: job.status, permitId: body.permitId };
   });
 
   app.get("/v1/analyses/:id", { preHandler: app.authenticate }, async (request, reply) => {
@@ -122,19 +159,53 @@ export function registerAnalysisRoutes(app: FastifyInstance, context: AppContext
 
   app.post("/v1/analyses/:id/cancel", { preHandler: app.authenticate }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const result = await context.pool!.query(
-      "UPDATE analysis_job SET status = 'cancelled' WHERE id = $1 AND user_id = $2 AND status = 'queued'",
-      [id, request.user!.id],
-    );
-    if (result.rowCount === 0)
-      return sendFailure(
-        reply,
-        request,
-        409,
-        "permanent",
-        "analysis.not_cancellable",
-        "Analysis is not queued.",
-      );
-    return { status: "cancelled" };
+    try {
+      const cancelled = await withTransaction(context.pool!, async (tx) => {
+        const job = await one<{ analysis_permit_id: string | null; status: string }>(
+          tx,
+          `SELECT analysis_permit_id, status FROM analysis_job
+           WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+          [id, request.user!.id],
+        );
+        if (!job || job.status !== "queued") return null;
+        await tx.query(
+          "UPDATE analysis_job SET status = 'cancelled', finished_at = now() WHERE id = $1",
+          [id],
+        );
+        if (job.analysis_permit_id) {
+          await finalizeAnalysisPermitWithDb(
+            tx,
+            request.user!.id,
+            job.analysis_permit_id,
+            "cancelled",
+            null,
+          );
+        }
+        return { status: "cancelled" as const };
+      });
+      if (!cancelled) {
+        return sendFailure(
+          reply,
+          request,
+          409,
+          "permanent",
+          "analysis.not_cancellable",
+          "Analysis is not queued.",
+        );
+      }
+      return cancelled;
+    } catch (error) {
+      if (error instanceof AccessServiceError) {
+        return sendFailure(
+          reply,
+          request,
+          error.statusCode,
+          "permanent",
+          error.code,
+          error.message,
+        );
+      }
+      throw error;
+    }
   });
 }

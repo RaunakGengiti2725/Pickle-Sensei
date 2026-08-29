@@ -1,0 +1,59 @@
+{
+  "experimentId": "EXP-2026-08-28-paddle-waterfall",
+  "task": "paddle_pipeline_forensics",
+  "instrument": "pnpm lab:paddle-waterfall (replays the real pipeline stages against the same 40 labeled frames)",
+  "datasetVersion": "pickle-real-v0.1 + rally2 + afn-vic (5 cases, 3 sources, 27 visible labels)",
+  "waterfall": {
+    "S0_raw_detector": {
+      "P": 0.68,
+      "R": 1.0,
+      "hits": "27/27"
+    },
+    "S1_candidate_filter": {
+      "P": 0.65,
+      "R": 0.96,
+      "hits": "26/27",
+      "deltaR": -0.04
+    },
+    "S2_track_formation": {
+      "P": 0.65,
+      "R": 0.96,
+      "hits": "26/27",
+      "deltaR": 0.0
+    },
+    "S3_ownership_filter": {
+      "P": 0.26,
+      "R": 0.22,
+      "hits": "6/27",
+      "deltaR": -0.74
+    },
+    "S4_primary_selection": {
+      "P": 0.27,
+      "R": 0.22,
+      "hits": "6/27",
+      "deltaR": 0.0
+    },
+    "S5_final_track": {
+      "P": 0.27,
+      "R": 0.22,
+      "hits": "6/27",
+      "deltaR": 0.0
+    }
+  },
+  "headline": "74 of the 78 lost recall points die in ONE stage: ownership + primary selection (S2 0.96 -> S3/S4 0.22). Detection and temporal association are effectively solved at this corpus size.",
+  "rootCausesIdentified": [
+    "A: DUPLICATE PLAYER TRACKS \u2014 Vision emits overlapping detections of the same human, so the tracker produced duplicates of the TARGET (afn-sasebo-rally1: P9 at torso-distance 0.058, P13 at 0.068). Those duplicates were fed to ownership as 'other players', putting the target's own wrist on the opposing side of every comparison. FIXED (track-level torso-coincidence suppression + wrist-level same-hand suppression in otherPlayersWrists).",
+    "B: TRACK FRAGMENTATION + WRONG SELECTION CRITERION \u2014 the true paddle's detections are split across many short tracks (afn-vic-rally1: 26 candidate tracks; seven each covered one labeled frame; none covered both). Selection scores by windowCoverage x detectorScore, which favors long-lived BACKGROUND racket-like tracks (winner T3: 0 label hits; T6: 97% coverage, 0 hits). NOT FIXED."
+  ],
+  "attemptedFixRejected": {
+    "change": "hand-affinity-dominant rescoring (fraction of observations within 0.13 of a target wrist) + affinity eligibility gate",
+    "result": "S4 recall 0.22 -> 0.04 \u2014 MEASURED WORSE, reverted immediately",
+    "interpretation": "Target wrist positions are themselves unreliable at the labeled moments, so wrist proximity cannot carry the selection decision alone. Fragment MERGING (before selection) is the indicated next attack, not rescoring."
+  },
+  "nextAttack": [
+    "1. Merge paddle fragments belonging to one physical paddle before selection (appearance + motion continuity across the 250ms gap limit), then re-measure the waterfall.",
+    "2. Only then revisit the selection criterion.",
+    "3. Ownership needs the 20+ dual-paddle labels to be trainable rather than hand-designed."
+  ],
+  "unchangedBaselines": "No frozen benchmark numbers were altered; end-to-end paddle P/R remains as previously reported."
+}

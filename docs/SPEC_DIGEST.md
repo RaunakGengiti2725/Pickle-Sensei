@@ -1,6 +1,8 @@
 # SPEC DIGEST — Pickleball AI Coaching App
 
-Source of truth: "Pickleball AI Coaching App: Complete Product and Technical Blueprint" (Deep Research report, 62 pages). This digest converts it into an implementation checklist. Statuses live in `IMPLEMENTATION_STATUS.md`.
+This file preserves the intended product and research rubric from the "Pickleball AI Coaching App: Complete Product and Technical Blueprint" (Deep Research report, 62 pages). It is **not** evidence that a capability ships; current truth lives in `IMPLEMENTATION_STATUS.md`.
+
+Current implementation: capture is automatic and shows real native pose/motion, but returns `unknown`/`awaiting_model` because validated pickleball recognition/scoring models do not yet exist. Live Court and numeric ratings are unavailable, training content is empty pending review/licensing, and MPH is withheld without calibrated ball tracking. Product decisions that supersede older blueprint details below: there is no manual shot/view selector, and the future classifier must recognize the attempted stroke automatically; the entitlement boundary is two lifetime successful server-accepted ratings followed by a hard paywall. Failed, abstained, incorrect-recognition, and `awaiting_model` attempts consume nothing. Seeded scoring configs stay `validating`; migration `0013` leaves zero active scoring models, and canonical sync requires an explicit evidence-backed admin release tied to an exact shot config and 100%-active SHA-256 bundle.
 
 ## Core product loop
 
@@ -11,7 +13,7 @@ Phone on fence/tripod → player hits → stroke auto-detected → body+paddle a
 → drill recommended → Live Court practice → every rep detected → voice feedback → improvement tracked
 ```
 
-Live Court Mode is the product. Single-shot analysis is the onboarding/diagnostic experience that makes Live Court understandable.
+In the target product, Live Court Mode is the centerpiece and single-shot analysis is the diagnostic on-ramp. Neither scoring mode is currently released.
 
 ## Locked product decisions (spec pp. 59–60)
 
@@ -123,7 +125,7 @@ No synchronous LLM. Deterministic: structured diagnosis + fault direction + seve
 
 ## Complete screen inventory (spec pp. 5–7)
 
-Launch, Account (OIDC: Apple/Google/Email), Onboarding (level→handedness→goal→problem→plan reveal), Permissions education, Home (Technique Score, monthly trend, Analyze Shot, Live Court, Today's Focus, weekly, recent), Shot selector, View selector, Camera setup w/ CV checklist, Single-shot capture (rolling buffer, auto-detect), Import video, Processing (honest status), Analysis result (asymmetric hierarchy: score → priority → why → next cue → drill), Priority fix, Checkpoint list (score+confidence, green/yellow/red), Checkpoint detail (What happened/Why it matters/What good looks like/Your next cue), Replay (0.25×/0.5×/1×, phase scrubber, overlays), Phase viewer, Compare (licensed references, body-size normalization), Drill detail, Training plan, Drill library, Live Court setup/active/paused, Session summary, Session replay, Library (Shots/Sessions/Favorites), Progress (model-version aware), Skill map (per-stroke, no single opaque number), Weekly review, Achievements, Friends (opt-in), Leaderboard (friends-only default), Share creator (hide face/name toggles), Coach chat (later; LLM gets structured context), Profile, Settings, Subscription, Privacy center, Help/calibration.
+Launch, Account (OIDC: Apple/Google/Email), Onboarding (level→handedness→goal→problem→plan reveal), Permissions education, Home, automatic camera setup/capture (no shot picker; rolling buffer + automatic motion trigger + future automatic classifier), Import video, Processing (honest status), Analysis result (only after validated inference; asymmetric hierarchy: score → priority → why → next cue → drill), Priority fix, Checkpoint list, Checkpoint detail, Replay, Phase viewer, Compare (licensed references), Drill detail, Training plan, Drill library, Live Court (after release gates), Session summary/replay, Library, model-version-aware Progress, Skill map, Weekly review, Achievements, Friends, privacy-safe sharing, Profile, Settings, Subscription, Privacy center, Help/calibration.
 
 ## UI states — first-class (directive §10)
 
@@ -137,8 +139,8 @@ PostgreSQL, pgcrypto/gen_random_uuid, UUIDs for offline sync. Tables: app_user, 
 ## API `/v1` (spec pp. 17–21)
 
 Headers: `Authorization: Bearer <OIDC>`, `X-Client-Version`, `X-Model-Bundle-Version`, `X-Request-Id`, `Idempotency-Key` (mutating creation), JSON.
-Endpoints: account/bootstrap, me, me/profile, me/settings, me/onboarding, me/goals CRUD, catalog/shot-types, catalog/checkpoints, catalog/drills(+detail), catalog/model-bundle, media/uploads (presigned multipart), media/{id}/complete, media/{id} (signed playback), DELETE media/{id}, analyses (create/status/cancel), shots:sync (offline batch upsert), shots/{id}, shots/{id}/rating, sessions (create/batch-shots/patch/finalize/detail), library/shots, library/sessions, progress, progress/checkpoints/{id}, weekly-reports/latest+history, references, share-cards (+status), friends/requests/accept/delete, leaderboards/friends, billing/offerings, billing/apple/sync, billing/google/sync, webhooks/apple, webhooks/google, me/ml-training-consent, me/export, DELETE me, devices, health.
-Canonical shot-sync payload includes: client UUID, sessionId, shotType, scoringModelVersion, modelBundleVersion, timestamps (startMs/contactMs/endMs), overallScore, confidence, cameraView, phases[], checkpoints[] (key, score, confidence, band, direction, severity).
+Endpoints: account/bootstrap, me, me/profile, me/settings, me/onboarding, me/goals CRUD, catalog/shot-types, catalog/checkpoints, catalog/drills(+detail), catalog/model-bundle, media/uploads (presigned multipart), media/{id}/complete, media/{id} (signed playback), DELETE media/{id}, analysis-permits (reserve/finalize), analyses (create/status/cancel), shots:sync (permit-bound atomic offline batch sync), shots/{id}, shots/{id}/rating, sessions (create/batch-shots/patch/finalize/detail), library/shots, library/sessions, progress, progress/checkpoints/{id}, weekly-reports/latest+history, references, share-cards (+status), friends/requests/accept/delete, leaderboards/friends, billing/offerings, billing/apple/sync, billing/google/sync, webhooks/apple, webhooks/google, me/ml-training-consent, me/export, DELETE me, devices, health, and audited scoring release at `PUT /v1/admin/scoring-models/:shotType/:version/release`.
+Canonical shot-sync payload includes: client UUID, pre-inference analysisPermitId, sessionId, shotType, scoringModelVersion, modelBundleVersion, timestamps (startMs/contactMs/endMs), overallScore, confidence, cameraView, phases[], checkpoints[] (key, score, confidence, band, direction, severity).
 Backend validates version known; does NOT recompute client scores.
 
 ## Auth (spec pp. 22–23)
@@ -167,7 +169,7 @@ OpenTelemetry logs/metrics/traces; request/job/analysis IDs + model versions. Tr
 
 ## Analytics events (spec p. 43)
 
-app_opened, onboarding_started/completed, goal_selected, shot_type_selected, camera_preflight_started/passed, capture_started, shot_detected, analysis_started/completed/low_confidence/failed, score_viewed, checkpoint_opened, drill_opened/started/completed, live_court_started, live_shot_scored, voice_cue_played, live_session_completed, weekly_review_viewed, share_created, friend_request_sent, paywall_viewed, trial_started, subscription_started/renewed/cancelled, cloud_sync_enabled, ml_training_consent_changed, account_export_requested, account_delete_requested.
+app_opened, onboarding_started/completed, goal_selected, camera_preflight_started/passed, capture_started, motion_triggered, shot_recognized/unknown, analysis_started/completed/low_confidence/failed/model_unavailable, score_viewed, checkpoint_opened, drill_opened/started/completed, live_court_started, live_shot_scored, voice_cue_played, live_session_completed, weekly_review_viewed, share_created, friend_request_sent, paywall_viewed, trial_started, subscription_started/renewed/cancelled, cloud_sync_enabled, ml_training_consent_changed, account_export_requested, account_delete_requested.
 KPIs: install→onboarding, onboarding→first valid scored stroke, preflight success, %analyses ≥ confidence threshold, first score→checkpoint→drill, drill→second analysis, live setup→≥10 valid strokes, D1/D7/D30, checkpoint improvement, crash-free, free→trial→paid→renewal, helpfulness by checkpoint/model, score distribution + coach agreement by model version. No cross-model-version improvement without normalization.
 
 ## ML data plan (spec pp. 29–31)
@@ -200,7 +202,7 @@ AWS org: security/logging, development, staging, production accounts. Production
 
 ## Billing (spec p. 55)
 
-Free: 3 single-shot analyses/mo, limited library, one Live Court trial, basic progress. Premium $11.99/mo, $79.99/yr (7-day trial), founder lifetime $169–199 launch-only. Premium: unlimited analyses + Live Court, full checkpoint detail, all drills, replay/overlays, trends, weekly report, cloud sync, pro compare, plans, share, social. Pricing remote-configurable. Canonical backend entitlements, not UI checks. StoreKit/Play Billing + server notifications + restore + grace/trial/cancel.
+Free: exactly two lifetime successful server-accepted ratings. The next successful-rating attempt is hard-gated. Abstentions, failures, cancellations, unsupported devices, incorrect recognition, and `awaiting_model` do not consume the allowance. Premium packaging and prices remain remote-configurable; StoreKit/Play verification, notifications, restore, grace, trial, and cancellation require real store credentials before release.
 
 ## Team/roadmap context (spec pp. 46–54)
 
@@ -208,4 +210,4 @@ Free: 3 single-shot analyses/mo, limited library, one Live Court trial, basic pr
 
 ## Positioning
 
-Launch line: "Put your phone on the fence. Hit. Your coach watches every rep." Demo: three strokes, three spoken scores, visible focus improvement. First product: AI analyzes your stroke. Stronger: AI coaches every repetition. Long-term: AI understands how you play pickleball.
+Target launch line: "Put your phone on the fence. Hit. Your coach watches every rep." Any launch demonstration must use a validated released model and genuine captured results; the app must never substitute timed/sample strokes or prerecorded scores. Today the honest product statement is automatic capture with live pose/motion visualization while analysis awaits validated models.

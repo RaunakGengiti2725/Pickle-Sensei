@@ -1,0 +1,192 @@
+{
+  "artifactId": "E-replay-validation",
+  "workstream": "E — session multi-event engine",
+  "generatedAtIso": "2026-08-29T01:48:44.224Z",
+  "engineVersion": "session-engine-1 (streaming reconcile over stroke-event-2 · D-029 completion · append-only)",
+  "method": "Reconstruct the target wrist-speed series exactly as analyzeVideo.ts (parse L241 · seed L279 · targetPoseSequence L317 · scene L352 · window L389 · dominantWristSpeeds L922 · proposals L511, wrist-only), stream per-sample through SessionEventEngine, flush at stream end, diff vs the full-series batch and report.json.",
+  "toleranceStatement": {
+    "engineVsBatchBoundsMs": "0 (exact on every matched event, both runs)",
+    "batchVsReportBoundsMs": "0 (exact)",
+    "batchVsReportPeakMs": "0 where unrefined; -235.23 on rally2 E2 (paddle refinement, bound ±250ms per strokeEvents.ts L339)",
+    "emissionLagVsSafety": "closedAt−endMs: settle +701/+801 · valley +33 · flush +101/+200 — all ≤ +2500 safety"
+  },
+  "runs": [
+    {
+      "runId": "afn-sasebo-rally1",
+      "split": "dev (splits.json pins afn-sasebo-2025-06 to dev; shadow untouched)",
+      "wristSamples": 96,
+      "batchProposals": 3,
+      "emittedEvents": 3,
+      "batchVsEmitted": [
+        {
+          "batch": {
+            "startMs": 367,
+            "endMs": 901,
+            "peakMs": 467
+          },
+          "emitted": {
+            "eventId": "E1",
+            "startMs": 367,
+            "endMs": 901,
+            "peakMs": 467,
+            "closedAtMs": 1602,
+            "closeReason": "settle"
+          },
+          "deltaMs": {
+            "start": 0,
+            "end": 0,
+            "peak": 0
+          },
+          "closedAtMinusEndMs": 701
+        },
+        {
+          "batch": {
+            "startMs": 967.5,
+            "endMs": 2636,
+            "peakMs": 1468
+          },
+          "emitted": {
+            "eventId": "E2",
+            "startMs": 967.5,
+            "endMs": 2636,
+            "peakMs": 1468,
+            "closedAtMs": 2669,
+            "closeReason": "next_stroke_valley"
+          },
+          "deltaMs": {
+            "start": 0,
+            "end": 0,
+            "peak": 0
+          },
+          "closedAtMinusEndMs": 33
+        },
+        {
+          "batch": {
+            "startMs": 2703,
+            "endMs": 3770,
+            "peakMs": 3403
+          },
+          "emitted": {
+            "eventId": "E3",
+            "startMs": 2703,
+            "endMs": 3770,
+            "peakMs": 3403,
+            "closedAtMs": 3871,
+            "closeReason": "flush"
+          },
+          "deltaMs": {
+            "start": 0,
+            "end": 0,
+            "peak": 0
+          },
+          "closedAtMinusEndMs": 101
+        }
+      ],
+      "causalOnlyExtras": [],
+      "wristOnlyBatchVsReportDeltasMs": [
+        {
+          "start": 0,
+          "end": 0,
+          "peak": 0,
+          "paddleConfirmed": false
+        },
+        {
+          "start": 0,
+          "end": 0,
+          "peak": 0,
+          "paddleConfirmed": true
+        },
+        {
+          "start": 0,
+          "end": 0,
+          "peak": 0,
+          "paddleConfirmed": false
+        }
+      ],
+      "qualityNotes": []
+    },
+    {
+      "runId": "afn-sasebo-rally2",
+      "split": "dev (splits.json pins afn-sasebo-2025-06 to dev; shadow untouched)",
+      "wristSamples": 134,
+      "batchProposals": 2,
+      "emittedEvents": 3,
+      "batchVsEmitted": [
+        {
+          "batch": {
+            "startMs": 2236,
+            "endMs": 2836,
+            "peakMs": 2436
+          },
+          "emitted": {
+            "eventId": "E2",
+            "startMs": 2236,
+            "endMs": 2836,
+            "peakMs": 2436,
+            "closedAtMs": 3637,
+            "closeReason": "settle"
+          },
+          "deltaMs": {
+            "start": 0,
+            "end": 0,
+            "peak": 0
+          },
+          "closedAtMinusEndMs": 801
+        },
+        {
+          "batch": {
+            "startMs": 3604,
+            "endMs": 4538,
+            "peakMs": 3837
+          },
+          "emitted": {
+            "eventId": "E3",
+            "startMs": 3604,
+            "endMs": 4538,
+            "peakMs": 3837,
+            "closedAtMs": 4738,
+            "closeReason": "flush"
+          },
+          "deltaMs": {
+            "start": 0,
+            "end": 0,
+            "peak": 0
+          },
+          "closedAtMinusEndMs": 200
+        }
+      ],
+      "causalOnlyExtras": [
+        {
+          "eventId": "E1",
+          "startMs": 67,
+          "endMs": 1401,
+          "peakMs": 601,
+          "peakSpeed": 0.84,
+          "closeReason": "settle"
+        }
+      ],
+      "wristOnlyBatchVsReportDeltasMs": [
+        {
+          "start": 0,
+          "end": 0,
+          "peak": 0,
+          "paddleConfirmed": true
+        },
+        {
+          "start": 0,
+          "end": 0,
+          "peak": -235.23,
+          "paddleConfirmed": true
+        }
+      ],
+      "qualityNotes": [
+        "SESSION_EVENT_RETRO_SUPPRESSED: E1 (peak 0.84 u/s at 601ms) is no longer proposed by the full-series batch (a later stroke raised the relative proposal floor); kept append-only, flagged"
+      ]
+    }
+  ],
+  "caveats": [
+    "n=2 dev runs (5 batch events total) — replay evidence, no reliability claim",
+    "rally2 has 1 causal-only emission: a 0.60 u/s movement proposed while strongest-yet, retro-suppressed by the acausal batch after the 6.87 u/s stroke raised the relative floor (threshold = max(0.5, 30% of global peak)); the engine keeps it append-only and flags SESSION_EVENT_RETRO_SUPPRESSED — a streaming engine cannot know the future",
+    "trailing events close via flush when the wrist stream ends before settle confirmation (rally1 E3, rally2 E3): in live capture the stream continues, so flush is a user-stop outcome only"
+  ]
+}

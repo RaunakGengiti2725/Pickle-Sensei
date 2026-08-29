@@ -1,0 +1,1 @@
+A/B ATTRIBUTION CHECK: reran 2 DEV cases with the pre-W1 selector (truncation + stale terms) on current pipeline code. Contacts matched the post-W1 sandbox exactly (volley 6650, rally2 2650), proving contact deltas vs canonical are pre-existing pipeline drift, not W1.

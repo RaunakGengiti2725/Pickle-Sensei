@@ -13,8 +13,8 @@ import type { VideoClipRef, VisionProviderSet } from "@pickle/vision-contracts";
 /**
  * Single-shot analysis pipeline (spec pp. 24–25):
  *   stroke detection → pose + paddle → phases → features → scoring → priority.
- * Pure orchestration over injected providers; provider provenance (real vs
- * fixture) propagates into the persisted result and is never laundered.
+ * Pure orchestration over injected providers; the provider's declared source
+ * propagates into the persisted result and is never laundered.
  */
 
 export interface AnalyzeClipOptions {

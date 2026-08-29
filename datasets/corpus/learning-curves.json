@@ -1,0 +1,106 @@
+{
+  "generatedAtIso": "2026-08-29T02:12:52.557Z",
+  "note": "dev cases only; held-out excluded",
+  "tasks": [
+    {
+      "task": "paddle-detection (dev cases, micro-avg)",
+      "source": "datasets/paddle-bench/results/paddle-bench-1787968828222.json",
+      "cases": 3,
+      "points": [
+        {
+          "n": 1,
+          "resamples": 1000,
+          "precision": {
+            "mean": 0.507,
+            "p5": 0.2,
+            "p95": 1
+          },
+          "recall": {
+            "mean": 0.391,
+            "p5": 0.333,
+            "p95": 0.45
+          }
+        },
+        {
+          "n": 2,
+          "resamples": 1000,
+          "precision": {
+            "mean": 0.689,
+            "p5": 0.444,
+            "p95": 0.727
+          },
+          "recall": {
+            "mean": 0.429,
+            "p5": 0.4,
+            "p95": 0.435
+          }
+        },
+        {
+          "n": 3,
+          "resamples": 1,
+          "precision": {
+            "mean": 0.63,
+            "p5": 0.63,
+            "p95": 0.63
+          },
+          "recall": {
+            "mean": 0.425,
+            "p5": 0.425,
+            "p95": 0.425
+          }
+        }
+      ],
+      "verdict": "flattening at n=3 (Δrecall 0.004) — inspect slices before adding bulk data"
+    },
+    {
+      "task": "ball-detection (dev cases, micro-avg)",
+      "source": "datasets/ball-bench/results/ball-bench-1787966975192.json",
+      "cases": 3,
+      "points": [
+        {
+          "n": 1,
+          "resamples": 1000,
+          "precision": {
+            "mean": 0.833,
+            "p5": 0.833,
+            "p95": 0.833
+          },
+          "recall": {
+            "mean": 0.381,
+            "p5": 0,
+            "p95": 0.833
+          }
+        },
+        {
+          "n": 2,
+          "resamples": 1000,
+          "precision": {
+            "mean": 0.833,
+            "p5": 0.833,
+            "p95": 0.833
+          },
+          "recall": {
+            "mean": 0.322,
+            "p5": 0,
+            "p95": 0.625
+          }
+        },
+        {
+          "n": 3,
+          "resamples": 1,
+          "precision": {
+            "mean": 0.833,
+            "p5": 0.833,
+            "p95": 0.833
+          },
+          "recall": {
+            "mean": 0.417,
+            "p5": 0.417,
+            "p95": 0.417
+          }
+        }
+      ],
+      "verdict": "UNSTABLE at n=3: leave-one-out recall interval spans 0.63 — more labeled cases needed before any reliability claim"
+    }
+  ]
+}

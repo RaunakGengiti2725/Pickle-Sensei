@@ -1,0 +1,44 @@
+{
+  "experimentId": "EXP-2026-08-28-target-acquisition-bench",
+  "question": "Does the shipped guided-capture target acquisition (region occupancy → 9-frame streak → lock; ambiguity → wrist-raise gesture; post-lock anchor following) actually work on real multi-person footage?",
+  "method": "Faithful TS port of GuidedCaptureViewController.considerTargetAcquisition + ApplePoseProvider.primaryPerson (ta-replay-1, port semantics unit-tested), replayed offline against corpus recordings at ≤30fps. Cases = scene windows with a machine-proposed starting region + true target track; 7 human-verified (devin-visual-v1), 281 unverified Tier-C included only as a separate aggregate. Constants: region radius 0.17, 9-frame streak, gesture elevation 0.03, on-target radius 0.06.",
+  "results": {
+    "verified_n7": {
+      "lockRate": 0.571,
+      "lockCorrectRate": 0.75,
+      "medianLockLatencyMs": 320,
+      "ambiguityEntered": 3,
+      "gestureLocks": 0,
+      "postLockStable90": "1/4",
+      "meanOnTargetFraction": 0.584
+    },
+    "tierC_n288": {
+      "lockRate": 0.729,
+      "lockCorrectRate": 0.7,
+      "ambiguityEntered": 115,
+      "gestureLocks": 37,
+      "meanOnTargetFraction": 0.493
+    }
+  },
+  "findings": [
+    "STICKY AMBIGUITY IS A DEAD END: once ≥2 people touch the region the state machine waits forever for a deliberate gesture; in natural footage nobody performs it → never_locked. 3/7 verified cases died here.",
+    "NATURAL FALSE GESTURES ARE REAL: 37/288 Tier-C replays 'locked' via gesture from ordinary play motion (serves, ready position raise wrists above shoulders). The gesture arbitration can pick whoever swings first, not the intended user.",
+    "POST-LOCK FOLLOWING IS THE WEAKEST STAGE: mean on-target fraction 0.584 (verified) / 0.493 (Tier-C); the span/(1+3·distance) score jumps to decisively larger newcomers (also demonstrated by unit test). Only 1/4 verified locks stayed ≥90% on-target.",
+    "LOCK LATENCY IS NOT THE PROBLEM: median 320ms once a single occupant is stable."
+  ],
+  "caveats": [
+    "n=7 verified cases; wide intervals. Tier-C aggregate includes unverified machine-proposed regions/targets.",
+    "Offline people.json comes from batch extraction, not the live capture path; live jitter/dropped frames not modeled.",
+    "Machine-proposed regions equal the target's own start position by construction; real users may tap less precisely."
+  ],
+  "artifacts": {
+    "bench": "datasets/ta-bench/results/ta-bench-1787957075994.json",
+    "cases": "datasets/ta-bench/cases.json",
+    "replayPort": "packages/swing-lab/src/engine/taReplay.ts (tested in test/dataEngine.test.ts)"
+  },
+  "nextActions": [
+    "Ambiguity needs a timeout → largest/closest-occupant fallback or explicit re-tap prompt (product decision, then re-measure here)",
+    "Gesture arbitration should require sustained elevation (not a single frame) and prefer the occupant nearest the region",
+    "Post-lock follower should get incumbent hysteresis like playerTracker (candidate must beat incumbent by margin); prototype offline and re-run this bench before touching Swift"
+  ]
+}

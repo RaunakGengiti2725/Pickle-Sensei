@@ -1,0 +1,32 @@
+{
+  "workstream": "U — second north-star: USABLE RESULT RATE under versioned evidence contract (usable-result-v1)",
+  "status": "complete",
+  "baseline": "cascadeWaterfall printed only strict end-to-end survival: 1/5 gold events survive TARGET→…→STROKE; no product-level notion of 'honest usable Result' existed",
+  "candidate": "usable-result-v1 contract encoded verbatim as a versioned const in packages/swing-lab/src/cascadeWaterfall.ts; strict waterfall output unchanged above, per-case usable verdict + reasons and aggregate USABLE RESULT RATE printed below; both metrics emitted into the cascade JSON artifact",
+  "measured": {
+    "strictSurvival": "1/5",
+    "usableResultRate": "1/5",
+    "perCase": {
+      "wm-dink-01": { "strict": "LOST AT EVENT", "usable": false, "why": "wrong event (42% overlap); downstream abstentions leave nothing to show" },
+      "wm-volley-02": { "strict": "COMPLETE", "usable": true, "why": "replay clause (a): contact |err| 43ms; stroke L1 match" },
+      "afn-sasebo-rally1": { "strict": "LOST AT EVENT", "usable": false, "why": "no event selected (ambiguous); honest abstentions but nothing usable" },
+      "afn-sasebo-rally2": { "strict": "LOST AT BALL", "usable": false, "why": "fabricated contact marker (274ms off, >132ms veto) AND confidently wrong stroke (BACKHAND vs OVERHEAD)" },
+      "afn-vic-rally1": { "strict": "LOST AT CONTACT", "usable": false, "why": "confidently wrong stroke (OVERHEAD vs FOREHAND_DRIVE); contact+phases both abstained so no clause (c) timeline" }
+    },
+    "gates": { "pnpm typecheck": "green (all packages)", "pnpm lab:cascade": "prints both metrics, strict section unchanged", "swing-lab vitest": "82/82 passed" },
+    "note": "usable rate equals strict rate today (same single survivor) — reported as it fell out; the bars diverge per-case in REASONS: usable exposes fabricated-marker and wrong-confident-stroke failures that strict attributes to earlier stages (BALL/CONTACT), and it would credit honest-abstention timelines (clause c) that strict never can"
+  },
+  "filesChanged": [
+    "packages/swing-lab/src/cascadeWaterfall.ts",
+    "datasets/experiments/wave-a/U-usable-result-v1-measurement.json",
+    "datasets/experiments/wave-a/U-summary.json"
+  ],
+  "recommendation": "Adopt usable-result-v1 as the second north-star printed by pnpm lab:cascade. Product levers it uniquely exposes today: (1) suppress or widen the contact marker when supporting signals disagree (rally2's 274ms marker is the only fabrication in the set — worse than its honest abstentions elsewhere); (2) make the stroke classifier abstain instead of guessing at low evidence (2/5 cases are confidently wrong; an abstention would have been contract-compliant); (3) phases v2 abstains whenever contact abstains (PHASE_CONTACT_ANCHOR_MISSING), which makes clause (c) currently unreachable — decoupling phase segmentation from the contact anchor is the cheapest path to usable Results on honest-abstain cases like afn-vic-rally1.",
+  "risks": [
+    "n=5: neither metric is a stable estimate (existing artifact caveat retained); the SHAPE and per-case reasons are the signal",
+    "contract ambiguity #1 (missing strokePrediction block counted as explicit abstention) needs commander adjudication; today's verdicts are insensitive to it — details in U-usable-result-v1-measurement.json",
+    "contract ambiguity #2 (contact estimated but error unverifiable vs gold): v1 denies replay (a)/(b) and cannot apply the fabrication veto; unexercised today but will matter for golds without contactMs",
+    "clause (c) intentionally reuses the strict PHASE ordering predicate — if strict PHASE criteria change, usable-result must be re-versioned (v2), not silently inherit the change",
+    "usable rate reads on gold-annotated events only; it says nothing about events the product never localizes (recall is the waterfall's job)"
+  ]
+}

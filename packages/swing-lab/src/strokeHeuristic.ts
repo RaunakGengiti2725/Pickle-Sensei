@@ -1,0 +1,633 @@
+import type { Handedness } from "@pickle/shared-types";
+import { toLegacyPoseFrames, type PoseSequence } from "@pickle/swing-domain";
+import type { TrackedPaddleObservation } from "./paddleTracker.js";
+
+/**
+ * Stroke recognition taxonomy v3 + the hierarchical HEURISTIC baseline.
+ *
+ * This is measured geometry, not a learned classifier, and it says so:
+ * predictions stop at the deepest taxonomy level the evidence supports.
+ * Level 1 separates OVERHEAD / SWING (bounce information does not exist yet,
+ * so volley-vs-groundstroke is NOT claimable at L1). Level 2 decides
+ * FOREHAND/BACKHAND from the dominant wrist's position relative to the body
+ * midline in the PLAYER's frame (camera-facing corrected). Level 3 commits to
+ * DINK vs DRIVE only when contact height and swing speed agree with margin.
+ *
+ * stroke-heuristic-2 (this file) hardens the CONTACT-POINT provenance and the
+ * OVERHEAD claim against single-point tracking failures, and prefers honest
+ * abstention over a confidently-wrong guess:
+ *
+ *  1. CONTACT-POINT PLAUSIBILITY — a paddle-track center is only trusted as
+ *     the contact point when it is kinematically reachable from the dominant
+ *     wrist. An implausible paddle point (stale/wrong box) falls back to the
+ *     wrist; when neither is reliable the classifier ABSTAINS.
+ *  2. OVERHEAD CORROBORATION — OVERHEAD is no longer claimable from a single
+ *     contact-point height. The dominant wrist (and elbow) must be measured
+ *     above the shoulder line in a window around contact; conversely, strong
+ *     multi-frame skeletal raise evidence can override a LOW-PROVENANCE
+ *     contact point that sits at mid-body (dev-measured failure: a stale
+ *     paddle box at mid-body during a real overhead).
+ *  3. ABSTENTION BAND — degraded contact-point provenance narrows what the
+ *     classifier will claim: small side margins return UNKNOWN with reasons,
+ *     and committed predictions carry a capped confidence.
+ *
+ * declared / annotated / predicted stroke stay separate records everywhere.
+ */
+
+export const STROKE_TAXONOMY_V3 = {
+  version: "pickleball-stroke-taxonomy-v3",
+  labels: [
+    "FOREHAND_DRIVE",
+    "BACKHAND_DRIVE",
+    "SERVE",
+    "RETURN",
+    "FOREHAND_DINK",
+    "BACKHAND_DINK",
+    "FOREHAND_VOLLEY",
+    "BACKHAND_VOLLEY",
+    "DROP",
+    "RESET",
+    "OVERHEAD",
+    "SPEEDUP",
+    "UNKNOWN",
+  ] as const,
+} as const;
+export type StrokeV3 = (typeof STROKE_TAXONOMY_V3.labels)[number];
+
+export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-2 (uncalibrated)";
+
+/**
+ * Constants derived from the DEV sandbox pose/paddle data (W9-forensics.txt,
+ * wave-b). Held-out cases were never measured. n=2 measurable dev cases —
+ * these are documented anchors, not calibrated statistics.
+ *
+ * PADDLE_REACH_ARM_LENGTHS — verified-good paddle tracks sit 0.36–0.41
+ *   arm-lengths from the dominant wrist at contact (wm-volley-02 0.41,
+ *   afn-sasebo-rally2 0.36). 1.2 arm-lengths is ~3× the measured-good
+ *   distance and still under the anatomical maximum a real paddle center
+ *   can reach (hand + grip + half a paddle ≈ 0.5–0.6 arm), with 2D
+ *   foreshortening headroom.
+ * PADDLE_REACH_TORSO_UNITS — fallback when the arm is not measurable.
+ *   Dev arm/torso ratios: 0.72 (rally2) and 1.30 (wm-volley crouch), so
+ *   1.2×arm ≈ 0.9–1.6 torso units; 1.5 sits at the generous end.
+ * PADDLE_POINT_CONFIDENCE_FLOOR — the stale mid-body track that shadowed
+ *   rally2's real (raised) paddle carried per-observation confidence
+ *   0.08–0.28 near contact; the verified-good wm-volley track carried
+ *   0.68–0.85. 0.3 separates them with margin on both sides.
+ * OVERHEAD_WINDOW_MS — the raise apex of the dev overhead sits 81–147ms
+ *   BEFORE the estimated contact (fast smash + 30fps sampling + estimator
+ *   30ms late): a ±80ms window sees at most one visibility-gated frame
+ *   (median −0.28, blind slice), so the corroboration window is ±150ms.
+ *   The ±80ms median is still computed and recorded as evidence.
+ * OVERHEAD_WRIST_RAISE_TORSO / OVERHEAD_MIN_RAISED_FRAMES — the dev overhead
+ *   shows 3 frames at vis≥0.5 raised +0.37..+0.64 torso above the shoulder
+ *   line inside ±150ms; the dev volley's maximum is −0.24 (never raised).
+ *   Threshold +0.25 (same as the point-height threshold) with ≥2 frames.
+ * OVERHEAD_ELBOW_RAISE_TORSO — same scan for the elbow: dev overhead
+ *   +0.20..+0.26 (3 frames) vs dev volley max −0.50. Threshold +0.10.
+ * SIDE_MARGIN_DEGRADED_BAND — with degraded provenance the side commitment
+ *   additionally requires margin ≥ 0.5 shoulder-widths (good-provenance dev
+ *   commitments measure 1.99–2.32; the universal floor stays 0.15).
+ */
+const PADDLE_REACH_ARM_LENGTHS = 1.2;
+const PADDLE_REACH_TORSO_UNITS = 1.5;
+const PADDLE_POINT_CONFIDENCE_FLOOR = 0.3;
+const WRIST_RELIABLE_VISIBILITY = 0.5;
+const OVERHEAD_POINT_RAISE_TORSO = 0.25;
+const OVERHEAD_WINDOW_MS = 150;
+const OVERHEAD_MEDIAN_WINDOW_MS = 80;
+const OVERHEAD_WRIST_RAISE_TORSO = 0.25;
+const OVERHEAD_ELBOW_RAISE_TORSO = 0.1;
+const OVERHEAD_MIN_RAISED_FRAMES = 2;
+const SIDE_MARGIN_FLOOR = 0.15;
+const SIDE_MARGIN_DEGRADED_BAND = 0.5;
+const DEGRADED_CONFIDENCE_CAP = 0.6;
+
+export interface StrokePrediction {
+  taxonomyVersion: string;
+  classifierVersion: string;
+  /** Deepest label the evidence supports (may be coarse, e.g. "FOREHAND"). */
+  label: string;
+  /** Mapped v3 leaf when depth reaches 3 (or OVERHEAD at depth 1); else null. */
+  leaf: StrokeV3 | null;
+  taxonomyDepth: 1 | 2 | 3;
+  /** Heuristic, uncalibrated. */
+  confidence: number;
+  evidence: string[];
+  limitingFactors: string[];
+  /** ADDITIVE (v2): where the contact point came from. */
+  contactPointSource?: "paddle" | "wrist" | null;
+  /** ADDITIVE (v2): provenance quality of the contact point. */
+  contactPointReliability?: "strong" | "degraded" | null;
+}
+
+export function classifyStroke(input: {
+  sequence: PoseSequence;
+  window: { startMs: number; endMs: number };
+  contactMs: number | null;
+  /** Measured kinematic peak of the ISOLATED event — the only permitted
+   * reference when contact is missing (never a window midpoint). */
+  eventPeakMs?: number | null;
+  handedness: Handedness;
+  paddle: readonly TrackedPaddleObservation[] | null;
+  paddleSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
+  wristSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
+}): StrokePrediction {
+  const evidence: string[] = [];
+  const limitingFactors: string[] = [];
+  const frames = toLegacyPoseFrames(input.sequence);
+  let contactMs: number;
+  if (input.contactMs !== null) {
+    contactMs = input.contactMs;
+  } else if (input.eventPeakMs !== null && input.eventPeakMs !== undefined) {
+    contactMs = input.eventPeakMs;
+    limitingFactors.push("reference_is_event_peak_not_contact");
+  } else {
+    return unknown("no_contact_and_no_event_peak_reference", evidence, limitingFactors);
+  }
+
+  const frame = nearestFrame(frames, contactMs);
+  if (!frame) {
+    return unknown("no_pose_frame_near_contact", evidence, limitingFactors);
+  }
+  const joints = new Map(frame.landmarks.map((mark) => [mark.name, mark]));
+  const leftShoulder = joints.get("left_shoulder");
+  const rightShoulder = joints.get("right_shoulder");
+  const leftHip = joints.get("left_hip");
+  const rightHip = joints.get("right_hip");
+  if (!leftShoulder || !rightShoulder || !leftHip || !rightHip) {
+    return unknown("torso_not_measured_at_contact", evidence, limitingFactors);
+  }
+  const shoulderY = (leftShoulder.y + rightShoulder.y) / 2;
+  const hipY = (leftHip.y + rightHip.y) / 2;
+  const midX = (leftShoulder.x + rightShoulder.x) / 2;
+  const shoulderWidth = Math.max(0.02, Math.abs(rightShoulder.x - leftShoulder.x));
+  const torso = Math.max(0.02, hipY - shoulderY);
+
+  // ── Contact point with kinematic plausibility (stroke-heuristic-2) ─────
+  // Measured paddle center near contact when available AND within reach of
+  // the dominant wrist; else the dominant-motion wrist. Source + provenance
+  // quality are recorded so downstream consumers can weigh the claim.
+  const wristInfo = dominantWristInfo(frames, contactMs);
+  const armLength = estimateArmLength(frames, contactMs, wristInfo.side);
+  const reachLimit =
+    armLength !== null
+      ? PADDLE_REACH_ARM_LENGTHS * armLength
+      : PADDLE_REACH_TORSO_UNITS * torso;
+
+  let contactPoint: { x: number; y: number } | null = null;
+  let contactPointSource: "paddle" | "wrist" | null = null;
+  let contactPointReliability: "strong" | "degraded" = "degraded";
+
+  const paddleNear = input.paddle
+    ?.filter((observation) => Math.abs(observation.timestampMs - contactMs) <= 80)
+    .sort(
+      (a, b) =>
+        Math.abs(a.timestampMs - contactMs) - Math.abs(b.timestampMs - contactMs),
+    )[0];
+
+  if (paddleNear && wristInfo.point) {
+    const wristDistance = Math.hypot(
+      paddleNear.center.x - wristInfo.point.x,
+      paddleNear.center.y - wristInfo.point.y,
+    );
+    if (wristDistance <= reachLimit) {
+      contactPoint = paddleNear.center;
+      contactPointSource = "paddle";
+      contactPointReliability =
+        paddleNear.confidence >= PADDLE_POINT_CONFIDENCE_FLOOR ? "strong" : "degraded";
+      evidence.push(
+        `paddle center at contact (${paddleNear.center.x.toFixed(2)}, ${paddleNear.center.y.toFixed(2)}) — ` +
+          `${wristDistance.toFixed(2)}u from wrist (reach limit ${reachLimit.toFixed(2)}u ${armLength !== null ? `= 1.2×arm ${armLength.toFixed(2)}u` : `= 1.5×torso ${torso.toFixed(2)}u`}), track conf ${paddleNear.confidence.toFixed(2)}`,
+      );
+      if (contactPointReliability === "degraded") {
+        limitingFactors.push("paddle_point_low_track_confidence");
+      }
+    } else {
+      contactPoint = wristInfo.point;
+      contactPointSource = "wrist";
+      contactPointReliability =
+        wristInfo.visibility >= WRIST_RELIABLE_VISIBILITY ? "strong" : "degraded";
+      evidence.push(
+        `paddle center (${paddleNear.center.x.toFixed(2)}, ${paddleNear.center.y.toFixed(2)}) is ${wristDistance.toFixed(2)}u from the dominant wrist ` +
+          `(> reach limit ${reachLimit.toFixed(2)}u) — using wrist (${wristInfo.point.x.toFixed(2)}, ${wristInfo.point.y.toFixed(2)}) instead`,
+      );
+      limitingFactors.push("paddle_point_implausible_used_wrist");
+      if (contactPointReliability === "degraded") {
+        limitingFactors.push("wrist_low_visibility_at_contact");
+      }
+    }
+  } else if (paddleNear && !wristInfo.point) {
+    // Plausibility unverifiable: the wrist is not measured at contact. A
+    // confident paddle track may still carry the point (degraded); a
+    // low-confidence one leaves NO reliable contact point — abstain rather
+    // than guess (both sources unreliable).
+    if (paddleNear.confidence >= PADDLE_POINT_CONFIDENCE_FLOOR) {
+      contactPoint = paddleNear.center;
+      contactPointSource = "paddle";
+      contactPointReliability = "degraded";
+      evidence.push(
+        `paddle center at contact (${paddleNear.center.x.toFixed(2)}, ${paddleNear.center.y.toFixed(2)}), track conf ${paddleNear.confidence.toFixed(2)} — wrist invisible, plausibility unverified`,
+      );
+      limitingFactors.push("paddle_plausibility_unverified_wrist_invisible");
+    } else {
+      limitingFactors.push("paddle_point_low_track_confidence");
+      limitingFactors.push("wrist_invisible_at_contact");
+      return unknown(
+        "contact_point_unreliable_paddle_unverified_wrist_invisible",
+        evidence,
+        limitingFactors,
+      );
+    }
+  } else if (wristInfo.point) {
+    contactPoint = wristInfo.point;
+    contactPointSource = "wrist";
+    contactPointReliability =
+      wristInfo.visibility >= WRIST_RELIABLE_VISIBILITY ? "strong" : "degraded";
+    evidence.push(
+      `wrist at contact (${wristInfo.point.x.toFixed(2)}, ${wristInfo.point.y.toFixed(2)}) — paddle not tracked at contact`,
+    );
+    limitingFactors.push("paddle_not_tracked_at_contact");
+    if (contactPointReliability === "degraded") {
+      limitingFactors.push("wrist_low_visibility_at_contact");
+    }
+  }
+  if (!contactPoint) {
+    return unknown("no_contact_point_measurable", evidence, limitingFactors);
+  }
+
+  // ── Level 1: vertical motion class ─────────────────────────────────────
+  const aboveShoulder = (shoulderY - contactPoint.y) / torso; // >0 above
+  const pointRaised = aboveShoulder > OVERHEAD_POINT_RAISE_TORSO;
+
+  // Skeletal raise corroboration around contact (stroke-heuristic-2): the
+  // contact POINT is one measurement of one instant; the raise of the
+  // dominant wrist/elbow across the contact window is repeated, independent
+  // evidence. Both are recorded; disagreements are resolved by provenance.
+  const raise = scanRaiseWindow(frames, contactMs, wristInfo.side);
+  if (raise.wristMeasuredFrames > 0) {
+    evidence.push(
+      `overhead window ±${OVERHEAD_WINDOW_MS}ms: dominant wrist ≥${OVERHEAD_WRIST_RAISE_TORSO} torso above shoulder line in ` +
+        `${raise.wristRaisedFrames}/${raise.wristMeasuredFrames} measured frames (max ${raise.maxWristRaise === null ? "n/a" : raise.maxWristRaise.toFixed(2)}); ` +
+        `elbow ≥${OVERHEAD_ELBOW_RAISE_TORSO} in ${raise.elbowRaisedFrames}/${raise.elbowMeasuredFrames}`,
+    );
+  }
+  if (raise.medianWristRaise80 !== null) {
+    evidence.push(
+      `±${OVERHEAD_MEDIAN_WINDOW_MS}ms wrist-raise median ${raise.medianWristRaise80.toFixed(2)} torso over ${raise.wristMeasuredFrames80} frame(s)`,
+    );
+  }
+  const windowWristRaised = raise.wristRaisedFrames >= OVERHEAD_MIN_RAISED_FRAMES;
+  const windowElbowRaised = raise.elbowRaisedFrames >= OVERHEAD_MIN_RAISED_FRAMES;
+  const windowMeasured = raise.wristMeasuredFrames > 0 || raise.elbowMeasuredFrames > 0;
+
+  if (pointRaised) {
+    evidence.push(`contact ${aboveShoulder.toFixed(2)} torso-units above shoulders`);
+    if (windowWristRaised || windowElbowRaised) {
+      // Point and skeleton agree — the strong OVERHEAD claim.
+      return {
+        taxonomyVersion: STROKE_TAXONOMY_V3.version,
+        classifierVersion: STROKE_HEURISTIC_VERSION,
+        label: "OVERHEAD",
+        leaf: "OVERHEAD",
+        taxonomyDepth: 1,
+        confidence: clamp(0.5 + aboveShoulder / 2, 0.5, 0.85),
+        evidence,
+        limitingFactors,
+        contactPointSource,
+        contactPointReliability,
+      };
+    }
+    if (!windowMeasured) {
+      // No skeletal window data at all: the point stands alone. Claimable
+      // only on strong provenance, at reduced confidence.
+      if (contactPointReliability === "strong") {
+        limitingFactors.push("overhead_uncorroborated_skeletal_window_unmeasured");
+        return {
+          taxonomyVersion: STROKE_TAXONOMY_V3.version,
+          classifierVersion: STROKE_HEURISTIC_VERSION,
+          label: "OVERHEAD",
+          leaf: "OVERHEAD",
+          taxonomyDepth: 1,
+          confidence: clamp(0.5 + aboveShoulder / 2, 0.5, DEGRADED_CONFIDENCE_CAP),
+          evidence,
+          limitingFactors,
+          contactPointSource,
+          contactPointReliability,
+        };
+      }
+      limitingFactors.push("overhead_point_degraded_and_uncorroborated_no_claim");
+      return unknown(null, evidence, limitingFactors, contactPointSource, contactPointReliability);
+    }
+    // Window measured and quiet: repeated skeletal measurements contradict
+    // the single high point. A high point that the skeleton never supports
+    // is the confidently-wrong OVERHEAD pattern — do not claim it.
+    limitingFactors.push("contact_point_high_but_skeleton_quiet_no_overhead_claim");
+    if (contactPointReliability === "degraded") {
+      // Degraded point + contradicting skeleton: nothing trustworthy left.
+      return unknown(
+        "contact_point_contradicted_by_skeletal_window",
+        evidence,
+        limitingFactors,
+        contactPointSource,
+        contactPointReliability,
+      );
+    }
+    // Strong point, quiet skeleton — fall through to side classification on
+    // the point; the tension is recorded above.
+  } else if (windowWristRaised && windowElbowRaised) {
+    // Contact point at/below shoulders but BOTH joints were repeatedly
+    // measured above the shoulder line around contact.
+    if (contactPointReliability === "degraded") {
+      // Dev-measured failure (rally2): stale mid-body paddle box (track
+      // conf 0.08) + jittered single-frame wrist vs 3 high-visibility raised
+      // wrist frames + 3 raised elbow frames. Repeated high-visibility
+      // skeletal evidence outweighs one low-provenance point.
+      limitingFactors.push("contact_point_contradicts_overhead_but_degraded_window_wins");
+      const raisedFrames = raise.wristRaisedFrames + raise.elbowRaisedFrames;
+      return {
+        taxonomyVersion: STROKE_TAXONOMY_V3.version,
+        classifierVersion: STROKE_HEURISTIC_VERSION,
+        label: "OVERHEAD",
+        leaf: "OVERHEAD",
+        taxonomyDepth: 1,
+        confidence: clamp(0.45 + 0.05 * raisedFrames, 0.45, 0.7),
+        evidence,
+        limitingFactors,
+        contactPointSource,
+        contactPointReliability,
+      };
+    }
+    // Strong point at mid/low body wins over the window; record the tension.
+    limitingFactors.push("skeletal_raise_present_but_reliable_point_not_overhead");
+  }
+
+  evidence.push(
+    `contact height: ${contactPoint.y < shoulderY ? "above" : contactPoint.y < hipY ? "between shoulders and hips" : "below hips"}`,
+  );
+  limitingFactors.push("bounce_not_observed_volley_vs_groundstroke_unresolved");
+
+  // ── Level 2: side (forehand/backhand) in the player's frame ────────────
+  if (input.handedness === "ambidextrous") {
+    limitingFactors.push("ambidextrous_declared_side_unresolvable");
+    return unknown(null, evidence, limitingFactors, contactPointSource, contactPointReliability);
+  }
+  // Facing sign: rear view keeps anatomical right on image right (+1);
+  // front view mirrors it (-1).
+  const facing = rightShoulder.x >= leftShoulder.x ? 1 : -1;
+  evidence.push(facing === 1 ? "rear-ish view (shoulder order)" : "front-ish view (shoulder order)");
+  const offset = ((contactPoint.x - midX) / shoulderWidth) * facing;
+  // offset > 0 = contact on the player's RIGHT side.
+  const dominantRight = input.handedness === "right";
+  const sameSide = dominantRight ? offset > 0 : offset < 0;
+  const sideMargin = Math.abs(offset);
+  const side = sameSide ? "FOREHAND" : "BACKHAND";
+  evidence.push(
+    `contact ${sideMargin.toFixed(2)} shoulder-widths ${offset > 0 ? "right" : "left"} of midline (${input.handedness}-handed → ${side.toLowerCase()})`,
+  );
+  if (sideMargin < SIDE_MARGIN_FLOOR) {
+    limitingFactors.push("contact_too_close_to_midline_for_confident_side");
+    return unknown(null, evidence, limitingFactors, contactPointSource, contactPointReliability);
+  }
+  // Abstention band (stroke-heuristic-2): a low-provenance contact point
+  // does not earn a low-margin side call — an honest UNKNOWN beats a
+  // confidently-wrong guess under the usable-result contract.
+  if (contactPointReliability === "degraded" && sideMargin < SIDE_MARGIN_DEGRADED_BAND) {
+    limitingFactors.push("side_margin_within_degraded_abstention_band");
+    return unknown(null, evidence, limitingFactors, contactPointSource, contactPointReliability);
+  }
+  const sideConfidenceCap = contactPointReliability === "degraded" ? DEGRADED_CONFIDENCE_CAP : 0.8;
+  if (contactPointReliability === "degraded") {
+    limitingFactors.push("contact_point_degraded_confidence_capped");
+  }
+  const sideConfidence = clamp(0.45 + sideMargin * 0.5, 0.45, sideConfidenceCap);
+
+  // ── Level 3: intensity class (dink vs drive) ───────────────────────────
+  const speeds = input.paddleSpeeds && input.paddleSpeeds.length >= 5
+    ? { series: input.paddleSpeeds, source: "paddle" }
+    : input.wristSpeeds && input.wristSpeeds.length >= 5
+      ? { series: input.wristSpeeds, source: "wrist" }
+      : null;
+  if (!speeds) {
+    limitingFactors.push("no_speed_series_for_intensity");
+    return {
+      taxonomyVersion: STROKE_TAXONOMY_V3.version,
+      classifierVersion: STROKE_HEURISTIC_VERSION,
+      label: side,
+      leaf: null,
+      taxonomyDepth: 2,
+      confidence: sideConfidence,
+      evidence,
+      limitingFactors,
+      contactPointSource,
+      contactPointReliability,
+    };
+  }
+  const inWindow = speeds.series.filter(
+    (sample) =>
+      sample.timestampMs >= input.window.startMs && sample.timestampMs <= input.window.endMs,
+  );
+  const peak = inWindow.reduce((best, sample) => Math.max(best, sample.value), 0);
+  const lowContact = contactPoint.y > hipY - 0.35 * torso;
+  const intensity = peak < 0.9 ? "slow" : peak >= 1.4 ? "fast" : "medium";
+  evidence.push(
+    `${speeds.source} speed peak ${peak.toFixed(2)} u/s (${intensity} swing, ${lowContact ? "low" : "mid/high"} contact)`,
+  );
+  // Without bounce observation, DRIVE/VOLLEY/DINK/DROP/RESET cannot be
+  // separated defensibly — a fast volley is as fast as a drive. The
+  // intensity stays EVIDENCE; the commitment stops at depth 2.
+  limitingFactors.push("bounce_not_observed_level3_uncommitted");
+  return {
+    taxonomyVersion: STROKE_TAXONOMY_V3.version,
+    classifierVersion: STROKE_HEURISTIC_VERSION,
+    label: side,
+    leaf: null,
+    taxonomyDepth: 2,
+    confidence: sideConfidence,
+    evidence,
+    limitingFactors,
+    contactPointSource,
+    contactPointReliability,
+  };
+}
+
+function unknown(
+  reason: string | null,
+  evidence: string[],
+  limitingFactors: string[],
+  contactPointSource: "paddle" | "wrist" | null = null,
+  contactPointReliability: "strong" | "degraded" | null = null,
+): StrokePrediction {
+  if (reason) limitingFactors.push(reason);
+  return {
+    taxonomyVersion: STROKE_TAXONOMY_V3.version,
+    classifierVersion: STROKE_HEURISTIC_VERSION,
+    label: "UNKNOWN",
+    leaf: "UNKNOWN",
+    taxonomyDepth: 1,
+    confidence: 0.2,
+    evidence,
+    limitingFactors,
+    contactPointSource,
+    contactPointReliability,
+  };
+}
+
+function nearestFrame(
+  frames: ReturnType<typeof toLegacyPoseFrames>,
+  timestampMs: number,
+) {
+  let best: (typeof frames)[number] | null = null;
+  let bestDelta = Infinity;
+  for (const frame of frames) {
+    const delta = Math.abs(frame.timestampMs - timestampMs);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      best = frame;
+    }
+  }
+  return best && bestDelta <= 80 ? best : null;
+}
+
+/** The wrist that moved more around contact (±200ms), with its side and
+ * visibility at the nearest frame so provenance can be judged. */
+function dominantWristInfo(
+  frames: ReturnType<typeof toLegacyPoseFrames>,
+  contactMs: number,
+): { side: "left" | "right"; point: { x: number; y: number } | null; visibility: number } {
+  const nearby = frames.filter(
+    (frame) => Math.abs(frame.timestampMs - contactMs) <= 200,
+  );
+  const travel = { left: 0, right: 0 };
+  const previous: { left?: { x: number; y: number }; right?: { x: number; y: number } } = {};
+  for (const frame of nearby) {
+    for (const sideName of ["left", "right"] as const) {
+      const mark = frame.landmarks.find(
+        (landmark) => landmark.name === `${sideName}_wrist` && landmark.visibility >= 0.25,
+      );
+      if (!mark) continue;
+      const prior = previous[sideName];
+      if (prior) travel[sideName] += Math.hypot(mark.x - prior.x, mark.y - prior.y);
+      previous[sideName] = { x: mark.x, y: mark.y };
+    }
+  }
+  const chosen = travel.right >= travel.left ? "right" : "left";
+  const frame = nearestFrame(frames, contactMs);
+  const mark = frame?.landmarks.find(
+    (landmark) => landmark.name === `${chosen}_wrist` && landmark.visibility >= 0.25,
+  );
+  return {
+    side: chosen,
+    point: mark ? { x: mark.x, y: mark.y } : null,
+    visibility: mark?.visibility ?? 0,
+  };
+}
+
+/**
+ * Dominant-arm length (|shoulder→elbow| + |elbow→wrist|) as the median over
+ * frames within ±300ms of contact where all three joints are measured at
+ * visibility ≥ 0.5. Null when fewer than 3 such frames exist (falls back to
+ * torso units at the call site).
+ */
+function estimateArmLength(
+  frames: ReturnType<typeof toLegacyPoseFrames>,
+  contactMs: number,
+  side: "left" | "right",
+): number | null {
+  const lengths: number[] = [];
+  for (const frame of frames) {
+    if (Math.abs(frame.timestampMs - contactMs) > 300) continue;
+    const find = (name: string) =>
+      frame.landmarks.find(
+        (landmark) => landmark.name === name && landmark.visibility >= WRIST_RELIABLE_VISIBILITY,
+      );
+    const shoulder = find(`${side}_shoulder`);
+    const elbow = find(`${side}_elbow`);
+    const wrist = find(`${side}_wrist`);
+    if (!shoulder || !elbow || !wrist) continue;
+    lengths.push(
+      Math.hypot(shoulder.x - elbow.x, shoulder.y - elbow.y) +
+        Math.hypot(elbow.x - wrist.x, elbow.y - wrist.y),
+    );
+  }
+  if (lengths.length < 3) return null;
+  lengths.sort((a, b) => a - b);
+  return lengths[Math.floor(lengths.length / 2)] ?? null;
+}
+
+/**
+ * Raise evidence for the dominant wrist/elbow relative to the per-frame
+ * shoulder line across ±OVERHEAD_WINDOW_MS of contact (visibility-gated at
+ * 0.5 — only well-measured frames count). Also computes the ±80ms
+ * visibility-gated median, recorded as evidence: on the dev overhead that
+ * slice holds a single post-contact frame (the arm has already dropped), so
+ * the DECISION uses the raised-frame counts over the wider window.
+ */
+function scanRaiseWindow(
+  frames: ReturnType<typeof toLegacyPoseFrames>,
+  contactMs: number,
+  side: "left" | "right",
+): {
+  wristMeasuredFrames: number;
+  wristRaisedFrames: number;
+  maxWristRaise: number | null;
+  elbowMeasuredFrames: number;
+  elbowRaisedFrames: number;
+  wristMeasuredFrames80: number;
+  medianWristRaise80: number | null;
+} {
+  let wristMeasuredFrames = 0;
+  let wristRaisedFrames = 0;
+  let maxWristRaise: number | null = null;
+  let elbowMeasuredFrames = 0;
+  let elbowRaisedFrames = 0;
+  const raises80: number[] = [];
+  for (const frame of frames) {
+    const delta = Math.abs(frame.timestampMs - contactMs);
+    if (delta > OVERHEAD_WINDOW_MS) continue;
+    const find = (name: string, minVisibility: number) =>
+      frame.landmarks.find(
+        (landmark) => landmark.name === name && landmark.visibility >= minVisibility,
+      );
+    const leftShoulder = find("left_shoulder", 0);
+    const rightShoulder = find("right_shoulder", 0);
+    const leftHip = find("left_hip", 0);
+    const rightHip = find("right_hip", 0);
+    if (!leftShoulder || !rightShoulder || !leftHip || !rightHip) continue;
+    const shoulderY = (leftShoulder.y + rightShoulder.y) / 2;
+    const torso = Math.max(0.02, (leftHip.y + rightHip.y) / 2 - shoulderY);
+    const wrist = find(`${side}_wrist`, WRIST_RELIABLE_VISIBILITY);
+    if (wrist) {
+      const raiseAmount = (shoulderY - wrist.y) / torso;
+      wristMeasuredFrames += 1;
+      if (raiseAmount >= OVERHEAD_WRIST_RAISE_TORSO) wristRaisedFrames += 1;
+      if (maxWristRaise === null || raiseAmount > maxWristRaise) maxWristRaise = raiseAmount;
+      if (delta <= OVERHEAD_MEDIAN_WINDOW_MS) raises80.push(raiseAmount);
+    }
+    const elbow = find(`${side}_elbow`, WRIST_RELIABLE_VISIBILITY);
+    if (elbow) {
+      elbowMeasuredFrames += 1;
+      if ((shoulderY - elbow.y) / torso >= OVERHEAD_ELBOW_RAISE_TORSO) elbowRaisedFrames += 1;
+    }
+  }
+  raises80.sort((a, b) => a - b);
+  const medianWristRaise80 =
+    raises80.length === 0
+      ? null
+      : raises80.length % 2 === 1
+        ? raises80[(raises80.length - 1) / 2]!
+        : (raises80[raises80.length / 2 - 1]! + raises80[raises80.length / 2]!) / 2;
+  return {
+    wristMeasuredFrames,
+    wristRaisedFrames,
+    maxWristRaise,
+    elbowMeasuredFrames,
+    elbowRaisedFrames,
+    wristMeasuredFrames80: raises80.length,
+    medianWristRaise80,
+  };
+}
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.max(low, Math.min(high, value));
+}

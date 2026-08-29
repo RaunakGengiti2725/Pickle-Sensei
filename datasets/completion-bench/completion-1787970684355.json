@@ -1,0 +1,581 @@
+{
+  "benchVersion": "event-completion-2",
+  "benchVersionNote": "replays ALL labeled target events per case (was: first only) and merges event-bounds-wave-a.json cases (windowed DEV corpus runDirs, devin-visual-v2-wave-a labels); recovery/follow-through truth only attaches to the event containing the bundle's phases.contactMs",
+  "generatedAtIso": "2026-08-29T02:31:24.354Z",
+  "policies": {
+    "FIXED_POSTROLL": "trigger + 1500ms (current shipped behavior)",
+    "ADAPTIVE_COMPLETION": "settle: wrist speed < max(0.15, 25% peak) for 400ms; min +300ms; hard max +2500ms"
+  },
+  "n": 20,
+  "caveat": "n=20 gold target events (21 labeled incl. unusable); per-event table is the honest unit; no reliability claim",
+  "summary": {
+    "FIXED": {
+      "medianAbsEndErrorMs": 1371,
+      "medianAbsRecoveryErrorMs": 1200,
+      "earlyStops": 0,
+      "contactLost": 0,
+      "followThroughLost": 0,
+      "recoveryLost": 0,
+      "meanTrailingExcessMs": 1233,
+      "meanPostTriggerMs": 1500
+    },
+    "ADAPTIVE": {
+      "medianAbsEndErrorMs": 668,
+      "medianAbsRecoveryErrorMs": 620,
+      "earlyStops": 1,
+      "contactLost": 0,
+      "followThroughLost": 0,
+      "recoveryLost": 1,
+      "meanTrailingExcessMs": 967,
+      "meanPostTriggerMs": 1232
+    }
+  },
+  "rows": [
+    {
+      "caseId": "wm-dink-01",
+      "split": "held_out",
+      "trigger": 1560,
+      "peakSpeed": 0.84,
+      "fixed": {
+        "endMs": 3060,
+        "endVsEventEndMs": 1410,
+        "endVsRecoveryEndMs": 1060,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 2160,
+        "endVsEventEndMs": 510,
+        "endVsRecoveryEndMs": 160,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 600,
+        "settled": true
+      },
+      "identityNote": null
+    },
+    {
+      "caseId": "wm-volley-02",
+      "split": "development",
+      "trigger": 6680,
+      "peakSpeed": 1.28,
+      "fixed": {
+        "endMs": 8180,
+        "endVsEventEndMs": 1080,
+        "endVsRecoveryEndMs": 680,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 9180,
+        "endVsEventEndMs": 2080,
+        "endVsRecoveryEndMs": 1680,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 2500,
+        "settled": false
+      },
+      "identityNote": "post-trigger wrist data ends at 6840ms (< trigger+2500) — adaptive outcome truncated by window end"
+    },
+    {
+      "caseId": "afn-sasebo-rally1#1",
+      "split": "development",
+      "trigger": 3403,
+      "peakSpeed": 1.39,
+      "fixed": {
+        "endMs": 4903,
+        "endVsEventEndMs": 1303,
+        "endVsRecoveryEndMs": 1303,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 5903,
+        "endVsEventEndMs": 2303,
+        "endVsRecoveryEndMs": 2303,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 2500,
+        "settled": false
+      },
+      "identityNote": "post-trigger wrist data ends at 3871ms (< trigger+2500) — adaptive outcome truncated by window end"
+    },
+    {
+      "caseId": "afn-sasebo-rally1#2",
+      "split": "development",
+      "trigger": 400,
+      "peakSpeed": 2.92,
+      "fixed": {
+        "endMs": 1900,
+        "endVsEventEndMs": 1400,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": true,
+        "followThroughRetained": null,
+        "recoveryRetained": null,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 1168,
+        "endVsEventEndMs": 668,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": true,
+        "followThroughRetained": null,
+        "recoveryRetained": null,
+        "postTriggerMs": 768,
+        "settled": true
+      },
+      "identityNote": null
+    },
+    {
+      "caseId": "afn-sasebo-rally1#3",
+      "split": "development",
+      "trigger": 1235,
+      "peakSpeed": 0.24,
+      "fixed": {
+        "endMs": 2735,
+        "endVsEventEndMs": 1451,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": true,
+        "followThroughRetained": null,
+        "recoveryRetained": null,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 2669,
+        "endVsEventEndMs": 1385,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": true,
+        "followThroughRetained": null,
+        "recoveryRetained": null,
+        "postTriggerMs": 1434,
+        "settled": true
+      },
+      "identityNote": null
+    },
+    {
+      "caseId": "afn-sasebo-rally1#4",
+      "split": "development",
+      "trigger": 1502,
+      "peakSpeed": 0.98,
+      "fixed": {
+        "endMs": 3002,
+        "endVsEventEndMs": 1385,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": true,
+        "followThroughRetained": null,
+        "recoveryRetained": null,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 1835,
+        "endVsEventEndMs": 218,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": true,
+        "followThroughRetained": null,
+        "recoveryRetained": null,
+        "postTriggerMs": 333,
+        "settled": true
+      },
+      "identityNote": null
+    },
+    {
+      "caseId": "afn-sasebo-rally1#5",
+      "split": "development",
+      "trigger": 1802,
+      "peakSpeed": 0.43,
+      "fixed": {
+        "endMs": 3302,
+        "endVsEventEndMs": 1484,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": true,
+        "followThroughRetained": null,
+        "recoveryRetained": null,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 2669,
+        "endVsEventEndMs": 851,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": true,
+        "followThroughRetained": null,
+        "recoveryRetained": null,
+        "postTriggerMs": 867,
+        "settled": true
+      },
+      "identityNote": null
+    },
+    {
+      "caseId": "afn-sasebo-rally2#1",
+      "split": "development",
+      "trigger": 2469,
+      "peakSpeed": 11.26,
+      "fixed": {
+        "endMs": 3969,
+        "endVsEventEndMs": 919,
+        "endVsRecoveryEndMs": 869,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 3170,
+        "endVsEventEndMs": 120,
+        "endVsRecoveryEndMs": 70,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 701,
+        "settled": true
+      },
+      "identityNote": null
+    },
+    {
+      "caseId": "afn-sasebo-rally2#2",
+      "split": "development",
+      "trigger": 3871,
+      "peakSpeed": 2.75,
+      "fixed": {
+        "endMs": 5371,
+        "endVsEventEndMs": 1138,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": true,
+        "followThroughRetained": null,
+        "recoveryRetained": null,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 6371,
+        "endVsEventEndMs": 2138,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": true,
+        "followThroughRetained": null,
+        "recoveryRetained": null,
+        "postTriggerMs": 2500,
+        "settled": false
+      },
+      "identityNote": "post-trigger wrist data ends at 4738ms (< trigger+2500) — adaptive outcome truncated by window end"
+    },
+    {
+      "caseId": "afn-vic-rally1",
+      "split": "test_held_out",
+      "trigger": 701,
+      "peakSpeed": 1.97,
+      "fixed": {
+        "endMs": 2201,
+        "endVsEventEndMs": 1051,
+        "endVsRecoveryEndMs": 1051,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 1401,
+        "endVsEventEndMs": 251,
+        "endVsRecoveryEndMs": 251,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 700,
+        "settled": true
+      },
+      "identityNote": null
+    },
+    {
+      "caseId": "wavea-marne-serve",
+      "split": "development",
+      "trigger": 34785,
+      "peakSpeed": 3.49,
+      "fixed": {
+        "endMs": 36285,
+        "endVsEventEndMs": 852,
+        "endVsRecoveryEndMs": 852,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 35552,
+        "endVsEventEndMs": 119,
+        "endVsRecoveryEndMs": 119,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 767,
+        "settled": true
+      },
+      "identityNote": null
+    },
+    {
+      "caseId": "wavea-marne-dig",
+      "split": "development",
+      "trigger": 14214,
+      "peakSpeed": 0.51,
+      "fixed": {
+        "endMs": 15714,
+        "endVsEventEndMs": 1381,
+        "endVsRecoveryEndMs": 1381,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 16714,
+        "endVsEventEndMs": 2381,
+        "endVsRecoveryEndMs": 2381,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 2500,
+        "settled": false
+      },
+      "identityNote": "post-trigger wrist data ends at 14398ms (< trigger+2500) — adaptive outcome truncated by window end"
+    },
+    {
+      "caseId": "wavea-faead-feed",
+      "split": "development",
+      "trigger": 33750,
+      "peakSpeed": 1.02,
+      "fixed": {
+        "endMs": 35250,
+        "endVsEventEndMs": 1200,
+        "endVsRecoveryEndMs": 1200,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 36250,
+        "endVsEventEndMs": 2200,
+        "endVsRecoveryEndMs": 2200,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 2500,
+        "settled": false
+      },
+      "identityNote": "post-trigger wrist data ends at 33833ms (< trigger+2500) — adaptive outcome truncated by window end"
+    },
+    {
+      "caseId": "wavea-faead-rally#1",
+      "split": "development",
+      "trigger": 13667,
+      "peakSpeed": 0.67,
+      "fixed": {
+        "endMs": 15167,
+        "endVsEventEndMs": 1334,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": true,
+        "followThroughRetained": null,
+        "recoveryRetained": null,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 16167,
+        "endVsEventEndMs": 2334,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": true,
+        "followThroughRetained": null,
+        "recoveryRetained": null,
+        "postTriggerMs": 2500,
+        "settled": false
+      },
+      "identityNote": "post-trigger wrist data ends at 13708ms (< trigger+2500) — adaptive outcome truncated by window end"
+    },
+    {
+      "caseId": "wavea-faead-rally#2",
+      "split": "development",
+      "trigger": -1,
+      "peakSpeed": 0,
+      "fixed": {
+        "endMs": null,
+        "endVsEventEndMs": null,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": false,
+        "followThroughRetained": false,
+        "recoveryRetained": false,
+        "postTriggerMs": null
+      },
+      "adaptive": {
+        "endMs": null,
+        "endVsEventEndMs": null,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": false,
+        "followThroughRetained": false,
+        "recoveryRetained": false,
+        "postTriggerMs": null,
+        "settled": false
+      },
+      "identityNote": "NO wrist samples inside event for auto target — event unusable for completion replay (recorded, not skipped silently)"
+    },
+    {
+      "caseId": "wavea-944403-dink",
+      "split": "development",
+      "trigger": 21371,
+      "peakSpeed": 1.01,
+      "fixed": {
+        "endMs": 22871,
+        "endVsEventEndMs": 1371,
+        "endVsRecoveryEndMs": 1371,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 22689,
+        "endVsEventEndMs": 1189,
+        "endVsRecoveryEndMs": 1189,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1318,
+        "settled": true
+      },
+      "identityNote": null
+    },
+    {
+      "caseId": "wavea-944403-smash",
+      "split": "development",
+      "trigger": 4404,
+      "peakSpeed": 0.87,
+      "fixed": {
+        "endMs": 5904,
+        "endVsEventEndMs": 1379,
+        "endVsRecoveryEndMs": 1379,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 4721,
+        "endVsEventEndMs": 196,
+        "endVsRecoveryEndMs": 196,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 317,
+        "settled": true
+      },
+      "identityNote": null
+    },
+    {
+      "caseId": "wavea-wgm-wheelchair",
+      "split": "development",
+      "trigger": 182733,
+      "peakSpeed": 1.82,
+      "fixed": {
+        "endMs": 184233,
+        "endVsEventEndMs": 1166,
+        "endVsRecoveryEndMs": 1166,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 183033,
+        "endVsEventEndMs": -34,
+        "endVsRecoveryEndMs": -34,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": false,
+        "postTriggerMs": 300,
+        "settled": true
+      },
+      "identityNote": null
+    },
+    {
+      "caseId": "wavea-sasebo-volleys#1",
+      "split": "development",
+      "trigger": 52286,
+      "peakSpeed": 0.2,
+      "fixed": {
+        "endMs": 53786,
+        "endVsEventEndMs": 1486,
+        "endVsRecoveryEndMs": 1486,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 52920,
+        "endVsEventEndMs": 620,
+        "endVsRecoveryEndMs": 620,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 634,
+        "settled": true
+      },
+      "identityNote": null
+    },
+    {
+      "caseId": "wavea-sasebo-volleys#2",
+      "split": "development",
+      "trigger": 52586,
+      "peakSpeed": 1.17,
+      "fixed": {
+        "endMs": 54086,
+        "endVsEventEndMs": 1186,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": true,
+        "followThroughRetained": null,
+        "recoveryRetained": null,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 52920,
+        "endVsEventEndMs": 20,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": true,
+        "followThroughRetained": null,
+        "recoveryRetained": null,
+        "postTriggerMs": 334,
+        "settled": true
+      },
+      "identityNote": null
+    },
+    {
+      "caseId": "wavea-sasebo-volleys#3",
+      "split": "development",
+      "trigger": 53220,
+      "peakSpeed": 0.24,
+      "fixed": {
+        "endMs": 54720,
+        "endVsEventEndMs": 1486,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": true,
+        "followThroughRetained": null,
+        "recoveryRetained": null,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 53787,
+        "endVsEventEndMs": 553,
+        "endVsRecoveryEndMs": null,
+        "contactRetained": true,
+        "followThroughRetained": null,
+        "recoveryRetained": null,
+        "postTriggerMs": 567,
+        "settled": true
+      },
+      "identityNote": null
+    }
+  ]
+}

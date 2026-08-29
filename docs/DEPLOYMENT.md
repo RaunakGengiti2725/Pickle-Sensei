@@ -15,12 +15,13 @@ main: same verification, then Docker builds for `services/api` and `services/med
 
 All secrets via environment/Secrets Manager (.env.example is the catalog). Hard rules encoded in the binaries:
 
-- `PICKLE_ENV=production` ⇒ fixture vision provider construction throws; dev token verifier construction throws; OIDC config required at boot.
+- Production binaries contain no deterministic/demo vision provider. The dev token verifier cannot construct outside development/test, and OIDC config is required at boot.
 - Store billing endpoints stay typed-501 until credentials exist.
+- Cloud deep analysis stays typed-501 until a validated worker/model is deployed; it releases the reserved analysis permit and never returns a sample result.
 
 ## Model release train (separate from app binary)
 
-`PUT /v1/admin/model-bundles/:version` (audited) moves a signed bundle draft → canary(1%) → active with rollout percent; devices poll `GET /v1/catalog/model-bundle`. Rollback = previous version to `active`, regressed one to `retired`. Automatic rollback triggers (low-confidence rate, crashes, latency, score-distribution shift) wire into alarms in the observability stage.
+`PUT /v1/admin/model-bundles/:version` manages a signed bundle's staged rollout; devices poll `GET /v1/catalog/model-bundle`. A scoring model is a separate audited release at `PUT /v1/admin/scoring-models/:shotType/:version/release` and is eligible only when the SHA-256-verified bundle is 100% active and the dataset snapshot, locked evaluation-report hash, coach-validation reference, releasing admin, and exact shot-config version are recorded. Fresh databases have zero active scoring models. Rollback retires the regressed release; canonical sync rechecks release eligibility.
 
 ## Mobile release
 

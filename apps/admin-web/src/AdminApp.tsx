@@ -1,10 +1,15 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { CoachReviewLab, useHashRoute } from "./coachReview/CoachReviewLab";
 
 /**
  * Internal admin console (directive §45): feature flags, model bundles,
  * user lookup, drill review. Auth: paste an admin bearer token (OIDC in
  * staging/production; the API's dev issuer locally). Every admin read/write
  * is audited server-side.
+ *
+ * The COACH REVIEW LAB (#/coach) is file-based over datasets/coach-review/*
+ * (vite dev middleware) and needs no token: reads are repo artifacts, and
+ * the only write path is gated on the human-managed coach registry.
  */
 
 const box: React.CSSProperties = {
@@ -190,31 +195,47 @@ function UserLookupPanel({ token }: { token: string }) {
 
 export function AdminApp() {
   const [token, setToken] = useState("");
+  const hash = useHashRoute();
+  const coachLab = hash.startsWith("#/coach");
   return (
-    <main style={{ maxWidth: 860, margin: "0 auto", padding: 24 }}>
+    <main style={{ maxWidth: coachLab ? 1080 : 860, margin: "0 auto", padding: 24 }}>
       <h1 style={{ fontFamily: "ui-sans-serif, system-ui" }}>Pickle Sensei — Admin</h1>
-      <section style={box}>
-        <label>
-          Admin bearer token:{" "}
-          <input
-            type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            style={{ width: 420 }}
-            placeholder="paste OIDC (or local dev) admin token"
-          />
-        </label>
-      </section>
-      {token ? (
-        <>
-          <FlagsPanel token={token} />
-          <ModelBundlePanel token={token} />
-          <UserLookupPanel token={token} />
-        </>
+      <nav style={{ marginBottom: 16, fontFamily: "ui-sans-serif, system-ui" }}>
+        <a href="#/" style={{ marginRight: 16, fontWeight: coachLab ? 400 : 700 }}>
+          API console
+        </a>
+        <a href="#/coach" style={{ fontWeight: coachLab ? 700 : 400 }}>
+          Coach Review Lab
+        </a>
+      </nav>
+      {coachLab ? (
+        <CoachReviewLab />
       ) : (
-        <p>
-          Provide a token to load panels. All admin actions are role-gated and audited by the API.
-        </p>
+        <>
+          <section style={box}>
+            <label>
+              Admin bearer token:{" "}
+              <input
+                type="password"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                style={{ width: 420 }}
+                placeholder="paste OIDC (or local dev) admin token"
+              />
+            </label>
+          </section>
+          {token ? (
+            <>
+              <FlagsPanel token={token} />
+              <ModelBundlePanel token={token} />
+              <UserLookupPanel token={token} />
+            </>
+          ) : (
+            <p>
+              Provide a token to load panels. All admin actions are role-gated and audited by the API.
+            </p>
+          )}
+        </>
       )}
     </main>
   );

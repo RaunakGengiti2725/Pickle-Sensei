@@ -1,0 +1,222 @@
+{
+  "schemaVersion": 2,
+  "generatedAtIso": "2026-08-29T01:51:06.841Z",
+  "status": "AWAITING QUALIFIED COACHES — 0 reviews exist; technique scoring stays BLOCKED_ON_VALIDATION until real coach labels arrive and agree",
+  "program": {
+    "reviewersPerStroke": "≥2 independent qualified coaches for important strokes",
+    "disagreementPolicy": "preserved as data; adjudication recorded separately; never averaged away",
+    "taxonomyPolicy": "46-fault fault-taxonomy-v0-draft (stroke-family-specific) expected to be corrected/extended by coaches; rationale prose is mandatory so the real taxonomy grows from coach language",
+    "agreementMetrics": "stroke confirmation %, rating exact/|Δ|, primary-fault agreement, severity agreement, fault-set overlap",
+    "onboarding": "docs/COACHING.md",
+    "reviewConsole": "apps/admin-web (pnpm --filter @pickle/admin-web dev → Coach Review Lab)"
+  },
+  "artifacts": {
+    "schema": "datasets/coach-review/schema.json",
+    "faultTaxonomy": "datasets/coach-review/taxonomy/fault-taxonomy.v0-draft.json",
+    "drillLibrary": "datasets/coach-review/drills/drill-library.v0.json",
+    "coachRegistry": "datasets/coach-review/coaches.json",
+    "reviewsDir": "datasets/coach-review/reviews/"
+  },
+  "queue": [
+    {
+      "queueItemId": "wm-dink-01-E1",
+      "eventRef": {
+        "caseId": "wm-dink-01",
+        "eventIndex": 0
+      },
+      "video": "datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "windowMs": {
+        "start": 1050,
+        "end": 1650
+      },
+      "contactMs": 1260,
+      "annotatedStrokeV3": "BACKHAND_DINK",
+      "strokeFamily": "dink",
+      "relevantFaultFamilies": [
+        "global",
+        "dink"
+      ],
+      "bundle": {
+        "role": "held_out",
+        "annotatorId": "devin-visual-v1",
+        "revision": 6,
+        "analyzable": false,
+        "notAnalyzableReason": "rear tournament view; body partially cropped; labels are for paddle perception only",
+        "annotatorConfidence": 0.6,
+        "contactUncertainty": "plus_minus_2",
+        "phases": {
+          "preparationStartMs": 700,
+          "accelerationStartMs": 1080,
+          "contactMs": 1260,
+          "followThroughEndMs": 1560,
+          "recoveryEndMs": 2000
+        },
+        "eventNote": "yellow-cap backhand dink"
+      },
+      "replayCommand": "ffplay -ss 0.25 -t 2.20 datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "reviewTemplate": "datasets/coach-review/reviews/wm-dink-01-E1.<coachId>.json",
+      "requiredReviewsTarget": 2,
+      "existingReviews": []
+    },
+    {
+      "queueItemId": "wm-volley-02-E1",
+      "eventRef": {
+        "caseId": "wm-volley-02",
+        "eventIndex": 0
+      },
+      "video": "datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "windowMs": {
+        "start": 6300,
+        "end": 7100
+      },
+      "contactMs": 6680,
+      "annotatedStrokeV3": "FOREHAND_VOLLEY",
+      "strokeFamily": "volley",
+      "relevantFaultFamilies": [
+        "global",
+        "volley"
+      ],
+      "bundle": {
+        "role": "development",
+        "annotatorId": "devin-visual-v1",
+        "revision": 7,
+        "analyzable": true,
+        "notAnalyzableReason": null,
+        "annotatorConfidence": 0.7,
+        "contactUncertainty": "exact",
+        "phases": {
+          "preparationStartMs": 5800,
+          "accelerationStartMs": 6440,
+          "contactMs": 6680,
+          "followThroughEndMs": 7050,
+          "recoveryEndMs": 7500
+        },
+        "eventNote": "near player forehand volley"
+      },
+      "replayCommand": "ffplay -ss 5.50 -t 2.40 datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "reviewTemplate": "datasets/coach-review/reviews/wm-volley-02-E1.<coachId>.json",
+      "requiredReviewsTarget": 2,
+      "existingReviews": []
+    },
+    {
+      "queueItemId": "afn-sasebo-rally1-E1",
+      "eventRef": {
+        "caseId": "afn-sasebo-rally1",
+        "eventIndex": 0
+      },
+      "video": "datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "windowMs": {
+        "start": 2600,
+        "end": 3600
+      },
+      "contactMs": 2900,
+      "annotatedStrokeV3": "BACKHAND_VOLLEY",
+      "strokeFamily": "volley",
+      "relevantFaultFamilies": [
+        "global",
+        "volley"
+      ],
+      "bundle": {
+        "role": "development",
+        "annotatorId": "devin-visual-v1",
+        "revision": 3,
+        "analyzable": true,
+        "notAnalyzableReason": null,
+        "annotatorConfidence": 0.65,
+        "contactUncertainty": "plus_minus_1",
+        "phases": {
+          "preparationStartMs": 2600,
+          "accelerationStartMs": 2830,
+          "contactMs": 2900,
+          "followThroughEndMs": 3200,
+          "recoveryEndMs": 3600
+        },
+        "eventNote": "white-shirt woman backhand volley (labels ±2 frames)"
+      },
+      "replayCommand": "ffplay -ss 1.80 -t 2.60 datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "reviewTemplate": "datasets/coach-review/reviews/afn-sasebo-rally1-E1.<coachId>.json",
+      "requiredReviewsTarget": 2,
+      "existingReviews": []
+    },
+    {
+      "queueItemId": "afn-sasebo-rally2-E1",
+      "eventRef": {
+        "caseId": "afn-sasebo-rally2",
+        "eventIndex": 0
+      },
+      "video": "datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "windowMs": {
+        "start": 2380,
+        "end": 3050
+      },
+      "contactMs": 2620,
+      "annotatedStrokeV3": "OVERHEAD",
+      "strokeFamily": "overhead",
+      "relevantFaultFamilies": [
+        "global",
+        "overhead"
+      ],
+      "bundle": {
+        "role": "development",
+        "annotatorId": "devin-visual-v1",
+        "revision": 4,
+        "analyzable": true,
+        "notAnalyzableReason": null,
+        "annotatorConfidence": 0.6,
+        "contactUncertainty": "plus_minus_2",
+        "phases": {
+          "preparationStartMs": 2350,
+          "accelerationStartMs": 2480,
+          "contactMs": 2620,
+          "followThroughEndMs": 2950,
+          "recoveryEndMs": 3100
+        },
+        "eventNote": "near gray-shirt man overhead/high hit; contact interpolated from ball transit 2500->2682 stills"
+      },
+      "replayCommand": "ffplay -ss 1.58 -t 2.27 datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "reviewTemplate": "datasets/coach-review/reviews/afn-sasebo-rally2-E1.<coachId>.json",
+      "requiredReviewsTarget": 2,
+      "existingReviews": []
+    },
+    {
+      "queueItemId": "afn-vic-rally1-E1",
+      "eventRef": {
+        "caseId": "afn-vic-rally1",
+        "eventIndex": 0
+      },
+      "video": "datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+      "windowMs": {
+        "start": 450,
+        "end": 1150
+      },
+      "contactMs": 680,
+      "annotatedStrokeV3": "FOREHAND_DRIVE",
+      "strokeFamily": "drive",
+      "relevantFaultFamilies": [
+        "global",
+        "drive"
+      ],
+      "bundle": {
+        "role": "test_held_out",
+        "annotatorId": "devin-visual-v1",
+        "revision": 4,
+        "analyzable": true,
+        "notAnalyzableReason": null,
+        "annotatorConfidence": 0.6,
+        "contactUncertainty": "plus_minus_1",
+        "phases": {
+          "preparationStartMs": 450,
+          "accelerationStartMs": 580,
+          "contactMs": 680,
+          "followThroughEndMs": 900,
+          "recoveryEndMs": 1150
+        },
+        "eventNote": "near gray-shirt man low forehand, blue ball departs toward net (still at 700ms shows ball just off paddle)"
+      },
+      "replayCommand": "ffplay -ss 0.00 -t 2.30 datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+      "reviewTemplate": "datasets/coach-review/reviews/afn-vic-rally1-E1.<coachId>.json",
+      "requiredReviewsTarget": 2,
+      "existingReviews": []
+    }
+  ]
+}

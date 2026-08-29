@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "provenance": "licensed",
+  "note": "WAVE-A event-bounds gold cases (workstream Q, D-029 gate). Each case = a short window of a DEV corpus recording; runDir holds a WINDOWED people.json (frames filtered to the window, timestamps kept on the recording clock; see window-meta.json) so the completion bench's auto-target policy resolves the player the annotator verified. Labels are visual-truth only: annotator devin-visual-v2-wave-a looked at 12-60fps rendered frame sheets; every contactMs cites the bracketing frames in its note. Consumed by eventCompletionBench (event replay only - these runDirs have no report.json, so strokeBench/paddleBench ignore them by construction). SPLIT DISCIPLINE: all sessions here are DEV (afn-sasebo-2025-06, dvids-marne-2024, dvids-warriorgames-2026); no shadow/val/locked_test material was viewed or labeled.",
+  "annotator": "devin-visual-v2-wave-a",
+  "createdAtIso": "2026-08-29T00:00:00.000Z",
+  "rejectedCandidates": [
+    { "ref": "rec-afd0b6bad5d0 (dvids-943757) all Tier-C events incl. 1125/1875/16125/22417/66292/66708/77292", "reason": "non-pickleball b-roll at every candidate peak (rifle range, track, sitting volleyball, wheelchair basketball) - sport-context invalidity, cf. D-028" },
+    { "ref": "rec-d230484fbaa5 (dvids-1007845) 61261/62529/65766/34568", "reason": "flag-football scenes / title-card segment at candidate peaks" },
+    { "ref": "rec-5bf0e6a85afb (afn-infocus-pro) 12145/12913/13580/16250/16617", "reason": "interview segment: pro gestures with the paddle while talking (3.2n/s wrist flourish at 13580); no ball struck - gesture, not stroke" },
+    { "ref": "rec-960a1a200d6d 127233/127533", "reason": "between-points idle: arm-raise + paddle fidget, no ball" },
+    { "ref": "rec-960a1a200d6d 213000 (s8w4 window)", "reason": "end-of-game paddle-tap ritual at the net + air swing; no ball in any frame" },
+    { "ref": "rec-faead33a362c 90083/90375 (s3w4)", "reason": "ball-retrieval jog/kick between points - pickup motion, not a stroke" },
+    { "ref": "rec-6e06a3157947 53954", "reason": "post-rally milling/ball-toss to server - not a hitting motion" },
+    { "ref": "wm-volley-02 clip ~7440-8000 target reach", "reason": "motion starts but never resolves inside the clip (no contact seen, clip ends mid-track) - bounds not determinable" },
+    { "ref": "rec-b6f280b2900c 42200", "reason": "inside wm-pickleball-game 38-46s = the HELD-OUT wm-dink-01 source window - off-limits" }
+  ],
+  "cases": [
+    {
+      "id": "wavea-marne-serve",
+      "labels": "bundles/wavea-marne-serve/annotation/devin-visual-v2-wave-a.json",
+      "runDir": "runs-wave-a/wavea-marne-serve",
+      "sourceKey": "dvids-marne-outdoor",
+      "sessionKey": "dvids-marne-2024",
+      "recordingId": "rec-96ae65019c30",
+      "windowMs": { "from": 33350, "to": 39656 },
+      "role": "development"
+    },
+    {
+      "id": "wavea-marne-dig",
+      "labels": "bundles/wavea-marne-dig/annotation/devin-visual-v2-wave-a.json",
+      "runDir": "runs-wave-a/wavea-marne-dig",
+      "sourceKey": "dvids-marne-outdoor",
+      "sessionKey": "dvids-marne-2024",
+      "recordingId": "rec-96ae65019c30",
+      "windowMs": { "from": 12200, "to": 14400 },
+      "role": "development",
+      "windowLimitation": "tracker loses the target at the frame edge ~14414 (partially cropped body), so post-trigger replay runway is truncated ~65ms after eventEnd; the bench's end-of-data disclosure applies"
+    },
+    {
+      "id": "wavea-faead-feed",
+      "labels": "bundles/wavea-faead-feed/annotation/devin-visual-v2-wave-a.json",
+      "runDir": "runs-wave-a/wavea-faead-feed",
+      "sourceKey": "dvids-944209",
+      "sessionKey": "dvids-marne-2024",
+      "recordingId": "rec-faead33a362c",
+      "windowMs": { "from": 32800, "to": 34900 },
+      "role": "development"
+    },
+    {
+      "id": "wavea-faead-rally",
+      "labels": "bundles/wavea-faead-rally/annotation/devin-visual-v2-wave-a.json",
+      "runDir": "runs-wave-a/wavea-faead-rally",
+      "sourceKey": "dvids-944209",
+      "sessionKey": "dvids-marne-2024",
+      "recordingId": "rec-faead33a362c",
+      "windowMs": { "from": 12500, "to": 14900 },
+      "role": "development"
+    },
+    {
+      "id": "wavea-944403-dink",
+      "labels": "bundles/wavea-944403-dink/annotation/devin-visual-v2-wave-a.json",
+      "runDir": "runs-wave-a/wavea-944403-dink",
+      "sourceKey": "dvids-944403",
+      "sessionKey": "dvids-marne-2024",
+      "recordingId": "rec-916657917f2b",
+      "windowMs": { "from": 20000, "to": 23400 },
+      "role": "development"
+    },
+    {
+      "id": "wavea-944403-smash",
+      "labels": "bundles/wavea-944403-smash/annotation/devin-visual-v2-wave-a.json",
+      "runDir": "runs-wave-a/wavea-944403-smash",
+      "sourceKey": "dvids-944403",
+      "sessionKey": "dvids-marne-2024",
+      "recordingId": "rec-916657917f2b",
+      "windowMs": { "from": 2900, "to": 4900 },
+      "role": "development"
+    },
+    {
+      "id": "wavea-wgm-wheelchair",
+      "labels": "bundles/wavea-wgm-wheelchair/annotation/devin-visual-v2-wave-a.json",
+      "runDir": "runs-wave-a/wavea-wgm-wheelchair",
+      "sourceKey": "dvids-warriorgames-match",
+      "sessionKey": "dvids-warriorgames-2026",
+      "recordingId": "rec-960a1a200d6d",
+      "windowMs": { "from": 182250, "to": 183300 },
+      "role": "development"
+    },
+    {
+      "id": "wavea-sasebo-volleys",
+      "labels": "bundles/wavea-sasebo-volleys/annotation/devin-visual-v2-wave-a.json",
+      "runDir": "runs-wave-a/wavea-sasebo-volleys",
+      "sourceKey": "afn-sasebo-indoor",
+      "sessionKey": "afn-sasebo-2025-06",
+      "recordingId": "rec-6e06a3157947",
+      "windowMs": { "from": 51600, "to": 54600 },
+      "role": "development"
+    }
+  ]
+}

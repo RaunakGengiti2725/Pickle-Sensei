@@ -2,7 +2,7 @@
  * Live Court engine tests: fixture providers + REAL scoring + REAL cue engine.
  * Verifies the spec loop: rep → score → cue → summary (spec pp. 9, 35–37).
  */
-import { createFixtureVisionProviderSet } from '@pickle/vision-contracts';
+import { createFixtureVisionProviderSet } from '../../../packages/vision-contracts/test/support/fixtureProvider';
 import { LiveCourtEngine } from '../src/flow/liveCourt';
 
 declare const process: { env: Record<string, string | undefined> };

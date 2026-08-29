@@ -1,0 +1,589 @@
+{
+  "video": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+  "outDir": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/runs/afn-sasebo-rally1",
+  "stroke": "forehand_drive",
+  "poseSequenceSha256": "53449dfa2a56241bae68d951db58e13d37a7266f0286b9e9cb588a7483221369",
+  "quality": {
+    "analyzable": true,
+    "reasons": [],
+    "notEvaluated": [
+      "camera_motion",
+      "paddle_visibility",
+      "lighting_failure"
+    ],
+    "stats": {
+      "frameCount": 132,
+      "durationMs": 4371,
+      "effectiveFps": 29.970258522077327,
+      "meanFrameConfidence": 0.7461775488508883,
+      "meanJointsPerFrame": 9.537878787878787,
+      "fullBodyFrameRate": 0.7196969696969697,
+      "medianTorsoLengthNorm": 0.20663108093280705,
+      "largestGapMs": 34
+    }
+  },
+  "window": {
+    "startMs": 2837,
+    "endMs": 4404,
+    "peakMotionMs": 3871,
+    "confidence": 0.95
+  },
+  "contact": {
+    "status": "abstained",
+    "reason": "Contact signals disagree by 571ms; no single moment is defensible."
+  },
+  "ballDiagnostics": {
+    "trajectoryCount": 1824,
+    "trajectoriesPerSecond": 410.99594411897255,
+    "windowCandidates": 0,
+    "chosenId": null,
+    "chosenCoverage": 0,
+    "chosenPoints": 0
+  },
+  "ballModality": "unavailable",
+  "ballStage": {
+    "status": "tracked",
+    "trackId": 215,
+    "observationCount": 20,
+    "windowOverlapMs": 767.44,
+    "medianSpeed": 0.466889887093372,
+    "minPaddleDistance": 0.14841065626834476,
+    "gatedTracks": 50,
+    "ablation": {
+      "durationSec": 2.63596,
+      "stageA_rawCandidatesPerSec": 1213.9789678143827,
+      "stageB_tracks": 214,
+      "stageB_trackedObsPerSec": 1097.5128605896903,
+      "stageC_tracks": 50,
+      "stageC_trackedObsPerSec": 203.7208455363511
+    },
+    "confidenceModel": "heuristic-v1-ball (uncalibrated)"
+  },
+  "paddle": {
+    "status": "tracked",
+    "trackId": 4,
+    "observationCount": 47,
+    "windowCoverage": 0.6175047862156986,
+    "meanDetectorScore": 0.5727510638297871,
+    "meanWristDistance": 0.10698088307135963,
+    "candidateTracks": 19,
+    "detector": "dfine-medium-coco@transformers",
+    "inferenceMsPerFrame": 85.3,
+    "confidenceModel": "heuristic-v1 (uncalibrated)"
+  },
+  "timings": {
+    "poseExtractMs": 3655,
+    "paddleDetectMs": 42266,
+    "paddleTrackMs": 17,
+    "ballCandidatesMs": 1220,
+    "ballTrackMs": 57,
+    "fusionAnalysisMs": 8,
+    "overlayRenderMs": 951
+  },
+  "outcome": {
+    "kind": "analyzed",
+    "record": {
+      "schemaVersion": 1,
+      "id": "lab-analysis-1787938315929",
+      "captureId": "lab-53449dfa2a56",
+      "createdAtIso": "2026-08-28T17:31:55.931Z",
+      "engineVersion": "fusion-1",
+      "strokeTaxonomyVersion": "pickleball-taxonomy-v2",
+      "strokeResolution": {
+        "kind": "declared",
+        "shotType": "forehand_drive"
+      },
+      "modalities": {
+        "pose": true,
+        "paddle": true,
+        "ball": true,
+        "court": false,
+        "camera": false
+      },
+      "modelRuns": [
+        {
+          "id": "run-l4o2b9on",
+          "task": "phase_segmentation",
+          "model": {
+            "providerId": "phase.geometry",
+            "modelVersion": "phase-geometry-1",
+            "runtime": "deterministic",
+            "executionTarget": "on_device",
+            "artifactHash": null
+          },
+          "inputSchemaVersion": 1,
+          "outputSchemaVersion": 1,
+          "startedAtIso": "2026-08-28T17:31:55.929Z",
+          "completedAtIso": "2026-08-28T17:31:55.929Z",
+          "status": "succeeded",
+          "failure": null
+        },
+        {
+          "id": "run-ttc1hbkx",
+          "task": "biomechanics_extraction",
+          "model": {
+            "providerId": "biomech.geometry",
+            "modelVersion": "features-geometry-1",
+            "runtime": "deterministic",
+            "executionTarget": "on_device",
+            "artifactHash": null
+          },
+          "inputSchemaVersion": 1,
+          "outputSchemaVersion": 1,
+          "startedAtIso": "2026-08-28T17:31:55.930Z",
+          "completedAtIso": "2026-08-28T17:31:55.931Z",
+          "status": "succeeded",
+          "failure": null
+        },
+        {
+          "id": "run-7qqbiqza",
+          "task": "technique_scoring",
+          "model": {
+            "providerId": "scorer.sm-v1",
+            "modelVersion": "sm-v1",
+            "runtime": "deterministic",
+            "executionTarget": "on_device",
+            "artifactHash": null
+          },
+          "inputSchemaVersion": 1,
+          "outputSchemaVersion": 1,
+          "startedAtIso": "2026-08-28T17:31:55.931Z",
+          "completedAtIso": "2026-08-28T17:31:55.931Z",
+          "status": "succeeded",
+          "failure": null
+        },
+        {
+          "id": "run-7ts7uvem",
+          "task": "fault_detection",
+          "model": {
+            "providerId": "faults.checkpoint-threshold",
+            "modelVersion": "faults-v1",
+            "runtime": "deterministic",
+            "executionTarget": "on_device",
+            "artifactHash": null
+          },
+          "inputSchemaVersion": 1,
+          "outputSchemaVersion": 1,
+          "startedAtIso": "2026-08-28T17:31:55.931Z",
+          "completedAtIso": "2026-08-28T17:31:55.931Z",
+          "status": "succeeded",
+          "failure": null
+        },
+        {
+          "id": "run-sil8r588",
+          "task": "uncertainty_estimation",
+          "model": {
+            "providerId": "uncertainty.engine",
+            "modelVersion": "uncertainty-v1",
+            "runtime": "deterministic",
+            "executionTarget": "on_device",
+            "artifactHash": null
+          },
+          "inputSchemaVersion": 1,
+          "outputSchemaVersion": 1,
+          "startedAtIso": "2026-08-28T17:31:55.931Z",
+          "completedAtIso": "2026-08-28T17:31:55.931Z",
+          "status": "succeeded",
+          "failure": null
+        }
+      ],
+      "result": {
+        "id": "lab-analysis-1787938315929",
+        "sessionId": null,
+        "shotType": "forehand_drive",
+        "cameraView": "side",
+        "handedness": "right",
+        "capturedAtIso": "2026-08-28T17:31:55.925Z",
+        "timestamps": {
+          "startMs": 2837,
+          "contactMs": 3871,
+          "endMs": 4404
+        },
+        "phases": [
+          {
+            "key": "ready",
+            "startMs": 2837,
+            "endMs": 3270,
+            "representativeMs": 3053.5,
+            "confidence": 0.6788847528385843
+          },
+          {
+            "key": "prepare",
+            "startMs": 3270,
+            "endMs": 3804,
+            "representativeMs": 3537,
+            "confidence": 0.6788847528385843
+          },
+          {
+            "key": "accelerate",
+            "startMs": 3804,
+            "endMs": 3854.318181818182,
+            "representativeMs": 3829.159090909091,
+            "confidence": 0.6788847528385843
+          },
+          {
+            "key": "contact",
+            "startMs": 3854.318181818182,
+            "representativeMs": 3871,
+            "endMs": 3887.681818181818,
+            "confidence": 0.6788847528385843
+          },
+          {
+            "key": "follow_through",
+            "startMs": 3887.681818181818,
+            "endMs": 3971,
+            "representativeMs": 3929.340909090909,
+            "confidence": 0.6788847528385843
+          },
+          {
+            "key": "recover",
+            "startMs": 3971,
+            "endMs": 4404,
+            "representativeMs": 4187.5,
+            "confidence": 0.6788847528385843
+          }
+        ],
+        "measurements": [
+          {
+            "metricKey": "stance_width_ratio",
+            "value": 1.7496176277783435,
+            "unit": "ratio",
+            "confidence": 0.712890625,
+            "source": "real"
+          },
+          {
+            "metricKey": "knee_flexion_deg",
+            "value": 2.690631213375184,
+            "unit": "degrees",
+            "confidence": 0.7822265625,
+            "source": "real"
+          },
+          {
+            "metricKey": "shoulder_turn_deg",
+            "value": 6.686354466596725,
+            "unit": "degrees",
+            "confidence": 0.5655883789062499,
+            "source": "real"
+          },
+          {
+            "metricKey": "paddle_set_height_ratio",
+            "value": 0.05668416493466018,
+            "unit": "ratio",
+            "confidence": 0.5869140625,
+            "source": "real"
+          },
+          {
+            "metricKey": "paddle_set_forward_norm",
+            "value": 0.5997197981539683,
+            "unit": "normalized",
+            "confidence": 0.5869140625,
+            "source": "real"
+          },
+          {
+            "metricKey": "backswing_length_norm",
+            "value": 1.3838993187855797,
+            "unit": "normalized",
+            "confidence": 0.7911017922794117,
+            "source": "real"
+          },
+          {
+            "metricKey": "weight_transfer_norm",
+            "value": 0.003774606065295861,
+            "unit": "normalized",
+            "confidence": 0.72998046875,
+            "source": "real"
+          },
+          {
+            "metricKey": "path_low_to_high_slope",
+            "value": 0.5522755332058717,
+            "unit": "ratio",
+            "confidence": 0.69140625,
+            "source": "real"
+          },
+          {
+            "metricKey": "contact_forward_of_hip_norm",
+            "value": 0.6281083823747111,
+            "unit": "normalized",
+            "confidence": 0.65380859375,
+            "source": "real"
+          },
+          {
+            "metricKey": "contact_height_ratio",
+            "value": 0.6354351103619433,
+            "unit": "ratio",
+            "confidence": 0.7054036458333334,
+            "source": "real"
+          },
+          {
+            "metricKey": "follow_through_length_norm",
+            "value": 0.0327036714896335,
+            "unit": "normalized",
+            "confidence": 0.628155048076923,
+            "source": "real"
+          },
+          {
+            "metricKey": "recovery_time_ms",
+            "value": 433,
+            "unit": "ms",
+            "confidence": 0.6788847528385843,
+            "source": "real"
+          }
+        ],
+        "checkpoints": [
+          {
+            "key": "ready_position",
+            "score": null,
+            "confidence": 0,
+            "band": "unscored",
+            "direction": "none",
+            "severity": 0,
+            "applicable": true
+          },
+          {
+            "key": "athletic_base",
+            "score": null,
+            "confidence": 0.7437065972222223,
+            "band": "unscored",
+            "direction": "low",
+            "severity": 0.13896582888739545,
+            "applicable": true
+          },
+          {
+            "key": "preparation",
+            "score": null,
+            "confidence": 0.5655883789062499,
+            "band": "unscored",
+            "direction": "short",
+            "severity": 0.5677602191189127,
+            "applicable": true
+          },
+          {
+            "key": "paddle_set",
+            "score": null,
+            "confidence": 0.5869140625,
+            "band": "unscored",
+            "direction": "low",
+            "severity": 0.22643289463922983,
+            "applicable": true
+          },
+          {
+            "key": "swing_length",
+            "score": null,
+            "confidence": 0.7911017922794117,
+            "band": "unscored",
+            "direction": "long",
+            "severity": 0.3609491434385397,
+            "applicable": true
+          },
+          {
+            "key": "sequencing",
+            "score": null,
+            "confidence": 0.72998046875,
+            "band": "unscored",
+            "direction": "short",
+            "severity": 0.37820981980636,
+            "applicable": true
+          },
+          {
+            "key": "paddle_path",
+            "score": null,
+            "confidence": 0.69140625,
+            "band": "unscored",
+            "direction": "none",
+            "severity": 0,
+            "applicable": true
+          },
+          {
+            "key": "contact_position",
+            "score": null,
+            "confidence": 0.6750536151960784,
+            "band": "unscored",
+            "direction": "high",
+            "severity": 0.0743417590663809,
+            "applicable": true
+          },
+          {
+            "key": "face_wrist_stability",
+            "score": null,
+            "confidence": 0,
+            "band": "unscored",
+            "direction": "none",
+            "severity": 0,
+            "applicable": true
+          },
+          {
+            "key": "follow_through",
+            "score": null,
+            "confidence": 0.628155048076923,
+            "band": "unscored",
+            "direction": "short",
+            "severity": 0.589873331294326,
+            "applicable": true
+          },
+          {
+            "key": "recovery",
+            "score": null,
+            "confidence": 0.6788847528385843,
+            "band": "unscored",
+            "direction": "none",
+            "severity": 0,
+            "applicable": true
+          }
+        ],
+        "overallScore": null,
+        "analysisConfidence": 0.5896589721485123,
+        "resultKind": "low_confidence",
+        "guidance": "Couldn't read this stroke clearly. Reposition the phone.",
+        "priorityFix": null,
+        "versionVector": {
+          "appVersion": "swing-lab",
+          "modelBundleVersion": "swing-lab-desktop",
+          "poseModelVersion": "apple-vision-bodypose-1",
+          "paddleModelVersion": "dfine-medium-coco+paddle-track-1",
+          "strokeDetectorVersion": "offline-trigger-1",
+          "phaseModelVersion": "phase-geometry-1",
+          "scoringModelVersion": "sm-v1",
+          "shotConfigVersion": "forehand_drive@1"
+        },
+        "source": "real"
+      },
+      "faults": [],
+      "uncertainty": {
+        "analysisConfidence": 0.5896589721485123,
+        "presentation": "abstain",
+        "perCheckpoint": {
+          "ready_position": 0,
+          "athletic_base": 0.7437065972222223,
+          "preparation": 0.5655883789062499,
+          "paddle_set": 0.5869140625,
+          "swing_length": 0.7911017922794117,
+          "sequencing": 0.72998046875,
+          "paddle_path": 0.69140625,
+          "contact_position": 0.6750536151960784,
+          "face_wrist_stability": 0,
+          "follow_through": 0.628155048076923,
+          "recovery": 0.6788847528385843
+        },
+        "limitingFactors": [
+          "court_geometry_unavailable",
+          "checkpoint_unobserved:ready_position",
+          "checkpoint_unobserved:face_wrist_stability",
+          "analysis_confidence_below_threshold"
+        ]
+      },
+      "evidence": [
+        {
+          "claim": "checkpoint:athletic_base",
+          "window": {
+            "startMs": 2837,
+            "endMs": 3270
+          },
+          "metricKeys": [
+            "stance_width_ratio",
+            "knee_flexion_deg"
+          ],
+          "producedByProviderId": "scorer.sm-v1",
+          "confidence": 0.7437065972222223
+        },
+        {
+          "claim": "checkpoint:preparation",
+          "window": {
+            "startMs": 3270,
+            "endMs": 3804
+          },
+          "metricKeys": [
+            "shoulder_turn_deg"
+          ],
+          "producedByProviderId": "scorer.sm-v1",
+          "confidence": 0.5655883789062499
+        },
+        {
+          "claim": "checkpoint:paddle_set",
+          "window": {
+            "startMs": 3270,
+            "endMs": 3804
+          },
+          "metricKeys": [
+            "paddle_set_height_ratio"
+          ],
+          "producedByProviderId": "scorer.sm-v1",
+          "confidence": 0.5869140625
+        },
+        {
+          "claim": "checkpoint:swing_length",
+          "window": {
+            "startMs": 3270,
+            "endMs": 3804
+          },
+          "metricKeys": [
+            "backswing_length_norm"
+          ],
+          "producedByProviderId": "scorer.sm-v1",
+          "confidence": 0.7911017922794117
+        },
+        {
+          "claim": "checkpoint:sequencing",
+          "window": {
+            "startMs": 3804,
+            "endMs": 3854.318181818182
+          },
+          "metricKeys": [
+            "weight_transfer_norm"
+          ],
+          "producedByProviderId": "scorer.sm-v1",
+          "confidence": 0.72998046875
+        },
+        {
+          "claim": "checkpoint:paddle_path",
+          "window": {
+            "startMs": 3804,
+            "endMs": 3854.318181818182
+          },
+          "metricKeys": [
+            "path_low_to_high_slope"
+          ],
+          "producedByProviderId": "scorer.sm-v1",
+          "confidence": 0.69140625
+        },
+        {
+          "claim": "checkpoint:contact_position",
+          "window": {
+            "startMs": 3854.318181818182,
+            "endMs": 3887.681818181818
+          },
+          "metricKeys": [
+            "contact_forward_of_hip_norm",
+            "contact_height_ratio"
+          ],
+          "producedByProviderId": "scorer.sm-v1",
+          "confidence": 0.6750536151960784
+        },
+        {
+          "claim": "checkpoint:follow_through",
+          "window": {
+            "startMs": 3887.681818181818,
+            "endMs": 3971
+          },
+          "metricKeys": [
+            "follow_through_length_norm"
+          ],
+          "producedByProviderId": "scorer.sm-v1",
+          "confidence": 0.628155048076923
+        },
+        {
+          "claim": "checkpoint:recovery",
+          "window": {
+            "startMs": 3971,
+            "endMs": 4404
+          },
+          "metricKeys": [
+            "recovery_time_ms"
+          ],
+          "producedByProviderId": "scorer.sm-v1",
+          "confidence": 0.6788847528385843
+        }
+      ],
+      "shadow": []
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "name": "@pickle/swing-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "analyze:video": "tsx src/analyzeVideo.ts",
+    "dataset:export": "tsx src/exportDataset.ts",
+    "annotate": "tsx src/annotate.ts",
+    "paddle:bench": "tsx src/paddleBench.ts",
+    "ball:bench": "tsx src/ballBench.ts",
+    "stroke:bench": "tsx src/strokeBench.ts",
+    "dataset:report": "tsx src/datasetReport.ts",
+    "dataset:release": "tsx src/datasetRelease.ts",
+    "data:gaps": "tsx src/dataGaps.ts",
+    "mine": "tsx src/mineVideo.ts",
+    "paddle:waterfall": "tsx src/paddleWaterfall.ts",
+    "acquire": "tsx src/engine/acquire.ts",
+    "corpus:init": "tsx src/engine/importLegacy.ts",
+    "corpus:status": "tsx src/engine/corpusStatus.ts",
+    "factory": "tsx src/engine/factory.ts",
+    "ta:bench": "tsx src/targetAcquisitionBench.ts",
+    "learning:curve": "tsx src/learningCurve.ts",
+    "corpus:sessions": "tsx src/engine/sessionGroup.ts",
+    "failure:mine": "tsx src/engine/failureMine.ts",
+    "own": "tsx src/ownershipAnnotate.ts",
+    "completion:bench": "tsx src/eventCompletionBench.ts",
+    "cascade": "tsx src/cascadeWaterfall.ts",
+    "coach:queue": "tsx src/coachReview.ts",
+    "regen": "tsx src/benchRegen.ts"
+  },
+  "dependencies": {
+    "@pickle/analysis-pipeline": "workspace:*",
+    "@pickle/evaluation": "workspace:*",
+    "@pickle/scoring": "workspace:*",
+    "@pickle/shared-types": "workspace:*",
+    "@pickle/swing-domain": "workspace:*",
+    "@pickle/vision-contracts": "workspace:*",
+    "@pickle/vision-geometry": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "experimentId": "EXP-2026-08-28-event-decoupling",
+  "question": "Can StrokeEvent identity be made stable across paddle-representation changes (the measured rally1 merge cascade and the 0%-overlap cascade loss), without losing event quality?",
+  "change": "stroke-event-2: TARGET body (wrist) motion PROPOSES events (fragment glue ≤350ms + two-threshold boundary relaxation ≥max(12% peak, 0.08)); paddle evidence only CONFIRMS/RANKS (decisive peak inside ⇒ paddleConfirmed, +confidence, peak refined ≤250ms) and breaks prominence ties; paddle-only proposals exist solely as a FLAGGED fallback when body evidence is absent. CONTACT SCOPE decoupled from event bounds (peak ±450ms clamp) after the widened windows tripped the disagreement gate. Unit-tested contract: paddle content cannot create, delete, or re-bound a proposal.",
+  "results_events_n9_labels": {
+    "before_v1": { "targetRecall": "4/5 (proposal-level; SELECTED window for rally1 had 0% gold overlap)", "falseProposals": "8/14", "startMedianMs": 224, "endMedianMs": 281 },
+    "after_v2": { "targetRecall": "5/5", "falseProposals": "3/9", "startMedianMs": 350, "endMedianMs": 260, "contactInsideMatched": "4/6" }
+  },
+  "results_merge_safety": {
+    "protocol": "same dev videos with --merge-tracklets, isolated out-dirs",
+    "volley": "IDENTICAL event set and selection; contact 43→49ms — SAFE",
+    "rally1": "event proposals BYTE-IDENTICAL under merge (the v1 failure class is dead); but merged other-player paddle fragments + an opponent-side ball direction change fabricate a 'ball+paddle confirmed' contact at 546ms inside the ready-hop event → selection flips via the CONTACT channel (gold contact 2900).",
+    "conclusion": "Decoupling holds at the proposal layer. Merge promotion remains blocked on (a) target-conditioned tracklet reconciliation and (b) target-gated contact evidence (ball/paddle proximity must be to the TARGET's paddle/wrist)."
+  },
+  "results_cascade_n5": {
+    "survival": { "TARGET": 5, "EVENT": 3, "PADDLE": 3, "BALL": 2, "CONTACT": 1, "PHASE": 1, "STROKE": 1 },
+    "vs_previous": "end-to-end survival unchanged at 1/5, but the loss distribution moved from EVENT-identity errors to CONTACT abstentions: vic event overlap 36%→88% (contact-inside), rally1 is now honestly MULTI_STROKE_AMBIGUOUS instead of confidently analyzing a 0%-overlap window (its wrong stroke prediction is gone), dink event 40%→42% but slid past the 50% gate with contact abstained.",
+    "newDominantLoss": "CONTACT: compact strokes (dink) peak wrist speed AFTER contact and the multi-signal disagreement gate abstains (dink 307ms, vic 380ms disagreement). Contact fusion — not event identity — is now the cascade's binding constraint."
+  },
+  "heldOutDisclosure": "wm-dink-01/afn-vic-rally1 were regenerated TWICE tonight (once for v2, once after the contact-scope fix). The second evaluation is recorded here rather than hidden; no thresholds were tuned against held-out outputs between runs (the contact-scope fix was motivated and verified on dev cases).",
+  "artifacts": "packages/swing-lab/src/strokeEvents.ts (stroke-event-2 + tests), analyzeVideo.ts wiring, datasets/cascade/cascade-1787963173891.json, /tmp isolated merge runs (volley-merge, rally1-merge)"
+}

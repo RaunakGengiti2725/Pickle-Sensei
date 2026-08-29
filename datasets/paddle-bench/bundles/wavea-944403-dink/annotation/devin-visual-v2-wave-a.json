@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-944403-dink",
+  "annotatorId": "devin-visual-v2-wave-a",
+  "createdAtIso": "2026-08-29T00:00:00.000Z",
+  "revision": 1,
+  "stroke": "forehand_drive",
+  "annotatedStrokeV3": "FOREHAND_DRIVE",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 20950,
+    "accelerationStartMs": 21075,
+    "contactMs": 21117,
+    "followThroughEndMs": 21292,
+    "recoveryEndMs": 21500
+  },
+  "contactUncertainty": "plus_minus_2",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.6,
+  "notes": "dvids-944403 Fort Stewart outdoor (rec-916657917f2b, dvids-marne-2024, DEV) window [20000..23400], RECORDING clock. Two red-shirt near players (backs to camera): LEFT big man with crest = window auto-target (cov 0.91, torso ~(0.22,0.36)); RIGHT slimmer man uses a BLUE paddle; two far players face the camera; camo soldiers watch (bystanders). Cooperative/warm-up rally reviewed at 12/24fps. TARGET event: near-LEFT drives the returned ball - coil from 20950, stride/swing from ~21075, contact 21117 +-2 frames (ball at paddle zone but partially occluded against the net band; clear transit 21075 incoming -> 21158 outgoing), follow-through extended 21242-21292, re-set upright 21500. OTHER events (near-RIGHT player, blue paddle): scoop-dink #1 stride 20125, contact ~20354 (closing 20333 / departing 20375 at 24fps), recovered 20700; dink #2 paddle-drop 21500, contact ~21604 (bracket 21583/21625), re-set 21958; scramble lob under a fast drop - bend 22000, scoop contact 22125 (ball on low paddle), flick complete 22333 (subsequent backpedal = repositioning, excluded). OTHER (far-left player, small figure, facing camera): dink return - bend 20700, contact ~20804 (ball at his paddle 20783-20825), re-set 20950. Far-side overhead ~23100 is cut by the window end and left unlabeled; near-left's pre-window stroke before 20000 also unlabeled.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T00:00:00.000Z"
+    }
+  ],
+  "eventLabels": [
+    {
+      "eventStartMs": 20125,
+      "contactMs": 20354,
+      "eventEndMs": 20700,
+      "owner": "other",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "near-right (blue paddle) scoop-dink #1: stride 20125, contact bracketed 20333/20375 -> 20354, recovered 20700"
+    },
+    {
+      "eventStartMs": 20700,
+      "contactMs": 20804,
+      "eventEndMs": 20950,
+      "owner": "other",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "far-left player dink return (small figure): bend 20700, ball at paddle 20783-20825 -> 20804, re-set 20950"
+    },
+    {
+      "eventStartMs": 20950,
+      "contactMs": 21117,
+      "eventEndMs": 21500,
+      "owner": "target",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "near-left (auto-target) forehand drive: coil 20950, contact 21117 +-2 frames (partially occluded against net band; transit 21075 -> 21158), follow-through done 21292, upright re-set 21500"
+    },
+    {
+      "eventStartMs": 21500,
+      "contactMs": 21604,
+      "eventEndMs": 21958,
+      "owner": "other",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "near-right dink #2: paddle-drop 21500, contact bracketed 21583/21625 -> 21604, chest-front re-set 21958"
+    },
+    {
+      "eventStartMs": 22000,
+      "contactMs": 22125,
+      "eventEndMs": 22333,
+      "owner": "other",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "near-right scramble lob: bend 22000 (fast return dropping), scoop contact 22125 (ball on low paddle), flick complete 22333; backpedal after = repositioning, excluded; lob apex visible 22417-22500"
+    }
+  ]
+}

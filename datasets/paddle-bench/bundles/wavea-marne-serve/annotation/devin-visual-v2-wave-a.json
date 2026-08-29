@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-marne-serve",
+  "annotatorId": "devin-visual-v2-wave-a",
+  "createdAtIso": "2026-08-29T00:00:00.000Z",
+  "revision": 1,
+  "stroke": "serve",
+  "annotatedStrokeV3": "SERVE",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 34017,
+    "accelerationStartMs": 34630,
+    "contactMs": 34689,
+    "followThroughEndMs": 34933,
+    "recoveryEndMs": 35433
+  },
+  "contactUncertainty": "plus_minus_1",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.8,
+  "notes": "dvids-marne-outdoor (rec-96ae65019c30, dvids-marne-2024, DEV) scene [33350..39656], timestamps on the RECORDING clock. Single red-shirt practice player (sunglasses, green-face paddle), 59.94fps source reviewed at 12/24/59.94fps contact sheets. DROP SERVE: address until 33975 (ball in left hand at chest); paddle takeaway + ball release begin at 34017 (ball visibly airborne 34058, floor bounce ~34225, coil 34350-34600). Contact bracketed by frames 34680 (ball at paddle) and 34697 (ball just off, blurred) -> contactMs 34689 +-1 frame. Follow-through peaks over left shoulder ~34933; paddle descends; first clearly settled frame 35433 (both hands at waist, feet static; walking begins ~35683 and is excluded). Tier-C mined candidates 34301/34801/35118 are the drop/strike/recovery phases of this ONE stroke. The rest of the scene (36000-39600) is ball-feeding by an off-court feeder; the player never swings again (no additional events). Window auto-target = the single track (cov 1.0), so bench target identity is unambiguous.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T00:00:00.000Z"
+    }
+  ],
+  "eventLabels": [
+    {
+      "eventStartMs": 34017,
+      "contactMs": 34689,
+      "eventEndMs": 35433,
+      "owner": "target",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "drop serve: takeaway+release begin 34017 (ball airborne 34058, bounce ~34225); contact bracketed 34680/34697 at 59.94fps -> 34689; recovery settle first seen 35433 (walk-off ~35683 excluded)"
+    }
+  ]
+}

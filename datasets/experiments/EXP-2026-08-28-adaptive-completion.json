@@ -1,0 +1,17 @@
+{
+  "experimentId": "EXP-2026-08-28-adaptive-completion",
+  "question": "Can adaptive movement-completion detection replace the FIXED 1.5s post-roll without losing contact/follow-through/recovery?",
+  "method": "Replay on gold events (n=5, all bench cases): trigger = target wrist-speed peak inside the labeled event; FIXED = trigger+1500ms; ADAPTIVE v2 = first of (a) SETTLE: wrist speed < max(0.15, 25% peak) sustained 400ms, (b) NEXT-STROKE VALLEY: dip <60% peak then rise ≥1.5× valley → end at valley, (c) hard safety max trigger+2500ms. Truth: labeled eventEnd + phase followThroughEnd/recoveryEnd.",
+  "results": {
+    "FIXED":   { "medianAbsEndErrorMs": 1080, "medianAbsRecoveryErrorMs": 1051, "earlyStops": 0, "contactLost": 0, "followThroughLost": 0, "recoveryLost": 0, "meanPostTriggerMs": 1500 },
+    "ADAPTIVE": { "medianAbsEndErrorMs": 510, "medianAbsRecoveryErrorMs": 251, "earlyStops": 0, "contactLost": 0, "followThroughLost": 0, "recoveryLost": 0, "meanPostTriggerMs": 1400 },
+    "perEvent": "3/5 dramatically better (dink 1060→160, rally2 869→70, vic 1051→251 recovery excess); 2/5 never settle (continuous rally exchanges) → safety max (+1s trailing, still loss-free)"
+  },
+  "findings": [
+    "ADAPTIVE v2 halves end error and cuts recovery-end excess 76% while producing slightly SHORTER clips — accuracy and latency improve together.",
+    "v1 (settle-only) LOST to FIXED (median 1750 vs 1080): in continuous play the athlete never settles. The next-stroke-valley condition is what makes adaptive viable — completion and multi-event segmentation are the same problem.",
+    "The 2 never-settled cases are rapid volley exchanges; wrist-speed valleys between hits were too shallow for the 1.5× rise gate. Session-mode event chaining will need paddle/contact confirmation, as the event-decoupling plan already states."
+  ],
+  "decision": "NOT PROMOTED to Swift yet. n=5, replay-only, trigger idealized (label-window peak, not the live rising-edge trigger). The shipped FIXED 1.5s stays. Promotion path: instrument the live trigger timestamps, re-run this bench with real trigger times on ≥20 gold events, then gate like D-027.",
+  "artifacts": "datasets/completion-bench/ (v1 + v2 runs), packages/swing-lab/src/eventCompletionBench.ts"
+}

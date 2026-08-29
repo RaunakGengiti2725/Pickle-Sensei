@@ -1,0 +1,74 @@
+{
+  "workstream": "A — CONTACT MULTIMODAL FUSION (contact-evidence-3 → contact-evidence-4)",
+  "status": "GREEN",
+  "baseline": {
+    "estimator": "contact-evidence-3 (flat weighted mean of signal timestamps + 250ms disagreement veto)",
+    "devSandboxV3": {
+      "wm-volley-02": { "estimatedContactMs": 6637, "goldMs": 6680, "errorMs": 43, "ballConfirmed": true, "paddleConfirmed": true },
+      "afn-sasebo-rally1": { "status": "abstained", "reason": "signals disagree by 626ms", "goldMs": 2900 },
+      "afn-sasebo-rally2": { "estimatedContactMs": 2346, "goldMs": 2620, "errorMs": 274, "ballConfirmed": false, "paddleConfirmed": true }
+    },
+    "v3OnFinalTrackerSnapshot_sameInputsAsV4": {
+      "note": "parallel wave workstreams upgraded ball/paddle trackers mid-wave; on the final snapshot the v3 reference fusion (replayed in contactForensics.ts) measures:",
+      "wm-volley-02": { "estimatedContactMs": 6637, "errorMs": 43 },
+      "afn-sasebo-rally1": { "status": "abstained (spread 385ms)" },
+      "afn-sasebo-rally2": { "estimatedContactMs": 2374, "errorMs": 246, "detail": "v3 ungated fusion consumes the newly-tracked OPPONENT-side ball (turn 1.86 torso away, proximity 1.78 torso away)" }
+    },
+    "canonicalCascadeFrozen": "TARGET 5/5, EVENT 3/5, PADDLE 3/5, BALL 2/5, CONTACT 1/5, PHASE 1/5, STROKE 1/5; strict survival 1/5 (wm-volley-02)"
+  },
+  "candidate": {
+    "estimator": "contact-evidence-4 — calibrated, target-gated, reliability-weighted temporal kernel-density fusion",
+    "design": [
+      "per-signal reliability + temporal uncertainty priors (offsets currently 0: dev lead/lag signs are inconsistent; uncertainty lives in kernel widths; compact families widen the wrist kernel)",
+      "ALL local maxima per motion family contribute kernels (linear value shares), not just the global peak",
+      "kernel density over time; estimate = argmax; contactDistribution + modes exposed in the result for calibration",
+      "flat 250ms veto REPLACED by: insufficient-mass abstention, multi-modal abstention (comparable peaks >300ms apart, both modes reported), motion-peak-divergence abstention (>700ms from the scanned movement's peak), and ball-contradiction abstention (ball OBSERVED beyond proximity limits at the fused moment)",
+      "target gating of ball evidence: turns/proximity discounted or rejected by torso-normalized distance to target paddle (0.55 full / 1.2 reject) or target wrists (0.9 / 1.8); decisions recorded in signal detail strings",
+      "ball-flight gate (ball evidence at drift speed is jitter), motion-support time gate (ball evidence with a quiet target is not target contact), ball family mass cap (turn+proximity are one modality)",
+      "cross-modal corroboration: paddle and wrist are rigidly coupled — a speed peak with the other modality measured-quiet is discounted (median-relative, interpolated)",
+      "physical plausibility ceiling: motion peaks >25 torso/s are tracking glitches and are rejected (rally2's 47 torso/s wrist landmark jump)",
+      "late-mode tiebreak for comparable near modes (paddle whip precedes contact; dev-measured)",
+      "new optional inputs (backward compatible): targetWrists, strokeFamily, includeFusionKernels; ContactEstimate keeps every v3 field and only ADDS (contactDistribution, modes, fusionKernels; abstained branch gains optional limitingFactors/modes/contactDistribution)"
+    ],
+    "callSiteWiring": "analyzeVideo.ts contact region passes target wrist positions + declared-stroke family to both estimateContact call sites; per-event confirmation now requires ballConfirmed when a measured ball track exists (paddle-only confirmation cannot anchor event selection against an observed non-corroborating ball)"
+  },
+  "measured": {
+    "devSandbox": "datasets/experiments/wave-a/A-runs (canonical run dirs untouched; snapshot md5s below)",
+    "contact": {
+      "wm-volley-02": { "estimatedContactMs": 6650, "goldMs": 6680, "errorMs": 30, "confidence": 0.87, "ballConfirmed": true, "paddleConfirmed": true, "verdict": "PASS ≤66ms — improved from 43ms, no regression" },
+      "afn-sasebo-rally1": { "status": "abstained", "goldMs": 2900, "reason": "fused evidence peaks at 1970ms vs scanned movement peak 3403ms (1433ms apart) — evidence belongs to a different moment; modes [1970 (100%), 2655 (25%), 3565 (23%), 1215 (21%)] reported", "verdict": "HONEST ABSTENTION (allowed by success criteria) — gold 2900 has no tracked support in any modality: ball track dies ~900ms before contact, paddle speeds sit below the 0.5 u/s idle floor at 2900, wrist quiet" },
+      "afn-sasebo-rally2": { "estimatedContactMs": 2650, "goldMs": 2620, "errorMs": 30, "confidence": 0.61, "ballConfirmed": false, "paddleConfirmed": true, "verdict": "PASS ≤66ms — improved from 274ms (v3) / 246ms (v3 on same inputs)" }
+    },
+    "downstreamCascadeDevSandbox": {
+      "wm-volley-02": "COMPLETE (TARGET,EVENT,PADDLE,BALL,CONTACT 30ms,PHASE followEnd 6730>6650,STROKE FOREHAND=gold)",
+      "afn-sasebo-rally1": "LOST AT EVENT (unchanged vs baseline; contact abstention is honest + structured)",
+      "afn-sasebo-rally2": "LOST AT STROKE (was LOST AT CONTACT): CONTACT 30ms PASS, PHASE segmented followEnd 3038>2650 PASS, STROKE fails (predicted BACKHAND vs gold OVERHEAD — stroke-classifier workstream)"
+    },
+    "devContactStage": "2/3 ≤66ms (baseline 1/3); abstentions 1/3 (honest, structured); zero confidently-wrong estimates",
+    "unitTests": "vision-geometry 47 passed (offlineStroke 20: strong-agreement, whip-outlier-does-not-veto, multi-modal abstention w/ modes, target-gated far-ball rejection, ball-contradiction abstention, targetWrists gating, glitch rejection, v3-contract backward compat, plus the 12 pre-existing tests unchanged)",
+    "gates": "pnpm typecheck GREEN (all packages) · swing-lab vitest 143 passed · vision-geometry vitest 47 passed",
+    "snapshotMd5": {
+      "packages/swing-lab/src/paddleTracker.ts": "73c82683",
+      "packages/swing-lab/src/ballTracker.ts": "aa6209d6",
+      "packages/swing-lab/src/phaseTemporal.ts": "945ef44c",
+      "packages/swing-lab/src/analyzeVideo.ts": "8be3aabb",
+      "packages/vision-geometry/src/offlineStroke.ts": "fe03505f"
+    }
+  },
+  "filesChanged": [
+    "packages/vision-geometry/src/offlineStroke.ts (estimateContact → contact-evidence-4; detectOfflineStrokeWindow untouched)",
+    "packages/vision-geometry/src/index.ts (export new types: ContactDistributionPoint, ContactMode, StrokeFamily)",
+    "packages/vision-geometry/test/offlineStroke.test.ts (8 new estimator tests; 12 pre-existing kept green)",
+    "packages/swing-lab/src/analyzeVideo.ts (ONLY the contact call-site region: targetWrists + strokeFamily inputs, ball-aware per-event confirmation veto)",
+    "packages/swing-lab/src/contactForensics.ts (NEW replay harness: per-signal timestamps vs gold, v3 reference fusion vs current estimator, kernel/mode dumps)",
+    "datasets/experiments/wave-a/A-runs/* (sandbox), A-forensics-final.txt, A-summary.json"
+  ],
+  "recommendation": "1) BALL workstream: rally2 has strong raw candidate blobs near the target paddle around gold 2620 (2571–2671ms, scores 43k–51k in ball-candidates.json) that the plausible-ball gates reject — a target-side track there would make rally2's contact ball-confirmed. 2) rally1's gold contact (2900) is unrecoverable by any fusion: no modality has signal there (paddle below idle floor, ball dead/elsewhere, wrist quiet) — needs perception coverage through the strike, not estimator work. 3) Held-out cases were untouched per protocol; someone outside this workstream should evaluate contact-evidence-4 on them before promoting to canonical. 4) STROKE workstream: rally2 (gold OVERHEAD) predicts BACKHAND and is now the binding failure on that case. 5) Consider promoting the per-event 'ball-exists-but-unconfirmed ⇒ paddle-only cannot anchor event selection' veto into shared policy.",
+  "risks": [
+    "priors/gates are generic constants tuned only on the 3 dev cases (n=3); held-out transfer is unverified by design (no held-out regen/tuning performed)",
+    "parallel workstreams changed ball/paddle trackers mid-wave; measurements are pinned to the recorded snapshot md5s. rally1's honest abstention fires via the peak-divergence net on this snapshot; on an intermediate tracker state (paddle track extended to ~3300ms) the ball-contradiction net is the operative guard (verified by unit test, not by a pipeline run)",
+    "late-mode tiebreak (comparable modes ≤300ms apart → later) is a dev-measured heuristic; a follow-through whip inside the scan scope could bias late on cases where no corroboration difference exists",
+    "ball-contradiction abstention assumes the passed ball track is THE ball; a wrong-ball track far from the target at the fused moment abstains a legitimate contact (abstention-over-invention accepted)",
+    "confidence remains heuristic (uncalibrated); contactDistribution is exposed specifically to enable future calibration"
+  ]
+}

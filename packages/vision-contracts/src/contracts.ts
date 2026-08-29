@@ -17,7 +17,7 @@ import type {
  */
 
 export interface VideoClipRef {
-  /** Local file URI or fixture identifier. */
+  /** Local file URI or test-only identifier. */
   uri: string;
   durationMs: number;
   fps: number;

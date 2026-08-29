@@ -22,6 +22,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     reactNativeFactory = factory
 
     window = UIWindow(frame: UIScreen.main.bounds)
+    window?.backgroundColor = .brandSurfaceDark
 
     factory.startReactNative(
       withModuleName: "PickleSensei",
@@ -29,8 +30,23 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
       launchOptions: launchOptions
     )
 
+    // React's root view is white until the first JS frame renders. Painting it
+    // with the launch background keeps the handoff from the launch storyboard
+    // to the JS splash from flashing white.
+    window?.rootViewController?.view.backgroundColor = .brandSurfaceDark
+
     return true
   }
+}
+
+private extension UIColor {
+  /// Mirrors `color.surfaceDark` (#06130E) in the JS design tokens.
+  static let brandSurfaceDark = UIColor(
+    red: 6.0 / 255.0,
+    green: 19.0 / 255.0,
+    blue: 14.0 / 255.0,
+    alpha: 1.0
+  )
 }
 
 class ReactNativeDelegate: RCTDefaultReactNativeFactoryDelegate {

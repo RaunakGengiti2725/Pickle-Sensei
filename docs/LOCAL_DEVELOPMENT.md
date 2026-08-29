@@ -21,7 +21,7 @@ pnpm db:migrate
 pnpm db:seed
 ```
 
-`pnpm db:migrate` applies `packages/database/migrations/*.sql` transactionally with checksum verification. `pnpm db:seed` loads the catalog (8 shot types, 11 checkpoints), scoring model sm-v1 generated from `packages/scoring/src/config/v1.ts`, and clearly-labeled dev fixture drills. Both are idempotent.
+`pnpm db:migrate` applies `packages/database/migrations/*.sql` through migration `0014` transactionally with checksum verification. `pnpm db:seed` loads the technique/checkpoint catalog and versioned **validating** scoring hypotheses used by engine tests; it activates none of them, so a fresh database has zero active scoring models. It also does **not** publish placeholder drills or instructional media: training content remains empty until reviewed, rights-cleared records are released. Both commands are idempotent.
 
 ## Everyday commands
 
@@ -83,9 +83,17 @@ xed apps/mobile/ios/PickleSensei.xcworkspace
   `src/config/authConfig.ts` and add its reversed client id as a URL scheme in
   Info.plist. Until then the button reports "not configured" — by design.
 
+The native camera is wired into the app. On supported iOS devices it uses Apple Vision body pose to draw the live skeleton and measured joint-motion glow, automatically retains a clip around player motion, and returns `unknown`/`awaiting_model`. A simulator can verify navigation and lifecycle, but cannot establish camera/model accuracy; use a physical device for capture QA.
+
+## Mobile (Android)
+
+Build the Android app with JDK 17 and an installed Android SDK. The native path uses CameraX and the bundled MediaPipe pose model for the same live skeleton, motion visualization, and automatic short-clip capture. Physical-device validation remains required.
+
+Neither platform has a runtime switch that generates a sample score. Test-only doubles are confined to test suites. With no validated classifier/scoring model, captured clips intentionally remain unscored. No speed/MPH appears because calibrated ball tracking is not implemented.
+
 ## Environment conventions
 
-- `PICKLE_ENV`: development | test | staging | production. The FixtureVisionProvider refuses to construct when this is `production`.
+- `PICKLE_ENV`: development | test | staging | production. Production runtime has no deterministic vision provider or demo inference mode.
 - Secrets: never committed; `.env.example` holds placeholders and non-secret local defaults only. Production secrets live in AWS Secrets Manager (infra stage).
 
 ## Repo layout

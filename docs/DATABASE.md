@@ -1,6 +1,6 @@
 # DATABASE
 
-PostgreSQL 16. Migrations: `packages/database/migrations/*.sql`, applied by the in-repo runner (`src/migrate.ts`) — ordered files, one transaction each, checksum-locked history (edit-after-apply fails loudly; write a new migration).
+PostgreSQL 16. Current migration head: `0014`. Migrations live in `packages/database/migrations/*.sql` and are applied by the in-repo runner (`src/migrate.ts`) — ordered files, one transaction each, checksum-locked history (edit-after-apply fails loudly; write a new migration).
 
 ## ERD (ownership view)
 
@@ -28,7 +28,9 @@ ops:       idempotency_record, audit_log, schema_migrations
 
 - **UUID PKs**; `shot.id` and `practice_session.id` are **client-generated** for offline-first sync; server upserts idempotently.
 - **Version integrity**: `shot.version_vector` (JSONB, validated at API boundary) + `shot.scoring_model_id` + `shot.model_bundle_version` columns. Historical scores are never rescored in place (spec p. 22). `progress_daily` and `weekly_report` are scoring-model-version aware — no cross-version trend math without explicit normalization.
-- **Honest results**: `CHECK (result_kind='scored' AND overall_score IS NOT NULL OR result_kind='low_confidence' AND overall_score IS NULL)`; `shot.source IN ('real','fixture')` so fixture data can never be presented as inference.
+- **Release integrity (migration 0013)**: seeded scoring configs remain validating hypotheses, and a fresh database has zero active scoring models. Release requires an audited admin action at `PUT /v1/admin/scoring-models/:shotType/:version/release` with a 100%-active model bundle whose manifest passes SHA-256 validation, a dataset snapshot, locked evaluation-report hash, coach-validation reference, releasing admin, and the exact shot-config version. Canonical score sync rejects anything else.
+- **Replay integrity (migration 0014)**: every newly accepted shot stores the server-computed SHA-256 of its schema-normalized sync payload. A durable outbox may replay that exact payload after its model retires; a reused shot id with changed analysis data is rejected. Pre-0014 rows remain canonical but cannot claim an unprovable retry is exact.
+- **Honest results**: `CHECK (result_kind='scored' AND overall_score IS NOT NULL OR result_kind='low_confidence' AND overall_score IS NULL)`. `shot.source` retains a legacy `fixture` enum value for migration/test compatibility, but production runtime and seeds create no fixture shots or UI content; release data is `real` only.
 - **Frame data stays out of Postgres**: per-frame landmark tensors go to object storage as `media_asset(kind='features')`, referenced by `shot.feature_asset_id` (spec p. 13).
 - JSONB only where flexibility is genuine: version vectors, report payloads, billing raw events, annotation metadata.
 
@@ -40,6 +42,8 @@ ops:       idempotency_record, audit_log, schema_migrations
 ## Retention (spec p. 39)
 
 Raw cloud clips 30 days unless kept; derived analysis while account exists; share intermediates 7–30 days (`share_card.expires_at`, `media_asset.expires_at`); training data only with documented consent; local device clips user-controlled.
+
+The mobile SQLite `local_capture.payload` stores the schema-validated native clip result, including its bounded pose-evidence summary and typed ball-speed availability. It is owner-scoped and deleted/exported with the local clip. The column is nullable only for captures created by older app versions; the UI labels those rows as legacy and never reconstructs evidence from neighboring metadata.
 
 ## Indexes
 

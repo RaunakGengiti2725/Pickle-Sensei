@@ -1,0 +1,86 @@
+{
+  "video": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+  "outDir": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/runs/wm-dink-01",
+  "stroke": "dink",
+  "poseSequenceSha256": "610ddbeadd7202cc8441130572eaf679f716b94fa8a03054cc66de4a1858d4a0",
+  "quality": {
+    "analyzable": false,
+    "reasons": [
+      "body_not_fully_visible"
+    ],
+    "notEvaluated": [
+      "camera_motion",
+      "paddle_visibility",
+      "lighting_failure"
+    ],
+    "stats": {
+      "frameCount": 200,
+      "durationMs": 7960,
+      "effectiveFps": 25,
+      "meanFrameConfidence": 0.6676709923377403,
+      "meanJointsPerFrame": 9.37,
+      "fullBodyFrameRate": 0.38,
+      "medianTorsoLengthNorm": 0.15664621042620894,
+      "largestGapMs": 40
+    }
+  },
+  "window": {
+    "startMs": 0,
+    "endMs": 2660,
+    "peakMotionMs": 1560,
+    "confidence": 0.7832952245014096
+  },
+  "contact": {
+    "status": "abstained",
+    "reason": "Contact signals disagree by 527ms; no single moment is defensible."
+  },
+  "ballDiagnostics": {
+    "trajectoryCount": 12939,
+    "trajectoriesPerSecond": 1617.375,
+    "windowCandidates": 0,
+    "chosenId": null,
+    "chosenCoverage": 0,
+    "chosenPoints": 0
+  },
+  "ballModality": "unavailable",
+  "ballStage": {
+    "status": "tracked",
+    "trackId": 286,
+    "observationCount": 11,
+    "windowOverlapMs": 520,
+    "medianSpeed": 0.487647413609464,
+    "minPaddleDistance": null,
+    "gatedTracks": 49,
+    "ablation": {
+      "durationSec": 3.76,
+      "stageA_rawCandidatesPerSec": 1010.6382978723404,
+      "stageB_tracks": 260,
+      "stageB_trackedObsPerSec": 877.6595744680851,
+      "stageC_tracks": 49,
+      "stageC_trackedObsPerSec": 144.9468085106383
+    },
+    "confidenceModel": "heuristic-v1-ball (uncalibrated)"
+  },
+  "paddle": {
+    "status": "tracked",
+    "trackId": 4,
+    "observationCount": 33,
+    "windowCoverage": 0.49624060150375937,
+    "meanDetectorScore": 0.5311424242424241,
+    "meanWristDistance": 0.06380336187591981,
+    "candidateTracks": 34,
+    "detector": "dfine-medium-coco@transformers",
+    "inferenceMsPerFrame": 72.5,
+    "confidenceModel": "heuristic-v1 (uncalibrated)"
+  },
+  "timings": {
+    "paddleTrackMs": 9,
+    "ballCandidatesMs": 1127,
+    "ballTrackMs": 38,
+    "overlayRenderMs": 759
+  },
+  "outcome": {
+    "kind": "not_analyzable",
+    "detail": "capture quality gate failed: body_not_fully_visible — perception artifacts written; no score permitted"
+  }
+}

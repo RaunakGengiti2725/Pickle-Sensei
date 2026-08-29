@@ -1,66 +1,76 @@
 # IMPLEMENTATION PLAN
 
-Build order follows directive §59 (Stage 0–8) with spec roadmap. Each stage lists concrete deliverables and exit criteria.
+This is the forward plan from the current implementation. Completed infrastructure is listed in `IMPLEMENTATION_STATUS.md`; the target-product narrative in `SPEC_DIGEST.md` is not evidence that a capability ships.
 
-## Stage 0 — Understand ✅
+## Completed foundations
 
-- Read Deep Research (62pp), produce `SPEC_DIGEST.md`, `ARCHITECTURE.md`, `DECISIONS.md`, `IMPLEMENTATION_STATUS.md`.
-- Repo was empty; no existing work to preserve.
+- React Native product shell, premium navigation and account-aware state.
+- Canonical auth/bootstrap/onboarding/progress APIs and account-scoped local SQLite/outbox data.
+- Permit-bound analysis accounting with exactly two lifetime successful free ratings and an entitlement gate after them.
+- iOS AVFoundation + Apple Vision and Android CameraX + MediaPipe native camera paths.
+- Automatic motion-triggered short-clip capture with live real-pose skeleton and measured joint-motion visualization.
+- Typed `unknown`/`awaiting_model` outcomes instead of sample stroke labels, scores, drills, or speed.
+- v2 consent/provenance schemas, exact 61-technique taxonomy, explicit non-stroke/partial outcomes, and tested release-eligibility gates for future model-data collection.
+- Saved-drill/training-plan persistence that accepts only real catalog records. No placeholder catalog is published.
 
-## Stage 1 — Foundation
+## Stage 1 — Physical-device capture validation
 
-- pnpm monorepo: `apps/`, `services/`, `packages/`, `native/`, `ml/`, `infra/`, `fixtures/`, `.github/`.
-- Strict TypeScript base config (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), ESLint flat config, Prettier, Vitest.
-- `packages/shared-types`: domain model (shot types, phases, checkpoints, landmarks, coordinate systems, result types, typed error taxonomy, UI/camera states).
-- `packages/api-contracts`: Zod schemas for `/v1` payloads; OpenAPI generation; single source shared mobile↔backend.
-- `packages/database`: SQL migrations implementing full schema; migration runner; deterministic seeds (shot types, checkpoints, scoring config v1, drills, dev fixtures marked as fixtures).
-- `packages/scoring`: production scoring engine (metric→checkpoint→technique score, confidence gating, versioning) + coaching-priority engine + dependency graph. Pure, deterministic, fully tested.
-- `packages/audio-coach-core`: deterministic cue selection engine (categories, cooldowns, silence rules) as portable TS core; native TTS binding later.
-- `packages/vision-contracts`: `IPoseProvider`, `IPaddleDetector`, `IBallTracker`, `IStrokeDetector`, `IPhaseSegmenter` interfaces + `FixtureVisionProvider` (explicit dev mock, excluded from production builds by env guard).
-- `services/api`: Fastify modular monolith skeleton (identity, catalog, analysis, sessions, progress, billing, privacy modules), health endpoint, request-id middleware, typed config, OpenAPI route validation.
-- Local infra: docker-compose (PostgreSQL, Redis, MinIO, elasticmq), `.env.example`, Makefile-equivalent pnpm scripts, `docs/LOCAL_DEVELOPMENT.md`.
-- CI: GitHub Actions PR workflow (install, format, lint, typecheck, tests, build, migration check).
-- Exit: `pnpm lint && pnpm typecheck && pnpm test && pnpm build` green.
+- Validate orientation, mirroring, framing, lifecycle, permissions, memory, battery, and thermal behavior across representative iOS and Android devices.
+- Measure motion-trigger precision/recall for capture only. A motion trigger is not a stroke classification.
+- Preserve the current truth boundary: missing person/model/permission yields a visible typed state, never a generated result.
 
-## Stage 2 — Core product (mobile shell)
+Exit: reliable private clip capture across the supported device matrix with documented measurements.
 
-- `apps/mobile`: React Native New Architecture + TypeScript. Navigation, design system (tokens + components §46), auth abstraction, onboarding flow, Home, shot catalog, SQLite persistence, outbox sync scaffolding, Library, Progress foundations.
-- Every screen with the §10 state matrix.
-- Exit: first vertical slice runs — launch → onboarding → Home → select Forehand Drive → dev capture flow → persisted analysis (fixture provider, clearly labeled) → result → checkpoint breakdown → drill → library.
+## Stage 2 — Rights-cleared data and content
 
-## Stage 3 — Vision infrastructure
+- Collect consented, provenance-tracked, representative pickleball video across strokes, views, handedness, levels, bodies, environments, and devices.
+- Obtain expert stroke/phase/checkpoint labels with adjudication and a frozen holdout.
+- Produce or license human instruction media and coach-review drills before publishing them to the catalog.
 
-- `native/camera-engine` (iOS Swift/AVFoundation): capture, rolling buffer, orientation transforms.
-- `native/vision-core` (Swift/Obj-C++/Core ML): pose baseline execution, paddle detector slot, temporal stroke detector, phase segmenter, feature extraction; portable C++ core where feasible.
-- Coordinate system docs + tests (normalized image / pixel / body-relative).
-- `ml/` training + export + evaluation scaffolding; dataset manifests; annotation schema (formal JSON Schema).
-- Exit: on-device pose over recorded fixture video producing real `PoseFrame` streams into the shared feature extractor.
+Exit: legally usable training/evaluation sets and a reviewed content catalog. Public datasets are not assumed commercially usable.
 
-## Stage 4 — Single-shot analyzer
+## Stage 3 — Validated perception
 
-- Real capture → stroke clip → pose+paddle → phases → features → scoring engine → result screen with confidence gating and priority fix, replay w/ overlays, drill recommendation.
-- Fixture inference replaced piecewise; each replacement flips a provider flag, never silently.
+- Train and validate paddle detection, temporal stroke classification, and phase segmentation.
+- Keep automatic recognition in the camera path; do not reintroduce a manual stroke picker as a substitute for model quality.
+- Add calibrated ball tracking only when it can support a measured trajectory. MPH remains absent until calibration and error bounds are validated.
 
-## Stage 5 — Live Court
+Exit: frozen per-subsystem quality, fairness, false-trigger, and device-runtime gates pass.
 
-- Rolling native buffer, continuous detection, on-device scoring, AudioCoach TTS, session persistence, summary, thermal tiers, offline guarantee.
+## Stage 4 — Coach-calibrated scoring
 
-## Stage 6 — Backend completeness
+- Extract observable biomechanics from validated pose/paddle/phase outputs.
+- Calibrate targets and checkpoint weights with coaches; replace engineering hypotheses with a signed, versioned release bundle.
+- Validate abstention, coach agreement, test/retest stability, camera perturbation, and subgroup parity.
+- Emit a numeric score only above the release confidence threshold; otherwise return a useful abstention.
 
-- Presigned media uploads, cloud sync, progress/weekly reports, StoreKit/Play billing + entitlements, privacy center (export/delete workflows), feature flags, notifications.
+Exit: a successful rating can be produced, accepted with its full version vector, and legitimately consume one free rating.
 
-## Stage 7 — Product depth
+## Stage 5 — Training and improvement loop
 
-- Training plans, achievements, weekly review, references, share cards, social (friends/leaderboards, teen-safe defaults).
+- Map verified diagnoses to reviewed drills and rights-cleared human instruction media.
+- Support saving, completing, and revisiting drills with canonical account sync.
+- Show progress only from server-accepted, version-compatible ratings across 7-day, 4-week, 3-month, and all-time ranges.
 
-## Stage 8 — Advanced CV
+Exit: capture → trustworthy diagnosis → reviewed practice → later re-measurement demonstrates a version-valid change.
 
-- Ball tracking, court calibration, 2D→3D research, match/rally analysis.
+## Stage 6 — Live Court
 
-## MVP critical path (directive §60)
+- Connect validated repetition detection and scoring to the tested cue engine and native speech.
+- Add thermal capability tiers, quiet/cooldown policy, session summary, and offline-first sync.
+- Validate a full 30-minute session on representative devices before release.
 
-camera → stroke detection → pose+paddle → phases → features → score → confidence → priority fix → Live Court → voice.
+Exit: measured repetition-to-cue performance passes every gate in `LIVE_COURT.md`.
 
-## Testing plan pointer
+## Stage 7 — Commerce release
 
-See `docs/TESTING.md` (created with Stage 1) + spec pp. 49–51: mobile unit/store/navigation/persistence/sync; backend unit/integration/auth/DB/queue/idempotency; E2E critical paths; native coordinate/rotation/mirroring/memory/thermal/lifecycle; golden-video regression.
+- Configure App Store and Play receipt verification and server notifications.
+- Verify restore, expiry, grace, cancellation, and cross-device entitlement behavior.
+- Confirm that exactly two successful server-accepted ratings are free, the third rating attempt is hard-gated, and all abstentions/failures release their permits.
+
+## Critical path
+
+```
+real capture → consented data → validated stroke/paddle/phases → coach-calibrated score
+→ reviewed drill/content → repeat measurement → validated Live Court → commerce release
+```

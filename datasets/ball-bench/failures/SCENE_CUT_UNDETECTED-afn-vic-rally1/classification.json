@@ -1,0 +1,7 @@
+{
+  "failureClass": "SCENE_CUT_UNDETECTED (→ BALL_FALSE_POSITIVE + CONTACT_FALSE_POSITIVE on non-gameplay)",
+  "capturedAtIso": "2026-08-28T16:20:00.000Z",
+  "video": "original afn-vic-rally1 cut (22-28s of afn-provic) — spans a hard cut from rally b-roll to a whiteboard interview scene at ~25.8s",
+  "description": "On the first held-out run, the pipeline produced a 'ball track' (11 obs, 1.68 u/s) and a 'ball-confirmed contact' at 4081ms INSIDE the whiteboard interview scene: marker/hand motion passed the ball gates, wrist peaks of the writer supplied contact evidence. No scene-change detection exists.",
+  "regressionExpectation": "A future scene/shot-boundary gate must mark multi-shot clips and refuse cross-shot analysis; this clip is the regression exhibit."
+}

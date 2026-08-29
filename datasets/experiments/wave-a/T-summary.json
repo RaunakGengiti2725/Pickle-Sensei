@@ -1,0 +1,35 @@
+{
+  "workstream": "T — Competitor benchmark research (cited matrix for CLAIM_REVIEW Gate J)",
+  "status": "GREEN",
+  "baseline": "docs/CLAIM_REVIEW.md contained a 4-row qualitative competitor table with no fetched citations; Gate J = FAIL (qualitative feature comparison only, no comparable-case benchmark).",
+  "candidate": "Full cited landscape: 9 primary products profiled (PB Vision, SwingVision, SportsReflector, DinkAI + 4-app LLM tail, SevenSix, Sportsbox 3D Golf, OnForm, Apple Watch, Garmin) across 13 dimensions (platform, capture setup, athlete ID, stroke detection, technique feedback, contact detection, phase replay, validation, drills, latency, session analytics, pricing, privacy), with CLAIMED-vs-DEMONSTRATED ledger and gap/differentiator analysis vs Pickle Sensei's measured state.",
+  "measured": {
+    "productsProfiled": 9,
+    "sourcesCited": 44,
+    "sourcesDirectlyFetched": 6,
+    "sourcesSearchIndexed": 38,
+    "fabricatedMetrics": 0,
+    "keyFindings": {
+      "onlyIndependentlyValidatedCompetitor": "SwingVision — peer-reviewed tennis match-stat validation (doi.org/10.1080/24748668.2023.2268475, 1065 strokes); vendor claims 97% close-call line accuracy / speed within 10% at 60fps ideal setup; real-time on-device; iOS-only; $179.99/yr",
+      "pickleballAnalyticsLeader": "PB Vision — full-game cloud analytics, auto shot classification (dink/drive/drop/lob/Erne/ATP), 6 skill ratings with no published validation, ~30min claimed processing (user-reported multi-hour tail), $99.99-$396/yr, no manual AI-error correction",
+      "techniqueScoreIncumbent": "SportsReflector — 0-100 pickleball form score with '94.4% accuracy' marketing claim, zero published methodology/validation, 3-person team, 12 App Store ratings",
+      "unoccupiedLane": "No pickleball product demonstrates per-stroke biomechanical technique feedback, contact-moment detection, automatic busy-court athlete lock, or abstention/calibration discipline",
+      "bigPlatforms": "Apple Watch + Garmin ship pickleball as HR/fitness activity profiles only — no technique analysis; they normalize free 'pickleball tracking'"
+    },
+    "gateJImplication": "FAIL stands. External evidence confirms no comparable-case benchmark exists yet; best-in-class claim requires same-footage protocol vs SwingVision + PB Vision plus independent validation."
+  },
+  "filesChanged": [
+    "datasets/experiments/wave-a/T-competitor-matrix.md",
+    "datasets/experiments/wave-a/T-summary.json"
+  ],
+  "recommendation": "Keep the best-in-class claim FAILED and the approved language 'Pickle Sensei is still being validated.' Position against the market's actual shape: (1) match analytics is owned by SwingVision/PB Vision — do not compete there first; (2) the validated per-stroke technique lane is unoccupied (SportsReflector's 0-100 is unvalidated marketing) — flipping Gate H (first coach cohort) creates a claim no pickleball competitor can make; (3) table stakes to close before any superiority claim: cascade survival beyond 1/5 (Gates A/D/E), measured iPhone latency vs SwingVision's real-time bar and PB Vision's ~30min cloud (Gate F), and a shipped session mode reaching PB Vision's stroke-by-stroke baseline; (4) the differentiated capture UX (auto target lock + auto event detection + declared-vs-predicted + abstention-first) is real and externally unmatched — market it only as capture/trust UX, never as accuracy, until gates flip; (5) when ready for Gate J, run a published same-footage comparable-case benchmark vs PB Vision and SwingVision.",
+  "risks": [
+    "JS-blocked vendor SPAs (pb.vision, swing.vision, sportsreflector.com, sevensixtennis.com): claims quoted via search-indexed page content with URL attribution rather than direct fetch; content could drift or be misindexed — re-verify before any public comparative statement.",
+    "Pricing volatility: OnForm repricing effective 2026-04-06; PB Vision limited-time offers; SwingVision coupon pages — all prices are point-in-time.",
+    "App Store privacy labels are developer-declared and 'not verified by Apple'; no vendor's training-data reuse policy was verifiable (all UNVERIFIED) — do not cite competitor privacy posture as fact beyond the labels.",
+    "SwingVision's independent validation covers tennis match stats, not pickleball and not technique scoring; do not overstate it, but do not ignore that they can cite it and we cannot cite anything.",
+    "Absence-of-evidence caveat: 'no contact-moment detection / athlete lock advertised' means not found in public materials fetched today, not proven absent internally at competitors.",
+    "Fast-moving tail: pickleball AI apps are appearing monthly (DinkAI shipped ~9 months ago); this matrix decays — re-run at every release candidate per CLAIM_REVIEW policy.",
+    "Competitor user reviews (scoring errors, processing delays) are anecdotes, not measurements; usable for positioning color only, not for quantitative claims."
+  ]
+}

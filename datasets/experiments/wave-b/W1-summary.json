@@ -1,0 +1,55 @@
+{
+  "workstream": "W1 — S4 paddle selection: flip-SEGMENTATION replaces truncation-by-deletion + stale score terms recomputed",
+  "status": "GREEN",
+  "baseline": {
+    "labelSnapshotNote": "gold labels grew again mid-wave (46 → 65 visible; wm-dink 14→19, wm-volley 14→17, rally1 13→20, rally2 2→3, vic 3→6 approx). All W1 numbers are measured on the 65-label snapshot; the task-quoted baselines (S4 R≈.30 on 46, S5 P.42/R.32 on 41) are older snapshots of the same defect and agree directionally (measured 46-snapshot S4 was 14/46=.30).",
+    "waterfall65": {
+      "S4_selection": { "precision": 0.76, "recall": 0.29, "hits": "19/65" },
+      "S5_final": { "precision": 0.51, "recall": 0.37, "hits": "24/65", "note": "S5 reads frozen canonical debug.json" },
+      "perCaseS4": { "wm-dink-01_heldout": "9/19", "wm-volley-02": "7/17", "afn-sasebo-rally1": "1/20", "afn-sasebo-rally2": "0/3", "afn-vic-rally1_heldout": "2/6" }
+    },
+    "productionCanonicalDev": {
+      "wm-volley-02": { "paddle": "tracked T11, 38 obs, coverage 0.7399", "contact": "6637 (gold 6680, err 43ms, ball+paddle confirmed)", "outcome": "analyzed" },
+      "afn-sasebo-rally1": { "paddle": "tracked T9, 46 obs", "contact": "abstained (gold 2900)", "outcome": "analyzed, targetEvent ambiguous" },
+      "afn-sasebo-rally2": { "paddle": "tracked T13, 82 obs, coverage 0.9861", "contact": "2346 (gold 2620, err 274ms)", "outcome": "not_analyzable" }
+    },
+    "forensicsPreFix65": { "CF0_currentRanking_noFlipDeletion": { "dev": "21/40 = 0.53", "heldOut": "11/25 = 0.44", "all": "32/65 = 0.49" }, "oracleSingleTrackCeiling": { "dev": "22/40 = 0.55", "heldOut": "11/25 = 0.44", "all": "33/65 = 0.51" } }
+  },
+  "candidate": "packages/swing-lab/src/paddleTracker.ts: (1) sustainedOtherPlayerFlip + observations.slice DELETED; new exported segmentTrackByWristOwnership splits a track at sustained-flip boundaries (3+ consecutive obs with another player's wrist < 0.7× target distance — factors unchanged, now named TRACKER_GATES.otherFlipFactor/sustainedFlipRunLength) and gives every segment a FRESH ownership verdict (same decisive 0.85 factor as track level, now TRACKER_GATES.otherOwnershipFactor, judged on the segment's in-window obs with whole-segment fallback). (2) Segment-set selection: on a track with a PROVEN flip, exactly the decisively TARGET-owned segments survive; neutral segments (which border flip runs by construction) are dropped — keeping them was measured to smuggle wm-dink-01 T7 (161 obs, mostly other-owned) past ownership on span coverage 0.961 and force an ambiguity abstain. Justification for segment SET over single-best-segment: gold evidence lives on both sides of transient flips (dink T20 head 9 hits + rally1 tail 13 hits); a single-segment rule would delete one side, and CF0 (the measured recommendation) kept all of them. Mixed track with NO decisively-target segment falls back to the full list and the unchanged track-level ownership test (wholly-other tracks reject with identical accounting). (3) STALENESS FIX: windowCoverage and meanScore are recomputed from kept observations; coverage sums per-surviving-segment in-window spans so dropped holes are not claimed as covered. Ranking objective coverage×meanScore×proximityFactor and all gates/abstains UNCHANGED. PADDLE_TRACKER_VERSION bumped paddle-track-1 → paddle-track-2. switchEvents = one per dropped flip segment.",
+  "measured": {
+    "waterfall65AfterFix": {
+      "S4_selection": { "precision": 0.54, "recall": 0.43, "hits": "28/65", "delta": "R +0.14 (19→28 hits); P .76→.54 because the kept winners now claim their full target-owned spans (same tradeoff CF0 measured); wrong-player precision guarded by segment-level + track-level decisive ownership" },
+      "S5_final": { "precision": 0.51, "recall": 0.37, "hits": "24/65", "note": "unchanged by definition — reads FROZEN canonical debug.json; commander integration regen will move S5" },
+      "perCaseS4": { "wm-dink-01_heldout": "5/19 (was 9/19 — see risks: the 9 was manufactured by the stale-coverage bug; production canonical winner T18 also scores 5/19)", "wm-volley-02": "7/17 (= baseline; T11's post-flip tail is neutral, not decisively target-owned, so it stays dropped)", "afn-sasebo-rally1": "13/20 (was 1/20; equals that case's perfect-selection ceiling)", "afn-sasebo-rally2": "1/3 (was 0/3; staleness fix demotes T12 cut 79→10 obs from coverage 0.986 to honest ~0.13, oracle T15 wins)", "afn-vic-rally1_heldout": "2/6 (unchanged)" },
+      "S4_devVsHeldOut": { "dev": "21/40 = 0.53 (was 8/40 = 0.20; CF0 dev forecast 0.53 — met exactly, composition differs: −1 volley neutral tail, +1 rally2 staleness fix)", "heldOut": "7/25 = 0.28 (was 11/25 = 0.44 — entirely the wm-dink replay artifact above; production dink outcome is identical before/after)" }
+    },
+    "forensicsInstrumentRerun": "npx tsx src/paddleSelectionForensics.ts (instrument unmodified; fresh output stored as W1-forensics-rerun-after-fix.json; frozen wave-a artifact restored byte-identically). Its replica still mirrors the OLD truncation, so parity flags exactly the two intended behavior changes: wm-dink-01 (replica T20 → real T18) and afn-sasebo-rally2 (replica T12 → real T15); parity OK (same winners) on wm-volley-02, afn-sasebo-rally1, afn-vic-rally1. rally1 parity target MET: selected track keeps the 734–3837ms tail — winner gold 1/20 → 13/20; on B's original 13-label frame that is 0/13 → 9/13 exactly as forecast (the other 4 of 13 were never on the winning track).",
+    "sandboxProductionReruns": {
+      "protocol": "canonical run dirs FROZEN; cp -R runs/<case> → wave-b/W1-runs/<case>; npx tsx src/analyzeVideo.ts <video> --stroke volley --target-tap <case tap> --out <sandbox> --reuse-extract; held-out cases NOT run",
+      "D030_eventBounds": "events.proposals BYTE-IDENTICAL to canonical on all 3 DEV cases (bounds, peaks, confirmations) — paddle did not re-bound proposals",
+      "paddleParity": "winning track + its observations byte-identical to canonical on all 3 (volley T11 38 obs · rally1 T9 46 obs · rally2 T13 82 obs); window/detectSpan/stroke/phases-status/outcome all identical; report deltas are honest metadata only (volley coverage 0.7399→0.5202 recomputed post-segmentation, switchEvent/rejectedOtherPlayerTracks counts recounted per segment)",
+      "contact": { "wm-volley-02": "estimated 6650 vs gold 6680 → err 30ms (canonical 43ms), ball+paddle confirmed, E1 selected, FOREHAND 0.8, analyzed — COMPLETE cascade, NO regression", "afn-sasebo-rally1": "abstained → abstained (unchanged; targetEvent ambiguous both)", "afn-sasebo-rally2": "estimated 2650 vs gold 2620 → err 30ms (canonical 2346, err 274ms)" },
+      "contactDeltaAttribution": "A/B check (W1-runs-abcheck): re-running the PRE-W1 selector (verbatim truncation + stale terms) on today's pipeline reproduces 6650/2650 exactly → the contact deltas vs canonical are pre-existing drift from other workstreams' merged changes since the canonical freeze, NOT W1. W1's own production-visible delta on the 3 DEV cases is report metadata only."
+    },
+    "gates": { "pnpmTypecheckRepoRoot": "exit 0", "vitestSwingLab": "143/143 (11 files; suite grew 104→143 under parallel workstreams during this session — none broken; W1 added 7 tests: 3 segmentation unit tests + tail-survives-earlier-flip + stale-coverage regression + wholly-other rejection + neutral-scrap precision guard)" }
+  },
+  "filesChanged": [
+    "packages/swing-lab/src/paddleTracker.ts (flip-segmentation + fresh score terms; PADDLE_TRACKER_VERSION → paddle-track-2)",
+    "packages/swing-lab/test/paddleTracker.test.ts (+7 tests; paddleMerge.test.ts untouched — API unchanged)",
+    "datasets/experiments/wave-b/W1-summary.json (this file)",
+    "datasets/experiments/wave-b/W1-waterfall-before.txt / W1-waterfall-after.txt (65-label snapshot captures)",
+    "datasets/experiments/wave-b/W1-forensics-rerun-after-fix.json (instrument output post-fix; wave-a original restored byte-identically)",
+    "datasets/experiments/wave-b/W1-diagnose.ts (read-only replay/segment-dump tool used for the dink diagnosis)",
+    "datasets/experiments/wave-b/W1-runs/{wm-volley-02,afn-sasebo-rally1,afn-sasebo-rally2} (sandbox production reruns)",
+    "datasets/experiments/wave-b/W1-runs-abcheck (contact-delta attribution A/B, reports only)"
+  ],
+  "recommendation": "SHIP W1 (production behavior verified non-regressive on DEV: identical winners/observations, byte-identical event proposals, volley cascade COMPLETE at err 30ms). At integration: (1) commander one-shots the two held-out cases as planned; expect wm-dink-01 production winner T18 (5/19, same as canonical) — do NOT compare against the merged-replay 9/19 which the stale-coverage defect manufactured; (2) regen canonical S5 to collect the rally1 gain (S4 13/20 vs frozen S5 9/20 there); (3) the next recall lever is fragment merge / top-2 union (CF0 top2 measured 0.72 all-labels vs single-track ceiling 0.51), still gated behind event decoupling per EXP-2026-08-28-tracklet-merge.",
+  "risks": [
+    "Held-out REPLAY delta: waterfall S4 held-out 11/25 → 7/25, entirely wm-dink-01 9→5. The 9 required scoring T20 by its pre-cut coverage (0.546 vs honest 0.237) — i.e. the defect this workstream removes; production canonical dink already selects T18 = 5/19, so no production regression is expected, but the commander's held-out one-shot is the binding check.",
+    "S4 waterfall precision falls .76 → .54 mechanically: winners now claim their full target-owned spans (claims 25→52), matching CF0's measured tradeoff; S5-style precision is unchanged (.51). Wrong-player containment is enforced twice (segment-level decisive ownership + unchanged track-level test) and covered by 2 dedicated unit tests (wholly-other rejection, neutral-scrap smuggling).",
+    "Neutral (not-decisively-owned) segments of flipped tracks are dropped; on wm-volley-02 this costs the 1 gold hit CF0 kept in T11's tail (7/17 vs CF0 8/17) in exchange for the dink T7 precision guard — net S4 dev total still meets CF0 (21/40).",
+    "Label snapshot moved again (46 → 65) under a parallel labeling workstream; any workstream quoting 41/46-label totals will disagree numerically with this file.",
+    "Sandbox contact values (volley 6650, rally2 2650) differ from frozen canonicals for reasons PROVEN external to W1 (A/B in W1-runs-abcheck); if those upstream changes are reverted before integration, contacts will shift again — re-measure at integration rather than pinning these numbers.",
+    "PADDLE_TRACKER_VERSION bumped to paddle-track-2: downstream provenance consumers see the new modelVersion string on regen."
+  ]
+}

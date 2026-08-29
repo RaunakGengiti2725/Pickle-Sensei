@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "tier": "C_CANDIDATE (proposals only — NOT labels)",
+  "miner": "video-mining-1 (scene → player tracks → kinematic event proposals → uncertainty ranking)",
+  "video": "datasets/paddle-bench/videos/dvids-warriorgames-match.mp4",
+  "poseFramesParsed": 9160,
+  "durationSec": 307.5,
+  "scenes": {
+    "cuts": 9,
+    "segments": 10,
+    "mined": 10
+  },
+  "timing": {
+    "extractMs": 326996,
+    "mineMs": 57,
+    "secondsOfVideoPerSecondOfMining": 0.94
+  },
+  "candidateCount": 14,
+  "candidates": [
+    {
+      "candidateId": "dvids-warriorgames-match-s0-p33-13267",
+      "sceneIndex": 0,
+      "playerTrackId": 33,
+      "startMs": 13267,
+      "peakMs": 13600,
+      "endMs": 13933,
+      "peakSpeed": 0.541,
+      "prominence": 3.62,
+      "uncertainty": 0.9,
+      "reasons": [
+        "low prominence (is this a stroke at all?)",
+        "33 people in scene (ownership/contamination risk)",
+        "target track has loss periods"
+      ]
+    },
+    {
+      "candidateId": "dvids-warriorgames-match-s5-p2-106733",
+      "sceneIndex": 5,
+      "playerTrackId": 2,
+      "startMs": 106733,
+      "peakMs": 106967,
+      "endMs": 107133,
+      "peakSpeed": 0.573,
+      "prominence": 2.33,
+      "uncertainty": 0.9,
+      "reasons": [
+        "low prominence (is this a stroke at all?)",
+        "8 people in scene (ownership/contamination risk)",
+        "target track has loss periods"
+      ]
+    },
+    {
+      "candidateId": "dvids-warriorgames-match-s1-p10-43733",
+      "sceneIndex": 1,
+      "playerTrackId": 10,
+      "startMs": 43733,
+      "peakMs": 43867,
+      "endMs": 44067,
+      "peakSpeed": 0.666,
+      "prominence": 3.83,
+      "uncertainty": 0.75,
+      "reasons": [
+        "low prominence (is this a stroke at all?)",
+        "13 people in scene (ownership/contamination risk)"
+      ]
+    },
+    {
+      "candidateId": "dvids-warriorgames-match-s5-p2-99533",
+      "sceneIndex": 5,
+      "playerTrackId": 2,
+      "startMs": 99533,
+      "peakMs": 99733,
+      "endMs": 99867,
+      "peakSpeed": 0.777,
+      "prominence": 8.51,
+      "uncertainty": 0.7,
+      "reasons": [
+        "8 people in scene (ownership/contamination risk)",
+        "target track has loss periods"
+      ]
+    },
+    {
+      "candidateId": "dvids-warriorgames-match-s5-p2-105367",
+      "sceneIndex": 5,
+      "playerTrackId": 2,
+      "startMs": 105367,
+      "peakMs": 105433,
+      "endMs": 105567,
+      "peakSpeed": 1.617,
+      "prominence": 8.36,
+      "uncertainty": 0.7,
+      "reasons": [
+        "8 people in scene (ownership/contamination risk)",
+        "target track has loss periods"
+      ]
+    },
+    {
+      "candidateId": "dvids-warriorgames-match-s5-p2-106167",
+      "sceneIndex": 5,
+      "playerTrackId": 2,
+      "startMs": 106167,
+      "peakMs": 106367,
+      "endMs": 106567,
+      "peakSpeed": 1.452,
+      "prominence": 7.47,
+      "uncertainty": 0.7,
+      "reasons": [
+        "8 people in scene (ownership/contamination risk)",
+        "target track has loss periods"
+      ]
+    }
+  ]
+}

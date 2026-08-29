@@ -1,0 +1,164 @@
+{
+  "benchVersion": "event-completion-1",
+  "generatedAtIso": "2026-08-28T23:47:10.244Z",
+  "policies": {
+    "FIXED_POSTROLL": "trigger + 1500ms (current shipped behavior)",
+    "ADAPTIVE_COMPLETION": "settle: wrist speed < max(0.15, 25% peak) for 400ms; min +300ms; hard max +2500ms"
+  },
+  "n": 5,
+  "caveat": "n=5 gold events; per-event table is the honest unit; no reliability claim",
+  "summary": {
+    "FIXED": {
+      "medianAbsEndErrorMs": 1080,
+      "medianAbsRecoveryErrorMs": 1051,
+      "earlyStops": 0,
+      "contactLost": 0,
+      "followThroughLost": 0,
+      "recoveryLost": 0,
+      "meanTrailingExcessMs": 993,
+      "meanPostTriggerMs": 1500
+    },
+    "ADAPTIVE": {
+      "medianAbsEndErrorMs": 1750,
+      "medianAbsRecoveryErrorMs": 1400,
+      "earlyStops": 0,
+      "contactLost": 0,
+      "followThroughLost": 0,
+      "recoveryLost": 0,
+      "meanTrailingExcessMs": 1141,
+      "meanPostTriggerMs": 1648
+    }
+  },
+  "rows": [
+    {
+      "caseId": "wm-dink-01",
+      "split": "held_out",
+      "trigger": 1560,
+      "peakSpeed": 0.84,
+      "fixed": {
+        "endMs": 3060,
+        "endVsEventEndMs": 1410,
+        "endVsRecoveryEndMs": 1060,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 3400,
+        "endVsEventEndMs": 1750,
+        "endVsRecoveryEndMs": 1400,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1840,
+        "settled": true
+      },
+      "identityNote": null
+    },
+    {
+      "caseId": "wm-volley-02",
+      "split": "development",
+      "trigger": 6680,
+      "peakSpeed": 1.28,
+      "fixed": {
+        "endMs": 8180,
+        "endVsEventEndMs": 1080,
+        "endVsRecoveryEndMs": 680,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 9180,
+        "endVsEventEndMs": 2080,
+        "endVsRecoveryEndMs": 1680,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 2500,
+        "settled": false
+      },
+      "identityNote": null
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "split": "development",
+      "trigger": 3403,
+      "peakSpeed": 1.39,
+      "fixed": {
+        "endMs": 4903,
+        "endVsEventEndMs": 1303,
+        "endVsRecoveryEndMs": 1303,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 5903,
+        "endVsEventEndMs": 2303,
+        "endVsRecoveryEndMs": 2303,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 2500,
+        "settled": false
+      },
+      "identityNote": null
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "split": "development",
+      "trigger": 2469,
+      "peakSpeed": 11.26,
+      "fixed": {
+        "endMs": 3969,
+        "endVsEventEndMs": 919,
+        "endVsRecoveryEndMs": 869,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 3170,
+        "endVsEventEndMs": 120,
+        "endVsRecoveryEndMs": 70,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 701,
+        "settled": true
+      },
+      "identityNote": null
+    },
+    {
+      "caseId": "afn-vic-rally1",
+      "split": "test_held_out",
+      "trigger": 701,
+      "peakSpeed": 1.97,
+      "fixed": {
+        "endMs": 2201,
+        "endVsEventEndMs": 1051,
+        "endVsRecoveryEndMs": 1051,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 1500
+      },
+      "adaptive": {
+        "endMs": 1401,
+        "endVsEventEndMs": 251,
+        "endVsRecoveryEndMs": 251,
+        "contactRetained": true,
+        "followThroughRetained": true,
+        "recoveryRetained": true,
+        "postTriggerMs": 700,
+        "settled": true
+      },
+      "identityNote": null
+    }
+  ]
+}

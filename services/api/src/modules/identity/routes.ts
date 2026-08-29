@@ -71,7 +71,12 @@ async function fetchMe(context: AppContext, userId: string) {
     "SELECT id, goal_type, title, status FROM user_goal WHERE user_id = $1 AND status = 'active'",
     [userId],
   );
-  const onboarded = Boolean(profile?.["handedness"] && profile?.["skill_level"]);
+  const onboarded = Boolean(
+    profile?.["handedness"] &&
+    profile?.["skill_level"] &&
+    profile?.["primary_goal"] &&
+    profile?.["biggest_problem"],
+  );
   return {
     user,
     profile,

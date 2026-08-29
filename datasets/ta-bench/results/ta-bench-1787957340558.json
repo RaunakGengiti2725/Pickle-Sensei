@@ -1,0 +1,5123 @@
+{
+  "benchVersion": "ta-replay-1",
+  "generatedAtIso": "2026-08-28T22:49:00.557Z",
+  "variant": {
+    "name": "sustained-gesture",
+    "config": {
+      "sustainedGestureFrames": 5
+    },
+    "shipped": false
+  },
+  "constants": {
+    "START_REGION_RADIUS": 0.17,
+    "framesToLock": 9,
+    "gestureElevation": 0.03,
+    "onTargetRadius": 0.06
+  },
+  "scope": "all non-rejected cases (INCLUDES unverified Tier-C proposals)",
+  "summaryVerified": {
+    "cases": 7,
+    "locked": 4,
+    "lockRate": 0.571,
+    "lockCorrect": 3,
+    "lockCorrectRate": 0.75,
+    "medianLockLatencyMs": 320,
+    "ambiguityEntered": 3,
+    "gestureLocks": 0,
+    "postLockStable90": 1,
+    "meanOnTargetFraction": 0.584
+  },
+  "summaryAll": {
+    "cases": 288,
+    "locked": 193,
+    "lockRate": 0.67,
+    "lockCorrect": 142,
+    "lockCorrectRate": 0.736,
+    "medianLockLatencyMs": 320,
+    "ambiguityEntered": 115,
+    "gestureLocks": 20,
+    "postLockStable90": 55,
+    "meanOnTargetFraction": 0.505
+  },
+  "results": [
+    {
+      "caseId": "ta-44c0c451500c-s0w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 227,
+        "onTargetFraction": 0.991,
+        "switches": 1,
+        "longestOffTargetMs": 4171
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s0w0-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 227,
+        "onTargetFraction": 0.15,
+        "switches": 1,
+        "longestOffTargetMs": 10544
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s0w1-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 269,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 198,
+        "onTargetFraction": 0.98,
+        "switches": 1,
+        "longestOffTargetMs": 1635
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s0w1-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 269,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 244,
+        "onTargetFraction": 0.205,
+        "switches": 1,
+        "longestOffTargetMs": 6473
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s0w1-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 269,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 244,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 8108
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s0w1-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 269,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 182,
+        "onTargetFraction": 0.005,
+        "switches": 1,
+        "longestOffTargetMs": 6139
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s1w0-p21",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 568,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 203,
+        "onTargetFraction": 0.887,
+        "switches": 3,
+        "longestOffTargetMs": 734
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s1w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 351,
+        "onTargetFraction": 0.484,
+        "switches": 1,
+        "longestOffTargetMs": 6006
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s1w0-p6",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 11846,
+      "lockCorrect": false,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 0,
+        "onTargetFraction": null,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s1w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 11812,
+      "lockCorrect": false,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 0,
+        "onTargetFraction": null,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s1w2-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 271,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 351,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s1w2-p14",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 5042,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 183,
+        "onTargetFraction": 0.459,
+        "switches": 1,
+        "longestOffTargetMs": 4104
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s1w3-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-44c0c451500c-s2w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 246,
+        "onTargetFraction": 0.565,
+        "switches": 1,
+        "longestOffTargetMs": 3537
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s2w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 141,
+        "onTargetFraction": 0.652,
+        "switches": 2,
+        "longestOffTargetMs": 1635
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s3w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-44c0c451500c-s3w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-44c0c451500c-s3w0-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-44c0c451500c-s4w2-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 404,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 347,
+        "onTargetFraction": 0.916,
+        "switches": 16,
+        "longestOffTargetMs": 567
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s4w2-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 1671,
+      "lockCorrect": true,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 279,
+        "onTargetFraction": 0.072,
+        "switches": 7,
+        "longestOffTargetMs": 5472
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s4w2-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 1671,
+      "lockCorrect": false,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 309,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 10277
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s4w3-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 272,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 186,
+        "onTargetFraction": 0.882,
+        "switches": 14,
+        "longestOffTargetMs": 267
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s4w3-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 6545,
+      "lockCorrect": false,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 44,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 1435
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s4w3-p35",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 2240,
+      "lockCorrect": false,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 170,
+        "onTargetFraction": 0.018,
+        "switches": 4,
+        "longestOffTargetMs": 3370
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s4w3-p29",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 6545,
+      "lockCorrect": true,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 44,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 1435
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s4w3-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 165,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w0-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 6807,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 155,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w1-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 277,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 193,
+        "onTargetFraction": 0.984,
+        "switches": 1,
+        "longestOffTargetMs": 5339
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w1-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 277,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 193,
+        "onTargetFraction": 0.984,
+        "switches": 1,
+        "longestOffTargetMs": 5339
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w2-p10",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w2-p8",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 1022,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 203,
+        "onTargetFraction": 0.985,
+        "switches": 1,
+        "longestOffTargetMs": 4271
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w2-p20",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 1255,
+      "lockCorrect": false,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 221,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 7407
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w2-p11",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 1022,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 203,
+        "onTargetFraction": 0.985,
+        "switches": 1,
+        "longestOffTargetMs": 4271
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w2-p12",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 1255,
+      "lockCorrect": false,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 196,
+        "onTargetFraction": 0.036,
+        "switches": 2,
+        "longestOffTargetMs": 6207
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w3-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 297,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 241,
+        "onTargetFraction": 0.515,
+        "switches": 1,
+        "longestOffTargetMs": 7508
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s2w0-p1",
+      "verification": "verified",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s2w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s3w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 5539,
+      "lockCorrect": false,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 0,
+        "onTargetFraction": null,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s3w0-p10",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 150,
+        "onTargetFraction": 0.307,
+        "switches": 5,
+        "longestOffTargetMs": 3169
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s0w0-p13",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-6e06a3157947-s0w1-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 277,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 85,
+        "onTargetFraction": 0.047,
+        "switches": 1,
+        "longestOffTargetMs": 2669
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s0w1-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-6e06a3157947-s0w1-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-6e06a3157947-s0w1-p4",
+      "verification": "verified",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-6e06a3157947-s0w1-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-6e06a3157947-s0w1-p6",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-6e06a3157947-s2w2-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-6e06a3157947-s2w2-p11",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 287,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 229,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 7641
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s2w3-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 431,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 129,
+        "onTargetFraction": 0.992,
+        "switches": 1,
+        "longestOffTargetMs": 33
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s2w3-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 297,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 133,
+        "onTargetFraction": 0.038,
+        "switches": 1,
+        "longestOffTargetMs": 4238
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s2w3-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 764,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 119,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 3937
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s2w3-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 1498,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 97,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 3203
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s3w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-6e06a3157947-s3w0-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-6e06a3157947-s3w0-p6",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 334,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 89,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s3w0-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-6e06a3157947-s3w0-p7",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-912aeaa8c30c-s3w0-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 801,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 52,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s0w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 3737,
+      "lockCorrect": true,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 158,
+        "onTargetFraction": 0.323,
+        "switches": 1,
+        "longestOffTargetMs": 6507
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s0w1-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-916657917f2b-s0w1-p9",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-916657917f2b-s0w1-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 277,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 207,
+        "onTargetFraction": 0.024,
+        "switches": 4,
+        "longestOffTargetMs": 8142
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s0w1-p7",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 744,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 180,
+        "onTargetFraction": 0.983,
+        "switches": 1,
+        "longestOffTargetMs": 5306
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s0w2-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-916657917f2b-s0w2-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 270,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 203,
+        "onTargetFraction": 0.34,
+        "switches": 2,
+        "longestOffTargetMs": 4471
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s0w2-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 270,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 200,
+        "onTargetFraction": 0.05,
+        "switches": 2,
+        "longestOffTargetMs": 4538
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w0-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w1-p17",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 1779,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 266,
+        "onTargetFraction": 0.241,
+        "switches": 5,
+        "longestOffTargetMs": 3671
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w2-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w3-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 3584,
+      "lockCorrect": true,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 202,
+        "onTargetFraction": 0.861,
+        "switches": 7,
+        "longestOffTargetMs": 1735
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w4-p7",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 541,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 182,
+        "onTargetFraction": 0.615,
+        "switches": 4,
+        "longestOffTargetMs": 2303
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w4-p15",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 1308,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 155,
+        "onTargetFraction": 0.755,
+        "switches": 1,
+        "longestOffTargetMs": 1368
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w4-p11",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 274,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 120,
+        "onTargetFraction": 0.017,
+        "switches": 3,
+        "longestOffTargetMs": 3871
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w4-p14",
+      "verification": "verified",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-916657917f2b-s2w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 339,
+        "onTargetFraction": 0.858,
+        "switches": 11,
+        "longestOffTargetMs": 634
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s2w0-p6",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 293,
+        "onTargetFraction": 0.15,
+        "switches": 9,
+        "longestOffTargetMs": 6140
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s2w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 220,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 11345
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s3w0-p8",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 934,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 241,
+        "onTargetFraction": 0.05,
+        "switches": 2,
+        "longestOffTargetMs": 7274
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s3w0-p13",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 162,
+        "onTargetFraction": 0.975,
+        "switches": 1,
+        "longestOffTargetMs": 134
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s3w0-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 249,
+        "onTargetFraction": 0.253,
+        "switches": 5,
+        "longestOffTargetMs": 3203
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s3w0-p14",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 162,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 5372
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w1-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 351,
+        "onTargetFraction": 0.199,
+        "switches": 3,
+        "longestOffTargetMs": 7133
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w1-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 351,
+        "onTargetFraction": 0.083,
+        "switches": 3,
+        "longestOffTargetMs": 6066
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w1-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 249,
+        "onTargetFraction": 0.357,
+        "switches": 5,
+        "longestOffTargetMs": 4200
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w1-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 179,
+        "onTargetFraction": 0.944,
+        "switches": 1,
+        "longestOffTargetMs": 6034
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w2-p1",
+      "verification": "verified",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 135,
+        "onTargetFraction": 0.615,
+        "switches": 2,
+        "longestOffTargetMs": 1734
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w2-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w2-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w2-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 102,
+        "onTargetFraction": 0.696,
+        "switches": 1,
+        "longestOffTargetMs": 2100
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w2-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w2-p13",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s1w1-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 351,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s1w1-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 214,
+        "onTargetFraction": 0.986,
+        "switches": 1,
+        "longestOffTargetMs": 4634
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s1w2-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 184,
+        "onTargetFraction": 0.44,
+        "switches": 3,
+        "longestOffTargetMs": 3366
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s1w2-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 173,
+        "onTargetFraction": 0.89,
+        "switches": 5,
+        "longestOffTargetMs": 367
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s2w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s2w0-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s3w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s3w0-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 240,
+        "onTargetFraction": 0.579,
+        "switches": 1,
+        "longestOffTargetMs": 3534
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s4w0-p7",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 233,
+        "onTargetFraction": 0.824,
+        "switches": 3,
+        "longestOffTargetMs": 2600
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s4w1-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 349,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s4w2-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 138,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s4w2-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 138,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s5w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 351,
+        "onTargetFraction": 0.533,
+        "switches": 3,
+        "longestOffTargetMs": 4967
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s5w0-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 633,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 222,
+        "onTargetFraction": 0.009,
+        "switches": 1,
+        "longestOffTargetMs": 11234
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s5w1-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 154,
+        "onTargetFraction": 0.273,
+        "switches": 3,
+        "longestOffTargetMs": 3133
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s5w1-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 154,
+        "onTargetFraction": 0.318,
+        "switches": 7,
+        "longestOffTargetMs": 1500
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s5w1-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 154,
+        "onTargetFraction": 0.221,
+        "switches": 1,
+        "longestOffTargetMs": 3967
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s6w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 346,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s6w1-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 218,
+        "onTargetFraction": 0.986,
+        "switches": 1,
+        "longestOffTargetMs": 4500
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s6w1-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 218,
+        "onTargetFraction": 0.986,
+        "switches": 1,
+        "longestOffTargetMs": 4500
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s6w2-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 351,
+        "onTargetFraction": 0.604,
+        "switches": 1,
+        "longestOffTargetMs": 4600
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s6w2-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 351,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s6w3-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 158,
+        "onTargetFraction": 0.886,
+        "switches": 2,
+        "longestOffTargetMs": 600
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s7w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 266,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 348,
+        "onTargetFraction": 0.885,
+        "switches": 4,
+        "longestOffTargetMs": 933
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s7w1-p1",
+      "verification": "proposed",
+      "situation": [
+        "solo"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 266,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 187,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w0-p7",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 1867,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 277,
+        "onTargetFraction": 0.917,
+        "switches": 11,
+        "longestOffTargetMs": 867
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 334,
+        "onTargetFraction": 0.198,
+        "switches": 14,
+        "longestOffTargetMs": 8466
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w0-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w0-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w0-p9",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w0-p10",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 4033,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 209,
+        "onTargetFraction": 0.89,
+        "switches": 3,
+        "longestOffTargetMs": 1034
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w2-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 351,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w2-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w3-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 351,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w3-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w3-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w4-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 346,
+        "onTargetFraction": 0.465,
+        "switches": 3,
+        "longestOffTargetMs": 5934
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w4-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 293,
+        "onTargetFraction": 0.611,
+        "switches": 5,
+        "longestOffTargetMs": 3033
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w5-p28",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 1233,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 191,
+        "onTargetFraction": 0.958,
+        "switches": 5,
+        "longestOffTargetMs": 100
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w5-p22",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 241,
+        "onTargetFraction": 0.017,
+        "switches": 4,
+        "longestOffTargetMs": 4367
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w6-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 351,
+        "onTargetFraction": 0.746,
+        "switches": 11,
+        "longestOffTargetMs": 2200
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w7-p18",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 3533,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 225,
+        "onTargetFraction": 0.724,
+        "switches": 20,
+        "longestOffTargetMs": 1300
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w7-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w8-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 351,
+        "onTargetFraction": 0.721,
+        "switches": 3,
+        "longestOffTargetMs": 2267
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w8-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w8-p7",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w8-p9",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w9-p7",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 367,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 264,
+        "onTargetFraction": 0.462,
+        "switches": 17,
+        "longestOffTargetMs": 2867
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w9-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 4800,
+      "lockCorrect": true,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 132,
+        "onTargetFraction": 0.038,
+        "switches": 3,
+        "longestOffTargetMs": 3933
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w9-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 4800,
+      "lockCorrect": false,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 20,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 4367
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w9-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 237,
+        "onTargetFraction": 0.958,
+        "switches": 1,
+        "longestOffTargetMs": 4100
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w1-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w1-p12",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w1-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w1-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w1-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w2-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w2-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w2-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w2-p12",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w3-p9",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w3-p11",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-96ae65019c30-s0w1-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 277,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 234,
+        "onTargetFraction": 0.278,
+        "switches": 2,
+        "longestOffTargetMs": 5639
+      }
+    },
+    {
+      "caseId": "ta-96ae65019c30-s0w1-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 277,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 126,
+        "onTargetFraction": 0.976,
+        "switches": 1,
+        "longestOffTargetMs": 3671
+      }
+    },
+    {
+      "caseId": "ta-96ae65019c30-s0w1-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 277,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 211,
+        "onTargetFraction": 0.507,
+        "switches": 2,
+        "longestOffTargetMs": 3436
+      }
+    },
+    {
+      "caseId": "ta-96ae65019c30-s1w1-p6",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 477,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 137,
+        "onTargetFraction": 0.949,
+        "switches": 3,
+        "longestOffTargetMs": 167
+      }
+    },
+    {
+      "caseId": "ta-96ae65019c30-s2w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "solo"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 180,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-96ae65019c30-s3w0-p2",
+      "verification": "verified",
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 701,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 174,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-96ae65019c30-s4w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 160,
+        "onTargetFraction": 0.981,
+        "switches": 1,
+        "longestOffTargetMs": 4571
+      }
+    },
+    {
+      "caseId": "ta-96ae65019c30-s5w0-p25",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 3386,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 225,
+        "onTargetFraction": 0.24,
+        "switches": 10,
+        "longestOffTargetMs": 4404
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s2w0-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 64,
+        "onTargetFraction": 0.453,
+        "switches": 4,
+        "longestOffTargetMs": 1208
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s2w0-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s8w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s8w0-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s10w0-p11",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 250,
+      "lockCorrect": false,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 46,
+        "onTargetFraction": 0.565,
+        "switches": 2,
+        "longestOffTargetMs": 708
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s12w0-p6",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s12w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s12w0-p9",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s12w0-p10",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 85,
+        "onTargetFraction": 0.506,
+        "switches": 1,
+        "longestOffTargetMs": 1750
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s13w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 71,
+        "onTargetFraction": 0.972,
+        "switches": 1,
+        "longestOffTargetMs": 2417
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s13w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 67,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 5292
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s14w0-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 916,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 34,
+        "onTargetFraction": 0.235,
+        "switches": 2,
+        "longestOffTargetMs": 708
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s14w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 33,
+        "onTargetFraction": 0.939,
+        "switches": 1,
+        "longestOffTargetMs": 709
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s14w0-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 416,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 45,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 1917
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s17w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 73,
+        "onTargetFraction": 0.726,
+        "switches": 3,
+        "longestOffTargetMs": 875
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s17w0-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 2250,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 54,
+        "onTargetFraction": 0.241,
+        "switches": 1,
+        "longestOffTargetMs": 1708
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s20w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s20w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s20w0-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 375,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 23,
+        "onTargetFraction": 0.913,
+        "switches": 1,
+        "longestOffTargetMs": 458
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s31w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s38w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "solo",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 875,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 28,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w0-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 2360,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 240,
+        "onTargetFraction": 0.838,
+        "switches": 3,
+        "longestOffTargetMs": 1480
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w0-p10",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 4280,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 192,
+        "onTargetFraction": 0.641,
+        "switches": 2,
+        "longestOffTargetMs": 2760
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w0-p1",
+      "verification": "verified",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 291,
+        "onTargetFraction": 0.165,
+        "switches": 1,
+        "longestOffTargetMs": 9680
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w1-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 291,
+        "onTargetFraction": 0.742,
+        "switches": 10,
+        "longestOffTargetMs": 1920
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w1-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w2-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 291,
+        "onTargetFraction": 0.392,
+        "switches": 1,
+        "longestOffTargetMs": 7040
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w2-p12",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 5160,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 170,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w2-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 480,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 281,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 11440
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w3-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w3-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 291,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 11600
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w3-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w4-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w4-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 257,
+        "onTargetFraction": 0.171,
+        "switches": 2,
+        "longestOffTargetMs": 7720
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w4-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w4-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 228,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 11600
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w5-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 291,
+        "onTargetFraction": 0.942,
+        "switches": 2,
+        "longestOffTargetMs": 680
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w6-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 193,
+        "onTargetFraction": 0.99,
+        "switches": 1,
+        "longestOffTargetMs": 3960
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w7-p8",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 3160,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 207,
+        "onTargetFraction": 0.836,
+        "switches": 5,
+        "longestOffTargetMs": 760
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w7-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 291,
+        "onTargetFraction": 0.808,
+        "switches": 1,
+        "longestOffTargetMs": 2200
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w7-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 1560,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 260,
+        "onTargetFraction": 0.227,
+        "switches": 5,
+        "longestOffTargetMs": 7080
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w8-p12",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 216,
+        "onTargetFraction": 0.981,
+        "switches": 5,
+        "longestOffTargetMs": 80
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w8-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 291,
+        "onTargetFraction": 0.265,
+        "switches": 1,
+        "longestOffTargetMs": 8520
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w8-p15",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 720,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 203,
+        "onTargetFraction": 0.005,
+        "switches": 2,
+        "longestOffTargetMs": 8080
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w9-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 2960,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 225,
+        "onTargetFraction": 0.502,
+        "switches": 2,
+        "longestOffTargetMs": 4480
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w9-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 226,
+        "onTargetFraction": 0.978,
+        "switches": 1,
+        "longestOffTargetMs": 2760
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w9-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 211,
+        "onTargetFraction": 0.142,
+        "switches": 1,
+        "longestOffTargetMs": 10400
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w10-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w10-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 288,
+        "onTargetFraction": 0.451,
+        "switches": 1,
+        "longestOffTargetMs": 6400
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w10-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 291,
+        "onTargetFraction": 0.003,
+        "switches": 2,
+        "longestOffTargetMs": 8600
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w11-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 291,
+        "onTargetFraction": 0.581,
+        "switches": 1,
+        "longestOffTargetMs": 4840
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w11-p7",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 560,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 215,
+        "onTargetFraction": 0.567,
+        "switches": 1,
+        "longestOffTargetMs": 3720
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w11-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 291,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 11600
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w12-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 291,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w12-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w12-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 291,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 11600
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w13-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w13-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 191,
+        "onTargetFraction": 0.942,
+        "switches": 1,
+        "longestOffTargetMs": 4400
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w13-p6",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 276,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 11360
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w13-p17",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w14-p15",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 4880,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 175,
+        "onTargetFraction": 0.926,
+        "switches": 16,
+        "longestOffTargetMs": 200
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w15-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w15-p13",
+      "verification": "verified",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 158,
+        "onTargetFraction": 0.557,
+        "switches": 5,
+        "longestOffTargetMs": 1040
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w15-p9",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 880,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 194,
+        "onTargetFraction": 0.124,
+        "switches": 2,
+        "longestOffTargetMs": 6600
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w16-p13",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 5040,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 169,
+        "onTargetFraction": 0.686,
+        "switches": 10,
+        "longestOffTargetMs": 1800
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w16-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 800,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 279,
+        "onTargetFraction": 0.391,
+        "switches": 9,
+        "longestOffTargetMs": 2840
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w17-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 400,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 210,
+        "onTargetFraction": 0.59,
+        "switches": 3,
+        "longestOffTargetMs": 5760
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w17-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 193,
+        "onTargetFraction": 0.021,
+        "switches": 2,
+        "longestOffTargetMs": 10880
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w17-p21",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w18-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 283,
+        "onTargetFraction": 0.336,
+        "switches": 8,
+        "longestOffTargetMs": 3720
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w18-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 760,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 149,
+        "onTargetFraction": 0.624,
+        "switches": 2,
+        "longestOffTargetMs": 5440
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w19-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 600,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 284,
+        "onTargetFraction": 0.056,
+        "switches": 1,
+        "longestOffTargetMs": 10680
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w19-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 291,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w19-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 291,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 11600
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w19-p8",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 880,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 179,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 10680
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w20-p7",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 320,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 233,
+        "onTargetFraction": 0.219,
+        "switches": 10,
+        "longestOffTargetMs": 2800
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w22-p13",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s3w0-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s3w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s3w0-p6",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s3w0-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s5w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 243,
+        "onTargetFraction": 0.074,
+        "switches": 6,
+        "longestOffTargetMs": 7608
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s7w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 85,
+        "onTargetFraction": 0.965,
+        "switches": 1,
+        "longestOffTargetMs": 1034
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s7w0-p4",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 70,
+        "onTargetFraction": 0.043,
+        "switches": 1,
+        "longestOffTargetMs": 2236
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s11w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s13w1-p9",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 477,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 120,
+        "onTargetFraction": 0.675,
+        "switches": 2,
+        "longestOffTargetMs": 834
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s13w1-p11",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 3380,
+      "lockCorrect": true,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 38,
+        "onTargetFraction": 0.132,
+        "switches": 1,
+        "longestOffTargetMs": 1234
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s13w1-p12",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 610,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 111,
+        "onTargetFraction": 0.036,
+        "switches": 2,
+        "longestOffTargetMs": 3069
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s13w1-p18",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 2812,
+      "lockCorrect": true,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 58,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 1968
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s15w0-p9",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s15w0-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s20w0-p9",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 150,
+        "onTargetFraction": 0.427,
+        "switches": 2,
+        "longestOffTargetMs": 2402
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s20w0-p11",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 160,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 5472
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s22w0-p7",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s22w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 234,
+      "lockCorrect": false,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 170,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 5639
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s22w0-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 267,
+      "lockCorrect": false,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 169,
+        "onTargetFraction": 0.16,
+        "switches": 1,
+        "longestOffTargetMs": 4705
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s22w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 82,
+        "onTargetFraction": 0.573,
+        "switches": 1,
+        "longestOffTargetMs": 4037
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s22w0-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s22w0-p10",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s24w0-p10",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-faead33a362c-s0w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "gesture_confirmed",
+      "lockLatencyMs": 9958,
+      "lockCorrect": true,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 48,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s0w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-faead33a362c-s0w0-p8",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-faead33a362c-s0w1-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 111,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s0w1-p7",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 102,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 4208
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s0w1-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 111,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 4583
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s0w1-p9",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 73,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 3000
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s2w0-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-faead33a362c-s2w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-faead33a362c-s2w0-p3",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 145,
+        "onTargetFraction": 0.779,
+        "switches": 3,
+        "longestOffTargetMs": 5625
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s2w1-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 276,
+        "onTargetFraction": 0.79,
+        "switches": 1,
+        "longestOffTargetMs": 2375
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s2w1-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 750,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 264,
+        "onTargetFraction": 0.25,
+        "switches": 2,
+        "longestOffTargetMs": 8333
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s2w1-p7",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "small_target"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 750,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 192,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 7958
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w0-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w1-p1",
+      "verification": "proposed",
+      "situation": [
+        "two_players",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 279,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w1-p2",
+      "verification": "proposed",
+      "situation": [
+        "two_players",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 2833,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 219,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w2-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 279,
+        "onTargetFraction": 0.76,
+        "switches": 2,
+        "longestOffTargetMs": 2792
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w2-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 242,
+        "onTargetFraction": 0.653,
+        "switches": 3,
+        "longestOffTargetMs": 3125
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w3-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 279,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w3-p5",
+      "verification": "proposed",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": false,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 253,
+        "onTargetFraction": 0,
+        "switches": 0,
+        "longestOffTargetMs": 10500
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w4-p2",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 333,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 275,
+        "onTargetFraction": 0.287,
+        "switches": 2,
+        "longestOffTargetMs": 8167
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w4-p1",
+      "verification": "proposed",
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w5-p1",
+      "verification": "proposed",
+      "situation": [
+        "two_players",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w5-p2",
+      "verification": "proposed",
+      "situation": [
+        "two_players",
+        "contested_region"
+      ],
+      "outcome": "ambiguous_unresolved",
+      "lockSource": null,
+      "lockLatencyMs": null,
+      "lockCorrect": null,
+      "ambiguityEntered": true,
+      "postLock": null
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+[
+  {
+    "caseId": "afn-sasebo-rally2",
+    "tMs": 2571,
+    "annotator": "devin-visual-v2-wave-a",
+    "owners": { "0": "other", "1": "reject" },
+    "note": "0 = left-court woman (black sleeveless) paddle held chest-high — same player labeled other at 1303/1703/2104; 1 = motion-blurred flying ball over blue curtain (BALL FP class, 2nd occurrence). Target mid-overhead (contact 2620): his raised paddle motion-blurred, undetected — edge-on/blur gap again"
+  },
+  {
+    "caseId": "afn-sasebo-rally2",
+    "tMs": 2971,
+    "annotator": "devin-visual-v2-wave-a",
+    "owners": { "0": "other", "1": "reject" },
+    "note": "0 = same left-court woman's paddle in front; 1 = small yellow logo patch ON far net tape (static — same patch boxed again at 3372; net-tape graphic FP class). Target's lime paddle face partially visible near his left shoulder post-follow-through but NOT detected"
+  },
+  {
+    "caseId": "afn-sasebo-rally2",
+    "tMs": 3372,
+    "annotator": "devin-visual-v2-wave-a",
+    "owners": { "0": "reject", "1": "reject" },
+    "note": "0 = yellow net-tape logo patch (same static object as 2971 box1); 1 = dark ground paddle lying flat at target's feet, NO owner (static since 1303 — 3rd occurrence). No player's paddle certifiable this frame"
+  },
+  {
+    "caseId": "wm-dink-01",
+    "tMs": 440,
+    "annotator": "devin-visual-v2-wave-a",
+    "owners": { "0": "other", "1": "other", "2": "reject" },
+    "note": "0 = red-shirt opponent's paddle mid-reach, projected right beside target's head (wrong-player trap geometry); 1 = gray-shirt opponent's paddle face at waist; 2 = court-line/net-mesh FP (same static box rejected at t=0). Target yellow-cap in ready position, green paddle hidden in front of body"
+  },
+  {
+    "caseId": "wm-dink-01",
+    "tMs": 1280,
+    "annotator": "devin-visual-v2-wave-a",
+    "owners": { "0": "other", "1": "reject", "2": "reject", "3": "target" },
+    "note": "DUAL frame 20ms after target's backhand-dink contact (1260, event 1050-1650): 3 = target's paddle EDGE-ON dark sliver cross-body left immediately post-contact (hard slice, score .30); 0 = red-shirt opponent's white paddle face at his knees; 1 = clutter at red-shirt hip/far post, no distinct paddle; 2 = pale round blob near far-left player (ball/fence highlight — same region rejected at 840)"
+  },
+  {
+    "caseId": "wm-dink-01",
+    "tMs": 2080,
+    "annotator": "devin-visual-v2-wave-a",
+    "owners": { "0": "other", "1": "other", "2": "reject", "3": "target" },
+    "note": "DUAL frame post-recovery: 3 = target's paddle EDGE-ON at right hip, hand+grip in box, blade angled down against dark far-net band (continuation of 1680 carry posture); 0 = red-shirt opponent's white paddle in full right lunge; 1 = gray-shirt opponent's paddle face at chest; 2 = offset duplicate of gray-shirt paddle onto shoulder+banner background"
+  },
+  {
+    "caseId": "wm-dink-01",
+    "tMs": 2880,
+    "annotator": "devin-visual-v2-wave-a",
+    "owners": { "0": "reject", "1": "other", "2": "ambiguous" },
+    "note": "0 = court-line/net-mesh FP (3rd occurrence of same static box); 1 = gray-shirt opponent's paddle face in front of chest; 2 = small pale shape in black-tank opponent's torso/arm gap — could be far-court player's paddle or tent clutter, not certifiable. Target's green paddle hidden in front of body; black-tank opponent's actual paddle (dark red, at his thighs) NOT detected"
+  },
+  {
+    "caseId": "wm-volley-02",
+    "tMs": 4650,
+    "annotator": "devin-visual-v2-wave-a",
+    "owners": { "0": "target", "1": "reject" },
+    "note": "0 = target (near white-shirt) dark-green paddle face at waist, right side, clearly in his grip; 1 = paddle-shaped banner feather flag on fence pole (4th occurrence of this hard negative). Far opponent's paddle visible at his knees but not detected this frame"
+  },
+  {
+    "caseId": "wm-volley-02",
+    "tMs": 5850,
+    "annotator": "devin-visual-v2-wave-a",
+    "owners": { "0": "reject", "1": "other", "2": "ambiguous" },
+    "note": "prep window (prep 5800): 0 = banner feather flag (5th); 1 = far opponent (red shirt, white cap) white paddle face in front of shorts; 2 = possible target paddle edge rising at his right-shoulder gap against fence crowd — plausible for volley prep but not certifiable at this contrast"
+  },
+  {
+    "caseId": "wm-volley-02",
+    "tMs": 6250,
+    "annotator": "devin-visual-v2-wave-a",
+    "owners": { "0": "target", "1": "other", "2": "reject" },
+    "note": "DUAL frame 50ms before eventStart 6300 (contact 6680): 0 = target's dark paddle face extended forward at net height, attached to outstretched right hand; 1 = far opponent's white paddle held in front; 2 = banner feather flag (6th)"
+  },
+  {
+    "caseId": "wm-volley-02",
+    "tMs": 6650,
+    "annotator": "devin-visual-v2-wave-a",
+    "owners": { "0": "target", "1": "other", "2": "reject" },
+    "note": "DUAL frame 30ms PRE-CONTACT (6680), inside event window 6300-7100: 0 = target's teal paddle face at net with BALL arriving at its top-right edge; 1 = far opponent's white paddle dropped low in front of knees (down-trajectory from 6250); 2 = banner feather flag (7th)"
+  },
+  {
+    "caseId": "wm-volley-02",
+    "tMs": 7050,
+    "annotator": "devin-visual-v2-wave-a",
+    "owners": { "0": "other", "1": "reject" },
+    "note": "follow-through end (7050): 0 = FAR OPPONENT's pale paddle at his waist between knees — highest-score box this frame is NOT the target's (wrong-player trap); 1 = banner feather flag (8th). Target's paddle occluded in front of body during reset — no target label possible"
+  }
+]

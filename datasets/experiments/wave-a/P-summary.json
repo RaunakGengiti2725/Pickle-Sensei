@@ -1,0 +1,63 @@
+{
+  "workstream": "P — latency map + attack plan (guided stroke ≤2s ideal / ≤3s strong / ≤5s max)",
+  "status": "complete — map + plan delivered; all numbers Mac-measured; iPhone numbers BLOCKED_EXTERNAL (no hardware)",
+  "baseline": {
+    "machine": "Mac (research path; NOT iPhone)",
+    "endToEndColdSec": 55.07,
+    "case": "afn-sasebo-rally2 (dev), event-gated span 1967ms, stride-1 full-frame detector",
+    "stagesMs": {
+      "poseExtract": 6012,
+      "paddleDetectTotal": 43675,
+      "paddleDetect_modelLoad": 2075,
+      "paddleDetect_inference": 9203,
+      "paddleDetect_decodePostprocResidual": 17100,
+      "paddleDetect_processFixedOverhead": 15300,
+      "ballCandidates": 2803,
+      "tsStagesCombined": 126,
+      "nodeTsxOrchestration": 1200
+    },
+    "reuseExtractPathSec": 1.25,
+    "benchReportsNote": "5 current-schema bench reports record only cheap TS stages (player 6-16ms, prePass 1-3ms, paddleTrack 12-42ms, ballTrack 68-134ms, eventIso 1-2ms, fusion 28-34ms); heavy-stage timings absent because benches run --reuse-extract. wm-far-03 (old schema): poseExtract 5598ms, paddleDetect 19757ms, overlay 671ms.",
+    "priorReconciliation": "the '~23s (pose 6.9 + detector 14.6)' prior matches inference+load-only accounting (ROI-grid artifact: 12.2s inference stride-1 + ~2-4s load); fresh cold run additionally exposes ~12-15s per-invocation python/torch/HF overhead and ~17s ffmpeg decode residual"
+  },
+  "candidate": {
+    "stack": [
+      "1. persistent prewarmed detector worker started at camera-open (kills ~12-15s fixed + ~0.6s first-inference MPS compile; interim: local snapshot/hub-offline −3.9s)",
+      "2. stride-3 + target-ROI detector operating point (−65% inference; EXP-2026-08-28-roi-keyframe-grid; needs full-cascade gate before promotion)",
+      "3. detector decode-path fix in detect_paddle.py frame_iter (reduced-res / stride-only decode / shared decode with ball tool) — attacks the ~17.1s residual",
+      "4. Wave-B capture-time pose reuse: feed ported pipeline from pickle.pose-sequence.v1 sidecar instead of re-running extract (−6.0s); on-device identity already solved by live target lock",
+      "5. run ball_candidates.py concurrently with detector (ball needs only stroke window; only the 68-134ms association step needs the paddle track) — hides 2.8s"
+    ],
+    "projectedMacSec": "~55 → ~34 (prewarm) → ~28 (+stride/ROI) → ~22 (+pose reuse) → ~21 (+concurrency) → ~4-6 if decode fix lands (PROJECTED arithmetic on measured components; NOT iPhone numbers)"
+  },
+  "measured": {
+    "freshRuns": "datasets/experiments/wave-a/P-runs/P-measurements.json (cold 55.07s with per-stage timings; reuse 1.25s; detector micro-bench fresh 33.7s / warm 20.2s / hub-offline 16.3s on 18 frames)",
+    "artifacts": [
+      "datasets/experiments/wave-a/P-runs/afn-sasebo-rally2/ (sandbox run outputs incl. paddle-dets.json with .timing {modelLoadSec 2.075, inferenceSecTotal 9.203, wallSecTotal 26.338})",
+      "datasets/experiments/wave-a/P-runs/P-detector-fresh1.json / P-detector-fresh2-warm.json / P-detector-fresh3-hfoffline.json",
+      "datasets/paddle-bench/runs/*/report.json (.timings)",
+      "datasets/experiments/EXP-2026-08-28-roi-keyframe-grid.json (stride3+ROI −65% detector compute, S0-gated)"
+    ],
+    "dagFindings": {
+      "paddleBallConcurrency": "YES for expensive subprocesses: detect_paddle.py needs video+detectSpan only (analyzeVideo.ts:841-851); ball_candidates.py needs video+window only (:1040-1063); paddle output consumed solely by cheap buildBallTracks/selectPrimaryBallTrack (:1067-1076, 68-134ms); today both are sequential execFileSync (:841, :1052)",
+      "contactVsStrokeSequence": "NO — strict data deps: contact (:561-573,629-663) → estimatedContactMs (:664-665) → targetEvent (:666) → analysisScope (:672-675) → classifyStroke (:676-687) + buildStrokeSequence (:689-698); all sub-200ms anyway",
+      "poseReuse": "phone already reuses capture pose (GuidedCaptureViewController.swift:352 live extractPose → poseHistory :373-383 → sidecar ClipMediaStore.swift:135-142,222-280; consumed by runCaptureAnalysis.ts:89-110); recomputation exists only on the research path being ported (analyzeVideo.ts:208-216 → main.swift:108-194) = the 6.0s Wave-B saving; parity gaps: multi-person people.json + trajectories + scenes are extract byproducts — on-device, live target lock (GuidedCapture:630-656,695-768) replaces offline identity"
+    }
+  },
+  "filesChanged": [
+    "datasets/experiments/wave-a/P-latency-plan.md (new)",
+    "datasets/experiments/wave-a/P-summary.json (new)",
+    "datasets/experiments/wave-a/P-runs/afn-sasebo-rally2/* (new sandbox copy of the dev run; artifacts overwritten by the two permitted timing runs)",
+    "datasets/experiments/wave-a/P-runs/P-measurements.json (new)",
+    "datasets/experiments/wave-a/P-runs/P-detector-fresh1.json, P-detector-fresh2-warm.json, P-detector-fresh3-hfoffline.json (new)"
+  ],
+  "recommendation": "Execute in order: (1) detector worker/prewarm at camera-open + local model snapshot; (2) wire --stride 3 --roi into runPaddleStage behind the existing bench gate; (3) fix detect_paddle.py decode path; (4) Wave-B pose-sidecar reuse with live-lock identity; (5) concurrent ball/paddle spawns. Then re-measure the full ladder on Mac, and schedule physical-iPhone instrumentation before ANY product latency claim.",
+  "risks": [
+    "stride-3+ROI validated only at S0 on 2 dev cases / 21 labels — full cascade (tracking/ownership/contact/stroke benches) must gate promotion (EXP caveats)",
+    "persistent detector worker keeps D-FINE resident (memory footprint; MPS context lifetime) and needs crash/restart semantics",
+    "pose-sidecar reuse changes the pipeline's input provenance: sidecar is primary-person-only and 15s-windowed (poseHistoryWindowMs, GuidedCapture:93) — bench parity must be re-proven after the swap",
+    "concurrency shares one machine: detector (GPU/MPS) + ball diff (CPU) look complementary, but contention is unmeasured",
+    "Mac numbers do not transfer to iPhone — BLOCKED_EXTERNAL: physical-device wall-clock instrumentation required; no iPhone latency numbers exist",
+    "bench report timings are reuse-path only; anyone reading them as end-to-end latency will underestimate by ~50s cold"
+  ]
+}

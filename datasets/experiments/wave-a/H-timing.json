@@ -1,0 +1,125 @@
+{
+  "wm-volley-02": {
+    "window": {
+      "startMs": 4250.0,
+      "endMs": 8210.0
+    },
+    "roiNorm": [
+      0.1075,
+      0.0,
+      1.0,
+      1.0
+    ],
+    "stride": 3,
+    "canonicalRecorded_stride1_full": {
+      "modelLoadSec": 1.411,
+      "framesProcessed": 93,
+      "inferenceSecTotal": 6.55,
+      "inferenceMsPerFrame": 70.4,
+      "wallSecTotal": 16.039
+    },
+    "candidate_stride3_roi": {
+      "modelLoadSec": 1.765,
+      "framesProcessed": 31,
+      "inferenceSecTotal": 4.556,
+      "inferenceMsPerFrame": 147.0,
+      "wallSecTotal": 11.045
+    },
+    "baselineRerun_stride1_full": {
+      "modelLoadSec": 1.71,
+      "framesProcessed": 93,
+      "inferenceSecTotal": 13.663,
+      "inferenceMsPerFrame": 146.9,
+      "wallSecTotal": 38.287
+    },
+    "baselineRerunS0Waterfall": {
+      "hits": 8,
+      "visible": 8,
+      "claims": 14,
+      "recall": 1.0,
+      "precision": 0.571
+    }
+  },
+  "afn-sasebo-rally1": {
+    "window": {
+      "startMs": 0.0,
+      "endMs": 4121.0
+    },
+    "roiNorm": [
+      0.0257,
+      0.0,
+      1.0,
+      1.0
+    ],
+    "stride": 3,
+    "canonicalRecorded_stride1_full": {
+      "modelLoadSec": 1.758,
+      "framesProcessed": 124,
+      "inferenceSecTotal": 8.864,
+      "inferenceMsPerFrame": 71.5,
+      "wallSecTotal": 27.09
+    },
+    "candidate_stride3_roi": {
+      "modelLoadSec": 1.595,
+      "framesProcessed": 42,
+      "inferenceSecTotal": 4.763,
+      "inferenceMsPerFrame": 113.4,
+      "wallSecTotal": 13.713
+    },
+    "baselineRerun_stride1_full": {
+      "modelLoadSec": 1.83,
+      "framesProcessed": 124,
+      "inferenceSecTotal": 19.427,
+      "inferenceMsPerFrame": 156.7,
+      "wallSecTotal": 58.015
+    },
+    "baselineRerunS0Waterfall": {
+      "hits": 13,
+      "visible": 13,
+      "claims": 13,
+      "recall": 1.0,
+      "precision": 1.0
+    }
+  },
+  "afn-sasebo-rally2": {
+    "window": {
+      "startMs": 502.0,
+      "endMs": 4403.0
+    },
+    "roiNorm": [
+      0.17,
+      0.0,
+      1.0,
+      1.0
+    ],
+    "stride": 3,
+    "canonicalRecorded_stride1_full": {
+      "modelLoadSec": 1.664,
+      "framesProcessed": 117,
+      "inferenceSecTotal": 8.36,
+      "inferenceMsPerFrame": 71.4,
+      "wallSecTotal": 25.109
+    },
+    "candidate_stride3_roi": {
+      "modelLoadSec": 1.785,
+      "framesProcessed": 39,
+      "inferenceSecTotal": 4.408,
+      "inferenceMsPerFrame": 113.0,
+      "wallSecTotal": 12.96
+    },
+    "baselineRerun_stride1_full": {
+      "modelLoadSec": 1.762,
+      "framesProcessed": 117,
+      "inferenceSecTotal": 17.224,
+      "inferenceMsPerFrame": 147.2,
+      "wallSecTotal": 56.785
+    },
+    "baselineRerunS0Waterfall": {
+      "hits": 2,
+      "visible": 2,
+      "claims": 4,
+      "recall": 1.0,
+      "precision": 0.5
+    }
+  }
+}

@@ -1,2 +1,2 @@
 export * from "./contracts.js";
-export * from "./fixture/fixtureProvider.js";
+export * from "./providers.js";

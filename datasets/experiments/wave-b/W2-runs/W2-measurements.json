@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "workstream": "W2 — detector decode residual + per-invocation fixed overhead",
+  "measuredAtIso": "2026-08-29T00:00:00Z",
+  "machine": "Mac (MPS; ffmpeg 9.0.1; python 3.12.13; torch 2.13.0; transformers 5.16.1). NOT iPhone numbers.",
+  "measurementContext": "All W2 runs are same-session, back-to-back (warm OS file cache, HF cache present). P's 43.7s paddleDetect was a fully-cold first-of-day run; the like-for-like baseline here is the re-measured legacy script (26.8-30.4s). Savings are reported against the same-session baseline.",
+  "wasteCharacterization": {
+    "claimUnderTest": "P-latency-plan §1.2: '~17.1s decode+postproc residual (ffmpeg rawvideo full-res pipe, detect_paddle.py:59-80)'",
+    "finding": "MISATTRIBUTED. The window decode was already minimal and fast; the residual was per-detection GPU->CPU sync in the drain loop.",
+    "evidence": {
+      "ffmpegWindowDecodeStandalone": "ffmpeg -ss 1.386 -to 3.853 -i afn-sasebo-rally2.mp4 -f rawvideo -pix_fmt rgb24 - | wc -c -> 460,339,200 bytes = exactly 74 x 1920x1080x3 in 0.74s real. Input seeking (-ss/-to before -i) already decodes only the requested window; frame-count parity confirmed.",
+      "phaseTimedProfile_74frames": {
+        "readPipeWaitSec": 0.299,
+        "npFrombufferSec": 0.002,
+        "pilFromarraySec": 0.104,
+        "processorSec": 0.434,
+        "modelForwardSec": 5.416,
+        "mpsSynchronizeSec": 0.132,
+        "postProcessSec": 0.115,
+        "perDetectionDrainSec": 12.635,
+        "note": "drain = box.tolist()/score.item()/label.item() on MPS result tensors, ~61 kept detections/frame x 3 synced transfers each = 170.7ms/frame. This is P's 'decode residual'."
+      }
+    }
+  },
+  "changes": {
+    "defaultPath_bitEqual": [
+      "drain fix: batch result boxes/scores/labels to CPU once per frame, iterate in numpy (170.7ms/frame -> ~0.3ms/frame)",
+      "model load: local HF cache first (local_files_only=True, network fallback on cache miss) — modelLoadSec 1.5-1.8s -> 0.74s and no hub HEAD round-trips",
+      "stride>1: skipped frames dropped inside ffmpeg (select filter + -fps_mode vfr) so they are never rgb24-converted nor piped (previously decoded+piped, Python skipped inference only). stride-1 ffmpeg command is byte-identical to legacy."
+    ],
+    "optIn": [
+      "--decode-size WxH: ffmpeg-side scale before inference. REJECTED for default: not detection-equivalent (see equivalence.decodeSize640)",
+      "--legacy-decode: restores pre-W2 frame path + drain for A/B audits",
+      "--serve: persistent warm worker, JSONL over stdio (protocol in detect_paddle.py docstring; timings below)"
+    ]
+  },
+  "detectorWallClock": {
+    "afn-sasebo-rally2_eventGatedWindow_1386_3853ms_74frames": {
+      "baselineLegacyOneshotSec": [30.436, 26.797],
+      "candidateDefaultOneshotSec": 17.065,
+      "candidateInsidePipelineMs": 11188,
+      "serveStartupToReadySec": 5.537,
+      "serveRequest1Sec": 5.95,
+      "serveRequest2Sec_warmWorker": 5.807,
+      "decodeSize640OneshotSec_rejectedVariant": 9.875,
+      "pColdReferenceSec": 43.675
+    },
+    "afn-sasebo-rally2_stride3_25frames": {
+      "baselineLegacyOneshotSec": 14.028,
+      "candidateDefaultOneshotSec": 7.619
+    },
+    "wm-volley-02_window_4250_8210ms_93frames": {
+      "baselineLegacyOneshotSec": 26.135,
+      "candidateDefaultOneshotSec": 11.876,
+      "serveRequestSec": 7.384
+    }
+  },
+  "equivalence": {
+    "noiseFloor_legacyVsLegacy_r2": "bit-equal (frames identical across two fresh legacy processes; 2833 dets + 1686 extras) — MPS inference is run-to-run deterministic on this machine, so diffs are attributable to code changes",
+    "defaultVsLegacy_r2": { "bitEqualFrames": true, "matchedPairs": 4519, "bitEqualPairs": 4519, "unmatched": 0, "minIoU": 1.0, "maxAbsScoreDelta": 0.0, "artifact": "detector/diff-r2-default.json" },
+    "defaultVsLegacy_r2_stride3": { "bitEqualFrames": true, "matchedPairs": 1511, "bitEqualPairs": 1511, "unmatched": 0, "minIoU": 1.0, "artifact": "detector/diff-r2-stride3.json" },
+    "defaultVsLegacy_volley": { "bitEqualFrames": true, "matchedPairs": 5215, "bitEqualPairs": 5215, "unmatched": 0, "minIoU": 1.0, "artifact": "detector/diff-vol-default.json" },
+    "serveVsLegacy_r2_and_volley": { "bitEqualFrames": true, "artifacts": ["detector/diff-r2-serve.json", "detector/diff-vol-serve.json"] },
+    "pipelineWrittenDetsVsLegacy_r2": { "bitEqualFrames": true, "artifact": "detector/diff-r2-pipeline.json" },
+    "decodeSize640_r2_REJECTED": {
+      "bitEqualFrames": false, "meanIoU": 0.909715, "minIoU": 0.0, "unmatchedA": 223, "unmatchedB": 80,
+      "framesWithCountMismatch": 122, "maxAbsScoreDelta": 0.7312,
+      "verdict": "fails the IoU>=0.99 + count-parity bar decisively (swscale-vs-PIL resampling changes model input; floor 0.08 keeps many near-threshold boxes that flip). Stays opt-in, must not default without a quality bench.",
+      "artifact": "detector/diff-r2-decode640.json"
+    }
+  },
+  "endToEnd_afnSaseboRally2_noReuseExtract": {
+    "command": "cd packages/swing-lab && time npx tsx src/analyzeVideo.ts <repo>/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4 --stroke volley --target-tap 0.7923,0.702 --out <repo>/datasets/experiments/wave-b/W2-runs/afn-sasebo-rally2",
+    "pMeasuredColdSec": 55.066,
+    "w2MeasuredSec": 17.248,
+    "w2TimingsMs": { "poseExtractMs": 4082, "playerTrackMs": 17, "eventPrePassMs": 1, "paddleDetectMs": 11188, "paddleTrackMs": 10, "ballCandidatesMs": 1452, "ballTrackMs": 49, "eventIsolationMs": 0 },
+    "tsCompatibility": "analyzeVideo.ts invokes detect_paddle.py with --video/--out/--start-ms/--end-ms only (analyzeVideo.ts:841-849) — the fixed default path is drop-in; NO TS changes were made or needed for this number.",
+    "notes": "poseExtract 4.08s here vs 6.01s in P (cache-warmth variance). paddleDetectMs 11.19s in-pipeline vs 17.07s standalone candidate: python import time varies 5-7s run to run; report both.",
+    "ladder": {
+      "measured_w2DefaultOnly": "55.07 (P cold) -> 17.25s",
+      "projected_plusServeWorkerWiredIntoRunPaddleStage": "17.25 - 11.19 + 5.81 ~= 11.9s (TS integration is a later workstream; serve request time measured, wiring projected)",
+      "projected_towardP4to6s": "warm-worker request is now inference-dominated (5.36s model forward @72.5ms/f x 74). P's '~4-6s if decode fixed' cell assumed ALL levers (worker + stride3/ROI −65% inference + pose reuse + ball∥paddle). With those: request ~2.2s, E2E ~4-5s — P's projection stays consistent, but only W2's slice (decode/drain + worker) is measured here."
+    }
+  },
+  "commands": {
+    "baseline": "tools/paddle-lab/.venv/bin/python tools/paddle-lab/detect_paddle.py --video <video> --out <out> --start-ms <s> --end-ms <e> [--stride 3]  (pre-W2 script @ git cdc0008)",
+    "candidate": "same CLI, post-W2 script (default path)",
+    "decodeSizeVariant": "same + --decode-size 640x640",
+    "serve": "tools/paddle-lab/.venv/bin/python tools/paddle-lab/detect_paddle.py --serve  (JSONL driver: requests r2 x2 + volley x1 + ping + error-request + ping + shutdown; full transcript in detector/serve-timings.json)",
+    "equivalence": "tools/paddle-lab/.venv/bin/python tools/paddle-lab/compare_paddle_dets.py --a <baseline> --b <candidate> --out <diff.json>"
+  },
+  "artifacts": {
+    "detectorRuns": "datasets/experiments/wave-b/W2-runs/detector/{baseline-*,cand-*,serve-*}.json",
+    "diffs": "datasets/experiments/wave-b/W2-runs/detector/diff-*.json",
+    "serveTimings": "datasets/experiments/wave-b/W2-runs/detector/serve-timings.json",
+    "pipelineSandbox": "datasets/experiments/wave-b/W2-runs/afn-sasebo-rally2/ (full analyzeVideo artifacts incl. report.json), wm-volley-02/ (sandbox copy, detector-standalone only)"
+  }
+}

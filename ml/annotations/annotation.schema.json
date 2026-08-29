@@ -1,17 +1,22 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://picklesensei.dev/schemas/annotation/v1",
-  "title": "Stroke clip annotation (v1)",
-  "description": "Formal annotation ontology per blueprint pp. 30-31. Every training/validation clip carries one of these. 'acceptable_alternative_mechanics' prevents the model from learning that every deviation from one reference is a defect.",
+  "$id": "https://picklesensei.dev/schemas/annotation/v2",
+  "title": "Pickleball temporal annotation (v2)",
+  "description": "Human-ground-truth annotation using the canonical 61-technique taxonomy. Negative and abstention outcomes prevent forced technique labels. This schema defines records and does not claim that any clips exist.",
   "type": "object",
   "required": [
     "clip_id",
-    "shot_type",
+    "annotation_outcome",
+    "technique",
+    "attributes",
     "handedness",
     "camera_view",
     "stroke_start_ms",
     "stroke_end_ms",
     "phases",
+    "contact_range_ms",
+    "checkpoint_labels",
+    "acceptable_alternative_mechanics",
     "quality_flags",
     "annotator",
     "revision"
@@ -19,63 +24,83 @@
   "additionalProperties": false,
   "properties": {
     "clip_id": { "type": "string", "minLength": 8 },
-    "shot_type": {
+    "annotation_outcome": {
+      "enum": ["recognized_technique", "unknown_technique", "no_stroke", "partial", "aborted"]
+    },
+    "technique": {
+      "oneOf": [{ "$ref": "#/$defs/canonicalTechnique" }, { "type": "null" }]
+    },
+    "attributes": { "$ref": "#/$defs/attributes" },
+    "handedness": { "enum": ["right", "left", "ambidextrous", "unknown"] },
+    "camera_view": {
       "enum": [
-        "serve",
-        "return",
-        "forehand_drive",
-        "backhand_drive",
-        "third_shot_drop",
-        "dink",
-        "volley",
-        "overhead"
+        "front",
+        "rear",
+        "dominant_side",
+        "nondominant_side",
+        "diagonal",
+        "overhead",
+        "other"
       ]
     },
-    "shot_subtype": { "type": ["string", "null"] },
-    "handedness": { "enum": ["right", "left"] },
-    "camera_view": { "enum": ["side", "rear_oblique", "other"] },
-    "stroke_start_ms": { "type": "integer", "minimum": 0 },
-    "stroke_end_ms": { "type": "integer", "minimum": 0 },
+    "stroke_start_ms": {
+      "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }]
+    },
+    "stroke_end_ms": {
+      "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }]
+    },
     "phases": {
       "type": "array",
-      "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["key", "start_ms", "end_ms"],
+        "required": ["key", "start_ms", "end_ms", "observable"],
         "additionalProperties": false,
         "properties": {
           "key": {
             "enum": ["ready", "prepare", "accelerate", "contact", "follow_through", "recover"]
           },
           "start_ms": { "type": "integer", "minimum": 0 },
-          "end_ms": { "type": "integer", "minimum": 0 }
+          "end_ms": { "type": "integer", "minimum": 0 },
+          "observable": { "type": "boolean" }
         }
       }
     },
     "contact_range_ms": {
-      "type": ["object", "null"],
-      "required": ["start_ms", "end_ms"],
-      "additionalProperties": false,
-      "properties": {
-        "start_ms": { "type": "integer", "minimum": 0 },
-        "end_ms": { "type": "integer", "minimum": 0 }
-      }
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["start_ms", "end_ms"],
+          "additionalProperties": false,
+          "properties": {
+            "start_ms": { "type": "integer", "minimum": 0 },
+            "end_ms": { "type": "integer", "minimum": 0 }
+          }
+        },
+        { "type": "null" }
+      ]
     },
     "player_bbox": {
-      "type": ["object", "null"],
-      "required": ["x", "y", "width", "height"],
-      "additionalProperties": false,
-      "properties": {
-        "x": { "type": "number", "minimum": 0, "maximum": 1 },
-        "y": { "type": "number", "minimum": 0, "maximum": 1 },
-        "width": { "type": "number", "minimum": 0, "maximum": 1 },
-        "height": { "type": "number", "minimum": 0, "maximum": 1 }
-      }
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["x", "y", "width", "height"],
+          "additionalProperties": false,
+          "properties": {
+            "x": { "type": "number", "minimum": 0, "maximum": 1 },
+            "y": { "type": "number", "minimum": 0, "maximum": 1 },
+            "width": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+            "height": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+          }
+        },
+        { "type": "null" }
+      ]
     },
     "pose_keyframes": { "type": "array", "items": { "type": "object" } },
     "paddle_keyframes": { "type": "array", "items": { "type": "object" } },
     "ball_keyframes": { "type": "array", "items": { "type": "object" } },
-    "court_keypoints": { "type": ["array", "null"], "items": { "type": "object" } },
+    "court_keypoints": {
+      "oneOf": [{ "type": "array", "items": { "type": "object" } }, { "type": "null" }]
+    },
     "checkpoint_labels": {
       "type": "array",
       "items": {
@@ -121,9 +146,11 @@
       }
     },
     "primary_coaching_priority": { "type": ["string", "null"] },
-    "acceptable_alternative_mechanics": { "type": "boolean", "default": false },
+    "acceptable_alternative_mechanics": { "type": "boolean" },
     "quality_flags": {
       "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
       "items": {
         "enum": [
           "clean",
@@ -143,5 +170,171 @@
     "revision": { "type": "integer", "minimum": 1 },
     "adjudicated_by": { "type": ["string", "null"] },
     "adjudication_note": { "type": ["string", "null"] }
-  }
+  },
+  "$defs": {
+    "canonicalTechnique": {
+      "type": "string",
+      "enum": [
+        "volley_serve_forehand",
+        "volley_serve_backhand",
+        "drop_serve_forehand",
+        "drop_serve_backhand",
+        "return_drive_forehand",
+        "return_drive_backhand",
+        "return_slice_forehand",
+        "return_slice_backhand",
+        "return_block_forehand",
+        "return_block_backhand",
+        "drive_forehand",
+        "drive_backhand",
+        "drive_two_hand_backhand",
+        "topspin_forehand",
+        "topspin_backhand",
+        "slice_forehand",
+        "slice_backhand",
+        "third_shot_drop_forehand",
+        "third_shot_drop_backhand",
+        "transition_drop_forehand",
+        "transition_drop_backhand",
+        "reset_volley_forehand",
+        "reset_volley_backhand",
+        "reset_half_volley_forehand",
+        "reset_half_volley_backhand",
+        "dink_straight_forehand",
+        "dink_straight_backhand",
+        "dink_crosscourt_forehand",
+        "dink_crosscourt_backhand",
+        "dink_topspin_forehand",
+        "dink_topspin_backhand",
+        "dink_slice_forehand",
+        "dink_slice_backhand",
+        "dink_two_hand_backhand",
+        "punch_volley_forehand",
+        "punch_volley_backhand",
+        "block_volley_forehand",
+        "block_volley_backhand",
+        "volley_two_hand_backhand",
+        "speedup_forehand",
+        "speedup_backhand",
+        "roll_volley_forehand",
+        "roll_volley_backhand",
+        "swinging_volley_forehand",
+        "swinging_volley_backhand",
+        "counter_forehand",
+        "counter_backhand",
+        "overhead_smash",
+        "backhand_overhead",
+        "offensive_lob_forehand",
+        "offensive_lob_backhand",
+        "defensive_lob_forehand",
+        "defensive_lob_backhand",
+        "around_the_post_forehand",
+        "around_the_post_backhand",
+        "erne_forehand",
+        "erne_backhand",
+        "bert",
+        "tweener",
+        "squash_shot_forehand",
+        "squash_shot_backhand"
+      ]
+    },
+    "attributes": {
+      "type": "object",
+      "required": [
+        "side",
+        "spin",
+        "direction",
+        "origin_zone",
+        "target_zone",
+        "contact_state",
+        "intent",
+        "rally_outcome"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "side": {
+          "enum": ["forehand", "backhand", "two_hand_backhand", "overhead", null]
+        },
+        "spin": { "enum": ["flat", "topspin", "slice", "sidespin", "mixed", "unknown", null] },
+        "direction": {
+          "enum": [
+            "straight",
+            "crosscourt",
+            "middle",
+            "inside_in",
+            "inside_out",
+            "around_the_post",
+            "unknown",
+            null
+          ]
+        },
+        "origin_zone": {
+          "enum": [
+            "baseline",
+            "backcourt",
+            "transition",
+            "nvz_line",
+            "nvz",
+            "outside_sideline",
+            "unknown",
+            null
+          ]
+        },
+        "target_zone": {
+          "enum": [
+            "baseline",
+            "backcourt",
+            "transition",
+            "nvz_line",
+            "nvz",
+            "outside_sideline",
+            "unknown",
+            null
+          ]
+        },
+        "contact_state": { "enum": ["after_bounce", "volley", "half_volley", "overhead", null] },
+        "intent": { "enum": ["attack", "neutral", "reset", "defend", "place", null] },
+        "rally_outcome": {
+          "enum": ["in_play", "winner", "forced_error", "unforced_error", "fault", "unknown", null]
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "annotation_outcome": { "const": "recognized_technique" } } },
+      "then": {
+        "properties": {
+          "technique": { "$ref": "#/$defs/canonicalTechnique" },
+          "stroke_start_ms": { "type": "integer", "minimum": 0 },
+          "stroke_end_ms": { "type": "integer", "minimum": 0 },
+          "phases": { "minItems": 1 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "annotation_outcome": { "const": "unknown_technique" } } },
+      "then": {
+        "properties": {
+          "technique": { "type": "null" },
+          "stroke_start_ms": { "type": "integer", "minimum": 0 },
+          "stroke_end_ms": { "type": "integer", "minimum": 0 },
+          "checkpoint_labels": { "maxItems": 0 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "annotation_outcome": { "const": "no_stroke" } } },
+      "then": {
+        "properties": {
+          "technique": { "type": "null" },
+          "stroke_start_ms": { "type": "null" },
+          "stroke_end_ms": { "type": "null" },
+          "phases": { "maxItems": 0 },
+          "contact_range_ms": { "type": "null" },
+          "checkpoint_labels": { "maxItems": 0 }
+        }
+      }
+    }
+  ]
 }

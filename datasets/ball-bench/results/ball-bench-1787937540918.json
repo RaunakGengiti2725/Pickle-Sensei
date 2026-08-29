@@ -1,0 +1,83 @@
+{
+  "manifest": "/Users/raunakgengiti/Pickle-Sensei/datasets/ball-bench/ball-bench.json",
+  "results": [
+    {
+      "caseId": "wm-volley-02",
+      "labeledFrames": 10,
+      "visibleFrames": 6,
+      "uncertainExcluded": 1,
+      "hits": 4,
+      "misses": 2,
+      "wrongLocation": 0,
+      "falsePositives": 0,
+      "correctRejections": 3,
+      "precision": 1,
+      "recall": 0.6666666666666666,
+      "meanCenterErrorNorm": 0.009757613798271949,
+      "medianCenterErrorNorm": 0.011463420083029327,
+      "medianCenterErrorPx": 11.463420083029327
+    },
+    {
+      "caseId": "wm-dink-01",
+      "labeledFrames": 0,
+      "visibleFrames": 0,
+      "uncertainExcluded": 0,
+      "hits": 0,
+      "misses": 0,
+      "wrongLocation": 0,
+      "falsePositives": 0,
+      "correctRejections": 0,
+      "precision": null,
+      "recall": null,
+      "meanCenterErrorNorm": null,
+      "medianCenterErrorNorm": null,
+      "medianCenterErrorPx": null
+    }
+  ],
+  "contacts": [
+    {
+      "caseId": "wm-volley-02",
+      "labelMs": 6680,
+      "labelUncertainty": "exact",
+      "estimatedMs": 6640,
+      "absErrorMs": 40,
+      "absErrorFrames": 1,
+      "ballConfirmed": true,
+      "paddleConfirmed": true
+    },
+    {
+      "caseId": "wm-dink-01",
+      "labelMs": 1260,
+      "labelUncertainty": "unspecified",
+      "estimatedMs": 1391,
+      "absErrorMs": 131,
+      "absErrorFrames": 3.275,
+      "ballConfirmed": false,
+      "paddleConfirmed": true
+    }
+  ],
+  "ablations": [
+    {
+      "caseId": "wm-volley-02",
+      "ablation": {
+        "durationSec": 4.6,
+        "stageA_rawCandidatesPerSec": 1008.6956521739131,
+        "stageB_tracks": 290,
+        "stageB_trackedObsPerSec": 916.0869565217392,
+        "stageC_tracks": 70,
+        "stageC_trackedObsPerSec": 197.82608695652175
+      }
+    },
+    {
+      "caseId": "wm-dink-01",
+      "ablation": {
+        "durationSec": 3.76,
+        "stageA_rawCandidatesPerSec": 1010.6382978723404,
+        "stageB_tracks": 260,
+        "stageB_trackedObsPerSec": 877.6595744680851,
+        "stageC_tracks": 49,
+        "stageC_trackedObsPerSec": 144.9468085106383
+      }
+    }
+  ]
+}

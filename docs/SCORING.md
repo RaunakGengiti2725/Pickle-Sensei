@@ -1,6 +1,6 @@
 # SCORING
 
-Implementation: `packages/scoring` (pure TypeScript, deterministic, fully tested). Native mirrors for the live loop must pass the same golden vectors.
+Implementation: `packages/scoring` (pure TypeScript, deterministic, unit-tested). This verifies the math, not the validity of its inputs or calibration. The shipping native camera currently returns `unknown`/`awaiting_model` and does not invoke this engine for a product score. Future native mirrors for the live loop must pass the same golden vectors plus coach/model release gates.
 
 ## Pipeline
 
@@ -30,8 +30,10 @@ Not simply the lowest checkpoint. Base priority multiplies severity, confidence,
 
 ## Versioning (directive §22)
 
-Config v1 (`sm-v1`, per-shot `<slug>@1`) lives in `packages/scoring/src/config/v1.ts` and is seeded into `scoring_model*` tables from the same source (no drift). Every analysis records the full eight-field version vector. Recalibration = new version; history is never silently rescored.
+Config v1 (`sm-v1`, per-shot `<slug>@1`) lives in `packages/scoring/src/config/v1.ts` and is seeded into `scoring_model*` tables from the same source (no drift) in `validating` state. Seeds never activate it; a fresh database has zero active scoring models. Every analysis records the full eight-field version vector. Recalibration = new version; history is never silently rescored.
+
+A scoring model becomes eligible for canonical sync only through `PUT /v1/admin/scoring-models/:shotType/:version/release`. Release requires a 100%-active SHA-256-verified model bundle, dataset snapshot, locked evaluation-report hash, coach-validation reference, releasing admin identity, and exact agreement between the released shot-config version and the submitted analysis. The sync path enforces these facts; a known-but-unreleased version is rejected.
 
 ## Status of the numbers
 
-Weights are the blueprint's matrix verbatim (spec p. 32, column sums = 100, enforced by test). Metric target ranges/σ are engineering starting hypotheses awaiting the coach advisory panel — explicitly labeled as such in code, seeds, and this doc. Serve legality is a separate concept (Serve Check) and is intentionally absent from technique scoring.
+Weights are the blueprint's matrix verbatim (spec p. 32, column sums = 100, enforced by test). Metric target ranges/σ are engineering starting hypotheses awaiting coach calibration and must not be described as validated pickleball ratings. No successful product rating exists until a signed model bundle supplies trustworthy observations and passes coach-agreement, stability, fairness, and camera-perturbation gates. Serve legality is a separate concept (Serve Check) and is intentionally absent from technique scoring.

@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "tier": "C_CANDIDATE (proposals only — NOT labels)",
+  "miner": "video-mining-1 (scene → player tracks → kinematic event proposals → uncertainty ranking)",
+  "video": "datasets/paddle-bench/videos/dvids-marne-outdoor.mp4",
+  "poseFramesParsed": 4011,
+  "durationSec": 67.5,
+  "scenes": {
+    "cuts": 6,
+    "segments": 7,
+    "mined": 6
+  },
+  "timing": {
+    "extractMs": 113123,
+    "mineMs": 27,
+    "secondsOfVideoPerSecondOfMining": 0.6
+  },
+  "candidateCount": 8,
+  "candidates": [
+    {
+      "candidateId": "dvids-marne-outdoor-s3-p2-43243",
+      "sceneIndex": 3,
+      "playerTrackId": 2,
+      "startMs": 43243,
+      "peakMs": 43327,
+      "endMs": 43477,
+      "peakSpeed": 0.556,
+      "prominence": 3.4,
+      "uncertainty": 1,
+      "reasons": [
+        "low prominence (is this a stroke at all?)",
+        "3 people in scene (ownership/contamination risk)",
+        "small player (far court / small paddle+ball)",
+        "target track has loss periods"
+      ]
+    },
+    {
+      "candidateId": "dvids-marne-outdoor-s3-p2-45946",
+      "sceneIndex": 3,
+      "playerTrackId": 2,
+      "startMs": 45946,
+      "peakMs": 46029,
+      "endMs": 46113,
+      "peakSpeed": 0.505,
+      "prominence": 3.28,
+      "uncertainty": 1,
+      "reasons": [
+        "low prominence (is this a stroke at all?)",
+        "3 people in scene (ownership/contamination risk)",
+        "small player (far court / small paddle+ball)",
+        "target track has loss periods"
+      ]
+    },
+    {
+      "candidateId": "dvids-marne-outdoor-s4-p4-48865",
+      "sceneIndex": 4,
+      "playerTrackId": 4,
+      "startMs": 48865,
+      "peakMs": 48899,
+      "endMs": 49466,
+      "peakSpeed": 0.651,
+      "prominence": 2.48,
+      "uncertainty": 0.9,
+      "reasons": [
+        "low prominence (is this a stroke at all?)",
+        "15 people in scene (ownership/contamination risk)",
+        "target track has loss periods"
+      ]
+    },
+    {
+      "candidateId": "dvids-marne-outdoor-s0-p9-8959",
+      "sceneIndex": 0,
+      "playerTrackId": 9,
+      "startMs": 8959,
+      "peakMs": 8992,
+      "endMs": 9126,
+      "peakSpeed": 1.374,
+      "prominence": 7.44,
+      "uncertainty": 0.7,
+      "reasons": [
+        "13 people in scene (ownership/contamination risk)",
+        "target track has loss periods"
+      ]
+    },
+    {
+      "candidateId": "dvids-marne-outdoor-s0-p9-12896",
+      "sceneIndex": 0,
+      "playerTrackId": 9,
+      "startMs": 12896,
+      "peakMs": 13113,
+      "endMs": 13213,
+      "peakSpeed": 0.733,
+      "prominence": 4.69,
+      "uncertainty": 0.7,
+      "reasons": [
+        "13 people in scene (ownership/contamination risk)",
+        "target track has loss periods"
+      ]
+    },
+    {
+      "candidateId": "dvids-marne-outdoor-s2-p1-35018",
+      "sceneIndex": 2,
+      "playerTrackId": 1,
+      "startMs": 35018,
+      "peakMs": 35118,
+      "endMs": 35335,
+      "peakSpeed": 0.854,
+      "prominence": 3.63,
+      "uncertainty": 0.55,
+      "reasons": [
+        "low prominence (is this a stroke at all?)"
+      ]
+    },
+    {
+      "candidateId": "dvids-marne-outdoor-s2-p1-34718",
+      "sceneIndex": 2,
+      "playerTrackId": 1,
+      "startMs": 34718,
+      "peakMs": 34801,
+      "endMs": 34918,
+      "peakSpeed": 2.751,
+      "prominence": 11.57,
+      "uncertainty": 0.5,
+      "reasons": [
+        "very fast swing (blur risk)"
+      ]
+    },
+    {
+      "candidateId": "dvids-marne-outdoor-s2-p1-34117",
+      "sceneIndex": 2,
+      "playerTrackId": 1,
+      "startMs": 34117,
+      "peakMs": 34301,
+      "endMs": 34368,
+      "peakSpeed": 0.845,
+      "prominence": 4.03,
+      "uncertainty": 0.35,
+      "reasons": []
+    }
+  ]
+}

@@ -1,59 +1,72 @@
 import React from 'react';
 import {
   ActivityIndicator,
-  Pressable,
+  Platform,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { color, radius, space, type } from '../design/tokens';
+import {
+  BrandMark,
+  Button,
+  PressableScale,
+  ScreenHeader,
+} from '../design/components';
+import { Icon } from '../design/icons';
+import { color, font, radius, space, type } from '../design/tokens';
+import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { useAuthStore } from '../auth/authStore';
-
-/**
- * Account screen (spec p. 5): Continue with Apple / Google, plus a local
- * trial account. Configuration gaps surface as explicit states — a sign-in
- * method that cannot work is labeled, never simulated.
- */
 
 function ProviderButton(props: {
   label: string;
-  glyph: string;
+  mark: string;
   onPress: () => void;
-  variant: 'apple' | 'google';
+  dark?: boolean;
   disabled?: boolean;
 }) {
-  const isApple = props.variant === 'apple';
   return (
-    <Pressable
-      accessibilityRole="button"
+    <PressableScale
       accessibilityLabel={props.label}
       disabled={props.disabled}
       onPress={props.onPress}
-      style={({ pressed }) => [
-        styles.providerButton,
-        isApple ? styles.appleButton : styles.googleButton,
-        { opacity: props.disabled ? 0.5 : pressed ? 0.85 : 1 },
-      ]}
+      style={[styles.providerButton, props.dark && styles.providerButtonDark]}
     >
-      <Text
-        style={[
-          styles.providerGlyph,
-          { color: isApple ? color.onDark : color.ink },
-        ]}
-      >
-        {props.glyph}
-      </Text>
-      <Text
-        style={[type.bodyBold, { color: isApple ? color.onDark : color.ink }]}
-      >
-        {props.label}
-      </Text>
-    </Pressable>
+      <View style={styles.providerInner}>
+        <View
+          style={[
+            styles.providerMark,
+            props.dark && { borderColor: color.lineStrongDark },
+          ]}
+        >
+          <Text
+            style={[
+              styles.providerMarkText,
+              props.mark === '' ? styles.appleMark : styles.letterMark,
+              { color: props.dark ? color.onDark : color.ink },
+            ]}
+          >
+            {props.mark}
+          </Text>
+        </View>
+        <Text
+          style={[
+            type.bodyBold,
+            { color: props.dark ? color.onDark : color.ink },
+          ]}
+        >
+          {props.label}
+        </Text>
+        <View style={{ width: 28 }} />
+      </View>
+    </PressableScale>
   );
 }
 
-export function SignInScreen(props: { onBack: () => void }) {
+export function SignInScreen(props: {
+  onBack: () => void;
+  allowGuest?: boolean;
+}) {
+  const insets = useReliableSafeAreaInsets();
   const {
     busy,
     error,
@@ -64,64 +77,57 @@ export function SignInScreen(props: { onBack: () => void }) {
   } = useAuthStore();
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <View style={styles.header}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          onPress={props.onBack}
-          hitSlop={12}
-        >
-          <Text style={[type.h2, { color: color.inkSoft }]}>‹</Text>
-        </Pressable>
-      </View>
-
+    <View
+      style={[
+        styles.screen,
+        { paddingTop: insets.top, paddingBottom: insets.bottom },
+      ]}
+    >
+      <ScreenHeader onBack={props.onBack} />
       <View style={styles.body}>
-        <Text style={[type.h1, { color: color.ink }]}>
-          Your coach,{'\n'}your account.
+        <BrandMark />
+        <Text style={[type.hero, styles.title]}>
+          Your ratings,{`\n`}tied to you.
         </Text>
-        <Text
-          style={[type.body, { color: color.inkSoft, marginTop: space.sm }]}
-        >
-          Sign in so your reps, scores, and progress follow you across devices.
+        <Text style={styles.sub}>
+          A connected account is required for free ratings, membership, and
+          server-verified coaching. Synced progress stays with that account.
         </Text>
 
-        <View style={{ marginTop: space.xl, gap: space.sm }}>
-          <ProviderButton
-            label="Continue with Apple"
-            glyph=""
-            variant="apple"
-            disabled={busy}
-            onPress={() => void signInWithApple()}
-          />
+        <View style={styles.providers}>
+          {Platform.OS === 'ios' ? (
+            <ProviderButton
+              label="Continue with Apple"
+              mark=""
+              dark
+              disabled={busy}
+              onPress={() => void signInWithApple()}
+            />
+          ) : null}
           <ProviderButton
             label="Continue with Google"
-            glyph="G"
-            variant="google"
+            mark="G"
             disabled={busy}
             onPress={() => void signInWithGoogle()}
           />
         </View>
 
-        {busy && (
+        {busy ? (
           <View style={styles.busyRow}>
             <ActivityIndicator color={color.court} />
-            <Text
-              style={[
-                type.caption,
-                { color: color.inkSoft, marginLeft: space.sm },
-              ]}
-            >
-              Signing in…
+            <Text style={[type.caption, { color: color.inkSoft }]}>
+              Signing in securely…
             </Text>
           </View>
-        )}
+        ) : null}
 
-        {error && error.code !== 'auth.canceled' && (
-          <Pressable
+        {error && error.code !== 'auth.canceled' ? (
+          <PressableScale
             onPress={clearError}
+            accessibilityLabel="Dismiss sign-in error"
+            accessibilityHint={error.message}
+            accessibilityLiveRegion="assertive"
             style={styles.errorCard}
-            accessibilityRole="button"
           >
             <Text style={[type.micro, { color: color.bad }]}>
               {error.code === 'auth.not_configured'
@@ -131,62 +137,94 @@ export function SignInScreen(props: { onBack: () => void }) {
             <Text style={[type.caption, { color: color.ink, marginTop: 4 }]}>
               {error.message}
             </Text>
-          </Pressable>
-        )}
+          </PressableScale>
+        ) : null}
       </View>
 
       <View style={styles.footer}>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => void continueAsGuest()}
-          hitSlop={8}
-        >
-          <Text
-            style={[type.bodyBold, { color: color.court, textAlign: 'center' }]}
-          >
-            Try it without an account
+        {props.allowGuest !== false ? (
+          <Button
+            label="Continue on this device"
+            variant="ghost"
+            disabled={busy}
+            onPress={() => void continueAsGuest()}
+          />
+        ) : null}
+        <View style={styles.trustRow}>
+          <Icon name="shield" color={color.court} size={17} />
+          <Text style={styles.trustCopy}>
+            {props.allowGuest === false
+              ? 'Your existing on-device reads stay here when you connect.'
+              : 'Guest sessions stay on this device. Connect an account to use free ratings, membership, and synced coaching.'}
           </Text>
-        </Pressable>
-        <Text
-          style={[
-            type.caption,
-            { color: color.inkSoft, textAlign: 'center', marginTop: space.sm },
-          ]}
-        >
-          Guest sessions live on this device. Sign in later to sync them.
-        </Text>
+        </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.surface },
-  header: { paddingHorizontal: space.lg, paddingTop: space.sm },
   body: { flex: 1, paddingHorizontal: space.lg, paddingTop: space.lg },
+  title: { color: color.ink, marginTop: space.xl },
+  sub: {
+    ...type.body,
+    color: color.inkSoft,
+    marginTop: space.md,
+    maxWidth: 340,
+  },
+  providers: { marginTop: space.xl, gap: 12 },
   providerButton: {
+    minHeight: 58,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: color.line,
+    backgroundColor: color.surfaceElevated,
+    overflow: 'hidden',
+  },
+  providerButtonDark: { backgroundColor: color.ink, borderColor: color.ink },
+  providerInner: {
+    minHeight: 58,
+    paddingHorizontal: 15,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 52,
-    borderRadius: radius.md,
-    gap: space.sm,
+    justifyContent: 'space-between',
   },
-  appleButton: { backgroundColor: '#000000' },
-  googleButton: {
-    backgroundColor: color.surface,
-    borderWidth: 1.5,
+  providerMark: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
     borderColor: color.line,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  providerGlyph: { fontSize: 18, fontWeight: '700' },
-  busyRow: { flexDirection: 'row', alignItems: 'center', marginTop: space.md },
+  providerMarkText: {
+    fontSize: 13,
+    fontWeight: 'normal',
+  },
+  letterMark: { fontFamily: font.bold },
+  appleMark: { fontFamily: 'System', fontSize: 18, lineHeight: 20 },
+  busyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    marginTop: space.md,
+  },
   errorCard: {
     marginTop: space.md,
-    backgroundColor: '#FEF2F2',
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: '#FECACA',
+    backgroundColor: color.badSoft,
+    borderRadius: radius.md,
     padding: space.md,
   },
-  footer: { padding: space.lg, paddingBottom: space.xl },
+  footer: { paddingHorizontal: space.lg, paddingBottom: space.sm },
+  trustRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    marginTop: space.md,
+  },
+  trustCopy: { ...type.caption, color: color.inkSoft, flex: 1 },
 });

@@ -1,0 +1,30 @@
+{
+  "workstream": "C — mobile tsc cleanup: missing inkMuted token usages + AnalyzeScreen capture-mode narrowing bug",
+  "status": "GREEN",
+  "baseline": {
+    "tsc": "5 errors (TargetSelector.tsx 119/128 inkMuted, HomeScreen.tsx 438 inkMuted, AnalyzeScreen.tsx 522 TS2367 no-overlap, AnalyzeScreen.tsx 526 uri-on-never)",
+    "jest": "21 suites / 107 tests, all passing"
+  },
+  "candidate": {
+    "tsc": "0 errors",
+    "jest": "22 suites / 113 tests, all passing (107 baseline + 6 new scoring-gate tests)"
+  },
+  "measured": {
+    "command_tsc": "cd apps/mobile && npx tsc --noEmit → exit 0, no output",
+    "command_jest": "cd apps/mobile && npx jest → Test Suites: 22 passed, Tests: 113 passed",
+    "inkMuted_references_remaining_in_src": 0
+  },
+  "filesChanged": [
+    "apps/mobile/src/camera/TargetSelector.tsx",
+    "apps/mobile/src/screens/HomeScreen.tsx",
+    "apps/mobile/src/screens/AnalyzeScreen.tsx",
+    "apps/mobile/__tests__/analyzeScreenScoringPath.test.ts (new)"
+  ],
+  "recommendation": "Merge. inkMuted: switched the 3 usages to the existing color.inkSoft token instead of adding a new token — inkSoft (#627168) is the palette's only muted-ink text tone and is already used ~93 times for exactly these roles (captions/status on light surfaces), including elsewhere in the very same files (HomeScreen captions, AnalyzeScreen scoreCopy/stateCopy/savedCopy); adding inkMuted would duplicate that semantic role against tokens.ts's stated 'semantic aliases' design, so tokens.ts was left untouched. AnalyzeScreen: the saved-phase gate `captureMode === 'automatic_pose_trigger' && poseSequence` made the inner `captureMode === 'imported_video'` TargetSelector branch unreachable (TS2367 + never). Intended machine (confirmed by CapturedClip union: imported clips have poseSequence?: never, and by the targetSelection.test.ts contract test that pairs captureMode 'imported_video' with a targetSeed): guided captures score only with a recorded pose sequence (live camera seed, no tap), imported videos always enter the flow via declare-stroke → tap-the-person (or skip). Implemented as exported pure helpers clipSupportsScoring()/importedClipNeedsTargetTap() consumed by the JSX and locked by 6 new jest tests using assertCapturedClip-validated fixtures; the now-dead 'imported videos cannot be scored' ternary in the else branch was reduced to the pose-less-guided-capture message.",
+  "risks": [
+    "Behavior change (intended): imported videos now reach declaration + tap-the-person. runCaptureAnalysis.ts (not owned, unchanged) still honestly abstains for imported clips ('no recorded pose sequence yet'), so after tapping the user gets the error screen with that reason instead of the old static note. The UI seed path now matches the product contract and needs no change when a pose-from-video pipeline lands — but until then the tap flow ends in an honest abstention.",
+    "Auto-captures declared after the fact pass targetSeed=null to scoreCapture (clip.targetSeed live lock is only forwarded on the zero-touch path) — pre-existing behavior, unchanged, noting for awareness.",
+    "TargetSelector renders the clip's file URI in an <Image> as the tap frame; if a platform cannot rasterize a still from a video URI the frame shows the dark camera surface. Pre-existing property of the branch, unchanged.",
+    "New test jest.mock's ../src/data/db (native op-sqlite binding is absent under jest and throws at import); only getDb is stubbed and the tested helpers never touch it."
+  ]
+}

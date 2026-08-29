@@ -1,0 +1,1360 @@
+{
+  "generatedFrom": {
+    "shipped": "ta-bench-1787969176233.json",
+    "legacy": "ta-bench-1787969182746.json",
+    "hysteresis": "ta-bench-1787968922982.json",
+    "sustained-gesture": "ta-bench-1787968929834.json",
+    "ambiguity-timeout": "ta-bench-1787968937199.json",
+    "dominance-gate": "ta-bench-1787969272621.json",
+    "sustained-ambiguity": "ta-bench-1787969281721.json",
+    "acquire-v3": "ta-bench-1787969290367.json",
+    "acquire-v3-strict-gesture": "ta-bench-1787969297321.json",
+    "centered-gate": "ta-bench-1787969707165.json",
+    "acquire-v4": "ta-bench-1787969715899.json",
+    "acquire-v4-strict-gesture": "ta-bench-1787969723950.json"
+  },
+  "shippedBucketSizes": {
+    "instantWrong": 9,
+    "timeoutWrong": 6,
+    "gestureWrong": 2,
+    "drift": 11
+  },
+  "shippedBucketCaseIds": {
+    "instantWrong": [
+      "ta-5bf0e6a85afb-s1w0-p2",
+      "ta-6e06a3157947-s2w2-p11",
+      "ta-6e06a3157947-s2w3-p3",
+      "ta-916657917f2b-s3w0-p13",
+      "ta-96ae65019c30-s1w1-p6",
+      "ta-b6f280b2900c-s0w8-p15",
+      "ta-b6f280b2900c-s0w15-p13",
+      "ta-faead33a362c-s2w1-p7",
+      "ta-faead33a362c-s3w3-p5"
+    ],
+    "timeoutWrong": [
+      "ta-6e06a3157947-s0w1-p4",
+      "ta-6e06a3157947-s0w1-p5",
+      "ta-916657917f2b-s1w0-p1",
+      "ta-960a1a200d6d-s9w1-p12",
+      "ta-b6f280b2900c-s0w4-p2",
+      "ta-faead33a362c-s3w5-p2"
+    ],
+    "gestureWrong": [
+      "ta-5bf0e6a85afb-s1w2-p20",
+      "ta-5bf0e6a85afb-s1w2-p12"
+    ],
+    "drift": [
+      "ta-44c0c451500c-s1w0-p6",
+      "ta-6e06a3157947-s2w3-p1",
+      "ta-6e06a3157947-s3w0-p4",
+      "ta-916657917f2b-s1w4-p14",
+      "ta-960a1a200d6d-s0w1-p1",
+      "ta-960a1a200d6d-s0w2-p1",
+      "ta-960a1a200d6d-s5w0-p3",
+      "ta-960a1a200d6d-s8w0-p1",
+      "ta-b6f280b2900c-s0w0-p1",
+      "ta-b6f280b2900c-s0w9-p2",
+      "ta-b6f280b2900c-s0w12-p4"
+    ]
+  },
+  "variants": {
+    "shipped": {
+      "variantConfig": {
+        "followerHysteresis": true,
+        "ambiguityTimeoutMs": 3000,
+        "sustainedGestureFrames": 5
+      },
+      "overall": {
+        "n": 54,
+        "lockRate": 1,
+        "lockCorrect": "37/54",
+        "lockCorrectRate": 0.685,
+        "wrongLocks": 17,
+        "wrongLockRateOfCases": 0.315,
+        "falseGestureLocks": 2,
+        "medianLockLatencyMs": 477,
+        "meanOnTargetFraction": 0.592,
+        "ambiguityEntered": 20,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "start_region_occupancy": 34,
+          "ambiguity_timeout": 18,
+          "gesture_confirmed": 2
+        },
+        "driftCorrectLocksBelow50": 11
+      },
+      "contested_region": {
+        "n": 36,
+        "lockRate": 1,
+        "lockCorrect": "23/36",
+        "lockCorrectRate": 0.639,
+        "wrongLocks": 13,
+        "wrongLockRateOfCases": 0.361,
+        "falseGestureLocks": 2,
+        "medianLockLatencyMs": 750,
+        "meanOnTargetFraction": 0.497,
+        "ambiguityEntered": 17,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "ambiguity_timeout": 15,
+          "gesture_confirmed": 2,
+          "start_region_occupancy": 19
+        },
+        "driftCorrectLocksBelow50": 10
+      },
+      "nonContested": {
+        "n": 18,
+        "lockRate": 1,
+        "lockCorrect": "14/18",
+        "lockCorrectRate": 0.778,
+        "wrongLocks": 4,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 269,
+        "meanOnTargetFraction": 0.78,
+        "ambiguityEntered": 3,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "start_region_occupancy": 15,
+          "ambiguity_timeout": 3
+        },
+        "driftCorrectLocksBelow50": 1
+      },
+      "shippedBuckets": {
+        "instantWrong": {
+          "ta-5bf0e6a85afb-s1w0-p2": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w2-p11": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w3-p3": "WRONG_lock(start_region_occupancy)",
+          "ta-916657917f2b-s3w0-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-96ae65019c30-s1w1-p6": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w8-p15": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w15-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s2w1-p7": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s3w3-p5": "WRONG_lock(start_region_occupancy)"
+        },
+        "timeoutWrong": {
+          "ta-6e06a3157947-s0w1-p4": "WRONG_lock(ambiguity_timeout)",
+          "ta-6e06a3157947-s0w1-p5": "WRONG_lock(ambiguity_timeout)",
+          "ta-916657917f2b-s1w0-p1": "WRONG_lock(ambiguity_timeout)",
+          "ta-960a1a200d6d-s9w1-p12": "WRONG_lock(ambiguity_timeout)",
+          "ta-b6f280b2900c-s0w4-p2": "WRONG_lock(ambiguity_timeout)",
+          "ta-faead33a362c-s3w5-p2": "WRONG_lock(ambiguity_timeout)"
+        },
+        "gestureWrong": {
+          "ta-5bf0e6a85afb-s1w2-p20": "WRONG_lock(gesture_confirmed)",
+          "ta-5bf0e6a85afb-s1w2-p12": "WRONG_lock(gesture_confirmed)"
+        },
+        "drift": {
+          "ta-44c0c451500c-s1w0-p6": "correct_lock(ambiguity_timeout)",
+          "ta-6e06a3157947-s2w3-p1": "correct_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s3w0-p4": "correct_lock(ambiguity_timeout)",
+          "ta-916657917f2b-s1w4-p14": "correct_lock(ambiguity_timeout)",
+          "ta-960a1a200d6d-s0w1-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s0w2-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s5w0-p3": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s8w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w9-p2": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w12-p4": "correct_lock(start_region_occupancy)"
+        }
+      },
+      "regressionsVsShipped_correctBecameWrong": []
+    },
+    "legacy": {
+      "variantConfig": {},
+      "overall": {
+        "n": 54,
+        "lockRate": 0.741,
+        "lockCorrect": "26/40",
+        "lockCorrectRate": 0.65,
+        "wrongLocks": 14,
+        "wrongLockRateOfCases": 0.259,
+        "falseGestureLocks": 5,
+        "medianLockLatencyMs": 320,
+        "meanOnTargetFraction": 0.496,
+        "ambiguityEntered": 20,
+        "unresolvedOrNeverLocked": 14,
+        "lockSources": {
+          "start_region_occupancy": 34,
+          "gesture_confirmed": 6
+        },
+        "driftCorrectLocksBelow50": 12
+      },
+      "contested_region": {
+        "n": 36,
+        "lockRate": 0.667,
+        "lockCorrect": "14/24",
+        "lockCorrectRate": 0.583,
+        "wrongLocks": 10,
+        "wrongLockRateOfCases": 0.278,
+        "falseGestureLocks": 5,
+        "medianLockLatencyMs": 320,
+        "meanOnTargetFraction": 0.367,
+        "ambiguityEntered": 17,
+        "unresolvedOrNeverLocked": 12,
+        "lockSources": {
+          "gesture_confirmed": 5,
+          "start_region_occupancy": 19
+        },
+        "driftCorrectLocksBelow50": 8
+      },
+      "nonContested": {
+        "n": 18,
+        "lockRate": 0.889,
+        "lockCorrect": "12/16",
+        "lockCorrectRate": 0.75,
+        "wrongLocks": 4,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 267,
+        "meanOnTargetFraction": 0.69,
+        "ambiguityEntered": 3,
+        "unresolvedOrNeverLocked": 2,
+        "lockSources": {
+          "start_region_occupancy": 15,
+          "gesture_confirmed": 1
+        },
+        "driftCorrectLocksBelow50": 4
+      },
+      "shippedBuckets": {
+        "instantWrong": {
+          "ta-5bf0e6a85afb-s1w0-p2": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w2-p11": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w3-p3": "WRONG_lock(start_region_occupancy)",
+          "ta-916657917f2b-s3w0-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-96ae65019c30-s1w1-p6": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w8-p15": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w15-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s2w1-p7": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s3w3-p5": "WRONG_lock(start_region_occupancy)"
+        },
+        "timeoutWrong": {
+          "ta-6e06a3157947-s0w1-p4": "ambiguous_unresolved",
+          "ta-6e06a3157947-s0w1-p5": "ambiguous_unresolved",
+          "ta-916657917f2b-s1w0-p1": "ambiguous_unresolved",
+          "ta-960a1a200d6d-s9w1-p12": "WRONG_lock(gesture_confirmed)",
+          "ta-b6f280b2900c-s0w4-p2": "ambiguous_unresolved",
+          "ta-faead33a362c-s3w5-p2": "ambiguous_unresolved"
+        },
+        "gestureWrong": {
+          "ta-5bf0e6a85afb-s1w2-p20": "WRONG_lock(gesture_confirmed)",
+          "ta-5bf0e6a85afb-s1w2-p12": "WRONG_lock(gesture_confirmed)"
+        },
+        "drift": {
+          "ta-44c0c451500c-s1w0-p6": "WRONG_lock(gesture_confirmed)",
+          "ta-6e06a3157947-s2w3-p1": "correct_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s3w0-p4": "ambiguous_unresolved",
+          "ta-916657917f2b-s1w4-p14": "ambiguous_unresolved",
+          "ta-960a1a200d6d-s0w1-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s0w2-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s5w0-p3": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s8w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w9-p2": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w12-p4": "correct_lock(start_region_occupancy)"
+        }
+      },
+      "regressionsVsShipped_correctBecameWrong": [
+        "ta-44c0c451500c-s1w0-p6 (gesture_confirmed)",
+        "ta-44c0c451500c-s3w0-p1 (gesture_confirmed)"
+      ]
+    },
+    "hysteresis": {
+      "variantConfig": {
+        "followerHysteresis": true
+      },
+      "overall": {
+        "n": 54,
+        "lockRate": 0.741,
+        "lockCorrect": "26/40",
+        "lockCorrectRate": 0.65,
+        "wrongLocks": 14,
+        "wrongLockRateOfCases": 0.259,
+        "falseGestureLocks": 5,
+        "medianLockLatencyMs": 320,
+        "meanOnTargetFraction": 0.56,
+        "ambiguityEntered": 20,
+        "unresolvedOrNeverLocked": 14,
+        "lockSources": {
+          "start_region_occupancy": 34,
+          "gesture_confirmed": 6
+        },
+        "driftCorrectLocksBelow50": 8
+      },
+      "contested_region": {
+        "n": 36,
+        "lockRate": 0.667,
+        "lockCorrect": "14/24",
+        "lockCorrectRate": 0.583,
+        "wrongLocks": 10,
+        "wrongLockRateOfCases": 0.278,
+        "falseGestureLocks": 5,
+        "medianLockLatencyMs": 320,
+        "meanOnTargetFraction": 0.423,
+        "ambiguityEntered": 17,
+        "unresolvedOrNeverLocked": 12,
+        "lockSources": {
+          "gesture_confirmed": 5,
+          "start_region_occupancy": 19
+        },
+        "driftCorrectLocksBelow50": 7
+      },
+      "nonContested": {
+        "n": 18,
+        "lockRate": 0.889,
+        "lockCorrect": "12/16",
+        "lockCorrectRate": 0.75,
+        "wrongLocks": 4,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 267,
+        "meanOnTargetFraction": 0.764,
+        "ambiguityEntered": 3,
+        "unresolvedOrNeverLocked": 2,
+        "lockSources": {
+          "start_region_occupancy": 15,
+          "gesture_confirmed": 1
+        },
+        "driftCorrectLocksBelow50": 1
+      },
+      "shippedBuckets": {
+        "instantWrong": {
+          "ta-5bf0e6a85afb-s1w0-p2": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w2-p11": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w3-p3": "WRONG_lock(start_region_occupancy)",
+          "ta-916657917f2b-s3w0-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-96ae65019c30-s1w1-p6": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w8-p15": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w15-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s2w1-p7": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s3w3-p5": "WRONG_lock(start_region_occupancy)"
+        },
+        "timeoutWrong": {
+          "ta-6e06a3157947-s0w1-p4": "ambiguous_unresolved",
+          "ta-6e06a3157947-s0w1-p5": "ambiguous_unresolved",
+          "ta-916657917f2b-s1w0-p1": "ambiguous_unresolved",
+          "ta-960a1a200d6d-s9w1-p12": "WRONG_lock(gesture_confirmed)",
+          "ta-b6f280b2900c-s0w4-p2": "ambiguous_unresolved",
+          "ta-faead33a362c-s3w5-p2": "ambiguous_unresolved"
+        },
+        "gestureWrong": {
+          "ta-5bf0e6a85afb-s1w2-p20": "WRONG_lock(gesture_confirmed)",
+          "ta-5bf0e6a85afb-s1w2-p12": "WRONG_lock(gesture_confirmed)"
+        },
+        "drift": {
+          "ta-44c0c451500c-s1w0-p6": "WRONG_lock(gesture_confirmed)",
+          "ta-6e06a3157947-s2w3-p1": "correct_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s3w0-p4": "ambiguous_unresolved",
+          "ta-916657917f2b-s1w4-p14": "ambiguous_unresolved",
+          "ta-960a1a200d6d-s0w1-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s0w2-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s5w0-p3": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s8w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w9-p2": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w12-p4": "correct_lock(start_region_occupancy)"
+        }
+      },
+      "regressionsVsShipped_correctBecameWrong": [
+        "ta-44c0c451500c-s1w0-p6 (gesture_confirmed)",
+        "ta-44c0c451500c-s3w0-p1 (gesture_confirmed)"
+      ]
+    },
+    "sustained-gesture": {
+      "variantConfig": {
+        "sustainedGestureFrames": 5
+      },
+      "overall": {
+        "n": 54,
+        "lockRate": 0.704,
+        "lockCorrect": "26/38",
+        "lockCorrectRate": 0.684,
+        "wrongLocks": 12,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 3,
+        "medianLockLatencyMs": 320,
+        "meanOnTargetFraction": 0.522,
+        "ambiguityEntered": 20,
+        "unresolvedOrNeverLocked": 16,
+        "lockSources": {
+          "start_region_occupancy": 34,
+          "gesture_confirmed": 4
+        },
+        "driftCorrectLocksBelow50": 12
+      },
+      "contested_region": {
+        "n": 36,
+        "lockRate": 0.611,
+        "lockCorrect": "14/22",
+        "lockCorrectRate": 0.636,
+        "wrongLocks": 8,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 3,
+        "medianLockLatencyMs": 320,
+        "meanOnTargetFraction": 0.4,
+        "ambiguityEntered": 17,
+        "unresolvedOrNeverLocked": 14,
+        "lockSources": {
+          "gesture_confirmed": 3,
+          "start_region_occupancy": 19
+        },
+        "driftCorrectLocksBelow50": 8
+      },
+      "nonContested": {
+        "n": 18,
+        "lockRate": 0.889,
+        "lockCorrect": "12/16",
+        "lockCorrectRate": 0.75,
+        "wrongLocks": 4,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 267,
+        "meanOnTargetFraction": 0.689,
+        "ambiguityEntered": 3,
+        "unresolvedOrNeverLocked": 2,
+        "lockSources": {
+          "start_region_occupancy": 15,
+          "gesture_confirmed": 1
+        },
+        "driftCorrectLocksBelow50": 4
+      },
+      "shippedBuckets": {
+        "instantWrong": {
+          "ta-5bf0e6a85afb-s1w0-p2": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w2-p11": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w3-p3": "WRONG_lock(start_region_occupancy)",
+          "ta-916657917f2b-s3w0-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-96ae65019c30-s1w1-p6": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w8-p15": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w15-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s2w1-p7": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s3w3-p5": "WRONG_lock(start_region_occupancy)"
+        },
+        "timeoutWrong": {
+          "ta-6e06a3157947-s0w1-p4": "ambiguous_unresolved",
+          "ta-6e06a3157947-s0w1-p5": "ambiguous_unresolved",
+          "ta-916657917f2b-s1w0-p1": "ambiguous_unresolved",
+          "ta-960a1a200d6d-s9w1-p12": "ambiguous_unresolved",
+          "ta-b6f280b2900c-s0w4-p2": "ambiguous_unresolved",
+          "ta-faead33a362c-s3w5-p2": "ambiguous_unresolved"
+        },
+        "gestureWrong": {
+          "ta-5bf0e6a85afb-s1w2-p20": "WRONG_lock(gesture_confirmed)",
+          "ta-5bf0e6a85afb-s1w2-p12": "WRONG_lock(gesture_confirmed)"
+        },
+        "drift": {
+          "ta-44c0c451500c-s1w0-p6": "WRONG_lock(gesture_confirmed)",
+          "ta-6e06a3157947-s2w3-p1": "correct_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s3w0-p4": "ambiguous_unresolved",
+          "ta-916657917f2b-s1w4-p14": "ambiguous_unresolved",
+          "ta-960a1a200d6d-s0w1-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s0w2-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s5w0-p3": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s8w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w9-p2": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w12-p4": "correct_lock(start_region_occupancy)"
+        }
+      },
+      "regressionsVsShipped_correctBecameWrong": [
+        "ta-44c0c451500c-s1w0-p6 (gesture_confirmed)"
+      ]
+    },
+    "ambiguity-timeout": {
+      "variantConfig": {
+        "ambiguityTimeoutMs": 3000
+      },
+      "overall": {
+        "n": 54,
+        "lockRate": 1,
+        "lockCorrect": "36/54",
+        "lockCorrectRate": 0.667,
+        "wrongLocks": 18,
+        "wrongLockRateOfCases": 0.333,
+        "falseGestureLocks": 3,
+        "medianLockLatencyMs": 477,
+        "meanOnTargetFraction": 0.509,
+        "ambiguityEntered": 20,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "start_region_occupancy": 34,
+          "ambiguity_timeout": 17,
+          "gesture_confirmed": 3
+        },
+        "driftCorrectLocksBelow50": 16
+      },
+      "contested_region": {
+        "n": 36,
+        "lockRate": 1,
+        "lockCorrect": "22/36",
+        "lockCorrectRate": 0.611,
+        "wrongLocks": 14,
+        "wrongLockRateOfCases": 0.389,
+        "falseGestureLocks": 3,
+        "medianLockLatencyMs": 750,
+        "meanOnTargetFraction": 0.413,
+        "ambiguityEntered": 17,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "ambiguity_timeout": 14,
+          "gesture_confirmed": 3,
+          "start_region_occupancy": 19
+        },
+        "driftCorrectLocksBelow50": 12
+      },
+      "nonContested": {
+        "n": 18,
+        "lockRate": 1,
+        "lockCorrect": "14/18",
+        "lockCorrectRate": 0.778,
+        "wrongLocks": 4,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 269,
+        "meanOnTargetFraction": 0.701,
+        "ambiguityEntered": 3,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "start_region_occupancy": 15,
+          "ambiguity_timeout": 3
+        },
+        "driftCorrectLocksBelow50": 4
+      },
+      "shippedBuckets": {
+        "instantWrong": {
+          "ta-5bf0e6a85afb-s1w0-p2": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w2-p11": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w3-p3": "WRONG_lock(start_region_occupancy)",
+          "ta-916657917f2b-s3w0-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-96ae65019c30-s1w1-p6": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w8-p15": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w15-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s2w1-p7": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s3w3-p5": "WRONG_lock(start_region_occupancy)"
+        },
+        "timeoutWrong": {
+          "ta-6e06a3157947-s0w1-p4": "WRONG_lock(ambiguity_timeout)",
+          "ta-6e06a3157947-s0w1-p5": "WRONG_lock(ambiguity_timeout)",
+          "ta-916657917f2b-s1w0-p1": "WRONG_lock(ambiguity_timeout)",
+          "ta-960a1a200d6d-s9w1-p12": "WRONG_lock(ambiguity_timeout)",
+          "ta-b6f280b2900c-s0w4-p2": "WRONG_lock(ambiguity_timeout)",
+          "ta-faead33a362c-s3w5-p2": "WRONG_lock(ambiguity_timeout)"
+        },
+        "gestureWrong": {
+          "ta-5bf0e6a85afb-s1w2-p20": "WRONG_lock(gesture_confirmed)",
+          "ta-5bf0e6a85afb-s1w2-p12": "WRONG_lock(gesture_confirmed)"
+        },
+        "drift": {
+          "ta-44c0c451500c-s1w0-p6": "correct_lock(ambiguity_timeout)",
+          "ta-6e06a3157947-s2w3-p1": "correct_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s3w0-p4": "correct_lock(ambiguity_timeout)",
+          "ta-916657917f2b-s1w4-p14": "correct_lock(ambiguity_timeout)",
+          "ta-960a1a200d6d-s0w1-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s0w2-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s5w0-p3": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s8w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w9-p2": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w12-p4": "correct_lock(start_region_occupancy)"
+        }
+      },
+      "regressionsVsShipped_correctBecameWrong": [
+        "ta-44c0c451500c-s3w0-p1 (gesture_confirmed)"
+      ]
+    },
+    "dominance-gate": {
+      "variantConfig": {
+        "followerHysteresis": true,
+        "ambiguityTimeoutMs": 3000,
+        "sustainedGestureFrames": 5,
+        "occupancyDominance": {
+          "marginRatio": 1.5,
+          "framesToDominate": 9,
+          "stallFramesToAmbiguity": 12
+        }
+      },
+      "overall": {
+        "n": 54,
+        "lockRate": 1,
+        "lockCorrect": "37/54",
+        "lockCorrectRate": 0.685,
+        "wrongLocks": 17,
+        "wrongLockRateOfCases": 0.315,
+        "falseGestureLocks": 2,
+        "medianLockLatencyMs": 520,
+        "meanOnTargetFraction": 0.591,
+        "ambiguityEntered": 20,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "start_region_occupancy": 30,
+          "occupancy_dominance": 4,
+          "ambiguity_timeout": 18,
+          "gesture_confirmed": 2
+        },
+        "driftCorrectLocksBelow50": 11
+      },
+      "contested_region": {
+        "n": 36,
+        "lockRate": 1,
+        "lockCorrect": "23/36",
+        "lockCorrectRate": 0.639,
+        "wrongLocks": 13,
+        "wrongLockRateOfCases": 0.361,
+        "falseGestureLocks": 2,
+        "medianLockLatencyMs": 750,
+        "meanOnTargetFraction": 0.496,
+        "ambiguityEntered": 17,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "ambiguity_timeout": 15,
+          "gesture_confirmed": 2,
+          "start_region_occupancy": 16,
+          "occupancy_dominance": 3
+        },
+        "driftCorrectLocksBelow50": 10
+      },
+      "nonContested": {
+        "n": 18,
+        "lockRate": 1,
+        "lockCorrect": "14/18",
+        "lockCorrectRate": 0.778,
+        "wrongLocks": 4,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 269,
+        "meanOnTargetFraction": 0.78,
+        "ambiguityEntered": 3,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "start_region_occupancy": 14,
+          "occupancy_dominance": 1,
+          "ambiguity_timeout": 3
+        },
+        "driftCorrectLocksBelow50": 1
+      },
+      "shippedBuckets": {
+        "instantWrong": {
+          "ta-5bf0e6a85afb-s1w0-p2": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w2-p11": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w3-p3": "WRONG_lock(start_region_occupancy)",
+          "ta-916657917f2b-s3w0-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-96ae65019c30-s1w1-p6": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w8-p15": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w15-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s2w1-p7": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s3w3-p5": "WRONG_lock(start_region_occupancy)"
+        },
+        "timeoutWrong": {
+          "ta-6e06a3157947-s0w1-p4": "WRONG_lock(ambiguity_timeout)",
+          "ta-6e06a3157947-s0w1-p5": "WRONG_lock(ambiguity_timeout)",
+          "ta-916657917f2b-s1w0-p1": "WRONG_lock(ambiguity_timeout)",
+          "ta-960a1a200d6d-s9w1-p12": "WRONG_lock(ambiguity_timeout)",
+          "ta-b6f280b2900c-s0w4-p2": "WRONG_lock(ambiguity_timeout)",
+          "ta-faead33a362c-s3w5-p2": "WRONG_lock(ambiguity_timeout)"
+        },
+        "gestureWrong": {
+          "ta-5bf0e6a85afb-s1w2-p20": "WRONG_lock(gesture_confirmed)",
+          "ta-5bf0e6a85afb-s1w2-p12": "WRONG_lock(gesture_confirmed)"
+        },
+        "drift": {
+          "ta-44c0c451500c-s1w0-p6": "correct_lock(ambiguity_timeout)",
+          "ta-6e06a3157947-s2w3-p1": "correct_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s3w0-p4": "correct_lock(ambiguity_timeout)",
+          "ta-916657917f2b-s1w4-p14": "correct_lock(ambiguity_timeout)",
+          "ta-960a1a200d6d-s0w1-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s0w2-p1": "correct_lock(occupancy_dominance)",
+          "ta-960a1a200d6d-s5w0-p3": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s8w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w9-p2": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w12-p4": "correct_lock(occupancy_dominance)"
+        }
+      },
+      "regressionsVsShipped_correctBecameWrong": []
+    },
+    "sustained-ambiguity": {
+      "variantConfig": {
+        "followerHysteresis": true,
+        "ambiguityTimeoutMs": 6000,
+        "sustainedGestureFrames": 5,
+        "ambiguityDominance": {
+          "marginRatio": 1.5,
+          "frames": 12
+        }
+      },
+      "overall": {
+        "n": 54,
+        "lockRate": 1,
+        "lockCorrect": "42/54",
+        "lockCorrectRate": 0.778,
+        "wrongLocks": 12,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 400,
+        "meanOnTargetFraction": 0.602,
+        "ambiguityEntered": 20,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "start_region_occupancy": 34,
+          "ambiguity_dominance": 20
+        },
+        "driftCorrectLocksBelow50": 15
+      },
+      "contested_region": {
+        "n": 36,
+        "lockRate": 1,
+        "lockCorrect": "28/36",
+        "lockCorrectRate": 0.778,
+        "wrongLocks": 8,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 410,
+        "meanOnTargetFraction": 0.54,
+        "ambiguityEntered": 17,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "ambiguity_dominance": 17,
+          "start_region_occupancy": 19
+        },
+        "driftCorrectLocksBelow50": 12
+      },
+      "nonContested": {
+        "n": 18,
+        "lockRate": 1,
+        "lockCorrect": "14/18",
+        "lockCorrectRate": 0.778,
+        "wrongLocks": 4,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 269,
+        "meanOnTargetFraction": 0.725,
+        "ambiguityEntered": 3,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "start_region_occupancy": 15,
+          "ambiguity_dominance": 3
+        },
+        "driftCorrectLocksBelow50": 3
+      },
+      "shippedBuckets": {
+        "instantWrong": {
+          "ta-5bf0e6a85afb-s1w0-p2": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w2-p11": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w3-p3": "WRONG_lock(start_region_occupancy)",
+          "ta-916657917f2b-s3w0-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-96ae65019c30-s1w1-p6": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w8-p15": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w15-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s2w1-p7": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s3w3-p5": "WRONG_lock(start_region_occupancy)"
+        },
+        "timeoutWrong": {
+          "ta-6e06a3157947-s0w1-p4": "correct_lock(ambiguity_dominance)",
+          "ta-6e06a3157947-s0w1-p5": "correct_lock(ambiguity_dominance)",
+          "ta-916657917f2b-s1w0-p1": "WRONG_lock(ambiguity_dominance)",
+          "ta-960a1a200d6d-s9w1-p12": "WRONG_lock(ambiguity_dominance)",
+          "ta-b6f280b2900c-s0w4-p2": "correct_lock(ambiguity_dominance)",
+          "ta-faead33a362c-s3w5-p2": "correct_lock(ambiguity_dominance)"
+        },
+        "gestureWrong": {
+          "ta-5bf0e6a85afb-s1w2-p20": "WRONG_lock(ambiguity_dominance)",
+          "ta-5bf0e6a85afb-s1w2-p12": "correct_lock(ambiguity_dominance)"
+        },
+        "drift": {
+          "ta-44c0c451500c-s1w0-p6": "correct_lock(ambiguity_dominance)",
+          "ta-6e06a3157947-s2w3-p1": "correct_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s3w0-p4": "correct_lock(ambiguity_dominance)",
+          "ta-916657917f2b-s1w4-p14": "correct_lock(ambiguity_dominance)",
+          "ta-960a1a200d6d-s0w1-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s0w2-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s5w0-p3": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s8w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w9-p2": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w12-p4": "correct_lock(start_region_occupancy)"
+        }
+      },
+      "regressionsVsShipped_correctBecameWrong": []
+    },
+    "acquire-v3": {
+      "variantConfig": {
+        "followerHysteresis": true,
+        "ambiguityTimeoutMs": 6000,
+        "sustainedGestureFrames": 5,
+        "occupancyDominance": {
+          "marginRatio": 1.5,
+          "framesToDominate": 9,
+          "stallFramesToAmbiguity": 12
+        },
+        "ambiguityDominance": {
+          "marginRatio": 1.5,
+          "frames": 12
+        }
+      },
+      "overall": {
+        "n": 54,
+        "lockRate": 1,
+        "lockCorrect": "42/54",
+        "lockCorrectRate": 0.778,
+        "wrongLocks": 12,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 401,
+        "meanOnTargetFraction": 0.601,
+        "ambiguityEntered": 20,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "start_region_occupancy": 30,
+          "occupancy_dominance": 4,
+          "ambiguity_dominance": 20
+        },
+        "driftCorrectLocksBelow50": 15
+      },
+      "contested_region": {
+        "n": 36,
+        "lockRate": 1,
+        "lockCorrect": "28/36",
+        "lockCorrectRate": 0.778,
+        "wrongLocks": 8,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 431,
+        "meanOnTargetFraction": 0.539,
+        "ambiguityEntered": 17,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "ambiguity_dominance": 17,
+          "start_region_occupancy": 16,
+          "occupancy_dominance": 3
+        },
+        "driftCorrectLocksBelow50": 12
+      },
+      "nonContested": {
+        "n": 18,
+        "lockRate": 1,
+        "lockCorrect": "14/18",
+        "lockCorrectRate": 0.778,
+        "wrongLocks": 4,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 269,
+        "meanOnTargetFraction": 0.725,
+        "ambiguityEntered": 3,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "start_region_occupancy": 14,
+          "occupancy_dominance": 1,
+          "ambiguity_dominance": 3
+        },
+        "driftCorrectLocksBelow50": 3
+      },
+      "shippedBuckets": {
+        "instantWrong": {
+          "ta-5bf0e6a85afb-s1w0-p2": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w2-p11": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w3-p3": "WRONG_lock(start_region_occupancy)",
+          "ta-916657917f2b-s3w0-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-96ae65019c30-s1w1-p6": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w8-p15": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w15-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s2w1-p7": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s3w3-p5": "WRONG_lock(start_region_occupancy)"
+        },
+        "timeoutWrong": {
+          "ta-6e06a3157947-s0w1-p4": "correct_lock(ambiguity_dominance)",
+          "ta-6e06a3157947-s0w1-p5": "correct_lock(ambiguity_dominance)",
+          "ta-916657917f2b-s1w0-p1": "WRONG_lock(ambiguity_dominance)",
+          "ta-960a1a200d6d-s9w1-p12": "WRONG_lock(ambiguity_dominance)",
+          "ta-b6f280b2900c-s0w4-p2": "correct_lock(ambiguity_dominance)",
+          "ta-faead33a362c-s3w5-p2": "correct_lock(ambiguity_dominance)"
+        },
+        "gestureWrong": {
+          "ta-5bf0e6a85afb-s1w2-p20": "WRONG_lock(ambiguity_dominance)",
+          "ta-5bf0e6a85afb-s1w2-p12": "correct_lock(ambiguity_dominance)"
+        },
+        "drift": {
+          "ta-44c0c451500c-s1w0-p6": "correct_lock(ambiguity_dominance)",
+          "ta-6e06a3157947-s2w3-p1": "correct_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s3w0-p4": "correct_lock(ambiguity_dominance)",
+          "ta-916657917f2b-s1w4-p14": "correct_lock(ambiguity_dominance)",
+          "ta-960a1a200d6d-s0w1-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s0w2-p1": "correct_lock(occupancy_dominance)",
+          "ta-960a1a200d6d-s5w0-p3": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s8w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w9-p2": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w12-p4": "correct_lock(occupancy_dominance)"
+        }
+      },
+      "regressionsVsShipped_correctBecameWrong": []
+    },
+    "acquire-v3-strict-gesture": {
+      "variantConfig": {
+        "followerHysteresis": true,
+        "ambiguityTimeoutMs": 6000,
+        "sustainedGestureFrames": 8,
+        "occupancyDominance": {
+          "marginRatio": 1.5,
+          "framesToDominate": 9,
+          "stallFramesToAmbiguity": 12
+        },
+        "ambiguityDominance": {
+          "marginRatio": 1.5,
+          "frames": 12
+        }
+      },
+      "overall": {
+        "n": 54,
+        "lockRate": 1,
+        "lockCorrect": "42/54",
+        "lockCorrectRate": 0.778,
+        "wrongLocks": 12,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 401,
+        "meanOnTargetFraction": 0.601,
+        "ambiguityEntered": 20,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "start_region_occupancy": 30,
+          "occupancy_dominance": 4,
+          "ambiguity_dominance": 20
+        },
+        "driftCorrectLocksBelow50": 15
+      },
+      "contested_region": {
+        "n": 36,
+        "lockRate": 1,
+        "lockCorrect": "28/36",
+        "lockCorrectRate": 0.778,
+        "wrongLocks": 8,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 431,
+        "meanOnTargetFraction": 0.539,
+        "ambiguityEntered": 17,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "ambiguity_dominance": 17,
+          "start_region_occupancy": 16,
+          "occupancy_dominance": 3
+        },
+        "driftCorrectLocksBelow50": 12
+      },
+      "nonContested": {
+        "n": 18,
+        "lockRate": 1,
+        "lockCorrect": "14/18",
+        "lockCorrectRate": 0.778,
+        "wrongLocks": 4,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 269,
+        "meanOnTargetFraction": 0.725,
+        "ambiguityEntered": 3,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "start_region_occupancy": 14,
+          "occupancy_dominance": 1,
+          "ambiguity_dominance": 3
+        },
+        "driftCorrectLocksBelow50": 3
+      },
+      "shippedBuckets": {
+        "instantWrong": {
+          "ta-5bf0e6a85afb-s1w0-p2": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w2-p11": "WRONG_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w3-p3": "WRONG_lock(start_region_occupancy)",
+          "ta-916657917f2b-s3w0-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-96ae65019c30-s1w1-p6": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w8-p15": "WRONG_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w15-p13": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s2w1-p7": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s3w3-p5": "WRONG_lock(start_region_occupancy)"
+        },
+        "timeoutWrong": {
+          "ta-6e06a3157947-s0w1-p4": "correct_lock(ambiguity_dominance)",
+          "ta-6e06a3157947-s0w1-p5": "correct_lock(ambiguity_dominance)",
+          "ta-916657917f2b-s1w0-p1": "WRONG_lock(ambiguity_dominance)",
+          "ta-960a1a200d6d-s9w1-p12": "WRONG_lock(ambiguity_dominance)",
+          "ta-b6f280b2900c-s0w4-p2": "correct_lock(ambiguity_dominance)",
+          "ta-faead33a362c-s3w5-p2": "correct_lock(ambiguity_dominance)"
+        },
+        "gestureWrong": {
+          "ta-5bf0e6a85afb-s1w2-p20": "WRONG_lock(ambiguity_dominance)",
+          "ta-5bf0e6a85afb-s1w2-p12": "correct_lock(ambiguity_dominance)"
+        },
+        "drift": {
+          "ta-44c0c451500c-s1w0-p6": "correct_lock(ambiguity_dominance)",
+          "ta-6e06a3157947-s2w3-p1": "correct_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s3w0-p4": "correct_lock(ambiguity_dominance)",
+          "ta-916657917f2b-s1w4-p14": "correct_lock(ambiguity_dominance)",
+          "ta-960a1a200d6d-s0w1-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s0w2-p1": "correct_lock(occupancy_dominance)",
+          "ta-960a1a200d6d-s5w0-p3": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s8w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w9-p2": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w12-p4": "correct_lock(occupancy_dominance)"
+        }
+      },
+      "regressionsVsShipped_correctBecameWrong": []
+    },
+    "centered-gate": {
+      "variantConfig": {
+        "followerHysteresis": true,
+        "ambiguityTimeoutMs": 3000,
+        "sustainedGestureFrames": 5,
+        "occupancyDominance": {
+          "marginRatio": 1.5,
+          "framesToDominate": 9,
+          "stallFramesToAmbiguity": 12,
+          "centeredRadius": 0.05,
+          "patienceFrames": 30
+        }
+      },
+      "overall": {
+        "n": 54,
+        "lockRate": 0.963,
+        "lockCorrect": "40/52",
+        "lockCorrectRate": 0.769,
+        "wrongLocks": 12,
+        "wrongLockRateOfCases": 0.222,
+        "falseGestureLocks": 2,
+        "medianLockLatencyMs": 1833,
+        "meanOnTargetFraction": 0.582,
+        "ambiguityEntered": 27,
+        "unresolvedOrNeverLocked": 2,
+        "lockSources": {
+          "start_region_occupancy": 23,
+          "occupancy_dominance": 3,
+          "ambiguity_timeout": 24,
+          "gesture_confirmed": 2
+        },
+        "driftCorrectLocksBelow50": 12
+      },
+      "contested_region": {
+        "n": 36,
+        "lockRate": 1,
+        "lockCorrect": "25/36",
+        "lockCorrectRate": 0.694,
+        "wrongLocks": 11,
+        "wrongLockRateOfCases": 0.306,
+        "falseGestureLocks": 2,
+        "medianLockLatencyMs": 3036,
+        "meanOnTargetFraction": 0.492,
+        "ambiguityEntered": 22,
+        "unresolvedOrNeverLocked": 0,
+        "lockSources": {
+          "ambiguity_timeout": 20,
+          "gesture_confirmed": 2,
+          "start_region_occupancy": 12,
+          "occupancy_dominance": 2
+        },
+        "driftCorrectLocksBelow50": 10
+      },
+      "nonContested": {
+        "n": 18,
+        "lockRate": 0.889,
+        "lockCorrect": "15/16",
+        "lockCorrectRate": 0.938,
+        "wrongLocks": 1,
+        "wrongLockRateOfCases": 0.056,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 269,
+        "meanOnTargetFraction": 0.784,
+        "ambiguityEntered": 5,
+        "unresolvedOrNeverLocked": 2,
+        "lockSources": {
+          "start_region_occupancy": 11,
+          "occupancy_dominance": 1,
+          "ambiguity_timeout": 4
+        },
+        "driftCorrectLocksBelow50": 2
+      },
+      "shippedBuckets": {
+        "instantWrong": {
+          "ta-5bf0e6a85afb-s1w0-p2": "correct_lock(ambiguity_timeout)",
+          "ta-6e06a3157947-s2w2-p11": "correct_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w3-p3": "correct_lock(ambiguity_timeout)",
+          "ta-916657917f2b-s3w0-p13": "correct_lock(ambiguity_timeout)",
+          "ta-96ae65019c30-s1w1-p6": "ambiguous_unresolved",
+          "ta-b6f280b2900c-s0w8-p15": "correct_lock(ambiguity_timeout)",
+          "ta-b6f280b2900c-s0w15-p13": "WRONG_lock(ambiguity_timeout)",
+          "ta-faead33a362c-s2w1-p7": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s3w3-p5": "WRONG_lock(start_region_occupancy)"
+        },
+        "timeoutWrong": {
+          "ta-6e06a3157947-s0w1-p4": "WRONG_lock(ambiguity_timeout)",
+          "ta-6e06a3157947-s0w1-p5": "WRONG_lock(ambiguity_timeout)",
+          "ta-916657917f2b-s1w0-p1": "WRONG_lock(ambiguity_timeout)",
+          "ta-960a1a200d6d-s9w1-p12": "WRONG_lock(ambiguity_timeout)",
+          "ta-b6f280b2900c-s0w4-p2": "WRONG_lock(ambiguity_timeout)",
+          "ta-faead33a362c-s3w5-p2": "WRONG_lock(ambiguity_timeout)"
+        },
+        "gestureWrong": {
+          "ta-5bf0e6a85afb-s1w2-p20": "WRONG_lock(gesture_confirmed)",
+          "ta-5bf0e6a85afb-s1w2-p12": "WRONG_lock(gesture_confirmed)"
+        },
+        "drift": {
+          "ta-44c0c451500c-s1w0-p6": "correct_lock(ambiguity_timeout)",
+          "ta-6e06a3157947-s2w3-p1": "correct_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s3w0-p4": "correct_lock(ambiguity_timeout)",
+          "ta-916657917f2b-s1w4-p14": "correct_lock(ambiguity_timeout)",
+          "ta-960a1a200d6d-s0w1-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s0w2-p1": "WRONG_lock(ambiguity_timeout)",
+          "ta-960a1a200d6d-s5w0-p3": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s8w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w9-p2": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w12-p4": "correct_lock(occupancy_dominance)"
+        }
+      },
+      "regressionsVsShipped_correctBecameWrong": [
+        "ta-960a1a200d6d-s0w2-p1 (ambiguity_timeout)"
+      ]
+    },
+    "acquire-v4": {
+      "variantConfig": {
+        "followerHysteresis": true,
+        "ambiguityTimeoutMs": 6000,
+        "sustainedGestureFrames": 5,
+        "occupancyDominance": {
+          "marginRatio": 1.5,
+          "framesToDominate": 9,
+          "stallFramesToAmbiguity": 12,
+          "centeredRadius": 0.05,
+          "patienceFrames": 30
+        },
+        "ambiguityDominance": {
+          "marginRatio": 1.5,
+          "frames": 12,
+          "centeredRadius": 0.05
+        }
+      },
+      "overall": {
+        "n": 54,
+        "lockRate": 0.944,
+        "lockCorrect": "44/51",
+        "lockCorrectRate": 0.863,
+        "wrongLocks": 7,
+        "wrongLockRateOfCases": 0.13,
+        "falseGestureLocks": 1,
+        "medianLockLatencyMs": 410,
+        "meanOnTargetFraction": 0.585,
+        "ambiguityEntered": 27,
+        "unresolvedOrNeverLocked": 3,
+        "lockSources": {
+          "start_region_occupancy": 23,
+          "occupancy_dominance": 3,
+          "ambiguity_dominance": 22,
+          "gesture_confirmed": 1,
+          "ambiguity_timeout": 2
+        },
+        "driftCorrectLocksBelow50": 15
+      },
+      "contested_region": {
+        "n": 36,
+        "lockRate": 0.972,
+        "lockCorrect": "29/35",
+        "lockCorrectRate": 0.829,
+        "wrongLocks": 6,
+        "wrongLockRateOfCases": 0.167,
+        "falseGestureLocks": 1,
+        "medianLockLatencyMs": 520,
+        "meanOnTargetFraction": 0.522,
+        "ambiguityEntered": 22,
+        "unresolvedOrNeverLocked": 1,
+        "lockSources": {
+          "ambiguity_dominance": 18,
+          "gesture_confirmed": 1,
+          "start_region_occupancy": 12,
+          "ambiguity_timeout": 2,
+          "occupancy_dominance": 2
+        },
+        "driftCorrectLocksBelow50": 11
+      },
+      "nonContested": {
+        "n": 18,
+        "lockRate": 0.889,
+        "lockCorrect": "15/16",
+        "lockCorrectRate": 0.938,
+        "wrongLocks": 1,
+        "wrongLockRateOfCases": 0.056,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 269,
+        "meanOnTargetFraction": 0.722,
+        "ambiguityEntered": 5,
+        "unresolvedOrNeverLocked": 2,
+        "lockSources": {
+          "start_region_occupancy": 11,
+          "occupancy_dominance": 1,
+          "ambiguity_dominance": 4
+        },
+        "driftCorrectLocksBelow50": 4
+      },
+      "shippedBuckets": {
+        "instantWrong": {
+          "ta-5bf0e6a85afb-s1w0-p2": "correct_lock(ambiguity_dominance)",
+          "ta-6e06a3157947-s2w2-p11": "correct_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w3-p3": "correct_lock(ambiguity_dominance)",
+          "ta-916657917f2b-s3w0-p13": "correct_lock(ambiguity_dominance)",
+          "ta-96ae65019c30-s1w1-p6": "ambiguous_unresolved",
+          "ta-b6f280b2900c-s0w8-p15": "WRONG_lock(ambiguity_dominance)",
+          "ta-b6f280b2900c-s0w15-p13": "correct_lock(ambiguity_dominance)",
+          "ta-faead33a362c-s2w1-p7": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s3w3-p5": "WRONG_lock(start_region_occupancy)"
+        },
+        "timeoutWrong": {
+          "ta-6e06a3157947-s0w1-p4": "correct_lock(ambiguity_dominance)",
+          "ta-6e06a3157947-s0w1-p5": "WRONG_lock(ambiguity_dominance)",
+          "ta-916657917f2b-s1w0-p1": "correct_lock(ambiguity_timeout)",
+          "ta-960a1a200d6d-s9w1-p12": "WRONG_lock(ambiguity_timeout)",
+          "ta-b6f280b2900c-s0w4-p2": "correct_lock(ambiguity_dominance)",
+          "ta-faead33a362c-s3w5-p2": "ambiguous_unresolved"
+        },
+        "gestureWrong": {
+          "ta-5bf0e6a85afb-s1w2-p20": "WRONG_lock(gesture_confirmed)",
+          "ta-5bf0e6a85afb-s1w2-p12": "correct_lock(ambiguity_dominance)"
+        },
+        "drift": {
+          "ta-44c0c451500c-s1w0-p6": "correct_lock(ambiguity_dominance)",
+          "ta-6e06a3157947-s2w3-p1": "correct_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s3w0-p4": "correct_lock(ambiguity_dominance)",
+          "ta-916657917f2b-s1w4-p14": "correct_lock(ambiguity_dominance)",
+          "ta-960a1a200d6d-s0w1-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s0w2-p1": "WRONG_lock(ambiguity_dominance)",
+          "ta-960a1a200d6d-s5w0-p3": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s8w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w9-p2": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w12-p4": "correct_lock(occupancy_dominance)"
+        }
+      },
+      "regressionsVsShipped_correctBecameWrong": [
+        "ta-960a1a200d6d-s0w2-p1 (ambiguity_dominance)"
+      ]
+    },
+    "acquire-v4-strict-gesture": {
+      "variantConfig": {
+        "followerHysteresis": true,
+        "ambiguityTimeoutMs": 6000,
+        "sustainedGestureFrames": 8,
+        "occupancyDominance": {
+          "marginRatio": 1.5,
+          "framesToDominate": 9,
+          "stallFramesToAmbiguity": 12,
+          "centeredRadius": 0.05,
+          "patienceFrames": 30
+        },
+        "ambiguityDominance": {
+          "marginRatio": 1.5,
+          "frames": 12,
+          "centeredRadius": 0.05
+        }
+      },
+      "overall": {
+        "n": 54,
+        "lockRate": 0.944,
+        "lockCorrect": "44/51",
+        "lockCorrectRate": 0.863,
+        "wrongLocks": 7,
+        "wrongLockRateOfCases": 0.13,
+        "falseGestureLocks": 1,
+        "medianLockLatencyMs": 410,
+        "meanOnTargetFraction": 0.585,
+        "ambiguityEntered": 27,
+        "unresolvedOrNeverLocked": 3,
+        "lockSources": {
+          "start_region_occupancy": 23,
+          "occupancy_dominance": 3,
+          "ambiguity_dominance": 22,
+          "gesture_confirmed": 1,
+          "ambiguity_timeout": 2
+        },
+        "driftCorrectLocksBelow50": 15
+      },
+      "contested_region": {
+        "n": 36,
+        "lockRate": 0.972,
+        "lockCorrect": "29/35",
+        "lockCorrectRate": 0.829,
+        "wrongLocks": 6,
+        "wrongLockRateOfCases": 0.167,
+        "falseGestureLocks": 1,
+        "medianLockLatencyMs": 520,
+        "meanOnTargetFraction": 0.522,
+        "ambiguityEntered": 22,
+        "unresolvedOrNeverLocked": 1,
+        "lockSources": {
+          "ambiguity_dominance": 18,
+          "gesture_confirmed": 1,
+          "start_region_occupancy": 12,
+          "ambiguity_timeout": 2,
+          "occupancy_dominance": 2
+        },
+        "driftCorrectLocksBelow50": 11
+      },
+      "nonContested": {
+        "n": 18,
+        "lockRate": 0.889,
+        "lockCorrect": "15/16",
+        "lockCorrectRate": 0.938,
+        "wrongLocks": 1,
+        "wrongLockRateOfCases": 0.056,
+        "falseGestureLocks": 0,
+        "medianLockLatencyMs": 269,
+        "meanOnTargetFraction": 0.722,
+        "ambiguityEntered": 5,
+        "unresolvedOrNeverLocked": 2,
+        "lockSources": {
+          "start_region_occupancy": 11,
+          "occupancy_dominance": 1,
+          "ambiguity_dominance": 4
+        },
+        "driftCorrectLocksBelow50": 4
+      },
+      "shippedBuckets": {
+        "instantWrong": {
+          "ta-5bf0e6a85afb-s1w0-p2": "correct_lock(ambiguity_dominance)",
+          "ta-6e06a3157947-s2w2-p11": "correct_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s2w3-p3": "correct_lock(ambiguity_dominance)",
+          "ta-916657917f2b-s3w0-p13": "correct_lock(ambiguity_dominance)",
+          "ta-96ae65019c30-s1w1-p6": "ambiguous_unresolved",
+          "ta-b6f280b2900c-s0w8-p15": "WRONG_lock(ambiguity_dominance)",
+          "ta-b6f280b2900c-s0w15-p13": "correct_lock(ambiguity_dominance)",
+          "ta-faead33a362c-s2w1-p7": "WRONG_lock(start_region_occupancy)",
+          "ta-faead33a362c-s3w3-p5": "WRONG_lock(start_region_occupancy)"
+        },
+        "timeoutWrong": {
+          "ta-6e06a3157947-s0w1-p4": "correct_lock(ambiguity_dominance)",
+          "ta-6e06a3157947-s0w1-p5": "WRONG_lock(ambiguity_dominance)",
+          "ta-916657917f2b-s1w0-p1": "correct_lock(ambiguity_timeout)",
+          "ta-960a1a200d6d-s9w1-p12": "WRONG_lock(ambiguity_timeout)",
+          "ta-b6f280b2900c-s0w4-p2": "correct_lock(ambiguity_dominance)",
+          "ta-faead33a362c-s3w5-p2": "ambiguous_unresolved"
+        },
+        "gestureWrong": {
+          "ta-5bf0e6a85afb-s1w2-p20": "WRONG_lock(gesture_confirmed)",
+          "ta-5bf0e6a85afb-s1w2-p12": "correct_lock(ambiguity_dominance)"
+        },
+        "drift": {
+          "ta-44c0c451500c-s1w0-p6": "correct_lock(ambiguity_dominance)",
+          "ta-6e06a3157947-s2w3-p1": "correct_lock(start_region_occupancy)",
+          "ta-6e06a3157947-s3w0-p4": "correct_lock(ambiguity_dominance)",
+          "ta-916657917f2b-s1w4-p14": "correct_lock(ambiguity_dominance)",
+          "ta-960a1a200d6d-s0w1-p1": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s0w2-p1": "WRONG_lock(ambiguity_dominance)",
+          "ta-960a1a200d6d-s5w0-p3": "correct_lock(start_region_occupancy)",
+          "ta-960a1a200d6d-s8w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w0-p1": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w9-p2": "correct_lock(start_region_occupancy)",
+          "ta-b6f280b2900c-s0w12-p4": "correct_lock(occupancy_dominance)"
+        }
+      },
+      "regressionsVsShipped_correctBecameWrong": [
+        "ta-960a1a200d6d-s0w2-p1 (ambiguity_dominance)"
+      ]
+    }
+  }
+}

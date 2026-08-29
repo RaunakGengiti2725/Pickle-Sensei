@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { createFixtureVisionProviderSet } from "@pickle/vision-contracts";
 import type { VideoClipRef } from "@pickle/vision-contracts";
+import { createFixtureVisionProviderSet } from "../../vision-contracts/test/support/fixtureProvider.js";
 import { analyzeClip } from "../src/index.js";
 
 const clip: VideoClipRef = {

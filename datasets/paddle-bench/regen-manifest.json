@@ -1,0 +1,62 @@
+[
+  {
+    "id": "wm-dink-01",
+    "video": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+    "stroke": "dink",
+    "outDir": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/runs/wm-dink-01",
+    "targetTap": {
+      "x": 0.5313,
+      "y": 0.5369
+    },
+    "expectedTargetTrackId": 1,
+    "extraFlags": []
+  },
+  {
+    "id": "wm-volley-02",
+    "video": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+    "stroke": "volley",
+    "outDir": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/runs/wm-volley-02",
+    "targetTap": {
+      "x": 0.5271,
+      "y": 0.4552
+    },
+    "expectedTargetTrackId": 1,
+    "extraFlags": []
+  },
+  {
+    "id": "afn-sasebo-rally1",
+    "video": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+    "stroke": "volley",
+    "outDir": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/runs/afn-sasebo-rally1",
+    "targetTap": {
+      "x": 0.5644,
+      "y": 0.4665
+    },
+    "expectedTargetTrackId": 1,
+    "extraFlags": []
+  },
+  {
+    "id": "afn-sasebo-rally2",
+    "video": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+    "stroke": "volley",
+    "outDir": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/runs/afn-sasebo-rally2",
+    "targetTap": {
+      "x": 0.7923,
+      "y": 0.702
+    },
+    "expectedTargetTrackId": 1,
+    "extraFlags": []
+  },
+  {
+    "id": "afn-vic-rally1",
+    "video": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+    "stroke": "volley",
+    "outDir": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/runs/afn-vic-rally1",
+    "targetTap": {
+      "x": 0.3455,
+      "y": 0.71
+    },
+    "expectedTargetTrackId": 1,
+    "extraFlags": []
+  }
+]

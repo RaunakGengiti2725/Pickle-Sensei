@@ -23,6 +23,7 @@ import { registerSocialRoutes } from "./modules/social/routes.js";
 import { registerPrivacyRoutes } from "./modules/privacy/routes.js";
 import { registerFlagRoutes } from "./modules/flags/routes.js";
 import { registerAdminRoutes } from "./modules/admin/routes.js";
+import { registerTrainingRoutes } from "./modules/training/routes.js";
 
 /**
  * Modular-monolith API (directive §30). Modules communicate through typed
@@ -112,6 +113,7 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
   registerPrivacyRoutes(app, context);
   registerFlagRoutes(app, context);
   registerAdminRoutes(app, context);
+  registerTrainingRoutes(app, context);
 
   return app;
 }

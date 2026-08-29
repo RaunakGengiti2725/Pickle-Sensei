@@ -51,40 +51,6 @@ const CHECKPOINT_NAMES: Record<string, { name: string; description: string }> = 
   recovery: { name: "Recovery", description: "Return to a stable ready/court position." },
 };
 
-/** Drill seeds — real coaching content pending; clearly marked dev fixtures. */
-const DEV_DRILLS: Array<{
-  slug: string;
-  title: string;
-  description: string;
-  checkpoint: string;
-  shotTypes: string[];
-}> = [
-  {
-    slug: "dev-contact-out-front",
-    title: "Contact Out Front (dev fixture)",
-    description:
-      "DEV FIXTURE — placeholder pending coach-authored content. Shadow reps freezing contact ahead of the front hip.",
-    checkpoint: "contact_position",
-    shotTypes: ["forehand_drive", "dink", "third_shot_drop", "serve"],
-  },
-  {
-    slug: "dev-compact-backswing",
-    title: "Compact Backswing Wall Drill (dev fixture)",
-    description:
-      "DEV FIXTURE — placeholder pending coach-authored content. Wall proximity limits backswing length.",
-    checkpoint: "swing_length",
-    shotTypes: ["dink", "third_shot_drop"],
-  },
-  {
-    slug: "dev-unit-turn",
-    title: "Unit Turn Shadow Reps (dev fixture)",
-    description:
-      "DEV FIXTURE — placeholder pending coach-authored content. Shoulder-led preparation without a ball.",
-    checkpoint: "preparation",
-    shotTypes: ["forehand_drive", "serve"],
-  },
-];
-
 export async function seed(pool: Pool, log: (line: string) => void = () => {}): Promise<void> {
   // Shot types
   for (let i = 0; i < SHOT_TYPES.length; i++) {
@@ -116,7 +82,9 @@ export async function seed(pool: Pool, log: (line: string) => void = () => {}): 
   }
   log("seeded checkpoint_definition");
 
-  // Scoring model v1 per shot — generated from @pickle/scoring config v1.
+  // Scoring hypotheses per shot — generated from @pickle/scoring config v1.
+  // They stay validating until an administrator binds a reviewed dataset,
+  // evaluation, coach approval, and active hashed model bundle.
   for (const config of getAllShotScoringConfigs()) {
     const { rows: shotRows } = await pool.query<{ id: string }>(
       "SELECT id FROM shot_type WHERE slug = $1",
@@ -127,8 +95,8 @@ export async function seed(pool: Pool, log: (line: string) => void = () => {}): 
 
     const { rows: modelRows } = await pool.query<{ id: string }>(
       `INSERT INTO scoring_model (shot_type_id, version, status, min_analysis_confidence,
-         lower_confidence_threshold, config, active_from)
-       VALUES ($1, $2, 'active', $3, $4, $5, now())
+         lower_confidence_threshold, config)
+       VALUES ($1, $2, 'validating', $3, $4, $5)
        ON CONFLICT (shot_type_id, version) DO UPDATE SET config = EXCLUDED.config
        RETURNING id`,
       [
@@ -199,67 +167,52 @@ export async function seed(pool: Pool, log: (line: string) => void = () => {}): 
       }
     }
   }
-  log("seeded scoring_model + checkpoints + targets (sm-v1)");
+  log("seeded validating scoring hypotheses + checkpoints + targets (sm-v1)");
 
-  // Dev fixture drills
-  for (const d of DEV_DRILLS) {
-    const { rows: drillRows } = await pool.query<{ id: string }>(
-      `INSERT INTO drill (slug, title, description, is_dev_fixture, active)
-       VALUES ($1, $2, $3, true, true)
-       ON CONFLICT (slug) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description
-       RETURNING id`,
-      [d.slug, d.title, d.description],
-    );
-    const drillId = drillRows[0]?.id;
-    if (!drillId) continue;
-    for (const shotSlug of d.shotTypes) {
-      await pool.query(
-        `INSERT INTO drill_checkpoint_map (drill_id, checkpoint_definition_id, shot_type_id, priority)
-         SELECT $1, cd.id, st.id, 1
-         FROM checkpoint_definition cd, shot_type st
-         WHERE cd.slug = $2 AND st.slug = $3
-         ON CONFLICT DO NOTHING`,
-        [drillId, d.checkpoint, shotSlug],
-      );
-    }
-  }
-  log("seeded dev fixture drills");
+  // Retire placeholder catalog entries created by pre-production builds.
+  // They remain inactive only where historical foreign keys require them.
+  await pool.query(`UPDATE drill SET active = false WHERE is_dev_fixture = true`);
+  log("retired legacy fixture drills");
 
   // Billing offerings — remote-configurable pricing (spec p. 55).
   const offerings: Array<[string, string, string, number | null, string | null, number, number]> = [
     [
-      "premium_monthly",
+      "premium_monthly_499",
       "Premium Monthly",
-      "Unlimited analyses and Live Court.",
-      1199,
+      "Server-verified monthly membership. Product capabilities appear only after their release gates pass.",
+      499,
       "monthly",
       0,
       1,
     ],
     [
-      "premium_annual",
+      "premium_annual_3999",
       "Premium Annual",
-      "Unlimited, billed yearly. 7-day free trial.",
-      7999,
+      "Server-verified annual membership. Product capabilities appear only after their release gates pass.",
+      3999,
       "annual",
       7,
       2,
     ],
-    [
-      "founder_lifetime",
-      "Founder Lifetime",
-      "Launch-campaign lifetime access.",
-      16900,
-      "lifetime",
-      0,
-      3,
-    ],
   ];
+  await pool.query(
+    `UPDATE billing_offering SET active = false
+     WHERE product_key NOT IN ('premium_monthly_499', 'premium_annual_3999')`,
+  );
   for (const [key, name, desc, cents, period, trial, order] of offerings) {
     await pool.query(
       `INSERT INTO billing_offering (product_key, display_name, description, price_usd_cents, period, trial_days, features, display_order, platform_product_ids)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       ON CONFLICT (product_key) DO UPDATE SET price_usd_cents = EXCLUDED.price_usd_cents, trial_days = EXCLUDED.trial_days`,
+       ON CONFLICT (product_key) DO UPDATE SET
+         display_name = EXCLUDED.display_name,
+         description = EXCLUDED.description,
+         price_usd_cents = EXCLUDED.price_usd_cents,
+         period = EXCLUDED.period,
+         trial_days = EXCLUDED.trial_days,
+         features = EXCLUDED.features,
+         display_order = EXCLUDED.display_order,
+         platform_product_ids = EXCLUDED.platform_product_ids,
+         active = true`,
       [
         key,
         name,
@@ -267,20 +220,10 @@ export async function seed(pool: Pool, log: (line: string) => void = () => {}): 
         cents,
         period,
         trial,
-        JSON.stringify([
-          "unlimited_analyses",
-          "unlimited_live_court",
-          "full_checkpoint_detail",
-          "all_drills",
-          "replay_overlays",
-          "progress_trends",
-          "weekly_report",
-          "cloud_sync",
-          "pro_compare",
-          "training_plans",
-          "share_cards",
-          "social",
-        ]),
+        // Keep the offering record structurally complete without advertising
+        // capabilities that do not yet have released models/content. Release
+        // gates, not a seed-time feature list, determine product availability.
+        JSON.stringify([]),
         order,
         JSON.stringify({ apple: `com.picklesensei.${key}`, google: `${key}` }),
       ],

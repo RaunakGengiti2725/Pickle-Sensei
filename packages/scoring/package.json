@@ -13,7 +13,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@pickle/shared-types": "workspace:*"
+    "@pickle/shared-types": "workspace:*",
+    "@pickle/swing-domain": "workspace:*",
+    "@pickle/vision-contracts": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.9.2",

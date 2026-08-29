@@ -1,0 +1,833 @@
+{
+ "schemaVersion": 1,
+ "workstream": "W12",
+ "note": "ALL boxes here are kind=TRACKED_ESTIMATE (propagated/predicted), NEVER detections; anchors come from the sandbox stride-1 run dets gated by annotation target points",
+ "frames": [
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 75,
+   "tMs": 2502.5,
+   "group": "rally2_missA_overhead_blur",
+   "estimates": [
+    {
+     "mode": "hold_last",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1306.0,
+      14.3,
+      1465.5,
+      153.1
+     ],
+     "sourceTMs": [
+      2470.64
+     ],
+     "ageMs": 31.9
+    },
+    {
+     "mode": "interp_anchors",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1274.3,
+      85.5,
+      1427.0,
+      209.5
+     ],
+     "sourceTMs": [
+      2470.64,
+      2637.47
+     ]
+    },
+    {
+     "mode": "wrist_anchored",
+     "kind": "TRACKED_ESTIMATE",
+     "joint": "left_wrist",
+     "sourceTMs": [
+      2470.64,
+      2637.47
+     ],
+     "box": [
+      1233.1,
+      -1.5,
+      1385.8,
+      122.5
+     ]
+    }
+   ],
+   "anchorBefore": {
+    "tMs": 2470.64,
+    "score": 0.4816,
+    "box": [
+     1306.0,
+     14.3,
+     1465.5,
+     153.1
+    ]
+   },
+   "anchorAfter": {
+    "tMs": 2637.47,
+    "score": 0.4412,
+    "box": [
+     1139.8,
+     387.2,
+     1264.0,
+     448.2
+    ]
+   }
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 76,
+   "tMs": 2535.87,
+   "group": "rally2_missA_overhead_blur",
+   "estimates": [
+    {
+     "mode": "hold_last",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1306.0,
+      14.3,
+      1465.5,
+      153.1
+     ],
+     "sourceTMs": [
+      2470.64
+     ],
+     "ageMs": 65.2
+    },
+    {
+     "mode": "interp_anchors",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1241.0,
+      160.1,
+      1386.7,
+      268.5
+     ],
+     "sourceTMs": [
+      2470.64,
+      2637.47
+     ]
+    },
+    {
+     "mode": "wrist_anchored",
+     "kind": "TRACKED_ESTIMATE",
+     "joint": "left_wrist",
+     "sourceTMs": [
+      2470.64,
+      2637.47
+     ],
+     "box": [
+      1164.8,
+      23.0,
+      1310.5,
+      131.3
+     ]
+    }
+   ],
+   "anchorBefore": {
+    "tMs": 2470.64,
+    "score": 0.4816,
+    "box": [
+     1306.0,
+     14.3,
+     1465.5,
+     153.1
+    ]
+   },
+   "anchorAfter": {
+    "tMs": 2637.47,
+    "score": 0.4412,
+    "box": [
+     1139.8,
+     387.2,
+     1264.0,
+     448.2
+    ]
+   }
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 77,
+   "tMs": 2569.23,
+   "group": "rally2_missA_overhead_blur",
+   "estimates": [
+    {
+     "mode": "hold_last",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1306.0,
+      14.3,
+      1465.5,
+      153.1
+     ],
+     "sourceTMs": [
+      2470.64
+     ],
+     "ageMs": 98.6
+    },
+    {
+     "mode": "interp_anchors",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1207.8,
+      234.7,
+      1346.4,
+      327.5
+     ],
+     "sourceTMs": [
+      2470.64,
+      2637.47
+     ]
+    },
+    {
+     "mode": "wrist_anchored",
+     "kind": "TRACKED_ESTIMATE",
+     "joint": "left_wrist",
+     "sourceTMs": [
+      2470.64,
+      2637.47
+     ],
+     "box": [
+      1101.0,
+      75.6,
+      1239.7,
+      168.4
+     ]
+    }
+   ],
+   "anchorBefore": {
+    "tMs": 2470.64,
+    "score": 0.4816,
+    "box": [
+     1306.0,
+     14.3,
+     1465.5,
+     153.1
+    ]
+   },
+   "anchorAfter": {
+    "tMs": 2637.47,
+    "score": 0.4412,
+    "box": [
+     1139.8,
+     387.2,
+     1264.0,
+     448.2
+    ]
+   }
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 78,
+   "tMs": 2602.6,
+   "group": "rally2_missA_overhead_blur",
+   "estimates": [
+    {
+     "mode": "hold_last",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1306.0,
+      14.3,
+      1465.5,
+      153.1
+     ],
+     "sourceTMs": [
+      2470.64
+     ],
+     "ageMs": 132.0
+    },
+    {
+     "mode": "interp_anchors",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1174.5,
+      309.3,
+      1306.1,
+      386.5
+     ],
+     "sourceTMs": [
+      2470.64,
+      2637.47
+     ]
+    },
+    {
+     "mode": "wrist_anchored",
+     "kind": "TRACKED_ESTIMATE",
+     "joint": "left_wrist",
+     "sourceTMs": [
+      2470.64,
+      2637.47
+     ],
+     "box": [
+      1053.8,
+      133.8,
+      1185.4,
+      211.0
+     ]
+    }
+   ],
+   "anchorBefore": {
+    "tMs": 2470.64,
+    "score": 0.4816,
+    "box": [
+     1306.0,
+     14.3,
+     1465.5,
+     153.1
+    ]
+   },
+   "anchorAfter": {
+    "tMs": 2637.47,
+    "score": 0.4412,
+    "box": [
+     1139.8,
+     387.2,
+     1264.0,
+     448.2
+    ]
+   }
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 79,
+   "tMs": 2635.97,
+   "group": "rally2_missA_overhead_blur",
+   "estimates": [
+    {
+     "mode": "hold_last",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1306.0,
+      14.3,
+      1465.5,
+      153.1
+     ],
+     "sourceTMs": [
+      2470.64
+     ],
+     "ageMs": 165.3
+    },
+    {
+     "mode": "interp_anchors",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1141.3,
+      383.8,
+      1265.8,
+      445.5
+     ],
+     "sourceTMs": [
+      2470.64,
+      2637.47
+     ]
+    },
+    {
+     "mode": "wrist_anchored",
+     "kind": "TRACKED_ESTIMATE",
+     "joint": "left_wrist",
+     "sourceTMs": [
+      2470.64,
+      2637.47
+     ],
+     "box": [
+      1142.3,
+      387.0,
+      1266.9,
+      448.7
+     ]
+    }
+   ],
+   "anchorBefore": {
+    "tMs": 2470.64,
+    "score": 0.4816,
+    "box": [
+     1306.0,
+     14.3,
+     1465.5,
+     153.1
+    ]
+   },
+   "anchorAfter": {
+    "tMs": 2637.47,
+    "score": 0.4412,
+    "box": [
+     1139.8,
+     387.2,
+     1264.0,
+     448.2
+    ]
+   }
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 80,
+   "tMs": 2669.33,
+   "group": "rally2_missA_overhead_blur",
+   "estimates": [
+    {
+     "mode": "hold_last",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1139.8,
+      387.2,
+      1264.0,
+      448.2
+     ],
+     "sourceTMs": [
+      2637.47
+     ],
+     "ageMs": 31.9
+    },
+    {
+     "mode": "interp_anchors",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1168.0,
+      428.5,
+      1289.5,
+      504.3
+     ],
+     "sourceTMs": [
+      2637.47,
+      2670.84
+     ]
+    },
+    {
+     "mode": "wrist_anchored",
+     "kind": "TRACKED_ESTIMATE",
+     "joint": "left_wrist",
+     "sourceTMs": [
+      2637.47,
+      2670.84
+     ],
+     "box": [
+      1160.9,
+      423.5,
+      1282.4,
+      499.3
+     ]
+    }
+   ],
+   "anchorBefore": {
+    "tMs": 2637.47,
+    "score": 0.4412,
+    "box": [
+     1139.8,
+     387.2,
+     1264.0,
+     448.2
+    ]
+   },
+   "anchorAfter": {
+    "tMs": 2670.84,
+    "score": 0.3356,
+    "box": [
+     1169.3,
+     430.5,
+     1290.7,
+     507.0
+    ]
+   }
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 81,
+   "tMs": 2702.7,
+   "group": "rally2_missA_overhead_blur",
+   "estimates": [
+    {
+     "mode": "hold_last",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1169.3,
+      430.5,
+      1290.7,
+      507.0
+     ],
+     "sourceTMs": [
+      2670.84
+     ],
+     "ageMs": 31.9
+    },
+    {
+     "mode": "interp_anchors",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1203.3,
+      475.3,
+      1315.5,
+      558.9
+     ],
+     "sourceTMs": [
+      2670.84,
+      2704.2
+     ]
+    },
+    {
+     "mode": "wrist_anchored",
+     "kind": "TRACKED_ESTIMATE",
+     "joint": "left_wrist",
+     "sourceTMs": [
+      2670.84,
+      2704.2
+     ],
+     "box": [
+      1203.8,
+      477.0,
+      1316.0,
+      560.5
+     ]
+    }
+   ],
+   "anchorBefore": {
+    "tMs": 2670.84,
+    "score": 0.3356,
+    "box": [
+     1169.3,
+     430.5,
+     1290.7,
+     507.0
+    ]
+   },
+   "anchorAfter": {
+    "tMs": 2704.2,
+    "score": 0.4198,
+    "box": [
+     1204.9,
+     477.4,
+     1316.7,
+     561.3
+    ]
+   }
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 87,
+   "tMs": 2902.9,
+   "group": "rally2_missB_edgeon_carry",
+   "estimates": [
+    {
+     "mode": "hold_last",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1248.9,
+      531.5,
+      1348.0,
+      601.6
+     ],
+     "sourceTMs": [
+      2737.57
+     ],
+     "ageMs": 165.3
+    },
+    {
+     "mode": "wrist_anchored",
+     "kind": "TRACKED_ESTIMATE",
+     "joint": "left_wrist",
+     "sourceTMs": [
+      2737.57
+     ],
+     "box": [
+      1354.6,
+      654.1,
+      1453.7,
+      724.2
+     ]
+    }
+   ],
+   "anchorBefore": {
+    "tMs": 2737.57,
+    "score": 0.3191,
+    "box": [
+     1248.9,
+     531.5,
+     1348.0,
+     601.6
+    ]
+   },
+   "anchorAfter": null
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 88,
+   "tMs": 2936.27,
+   "group": "rally2_missB_edgeon_carry",
+   "estimates": [
+    {
+     "mode": "hold_last",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1248.9,
+      531.5,
+      1348.0,
+      601.6
+     ],
+     "sourceTMs": [
+      2737.57
+     ],
+     "ageMs": 198.7
+    },
+    {
+     "mode": "wrist_anchored",
+     "kind": "TRACKED_ESTIMATE",
+     "joint": "left_wrist",
+     "sourceTMs": [
+      2737.57
+     ],
+     "box": [
+      1363.9,
+      664.6,
+      1463.0,
+      734.7
+     ]
+    }
+   ],
+   "anchorBefore": {
+    "tMs": 2737.57,
+    "score": 0.3191,
+    "box": [
+     1248.9,
+     531.5,
+     1348.0,
+     601.6
+    ]
+   },
+   "anchorAfter": null
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 89,
+   "tMs": 2969.63,
+   "group": "rally2_missB_edgeon_carry",
+   "estimates": [
+    {
+     "mode": "hold_last",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1248.9,
+      531.5,
+      1348.0,
+      601.6
+     ],
+     "sourceTMs": [
+      2737.57
+     ],
+     "ageMs": 232.1
+    },
+    {
+     "mode": "wrist_anchored",
+     "kind": "TRACKED_ESTIMATE",
+     "joint": "left_wrist",
+     "sourceTMs": [
+      2737.57
+     ],
+     "box": [
+      1378.7,
+      660.8,
+      1477.8,
+      730.9
+     ]
+    }
+   ],
+   "anchorBefore": {
+    "tMs": 2737.57,
+    "score": 0.3191,
+    "box": [
+     1248.9,
+     531.5,
+     1348.0,
+     601.6
+    ]
+   },
+   "anchorAfter": null
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 90,
+   "tMs": 3003.0,
+   "group": "rally2_missB_edgeon_carry",
+   "estimates": [
+    {
+     "mode": "hold_last",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1248.9,
+      531.5,
+      1348.0,
+      601.6
+     ],
+     "sourceTMs": [
+      2737.57
+     ],
+     "ageMs": 265.4
+    },
+    {
+     "mode": "wrist_anchored",
+     "kind": "TRACKED_ESTIMATE",
+     "joint": "left_wrist",
+     "sourceTMs": [
+      2737.57
+     ],
+     "box": [
+      1381.7,
+      659.3,
+      1480.8,
+      729.4
+     ]
+    }
+   ],
+   "anchorBefore": {
+    "tMs": 2737.57,
+    "score": 0.3191,
+    "box": [
+     1248.9,
+     531.5,
+     1348.0,
+     601.6
+    ]
+   },
+   "anchorAfter": null
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 91,
+   "tMs": 3036.37,
+   "group": "rally2_missB_edgeon_carry",
+   "estimates": [
+    {
+     "mode": "hold_last",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1248.9,
+      531.5,
+      1348.0,
+      601.6
+     ],
+     "sourceTMs": [
+      2737.57
+     ],
+     "ageMs": 298.8
+    },
+    {
+     "mode": "wrist_anchored",
+     "kind": "TRACKED_ESTIMATE",
+     "joint": "left_wrist",
+     "sourceTMs": [
+      2737.57
+     ],
+     "box": [
+      1383.6,
+      662.5,
+      1482.7,
+      732.6
+     ]
+    }
+   ],
+   "anchorBefore": {
+    "tMs": 2737.57,
+    "score": 0.3191,
+    "box": [
+     1248.9,
+     531.5,
+     1348.0,
+     601.6
+    ]
+   },
+   "anchorAfter": null
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 92,
+   "tMs": 3069.73,
+   "group": "rally2_missB_edgeon_carry",
+   "estimates": [
+    {
+     "mode": "hold_last",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1248.9,
+      531.5,
+      1348.0,
+      601.6
+     ],
+     "sourceTMs": [
+      2737.57
+     ],
+     "ageMs": 332.2
+    },
+    {
+     "mode": "wrist_anchored",
+     "kind": "TRACKED_ESTIMATE",
+     "joint": "left_wrist",
+     "sourceTMs": [
+      2737.57
+     ],
+     "box": [
+      1385.0,
+      675.7,
+      1484.1,
+      745.8
+     ]
+    }
+   ],
+   "anchorBefore": {
+    "tMs": 2737.57,
+    "score": 0.3191,
+    "box": [
+     1248.9,
+     531.5,
+     1348.0,
+     601.6
+    ]
+   },
+   "anchorAfter": null
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 93,
+   "tMs": 3103.1,
+   "group": "rally2_missB_edgeon_carry",
+   "estimates": [
+    {
+     "mode": "hold_last",
+     "kind": "TRACKED_ESTIMATE",
+     "box": [
+      1248.9,
+      531.5,
+      1348.0,
+      601.6
+     ],
+     "sourceTMs": [
+      2737.57
+     ],
+     "ageMs": 365.5
+    },
+    {
+     "mode": "wrist_anchored",
+     "kind": "TRACKED_ESTIMATE",
+     "joint": "left_wrist",
+     "sourceTMs": [
+      2737.57
+     ],
+     "box": [
+      1382.7,
+      685.7,
+      1481.8,
+      755.8
+     ]
+    }
+   ],
+   "anchorBefore": {
+    "tMs": 2737.57,
+    "score": 0.3191,
+    "box": [
+     1248.9,
+     531.5,
+     1348.0,
+     601.6
+    ]
+   },
+   "anchorAfter": null
+  }
+ ]
+}

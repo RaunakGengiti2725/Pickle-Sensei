@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 2,
+  "generatedAtIso": "2026-08-29T01:51:06.841Z",
+  "reviewRecord": {
+    "typescriptSource": "packages/swing-lab/src/coachReview.ts (interface CoachReview + validateCoachReview)",
+    "storage": "datasets/coach-review/reviews/<reviewId>.json — append-only; one file per review; never edited in place",
+    "reviewIdRule": "`${queueItemId}.${coachId}`; one review per coach per queue item",
+    "requiredFields": [
+      "schemaVersion",
+      "reviewId",
+      "queueItemId",
+      "coachId",
+      "coachCredentialRef",
+      "eventRef",
+      "strokeTaxonomyVersion",
+      "faultTaxonomyVersion",
+      "drillLibraryVersion",
+      "strokeConfirmation",
+      "overallQuality",
+      "faults",
+      "drillSuggestions",
+      "confidence",
+      "cannotEvaluate",
+      "rationale",
+      "createdAtIso",
+      "submittedAtIso"
+    ]
+  },
+  "strokeTaxonomy": {
+    "version": "pickleball-stroke-taxonomy-v3",
+    "labels": [
+      "FOREHAND_DRIVE",
+      "BACKHAND_DRIVE",
+      "SERVE",
+      "RETURN",
+      "FOREHAND_DINK",
+      "BACKHAND_DINK",
+      "FOREHAND_VOLLEY",
+      "BACKHAND_VOLLEY",
+      "DROP",
+      "RESET",
+      "OVERHEAD",
+      "SPEEDUP",
+      "UNKNOWN"
+    ]
+  },
+  "qualityScale": {
+    "id": "technique-quality-5pt-v1",
+    "status": "engineering draft — pending expert validation, will be revised by coaches",
+    "anchors": {
+      "1": "Fundamental breakdown: multiple severe faults; the stroke does not accomplish its tactical job.",
+      "2": "Major fault(s) materially limit the stroke's outcome or repeatability.",
+      "3": "Functional: identifiable faults, but the stroke accomplishes its job in this context.",
+      "4": "Strong mechanics: minor refinements only; repeatable under this context's pressure.",
+      "5": "Model form for this context: could be used as a teaching example."
+    }
+  },
+  "severityScale": {
+    "1": "minor — visible but unlikely to change the outcome of this ball",
+    "2": "moderate — costs quality/consistency in this context",
+    "3": "major — primary reason this stroke fails or breaks down under pressure"
+  },
+  "confidenceSemantics": "coach's own 0..1 confidence in this review; not a model output",
+  "cannotEvaluateSemantics": "first-class outcome: honest refusal with reason; quality/faults may be empty",
+  "faultTaxonomyVersion": "fault-taxonomy-v0-draft",
+  "drillLibraryVersion": "drill-library-v0"
+}

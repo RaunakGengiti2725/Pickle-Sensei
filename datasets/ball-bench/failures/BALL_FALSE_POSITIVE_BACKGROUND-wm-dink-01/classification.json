@@ -1,0 +1,8 @@
+{
+  "failureClass": "BALL_FALSE_POSITIVE_BACKGROUND",
+  "capturedAtIso": "2026-08-28T09:55:00.000Z",
+  "video": "datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+  "trackerVersion": "ball-diff-candidates-1+ball-track-1 (pre paddle-alignment-gate fix)",
+  "description": "Primary ball selection chose track 286: slow upward drift at (0.85-0.91, 0.34-0.45), 2040-2560ms — background/far-court motion, not the ball. Root cause: minPaddleDistance=null (no time-aligned paddle comparisons) was treated as acceptable even though a paddle track existed. Fix: null proximity is only eligible when NO paddle track exists at all.",
+  "regressionExpectation": "After the fix this clip must yield ball UNTRACKED (or a genuine ball track), never this drift track."
+}

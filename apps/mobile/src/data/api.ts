@@ -10,6 +10,20 @@ export interface ApiConfigState {
   token: string | null;
 }
 
+export type ReleasableAnalysisOutcome =
+  | 'low_confidence'
+  | 'cancelled'
+  | 'failed'
+  | 'unsupported'
+  | 'incorrect_recognition';
+
+export interface ReservedAnalysisPermit {
+  id: string;
+  accessSource: 'free' | 'premium';
+  status: 'reserved';
+  expiresAt: string;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -57,6 +71,50 @@ export function createTransport(config: ApiConfigState): SyncTransport {
     },
     async finalizeSession(id) {
       await request(config, 'POST', `/v1/sessions/${id}/finalize`);
+    },
+  };
+}
+
+/** Reserve before inference. Successful scores are never finalized here: the
+ * shot-sync transaction consumes them. Only abstentions and failures use the
+ * explicit release path, so a client cannot create an unbound rating UUID. */
+export function createAnalysisPermitClient(config: ApiConfigState) {
+  const requireSignedIn = () => {
+    if (!config.token?.trim()) {
+      throw new ApiError(
+        401,
+        'auth.required',
+        'Sign in before reserving an analysis rating.',
+      );
+    }
+  };
+  return {
+    async reserve(idempotencyKey: string): Promise<ReservedAnalysisPermit> {
+      requireSignedIn();
+      const response = await request<{
+        permit: ReservedAnalysisPermit;
+      }>(config, 'POST', '/v1/analysis-permits', { idempotencyKey });
+      if (response.permit.status !== 'reserved') {
+        throw new ApiError(
+          409,
+          'access.permit_not_reserved',
+          'The analysis permit is no longer reserved.',
+        );
+      }
+      return response.permit;
+    },
+
+    async release(
+      permitId: string,
+      outcome: ReleasableAnalysisOutcome,
+    ): Promise<void> {
+      requireSignedIn();
+      await request(
+        config,
+        'POST',
+        `/v1/analysis-permits/${encodeURIComponent(permitId)}/finalize`,
+        { outcome, ratingId: null },
+      );
     },
   };
 }

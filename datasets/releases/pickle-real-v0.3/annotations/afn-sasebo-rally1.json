@@ -1,0 +1,268 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "afn-sasebo-rally1",
+  "annotatorId": "devin-visual-v1",
+  "createdAtIso": "2026-08-28T10:55:00.000Z",
+  "revision": 3,
+  "stroke": "volley",
+  "annotatedStrokeV3": "BACKHAND_VOLLEY",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 2600,
+    "accelerationStartMs": 2830,
+    "contactMs": 2900,
+    "followThroughEndMs": 3200,
+    "recoveryEndMs": 3600
+  },
+  "contactUncertainty": "plus_minus_1",
+  "faults": [],
+  "checkpointScores": {},
+  "paddleFrames": [
+    {
+      "tMs": 0,
+      "point": {
+        "x": 0.442,
+        "y": 0.3326
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 800.8,
+      "point": {
+        "x": 0.4677,
+        "y": 0.5256
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1201.2,
+      "point": {
+        "x": 0.4758,
+        "y": 0.6455
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1601.6,
+      "point": {
+        "x": 0.4873,
+        "y": 0.4878
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2002,
+      "point": {
+        "x": 0.5265,
+        "y": 0.5354
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2435.77,
+      "point": {
+        "x": 0.4655,
+        "y": 0.6434
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2700,
+      "point": {
+        "x": 0.489,
+        "y": 0.605
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2830,
+      "point": {
+        "x": 0.495,
+        "y": 0.653
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2836.17,
+      "point": {
+        "x": 0.4604,
+        "y": 0.6137
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2900,
+      "point": {
+        "x": 0.457,
+        "y": 0.495
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2960,
+      "point": {
+        "x": 0.458,
+        "y": 0.495
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 3030,
+      "point": {
+        "x": 0.46,
+        "y": 0.432
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 3300,
+      "point": {
+        "x": 0.512,
+        "y": 0.369
+      },
+      "visibility": "visible"
+    }
+  ],
+  "ballFrames": [
+    {
+      "tMs": 2830,
+      "point": {
+        "x": 0.366,
+        "y": 0.49
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2900,
+      "point": {
+        "x": 0.457,
+        "y": 0.495
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2960,
+      "point": {
+        "x": 0.359,
+        "y": 0.503
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 3030,
+      "point": {
+        "x": 0.272,
+        "y": 0.438
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 3300,
+      "point": null,
+      "visibility": "uncertain"
+    }
+  ],
+  "overallScore": null,
+  "annotatorConfidence": 0.65,
+  "notes": "AFN Sasebo indoor, front-oblique, right-handed woman (white shirt, glasses, yellow wristband) at the kitchen line. Cross-body contact on her LEFT side with follow-through high-right = BACKHAND volley (ball taken out of the air at chest height). Her PARTNER (black shirt, pink paddle) reaches from behind - a wrong-paddle trap. She also holds a SPARE BALL in her left hand throughout (ball-color confuser). Labels eyeballed from raw stills (~±0.02). Phases: prep/accel/follow estimated ±2 frames; recoveryEnd uncertain. Rev2: event labels (target volley E + partner swing E), partner pink-paddle labels (visible 2830, occluded 2900/2960).",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-28T10:55:00.000Z"
+    },
+    {
+      "revision": 2,
+      "savedAtIso": "2026-08-28T14:10:00.000Z"
+    },
+    {
+      "revision": 3,
+      "savedAtIso": "2026-08-28T23:41:27.191Z"
+    }
+  ],
+  "eventLabels": [
+    {
+      "eventStartMs": 2600,
+      "contactMs": 2900,
+      "eventEndMs": 3600,
+      "owner": "target",
+      "note": "white-shirt woman backhand volley (labels ±2 frames)"
+    },
+    {
+      "eventStartMs": 3500,
+      "contactMs": 3870,
+      "eventEndMs": 4300,
+      "owner": "other",
+      "note": "partner (black shirt) swing behind target; contact from ball turn, ±2 frames"
+    }
+  ],
+  "otherPaddleFrames": [
+    {
+      "tMs": 400.4,
+      "point": {
+        "x": 0.4621,
+        "y": 0.5146
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 800.8,
+      "point": {
+        "x": 0.483,
+        "y": 0.4234
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1201.2,
+      "point": {
+        "x": 0.5165,
+        "y": 0.4926
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2002,
+      "point": {
+        "x": 0.3854,
+        "y": 0.5755
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2830,
+      "point": {
+        "x": 0.4605,
+        "y": 0.5
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2836.17,
+      "point": {
+        "x": 0.455,
+        "y": 0.4794
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2836.17,
+      "point": {
+        "x": 0.8916,
+        "y": 0.3123
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2900,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 2960,
+      "point": null,
+      "visibility": "occluded"
+    }
+  ]
+}

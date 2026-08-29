@@ -1,0 +1,59 @@
+{
+  "workstream": "J — Coach review UI + fault taxonomy + drills schema",
+  "status": "GREEN — working local flow on the real queue with 0 reviews; recruitment remains BLOCKED_EXTERNAL",
+  "baseline": "coachReview.ts v1: flat 15-term fault list, minimal CoachReview interface, CLI emitting queue.json only; no UI (admin-web = token-gated API panels only); no drill schema; no coach registry; no agreement computation; 0 coach reviews",
+  "candidate": "schema v2 end-to-end: coachReview.ts emits queue.json v2 (+bundle metadata, queueItemIds, review-dir scan) + schema.json (anchored 1-5 quality scale, severity semantics, storage contract) + fault-taxonomy.v0-draft.json (46 faults, 9 stroke families, observable-evidence hints, explicitly 'engineering draft — pending expert validation') + drill-library.v0.json (2 well-known public drills flagged UNVALIDATED, validatedFaultMappings EMPTY) + coaches.json registry scaffold (human-managed, scaffold-once). admin-web Coach Review Lab (#/coach): queue list w/ bundle metadata, event detail w/ mp4 playback + event-bounds scrubber/loop/frame-step/speed + evidence-timestamp marking, structured v2 review form w/ live validation and submit+export disabled behind 'no coach identity provisioned', inter-coach agreement view (pairwise stroke/rating/primary-fault/severity/Jaccard, cannotEvaluate excluded-not-imputed, adjudication triggers) truthfully 'awaiting reviews', adjudication flow stub, program/taxonomy/drills/COACHING.md browser. Vite dev middleware: read-only /datasets static serving w/ HTTP Range for video, GET/POST /api/coach-reviews gated on registry (403 while empty), SYNTHETIC-id rejection, append-only writes (409 on existing reviewId).",
+  "measured": {
+    "reviewsOnFile": 0,
+    "provisionedCoaches": 0,
+    "queueItems": 5,
+    "faultTaxonomyDraft": { "version": "fault-taxonomy-v0-draft", "families": 9, "faults": 46 },
+    "drillLibrary": { "version": "drill-library-v0", "entries": 2, "validatedFaultMappings": 0 },
+    "typecheck": "pnpm typecheck exit 0 (whole workspace, 0 TS errors at measurement time)",
+    "adminWebTests": "19/19 passed (agreement computation on synthetic fixtures + schema validator) via `cd apps/admin-web && npx vitest run --passWithNoTests`",
+    "swingLabTests": "95/95 passed (`pnpm --filter @pickle/swing-lab test`)",
+    "cliRegen": "`pnpm lab:coach-queue` → 5 gold StrokeEvents, 0 existing reviews, artifacts regenerated; coaches.json scaffolded once and never overwritten",
+    "liveEndpointChecks": {
+      "GET /datasets/coach-review/queue.json": "200, schemaVersion 2, 5 items",
+      "GET /api/coach-reviews": "200 [] (empty reviews dir is the single source of truth)",
+      "POST /api/coach-reviews (unprovisioned coach)": "403 'no coach identity provisioned'",
+      "POST /api/coach-reviews (SYNTHETIC id)": "403",
+      "GET video with Range bytes=0-1023": "206 partial, video/mp4",
+      "GET /datasets/../package.json": "404 (traversal guard)",
+      "GET /docs/COACHING.md": "200"
+    },
+    "uiRunCommand": "pnpm --filter @pickle/admin-web dev → http://localhost:5173/#/coach (renders queue of 5 real gold events, per-item video review page, agreement view showing 'awaiting reviews'; ?synthetic=1 exercises computed/adjudication states behind a red SYNTHETIC banner, client-side only)"
+  },
+  "filesChanged": [
+    "packages/swing-lab/src/coachReview.ts",
+    "apps/admin-web/src/AdminApp.tsx",
+    "apps/admin-web/vite.config.ts",
+    "apps/admin-web/src/coachReview/types.ts",
+    "apps/admin-web/src/coachReview/validate.ts",
+    "apps/admin-web/src/coachReview/agreement.ts",
+    "apps/admin-web/src/coachReview/syntheticFixtures.ts",
+    "apps/admin-web/src/coachReview/data.ts",
+    "apps/admin-web/src/coachReview/CoachReviewLab.tsx",
+    "apps/admin-web/src/coachReview/EventDetail.tsx",
+    "apps/admin-web/src/coachReview/ReviewForm.tsx",
+    "apps/admin-web/src/coachReview/AgreementView.tsx",
+    "apps/admin-web/src/coachReview/ProgramView.tsx",
+    "apps/admin-web/src/coachReview/__tests__/agreement.test.ts",
+    "apps/admin-web/src/coachReview/__tests__/validate.test.ts",
+    "docs/COACHING.md",
+    "datasets/coach-review/queue.json (regenerated v2)",
+    "datasets/coach-review/schema.json (new, derived)",
+    "datasets/coach-review/taxonomy/fault-taxonomy.v0-draft.json (new, derived)",
+    "datasets/coach-review/drills/drill-library.v0.json (new, derived)",
+    "datasets/coach-review/coaches.json (new scaffold, empty registry, human-managed)",
+    "datasets/experiments/wave-a/J-summary.json"
+  ],
+  "recommendation": "Onboard the first real coach per docs/COACHING.md §2 (off-repo credential record → one reviewed-commit registry entry); the console, validator, persistence gate, agreement math and adjudication stub are ready the same day. First cohort should also red-line the v0-draft fault taxonomy and quality-scale anchors so v1 is coach-authored. Keep TECHNIQUE SCORING BLOCKED_ON_VALIDATION until the §7 gate chain (labels → agreement → coach taxonomy v1 → recalibration → release gates) completes.",
+  "risks": [
+    "Fault taxonomy v0-draft and 1-5 anchors are engineering guesses; if coaches anchor to them instead of correcting them, bias calcifies — mitigated by mandatory prose rationale, other_see_rationale, and the explicit draft labeling in UI/schema, but facilitation discipline is still required",
+    "Persistence endpoint exists only in the vite DEV server (lab console, not a deployed service); the file-drop path in COACHING.md §4 is the fallback and both funnel through the same validator, but a deployed multi-coach setup will need a real service later",
+    "Agreement metrics are simple pairwise rates on n=2 reviewers; they are honest but low-powered — thresholds must be set with coaches, not tuned by engineering",
+    "queue windowMs timestamps reference the bench case videos; if a future regen re-cuts those clips (as happened twice on 2026-08-28 per D-030), `pnpm lab:coach-queue` must be re-run before any coach session or evidence timestamps will drift",
+    "Concurrent wave-A workstreams were editing swing-lab files during this run; workspace typecheck was 0-error at final measurement but the shared-tree state can shift — re-verify at integration"
+  ]
+}

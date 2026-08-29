@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "note": "Frozen ball-perception baselines. Future systems must benchmark against these exact records.",
+  "baselines": [
+    {
+      "id": "ball.motion-diff-tracker.v1",
+      "task": "ball_detection_tracking",
+      "frozenAtIso": "2026-08-28T10:05:00.000Z",
+      "candidateGenerator": "ball-diff-candidates-1 (3-frame differencing + connected components; numpy/scipy BSD; deterministic, no ML weights)",
+      "tracker": "ball-track-1 (global lowest-cost association, physics + chronic-motion + play-band + body-dwell + paddle-alignment gates)",
+      "confidence": "heuristic-v1-ball (uncalibrated)",
+      "benchmark": {
+        "provenance": "REAL (licensed, CC BY 3.0)",
+        "videos": 2,
+        "ballAnnotatedFrames": 10,
+        "annotators": 1,
+        "perCase": {
+          "wm-volley-02": {
+            "precision": 1.0,
+            "recall": 0.67,
+            "medianCenterErrorNorm": 0.011,
+            "medianCenterErrorPx": 11
+          },
+          "wm-dink-01": {
+            "note": "ball honestly UNTRACKED after paddle-alignment gate; no ball labels yet"
+          }
+        },
+        "contactTiming": {
+          "cases": 2,
+          "withinOneFrame": "1/2 (volley: 40ms err, ball+paddle confirmed)",
+          "other": "dink: 131ms err, paddle-only, label uncertainty unspecified"
+        },
+        "hitRadiusNorm": 0.05,
+        "matchToleranceMs": 40,
+        "resultsFile": "results/ball-bench-1787937540918.json"
+      },
+      "knownFailures": [
+        "failures/BALL_FALSE_POSITIVE_BACKGROUND-wm-dink-01 (fixed by paddle-alignment gate; kept as regression exhibit)",
+        "failures/PLAYER_ASSOCIATION_FAILURE-wm-far-03",
+        "outgoing ball after contact often unchained (<5 obs before leaving frame) \u2014 recall ceiling on short flights"
+      ]
+    },
+    {
+      "id": "contact.multimodal.v3",
+      "task": "contact_estimation",
+      "frozenAtIso": "2026-08-28T10:30:00.000Z",
+      "estimator": "contact-evidence-3 (paddle_speed_peak + wrist_speed_peak + ball_direction_change + ball_paddle_proximity; per-modality confirmation requires presence within \u00b1100ms of the fused moment)",
+      "benchmark": {
+        "provenance": "REAL (licensed, CC BY 3.0)",
+        "contactLabels": 2,
+        "results": {
+          "wm-volley-02": {
+            "labelMs": 6680,
+            "labelUncertainty": "exact",
+            "estimateMs": 6640,
+            "absErrorMs": 40,
+            "absErrorFrames": 1.0,
+            "confirmation": "ball+paddle"
+          },
+          "wm-dink-01": {
+            "labelMs": 1260,
+            "labelUncertainty": "unspecified",
+            "estimateMs": 1391,
+            "absErrorMs": 131,
+            "absErrorFrames": 3.3,
+            "confirmation": "paddle-only"
+          }
+        },
+        "resultsFile": "results/ball-bench-1787937540918.json"
+      }
+    },
+    {
+      "id": "phase.geometry.v1",
+      "task": "phase_segmentation",
+      "frozenAtIso": "2026-08-28T12:40:00.000Z",
+      "implementation": "GeometricPhaseSegmenter (synthetic-tuned wrist geometry; unchanged in @pickle/vision-geometry)",
+      "benchmark": {
+        "provenance": "REAL (licensed)",
+        "labeledBoundaries": 12,
+        "result": "median boundary errors 870-1280ms on real labels \u2014 FAILED real-video transfer; kept for regression comparison"
+      }
+    },
+    {
+      "id": "phase.paddle-temporal.v1",
+      "task": "phase_segmentation",
+      "frozenAtIso": "2026-08-28T12:40:00.000Z",
+      "implementation": "segmentPhasesTemporal (paddle-speed thresholds around a contact anchor; wrist fallback at reduced confidence; abstains without kinematic coverage)",
+      "benchmark": {
+        "provenance": "REAL (licensed)",
+        "labeledBoundaries": 15,
+        "perCase": {
+          "wm-volley-02 (contact-anchored)": "accel 180ms \u00b7 contact 40ms \u00b7 followEnd 310ms \u00b7 prep 660ms",
+          "wm-dink-01 (speed-peak anchor, wide window)": "anchored on wrong swing \u2014 errors >2s",
+          "afn-sasebo-rally1 (wrist fallback)": "anchored on spurious early spike \u2014 errors >2s"
+        },
+        "conclusion": "Temporal segmentation transfers ONLY when anchored on the multimodal contact estimate; without an anchor it inherits window errors. Next: tighten windows + require contact anchor or abstain."
+      }
+    },
+    {
+      "id": "stroke-event-1 + phase.paddle-temporal.v2",
+      "task": "event_isolation + phase_segmentation",
+      "frozenAtIso": "2026-08-28T15:20:00.000Z",
+      "implementation": "proposeStrokeEvents/selectTargetEvent (kinematic peaks, valley merging, MULTI_STROKE_AMBIGUOUS) + per-event contact scan (confirmed contact selects the event) + segmentPhasesTemporalV2 (event-local, anchor-or-abstain)",
+      "benchmark": {
+        "provenance": "REAL (licensed, 2 sources)",
+        "eventLabels": 5,
+        "eventRecall": "target 2/3 (volley miss is a 30%-overlap boundary marginal), other-swing detected 1/2",
+        "eventBoundaryError": "start median 150ms, end median 210ms (n=3 matched)",
+        "falseProposals": "4/7 (real arm motions not labeled as strokes)",
+        "contact": "n=3, 0 abstained, median 73ms, all ball-confirmed (2 also paddle-confirmed)",
+        "phases4way": {
+          "A_geometry_v1": "880-2366ms",
+          "B_paddle_speed": "765-1065ms",
+          "C_temporal_v1_with_event_contact": "accel 160 / contact 73 / follow 197ms",
+          "D_temporal_v2_event_local": "accel 160 / contact 73 / follow 130 / recovery 400ms \u2014 best; abstains without anchor"
+        },
+        "keyFinding": "Phase segmentation was an event-anchoring problem: per-event contact scanning resolved MULTI_STROKE_AMBIGUOUS on rally1 (E3 selected via ball+paddle-confirmed contact 2973ms vs label 2900\u00b11) and un-abstained held-out dink contact (1407ms vs label 1260\u00b12) WITHOUT touching detector or phase thresholds."
+      }
+    }
+  ]
+}

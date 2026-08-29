@@ -1,0 +1,59 @@
+{
+  "workstream": "W2 — kill the detector decode residual + per-invocation fixed overhead (tools/paddle-lab)",
+  "status": "complete — decode-path waste characterized and fixed (bit-equal, now default), warm serve mode shipped and measured; TS/mobile integration intentionally left to a later workstream",
+  "baseline": {
+    "case": "afn-sasebo-rally2 event-gated window 1386-3853ms (74 frames, stride 1, MPS), wm-volley-02 window 4250-8210ms (93 frames)",
+    "legacyDetectorOneshotSec": { "rally2": [30.436, 26.797], "rally2_stride3": 14.028, "volley": 26.135, "pFullyColdReference_rally2": 43.675 },
+    "endToEndColdSec_p": 55.066,
+    "wasteTruth": "P's '~17.1s ffmpeg decode residual (detect_paddle.py:59-80)' was MISATTRIBUTED. Measured phase profile (74 frames): ffmpeg window decode + pipe wait 0.30s (input -ss/-to already decodes exactly the requested 74 frames — 460,339,200 bytes = 74x1920x1080x3, 0.74s standalone), PIL 0.10s, processor 0.43s, model forward 5.42s, post-process 0.25s, and 12.6s (170.7ms/frame) in the per-detection drain: box.tolist()/score.item()/label.item() on MPS result tensors = ~61 kept dets/frame x 3 synced GPU->CPU transfers each. Remaining per-invocation fixed overhead: python+torch+transformers import 5-7s, HF hub HEAD checks ~1s-4s, model load 1.5-1.8s."
+  },
+  "candidate": {
+    "defaultPath_bitEqual_nowDefault": [
+      "drain fix: batch result tensors to CPU once per frame, iterate in numpy (170.7 -> ~0.3 ms/frame)",
+      "local-HF-cache-first model load (network fallback on cache miss): modelLoadSec 1.5-1.8 -> 0.74s, no hub round-trips",
+      "stride>1 decodes-only-what's-needed via ffmpeg select + -fps_mode vfr (skipped frames never rgb24-converted/piped); stride-1 ffmpeg command byte-identical to legacy"
+    ],
+    "flags": [
+      "--legacy-decode: exact pre-W2 frame path + drain, kept for A/B audits",
+      "--decode-size WxH (opt-in): ffmpeg-side downscale, 17.1 -> 9.9s oneshot, but REJECTED as default — NOT detection-equivalent",
+      "--serve [--no-warmup]: persistent warm worker, JSONL over stdio (paddle-serve-v1; protocol in detect_paddle.py docstring + W2-worker-integration.md)"
+    ]
+  },
+  "measured": {
+    "detectorWallClockSec": {
+      "rally2_74f": { "legacy": "26.8-30.4", "fixedOneshot": 17.065, "fixedInPipeline": 11.188, "serveStartupToReady": 5.537, "serveRequest1": 5.95, "serveRequest2_warm": 5.807 },
+      "rally2_stride3_25f": { "legacy": 14.028, "fixedOneshot": 7.619 },
+      "volley_93f": { "legacy": 26.135, "fixedOneshot": 11.876, "serveRequest": 7.384 }
+    },
+    "equivalence": {
+      "noiseFloor": "legacy-vs-legacy fresh processes bit-equal (MPS deterministic here)",
+      "fixedDefault_vs_legacy": "BIT-EQUAL on rally2 (4519/4519 pairs), rally2 stride-3 (1511/1511), volley (5215/5215), serve outputs, and the pipeline-written dets — IoU 1.0, zero unmatched, count parity, maxScoreDelta 0.0",
+      "decodeSize640_vs_legacy": "FAILS bar: meanIoU 0.9097, minIoU 0.0, 223+80 unmatched, 122 count-mismatched frame-kinds, maxScoreDelta 0.7312 -> stays opt-in, not default"
+    },
+    "endToEnd_rally2_noReuseExtract": {
+      "pCold": 55.066,
+      "w2Measured": 17.248,
+      "timingsMs": { "poseExtract": 4082, "paddleDetect": 11188, "ballCandidates": 1452, "tsStages": 77 },
+      "note": "fixed detector is drop-in (analyzeVideo.ts:841-849 passes only --video/--out/--start-ms/--end-ms); zero TS changes. Warm-cache session vs P's fully-cold run — like-for-like detector baseline same-session is 26.8-30.4s.",
+      "ladderProjection": "with serve worker wired into runPaddleStage (later workstream): ~11.9s (= 17.25 - 11.19 + 5.81 measured request). P's '~4-6s if decode fixed' cell needs the OTHER levers too (stride3/ROI -65% inference, pose reuse -4-6s, ball∥paddle): warm request is now inference-dominated (5.36s model @ 72.5ms/f), so with stride3/ROI the request is ~2.2s and E2E lands ~4-5s — consistent with P, not yet measured"
+    },
+    "artifacts": "datasets/experiments/wave-b/W2-runs/W2-measurements.json (full matrix + commands), W2-runs/detector/* (baseline/candidate/serve outputs, diff-*.json, serve-timings.json), W2-runs/afn-sasebo-rally2/ + wm-volley-02/ (sandbox copies; canonical run dirs and held-out cases untouched)"
+  },
+  "filesChanged": [
+    "tools/paddle-lab/detect_paddle.py (decode/drain rework — default bit-equal, CLI backward compatible; --legacy-decode, --decode-size, --serve added)",
+    "tools/paddle-lab/compare_paddle_dets.py (new equivalence differ; exit code gates on IoU floor + count parity)",
+    "datasets/experiments/wave-b/W2-summary.json (new)",
+    "datasets/experiments/wave-b/W2-worker-integration.md (new — serve protocol + analyzeVideo/mobile integration sketch)",
+    "datasets/experiments/wave-b/W2-runs/** (new measurement artifacts + sandbox run copies)"
+  ],
+  "recommendation": "Adopt the fixed default (bit-equal, already drop-in for analyzeVideo). Next workstream: wire --serve into runPaddleStage (spawn worker before extract so its 5.5s startup overlaps pose extraction; fallback to one-shot) for a measured ~11.9s E2E, then stack stride3/ROI + pose reuse + ball∥paddle toward P's 4-6s cell. Give ball_candidates.py the same worker treatment. Do NOT enable --decode-size without a full quality bench.",
+  "risks": [
+    "bit-equality was verified empirically on this machine (torch 2.13.0/MPS deterministic run-to-run); re-run compare_paddle_dets.py after any torch/transformers/ffmpeg upgrade",
+    "-fps_mode vfr (stride>1 path only) requires ffmpeg >= 5.1; stride-1 default emits a byte-identical ffmpeg command to legacy",
+    "serve worker keeps D-FINE resident on MPS; parent owns restart/liveness (ping op provided; worker survives bad requests — verified)",
+    "serve-mode artifacts report timing.modelLoadSec = 0.0 (paid once at startup) — aggregators reading modelLoadSec across artifacts must account for it",
+    "--decode-size is NOT detection-equivalent (meanIoU 0.91) — never promote without paddle/ball/event bench gates",
+    "W2 baselines are warm-cache same-session; fully-cold savings are larger in absolute terms (P: 43.7s detector) but were not re-measured cold",
+    "held-out cases (wm-dink-01, afn-vic-rally1) and SHADOW untouched; wm-volley-02 + rally2 are dev cases — quality conclusions beyond bit-equality still need the bench gates"
+  ]
+}

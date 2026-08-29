@@ -1,0 +1,80 @@
+{
+  "manifest": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/paddle-bench.json",
+  "results": [
+    {
+      "caseId": "wm-dink-01",
+      "labeledFrames": 17,
+      "visibleFrames": 12,
+      "occludedOrAbsentFrames": 5,
+      "hits": 3,
+      "misses": 3,
+      "wrongLocation": 6,
+      "falsePositives": 3,
+      "correctRejections": 2,
+      "precision": 0.25,
+      "recall": 0.25,
+      "meanCenterErrorNorm": 0.024646568018871176,
+      "medianCenterErrorNorm": 0.023487339452510823
+    },
+    {
+      "caseId": "wm-volley-02",
+      "labeledFrames": 14,
+      "visibleFrames": 8,
+      "occludedOrAbsentFrames": 6,
+      "hits": 3,
+      "misses": 4,
+      "wrongLocation": 1,
+      "falsePositives": 4,
+      "correctRejections": 2,
+      "precision": 0.375,
+      "recall": 0.375,
+      "meanCenterErrorNorm": 0.023536328182641637,
+      "medianCenterErrorNorm": 0.01769806211443245
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "labeledFrames": 13,
+      "visibleFrames": 13,
+      "occludedOrAbsentFrames": 0,
+      "hits": 5,
+      "misses": 8,
+      "wrongLocation": 0,
+      "falsePositives": 0,
+      "correctRejections": 0,
+      "precision": 1,
+      "recall": 0.38461538461538464,
+      "meanCenterErrorNorm": 0.017643258881373212,
+      "medianCenterErrorNorm": 0.013341371106912775
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "labeledFrames": 4,
+      "visibleFrames": 2,
+      "occludedOrAbsentFrames": 2,
+      "hits": 0,
+      "misses": 0,
+      "wrongLocation": 2,
+      "falsePositives": 2,
+      "correctRejections": 0,
+      "precision": 0,
+      "recall": 0,
+      "meanCenterErrorNorm": null,
+      "medianCenterErrorNorm": null
+    },
+    {
+      "caseId": "afn-vic-rally1",
+      "labeledFrames": 6,
+      "visibleFrames": 6,
+      "occludedOrAbsentFrames": 0,
+      "hits": 2,
+      "misses": 4,
+      "wrongLocation": 0,
+      "falsePositives": 0,
+      "correctRejections": 0,
+      "precision": 1,
+      "recall": 0.3333333333333333,
+      "meanCenterErrorNorm": 0.000035314548292504987,
+      "medianCenterErrorNorm": 0.000035465048048180296
+    }
+  ]
+}

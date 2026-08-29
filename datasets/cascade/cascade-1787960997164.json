@@ -1,0 +1,205 @@
+{
+  "generatedAtIso": "2026-08-28T23:49:57.162Z",
+  "goldEvents": 5,
+  "caveat": "n=5 gold events — the waterfall SHAPE is the product diagnosis; rates are not stable estimates (learning curves prove instability at this n)",
+  "unconditionalPass": {
+    "TARGET": 5,
+    "EVENT": 4,
+    "PADDLE": 5,
+    "BALL": 4,
+    "CONTACT": 3,
+    "PHASE": 3,
+    "STROKE": 3
+  },
+  "conditionalSurvival": {
+    "TARGET": 5,
+    "EVENT": 4,
+    "PADDLE": 4,
+    "BALL": 3,
+    "CONTACT": 2,
+    "PHASE": 1,
+    "STROKE": 1
+  },
+  "rows": [
+    {
+      "caseId": "wm-dink-01",
+      "split": "held_out",
+      "stroke": "BACKHAND_DINK",
+      "stages": {
+        "TARGET": {
+          "pass": true,
+          "detail": "policy user_tapped_person · coverage 1.00 · conf 0.83"
+        },
+        "EVENT": {
+          "pass": true,
+          "detail": "selected 1200–1440 vs gold 1050–1650 (overlap 40%, contact inside)"
+        },
+        "PADDLE": {
+          "pass": true,
+          "detail": "status tracked · coverage 0.52"
+        },
+        "BALL": {
+          "pass": true,
+          "detail": "status tracked"
+        },
+        "CONTACT": {
+          "pass": false,
+          "detail": "error 147ms (est 1407 vs gold 1260)"
+        },
+        "PHASE": {
+          "pass": true,
+          "detail": "segmented, ordering valid"
+        },
+        "STROKE": {
+          "pass": true,
+          "detail": "predicted BACKHAND vs gold BACKHAND_DINK"
+        }
+      },
+      "conditionalReached": "LOST AT CONTACT"
+    },
+    {
+      "caseId": "wm-volley-02",
+      "split": "development",
+      "stroke": "FOREHAND_VOLLEY",
+      "stages": {
+        "TARGET": {
+          "pass": true,
+          "detail": "policy user_tapped_person · coverage 1.00 · conf 0.84"
+        },
+        "EVENT": {
+          "pass": true,
+          "detail": "selected 6600–6840 vs gold 6300–7100 (overlap 30%, contact inside)"
+        },
+        "PADDLE": {
+          "pass": true,
+          "detail": "status tracked · coverage 0.74"
+        },
+        "BALL": {
+          "pass": true,
+          "detail": "status tracked"
+        },
+        "CONTACT": {
+          "pass": true,
+          "detail": "error 66ms (est 6614 vs gold 6680)"
+        },
+        "PHASE": {
+          "pass": true,
+          "detail": "segmented, ordering valid"
+        },
+        "STROKE": {
+          "pass": true,
+          "detail": "predicted FOREHAND vs gold FOREHAND_VOLLEY"
+        }
+      },
+      "conditionalReached": "COMPLETE"
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "split": "development",
+      "stroke": "BACKHAND_VOLLEY",
+      "stages": {
+        "TARGET": {
+          "pass": true,
+          "detail": "policy user_tapped_person · coverage 0.88 · conf 0.55"
+        },
+        "EVENT": {
+          "pass": false,
+          "detail": "selected 1001–2169 vs gold 2600–3600 (overlap 0%)"
+        },
+        "PADDLE": {
+          "pass": true,
+          "detail": "status tracked · coverage 0.44"
+        },
+        "BALL": {
+          "pass": true,
+          "detail": "status tracked"
+        },
+        "CONTACT": {
+          "pass": false,
+          "detail": "status abstained"
+        },
+        "PHASE": {
+          "pass": false,
+          "detail": "status abstained"
+        },
+        "STROKE": {
+          "pass": false,
+          "detail": "predicted FOREHAND vs gold BACKHAND_VOLLEY"
+        }
+      },
+      "conditionalReached": "LOST AT EVENT"
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "split": "development",
+      "stroke": "OVERHEAD",
+      "stages": {
+        "TARGET": {
+          "pass": true,
+          "detail": "policy user_tapped_person · coverage 0.95 · conf 0.63"
+        },
+        "EVENT": {
+          "pass": true,
+          "detail": "selected 2604–3038 vs gold 2380–3050 (overlap 65%, contact inside)"
+        },
+        "PADDLE": {
+          "pass": true,
+          "detail": "status tracked · coverage 0.99"
+        },
+        "BALL": {
+          "pass": false,
+          "detail": "status untracked"
+        },
+        "CONTACT": {
+          "pass": true,
+          "detail": "error 62ms (est 2682 vs gold 2620)"
+        },
+        "PHASE": {
+          "pass": true,
+          "detail": "segmented, ordering valid"
+        },
+        "STROKE": {
+          "pass": false,
+          "detail": "predicted BACKHAND vs gold OVERHEAD"
+        }
+      },
+      "conditionalReached": "LOST AT BALL"
+    },
+    {
+      "caseId": "afn-vic-rally1",
+      "split": "test_held_out",
+      "stroke": "FOREHAND_DRIVE",
+      "stages": {
+        "TARGET": {
+          "pass": true,
+          "detail": "policy user_tapped_person · coverage 1.00 · conf 0.94"
+        },
+        "EVENT": {
+          "pass": true,
+          "detail": "selected 167–701 vs gold 450–1150 (overlap 36%, contact inside)"
+        },
+        "PADDLE": {
+          "pass": true,
+          "detail": "status tracked · coverage 0.31"
+        },
+        "BALL": {
+          "pass": true,
+          "detail": "status tracked"
+        },
+        "CONTACT": {
+          "pass": true,
+          "detail": "error 34ms (est 714 vs gold 680)"
+        },
+        "PHASE": {
+          "pass": false,
+          "detail": "segmented but followEnd ≤ contact (known v2 defect)"
+        },
+        "STROKE": {
+          "pass": true,
+          "detail": "predicted FOREHAND vs gold FOREHAND_DRIVE"
+        }
+      },
+      "conditionalReached": "LOST AT PHASE"
+    }
+  ]
+}

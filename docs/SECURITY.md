@@ -5,7 +5,7 @@ Spec pp. 41–42 controls and their current state.
 ## Identity & access
 
 - OIDC/OAuth only; API stores stable `auth_subject`, never passwords. Access tokens verified against provider JWKS (`OidcTokenVerifier`).
-- Dev HS256 issuer exists strictly for development/test: constructor throws elsewhere; staging/production refuse to boot without real OIDC config (`buildVerifier` guard). Same guard philosophy as the fixture provider.
+- Dev HS256 issuer exists strictly for development/test: constructor throws elsewhere; staging/production refuse to boot without real OIDC config (`buildVerifier` guard). Production camera inference has no deterministic/demo provider.
 - Admin: separate `pickle_role=admin` claim; all admin reads/writes audited (`audit_log`); MFA enforcement belongs to the IdP configuration.
 - Ownership checks on every private resource (`WHERE user_id = $me`); UUID possession grants nothing — integration-tested.
 - No AWS credentials in mobile binaries; media access via short-lived signed URLs (300s downloads, 900s uploads).
@@ -13,7 +13,7 @@ Spec pp. 41–42 controls and their current state.
 ## Application
 
 - Input validation: Zod on every mutating route; unknown scoring-model versions rejected at sync.
-- Idempotency: client-generated UUID PKs + `ON CONFLICT DO NOTHING` upserts; `idempotency_record` table for header-keyed replays (wire-up per route as mutations grow).
+- Idempotency: client-generated UUID PKs + transactional `ON CONFLICT DO NOTHING` writes. Accepted shot payloads are SHA-256-bound, so only the exact schema-normalized payload can replay; a changed score under the same UUID is rejected. `idempotency_record` remains available for header-keyed replays as other mutations grow.
 - Rate limiting: Redis infrastructure provisioned; limiter middleware pending (tracked NOT_STARTED — not silently assumed).
 - Typed error envelopes everywhere; unhandled errors log server-side, return opaque 500.
 - No secrets/tokens/signed URLs in logs (worker/api log lines carry ids only).
@@ -26,6 +26,7 @@ Spec pp. 41–42 controls and their current state.
 
 - RDS in private subnets, storage encrypted (KMS), 14-day backups + PITR, deletion protection (terraform). Separate app/migration roles: staging bootstrap task.
 - Checksum-locked migrations — applied history cannot be silently edited.
+- Local pose-evidence summaries are owner-scoped motion-derived personal data. They share the private clip's export/deletion lifecycle; legacy or malformed payloads are never reconstructed, and guest evidence is never claimed by a later signed-in account.
 
 ## Model security
 

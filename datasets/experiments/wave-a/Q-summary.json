@@ -1,0 +1,74 @@
+{
+  "workstream": "Q — event-bounds gold growth 9 → 20+ (D-029 adaptive-completion gate data)",
+  "status": "DONE — gate label-count met: 34 gold events total (21 target / 13 other), all new labels visually verified frame-by-frame on DEV material only",
+  "annotator": "devin-visual-v2-wave-a",
+  "baseline": {
+    "goldEvents": { "total": 9, "target": 5, "other": 4 },
+    "completionBench": {
+      "n": 5,
+      "FIXED": { "medianAbsEndErrorMs": 1080, "medianAbsRecoveryErrorMs": 1051 },
+      "ADAPTIVE": { "medianAbsEndErrorMs": 510, "medianAbsRecoveryErrorMs": 251, "earlyStops": 0, "contactLost": 0 }
+    },
+    "strokeBenchEvents": { "labeledEvents": 9, "targetRecall": "5/5", "otherDetected": "4/4", "falseProposals": "3/9" }
+  },
+  "candidate": {
+    "newLabels": "16 target + 9 other = 25 new StrokeEvent gold labels: (a) appended to 3 existing DEV bundles (afn-sasebo-rally1 +4T+1O, afn-sasebo-rally2 +1T, wm-volley-02 +1O) without touching any existing label; (b) 8 new wave-a bundles over windowed DEV corpus runDirs (event-bounds-wave-a.json manifest, runs-wave-a/ windowed people.json views)",
+    "instrumentChange": "eventCompletionBench v2: replays ALL labeled target events per case (was: first only), merges event-bounds-wave-a.json cases, attaches recovery/follow-through truth only to the event containing the bundle's phases.contactMs, and discloses rows whose post-trigger wrist data is truncated by the window end"
+  },
+  "measured": {
+    "goldEvents": { "total": 34, "target": 21, "other": 13, "gate": "D-029 requires >=20 gold events: MET (21 target-owner alone; 34 total)" },
+    "completionBench": {
+      "report": "datasets/completion-bench/completion-1787970684355.json",
+      "labeledTargetRows": 21,
+      "usableN": 20,
+      "unusable": 1,
+      "unusableReason": "wavea-faead-rally#2: auto-target pose has zero wrist samples inside the visually-verified event (machine gap, recorded not skipped)",
+      "ALL_USABLE_n20": {
+        "FIXED": { "medianAbsEndErrorMs": 1371, "medianAbsRecoveryErrorMs": 1200, "meanTrailingExcessMs": 1233, "meanPostTriggerMs": 1500, "earlyStops": 0, "contactLost": 0 },
+        "ADAPTIVE": { "medianAbsEndErrorMs": 668, "medianAbsRecoveryErrorMs": 620, "meanTrailingExcessMs": 967, "meanPostTriggerMs": 1232, "earlyStops": 1, "contactLost": 0, "followThroughLost": 0, "recoveryLost": 1 }
+      },
+      "CLEAN_UNTRUNCATED_n14": {
+        "note": "6 rows' adaptive outcome is truncated by window end (post-trigger wrist data < trigger+2500, disclosed per-row); clean subset excludes them",
+        "FIXED": { "medianAbsEndErrorMs": 1385, "medianAbsRecoveryErrorMs": 1166 },
+        "ADAPTIVE": { "medianAbsEndErrorMs": 510, "medianAbsRecoveryErrorMs": 196, "earlyStops": 1 }
+      },
+      "adaptiveEarlyStopDetail": "wavea-wgm-wheelchair: adaptive ends 34ms BEFORE labeled eventEnd (valley fired on post-stroke wheel-push) — contact and follow-through retained; the single 'loss' costs the last 34ms of arm-settle on a wheelchair athlete",
+      "valleyConditionWins": "rally1#4 +218, sasebo#2 +20, marne-serve +119, rally2#1 +120, 944403-smash +196, wgm -34 — the D-029 settle-or-valley semantics hold on fast rallies and wheelchair locomotion",
+      "splits": { "development": 18, "held_out": 1, "test_held_out": 1, "note": "held-out rows (wm-dink-01, afn-vic-rally1) unchanged from baseline: ADAPTIVE 510/160 and 251/251" }
+    },
+    "strokeBenchEvents": {
+      "labeledEvents": 16,
+      "target": 10,
+      "other": 6,
+      "targetRecall": "10/10",
+      "otherDetected": "4/6",
+      "falseProposals": "0/9 (was 3/9 — the 3 'false' stroke-event-2 proposals were REAL strokes that lacked labels; wave-a labels confirm the proposer was right)",
+      "boundaryError": "start median 350ms (14) · end median 310ms (14) · contact-inside-matched 11/13",
+      "note": "new corpus cases have no report.json and are correctly ignored by strokeBench; its growth comes from the dev-bundle label additions"
+    },
+    "honestRejections": "recorded in event-bounds-wave-a.json rejectedCandidates: dvids-943757 (all candidates non-pickleball: rifle/track/sitting-volleyball/wheelchair-bball), dvids-1007845 (flag football/title cards), afn-infocus interview paddle-gestures (3.2n/s flourish, no ball), warriorgames idle fidget + end-of-game paddle-tap ritual, faead ball-retrieval jog, sasebo post-rally milling, wm-volley-02 unresolved end-of-clip reach, wm 42200 inside HELD-OUT wm-dink-01 source window"
+  },
+  "filesChanged": [
+    "datasets/paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v1.json (rev 6: +5 eventLabels appended, notes+history; existing labels byte-identical)",
+    "datasets/paddle-bench/bundles/afn-sasebo-rally2/annotation/devin-visual-v1.json (rev 6: +1 eventLabel appended)",
+    "datasets/paddle-bench/bundles/wm-volley-02/annotation/devin-visual-v1.json (rev 9: +1 eventLabel appended)",
+    "datasets/paddle-bench/bundles/wavea-{marne-serve,marne-dig,faead-feed,faead-rally,944403-dink,944403-smash,wgm-wheelchair,sasebo-volleys}/annotation/devin-visual-v2-wave-a.json (8 new bundles)",
+    "datasets/paddle-bench/event-bounds-wave-a.json (new aux manifest incl. rejected-candidate ledger)",
+    "datasets/paddle-bench/runs-wave-a/* (8 windowed people.json views + window-meta.json, derived from DEV corpus runs; no pose values altered)",
+    "packages/swing-lab/src/eventCompletionBench.ts (v2: all target events per case + aux manifest + phase-attribution guard + end-of-data disclosure)",
+    "packages/swing-lab/src/eventBoundsScout.ts (new read-only labeling aid)",
+    "packages/swing-lab/src/eventWindowSlice.ts (new windowed-view emitter)",
+    "packages/swing-lab/src/waveaValidate.ts (schema validation runner; all 10 touched annotation files pass validateAnnotation)",
+    "datasets/experiments/wave-a/{tools,frames,slices}/* (render tooling + the full frame-sheet evidence trail of every visual determination)"
+  ],
+  "recommendation": "The D-029 label gate (>=20 gold events) is MET with 21 verified target events; on the clean untruncated subset (n=14) ADAPTIVE still beats FIXED 510 vs 1385 ms median end error (recovery 196 vs 1166) with zero contact losses and one marginal -34ms early stop — same story as n=5 but at 2.8x the evidence. Remaining gate condition is the LIVE trigger instrumentation (workstream G): keep FIXED shipped until that lands, then re-run this bench with live triggers. Recommend also: (1) treat the 3 formerly-'false' proposals now confirmed as real strokes as validation of stroke-event-2's proposer precision, (2) consider extending strokeBench to read event-bounds-wave-a cases once corpus runDirs get report.json artifacts.",
+  "risks": [
+    "6/20 usable completion rows have window-truncated adaptive outcomes (disclosed per-row; excluded from the clean-subset numbers) — window sizes for wave-a cases were cut to keep the bench's auto-target identity correct, trading replay runway for identity honesty",
+    "1 target event (wavea-faead-rally#2 high volley) is machine-unusable: pose wrists absent during the overhead despite full track coverage — a real pose-visibility gap worth a failure-mine entry",
+    "wave-a corpus 'target' semantics = the windowed auto-target (coverage x torsoSpan winner inside the case window), verified visually per case; a future whole-recording replay would need target re-resolution",
+    "contact for 2 target events rests on ball-transit reversal rather than a visible touch frame (faead-rally#1 occluded-by-torso -> contact null; marne-dig edge-cropped -> plus_minus_2) — both disclosed in label notes",
+    "annotator overlap: all wave-a labels are single-annotator (devin-visual-v2-wave-a); the SECOND-ANNOTATOR credibility gap from HANDOFF applies to these too",
+    "pre-existing/concurrent typecheck error in packages/swing-lab/src/analyzeVideo.ts:748 (peakMs exactOptionalPropertyTypes) — NOT from this workstream's files; left untouched to avoid cross-workstream interference",
+    "concurrent workstreams bumped bundle revisions during this session; appends were done via read-modify-write at execution time and re-validated after"
+  ]
+}

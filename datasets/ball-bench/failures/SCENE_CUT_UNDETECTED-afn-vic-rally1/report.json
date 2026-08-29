@@ -1,0 +1,238 @@
+{
+  "video": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+  "outDir": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/runs/afn-vic-rally1",
+  "stroke": "volley",
+  "poseSequenceSha256": "c9f0e5eaee59e2c22b94bc8bea1ef2dd116a9a720c0f332e9a751bd1952d3c23",
+  "quality": {
+    "analyzable": false,
+    "reasons": [
+      "body_not_fully_visible"
+    ],
+    "notEvaluated": [
+      "camera_motion",
+      "paddle_visibility",
+      "lighting_failure"
+    ],
+    "stats": {
+      "frameCount": 84,
+      "durationMs": 2769,
+      "effectiveFps": 29.974720115565187,
+      "meanFrameConfidence": 0.38062350653903393,
+      "meanJointsPerFrame": 4.642857142857143,
+      "fullBodyFrameRate": 0,
+      "medianTorsoLengthNorm": 0.45877295836817117,
+      "largestGapMs": 34
+    }
+  },
+  "window": {
+    "startMs": 3237,
+    "endMs": 5071,
+    "peakMotionMs": 4071,
+    "confidence": 0.95
+  },
+  "contact": {
+    "status": "estimated",
+    "estimatedContactMs": 4081,
+    "confidence": 0.6245454545454545,
+    "ballConfirmed": true,
+    "paddleConfirmed": false,
+    "limitingFactors": [
+      "no_paddle_evidence"
+    ],
+    "supportingEvidence": [
+      {
+        "signal": "wrist_speed_peak",
+        "timestampMs": 4071,
+        "weight": 0.4,
+        "detail": "peak 2.43 u/s over 39 samples"
+      },
+      {
+        "signal": "ball_wrist_proximity",
+        "timestampMs": 4106,
+        "weight": 0.15,
+        "detail": "min distance 0.965 image units (wrist fallback; no paddle track)"
+      }
+    ]
+  },
+  "ballDiagnostics": {
+    "trajectoryCount": 1998,
+    "trajectoriesPerSecond": 330.849478390462,
+    "windowCandidates": 0,
+    "chosenId": null,
+    "chosenCoverage": 0,
+    "chosenPoints": 0
+  },
+  "ballModality": "unavailable",
+  "ballStage": {
+    "status": "tracked",
+    "trackId": 316,
+    "observationCount": 11,
+    "windowOverlapMs": 367.0400000000004,
+    "medianSpeed": 1.6846512565738143,
+    "minPaddleDistance": null,
+    "gatedTracks": 38,
+    "ablation": {
+      "durationSec": 3.83716,
+      "stageA_rawCandidatesPerSec": 1209.227657955363,
+      "stageB_tracks": 314,
+      "stageB_trackedObsPerSec": 997.3522084041323,
+      "stageC_tracks": 38,
+      "stageC_trackedObsPerSec": 101.37706011737848
+    },
+    "confidenceModel": "heuristic-v1-ball (uncalibrated)",
+    "timeline": {
+      "states": [
+        "TRACKED 3805-4172ms",
+        "LOST 4172-4572ms"
+      ],
+      "reacquisition": "FAILED_NO_CANDIDATE: no segment inside the trajectory corridor",
+      "bridgePointCount": 0
+    }
+  },
+  "paddle": {
+    "status": "untracked",
+    "reason": "best_track_low_window_coverage (0%)",
+    "candidateTracks": 8,
+    "detector": "dfine-medium-coco@transformers",
+    "inferenceMsPerFrame": 68.7,
+    "association": {
+      "meanTargetWristDistance": null,
+      "meanOtherWristDistance": 0.049118151370180704,
+      "rejectedOtherPlayerTracks": 0,
+      "selectionMargin": null,
+      "switchEvents": 0,
+      "risks": []
+    }
+  },
+  "strokePrediction": null,
+  "kineticEvents": [
+    {
+      "event": "hip_line_angular_speed_peak",
+      "tMs": 3437,
+      "tRelContactMs": -644,
+      "peakValue": 14.702367907338331
+    },
+    {
+      "event": "shoulder_line_angular_speed_peak",
+      "tMs": 3937,
+      "tRelContactMs": -144,
+      "peakValue": 168.07815904424754
+    },
+    {
+      "event": "wrist_speed_peak",
+      "tMs": 4071,
+      "tRelContactMs": -10,
+      "peakValue": 2.3491566794776375
+    },
+    {
+      "event": "contact",
+      "tMs": 4081,
+      "tRelContactMs": 0,
+      "peakValue": null
+    }
+  ],
+  "timings": {
+    "poseExtractMs": 5242,
+    "playerTrackMs": 5,
+    "paddleDetectMs": 19044,
+    "paddleTrackMs": 5,
+    "ballCandidatesMs": 1318,
+    "ballTrackMs": 40,
+    "eventIsolationMs": 1,
+    "overlayRenderMs": 995
+  },
+  "outcome": {
+    "kind": "not_analyzable",
+    "detail": "capture quality gate failed: body_not_fully_visible — perception artifacts written; no score permitted"
+  },
+  "player": {
+    "targetTrackId": 10,
+    "policy": "auto",
+    "selectionConfidence": 0.3,
+    "targetCoverage": 0.4666666666666667,
+    "lossPeriods": 0,
+    "candidateTracks": [
+      {
+        "trackId": 10,
+        "coverage": 0.47,
+        "meanTorsoSpan": 0.463
+      },
+      {
+        "trackId": 11,
+        "coverage": 0.47,
+        "meanTorsoSpan": 0.337
+      },
+      {
+        "trackId": 12,
+        "coverage": 0.47,
+        "meanTorsoSpan": 0.312
+      },
+      {
+        "trackId": 1,
+        "coverage": 0.53,
+        "meanTorsoSpan": 0.191
+      },
+      {
+        "trackId": 4,
+        "coverage": 0.21,
+        "meanTorsoSpan": 0.062
+      },
+      {
+        "trackId": 3,
+        "coverage": 0.19,
+        "meanTorsoSpan": 0.065
+      },
+      {
+        "trackId": 6,
+        "coverage": 0.13,
+        "meanTorsoSpan": 0.073
+      },
+      {
+        "trackId": 7,
+        "coverage": 0.14,
+        "meanTorsoSpan": 0.061
+      },
+      {
+        "trackId": 2,
+        "coverage": 0.07,
+        "meanTorsoSpan": 0.081
+      }
+    ],
+    "risks": [
+      "TARGET_SELECTION_AMBIGUOUS: runner-up player is nearly as prominent"
+    ]
+  },
+  "events": {
+    "version": "stroke-event-1 (heuristic, uncalibrated)",
+    "source": "none",
+    "proposals": []
+  },
+  "targetEvent": {
+    "status": "none",
+    "reason": "no stroke events proposed"
+  },
+  "temporalPhases": {
+    "status": "segmented",
+    "boundaries": {
+      "version": "phase.paddle-temporal.v1 (heuristic, uncalibrated)",
+      "source": "wrist",
+      "anchor": "contact_estimate",
+      "confidence": 0.4,
+      "preparationStartMs": 3871,
+      "accelerationStartMs": 4037,
+      "contactMs": 4081,
+      "followThroughEndMs": 4204,
+      "recoveryEndMs": 4238,
+      "relative": {
+        "preparationStartMs": -210,
+        "accelerationStartMs": -44,
+        "followThroughEndMs": 123,
+        "recoveryEndMs": 157
+      }
+    }
+  },
+  "temporalPhasesV2": {
+    "status": "abstained",
+    "reason": "no stroke event isolated"
+  }
+}

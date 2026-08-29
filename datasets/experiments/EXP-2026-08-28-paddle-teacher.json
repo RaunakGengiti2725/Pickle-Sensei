@@ -1,0 +1,50 @@
+{
+  "experimentId": "EXP-2026-08-28-paddle-teacher-vs-baseline",
+  "task": "paddle_detection",
+  "datasetVersion": "pickle-real-v0.1 (+2 cases: rally2 dev, afn-vic held-out)",
+  "evaluationFrames": 40,
+  "visibleFrames": 27,
+  "sources": 3,
+  "annotators": 1,
+  "protocol": "DETECTOR-ONLY on identical labeled frames; hit radius 0.08 normalized; \u00b140ms match tolerance; a 'claim' is any racket-class detection in the matched frame. No tracker, no ownership gating.",
+  "hardware": "Apple M-series (MPS/CPU), local",
+  "candidates": [
+    {
+      "model": "dfine-medium-coco (FROZEN BASELINE)",
+      "license": "Apache-2.0 code + weights",
+      "precision": 0.68,
+      "recall": 1.0,
+      "hits": "27/27",
+      "medianCenterErrorNorm": 0.014,
+      "msPerFrame": 72,
+      "perCase": {
+        "wm-dink-01": "P .69 R 1.00",
+        "wm-volley-02": "P .50 R 1.00",
+        "afn-sasebo-rally1": "P 1.00 R 1.00",
+        "afn-sasebo-rally2 (blurred overhead)": "P .50 R 1.00",
+        "afn-vic-rally1 (HELD-OUT, bright paddle)": "P 1.00 R 1.00"
+      }
+    },
+    {
+      "model": "rfdetr-large-coco",
+      "license": "Apache-2.0 code + Apache-2.0 weights (N/L family; XL/2XL are PML \u2014 excluded)",
+      "precision": 0.64,
+      "recall": 0.93,
+      "hits": "25/27",
+      "medianCenterErrorNorm": 0.013,
+      "msPerFrame": 95,
+      "loadSec": 2.8,
+      "verdict": "NOT PROMOTED \u2014 no recall gain, 32% slower, adds a dependency"
+    }
+  ],
+  "headlineFinding": "THE PADDLE DETECTOR IS NOT THE BOTTLENECK. The frozen COCO-proxy detector finds the paddle in 27/27 visible labeled frames (including the bright paddle and the motion-blurred overhead previously reported as 'detector failures'). End-to-end paddle P/R is 0.37 \u2014 meaning ~63% of available detection quality is destroyed downstream by OUR tracking, ownership gating, window/span selection and confidence gates, not by the model.",
+  "correctionOfPriorClaims": [
+    "Earlier sessions attributed bright-paddle and blurred-overhead misses to the COCO proxy; measurement shows the detector saw them. The misses are tracker/association failures.",
+    "Earlier in THIS session an intermediate RF-DETR run reported P/R 0.00 due to a class-id mapping bug (COCO_CLASS_NAMES list index vs COCO_CLASSES dict id). Fixed before scoring; the 0.00 numbers were never valid."
+  ],
+  "nextExperiments": [
+    "1. Tracker/association ablation: measure P/R after each stage (raw dets \u2192 tracks \u2192 ownership gate \u2192 window gate) to localize the 63% loss exactly. Highest expected return of any model work.",
+    "2. Only after that: consider a pickleball-specific detector fine-tune.",
+    "3. Precision (0.68) is limited by other players' paddles \u2014 an OWNERSHIP problem, already the top labeled-data gap."
+  ]
+}

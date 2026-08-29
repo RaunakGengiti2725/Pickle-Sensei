@@ -178,7 +178,8 @@ export function registerSessionRoutes(app: FastifyInstance, context: AppContext)
         context.pool!,
         `WITH scored AS (
          SELECT id, overall_score, captured_at FROM shot
-         WHERE session_id = $1 AND user_id = $2 AND result_kind = 'scored'
+         WHERE session_id = $1 AND user_id = $2
+           AND source = 'real' AND result_kind = 'scored'
        )
        SELECT count(*)::text AS valid_count,
               avg(overall_score)::text AS avg_score,
@@ -199,7 +200,7 @@ export function registerSessionRoutes(app: FastifyInstance, context: AppContext)
                   ntile(2) OVER (ORDER BY s.captured_at) AS half
            FROM shot_checkpoint_score scs
            JOIN shot s ON s.id = scs.shot_id
-           WHERE s.session_id = $1 AND s.user_id = $2
+           WHERE s.session_id = $1 AND s.user_id = $2 AND s.source = 'real'
              AND scs.checkpoint_definition_id = $3 AND scs.score_0_100 IS NOT NULL
          )
          SELECT avg(score_0_100) FILTER (WHERE half = 1)::text AS first_avg,
@@ -263,7 +264,7 @@ export function registerSessionRoutes(app: FastifyInstance, context: AppContext)
     const shots = await many(
       context.pool!,
       `SELECT id, captured_at, overall_score, confidence, result_kind, source FROM shot
-       WHERE session_id = $1 AND user_id = $2 ORDER BY captured_at ASC`,
+       WHERE session_id = $1 AND user_id = $2 AND source = 'real' ORDER BY captured_at ASC`,
       [id, request.user!.id],
     );
     const summary = await one(

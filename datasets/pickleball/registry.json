@@ -1,0 +1,205 @@
+{
+  "schemaVersion": 2,
+  "verifiedAt": "2026-08-27",
+  "reviewScope": {
+    "target": "Publicly available temporal pickleball stroke footage with stroke labels, documented provenance, and rights suitable for commercial model training",
+    "result": "no_qualifying_public_dataset_found",
+    "commercialTrainingReadyTemporalSourceCount": 0,
+    "requirements": [
+      "Downloadable temporal media, not only code, model weights, still images, metadata, or tabular match events",
+      "Pickleball-specific stroke labels with temporal boundaries",
+      "Documented media provenance and participant or rights-holder authority",
+      "License or release that expressly permits the intended commercial model-training use",
+      "Enough athlete, technique, camera, and environment diversity for leakage-safe evaluation"
+    ],
+    "conclusion": "No reviewed source satisfies all requirements. No public media was downloaded. A consent-first first-party collection is required for the stroke recognizer, phase detector, contact detector, and technique scorer."
+  },
+  "sources": [
+    {
+      "id": "roboflow-pickleball-detection-1oqlw-px8fm",
+      "name": "PickleBall Detection",
+      "publisher": "senior lab",
+      "url": "https://universe.roboflow.com/senior-lab-b5ptu/pickleball-detection-1oqlw-px8fm",
+      "task": "object_detection",
+      "modality": "image",
+      "declaredLicense": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "declaredLicenseTermsPermitCommercialUse": true,
+      "itemCount": 338,
+      "countType": "images",
+      "classes": ["ball", "player", "paddle", "PB-Paddle"],
+      "status": "registered_not_downloaded",
+      "trainingEligible": false,
+      "commercialTrainingClearance": "not_cleared",
+      "provenance": {
+        "status": "undocumented",
+        "projectDescriptionPublished": false,
+        "limitation": "The official project page declares CC BY 4.0 but publishes no collection description or underlying image provenance, so uploader authority over every image cannot be verified from the source page."
+      },
+      "limitations": [
+        "Still images only",
+        "No stroke-technique labels",
+        "No temporal phase or contact labels",
+        "No pose or biomechanical ground truth",
+        "Too small to establish athlete, environment, device, and technique coverage"
+      ]
+    },
+    {
+      "id": "roboflow-pickleball-pen-ball-tracking-v3",
+      "name": "Pickleball Pen Ball Tracking",
+      "publisher": "Dustins Workspace",
+      "url": "https://universe.roboflow.com/dustins-workspace-huvdc/pickleball-pen-ball-tracking/dataset/3",
+      "task": "object_detection",
+      "modality": "image",
+      "declaredLicense": "MIT",
+      "licenseUrl": "https://opensource.org/license/mit",
+      "declaredLicenseTermsPermitCommercialUse": true,
+      "sourceImageCount": 10921,
+      "generatedVersionImageCount": 78592,
+      "generatedVersionSplit": {
+        "train": 69816,
+        "validation": 6028,
+        "test": 2748
+      },
+      "classes": ["pickleball"],
+      "status": "registered_not_downloaded",
+      "trainingEligible": false,
+      "commercialTrainingClearance": "not_cleared",
+      "provenance": {
+        "status": "undocumented",
+        "projectDescriptionPublished": false,
+        "limitation": "The official page declares MIT but does not identify the source media or establish the publisher's authority over it."
+      },
+      "limitations": [
+        "Ball-only object detection; no player, paddle, or stroke label",
+        "No temporal stroke, phase, contact, pose, or biomechanics annotation",
+        "The 78,592 version count includes tiled and augmented outputs and is not a count of independent source scenes",
+        "The published split cannot establish athlete-level separation because athlete identities and source groups are undocumented"
+      ]
+    }
+  ],
+  "evaluatedButExcluded": [
+    {
+      "id": "actionatlas-v1-pickleball-subset",
+      "name": "ActionAtlas v1.0 pickleball rows",
+      "officialUrls": [
+        "https://huggingface.co/datasets/mrsalehi/ActionAtlas-v1.0",
+        "https://github.com/mrsalehi/action-atlas",
+        "https://proceedings.neurips.cc/paper_files/paper/2024/hash/f8643596721dbac71d67f89497323efe-Abstract-Datasets_and_Benchmarks_Track.html",
+        "https://datasets-server.huggingface.co/filter?dataset=mrsalehi%2FActionAtlas-v1.0&config=default&split=test&where=%22domain%22%20%3D%20%27Pickleball%27&offset=0&length=100"
+      ],
+      "task": "fine_grained_action_video_qa",
+      "modality": "youtube_segment_metadata",
+      "globalRowCount": 934,
+      "pickleballRowCount": 2,
+      "pickleballActions": ["Punch volley"],
+      "pickleballSegmentDurationsSeconds": [2, 2],
+      "mediaDistribution": "not_distributed_by_dataset",
+      "mediaLicenseForPickleballRows": "not_declared",
+      "declaredMediaLicenseTermsPermitCommercialUse": null,
+      "commercialTrainingClearance": "not_cleared",
+      "exclusionReasons": [
+        "The official repository instructs users to download source videos from YouTube; it distributes metadata, not cleared video media",
+        "Both pickleball rows have null source-license metadata",
+        "Only one pickleball action is represented",
+        "No stroke phase, contact, pose, biomechanics, fault, or coaching-quality annotation"
+      ]
+    },
+    {
+      "id": "university-of-rochester-pickleball-analytics",
+      "name": "University of Rochester Pickleball Analytics senior design dataset",
+      "officialUrls": ["https://www.hajim.rochester.edu/senior-design-day/pickleball-analytics/"],
+      "task": "ball_tracking",
+      "modality": "video_frames_with_ball_coordinates",
+      "trimmedFrameCount": 12810,
+      "ballLabeledFrameCount": 12000,
+      "labelFields": ["Frame", "Visibility", "X", "Y"],
+      "mediaDistribution": "not_published",
+      "declaredDatasetLicense": "none_found",
+      "declaredMediaLicenseTermsPermitCommercialUse": null,
+      "commercialTrainingClearance": "not_cleared",
+      "exclusionReasons": [
+        "The institutional page describes a 54-minute professional match recording but offers no downloadable dataset artifact",
+        "No media license, participant release, or broadcast-rights grant is published",
+        "Labels cover ball location only, not stroke identity or form"
+      ]
+    },
+    {
+      "id": "ball-tracking-pickleball-github",
+      "name": "TrackNet-Pickleball repository",
+      "officialUrls": ["https://github.com/shivam-d11/Ball-Tracking-PickleBall"],
+      "task": "ball_tracking_code_and_weights",
+      "modality": "code_and_model_weights",
+      "repositoryLicense": "Apache-2.0",
+      "repositoryLicenseTermsPermitCommercialUse": true,
+      "releasedDatasetItemCount": 0,
+      "commercialTrainingClearance": "not_applicable_no_dataset",
+      "exclusionReasons": [
+        "The repository explicitly excludes video files, label CSVs, and training arrays",
+        "The code license does not establish rights to the unspecified pickleball footage used for fine-tuning",
+        "Ball tracking is not stroke recognition or form scoring"
+      ]
+    },
+    {
+      "id": "pklmart-competitive-pickleball-extracts",
+      "name": "pklmart's Competitive Pickleball Extracts",
+      "officialUrls": [
+        "https://www.kaggle.com/datasets/cakesofspan/pklmarts-competitive-pickleball-extracts"
+      ],
+      "task": "match_event_analysis",
+      "modality": "tabular",
+      "reportedRowCount": "over_300000_shot_and_rally_outcomes",
+      "declaredLicense": "CC BY-NC-SA 4.0",
+      "declaredLicenseTermsPermitCommercialUse": false,
+      "commercialTrainingClearance": "prohibited_by_noncommercial_term",
+      "exclusionReasons": [
+        "No video, pose, temporal phase, or biomechanics data",
+        "The declared noncommercial license is incompatible with commercial product training"
+      ]
+    },
+    {
+      "id": "figshare-womens-singles-pickleball-notational-analysis",
+      "name": "Technical and Tactical Performance in Women's Singles Pickleball",
+      "officialUrls": [
+        "https://figshare.com/articles/dataset/Technical_and_Tactical_Performance_in_Women_s_Singles_Pickleball_A_Notational_Analysis_of_Key_Match_Indicators_data_files_for_SPSS_and_Theme_/28124738"
+      ],
+      "task": "notational_match_analysis",
+      "modality": "tabular",
+      "matchCount": 15,
+      "tournamentCount": 5,
+      "declaredLicense": "CC BY 4.0",
+      "declaredLicenseTermsPermitCommercialUse": true,
+      "commercialTrainingClearance": "license_allows_with_attribution_but_media_not_present",
+      "exclusionReasons": [
+        "The release contains SPSS and THEME analysis files, not match video",
+        "No frame-level pose, stroke boundary, contact, or form labels"
+      ]
+    },
+    {
+      "id": "scientific-reports-mctn-pickleball-dataset-claim",
+      "name": "Pickleball Dataset referenced by the MCTN Scientific Reports paper",
+      "officialUrls": ["https://www.nature.com/articles/s41598-025-33985-6"],
+      "task": "claimed_pose_and_action_detection",
+      "modality": "not_retrievable",
+      "itemCount": "not_reported",
+      "declaredDatasetLicense": "none_found",
+      "declaredMediaLicenseTermsPermitCommercialUse": null,
+      "commercialTrainingClearance": "not_cleared",
+      "exclusionReasons": [
+        "The paper names a Pickleball Dataset but supplies no live dataset link, count, taxonomy, or provenance",
+        "Its data-availability section links to a pickleball research article and the COCO paper rather than a downloadable pickleball artifact",
+        "No commercial media rights can be evaluated"
+      ]
+    }
+  ],
+  "officialSearchChecks": [
+    {
+      "service": "Hugging Face public datasets API",
+      "url": "https://huggingface.co/api/datasets?search=pickleball&limit=100",
+      "checkedAt": "2026-08-27",
+      "matchingRepositoryCount": 20,
+      "usableArtifactCount": 0,
+      "result": "All 20 matching sportsgirl/Pickleball01 through Pickleball20 repositories contained only .gitattributes and had no dataset card, media, labels, or license."
+    }
+  ]
+}

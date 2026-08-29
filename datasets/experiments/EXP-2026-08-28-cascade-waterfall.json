@@ -1,0 +1,22 @@
+{
+  "experimentId": "EXP-2026-08-28-cascade-waterfall",
+  "question": "Where does the PRODUCT lose each stroke end-to-end (not per-subsystem)?",
+  "method": "lab:cascade — per gold target event, read the shipped per-case report artifacts and evaluate explicit stage criteria: TARGET (product tap/seed path, coverage ≥0.5) → EVENT (≥50% overlap or gold contact inside selection) → PADDLE (tracked, coverage ≥0.3) → BALL (tracked) → CONTACT (|err| ≤ 66ms) → PHASE (segmented, ordering valid) → STROKE (L1 side match). Conditional survival = product view.",
+  "results": {
+    "n": 5,
+    "unconditional": { "TARGET": 5, "EVENT": 4, "PADDLE": 5, "BALL": 4, "CONTACT": 3, "PHASE": 3, "STROKE": 3 },
+    "conditionalSurvival": { "TARGET": 5, "EVENT": 4, "PADDLE": 4, "BALL": 3, "CONTACT": 2, "PHASE": 1, "STROKE": 1 },
+    "verdict": "1/5 gold strokes complete the full chain (wm-volley-02). Every loss has a distinct named cause: dink → contact error 147ms (ball-body overlap region); rally1 → EVENT SELECTION picked a 0%-overlap window (paddle-speed proposal defect; poisons contact/phase/stroke: predicted FOREHAND vs gold BACKHAND_VOLLEY); rally2 → ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only; vic (held-out) → phase followEnd ≤ contact (known v2 inversion defect)."
+  },
+  "modelingNotes": [
+    "Stage order forces BALL before CONTACT; rally2 shows contact can succeed without ball (paddle-anchored) — the conditional column understates that path. Recorded, not hidden.",
+    "EVENT overlap for passing cases is 30-65% — selections are systematically NARROWER than gold events (proposal bounds tight around the peak). Contact-inside saves them today.",
+    "n=5: the waterfall SHAPE is the diagnosis; the rates are not stable estimates."
+  ],
+  "highestLeverage": [
+    "EVENT selection decoupling from paddle-speed peaks (rally1's 0%-overlap selection is exactly the known merge-cascade defect measured from a new direction)",
+    "PHASE v2 ordering guard (one-line invariant fix candidate: reject/repair followEnd ≤ contact) unlocks the held-out case",
+    "BALL body-overlap remains the ball blocker (known, exhibits exist)"
+  ],
+  "artifacts": "datasets/cascade/cascade-1787960997164.json · lab:cascade rerunnable"
+}

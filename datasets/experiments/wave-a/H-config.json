@@ -1,0 +1,56 @@
+{
+  "workstream": "H",
+  "purpose": "Exact reproduction config for full-pipeline validation of the D-032 shortlist: paddle detector stride 3 + static target ROI (EXP-2026-08-28-roi-keyframe-grid).",
+  "devCases": ["wm-volley-02", "afn-sasebo-rally1", "afn-sasebo-rally2"],
+  "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"],
+  "shadowSplitTouched": false,
+  "sandbox": "datasets/experiments/wave-a/H-runs/<case> (cp -R of datasets/paddle-bench/runs/<case>; canonical run dirs read-only throughout)",
+  "roiDerivation": "roi_keyframe_grid.py:target_roi(case, span) — union of the largest-torso person's torso midpoints over the span from the case's people.json, padded by 2.6x mean torso span (x) / 3.12x (y), clamped to [0,1]. Span = report.detectSpan of the canonical run (the event-gated span, identical in the sandbox because pose/people artifacts are copied and events are pose-derived).",
+  "cases": {
+    "wm-volley-02": {
+      "video": "datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "detectorWindowMs": [4250, 8210],
+      "roiSpanMs": [5000, 7440],
+      "roiNorm": [0.1075, 0.0, 1.0, 1.0],
+      "candidateCmd": ".venv/bin/python detect_paddle.py --video ../../datasets/paddle-bench/videos/wm-volley-nearplayer.mp4 --out <sandbox>/paddle-dets.json --start-ms 4250 --end-ms 8210 --stride 3 --roi 0.1075,0.0,1.0,1.0",
+      "baselineTimingCmd": ".venv/bin/python detect_paddle.py --video ../../datasets/paddle-bench/videos/wm-volley-nearplayer.mp4 --out /tmp/h-baseline/wm-volley-02.json --start-ms 4250 --end-ms 8210",
+      "pipelineCmd": "npx tsx src/analyzeVideo.ts <ABS video> --stroke volley --target-tap 0.5271,0.4552 --out <ABS sandbox> --reuse-extract"
+    },
+    "afn-sasebo-rally1": {
+      "video": "datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "detectorWindowMs": [0, 4121],
+      "roiSpanMs": [168, 3871],
+      "roiNorm": [0.0257, 0.0, 1.0, 1.0],
+      "candidateCmd": ".venv/bin/python detect_paddle.py --video ../../datasets/paddle-bench/videos/afn-sasebo-rally1.mp4 --out <sandbox>/paddle-dets.json --start-ms 0 --end-ms 4121 --stride 3 --roi 0.0257,0.0,1.0,1.0",
+      "baselineTimingCmd": ".venv/bin/python detect_paddle.py --video ../../datasets/paddle-bench/videos/afn-sasebo-rally1.mp4 --out /tmp/h-baseline/afn-sasebo-rally1.json --start-ms 0 --end-ms 4121",
+      "pipelineCmd": "npx tsx src/analyzeVideo.ts <ABS video> --stroke volley --target-tap 0.5644,0.4665 --out <ABS sandbox> --reuse-extract"
+    },
+    "afn-sasebo-rally2": {
+      "video": "datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "detectorWindowMs": [502, 4403],
+      "roiSpanMs": [1636, 3603],
+      "roiNorm": [0.17, 0.0, 1.0, 1.0],
+      "candidateCmd": ".venv/bin/python detect_paddle.py --video ../../datasets/paddle-bench/videos/afn-sasebo-rally2.mp4 --out <sandbox>/paddle-dets.json --start-ms 502 --end-ms 4403 --stride 3 --roi 0.17,0.0,1.0,1.0",
+      "baselineTimingCmd": ".venv/bin/python detect_paddle.py --video ../../datasets/paddle-bench/videos/afn-sasebo-rally2.mp4 --out /tmp/h-baseline/afn-sasebo-rally2.json --start-ms 502 --end-ms 4403",
+      "pipelineCmd": "npx tsx src/analyzeVideo.ts <ABS video> --stroke volley --target-tap 0.7923,0.702 --out <ABS sandbox> --reuse-extract"
+    }
+  },
+  "windowChoice": "Candidate detections were generated over the SAME window as each canonical paddle-dets.json (not just detectSpan±250ms) so (a) stride+ROI are the only deltas vs baseline, (b) the analyzeVideo reuse gate (window covers detectSpan±250ms with 100ms slack) is satisfied, and (c) S0 scoring covers identical label spans in both arms. Baseline wall-clock re-runs used the same windows.",
+  "roiSpanNote": "The D-032 grid derived the ROI over the event-gated span; this run reproduces that (roiSpanMs = report.detectSpan). ROIs computed over the wider detector window differ negligibly (e.g. rally1 x0 0.0389 vs 0.0257) except wm-volley-02, where the full window's torso union degenerates to the full frame [0,0,1,1] — a production ROI must be derived from the event-gated span or it silently becomes a no-op.",
+  "integrationVerification": {
+    "mechanism": "analyzeVideo.ts runPaddleStage reuses an existing paddle-dets.json when --reuse-extract is set AND existing.window.startMs <= detectSpan.startMs-250+100 AND existing.window.endMs >= detectSpan.endMs+250-100; it does NOT inspect stride/roi. All three sandbox runs logged 'reusing existing extraction artifacts', zero 'detecting paddle candidates' lines, and the paddle-dets.json sha256 hashes were byte-identical before/after the pipeline runs.",
+    "sha256AfterPipeline": {
+      "wm-volley-02": "01ef4e375696fe96268c31ffd421774517df22918364baa7d33877428ceeb77a",
+      "afn-sasebo-rally1": "d3249ebedd5e566d1865efe012ee31a4fa32f2e4df08aee2395e6d89333d8d52",
+      "afn-sasebo-rally2": "e21da035f483805390df356ca456ed484da0112e0fcfe4fc2e8b123a9c17516c"
+    },
+    "ballCandidatesReused": "yes — canonical ball-candidates.json windows cover strokeWindow±1200ms for all three cases, so the ball detector was not re-run either"
+  },
+  "schemaCompatibility": "detect_paddle.py now emits detector.stride and detector.roiNorm (additive; schemaVersion still 1; top-level keys identical to canonical files). paddleTracker.ts RawPaddleDetectionFile ignores unknown detector keys. Boxes are mapped back to full-frame pixels by detect_paddle.py, so downstream normalization is unchanged.",
+  "scoringConventions": {
+    "waterfall": "paddleWaterfall.ts convention: hit radius 0.08 normalized, label match tolerance ±40ms (S0 from paddle-dets.json, S5 from debug.json final track). Note ±40ms structurally punishes stride 3 at S0 (inter-frame gap 100-120ms).",
+    "grid": "D-032 convention: radius 0.05, stride-aware reach (label with no detector frame within half a stride interval = miss).",
+    "cascade": "cascadeWaterfall.ts criteria replicated verbatim in tools/paddle-lab/h_fullpipe_compare.py (TARGET/EVENT/PADDLE/BALL/CONTACT≤66ms/PHASE/STROKE-L1)."
+  },
+  "environment": "MacBook (mps device). Canonical recorded detector timings (~70-72 ms/frame) predate this session; today's machine state runs ~113-157 ms/frame, so the timing comparison uses same-day back-to-back re-runs of the baseline, not the recorded numbers (both are reported in H-timing.json)."
+}

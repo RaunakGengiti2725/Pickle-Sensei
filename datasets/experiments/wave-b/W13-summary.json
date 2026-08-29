@@ -1,0 +1,96 @@
+{
+  "workstream": "W13 — data-engine refresh after gold-label growth + ranked next annotation batch",
+  "status": "complete — all four instruments (corpus-status, data-gaps, failure-mine, learning-curve) exited 0 on first attempt; no retries needed despite parallel tree churn; read-only except W13-* artifacts and the instruments' own regenerated outputs",
+  "baseline": {
+    "docs": "docs/HANDOFF.md + docs/HANDOFF_V2.md + docs/DATA_ENGINE.md (pre-growth)",
+    "gold": {
+      "taVerified": 36,
+      "paddleTargetBoxes": 54,
+      "otherPaddleBoxes": 41,
+      "dualFramesSameMs": 14,
+      "wrongPlayerCheckPairs": 19,
+      "ballFrames": 22,
+      "goldEvents": 9,
+      "strokes": 5,
+      "phaseBoundaries": 25
+    },
+    "learningCurves": "paddle/ball recall leave-one-out swings 0.38/0.63 at n=3 dev cases — no reliability claims permitted",
+    "annotationQueue": 203,
+    "silver": 0
+  },
+  "candidate": "none — measurement-and-ranking-only workstream; no code, labels, or thresholds touched; label growth being measured came from wave-A workstreams K (TA 36→59) and L (ownership 14→30 duals) plus in-flight W14/Q",
+  "measured": {
+    "instrumentRuns": {
+      "corpusStatus": "exit 0, integrity OK",
+      "dataGaps": "exit 0",
+      "failureMine": "exit 0 → failure-queue.json 2026-08-29T02:12:47.168Z (101 findings / 13 dev-val roots: CROWDED_SCENE 55, TRACK_FRAGMENTATION 37, NO_PEOPLE 4, SCENE_CHURN 2, STATIC_HUMAN_GRAPHIC 2, SPARSE_WRIST_SUSPECT 1), annotation-queue.json 203 entries (60 failure + 143 candidate-event)",
+      "learningCurve": "exit 0 → learning-curves.json 2026-08-29T02:12:52.557Z"
+    },
+    "corpus": {
+      "sources": "20 (wikimedia_commons 4, dvids 16), all training-eligible, 0 quarantined",
+      "recordings": "26 (17 roots + 9 derived)",
+      "rootFootageMin": 62.9,
+      "sessions": 12,
+      "splits": "dev 9 sessions/21.7min · locked_test 1/1.0min · shadow 2/40.1min (shadow media/labels never opened)"
+    },
+    "goldAfterGrowth": {
+      "taVerified": 59,
+      "taRejected": 12,
+      "taProposedPending": 230,
+      "paddleTargetBoxes": 78,
+      "otherPaddleBoxes": 83,
+      "dualFramesSameMs": 30,
+      "wrongPlayerCheckPairs": 41,
+      "ownershipSidecar": "80 reject + 14 ambiguous (70 adjudicated frames)",
+      "ballFrames": "22 (unchanged; wm-dink-01 still 0)",
+      "contactPoints": "7 (5 target-owner + 2 other-owner, ±1-2 frames)",
+      "strokes": 5,
+      "phaseBoundaries": 25,
+      "goldEvents": "9 (workstream Q not landed at run time)",
+      "allCountsRecountedFromFiles": true
+    },
+    "silver": 0,
+    "tierC": "199 candidates (all dev, 196 multi-person, 62 uncertainty>=0.8) — candidates, never labels",
+    "queueDepth": {
+      "corpusAnnotationQueue": 203,
+      "taProposed": 230,
+      "ownershipFramesPending": "30 (23 dev-labelable + 7 afn-vic locked_test deferred)",
+      "coachReviews": "5 queue items, 0 reviews, 0 coaches"
+    },
+    "multiAnnotator": "still single-annotator everywhere (devin-visual-v1/v2 = same human); W14 blind overlap worklist (12 TA + 12 ownership) created 2026-08-29T02:00Z, no verdicts on file yet; agreement remains unmeasurable at W13 run time",
+    "learningCurves": {
+      "paddle": {
+        "n": 3,
+        "fullN": "recall 0.425 / precision 0.630",
+        "looRecallInterval": "[0.400, 0.435] spread 0.035 (baseline swing 0.38)",
+        "instrumentVerdict": "flattening at n=3 (Δrecall 0.004) — inspect slices before adding bulk data",
+        "honestStatement": "swing collapsed because denser labels homogenized per-case recall (0.412/0.450/0.333), NOT because n grew; n=3 still forbids any reliability claim — next information unit is a 4th labeled dev case"
+      },
+      "ball": {
+        "n": 3,
+        "fullN": "recall 0.417 / precision 0.833",
+        "looRecallInterval": "[0, 0.625] spread 0.63 (baseline 0.63 — unchanged)",
+        "instrumentVerdict": "UNSTABLE at n=3 — more labeled cases needed before any reliability claim",
+        "honestStatement": "per-case recall bimodal (0.833 vs 0/4 and 0/2; wm-dink 0 labels contributes nothing); no claim possible"
+      },
+      "otherTasks": "TA/events/contact/stroke/phase have NO curve coverage; n = 59/9/7/5/25 respectively; cascade artifact itself caveats n=5 gold events as unstable; no stability statements made"
+    },
+    "top20Queue": "datasets/experiments/wave-b/W13-data-report.md §6 — 4 contact-disagreement, 6 event-ambiguity, 4 S3/S4-ownership, 3 ball-disappearance, 3 target-switch items; cross-referenced against wave-A B/K/L/I/U and in-flight W3/W5/W14 so no solved question is re-asked (excluded: L's 43 adjudicated frames, K's 29 reviewed TA proposals, wm-dink 1680-2160 episode = code fix, rally1 S4 collapse = diagnosed flip-truncation)"
+  },
+  "filesChanged": [
+    "datasets/experiments/wave-b/W13-data-report.md (new, W13-owned)",
+    "datasets/experiments/wave-b/W13-summary.json (new, W13-owned)",
+    "datasets/corpus/failure-queue.json (regenerated by lab:failure-mine itself)",
+    "datasets/corpus/annotation-queue.json (regenerated by lab:failure-mine itself)",
+    "datasets/corpus/learning-curves.json (regenerated by lab:learning-curve itself)"
+  ],
+  "recommendation": "Spend the next label budget in report §6 order: (1) rally2 contact 2380-3050 densification (kills the only fabricated marker), (2) rally2's 10 pending ownership frames (S3=0 case), (3) the six ≥0.90-uncertainty Tier-C events on marne/warriorgames — they are simultaneously the path to the 4th/5th dev bench case that the ball learning curve provably needs, (4) extend W14's blind-overlap protocol to the 7 contact points. Route rec-afd0b6bad5d0/rec-d230484fbaa5 candidates through the gameplay-validity screen before labeling (K measured non-pickleball contamination there).",
+  "risks": [
+    "n=3 remains n=3: the paddle curve's tight LOO interval (0.035) invites over-claiming — it constrains only these 3 dev cases; treat 'flattening' as a slice-inspection cue, not stability",
+    "ball recall LOO spread 0.63 unchanged — any product statement about ball reliability is still unsupported",
+    "gold events stuck at 9 until workstream Q lands; G's adaptive-completion promotion gate (≥20 live-trigger gold events) stays blocked",
+    "agreement is unmeasurable until W14 verdicts land; all gold remains single-annotator today",
+    "parallel tree churn: bench result files are being appended by W2/W3/W5 while curves read 'latest' — re-run lab:learning-curve after those workstreams merge before quoting numbers onward",
+    "counts in sealed release v0.3 manifest predate this growth (by design); do not cite manifest tier counts as current"
+  ]
+}

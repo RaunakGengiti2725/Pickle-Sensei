@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-faead-rally",
+  "annotatorId": "devin-visual-v2-wave-a",
+  "createdAtIso": "2026-08-29T00:00:00.000Z",
+  "revision": 1,
+  "stroke": "volley",
+  "annotatedStrokeV3": "FOREHAND_VOLLEY",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 13875,
+    "accelerationStartMs": 13958,
+    "contactMs": 14042,
+    "followThroughEndMs": 14208,
+    "recoveryEndMs": 14500
+  },
+  "contactUncertainty": "plus_minus_1",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.65,
+  "notes": "dvids-944209 Fort Stewart outdoor (rec-faead33a362c, dvids-marne-2024, DEV) window [12500..14900], RECORDING clock. Camera looks across the net at the players (they face the camera). Window auto-target = red-shirt player center-right (cov 1.0, torso ~(0.78,0.32)); white-cap X-strap partner left. Reviewed at 12/24fps. TWO back-to-back target strokes: (1) backhand groundstroke off the bounce - coil/takeaway 13417, CONTACT OCCLUDED by his torso (ball last seen incoming 13458 chest-height, first seen outgoing 13667 above head moving away) -> contactMs null, follow-through arm high through 13833; (2) the return comes straight back high: follow-through hold converts to overhead-ready at 13875, paddle cocked 13958, high forehand volley punch above head - contact 14042 (ball AT paddle at 24fps, just off by 14083; +-1 frame), arm sweep done ~14208, recovery settle 14500 (ready stance). Phases describe stroke (2), the better-evidenced one. Mined Tier-C 13333/13750 pointed at this exchange but attributed it to the partner track; visually the red-shirt auto-target hits both balls (partner stands left, never swings). Event (1) has NO settle - it flows directly into (2)'s preparation (eventEnd 13833 = last follow-through frame before overhead-ready at 13875): honest next-stroke-valley case for the D-029 adaptive policy.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T00:00:00.000Z"
+    }
+  ],
+  "eventLabels": [
+    {
+      "eventStartMs": 13417,
+      "contactMs": null,
+      "eventEndMs": 13833,
+      "owner": "target",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "backhand groundstroke off bounce; coil 13417; contact occluded by torso (rear-quarter ball transit 13458 -> 13667); no settle - transitions into next stroke's prep at 13875"
+    },
+    {
+      "eventStartMs": 13875,
+      "contactMs": 14042,
+      "eventEndMs": 14500,
+      "owner": "target",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "high forehand volley punch above head; overhead-ready from 13875, contact 14042 (ball at paddle, 24fps +-1 frame), settle 14500"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "failureClass": "WRONG_RACKET_LIKE_OBJECT",
+  "capturedAtIso": "2026-08-28T11:05:00.000Z",
+  "video": "datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+  "description": "Doubles partners overlap: primary (white shirt) swings a gray paddle; tracker locked onto the partner's paddle behind her (3/6 labeled frames wrong-location). Wrist-proximity gating alone cannot disambiguate two paddles near two adjacent players.",
+  "regressionExpectation": "A future paddle system must bind the paddle to the PRIMARY player's dominant hand trajectory, not merely any nearby wrist."
+}

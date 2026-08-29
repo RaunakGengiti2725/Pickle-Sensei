@@ -1,0 +1,1319 @@
+{
+  "generatedAtIso": "2026-08-29T02:12:47.168Z",
+  "scope": "dev+val roots",
+  "items": [
+    {
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 0,
+      "windowMs": {
+        "start": 0,
+        "end": 18443
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "20 tracks, 14 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 1,
+      "windowMs": {
+        "start": 18443,
+        "end": 54488
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "56 tracks, 54 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 4,
+      "windowMs": {
+        "start": 71430,
+        "end": 109459
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "95 tracks, 93 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "sceneIndex": 1,
+      "windowMs": {
+        "start": 500,
+        "end": 43310
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "46 tracks, 45 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "sceneIndex": 3,
+      "windowMs": {
+        "start": 51051,
+        "end": 59560
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "23 tracks, 15 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "sceneIndex": 0,
+      "windowMs": {
+        "start": 0,
+        "end": 13146
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "23 tracks, 15 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "sceneIndex": 2,
+      "windowMs": {
+        "start": 20320,
+        "end": 55088
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "30 tracks, 29 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 0,
+      "windowMs": {
+        "start": 0,
+        "end": 27060
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "32 tracks, 26 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 1,
+      "windowMs": {
+        "start": 27060,
+        "end": 73707
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "117 tracks, 117 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 2,
+      "windowMs": {
+        "start": 73707,
+        "end": 85369
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "17 tracks, 13 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 0,
+      "windowMs": {
+        "start": 0,
+        "end": 24800
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "33 tracks, 29 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 1,
+      "windowMs": {
+        "start": 24800,
+        "end": 52833
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "13 tracks, 10 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 3,
+      "windowMs": {
+        "start": 64333,
+        "end": 72800
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "14 tracks, 10 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 4,
+      "windowMs": {
+        "start": 72800,
+        "end": 97700
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "13 tracks, 11 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 8,
+      "windowMs": {
+        "start": 172800,
+        "end": 272033
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "134 tracks, 132 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 9,
+      "windowMs": {
+        "start": 272033,
+        "end": 307500
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "37 tracks, 33 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-96ae65019c30",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 0,
+      "windowMs": {
+        "start": 0,
+        "end": 18118
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "13 tracks, 10 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-96ae65019c30",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 1,
+      "windowMs": {
+        "start": 18118,
+        "end": 33350
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "35 tracks, 35 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-96ae65019c30",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 4,
+      "windowMs": {
+        "start": 46196,
+        "end": 56340
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "15 tracks, 11 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-96ae65019c30",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 5,
+      "windowMs": {
+        "start": 56340,
+        "end": 67551
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "35 tracks, 33 short (<30% coverage) — identity churn"
+    },
+    {
+      "kind": "SCENE_CHURN",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "sceneIndex": -1,
+      "windowMs": {
+        "start": 0,
+        "end": 107792
+      },
+      "severity": 1,
+      "evidence": "51 cuts in 1.8min (28.4/min) — gameplay rarely stabilizes"
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "sceneIndex": 2,
+      "windowMs": {
+        "start": 2417,
+        "end": 6542
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "17 tracks, 11 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "sceneIndex": 0,
+      "windowMs": {
+        "start": 0,
+        "end": 237240
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "232 tracks, 232 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 5,
+      "windowMs": {
+        "start": 12112,
+        "end": 30931
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "21 tracks, 20 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 13,
+      "windowMs": {
+        "start": 50017,
+        "end": 64865
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "49 tracks, 48 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 15,
+      "windowMs": {
+        "start": 67000,
+        "end": 72105
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "16 tracks, 13 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 20,
+      "windowMs": {
+        "start": 75242,
+        "end": 83150
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "20 tracks, 17 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 23,
+      "windowMs": {
+        "start": 91491,
+        "end": 105138
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "14 tracks, 13 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 24,
+      "windowMs": {
+        "start": 105138,
+        "end": 116083
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 1,
+      "evidence": "23 tracks, 17 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 2,
+      "windowMs": {
+        "start": 22167,
+        "end": 44042
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 0.9,
+      "evidence": "13 tracks, 9 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-1c1286ce675e",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 0,
+      "windowMs": {
+        "start": 0,
+        "end": 2060
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 1,
+      "windowMs": {
+        "start": 18443,
+        "end": 54488
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 4,
+      "windowMs": {
+        "start": 71430,
+        "end": 109459
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "sceneIndex": 1,
+      "windowMs": {
+        "start": 500,
+        "end": 43310
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "sceneIndex": 3,
+      "windowMs": {
+        "start": 51051,
+        "end": 59560
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "sceneIndex": 0,
+      "windowMs": {
+        "start": 0,
+        "end": 13146
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "sceneIndex": 2,
+      "windowMs": {
+        "start": 20320,
+        "end": 55088
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "sceneIndex": 3,
+      "windowMs": {
+        "start": 55088,
+        "end": 60027
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 0,
+      "windowMs": {
+        "start": 0,
+        "end": 27060
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 1,
+      "windowMs": {
+        "start": 27060,
+        "end": 73707
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 2,
+      "windowMs": {
+        "start": 73707,
+        "end": 85369
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 0,
+      "windowMs": {
+        "start": 0,
+        "end": 24800
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 3,
+      "windowMs": {
+        "start": 64333,
+        "end": 72800
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 6,
+      "windowMs": {
+        "start": 113133,
+        "end": 156267
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 8,
+      "windowMs": {
+        "start": 172800,
+        "end": 272033
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 9,
+      "windowMs": {
+        "start": 272033,
+        "end": 307500
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-96ae65019c30",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 1,
+      "windowMs": {
+        "start": 18118,
+        "end": 33350
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-96ae65019c30",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 5,
+      "windowMs": {
+        "start": 56340,
+        "end": 67551
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "sceneIndex": 2,
+      "windowMs": {
+        "start": 2417,
+        "end": 6542
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "sceneIndex": 8,
+      "windowMs": {
+        "start": 11292,
+        "end": 14375
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "sceneIndex": 10,
+      "windowMs": {
+        "start": 15667,
+        "end": 19167
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "sceneIndex": 12,
+      "windowMs": {
+        "start": 20042,
+        "end": 25375
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "sceneIndex": 14,
+      "windowMs": {
+        "start": 31167,
+        "end": 35292
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "sceneIndex": 24,
+      "windowMs": {
+        "start": 58708,
+        "end": 64083
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "sceneIndex": 31,
+      "windowMs": {
+        "start": 75000,
+        "end": 79625
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "sceneIndex": 0,
+      "windowMs": {
+        "start": 0,
+        "end": 237240
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 3,
+      "windowMs": {
+        "start": 234,
+        "end": 9576
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 4,
+      "windowMs": {
+        "start": 9576,
+        "end": 12112
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 7,
+      "windowMs": {
+        "start": 33066,
+        "end": 37170
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 9,
+      "windowMs": {
+        "start": 38338,
+        "end": 40741
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 13,
+      "windowMs": {
+        "start": 50017,
+        "end": 64865
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 14,
+      "windowMs": {
+        "start": 64865,
+        "end": 67000
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 15,
+      "windowMs": {
+        "start": 67000,
+        "end": 72105
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 20,
+      "windowMs": {
+        "start": 75242,
+        "end": 83150
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 22,
+      "windowMs": {
+        "start": 85552,
+        "end": 91491
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 24,
+      "windowMs": {
+        "start": 105138,
+        "end": 116083
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.75,
+      "evidence": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 6,
+      "windowMs": {
+        "start": 113133,
+        "end": 156267
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 0.7,
+      "evidence": "10 tracks, 7 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 7,
+      "windowMs": {
+        "start": 33066,
+        "end": 37170
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 0.7,
+      "evidence": "9 tracks, 7 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "sceneIndex": 3,
+      "windowMs": {
+        "start": 51051,
+        "end": 59560
+      },
+      "kind": "STATIC_HUMAN_GRAPHIC",
+      "severity": 0.6666666666666666,
+      "evidence": "1/8 substantial tracks show no wrist-relative-to-torso motion (graphic/title-card/portrait humans) — gameplay-validity exhibit"
+    },
+    {
+      "recordingId": "rec-912aeaa8c30c",
+      "sessionKey": "dvids-1008415",
+      "split": "dev",
+      "sceneIndex": 3,
+      "windowMs": {
+        "start": 5572,
+        "end": 14982
+      },
+      "kind": "STATIC_HUMAN_GRAPHIC",
+      "severity": 0.6666666666666666,
+      "evidence": "1/1 substantial tracks show no wrist-relative-to-torso motion (graphic/title-card/portrait humans) — gameplay-validity exhibit"
+    },
+    {
+      "kind": "SCENE_CHURN",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": -1,
+      "windowMs": {
+        "start": 0,
+        "end": 122089
+      },
+      "severity": 0.6388781954148204,
+      "evidence": "26 cuts in 2.0min (12.8/min) — gameplay rarely stabilizes"
+    },
+    {
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 0,
+      "windowMs": {
+        "start": 0,
+        "end": 18443
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.625,
+      "evidence": "5 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 2,
+      "windowMs": {
+        "start": 54488,
+        "end": 62996
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.625,
+      "evidence": "5 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 3,
+      "windowMs": {
+        "start": 62996,
+        "end": 71430
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.625,
+      "evidence": "5 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 3,
+      "windowMs": {
+        "start": 85369,
+        "end": 95912
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.625,
+      "evidence": "5 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 1,
+      "windowMs": {
+        "start": 24800,
+        "end": 52833
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.625,
+      "evidence": "5 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 5,
+      "windowMs": {
+        "start": 97700,
+        "end": 113133
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.625,
+      "evidence": "5 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "sceneIndex": 13,
+      "windowMs": {
+        "start": 25375,
+        "end": 31167
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.625,
+      "evidence": "5 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "sceneIndex": 17,
+      "windowMs": {
+        "start": 38792,
+        "end": 43375
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.625,
+      "evidence": "5 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "sceneIndex": 37,
+      "windowMs": {
+        "start": 92500,
+        "end": 96000
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.625,
+      "evidence": "5 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 5,
+      "windowMs": {
+        "start": 12112,
+        "end": 30931
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.625,
+      "evidence": "5 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 6,
+      "windowMs": {
+        "start": 30931,
+        "end": 33066
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.625,
+      "evidence": "5 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 19,
+      "windowMs": {
+        "start": 72306,
+        "end": 75242
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.625,
+      "evidence": "5 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 0,
+      "windowMs": {
+        "start": 0,
+        "end": 15000
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.625,
+      "evidence": "5 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 2,
+      "windowMs": {
+        "start": 22167,
+        "end": 44042
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.625,
+      "evidence": "5 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 2,
+      "windowMs": {
+        "start": 54488,
+        "end": 62996
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 0.6,
+      "evidence": "9 tracks, 6 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "sceneIndex": 4,
+      "windowMs": {
+        "start": 72800,
+        "end": 97700
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.5,
+      "evidence": "4 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-96ae65019c30",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 0,
+      "windowMs": {
+        "start": 0,
+        "end": 18118
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.5,
+      "evidence": "4 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-96ae65019c30",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 4,
+      "windowMs": {
+        "start": 46196,
+        "end": 56340
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.5,
+      "evidence": "4 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "sceneIndex": 13,
+      "windowMs": {
+        "start": 25375,
+        "end": 31167
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 0.5,
+      "evidence": "8 tracks, 5 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "sceneIndex": 20,
+      "windowMs": {
+        "start": 49125,
+        "end": 52292
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.5,
+      "evidence": "4 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 9,
+      "windowMs": {
+        "start": 38338,
+        "end": 40741
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 0.5,
+      "evidence": "7 tracks, 5 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 23,
+      "windowMs": {
+        "start": 91491,
+        "end": 105138
+      },
+      "kind": "CROWDED_SCENE",
+      "severity": 0.5,
+      "evidence": "4 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "sceneIndex": 3,
+      "windowMs": {
+        "start": 44042,
+        "end": 98000
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 0.5,
+      "evidence": "8 tracks, 5 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-912aeaa8c30c",
+      "sessionKey": "dvids-1008415",
+      "split": "dev",
+      "sceneIndex": 1,
+      "windowMs": {
+        "start": 534,
+        "end": 5539
+      },
+      "kind": "SPARSE_WRIST_SUSPECT",
+      "severity": 0.45,
+      "evidence": "1 tracks with sparse wrist detection + high jitter (animated graphic OR heavy motion blur — needs human review): 5.6pairs/s@0.1204rel/s"
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "sceneIndex": 31,
+      "windowMs": {
+        "start": 75000,
+        "end": 79625
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 0.4,
+      "evidence": "6 tracks, 4 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "sceneIndex": 1,
+      "windowMs": {
+        "start": 13146,
+        "end": 20320
+      },
+      "kind": "NO_PEOPLE",
+      "severity": 0.3,
+      "evidence": "scene 7s with 1 raw detections but 0 usable tracks"
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "sceneIndex": 32,
+      "windowMs": {
+        "start": 79625,
+        "end": 82667
+      },
+      "kind": "NO_PEOPLE",
+      "severity": 0.3,
+      "evidence": "scene 3s with 1 raw detections but 0 usable tracks"
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "sceneIndex": 35,
+      "windowMs": {
+        "start": 86167,
+        "end": 88542
+      },
+      "kind": "NO_PEOPLE",
+      "severity": 0.3,
+      "evidence": "scene 2s with 1 raw detections but 0 usable tracks"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 6,
+      "windowMs": {
+        "start": 30931,
+        "end": 33066
+      },
+      "kind": "TRACK_FRAGMENTATION",
+      "severity": 0.3,
+      "evidence": "5 tracks, 3 short (<30% coverage) — identity churn"
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "sceneIndex": 21,
+      "windowMs": {
+        "start": 83150,
+        "end": 85552
+      },
+      "kind": "NO_PEOPLE",
+      "severity": 0.3,
+      "evidence": "scene 2s with 3 raw detections but 0 usable tracks"
+    }
+  ]
+}

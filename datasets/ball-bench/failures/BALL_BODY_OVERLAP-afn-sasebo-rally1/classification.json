@@ -1,0 +1,7 @@
+{
+  "failureClass": "BALL_BODY_OVERLAP",
+  "capturedAtIso": "2026-08-28T11:40:00.000Z",
+  "video": "datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+  "description": "Ball recall 0/4 on labeled frames around contact (2830-3030ms): the yellow ball crosses the primary player's white shirt, killing diff contrast; candidate chain fragments below the 5-observation minimum and selection picks a later, cleaner flight (3305-4073ms) that misses her contact.",
+  "regressionExpectation": "A future ball system (appearance-aware candidates or reacquisition across body overlap) must recover >0 recall on these labeled frames without new false positives."
+}

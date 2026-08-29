@@ -1,0 +1,205 @@
+{
+ "workstream": "W12",
+ "createdBy": "devin-visual-v2-wave-b",
+ "note": "probe frames; dink_diag_HELDOUT group is diagnostic-only (held-out case)",
+ "frames": [
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 75,
+   "tMs": 2502.5,
+   "group": "rally2_missA_overhead_blur"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 76,
+   "tMs": 2535.87,
+   "group": "rally2_missA_overhead_blur"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 77,
+   "tMs": 2569.23,
+   "group": "rally2_missA_overhead_blur"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 78,
+   "tMs": 2602.6,
+   "group": "rally2_missA_overhead_blur"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 79,
+   "tMs": 2635.97,
+   "group": "rally2_missA_overhead_blur"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 80,
+   "tMs": 2669.33,
+   "group": "rally2_missA_overhead_blur"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 81,
+   "tMs": 2702.7,
+   "group": "rally2_missA_overhead_blur"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 87,
+   "tMs": 2902.9,
+   "group": "rally2_missB_edgeon_carry"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 88,
+   "tMs": 2936.27,
+   "group": "rally2_missB_edgeon_carry"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 89,
+   "tMs": 2969.63,
+   "group": "rally2_missB_edgeon_carry"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 90,
+   "tMs": 3003.0,
+   "group": "rally2_missB_edgeon_carry"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 91,
+   "tMs": 3036.37,
+   "group": "rally2_missB_edgeon_carry"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 92,
+   "tMs": 3069.73,
+   "group": "rally2_missB_edgeon_carry"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 93,
+   "tMs": 3103.1,
+   "group": "rally2_missB_edgeon_carry"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 62,
+   "tMs": 2068.73,
+   "group": "rally2_control"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 64,
+   "tMs": 2135.47,
+   "group": "rally2_control"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 65,
+   "tMs": 2168.83,
+   "group": "rally2_control"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 66,
+   "tMs": 2202.2,
+   "group": "rally2_control"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 68,
+   "tMs": 2268.93,
+   "group": "rally2_control"
+  },
+  {
+   "case": "afn-sasebo-rally2",
+   "frameIndex": 69,
+   "tMs": 2302.3,
+   "group": "rally2_control"
+  },
+  {
+   "case": "wm-dink-01",
+   "frameIndex": 42,
+   "tMs": 1680.0,
+   "group": "dink_diag_HELDOUT"
+  },
+  {
+   "case": "wm-dink-01",
+   "frameIndex": 43,
+   "tMs": 1720.0,
+   "group": "dink_diag_HELDOUT"
+  },
+  {
+   "case": "wm-dink-01",
+   "frameIndex": 44,
+   "tMs": 1760.0,
+   "group": "dink_diag_HELDOUT"
+  },
+  {
+   "case": "wm-dink-01",
+   "frameIndex": 45,
+   "tMs": 1800.0,
+   "group": "dink_diag_HELDOUT"
+  },
+  {
+   "case": "wm-dink-01",
+   "frameIndex": 46,
+   "tMs": 1840.0,
+   "group": "dink_diag_HELDOUT"
+  },
+  {
+   "case": "wm-dink-01",
+   "frameIndex": 47,
+   "tMs": 1880.0,
+   "group": "dink_diag_HELDOUT"
+  },
+  {
+   "case": "wm-dink-01",
+   "frameIndex": 48,
+   "tMs": 1920.0,
+   "group": "dink_diag_HELDOUT"
+  },
+  {
+   "case": "wm-dink-01",
+   "frameIndex": 49,
+   "tMs": 1960.0,
+   "group": "dink_diag_HELDOUT"
+  },
+  {
+   "case": "wm-dink-01",
+   "frameIndex": 50,
+   "tMs": 2000.0,
+   "group": "dink_diag_HELDOUT"
+  },
+  {
+   "case": "wm-dink-01",
+   "frameIndex": 51,
+   "tMs": 2040.0,
+   "group": "dink_diag_HELDOUT"
+  },
+  {
+   "case": "wm-dink-01",
+   "frameIndex": 52,
+   "tMs": 2080.0,
+   "group": "dink_diag_HELDOUT"
+  },
+  {
+   "case": "wm-dink-01",
+   "frameIndex": 53,
+   "tMs": 2120.0,
+   "group": "dink_diag_HELDOUT"
+  },
+  {
+   "case": "wm-dink-01",
+   "frameIndex": 54,
+   "tMs": 2160.0,
+   "group": "dink_diag_HELDOUT"
+  }
+ ]
+}

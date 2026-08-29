@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "note": "Frozen perception baselines. Future systems must be benchmarked against these exact records; never silently replace the numbers.",
+  "baselines": [
+    {
+      "id": "paddle.dfine-coco-proxy.v1",
+      "task": "paddle_detection_tracking",
+      "frozenAtIso": "2026-08-28T08:30:00.000Z",
+      "detector": {
+        "model": "ustc-community/dfine-medium-coco",
+        "codeLicense": "Apache-2.0",
+        "weightsLicense": "Apache-2.0",
+        "proxyClasses": ["tennis racket", "baseball bat"],
+        "inferenceMsPerFrame": "67-91 (Apple M-series, MPS)"
+      },
+      "tracker": "paddle-track-1 (two-stage association, pose-gated selection)",
+      "confidence": "heuristic-v1 (uncalibrated)",
+      "benchmark": {
+        "provenance": "REAL (licensed, CC BY 3.0)",
+        "videos": 2,
+        "annotatedFrames": 28,
+        "annotators": 1,
+        "precision": 0.53,
+        "recall": 0.53,
+        "medianCenterErrorNorm": { "wm-dink-01": 0.073, "wm-volley-02": 0.01 },
+        "hitRadiusNorm": 0.08,
+        "matchToleranceMs": 40,
+        "resultsFile": "results/paddle-bench-1787901391692.json"
+      }
+    }
+  ]
+}

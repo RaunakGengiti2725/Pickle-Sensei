@@ -1,5 +1,9 @@
 import { z } from "zod";
 import {
+  AccessStateSchema,
+  AnalysisPermitFinalizeRequest,
+  AnalysisPermitReserveRequest,
+  AnalysisPermitResponse,
   CheckpointsResponse,
   ErrorEnvelope,
   HealthResponse,
@@ -8,6 +12,11 @@ import {
   ShotsSyncRequest,
   ShotsSyncResponse,
   ShotTypesResponse,
+  RevenueCatSyncResponse,
+  TrainingPlanCreateRequest,
+  TrainingPlanResponse,
+  TrainingPlanReassessmentRequest,
+  DrillCompletionCreateRequest,
 } from "./schemas.js";
 
 /**
@@ -76,7 +85,9 @@ export function buildOpenApiDocument(apiVersion: string): Record<string, unknown
       "/v1/shots:sync": {
         post: {
           operationId: "syncShots",
-          summary: "Upload on-device structured results (idempotent batch upsert)",
+          summary: "Atomically persist permit-bound results and consume only successful ratings",
+          description:
+            "Each result carries its pre-inference analysis permit. The shot insert and permit finalization are one transaction. Replays are accepted only when user, shot, permit, and outcome match the original write.",
           requestBody: {
             required: true,
             content: { "application/json": { schema: schema(ShotsSyncRequest) } },
@@ -86,8 +97,8 @@ export function buildOpenApiDocument(apiVersion: string): Record<string, unknown
               description: "Accepted/rejected ids",
               content: { "application/json": { schema: schema(ShotsSyncResponse) } },
             },
+            "400": errorResponse,
             "401": errorResponse,
-            "501": errorResponse,
           },
         },
       },
@@ -106,6 +117,143 @@ export function buildOpenApiDocument(apiVersion: string): Record<string, unknown
             },
             "401": errorResponse,
             "501": errorResponse,
+          },
+        },
+      },
+      "/v1/training-plans": {
+        post: {
+          operationId: "createTrainingPlan",
+          summary: "Create an evidence-backed deterministic plan from a scored shot",
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: schema(TrainingPlanCreateRequest) } },
+          },
+          responses: {
+            "200": {
+              description: "Persisted training plan",
+              content: { "application/json": { schema: schema(TrainingPlanResponse) } },
+            },
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
+      "/v1/training-plans/current": {
+        get: {
+          operationId: "getCurrentTrainingPlan",
+          summary: "Get the athlete's current real training plan",
+          responses: {
+            "200": {
+              description: "Current plan or null when none exists",
+              content: { "application/json": { schema: schema(TrainingPlanResponse) } },
+            },
+            "401": errorResponse,
+          },
+        },
+      },
+      "/v1/training-plans/{id}/reassessment": {
+        post: {
+          operationId: "completeTrainingPlanReassessment",
+          summary: "Link a newer scored shot and compute version-compatible improvement",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          ],
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: schema(TrainingPlanReassessmentRequest) } },
+          },
+          responses: {
+            "200": {
+              description: "Completed training plan",
+              content: { "application/json": { schema: schema(TrainingPlanResponse) } },
+            },
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+            "422": errorResponse,
+          },
+        },
+      },
+      "/v1/drill-completions": {
+        post: {
+          operationId: "recordDrillCompletion",
+          summary: "Record actual reps or duration and derive streak qualification server-side",
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: schema(DrillCompletionCreateRequest) } },
+          },
+          responses: {
+            "200": { description: "Persisted completion" },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
+      "/v1/me/access": {
+        get: {
+          operationId: "getMyAccess",
+          summary: "Canonical premium entitlement and lifetime free-rating allowance",
+          responses: {
+            "200": {
+              description: "Current access state",
+              content: { "application/json": { schema: schema(AccessStateSchema) } },
+            },
+            "401": errorResponse,
+          },
+        },
+      },
+      "/v1/analysis-permits": {
+        post: {
+          operationId: "reserveAnalysisPermit",
+          summary: "Idempotently reserve access for one rating",
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: schema(AnalysisPermitReserveRequest) } },
+          },
+          responses: {
+            "200": {
+              description: "Reserved or previously returned permit",
+              content: { "application/json": { schema: schema(AnalysisPermitResponse) } },
+            },
+            "402": errorResponse,
+            "401": errorResponse,
+          },
+        },
+      },
+      "/v1/analysis-permits/{id}/finalize": {
+        post: {
+          operationId: "finalizeAnalysisPermit",
+          summary: "Consume only a successful rating; release all abstentions and failures",
+          parameters: [
+            { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+          ],
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: schema(AnalysisPermitFinalizeRequest) } },
+          },
+          responses: {
+            "200": {
+              description: "Finalized permit and current access state",
+              content: { "application/json": { schema: schema(AnalysisPermitResponse) } },
+            },
+            "401": errorResponse,
+            "404": errorResponse,
+            "409": errorResponse,
+          },
+        },
+      },
+      "/v1/billing/sync": {
+        post: {
+          operationId: "syncRevenueCatBilling",
+          summary: "Refresh canonical billing state from RevenueCat's server API",
+          responses: {
+            "200": {
+              description: "Server-verified billing and access state",
+              content: { "application/json": { schema: schema(RevenueCatSyncResponse) } },
+            },
+            "401": errorResponse,
+            "503": errorResponse,
           },
         },
       },

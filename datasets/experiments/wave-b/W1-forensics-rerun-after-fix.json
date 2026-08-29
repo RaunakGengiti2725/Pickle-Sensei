@@ -1,0 +1,5649 @@
+{
+  "tool": "paddleSelectionForensics",
+  "generatedAtIso": "2026-08-29T02:19:54.993Z",
+  "hitRadius": 0.08,
+  "matchToleranceMs": 40,
+  "cases": [
+    {
+      "id": "wm-dink-01",
+      "role": "held_out",
+      "visible": 19,
+      "window": {
+        "startMs": 0,
+        "endMs": 6740,
+        "peakMotionMs": 1760,
+        "confidence": 0.5891101595849311
+      },
+      "parity": {
+        "matchesRealSelector": false,
+        "realStatus": "tracked",
+        "realReason": null
+      },
+      "selection": {
+        "status": "tracked",
+        "reason": null,
+        "winnerTrackId": 20,
+        "rejectedOtherPlayerTracks": 33,
+        "switchEvents": [
+          {
+            "atMs": 0
+          },
+          {
+            "atMs": 0
+          },
+          {
+            "atMs": 3400
+          },
+          {
+            "atMs": 40
+          },
+          {
+            "atMs": 200
+          },
+          {
+            "atMs": 560
+          },
+          {
+            "atMs": 2680
+          },
+          {
+            "atMs": 3600
+          },
+          {
+            "atMs": 5200
+          },
+          {
+            "atMs": 560
+          },
+          {
+            "atMs": 600
+          },
+          {
+            "atMs": 4200
+          },
+          {
+            "atMs": 6560
+          },
+          {
+            "atMs": 760
+          },
+          {
+            "atMs": 4240
+          },
+          {
+            "atMs": 4720
+          },
+          {
+            "atMs": 2920
+          },
+          {
+            "atMs": 3600
+          },
+          {
+            "atMs": 4400
+          },
+          {
+            "atMs": 5160
+          },
+          {
+            "atMs": 7000
+          },
+          {
+            "atMs": 4240
+          },
+          {
+            "atMs": 4720
+          },
+          {
+            "atMs": 4360
+          },
+          {
+            "atMs": 6600
+          },
+          {
+            "atMs": 5520
+          },
+          {
+            "atMs": 5560
+          }
+        ],
+        "firedGate": null
+      },
+      "candidates": [
+        {
+          "trackId": 20,
+          "rankAll": 1,
+          "rankEligible": 1,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 75,
+          "nObsAfterFlip": 30,
+          "flipAtMs": 3600,
+          "spanMs": [
+            1680,
+            5360
+          ],
+          "windowCoverage": 0.546,
+          "meanScore": 0.4707,
+          "meanWristDistance": 0.0689,
+          "meanOtherDistance": 0.1886,
+          "proximityFactor": 0.9745,
+          "handAffinity": 0.7667,
+          "score": 0.250443,
+          "goldHitsFull": 9,
+          "goldHitsAfterFlip": 9
+        },
+        {
+          "trackId": 18,
+          "rankAll": 2,
+          "rankEligible": 2,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 82,
+          "nObsAfterFlip": 82,
+          "flipAtMs": null,
+          "spanMs": [
+            1080,
+            4600
+          ],
+          "windowCoverage": 0.5223,
+          "meanScore": 0.332,
+          "meanWristDistance": 0.0678,
+          "meanOtherDistance": 0.2241,
+          "proximityFactor": 0.9789,
+          "handAffinity": 0.8049,
+          "score": 0.169739,
+          "goldHitsFull": 5,
+          "goldHitsAfterFlip": 5
+        },
+        {
+          "trackId": 34,
+          "rankAll": 3,
+          "rankEligible": 3,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 96,
+          "nObsAfterFlip": 39,
+          "flipAtMs": 5160,
+          "spanMs": [
+            3080,
+            7520
+          ],
+          "windowCoverage": 0.5401,
+          "meanScore": 0.2896,
+          "meanWristDistance": 0.0289,
+          "meanOtherDistance": 0.2695,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0.156419,
+          "goldHitsFull": 2,
+          "goldHitsAfterFlip": 2
+        },
+        {
+          "trackId": 35,
+          "rankAll": 4,
+          "rankEligible": 4,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 71,
+          "nObsAfterFlip": 71,
+          "flipAtMs": null,
+          "spanMs": [
+            3120,
+            6160
+          ],
+          "windowCoverage": 0.451,
+          "meanScore": 0.3459,
+          "meanWristDistance": 0.0324,
+          "meanOtherDistance": 0.2581,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0.156018,
+          "goldHitsFull": 3,
+          "goldHitsAfterFlip": 3
+        },
+        {
+          "trackId": 4,
+          "rankAll": 5,
+          "rankEligible": 5,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 33,
+          "nObsAfterFlip": 33,
+          "flipAtMs": null,
+          "spanMs": [
+            80,
+            1400
+          ],
+          "windowCoverage": 0.1958,
+          "meanScore": 0.5311,
+          "meanWristDistance": 0.0638,
+          "meanOtherDistance": 0.1927,
+          "proximityFactor": 0.9948,
+          "handAffinity": 1,
+          "score": 0.10348,
+          "goldHitsFull": 6,
+          "goldHitsAfterFlip": 6
+        },
+        {
+          "trackId": 40,
+          "rankAll": 6,
+          "rankEligible": 6,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 74,
+          "nObsAfterFlip": 60,
+          "flipAtMs": 7000,
+          "spanMs": [
+            3760,
+            7520
+          ],
+          "windowCoverage": 0.4392,
+          "meanScore": 0.2317,
+          "meanWristDistance": 0.0415,
+          "meanOtherDistance": 0.2466,
+          "proximityFactor": 1,
+          "handAffinity": 0.9492,
+          "score": 0.101774,
+          "goldHitsFull": 2,
+          "goldHitsAfterFlip": 2
+        },
+        {
+          "trackId": 17,
+          "rankAll": 7,
+          "rankEligible": 7,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 70,
+          "nObsAfterFlip": 39,
+          "flipAtMs": 2920,
+          "spanMs": [
+            1040,
+            4200
+          ],
+          "windowCoverage": 0.4688,
+          "meanScore": 0.1991,
+          "meanWristDistance": 0.0781,
+          "meanOtherDistance": 0.2178,
+          "proximityFactor": 0.9375,
+          "handAffinity": 0.7949,
+          "score": 0.087527,
+          "goldHitsFull": 3,
+          "goldHitsAfterFlip": 3
+        },
+        {
+          "trackId": 31,
+          "rankAll": 8,
+          "rankEligible": 8,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 42,
+          "nObsAfterFlip": 32,
+          "flipAtMs": 4400,
+          "spanMs": [
+            2680,
+            4760
+          ],
+          "windowCoverage": 0.3086,
+          "meanScore": 0.2162,
+          "meanWristDistance": 0.0578,
+          "meanOtherDistance": 0.2278,
+          "proximityFactor": 1,
+          "handAffinity": 0.9063,
+          "score": 0.066719,
+          "goldHitsFull": 2,
+          "goldHitsAfterFlip": 2
+        },
+        {
+          "trackId": 5,
+          "rankAll": 9,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 26,
+          "nObsAfterFlip": 5,
+          "flipAtMs": 560,
+          "spanMs": [
+            160,
+            1800
+          ],
+          "windowCoverage": 0.2433,
+          "meanScore": 0.2992,
+          "meanWristDistance": 0.0853,
+          "meanOtherDistance": 0.0625,
+          "proximityFactor": 0.9087,
+          "handAffinity": 1,
+          "score": 0.066146,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 48,
+          "rankAll": 10,
+          "rankEligible": 9,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 55,
+          "nObsAfterFlip": 55,
+          "flipAtMs": null,
+          "spanMs": [
+            4960,
+            7520
+          ],
+          "windowCoverage": 0.2611,
+          "meanScore": 0.2399,
+          "meanWristDistance": 0.0314,
+          "meanOtherDistance": 0.2152,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0.062643,
+          "goldHitsFull": 1,
+          "goldHitsAfterFlip": 1
+        },
+        {
+          "trackId": 7,
+          "rankAll": 11,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 161,
+          "nObsAfterFlip": 161,
+          "flipAtMs": null,
+          "spanMs": [
+            240,
+            7520
+          ],
+          "windowCoverage": 0.9614,
+          "meanScore": 0.2194,
+          "meanWristDistance": 0.239,
+          "meanOtherDistance": 0.1379,
+          "proximityFactor": 0.2938,
+          "handAffinity": 0.1379,
+          "score": 0.061986,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 43,
+          "rankAll": 12,
+          "rankEligible": 10,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 84,
+          "nObsAfterFlip": 5,
+          "flipAtMs": 4360,
+          "spanMs": [
+            4160,
+            7520
+          ],
+          "windowCoverage": 0.3798,
+          "meanScore": 0.2156,
+          "meanWristDistance": 0.1433,
+          "meanOtherDistance": 0.1841,
+          "proximityFactor": 0.6766,
+          "handAffinity": 0.4,
+          "score": 0.0554,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 49,
+          "rankAll": 13,
+          "rankEligible": 11,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 55,
+          "nObsAfterFlip": 55,
+          "flipAtMs": null,
+          "spanMs": [
+            4960,
+            7520
+          ],
+          "windowCoverage": 0.2611,
+          "meanScore": 0.2048,
+          "meanWristDistance": 0.057,
+          "meanOtherDistance": 0.2289,
+          "proximityFactor": 1,
+          "handAffinity": 0.875,
+          "score": 0.053487,
+          "goldHitsFull": 1,
+          "goldHitsAfterFlip": 1
+        },
+        {
+          "trackId": 6,
+          "rankAll": 14,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 56,
+          "nObsAfterFlip": 56,
+          "flipAtMs": null,
+          "spanMs": [
+            200,
+            2920
+          ],
+          "windowCoverage": 0.4036,
+          "meanScore": 0.2356,
+          "meanWristDistance": 0.1857,
+          "meanOtherDistance": 0.1317,
+          "proximityFactor": 0.5073,
+          "handAffinity": 0.4107,
+          "score": 0.048234,
+          "goldHitsFull": 5,
+          "goldHitsAfterFlip": 5
+        },
+        {
+          "trackId": 54,
+          "rankAll": 15,
+          "rankEligible": 12,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 31,
+          "nObsAfterFlip": 31,
+          "flipAtMs": null,
+          "spanMs": [
+            5520,
+            6960
+          ],
+          "windowCoverage": 0.178,
+          "meanScore": 0.2873,
+          "meanWristDistance": 0.0792,
+          "meanOtherDistance": 0.1652,
+          "proximityFactor": 0.9331,
+          "handAffinity": 0.7308,
+          "score": 0.047737,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 2,
+          "rankAll": 16,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 102,
+          "nObsAfterFlip": 102,
+          "flipAtMs": null,
+          "spanMs": [
+            0,
+            4040
+          ],
+          "windowCoverage": 0.5994,
+          "meanScore": 0.4999,
+          "meanWristDistance": 0.2736,
+          "meanOtherDistance": 0.0299,
+          "proximityFactor": 0.1556,
+          "handAffinity": 0,
+          "score": 0.046619,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 51,
+          "rankAll": 17,
+          "rankEligible": 13,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 37,
+          "nObsAfterFlip": 37,
+          "flipAtMs": null,
+          "spanMs": [
+            5360,
+            7080
+          ],
+          "windowCoverage": 0.2018,
+          "meanScore": 0.2198,
+          "meanWristDistance": 0.0409,
+          "meanOtherDistance": 0.1895,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0.044351,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 1,
+          "rankAll": 18,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 155,
+          "nObsAfterFlip": 155,
+          "flipAtMs": null,
+          "spanMs": [
+            0,
+            7520
+          ],
+          "windowCoverage": 0.997,
+          "meanScore": 0.2287,
+          "meanWristDistance": 0.2642,
+          "meanOtherDistance": 0.1037,
+          "proximityFactor": 0.1931,
+          "handAffinity": 0.2353,
+          "score": 0.044042,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 15,
+          "rankAll": 19,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 168,
+          "nObsAfterFlip": 168,
+          "flipAtMs": null,
+          "spanMs": [
+            760,
+            7520
+          ],
+          "windowCoverage": 0.8843,
+          "meanScore": 0.3054,
+          "meanWristDistance": 0.2735,
+          "meanOtherDistance": 0.0657,
+          "proximityFactor": 0.1559,
+          "handAffinity": 0,
+          "score": 0.042087,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 55,
+          "rankAll": 20,
+          "rankEligible": 14,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 28,
+          "nObsAfterFlip": 28,
+          "flipAtMs": null,
+          "spanMs": [
+            5560,
+            6960
+          ],
+          "windowCoverage": 0.1721,
+          "meanScore": 0.2502,
+          "meanWristDistance": 0.0796,
+          "meanOtherDistance": 0.1635,
+          "proximityFactor": 0.9317,
+          "handAffinity": 0.7391,
+          "score": 0.040125,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 10,
+          "rankAll": 21,
+          "rankEligible": 15,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 19,
+          "nObsAfterFlip": 19,
+          "flipAtMs": null,
+          "spanMs": [
+            520,
+            1280
+          ],
+          "windowCoverage": 0.1128,
+          "meanScore": 0.3381,
+          "meanWristDistance": 0.0267,
+          "meanOtherDistance": 0.2249,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0.038125,
+          "goldHitsFull": 5,
+          "goldHitsAfterFlip": 5
+        },
+        {
+          "trackId": 47,
+          "rankAll": 22,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 61,
+          "nObsAfterFlip": 61,
+          "flipAtMs": null,
+          "spanMs": [
+            4920,
+            7320
+          ],
+          "windowCoverage": 0.2671,
+          "meanScore": 0.3405,
+          "meanWristDistance": 0.2393,
+          "meanOtherDistance": 0.0168,
+          "proximityFactor": 0.2928,
+          "handAffinity": 0,
+          "score": 0.026624,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 27,
+          "rankAll": 23,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 45,
+          "nObsAfterFlip": 8,
+          "flipAtMs": 2840,
+          "spanMs": [
+            2520,
+            4320
+          ],
+          "windowCoverage": 0.2671,
+          "meanScore": 0.2189,
+          "meanWristDistance": 0.2033,
+          "meanOtherDistance": 0.163,
+          "proximityFactor": 0.4368,
+          "handAffinity": 0,
+          "score": 0.025537,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 58,
+          "rankAll": 24,
+          "rankEligible": 16,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 36,
+          "nObsAfterFlip": 18,
+          "flipAtMs": 6840,
+          "spanMs": [
+            6000,
+            7520
+          ],
+          "windowCoverage": 0.1068,
+          "meanScore": 0.3873,
+          "meanWristDistance": 0.189,
+          "meanOtherDistance": 0.2059,
+          "proximityFactor": 0.494,
+          "handAffinity": 0,
+          "score": 0.020438,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 14,
+          "rankAll": 25,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 153,
+          "nObsAfterFlip": 153,
+          "flipAtMs": null,
+          "spanMs": [
+            600,
+            6960
+          ],
+          "windowCoverage": 0.908,
+          "meanScore": 0.2184,
+          "meanWristDistance": 0.3367,
+          "meanOtherDistance": 0.093,
+          "proximityFactor": 0.1,
+          "handAffinity": 0.0066,
+          "score": 0.01983,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 11,
+          "rankAll": 26,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 86,
+          "nObsAfterFlip": 86,
+          "flipAtMs": null,
+          "spanMs": [
+            560,
+            4040
+          ],
+          "windowCoverage": 0.5163,
+          "meanScore": 0.2279,
+          "meanWristDistance": 0.2707,
+          "meanOtherDistance": 0.0438,
+          "proximityFactor": 0.1671,
+          "handAffinity": 0,
+          "score": 0.019661,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 24,
+          "rankAll": 27,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 135,
+          "nObsAfterFlip": 135,
+          "flipAtMs": null,
+          "spanMs": [
+            2040,
+            7520
+          ],
+          "windowCoverage": 0.6944,
+          "meanScore": 0.2565,
+          "meanWristDistance": 0.3416,
+          "meanOtherDistance": 0.0931,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.017808,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 12,
+          "rankAll": 28,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 104,
+          "nObsAfterFlip": 104,
+          "flipAtMs": null,
+          "spanMs": [
+            600,
+            5320
+          ],
+          "windowCoverage": 0.7003,
+          "meanScore": 0.2237,
+          "meanWristDistance": 0.3004,
+          "meanOtherDistance": 0.1125,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.015663,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 53,
+          "rankAll": 29,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 44,
+          "nObsAfterFlip": 44,
+          "flipAtMs": null,
+          "spanMs": [
+            5480,
+            7520
+          ],
+          "windowCoverage": 0.184,
+          "meanScore": 0.3336,
+          "meanWristDistance": 0.2522,
+          "meanOtherDistance": 0.0307,
+          "proximityFactor": 0.2413,
+          "handAffinity": 0,
+          "score": 0.014806,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 3,
+          "rankAll": 30,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 101,
+          "nObsAfterFlip": 101,
+          "flipAtMs": null,
+          "spanMs": [
+            40,
+            4120
+          ],
+          "windowCoverage": 0.6053,
+          "meanScore": 0.2305,
+          "meanWristDistance": 0.3739,
+          "meanOtherDistance": 0.1185,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.013952,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 52,
+          "rankAll": 31,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 52,
+          "nObsAfterFlip": 52,
+          "flipAtMs": null,
+          "spanMs": [
+            5400,
+            7520
+          ],
+          "windowCoverage": 0.1958,
+          "meanScore": 0.2925,
+          "meanWristDistance": 0.2548,
+          "meanOtherDistance": 0.0505,
+          "proximityFactor": 0.2307,
+          "handAffinity": 0.0625,
+          "score": 0.013215,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 8,
+          "rankAll": 32,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 86,
+          "nObsAfterFlip": 86,
+          "flipAtMs": null,
+          "spanMs": [
+            280,
+            3840
+          ],
+          "windowCoverage": 0.5282,
+          "meanScore": 0.2313,
+          "meanWristDistance": 0.3476,
+          "meanOtherDistance": 0.0818,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.012216,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 36,
+          "rankAll": 33,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 92,
+          "nObsAfterFlip": 92,
+          "flipAtMs": null,
+          "spanMs": [
+            3440,
+            7520
+          ],
+          "windowCoverage": 0.4866,
+          "meanScore": 0.25,
+          "meanWristDistance": 0.3653,
+          "meanOtherDistance": 0.069,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.012165,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 13,
+          "rankAll": 34,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 37,
+          "nObsAfterFlip": 37,
+          "flipAtMs": null,
+          "spanMs": [
+            600,
+            2040
+          ],
+          "windowCoverage": 0.2136,
+          "meanScore": 0.5555,
+          "meanWristDistance": 0.2988,
+          "meanOtherDistance": 0.0333,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.011868,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 30,
+          "rankAll": 35,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 77,
+          "nObsAfterFlip": 77,
+          "flipAtMs": null,
+          "spanMs": [
+            2640,
+            5760
+          ],
+          "windowCoverage": 0.4629,
+          "meanScore": 0.2521,
+          "meanWristDistance": 0.3307,
+          "meanOtherDistance": 0.1057,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.011668,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 56,
+          "rankAll": 36,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 37,
+          "nObsAfterFlip": 37,
+          "flipAtMs": null,
+          "spanMs": [
+            5960,
+            7520
+          ],
+          "windowCoverage": 0.1128,
+          "meanScore": 0.4137,
+          "meanWristDistance": 0.2537,
+          "meanOtherDistance": 0.0359,
+          "proximityFactor": 0.2354,
+          "handAffinity": 0,
+          "score": 0.010978,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 38,
+          "rankAll": 37,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 95,
+          "nObsAfterFlip": 95,
+          "flipAtMs": null,
+          "spanMs": [
+            3560,
+            7520
+          ],
+          "windowCoverage": 0.4688,
+          "meanScore": 0.2275,
+          "meanWristDistance": 0.3379,
+          "meanOtherDistance": 0.0916,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.010668,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 9,
+          "rankAll": 38,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 36,
+          "nObsAfterFlip": 36,
+          "flipAtMs": null,
+          "spanMs": [
+            360,
+            1760
+          ],
+          "windowCoverage": 0.2077,
+          "meanScore": 0.2589,
+          "meanWristDistance": 0.2653,
+          "meanOtherDistance": 0.1042,
+          "proximityFactor": 0.1889,
+          "handAffinity": 0,
+          "score": 0.010157,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 29,
+          "rankAll": 39,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 51,
+          "nObsAfterFlip": 51,
+          "flipAtMs": null,
+          "spanMs": [
+            2640,
+            4760
+          ],
+          "windowCoverage": 0.3145,
+          "meanScore": 0.3189,
+          "meanWristDistance": 0.3344,
+          "meanOtherDistance": 0.0515,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.010029,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 37,
+          "rankAll": 40,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 97,
+          "nObsAfterFlip": 97,
+          "flipAtMs": null,
+          "spanMs": [
+            3520,
+            7520
+          ],
+          "windowCoverage": 0.4748,
+          "meanScore": 0.1787,
+          "meanWristDistance": 0.3518,
+          "meanOtherDistance": 0.1333,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.008484,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 57,
+          "rankAll": 41,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 26,
+          "nObsAfterFlip": 26,
+          "flipAtMs": null,
+          "spanMs": [
+            5960,
+            7080
+          ],
+          "windowCoverage": 0.1128,
+          "meanScore": 0.2076,
+          "meanWristDistance": 0.2258,
+          "meanOtherDistance": 0.0721,
+          "proximityFactor": 0.3467,
+          "handAffinity": 0.0556,
+          "score": 0.008113,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 41,
+          "rankAll": 42,
+          "rankEligible": 17,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 81,
+          "nObsAfterFlip": 6,
+          "flipAtMs": 4240,
+          "spanMs": [
+            4000,
+            7520
+          ],
+          "windowCoverage": 0.3976,
+          "meanScore": 0.1833,
+          "meanWristDistance": 0.3777,
+          "meanOtherDistance": 0.5472,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.00729,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 26,
+          "rankAll": 43,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 12,
+          "nObsAfterFlip": 12,
+          "flipAtMs": null,
+          "spanMs": [
+            2480,
+            2920
+          ],
+          "windowCoverage": 0.0653,
+          "meanScore": 0.4159,
+          "meanWristDistance": 0.2629,
+          "meanOtherDistance": 0.0483,
+          "proximityFactor": 0.1985,
+          "handAffinity": 0,
+          "score": 0.00539,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 46,
+          "rankAll": 44,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 65,
+          "nObsAfterFlip": 65,
+          "flipAtMs": null,
+          "spanMs": [
+            4920,
+            7520
+          ],
+          "windowCoverage": 0.2671,
+          "meanScore": 0.1686,
+          "meanWristDistance": 0.3027,
+          "meanOtherDistance": 0.0767,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.004504,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 32,
+          "rankAll": 45,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 30,
+          "nObsAfterFlip": 30,
+          "flipAtMs": null,
+          "spanMs": [
+            2720,
+            3920
+          ],
+          "windowCoverage": 0.178,
+          "meanScore": 0.2481,
+          "meanWristDistance": 0.3223,
+          "meanOtherDistance": 0.0467,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.004416,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 33,
+          "rankAll": 46,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 21,
+          "nObsAfterFlip": 21,
+          "flipAtMs": null,
+          "spanMs": [
+            2920,
+            3840
+          ],
+          "windowCoverage": 0.1365,
+          "meanScore": 0.2046,
+          "meanWristDistance": 0.3253,
+          "meanOtherDistance": 0.0573,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.002793,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 22,
+          "rankAll": 47,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 15,
+          "nObsAfterFlip": 15,
+          "flipAtMs": null,
+          "spanMs": [
+            1960,
+            2520
+          ],
+          "windowCoverage": 0.0831,
+          "meanScore": 0.2479,
+          "meanWristDistance": 0.2985,
+          "meanOtherDistance": 0.0393,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.00206,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 28,
+          "rankAll": 48,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 7,
+          "nObsAfterFlip": 7,
+          "flipAtMs": null,
+          "spanMs": [
+            2640,
+            2960
+          ],
+          "windowCoverage": 0.0475,
+          "meanScore": 0.1685,
+          "meanWristDistance": 0.3303,
+          "meanOtherDistance": 0.0625,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.0008,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 45,
+          "rankAll": 49,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 7,
+          "nObsAfterFlip": 7,
+          "flipAtMs": null,
+          "spanMs": [
+            4280,
+            4520
+          ],
+          "windowCoverage": 0.0356,
+          "meanScore": 0.202,
+          "meanWristDistance": 0.3889,
+          "meanOtherDistance": 0.1445,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.000719,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 42,
+          "rankAll": 50,
+          "rankEligible": 18,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 6,
+          "nObsAfterFlip": 6,
+          "flipAtMs": null,
+          "spanMs": [
+            4000,
+            4200
+          ],
+          "windowCoverage": 0.0297,
+          "meanScore": 0.2319,
+          "meanWristDistance": 0.3796,
+          "meanOtherDistance": 0.5546,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.000688,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 59,
+          "rankAll": 51,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 15,
+          "nObsAfterFlip": 15,
+          "flipAtMs": null,
+          "spanMs": [
+            6960,
+            7520
+          ],
+          "windowCoverage": 0,
+          "meanScore": 0.4631,
+          "meanWristDistance": 0.1608,
+          "meanOtherDistance": 0.0293,
+          "proximityFactor": 0.6068,
+          "handAffinity": 0,
+          "score": 0,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 60,
+          "rankAll": 52,
+          "rankEligible": 19,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 5,
+          "nObsAfterFlip": 5,
+          "flipAtMs": null,
+          "spanMs": [
+            7360,
+            7520
+          ],
+          "windowCoverage": 0,
+          "meanScore": 0.3074,
+          "meanWristDistance": 0.0305,
+          "meanOtherDistance": 0.1538,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        }
+      ],
+      "labels": [
+        {
+          "tMs": 600,
+          "matchedTrackIds": [
+            4,
+            10
+          ],
+          "matchedEligibleTrackIds": [
+            4,
+            10
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 800,
+          "matchedTrackIds": [
+            4,
+            10
+          ],
+          "matchedEligibleTrackIds": [
+            4,
+            10
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 1000,
+          "matchedTrackIds": [
+            4,
+            10,
+            17
+          ],
+          "matchedEligibleTrackIds": [
+            4,
+            10,
+            17
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 1160,
+          "matchedTrackIds": [
+            4,
+            10,
+            17,
+            18
+          ],
+          "matchedEligibleTrackIds": [
+            4,
+            10,
+            17,
+            18
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 1240,
+          "matchedTrackIds": [
+            4,
+            10,
+            18
+          ],
+          "matchedEligibleTrackIds": [
+            4,
+            10,
+            18
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 1280,
+          "matchedTrackIds": [],
+          "matchedEligibleTrackIds": [],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 1320,
+          "matchedTrackIds": [
+            4,
+            17,
+            18
+          ],
+          "matchedEligibleTrackIds": [
+            4,
+            17,
+            18
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 1680,
+          "matchedTrackIds": [
+            20
+          ],
+          "matchedEligibleTrackIds": [
+            20
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 1720,
+          "matchedTrackIds": [
+            20
+          ],
+          "matchedEligibleTrackIds": [
+            20
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 1760,
+          "matchedTrackIds": [
+            20
+          ],
+          "matchedEligibleTrackIds": [
+            20
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 1880,
+          "matchedTrackIds": [
+            20
+          ],
+          "matchedEligibleTrackIds": [
+            20
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 2040,
+          "matchedTrackIds": [
+            6,
+            20
+          ],
+          "matchedEligibleTrackIds": [
+            20
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 2080,
+          "matchedTrackIds": [
+            6,
+            20
+          ],
+          "matchedEligibleTrackIds": [
+            20
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 2160,
+          "matchedTrackIds": [
+            6,
+            20
+          ],
+          "matchedEligibleTrackIds": [
+            20
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 2200,
+          "matchedTrackIds": [
+            6,
+            20
+          ],
+          "matchedEligibleTrackIds": [
+            20
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 2400,
+          "matchedTrackIds": [
+            6,
+            20
+          ],
+          "matchedEligibleTrackIds": [
+            20
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 3360,
+          "matchedTrackIds": [
+            18,
+            31,
+            34,
+            35
+          ],
+          "matchedEligibleTrackIds": [
+            18,
+            31,
+            34,
+            35
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 3760,
+          "matchedTrackIds": [
+            18,
+            31,
+            34,
+            35,
+            40
+          ],
+          "matchedEligibleTrackIds": [
+            18,
+            31,
+            34,
+            35,
+            40
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 4960,
+          "matchedTrackIds": [
+            35,
+            40,
+            48,
+            49
+          ],
+          "matchedEligibleTrackIds": [
+            35,
+            40,
+            48,
+            49
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        }
+      ],
+      "oracle": {
+        "trackId": 20,
+        "hits": 9,
+        "rankAll": 1,
+        "rankEligible": 1,
+        "verdict": "selector picked the oracle track intact",
+        "termRatiosVsWinner": null
+      },
+      "lossWaterfall": {
+        "top1": 9,
+        "top2": 14,
+        "top3": 14
+      },
+      "counterfactuals": [
+        {
+          "name": "CF0 current ranking, no flip deletion",
+          "winnerTrackId": 20,
+          "winnerHits": 9,
+          "winnerScore": 0.2504,
+          "oracleRank": 1,
+          "top2UnionHits": 14,
+          "top3UnionHits": 14
+        },
+        {
+          "name": "CF1 event-gated coverage",
+          "winnerTrackId": 18,
+          "winnerHits": 5,
+          "winnerScore": 0.2733,
+          "oracleRank": 2,
+          "top2UnionHits": 14,
+          "top3UnionHits": 17
+        },
+        {
+          "name": "CF2 in-hand mass (window)",
+          "winnerTrackId": 35,
+          "winnerHits": 3,
+          "winnerScore": 65.7641,
+          "oracleRank": 13,
+          "top2UnionHits": 6,
+          "top3UnionHits": 6
+        },
+        {
+          "name": "CF3 wrist-speed correlation",
+          "winnerTrackId": 30,
+          "winnerHits": 0,
+          "winnerScore": 2.9149,
+          "oracleRank": 2,
+          "top2UnionHits": 9,
+          "top3UnionHits": 9
+        },
+        {
+          "name": "CF4 event-gated in-hand mass",
+          "winnerTrackId": 17,
+          "winnerHits": 3,
+          "winnerScore": 27.0045,
+          "oracleRank": 2,
+          "top2UnionHits": 12,
+          "top3UnionHits": 15
+        },
+        {
+          "name": "CF5 current + alias-suppressed identity",
+          "winnerTrackId": 20,
+          "winnerHits": 9,
+          "winnerScore": 0.250443,
+          "oracleRank": 1,
+          "top2UnionHits": 14,
+          "top3UnionHits": 14
+        }
+      ],
+      "aliasVariant": {
+        "note": "merged candidates + current scoring, but otherWrists built with duplicateAliasesOf (production identity)",
+        "winnerTrackId": 20,
+        "flipAtMs": 3600,
+        "hitsFull": 9,
+        "hitsAfterFlip": 9
+      },
+      "productionParity": {
+        "note": "raw tracklets (no merge) + duplicate-alias suppression, as analyzeVideo runs it",
+        "winnerTrackId": 18,
+        "winnerHitsFull": 5,
+        "status": "tracked"
+      }
+    },
+    {
+      "id": "wm-volley-02",
+      "role": "dev",
+      "visible": 17,
+      "window": {
+        "startMs": 4500,
+        "endMs": 7960,
+        "peakMotionMs": 6680,
+        "confidence": 0.8455688742696794
+      },
+      "parity": {
+        "matchesRealSelector": true,
+        "realStatus": "tracked",
+        "realReason": null
+      },
+      "selection": {
+        "status": "tracked",
+        "reason": null,
+        "winnerTrackId": 11,
+        "rejectedOtherPlayerTracks": 12,
+        "switchEvents": [
+          {
+            "atMs": 6770
+          },
+          {
+            "atMs": 6490
+          }
+        ],
+        "firedGate": null
+      },
+      "candidates": [
+        {
+          "trackId": 11,
+          "rankAll": 1,
+          "rankEligible": 1,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 52,
+          "nObsAfterFlip": 38,
+          "flipAtMs": 6770,
+          "spanMs": [
+            4930,
+            7490
+          ],
+          "windowCoverage": 0.7399,
+          "meanScore": 0.3971,
+          "meanWristDistance": 0.0478,
+          "meanOtherDistance": 0.2337,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0.293771,
+          "goldHitsFull": 8,
+          "goldHitsAfterFlip": 7
+        },
+        {
+          "trackId": 1,
+          "rankAll": 2,
+          "rankEligible": 2,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 30,
+          "nObsAfterFlip": 30,
+          "flipAtMs": null,
+          "spanMs": [
+            4250,
+            5450
+          ],
+          "windowCoverage": 0.2659,
+          "meanScore": 0.544,
+          "meanWristDistance": 0.0351,
+          "meanOtherDistance": 0.2949,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0.144648,
+          "goldHitsFull": 4,
+          "goldHitsAfterFlip": 4
+        },
+        {
+          "trackId": 21,
+          "rankAll": 3,
+          "rankEligible": 3,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 46,
+          "nObsAfterFlip": 8,
+          "flipAtMs": 6330,
+          "spanMs": [
+            5890,
+            7930
+          ],
+          "windowCoverage": 0.5896,
+          "meanScore": 0.2439,
+          "meanWristDistance": 0.1591,
+          "meanOtherDistance": 0.1644,
+          "proximityFactor": 0.6136,
+          "handAffinity": 0,
+          "score": 0.088222,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 28,
+          "rankAll": 4,
+          "rankEligible": 4,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 14,
+          "nObsAfterFlip": 14,
+          "flipAtMs": null,
+          "spanMs": [
+            7410,
+            7930
+          ],
+          "windowCoverage": 0.1503,
+          "meanScore": 0.6081,
+          "meanWristDistance": 0.076,
+          "meanOtherDistance": 0.1959,
+          "proximityFactor": 0.9461,
+          "handAffinity": 0.9231,
+          "score": 0.086464,
+          "goldHitsFull": 4,
+          "goldHitsAfterFlip": 4
+        },
+        {
+          "trackId": 13,
+          "rankAll": 5,
+          "rankEligible": 5,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 16,
+          "nObsAfterFlip": 16,
+          "flipAtMs": null,
+          "spanMs": [
+            4970,
+            5690
+          ],
+          "windowCoverage": 0.2081,
+          "meanScore": 0.4136,
+          "meanWristDistance": 0.0458,
+          "meanOtherDistance": 0.4165,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0.086074,
+          "goldHitsFull": 2,
+          "goldHitsAfterFlip": 2
+        },
+        {
+          "trackId": 20,
+          "rankAll": 6,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 37,
+          "nObsAfterFlip": 37,
+          "flipAtMs": null,
+          "spanMs": [
+            5690,
+            7410
+          ],
+          "windowCoverage": 0.4971,
+          "meanScore": 0.3446,
+          "meanWristDistance": 0.2248,
+          "meanOtherDistance": 0.0624,
+          "proximityFactor": 0.3507,
+          "handAffinity": 0.0811,
+          "score": 0.060075,
+          "goldHitsFull": 2,
+          "goldHitsAfterFlip": 2
+        },
+        {
+          "trackId": 12,
+          "rankAll": 7,
+          "rankEligible": 6,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 12,
+          "nObsAfterFlip": 12,
+          "flipAtMs": null,
+          "spanMs": [
+            4970,
+            5490
+          ],
+          "windowCoverage": 0.1503,
+          "meanScore": 0.3701,
+          "meanWristDistance": 0.0592,
+          "meanOtherDistance": 0.4311,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0.055624,
+          "goldHitsFull": 2,
+          "goldHitsAfterFlip": 2
+        },
+        {
+          "trackId": 8,
+          "rankAll": 8,
+          "rankEligible": 7,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 27,
+          "nObsAfterFlip": 27,
+          "flipAtMs": null,
+          "spanMs": [
+            4770,
+            5810
+          ],
+          "windowCoverage": 0.3006,
+          "meanScore": 0.3323,
+          "meanWristDistance": 0.183,
+          "meanOtherDistance": 0.2592,
+          "proximityFactor": 0.518,
+          "handAffinity": 0.1481,
+          "score": 0.051739,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 9,
+          "rankAll": 9,
+          "rankEligible": 8,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 25,
+          "nObsAfterFlip": 25,
+          "flipAtMs": null,
+          "spanMs": [
+            4810,
+            5770
+          ],
+          "windowCoverage": 0.2775,
+          "meanScore": 0.3372,
+          "meanWristDistance": 0.1846,
+          "meanOtherDistance": 0.2562,
+          "proximityFactor": 0.5117,
+          "handAffinity": 0.08,
+          "score": 0.047869,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 24,
+          "rankAll": 10,
+          "rankEligible": 9,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 22,
+          "nObsAfterFlip": 22,
+          "flipAtMs": null,
+          "spanMs": [
+            6570,
+            7930
+          ],
+          "windowCoverage": 0.3931,
+          "meanScore": 0.2146,
+          "meanWristDistance": 0.1749,
+          "meanOtherDistance": 0.2635,
+          "proximityFactor": 0.5503,
+          "handAffinity": 0.5,
+          "score": 0.046421,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 3,
+          "rankAll": 11,
+          "rankEligible": 10,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 93,
+          "nObsAfterFlip": 20,
+          "flipAtMs": 5050,
+          "spanMs": [
+            4250,
+            7930
+          ],
+          "windowCoverage": 0.9827,
+          "meanScore": 0.4645,
+          "meanWristDistance": 0.3803,
+          "meanOtherDistance": 0.3295,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.045644,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 27,
+          "rankAll": 12,
+          "rankEligible": 11,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 18,
+          "nObsAfterFlip": 18,
+          "flipAtMs": null,
+          "spanMs": [
+            6850,
+            7930
+          ],
+          "windowCoverage": 0.3121,
+          "meanScore": 0.2266,
+          "meanWristDistance": 0.1652,
+          "meanOtherDistance": 0.2856,
+          "proximityFactor": 0.5893,
+          "handAffinity": 0.2353,
+          "score": 0.04169,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 10,
+          "rankAll": 13,
+          "rankEligible": 12,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 23,
+          "nObsAfterFlip": 23,
+          "flipAtMs": null,
+          "spanMs": [
+            4890,
+            5770
+          ],
+          "windowCoverage": 0.2543,
+          "meanScore": 0.318,
+          "meanWristDistance": 0.1878,
+          "meanOtherDistance": 0.262,
+          "proximityFactor": 0.4988,
+          "handAffinity": 0.0435,
+          "score": 0.04034,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 7,
+          "rankAll": 14,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 79,
+          "nObsAfterFlip": 79,
+          "flipAtMs": null,
+          "spanMs": [
+            4610,
+            7930
+          ],
+          "windowCoverage": 0.9595,
+          "meanScore": 0.3233,
+          "meanWristDistance": 0.2803,
+          "meanOtherDistance": 0.0575,
+          "proximityFactor": 0.1287,
+          "handAffinity": 0.0256,
+          "score": 0.03991,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 14,
+          "rankAll": 15,
+          "rankEligible": 13,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 20,
+          "nObsAfterFlip": 20,
+          "flipAtMs": null,
+          "spanMs": [
+            5010,
+            5770
+          ],
+          "windowCoverage": 0.2197,
+          "meanScore": 0.3301,
+          "meanWristDistance": 0.1838,
+          "meanOtherDistance": 0.2696,
+          "proximityFactor": 0.515,
+          "handAffinity": 0,
+          "score": 0.037338,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 19,
+          "rankAll": 16,
+          "rankEligible": 14,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 28,
+          "nObsAfterFlip": 28,
+          "flipAtMs": null,
+          "spanMs": [
+            5570,
+            6810
+          ],
+          "windowCoverage": 0.3584,
+          "meanScore": 0.202,
+          "meanWristDistance": 0.1971,
+          "meanOtherDistance": 0.2949,
+          "proximityFactor": 0.4615,
+          "handAffinity": 0.1786,
+          "score": 0.033419,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 16,
+          "rankAll": 17,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 38,
+          "nObsAfterFlip": 38,
+          "flipAtMs": null,
+          "spanMs": [
+            5290,
+            6770
+          ],
+          "windowCoverage": 0.4277,
+          "meanScore": 0.2925,
+          "meanWristDistance": 0.2482,
+          "meanOtherDistance": 0.033,
+          "proximityFactor": 0.257,
+          "handAffinity": 0.0263,
+          "score": 0.032161,
+          "goldHitsFull": 2,
+          "goldHitsAfterFlip": 2
+        },
+        {
+          "trackId": 15,
+          "rankAll": 18,
+          "rankEligible": 15,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 9,
+          "nObsAfterFlip": 9,
+          "flipAtMs": null,
+          "spanMs": [
+            5250,
+            5570
+          ],
+          "windowCoverage": 0.0925,
+          "meanScore": 0.3054,
+          "meanWristDistance": 0.1002,
+          "meanOtherDistance": 0.4464,
+          "proximityFactor": 0.8493,
+          "handAffinity": 1,
+          "score": 0.023992,
+          "goldHitsFull": 2,
+          "goldHitsAfterFlip": 2
+        },
+        {
+          "trackId": 29,
+          "rankAll": 19,
+          "rankEligible": 16,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 13,
+          "nObsAfterFlip": 13,
+          "flipAtMs": null,
+          "spanMs": [
+            7450,
+            7930
+          ],
+          "windowCoverage": 0.1387,
+          "meanScore": 0.266,
+          "meanWristDistance": 0.1705,
+          "meanOtherDistance": 0.1584,
+          "proximityFactor": 0.5679,
+          "handAffinity": 0.0833,
+          "score": 0.020954,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 2,
+          "rankAll": 20,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 50,
+          "nObsAfterFlip": 50,
+          "flipAtMs": null,
+          "spanMs": [
+            4250,
+            6370
+          ],
+          "windowCoverage": 0.5318,
+          "meanScore": 0.3909,
+          "meanWristDistance": 0.3031,
+          "meanOtherDistance": 0.0294,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.020785,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 18,
+          "rankAll": 21,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 49,
+          "nObsAfterFlip": 49,
+          "flipAtMs": null,
+          "spanMs": [
+            5490,
+            7890
+          ],
+          "windowCoverage": 0.6936,
+          "meanScore": 0.2823,
+          "meanWristDistance": 0.3338,
+          "meanOtherDistance": 0.0641,
+          "proximityFactor": 0.1,
+          "handAffinity": 0.0625,
+          "score": 0.019578,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 5,
+          "rankAll": 22,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 92,
+          "nObsAfterFlip": 92,
+          "flipAtMs": null,
+          "spanMs": [
+            4250,
+            7930
+          ],
+          "windowCoverage": 0.9827,
+          "meanScore": 0.1799,
+          "meanWristDistance": 0.4039,
+          "meanOtherDistance": 0.0763,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.017674,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 17,
+          "rankAll": 23,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 64,
+          "nObsAfterFlip": 64,
+          "flipAtMs": null,
+          "spanMs": [
+            5410,
+            7930
+          ],
+          "windowCoverage": 0.7283,
+          "meanScore": 0.2265,
+          "meanWristDistance": 0.482,
+          "meanOtherDistance": 0.0666,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.0165,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 25,
+          "rankAll": 24,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 10,
+          "nObsAfterFlip": 10,
+          "flipAtMs": null,
+          "spanMs": [
+            6770,
+            7410
+          ],
+          "windowCoverage": 0.185,
+          "meanScore": 0.2451,
+          "meanWristDistance": 0.2355,
+          "meanOtherDistance": 0.1789,
+          "proximityFactor": 0.308,
+          "handAffinity": 0.2,
+          "score": 0.013963,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 26,
+          "rankAll": 25,
+          "rankEligible": 17,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 10,
+          "nObsAfterFlip": 10,
+          "flipAtMs": null,
+          "spanMs": [
+            6810,
+            7410
+          ],
+          "windowCoverage": 0.1734,
+          "meanScore": 0.1552,
+          "meanWristDistance": 0.2315,
+          "meanOtherDistance": 0.197,
+          "proximityFactor": 0.324,
+          "handAffinity": 0.2,
+          "score": 0.008721,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 22,
+          "rankAll": 26,
+          "rankEligible": 18,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 7,
+          "nObsAfterFlip": 7,
+          "flipAtMs": null,
+          "spanMs": [
+            5930,
+            6170
+          ],
+          "windowCoverage": 0.0694,
+          "meanScore": 0.192,
+          "meanWristDistance": 0.1564,
+          "meanOtherDistance": 0.1618,
+          "proximityFactor": 0.6243,
+          "handAffinity": 0,
+          "score": 0.008314,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 23,
+          "rankAll": 27,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 5,
+          "nObsAfterFlip": 5,
+          "flipAtMs": null,
+          "spanMs": [
+            6490,
+            6650
+          ],
+          "windowCoverage": 0.0462,
+          "meanScore": 0.2285,
+          "meanWristDistance": 0.1903,
+          "meanOtherDistance": 0.0624,
+          "proximityFactor": 0.4887,
+          "handAffinity": 0.2,
+          "score": 0.005164,
+          "goldHitsFull": 2,
+          "goldHitsAfterFlip": 2
+        },
+        {
+          "trackId": 4,
+          "rankAll": 28,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 27,
+          "nObsAfterFlip": 27,
+          "flipAtMs": null,
+          "spanMs": [
+            4250,
+            5330
+          ],
+          "windowCoverage": 0.2312,
+          "meanScore": 0.2006,
+          "meanWristDistance": 0.3357,
+          "meanOtherDistance": 0.096,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.004637,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 30,
+          "rankAll": 29,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 6,
+          "nObsAfterFlip": 6,
+          "flipAtMs": null,
+          "spanMs": [
+            7690,
+            7890
+          ],
+          "windowCoverage": 0.0578,
+          "meanScore": 0.2044,
+          "meanWristDistance": 0.3738,
+          "meanOtherDistance": 0.0933,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.001181,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 6,
+          "rankAll": 30,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 5,
+          "nObsAfterFlip": 5,
+          "flipAtMs": null,
+          "spanMs": [
+            4250,
+            4410
+          ],
+          "windowCoverage": 0,
+          "meanScore": 0.256,
+          "meanWristDistance": 0.3305,
+          "meanOtherDistance": 0.0351,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        }
+      ],
+      "labels": [
+        {
+          "tMs": 4250,
+          "matchedTrackIds": [
+            1
+          ],
+          "matchedEligibleTrackIds": [
+            1
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 4290,
+          "matchedTrackIds": [
+            1
+          ],
+          "matchedEligibleTrackIds": [
+            1
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 4600,
+          "matchedTrackIds": [
+            1
+          ],
+          "matchedEligibleTrackIds": [
+            1
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 4650,
+          "matchedTrackIds": [
+            1
+          ],
+          "matchedEligibleTrackIds": [
+            1
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 5450,
+          "matchedTrackIds": [
+            13,
+            12,
+            15
+          ],
+          "matchedEligibleTrackIds": [
+            13,
+            12,
+            15
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 5490,
+          "matchedTrackIds": [
+            13,
+            12,
+            15
+          ],
+          "matchedEligibleTrackIds": [
+            13,
+            12,
+            15
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 6100,
+          "matchedTrackIds": [
+            11
+          ],
+          "matchedEligibleTrackIds": [
+            11
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 6250,
+          "matchedTrackIds": [
+            11
+          ],
+          "matchedEligibleTrackIds": [
+            11
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 6290,
+          "matchedTrackIds": [
+            11
+          ],
+          "matchedEligibleTrackIds": [
+            11
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 6400,
+          "matchedTrackIds": [
+            11
+          ],
+          "matchedEligibleTrackIds": [
+            11
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 6650,
+          "matchedTrackIds": [
+            11,
+            23
+          ],
+          "matchedEligibleTrackIds": [
+            11
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 6690,
+          "matchedTrackIds": [
+            11,
+            16,
+            20,
+            23
+          ],
+          "matchedEligibleTrackIds": [
+            11
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 6700,
+          "matchedTrackIds": [
+            11,
+            16,
+            20
+          ],
+          "matchedEligibleTrackIds": [
+            11
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 7490,
+          "matchedTrackIds": [
+            11,
+            28
+          ],
+          "matchedEligibleTrackIds": [
+            11,
+            28
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 7600,
+          "matchedTrackIds": [
+            28
+          ],
+          "matchedEligibleTrackIds": [
+            28
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 7890,
+          "matchedTrackIds": [
+            28
+          ],
+          "matchedEligibleTrackIds": [
+            28
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 7900,
+          "matchedTrackIds": [
+            28
+          ],
+          "matchedEligibleTrackIds": [
+            28
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        }
+      ],
+      "oracle": {
+        "trackId": 11,
+        "hits": 8,
+        "rankAll": 1,
+        "rankEligible": 1,
+        "verdict": "selector PICKED the oracle track, but sustainedOtherPlayerFlip truncated it at 6770ms (52→38 obs), deleting 1/8 gold hits before the waterfall scored S4",
+        "termRatiosVsWinner": null
+      },
+      "lossWaterfall": {
+        "top1": 8,
+        "top2": 12,
+        "top3": 12
+      },
+      "counterfactuals": [
+        {
+          "name": "CF0 current ranking, no flip deletion",
+          "winnerTrackId": 11,
+          "winnerHits": 8,
+          "winnerScore": 0.2938,
+          "oracleRank": 1,
+          "top2UnionHits": 12,
+          "top3UnionHits": 12
+        },
+        {
+          "name": "CF1 event-gated coverage",
+          "winnerTrackId": 11,
+          "winnerHits": 8,
+          "winnerScore": 0.2734,
+          "oracleRank": 1,
+          "top2UnionHits": 10,
+          "top3UnionHits": 14
+        },
+        {
+          "name": "CF2 in-hand mass (window)",
+          "winnerTrackId": 11,
+          "winnerHits": 8,
+          "winnerScore": 32.4141,
+          "oracleRank": 1,
+          "top2UnionHits": 12,
+          "top3UnionHits": 14
+        },
+        {
+          "name": "CF3 wrist-speed correlation",
+          "winnerTrackId": 11,
+          "winnerHits": 8,
+          "winnerScore": 3.3089,
+          "oracleRank": 1,
+          "top2UnionHits": 8,
+          "top3UnionHits": 8
+        },
+        {
+          "name": "CF4 event-gated in-hand mass",
+          "winnerTrackId": 11,
+          "winnerHits": 8,
+          "winnerScore": 31.6706,
+          "oracleRank": 1,
+          "top2UnionHits": 10,
+          "top3UnionHits": 14
+        },
+        {
+          "name": "CF5 current + alias-suppressed identity",
+          "winnerTrackId": 11,
+          "winnerHits": 7,
+          "winnerScore": 0.293771,
+          "oracleRank": 1,
+          "top2UnionHits": 11,
+          "top3UnionHits": 11
+        }
+      ],
+      "aliasVariant": {
+        "note": "merged candidates + current scoring, but otherWrists built with duplicateAliasesOf (production identity)",
+        "winnerTrackId": 11,
+        "flipAtMs": 6770,
+        "hitsFull": 8,
+        "hitsAfterFlip": 7
+      },
+      "productionParity": {
+        "note": "raw tracklets (no merge) + duplicate-alias suppression, as analyzeVideo runs it",
+        "winnerTrackId": 11,
+        "winnerHitsFull": 8,
+        "status": "tracked"
+      }
+    },
+    {
+      "id": "afn-sasebo-rally1",
+      "role": "dev",
+      "visible": 20,
+      "window": {
+        "startMs": 168,
+        "endMs": 3871,
+        "peakMotionMs": 3403,
+        "confidence": 0.6442428216892244
+      },
+      "parity": {
+        "matchesRealSelector": true,
+        "realStatus": "tracked",
+        "realReason": null
+      },
+      "selection": {
+        "status": "tracked",
+        "reason": null,
+        "winnerTrackId": 6,
+        "rejectedOtherPlayerTracks": 10,
+        "switchEvents": [
+          {
+            "atMs": 734.07
+          },
+          {
+            "atMs": 2268.93
+          },
+          {
+            "atMs": 1134.47
+          },
+          {
+            "atMs": 2002
+          },
+          {
+            "atMs": 2369.03
+          },
+          {
+            "atMs": 2902.9
+          },
+          {
+            "atMs": 3036.37
+          },
+          {
+            "atMs": 3570.23
+          },
+          {
+            "atMs": 2235.57
+          }
+        ],
+        "firedGate": null
+      },
+      "candidates": [
+        {
+          "trackId": 6,
+          "rankAll": 1,
+          "rankEligible": 1,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 94,
+          "nObsAfterFlip": 12,
+          "flipAtMs": 734.07,
+          "spanMs": [
+            300,
+            3837
+          ],
+          "windowCoverage": 0.9551,
+          "meanScore": 0.3738,
+          "meanWristDistance": 0.0485,
+          "meanOtherDistance": 0.091,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0.356992,
+          "goldHitsFull": 13,
+          "goldHitsAfterFlip": 1
+        },
+        {
+          "trackId": 9,
+          "rankAll": 2,
+          "rankEligible": 2,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 46,
+          "nObsAfterFlip": 46,
+          "flipAtMs": null,
+          "spanMs": [
+            834,
+            2469
+          ],
+          "windowCoverage": 0.4415,
+          "meanScore": 0.5296,
+          "meanWristDistance": 0.0754,
+          "meanOtherDistance": 0.2885,
+          "proximityFactor": 0.9486,
+          "handAffinity": 0.8696,
+          "score": 0.221816,
+          "goldHitsFull": 9,
+          "goldHitsAfterFlip": 9
+        },
+        {
+          "trackId": 24,
+          "rankAll": 3,
+          "rankEligible": 3,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 47,
+          "nObsAfterFlip": 18,
+          "flipAtMs": 2902.9,
+          "spanMs": [
+            2202,
+            3837
+          ],
+          "windowCoverage": 0.4415,
+          "meanScore": 0.5728,
+          "meanWristDistance": 0.1009,
+          "meanOtherDistance": 0.2045,
+          "proximityFactor": 0.8464,
+          "handAffinity": 0.7222,
+          "score": 0.214046,
+          "goldHitsFull": 7,
+          "goldHitsAfterFlip": 3
+        },
+        {
+          "trackId": 25,
+          "rankAll": 4,
+          "rankEligible": 4,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 48,
+          "nObsAfterFlip": 23,
+          "flipAtMs": 3036.37,
+          "spanMs": [
+            2236,
+            3837
+          ],
+          "windowCoverage": 0.4325,
+          "meanScore": 0.561,
+          "meanWristDistance": 0.1202,
+          "meanOtherDistance": 0.2579,
+          "proximityFactor": 0.7694,
+          "handAffinity": 0.7391,
+          "score": 0.186688,
+          "goldHitsFull": 10,
+          "goldHitsAfterFlip": 10
+        },
+        {
+          "trackId": 10,
+          "rankAll": 5,
+          "rankEligible": 5,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 81,
+          "nObsAfterFlip": 33,
+          "flipAtMs": 2268.93,
+          "spanMs": [
+            1034,
+            3837
+          ],
+          "windowCoverage": 0.7569,
+          "meanScore": 0.2553,
+          "meanWristDistance": 0.0856,
+          "meanOtherDistance": 0.3101,
+          "proximityFactor": 0.9075,
+          "handAffinity": 0.7879,
+          "score": 0.175367,
+          "goldHitsFull": 5,
+          "goldHitsAfterFlip": 5
+        },
+        {
+          "trackId": 5,
+          "rankAll": 6,
+          "rankEligible": 6,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 41,
+          "nObsAfterFlip": 41,
+          "flipAtMs": null,
+          "spanMs": [
+            267,
+            1835
+          ],
+          "windowCoverage": 0.4235,
+          "meanScore": 0.4481,
+          "meanWristDistance": 0.0909,
+          "meanOtherDistance": 0.2512,
+          "proximityFactor": 0.8862,
+          "handAffinity": 0.7805,
+          "score": 0.168183,
+          "goldHitsFull": 2,
+          "goldHitsAfterFlip": 2
+        },
+        {
+          "trackId": 3,
+          "rankAll": 7,
+          "rankEligible": 7,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 27,
+          "nObsAfterFlip": 27,
+          "flipAtMs": null,
+          "spanMs": [
+            133,
+            1001
+          ],
+          "windowCoverage": 0.2163,
+          "meanScore": 0.6344,
+          "meanWristDistance": 0.0479,
+          "meanOtherDistance": 0.1278,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0.137197,
+          "goldHitsFull": 3,
+          "goldHitsAfterFlip": 3
+        },
+        {
+          "trackId": 19,
+          "rankAll": 8,
+          "rankEligible": 8,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 58,
+          "nObsAfterFlip": 16,
+          "flipAtMs": 2369.03,
+          "spanMs": [
+            1668,
+            3837
+          ],
+          "windowCoverage": 0.5857,
+          "meanScore": 0.1884,
+          "meanWristDistance": 0.0758,
+          "meanOtherDistance": 0.2282,
+          "proximityFactor": 0.9466,
+          "handAffinity": 0.875,
+          "score": 0.104461,
+          "goldHitsFull": 2,
+          "goldHitsAfterFlip": 2
+        },
+        {
+          "trackId": 11,
+          "rankAll": 9,
+          "rankEligible": 9,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 32,
+          "nObsAfterFlip": 32,
+          "flipAtMs": null,
+          "spanMs": [
+            1068,
+            2135
+          ],
+          "windowCoverage": 0.2883,
+          "meanScore": 0.3473,
+          "meanWristDistance": 0.0814,
+          "meanOtherDistance": 0.2769,
+          "proximityFactor": 0.9242,
+          "handAffinity": 0.8438,
+          "score": 0.092554,
+          "goldHitsFull": 3,
+          "goldHitsAfterFlip": 3
+        },
+        {
+          "trackId": 1,
+          "rankAll": 10,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 19,
+          "nObsAfterFlip": 8,
+          "flipAtMs": 266.93,
+          "spanMs": [
+            0,
+            634
+          ],
+          "windowCoverage": 0.1171,
+          "meanScore": 0.5084,
+          "meanWristDistance": 0.0854,
+          "meanOtherDistance": 0.0642,
+          "proximityFactor": 0.9086,
+          "handAffinity": 1,
+          "score": 0.054112,
+          "goldHitsFull": 2,
+          "goldHitsAfterFlip": 1
+        },
+        {
+          "trackId": 30,
+          "rankAll": 11,
+          "rankEligible": 10,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 15,
+          "nObsAfterFlip": 15,
+          "flipAtMs": null,
+          "spanMs": [
+            3036,
+            3837
+          ],
+          "windowCoverage": 0.2163,
+          "meanScore": 0.24,
+          "meanWristDistance": 0.0913,
+          "meanOtherDistance": 0.2918,
+          "proximityFactor": 0.8847,
+          "handAffinity": 0.7333,
+          "score": 0.045928,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 29,
+          "rankAll": 12,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 31,
+          "nObsAfterFlip": 31,
+          "flipAtMs": null,
+          "spanMs": [
+            2836,
+            3837
+          ],
+          "windowCoverage": 0.2703,
+          "meanScore": 0.3321,
+          "meanWristDistance": 0.188,
+          "meanOtherDistance": 0.032,
+          "proximityFactor": 0.4982,
+          "handAffinity": 0.0323,
+          "score": 0.04472,
+          "goldHitsFull": 2,
+          "goldHitsAfterFlip": 2
+        },
+        {
+          "trackId": 13,
+          "rankAll": 13,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 77,
+          "nObsAfterFlip": 77,
+          "flipAtMs": null,
+          "spanMs": [
+            1134,
+            3837
+          ],
+          "windowCoverage": 0.7299,
+          "meanScore": 0.2426,
+          "meanWristDistance": 0.2528,
+          "meanOtherDistance": 0.1519,
+          "proximityFactor": 0.2388,
+          "handAffinity": 0.013,
+          "score": 0.042273,
+          "goldHitsFull": 1,
+          "goldHitsAfterFlip": 1
+        },
+        {
+          "trackId": 16,
+          "rankAll": 14,
+          "rankEligible": 11,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 16,
+          "nObsAfterFlip": 16,
+          "flipAtMs": null,
+          "spanMs": [
+            1635,
+            2269
+          ],
+          "windowCoverage": 0.1712,
+          "meanScore": 0.3993,
+          "meanWristDistance": 0.1832,
+          "meanOtherDistance": 0.3217,
+          "proximityFactor": 0.5173,
+          "handAffinity": 0.1875,
+          "score": 0.035361,
+          "goldHitsFull": 2,
+          "goldHitsAfterFlip": 2
+        },
+        {
+          "trackId": 7,
+          "rankAll": 15,
+          "rankEligible": 12,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 17,
+          "nObsAfterFlip": 17,
+          "flipAtMs": null,
+          "spanMs": [
+            334,
+            1101
+          ],
+          "windowCoverage": 0.2072,
+          "meanScore": 0.2119,
+          "meanWristDistance": 0.1197,
+          "meanOtherDistance": 0.1839,
+          "proximityFactor": 0.7714,
+          "handAffinity": 0.5882,
+          "score": 0.033874,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 31,
+          "rankAll": 16,
+          "rankEligible": 13,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 10,
+          "nObsAfterFlip": 10,
+          "flipAtMs": null,
+          "spanMs": [
+            3504,
+            3837
+          ],
+          "windowCoverage": 0.0901,
+          "meanScore": 0.4041,
+          "meanWristDistance": 0.0939,
+          "meanOtherDistance": 0.2196,
+          "proximityFactor": 0.8743,
+          "handAffinity": 0.8,
+          "score": 0.031833,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 12,
+          "rankAll": 17,
+          "rankEligible": 14,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 13,
+          "nObsAfterFlip": 13,
+          "flipAtMs": null,
+          "spanMs": [
+            1068,
+            1502
+          ],
+          "windowCoverage": 0.1171,
+          "meanScore": 0.2081,
+          "meanWristDistance": 0.082,
+          "meanOtherDistance": 0.3843,
+          "proximityFactor": 0.9219,
+          "handAffinity": 0.8462,
+          "score": 0.022473,
+          "goldHitsFull": 2,
+          "goldHitsAfterFlip": 2
+        },
+        {
+          "trackId": 32,
+          "rankAll": 18,
+          "rankEligible": 15,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 11,
+          "nObsAfterFlip": 11,
+          "flipAtMs": null,
+          "spanMs": [
+            3504,
+            3837
+          ],
+          "windowCoverage": 0.0901,
+          "meanScore": 0.2349,
+          "meanWristDistance": 0.1176,
+          "meanOtherDistance": 0.1345,
+          "proximityFactor": 0.7794,
+          "handAffinity": 0.6364,
+          "score": 0.016495,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 20,
+          "rankAll": 19,
+          "rankEligible": 16,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 5,
+          "nObsAfterFlip": 5,
+          "flipAtMs": null,
+          "spanMs": [
+            1835,
+            2069
+          ],
+          "windowCoverage": 0.0631,
+          "meanScore": 0.2374,
+          "meanWristDistance": 0.0491,
+          "meanOtherDistance": 0.3029,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0.014971,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 33,
+          "rankAll": 20,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 10,
+          "nObsAfterFlip": 10,
+          "flipAtMs": null,
+          "spanMs": [
+            3537,
+            3837
+          ],
+          "windowCoverage": 0.0811,
+          "meanScore": 0.2333,
+          "meanWristDistance": 0.1441,
+          "meanOtherDistance": 0.1182,
+          "proximityFactor": 0.6736,
+          "handAffinity": 0.4,
+          "score": 0.012742,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 26,
+          "rankAll": 21,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 40,
+          "nObsAfterFlip": 40,
+          "flipAtMs": null,
+          "spanMs": [
+            2236,
+            4104
+          ],
+          "windowCoverage": 0.4415,
+          "meanScore": 0.2343,
+          "meanWristDistance": 0.3104,
+          "meanOtherDistance": 0.0512,
+          "proximityFactor": 0.1,
+          "handAffinity": 0.0303,
+          "score": 0.010343,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 17,
+          "rankAll": 22,
+          "rankEligible": 17,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 6,
+          "nObsAfterFlip": 6,
+          "flipAtMs": null,
+          "spanMs": [
+            1668,
+            1835
+          ],
+          "windowCoverage": 0.0451,
+          "meanScore": 0.2856,
+          "meanWristDistance": 0.1119,
+          "meanOtherDistance": 0.2551,
+          "proximityFactor": 0.8026,
+          "handAffinity": 0.6667,
+          "score": 0.010329,
+          "goldHitsFull": 1,
+          "goldHitsAfterFlip": 1
+        },
+        {
+          "trackId": 14,
+          "rankAll": 23,
+          "rankEligible": 18,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 5,
+          "nObsAfterFlip": 5,
+          "flipAtMs": null,
+          "spanMs": [
+            1268,
+            1401
+          ],
+          "windowCoverage": 0.036,
+          "meanScore": 0.3737,
+          "meanWristDistance": 0.1235,
+          "meanOtherDistance": 0.4074,
+          "proximityFactor": 0.7562,
+          "handAffinity": 0.6,
+          "score": 0.010185,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 27,
+          "rankAll": 24,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 20,
+          "nObsAfterFlip": 20,
+          "flipAtMs": null,
+          "spanMs": [
+            2636,
+            3537
+          ],
+          "windowCoverage": 0.2433,
+          "meanScore": 0.3085,
+          "meanWristDistance": 0.2916,
+          "meanOtherDistance": 0.0368,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.007505,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 18,
+          "rankAll": 25,
+          "rankEligible": 19,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 5,
+          "nObsAfterFlip": 5,
+          "flipAtMs": null,
+          "spanMs": [
+            1668,
+            1802
+          ],
+          "windowCoverage": 0.036,
+          "meanScore": 0.2531,
+          "meanWristDistance": 0.1146,
+          "meanOtherDistance": 0.2802,
+          "proximityFactor": 0.7915,
+          "handAffinity": 0.6,
+          "score": 0.007221,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 28,
+          "rankAll": 26,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 20,
+          "nObsAfterFlip": 20,
+          "flipAtMs": null,
+          "spanMs": [
+            2636,
+            3437
+          ],
+          "windowCoverage": 0.2163,
+          "meanScore": 0.2792,
+          "meanWristDistance": 0.296,
+          "meanOtherDistance": 0.0349,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.006037,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 23,
+          "rankAll": 27,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 22,
+          "nObsAfterFlip": 22,
+          "flipAtMs": null,
+          "spanMs": [
+            2102,
+            2870
+          ],
+          "windowCoverage": 0.2072,
+          "meanScore": 0.1595,
+          "meanWristDistance": 0.4005,
+          "meanOtherDistance": 0.1789,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.003306,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 8,
+          "rankAll": 28,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 12,
+          "nObsAfterFlip": 12,
+          "flipAtMs": null,
+          "spanMs": [
+            367,
+            767
+          ],
+          "windowCoverage": 0.1081,
+          "meanScore": 0.2868,
+          "meanWristDistance": 0.4343,
+          "meanOtherDistance": 0.0262,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.003101,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 34,
+          "rankAll": 29,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 6,
+          "nObsAfterFlip": 6,
+          "flipAtMs": null,
+          "spanMs": [
+            3670,
+            3837
+          ],
+          "windowCoverage": 0.0451,
+          "meanScore": 0.2395,
+          "meanWristDistance": 0.4291,
+          "meanOtherDistance": 0.0393,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.001079,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 36,
+          "rankAll": 30,
+          "rankEligible": 20,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 8,
+          "nObsAfterFlip": 8,
+          "flipAtMs": null,
+          "spanMs": [
+            3871,
+            4104
+          ],
+          "windowCoverage": 0,
+          "meanScore": 0.3014,
+          "meanWristDistance": 0.3195,
+          "meanOtherDistance": 0.3249,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        }
+      ],
+      "labels": [
+        {
+          "tMs": 0,
+          "matchedTrackIds": [
+            1
+          ],
+          "matchedEligibleTrackIds": [],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 433.77,
+          "matchedTrackIds": [
+            1,
+            3,
+            6
+          ],
+          "matchedEligibleTrackIds": [
+            3,
+            6
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 800.8,
+          "matchedTrackIds": [
+            3,
+            5,
+            9
+          ],
+          "matchedEligibleTrackIds": [
+            3,
+            5,
+            9
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 1001,
+          "matchedTrackIds": [
+            3,
+            9,
+            10
+          ],
+          "matchedEligibleTrackIds": [
+            3,
+            9,
+            10
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 1201.2,
+          "matchedTrackIds": [
+            6,
+            9,
+            10,
+            12
+          ],
+          "matchedEligibleTrackIds": [
+            6,
+            9,
+            10,
+            12
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 1401.4,
+          "matchedTrackIds": [
+            9,
+            10,
+            12
+          ],
+          "matchedEligibleTrackIds": [
+            9,
+            10,
+            12
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 1601.6,
+          "matchedTrackIds": [
+            5,
+            6,
+            9,
+            10,
+            11,
+            16
+          ],
+          "matchedEligibleTrackIds": [
+            5,
+            6,
+            9,
+            10,
+            11,
+            16
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 1801.8,
+          "matchedTrackIds": [
+            9,
+            11,
+            19,
+            17
+          ],
+          "matchedEligibleTrackIds": [
+            9,
+            11,
+            19,
+            17
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 2002,
+          "matchedTrackIds": [
+            6,
+            9,
+            10,
+            11,
+            19
+          ],
+          "matchedEligibleTrackIds": [
+            6,
+            9,
+            10,
+            11,
+            19
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 2202.2,
+          "matchedTrackIds": [
+            6,
+            9,
+            16,
+            25
+          ],
+          "matchedEligibleTrackIds": [
+            6,
+            9,
+            16,
+            25
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 2435.77,
+          "matchedTrackIds": [
+            6,
+            9,
+            24,
+            25
+          ],
+          "matchedEligibleTrackIds": [
+            6,
+            9,
+            24,
+            25
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 2602.6,
+          "matchedTrackIds": [
+            6,
+            25
+          ],
+          "matchedEligibleTrackIds": [
+            6,
+            25
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 2700,
+          "matchedTrackIds": [
+            6,
+            24,
+            25
+          ],
+          "matchedEligibleTrackIds": [
+            6,
+            24,
+            25
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 2830,
+          "matchedTrackIds": [
+            25
+          ],
+          "matchedEligibleTrackIds": [
+            25
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 2836.17,
+          "matchedTrackIds": [
+            25
+          ],
+          "matchedEligibleTrackIds": [
+            25
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 2900,
+          "matchedTrackIds": [
+            6,
+            24,
+            25
+          ],
+          "matchedEligibleTrackIds": [
+            6,
+            24,
+            25
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 2960,
+          "matchedTrackIds": [
+            6,
+            24,
+            25
+          ],
+          "matchedEligibleTrackIds": [
+            6,
+            24,
+            25
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 3003,
+          "matchedTrackIds": [
+            6,
+            24,
+            25,
+            29
+          ],
+          "matchedEligibleTrackIds": [
+            6,
+            24,
+            25
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 3030,
+          "matchedTrackIds": [
+            6,
+            13,
+            24,
+            25,
+            29
+          ],
+          "matchedEligibleTrackIds": [
+            6,
+            24,
+            25
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 3300,
+          "matchedTrackIds": [
+            6,
+            24
+          ],
+          "matchedEligibleTrackIds": [
+            6,
+            24
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": false
+        }
+      ],
+      "oracle": {
+        "trackId": 6,
+        "hits": 13,
+        "rankAll": 1,
+        "rankEligible": 1,
+        "verdict": "selector PICKED the oracle track, but sustainedOtherPlayerFlip truncated it at 734.07ms (94→12 obs), deleting 12/13 gold hits before the waterfall scored S4",
+        "termRatiosVsWinner": null
+      },
+      "lossWaterfall": {
+        "top1": 13,
+        "top2": 17,
+        "top3": 17
+      },
+      "counterfactuals": [
+        {
+          "name": "CF0 current ranking, no flip deletion",
+          "winnerTrackId": 6,
+          "winnerHits": 13,
+          "winnerScore": 0.357,
+          "oracleRank": 1,
+          "top2UnionHits": 17,
+          "top3UnionHits": 17
+        },
+        {
+          "name": "CF1 event-gated coverage",
+          "winnerTrackId": 9,
+          "winnerHits": 9,
+          "winnerScore": 0.1376,
+          "oracleRank": 11,
+          "top2UnionHits": 9,
+          "top3UnionHits": 10
+        },
+        {
+          "name": "CF2 in-hand mass (window)",
+          "winnerTrackId": 9,
+          "winnerHits": 9,
+          "winnerScore": 33.5551,
+          "oracleRank": 8,
+          "top2UnionHits": 9,
+          "top3UnionHits": 9
+        },
+        {
+          "name": "CF3 wrist-speed correlation",
+          "winnerTrackId": 25,
+          "winnerHits": 10,
+          "winnerScore": 4.0548,
+          "oracleRank": 14,
+          "top2UnionHits": 10,
+          "top3UnionHits": 10
+        },
+        {
+          "name": "CF4 event-gated in-hand mass",
+          "winnerTrackId": 9,
+          "winnerHits": 9,
+          "winnerScore": 33.5551,
+          "oracleRank": 8,
+          "top2UnionHits": 9,
+          "top3UnionHits": 9
+        },
+        {
+          "name": "CF5 current + alias-suppressed identity",
+          "winnerTrackId": 6,
+          "winnerHits": 1,
+          "winnerScore": 0.356992,
+          "oracleRank": 1,
+          "top2UnionHits": 10,
+          "top3UnionHits": 12
+        }
+      ],
+      "aliasVariant": {
+        "note": "merged candidates + current scoring, but otherWrists built with duplicateAliasesOf (production identity)",
+        "winnerTrackId": 6,
+        "flipAtMs": 734.07,
+        "hitsFull": 13,
+        "hitsAfterFlip": 1
+      },
+      "productionParity": {
+        "note": "raw tracklets (no merge) + duplicate-alias suppression, as analyzeVideo runs it",
+        "winnerTrackId": 9,
+        "winnerHitsFull": 9,
+        "status": "tracked"
+      }
+    },
+    {
+      "id": "afn-sasebo-rally2",
+      "role": "dev",
+      "visible": 3,
+      "window": {
+        "startMs": 1302,
+        "endMs": 3603,
+        "peakMotionMs": 2469,
+        "confidence": 0.9285714285714286
+      },
+      "parity": {
+        "matchesRealSelector": false,
+        "realStatus": "tracked",
+        "realReason": null
+      },
+      "selection": {
+        "status": "tracked",
+        "reason": null,
+        "winnerTrackId": 12,
+        "rejectedOtherPlayerTracks": 9,
+        "switchEvents": [
+          {
+            "atMs": 802.3
+          },
+          {
+            "atMs": 1069.23
+          },
+          {
+            "atMs": 2670.83
+          },
+          {
+            "atMs": 2237.07
+          },
+          {
+            "atMs": 802.3
+          },
+          {
+            "atMs": 1069.23
+          },
+          {
+            "atMs": 3471.63
+          },
+          {
+            "atMs": 1603.1
+          },
+          {
+            "atMs": 3471.63
+          },
+          {
+            "atMs": 2237.07
+          },
+          {
+            "atMs": 3872.03
+          },
+          {
+            "atMs": 2237.07
+          },
+          {
+            "atMs": 3605.1
+          },
+          {
+            "atMs": 3838.67
+          },
+          {
+            "atMs": 3471.63
+          }
+        ],
+        "firedGate": null
+      },
+      "candidates": [
+        {
+          "trackId": 12,
+          "rankAll": 1,
+          "rankEligible": 1,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 79,
+          "nObsAfterFlip": 10,
+          "flipAtMs": 1603.1,
+          "spanMs": [
+            1103,
+            4373
+          ],
+          "windowCoverage": 0.9861,
+          "meanScore": 0.269,
+          "meanWristDistance": 0.0345,
+          "meanOtherDistance": 0.2133,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0.265207,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 15,
+          "rankAll": 2,
+          "rankEligible": 2,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 27,
+          "nObsAfterFlip": 27,
+          "flipAtMs": null,
+          "spanMs": [
+            1269,
+            2804
+          ],
+          "windowCoverage": 0.6525,
+          "meanScore": 0.3641,
+          "meanWristDistance": 0.0749,
+          "meanOtherDistance": 0.2531,
+          "proximityFactor": 0.9505,
+          "handAffinity": 0.9231,
+          "score": 0.225866,
+          "goldHitsFull": 1,
+          "goldHitsAfterFlip": 1
+        },
+        {
+          "trackId": 13,
+          "rankAll": 3,
+          "rankEligible": 3,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 82,
+          "nObsAfterFlip": 82,
+          "flipAtMs": null,
+          "spanMs": [
+            1169,
+            4106
+          ],
+          "windowCoverage": 0.9861,
+          "meanScore": 0.2654,
+          "meanWristDistance": 0.1233,
+          "meanOtherDistance": 0.305,
+          "proximityFactor": 0.7566,
+          "handAffinity": 0.6032,
+          "score": 0.198019,
+          "goldHitsFull": 1,
+          "goldHitsAfterFlip": 1
+        },
+        {
+          "trackId": 14,
+          "rankAll": 4,
+          "rankEligible": 4,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 42,
+          "nObsAfterFlip": 42,
+          "flipAtMs": null,
+          "spanMs": [
+            1269,
+            2804
+          ],
+          "windowCoverage": 0.6525,
+          "meanScore": 0.2197,
+          "meanWristDistance": 0.0773,
+          "meanOtherDistance": 0.2167,
+          "proximityFactor": 0.9408,
+          "handAffinity": 0.9024,
+          "score": 0.134844,
+          "goldHitsFull": 1,
+          "goldHitsAfterFlip": 1
+        },
+        {
+          "trackId": 8,
+          "rankAll": 5,
+          "rankEligible": 5,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 104,
+          "nObsAfterFlip": 104,
+          "flipAtMs": null,
+          "spanMs": [
+            769,
+            4373
+          ],
+          "windowCoverage": 0.9861,
+          "meanScore": 0.2964,
+          "meanWristDistance": 0.2039,
+          "meanOtherDistance": 0.2049,
+          "proximityFactor": 0.4343,
+          "handAffinity": 0.0606,
+          "score": 0.126905,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 2,
+          "rankAll": 6,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 72,
+          "nObsAfterFlip": 9,
+          "flipAtMs": 802.3,
+          "spanMs": [
+            502,
+            3005
+          ],
+          "windowCoverage": 0.7395,
+          "meanScore": 0.2609,
+          "meanWristDistance": 0.1668,
+          "meanOtherDistance": 0.1356,
+          "proximityFactor": 0.583,
+          "handAffinity": 0.4444,
+          "score": 0.112475,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 18,
+          "rankAll": 7,
+          "rankEligible": 6,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 64,
+          "nObsAfterFlip": 64,
+          "flipAtMs": null,
+          "spanMs": [
+            1970,
+            4373
+          ],
+          "windowCoverage": 0.696,
+          "meanScore": 0.1926,
+          "meanWristDistance": 0.1486,
+          "meanOtherDistance": 0.3258,
+          "proximityFactor": 0.6555,
+          "handAffinity": 0.381,
+          "score": 0.087864,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 31,
+          "rankAll": 8,
+          "rankEligible": 7,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 18,
+          "nObsAfterFlip": 18,
+          "flipAtMs": null,
+          "spanMs": [
+            3171,
+            3839
+          ],
+          "windowCoverage": 0.174,
+          "meanScore": 0.3489,
+          "meanWristDistance": 0.0528,
+          "meanOtherDistance": 0.5014,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0.060709,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 28,
+          "rankAll": 9,
+          "rankEligible": 8,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 47,
+          "nObsAfterFlip": 47,
+          "flipAtMs": null,
+          "spanMs": [
+            2838,
+            4373
+          ],
+          "windowCoverage": 0.319,
+          "meanScore": 0.3462,
+          "meanWristDistance": 0.1946,
+          "meanOtherDistance": 0.4454,
+          "proximityFactor": 0.4717,
+          "handAffinity": 0.0435,
+          "score": 0.052095,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 10,
+          "rankAll": 10,
+          "rankEligible": 9,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 37,
+          "nObsAfterFlip": 37,
+          "flipAtMs": null,
+          "spanMs": [
+            802,
+            2170
+          ],
+          "windowCoverage": 0.377,
+          "meanScore": 0.1854,
+          "meanWristDistance": 0.1357,
+          "meanOtherDistance": 0.2068,
+          "proximityFactor": 0.7071,
+          "handAffinity": 0.5,
+          "score": 0.049419,
+          "goldHitsFull": 1,
+          "goldHitsAfterFlip": 1
+        },
+        {
+          "trackId": 7,
+          "rankAll": 11,
+          "rankEligible": 10,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 99,
+          "nObsAfterFlip": 46,
+          "flipAtMs": 2237.07,
+          "spanMs": [
+            635,
+            4139
+          ],
+          "windowCoverage": 0.9861,
+          "meanScore": 0.493,
+          "meanWristDistance": 0.5172,
+          "meanOtherDistance": 0.6718,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.048613,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 27,
+          "rankAll": 12,
+          "rankEligible": 11,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 44,
+          "nObsAfterFlip": 44,
+          "flipAtMs": null,
+          "spanMs": [
+            2804,
+            4272
+          ],
+          "windowCoverage": 0.3335,
+          "meanScore": 0.2477,
+          "meanWristDistance": 0.1841,
+          "meanOtherDistance": 0.4437,
+          "proximityFactor": 0.5137,
+          "handAffinity": 0.0833,
+          "score": 0.04244,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 29,
+          "rankAll": 13,
+          "rankEligible": 12,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 40,
+          "nObsAfterFlip": 40,
+          "flipAtMs": null,
+          "spanMs": [
+            2971,
+            4373
+          ],
+          "windowCoverage": 0.261,
+          "meanScore": 0.2369,
+          "meanWristDistance": 0.2027,
+          "meanOtherDistance": 0.4831,
+          "proximityFactor": 0.4393,
+          "handAffinity": 0,
+          "score": 0.027171,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 1,
+          "rankAll": 14,
+          "rankEligible": 13,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 39,
+          "nObsAfterFlip": 39,
+          "flipAtMs": null,
+          "spanMs": [
+            502,
+            1870
+          ],
+          "windowCoverage": 0.2465,
+          "meanScore": 0.2397,
+          "meanWristDistance": 0.2055,
+          "meanOtherDistance": 0.2948,
+          "proximityFactor": 0.428,
+          "handAffinity": 0,
+          "score": 0.025293,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 16,
+          "rankAll": 15,
+          "rankEligible": 14,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 76,
+          "nObsAfterFlip": 17,
+          "flipAtMs": 2237.07,
+          "spanMs": [
+            1670,
+            4373
+          ],
+          "windowCoverage": 0.8266,
+          "meanScore": 0.2034,
+          "meanWristDistance": 0.5266,
+          "meanOtherDistance": 0.6753,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.016812,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 11,
+          "rankAll": 16,
+          "rankEligible": 15,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 93,
+          "nObsAfterFlip": 56,
+          "flipAtMs": 3104.6,
+          "spanMs": [
+            1003,
+            4373
+          ],
+          "windowCoverage": 0.9861,
+          "meanScore": 0.17,
+          "meanWristDistance": 0.4015,
+          "meanOtherDistance": 0.4381,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.016764,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 19,
+          "rankAll": 17,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 15,
+          "nObsAfterFlip": 15,
+          "flipAtMs": null,
+          "spanMs": [
+            2004,
+            2537
+          ],
+          "windowCoverage": 0.232,
+          "meanScore": 0.2403,
+          "meanWristDistance": 0.2474,
+          "meanOtherDistance": 0.0593,
+          "proximityFactor": 0.2606,
+          "handAffinity": 0,
+          "score": 0.014526,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 32,
+          "rankAll": 18,
+          "rankEligible": 16,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 21,
+          "nObsAfterFlip": 21,
+          "flipAtMs": null,
+          "spanMs": [
+            3438,
+            4239
+          ],
+          "windowCoverage": 0.058,
+          "meanScore": 0.2339,
+          "meanWristDistance": 0.0631,
+          "meanOtherDistance": 0.3649,
+          "proximityFactor": 0.9977,
+          "handAffinity": 1,
+          "score": 0.013533,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 17,
+          "rankAll": 19,
+          "rankEligible": 17,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 73,
+          "nObsAfterFlip": 16,
+          "flipAtMs": 2237.07,
+          "spanMs": [
+            1703,
+            4206
+          ],
+          "windowCoverage": 0.8121,
+          "meanScore": 0.1589,
+          "meanWristDistance": 0.5258,
+          "meanOtherDistance": 0.6742,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.012903,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 6,
+          "rankAll": 20,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 21,
+          "nObsAfterFlip": 21,
+          "flipAtMs": null,
+          "spanMs": [
+            602,
+            1436
+          ],
+          "windowCoverage": 0.0435,
+          "meanScore": 0.3485,
+          "meanWristDistance": 0.1952,
+          "meanOtherDistance": 0.0447,
+          "proximityFactor": 0.4693,
+          "handAffinity": 0,
+          "score": 0.007114,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 26,
+          "rankAll": 21,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 36,
+          "nObsAfterFlip": 36,
+          "flipAtMs": null,
+          "spanMs": [
+            2637,
+            4339
+          ],
+          "windowCoverage": 0.377,
+          "meanScore": 0.1796,
+          "meanWristDistance": 0.5674,
+          "meanOtherDistance": 0.1726,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.006771,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 33,
+          "rankAll": 22,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 28,
+          "nObsAfterFlip": 28,
+          "flipAtMs": null,
+          "spanMs": [
+            3472,
+            4373
+          ],
+          "windowCoverage": 0.0435,
+          "meanScore": 0.2225,
+          "meanWristDistance": 0.193,
+          "meanOtherDistance": 0.0499,
+          "proximityFactor": 0.4782,
+          "handAffinity": 0,
+          "score": 0.004629,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 9,
+          "rankAll": 23,
+          "rankEligible": 18,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 20,
+          "nObsAfterFlip": 20,
+          "flipAtMs": null,
+          "spanMs": [
+            802,
+            1603
+          ],
+          "windowCoverage": 0.1305,
+          "meanScore": 0.2512,
+          "meanWristDistance": 0.494,
+          "meanOtherDistance": 0.6539,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.003279,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 34,
+          "rankAll": 24,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 23,
+          "nObsAfterFlip": 23,
+          "flipAtMs": null,
+          "spanMs": [
+            3505,
+            4339
+          ],
+          "windowCoverage": 0.029,
+          "meanScore": 0.3955,
+          "meanWristDistance": 0.7111,
+          "meanOtherDistance": 0.0663,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.001147,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 35,
+          "rankAll": 25,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 21,
+          "nObsAfterFlip": 21,
+          "flipAtMs": null,
+          "spanMs": [
+            3505,
+            4306
+          ],
+          "windowCoverage": 0.029,
+          "meanScore": 0.3643,
+          "meanWristDistance": 0.7173,
+          "meanOtherDistance": 0.094,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.001056,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 36,
+          "rankAll": 26,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 24,
+          "nObsAfterFlip": 24,
+          "flipAtMs": null,
+          "spanMs": [
+            3505,
+            4339
+          ],
+          "windowCoverage": 0.029,
+          "meanScore": 0.2711,
+          "meanWristDistance": 0.7125,
+          "meanOtherDistance": 0.0452,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.000786,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 37,
+          "rankAll": 27,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 17,
+          "nObsAfterFlip": 17,
+          "flipAtMs": null,
+          "spanMs": [
+            3538,
+            4172
+          ],
+          "windowCoverage": 0.0145,
+          "meanScore": 0.3086,
+          "meanWristDistance": 0.7084,
+          "meanOtherDistance": 0.077,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.000447,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 5,
+          "rankAll": 28,
+          "rankEligible": 19,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 7,
+          "nObsAfterFlip": 7,
+          "flipAtMs": null,
+          "spanMs": [
+            569,
+            936
+          ],
+          "windowCoverage": 0,
+          "meanScore": 0.265,
+          "meanWristDistance": 0.1188,
+          "meanOtherDistance": 0.1468,
+          "proximityFactor": 0.7749,
+          "handAffinity": 0.7143,
+          "score": 0,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 40,
+          "rankAll": 29,
+          "rankEligible": 20,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 7,
+          "nObsAfterFlip": 7,
+          "flipAtMs": null,
+          "spanMs": [
+            3872,
+            4106
+          ],
+          "windowCoverage": 0,
+          "meanScore": 0.2312,
+          "meanWristDistance": 0.0542,
+          "meanOtherDistance": 0.2639,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 41,
+          "rankAll": 30,
+          "rankEligible": 21,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 13,
+          "nObsAfterFlip": 13,
+          "flipAtMs": null,
+          "spanMs": [
+            3905,
+            4373
+          ],
+          "windowCoverage": 0,
+          "meanScore": 0.2156,
+          "meanWristDistance": 0.0725,
+          "meanOtherDistance": 0.2785,
+          "proximityFactor": 0.96,
+          "handAffinity": 1,
+          "score": 0,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        }
+      ],
+      "labels": [
+        {
+          "tMs": 2203.7,
+          "matchedTrackIds": [
+            10,
+            13,
+            14
+          ],
+          "matchedEligibleTrackIds": [
+            10,
+            13,
+            14
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 2500,
+          "matchedTrackIds": [],
+          "matchedEligibleTrackIds": [],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 2682,
+          "matchedTrackIds": [
+            15
+          ],
+          "matchedEligibleTrackIds": [
+            15
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        }
+      ],
+      "oracle": {
+        "trackId": 10,
+        "hits": 1,
+        "rankAll": 10,
+        "rankEligible": 9,
+        "verdict": "oracle track 10 (rank 10) lost to 12: windowCoverage ×2.62, meanScore ×1.45, proximityFactor ×1.41",
+        "termRatiosVsWinner": {
+          "coverageRatio": 2.6154,
+          "meanScoreRatio": 1.4508,
+          "proximityRatio": 1.4143,
+          "scoreRatio": 5.3665
+        }
+      },
+      "lossWaterfall": {
+        "top1": 0,
+        "top2": 1,
+        "top3": 2
+      },
+      "counterfactuals": [
+        {
+          "name": "CF0 current ranking, no flip deletion",
+          "winnerTrackId": 12,
+          "winnerHits": 0,
+          "winnerScore": 0.2652,
+          "oracleRank": 9,
+          "top2UnionHits": 1,
+          "top3UnionHits": 2
+        },
+        {
+          "name": "CF1 event-gated coverage",
+          "winnerTrackId": 15,
+          "winnerHits": 1,
+          "winnerScore": 0.1685,
+          "oracleRank": 9,
+          "top2UnionHits": 2,
+          "top3UnionHits": 2
+        },
+        {
+          "name": "CF2 in-hand mass (window)",
+          "winnerTrackId": 13,
+          "winnerHits": 1,
+          "winnerScore": 31.4732,
+          "oracleRank": 7,
+          "top2UnionHits": 1,
+          "top3UnionHits": 2
+        },
+        {
+          "name": "CF3 wrist-speed correlation",
+          "winnerTrackId": 15,
+          "winnerHits": 1,
+          "winnerScore": 3.6628,
+          "oracleRank": 16,
+          "top2UnionHits": 1,
+          "top3UnionHits": 1
+        },
+        {
+          "name": "CF4 event-gated in-hand mass",
+          "winnerTrackId": 13,
+          "winnerHits": 1,
+          "winnerScore": 26.0667,
+          "oracleRank": 8,
+          "top2UnionHits": 1,
+          "top3UnionHits": 1
+        },
+        {
+          "name": "CF5 current + alias-suppressed identity",
+          "winnerTrackId": 12,
+          "winnerHits": 0,
+          "winnerScore": 0.265207,
+          "oracleRank": 10,
+          "top2UnionHits": 1,
+          "top3UnionHits": 2
+        }
+      ],
+      "aliasVariant": {
+        "note": "merged candidates + current scoring, but otherWrists built with duplicateAliasesOf (production identity)",
+        "winnerTrackId": 12,
+        "flipAtMs": 1603.1,
+        "hitsFull": 0,
+        "hitsAfterFlip": 0
+      },
+      "productionParity": {
+        "note": "raw tracklets (no merge) + duplicate-alias suppression, as analyzeVideo runs it",
+        "winnerTrackId": 13,
+        "winnerHitsFull": 1,
+        "status": "tracked"
+      }
+    },
+    {
+      "id": "afn-vic-rally1",
+      "role": "held_out",
+      "visible": 6,
+      "window": {
+        "startMs": 33,
+        "endMs": 1968,
+        "peakMotionMs": 467,
+        "confidence": 0.9040402142327795
+      },
+      "parity": {
+        "matchesRealSelector": true,
+        "realStatus": "tracked",
+        "realReason": null
+      },
+      "selection": {
+        "status": "tracked",
+        "reason": null,
+        "winnerTrackId": 3,
+        "rejectedOtherPlayerTracks": 12,
+        "switchEvents": [
+          {
+            "atMs": 0
+          },
+          {
+            "atMs": 33.37
+          },
+          {
+            "atMs": 233.57
+          },
+          {
+            "atMs": 233.57
+          },
+          {
+            "atMs": 967.63
+          },
+          {
+            "atMs": 1601.6
+          },
+          {
+            "atMs": 1601.6
+          },
+          {
+            "atMs": 2168.83
+          },
+          {
+            "atMs": 800.8
+          },
+          {
+            "atMs": 1601.6
+          },
+          {
+            "atMs": 1601.6
+          },
+          {
+            "atMs": 1601.6
+          },
+          {
+            "atMs": 1701.7
+          },
+          {
+            "atMs": 1901.9
+          }
+        ],
+        "firedGate": null
+      },
+      "candidates": [
+        {
+          "trackId": 3,
+          "rankAll": 1,
+          "rankEligible": 1,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 20,
+          "nObsAfterFlip": 20,
+          "flipAtMs": null,
+          "spanMs": [
+            0,
+            634
+          ],
+          "windowCoverage": 0.3104,
+          "meanScore": 0.6013,
+          "meanWristDistance": 0.0958,
+          "meanOtherDistance": 0.3161,
+          "proximityFactor": 0.8669,
+          "handAffinity": 0.9474,
+          "score": 0.161779,
+          "goldHitsFull": 2,
+          "goldHitsAfterFlip": 2
+        },
+        {
+          "trackId": 9,
+          "rankAll": 2,
+          "rankEligible": 2,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 55,
+          "nObsAfterFlip": 20,
+          "flipAtMs": 1601.6,
+          "spanMs": [
+            300,
+            2736
+          ],
+          "windowCoverage": 0.8449,
+          "meanScore": 0.2476,
+          "meanWristDistance": 0.1342,
+          "meanOtherDistance": 0.2874,
+          "proximityFactor": 0.7133,
+          "handAffinity": 0.6,
+          "score": 0.149266,
+          "goldHitsFull": 1,
+          "goldHitsAfterFlip": 1
+        },
+        {
+          "trackId": 4,
+          "rankAll": 3,
+          "rankEligible": 3,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 21,
+          "nObsAfterFlip": 21,
+          "flipAtMs": null,
+          "spanMs": [
+            33,
+            901
+          ],
+          "windowCoverage": 0.4483,
+          "meanScore": 0.4377,
+          "meanWristDistance": 0.1587,
+          "meanOtherDistance": 0.1608,
+          "proximityFactor": 0.6152,
+          "handAffinity": 0.2857,
+          "score": 0.120707,
+          "goldHitsFull": 1,
+          "goldHitsAfterFlip": 1
+        },
+        {
+          "trackId": 13,
+          "rankAll": 4,
+          "rankEligible": 4,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 20,
+          "nObsAfterFlip": 20,
+          "flipAtMs": null,
+          "spanMs": [
+            1001,
+            2169
+          ],
+          "windowCoverage": 0.4828,
+          "meanScore": 0.2651,
+          "meanWristDistance": 0.1398,
+          "meanOtherDistance": 0.5184,
+          "proximityFactor": 0.6907,
+          "handAffinity": 0,
+          "score": 0.088397,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 14,
+          "rankAll": 5,
+          "rankEligible": 5,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 11,
+          "nObsAfterFlip": 11,
+          "flipAtMs": null,
+          "spanMs": [
+            1101,
+            1635
+          ],
+          "windowCoverage": 0.2759,
+          "meanScore": 0.393,
+          "meanWristDistance": 0.1379,
+          "meanOtherDistance": 0.5394,
+          "proximityFactor": 0.6985,
+          "handAffinity": 0.3636,
+          "score": 0.075731,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 8,
+          "rankAll": 6,
+          "rankEligible": 6,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 20,
+          "nObsAfterFlip": 20,
+          "flipAtMs": null,
+          "spanMs": [
+            234,
+            901
+          ],
+          "windowCoverage": 0.3449,
+          "meanScore": 0.2866,
+          "meanWristDistance": 0.1242,
+          "meanOtherDistance": 0.2437,
+          "proximityFactor": 0.7531,
+          "handAffinity": 0.45,
+          "score": 0.074453,
+          "goldHitsFull": 1,
+          "goldHitsAfterFlip": 1
+        },
+        {
+          "trackId": 19,
+          "rankAll": 7,
+          "rankEligible": 7,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 28,
+          "nObsAfterFlip": 28,
+          "flipAtMs": null,
+          "spanMs": [
+            1568,
+            2736
+          ],
+          "windowCoverage": 0.1724,
+          "meanScore": 0.3737,
+          "meanWristDistance": 0.0529,
+          "meanOtherDistance": 0.3042,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0.064438,
+          "goldHitsFull": 2,
+          "goldHitsAfterFlip": 2
+        },
+        {
+          "trackId": 1,
+          "rankAll": 8,
+          "rankEligible": 8,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 29,
+          "nObsAfterFlip": 29,
+          "flipAtMs": null,
+          "spanMs": [
+            0,
+            934
+          ],
+          "windowCoverage": 0.4656,
+          "meanScore": 0.2249,
+          "meanWristDistance": 0.1611,
+          "meanOtherDistance": 0.2032,
+          "proximityFactor": 0.6056,
+          "handAffinity": 0.3214,
+          "score": 0.063416,
+          "goldHitsFull": 1,
+          "goldHitsAfterFlip": 1
+        },
+        {
+          "trackId": 22,
+          "rankAll": 9,
+          "rankEligible": 9,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 31,
+          "nObsAfterFlip": 31,
+          "flipAtMs": null,
+          "spanMs": [
+            1735,
+            2736
+          ],
+          "windowCoverage": 0.1035,
+          "meanScore": 0.5259,
+          "meanWristDistance": 0.0537,
+          "meanOtherDistance": 0.2791,
+          "proximityFactor": 1,
+          "handAffinity": 1,
+          "score": 0.054415,
+          "goldHitsFull": 1,
+          "goldHitsAfterFlip": 1
+        },
+        {
+          "trackId": 6,
+          "rankAll": 10,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 81,
+          "nObsAfterFlip": 81,
+          "flipAtMs": null,
+          "spanMs": [
+            67,
+            2736
+          ],
+          "windowCoverage": 0.9657,
+          "meanScore": 0.3839,
+          "meanWristDistance": 0.4081,
+          "meanOtherDistance": 0.0578,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.03707,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 7,
+          "rankAll": 11,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 69,
+          "nObsAfterFlip": 69,
+          "flipAtMs": null,
+          "spanMs": [
+            234,
+            2736
+          ],
+          "windowCoverage": 0.8794,
+          "meanScore": 0.394,
+          "meanWristDistance": 0.2947,
+          "meanOtherDistance": 0.1362,
+          "proximityFactor": 0.1,
+          "handAffinity": 0.1556,
+          "score": 0.034647,
+          "goldHitsFull": 1,
+          "goldHitsAfterFlip": 1
+        },
+        {
+          "trackId": 2,
+          "rankAll": 12,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 83,
+          "nObsAfterFlip": 83,
+          "flipAtMs": null,
+          "spanMs": [
+            0,
+            2736
+          ],
+          "windowCoverage": 0.9829,
+          "meanScore": 0.3405,
+          "meanWristDistance": 0.5475,
+          "meanOtherDistance": 0.1036,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.033463,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 10,
+          "rankAll": 13,
+          "rankEligible": 10,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 5,
+          "nObsAfterFlip": 5,
+          "flipAtMs": null,
+          "spanMs": [
+            767,
+            901
+          ],
+          "windowCoverage": 0.069,
+          "meanScore": 0.389,
+          "meanWristDistance": 0.0809,
+          "meanOtherDistance": 0.4819,
+          "proximityFactor": 0.9263,
+          "handAffinity": 1,
+          "score": 0.024853,
+          "goldHitsFull": 1,
+          "goldHitsAfterFlip": 1
+        },
+        {
+          "trackId": 5,
+          "rankAll": 14,
+          "rankEligible": 11,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 82,
+          "nObsAfterFlip": 82,
+          "flipAtMs": null,
+          "spanMs": [
+            33,
+            2736
+          ],
+          "windowCoverage": 0.9829,
+          "meanScore": 0.1608,
+          "meanWristDistance": 0.315,
+          "meanOtherDistance": 0.5459,
+          "proximityFactor": 0.1,
+          "handAffinity": 0.069,
+          "score": 0.01581,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 17,
+          "rankAll": 15,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 32,
+          "nObsAfterFlip": 32,
+          "flipAtMs": null,
+          "spanMs": [
+            1535,
+            2736
+          ],
+          "windowCoverage": 0.2069,
+          "meanScore": 0.2706,
+          "meanWristDistance": 0.2474,
+          "meanOtherDistance": 0.0283,
+          "proximityFactor": 0.2604,
+          "handAffinity": 0,
+          "score": 0.014578,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 11,
+          "rankAll": 16,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 59,
+          "nObsAfterFlip": 59,
+          "flipAtMs": null,
+          "spanMs": [
+            801,
+            2736
+          ],
+          "windowCoverage": 0.5863,
+          "meanScore": 0.2462,
+          "meanWristDistance": 0.4135,
+          "meanOtherDistance": 0.1934,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.014436,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 18,
+          "rankAll": 17,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 29,
+          "nObsAfterFlip": 29,
+          "flipAtMs": null,
+          "spanMs": [
+            1535,
+            2469
+          ],
+          "windowCoverage": 0.2069,
+          "meanScore": 0.2545,
+          "meanWristDistance": 0.2507,
+          "meanOtherDistance": 0.0251,
+          "proximityFactor": 0.2473,
+          "handAffinity": 0,
+          "score": 0.013026,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 15,
+          "rankAll": 18,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 45,
+          "nObsAfterFlip": 45,
+          "flipAtMs": null,
+          "spanMs": [
+            1268,
+            2736
+          ],
+          "windowCoverage": 0.3449,
+          "meanScore": 0.3469,
+          "meanWristDistance": 0.5643,
+          "meanOtherDistance": 0.3558,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.011965,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 21,
+          "rankAll": 19,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 31,
+          "nObsAfterFlip": 31,
+          "flipAtMs": null,
+          "spanMs": [
+            1702,
+            2736
+          ],
+          "windowCoverage": 0.1207,
+          "meanScore": 0.2695,
+          "meanWristDistance": 0.3153,
+          "meanOtherDistance": 0.1442,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.003253,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 23,
+          "rankAll": 20,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 29,
+          "nObsAfterFlip": 29,
+          "flipAtMs": null,
+          "spanMs": [
+            1802,
+            2736
+          ],
+          "windowCoverage": 0.069,
+          "meanScore": 0.2528,
+          "meanWristDistance": 0.3866,
+          "meanOtherDistance": 0.1823,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0.001743,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 24,
+          "rankAll": 21,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 21,
+          "nObsAfterFlip": 21,
+          "flipAtMs": null,
+          "spanMs": [
+            1902,
+            2736
+          ],
+          "windowCoverage": 0.0172,
+          "meanScore": 0.2613,
+          "meanWristDistance": 0.274,
+          "meanOtherDistance": 0.0978,
+          "proximityFactor": 0.154,
+          "handAffinity": 0,
+          "score": 0.000694,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 25,
+          "rankAll": 22,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 19,
+          "nObsAfterFlip": 19,
+          "flipAtMs": null,
+          "spanMs": [
+            2135,
+            2736
+          ],
+          "windowCoverage": 0,
+          "meanScore": 0.2405,
+          "meanWristDistance": 0.4558,
+          "meanOtherDistance": 0.0216,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 26,
+          "rankAll": 23,
+          "rankEligible": 12,
+          "eligible": true,
+          "otherPlayers": false,
+          "nObsFull": 15,
+          "nObsAfterFlip": 15,
+          "flipAtMs": null,
+          "spanMs": [
+            2269,
+            2736
+          ],
+          "windowCoverage": 0,
+          "meanScore": 0.2636,
+          "meanWristDistance": 0.1752,
+          "meanOtherDistance": 0.4424,
+          "proximityFactor": 0.5493,
+          "handAffinity": 0.0667,
+          "score": 0,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        },
+        {
+          "trackId": 27,
+          "rankAll": 24,
+          "rankEligible": null,
+          "eligible": false,
+          "otherPlayers": true,
+          "nObsFull": 5,
+          "nObsAfterFlip": 5,
+          "flipAtMs": null,
+          "spanMs": [
+            2603,
+            2736
+          ],
+          "windowCoverage": 0,
+          "meanScore": 0.3553,
+          "meanWristDistance": 0.4271,
+          "meanOtherDistance": 0.1443,
+          "proximityFactor": 0.1,
+          "handAffinity": 0,
+          "score": 0,
+          "goldHitsFull": 0,
+          "goldHitsAfterFlip": 0
+        }
+      ],
+      "labels": [
+        {
+          "tMs": 0,
+          "matchedTrackIds": [
+            3
+          ],
+          "matchedEligibleTrackIds": [
+            3
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 400.4,
+          "matchedTrackIds": [
+            3
+          ],
+          "matchedEligibleTrackIds": [
+            3
+          ],
+          "s3Survived": true,
+          "s4WinnerCoversFull": true,
+          "s4WinnerCoversAfterFlip": true
+        },
+        {
+          "tMs": 700,
+          "matchedTrackIds": [
+            1,
+            4,
+            8,
+            7,
+            9
+          ],
+          "matchedEligibleTrackIds": [
+            1,
+            4,
+            8,
+            9
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 800.8,
+          "matchedTrackIds": [
+            10
+          ],
+          "matchedEligibleTrackIds": [
+            10
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 1601.6,
+          "matchedTrackIds": [
+            19
+          ],
+          "matchedEligibleTrackIds": [
+            19
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        },
+        {
+          "tMs": 2100,
+          "matchedTrackIds": [
+            19,
+            22
+          ],
+          "matchedEligibleTrackIds": [
+            19,
+            22
+          ],
+          "s3Survived": false,
+          "s4WinnerCoversFull": false,
+          "s4WinnerCoversAfterFlip": false
+        }
+      ],
+      "oracle": {
+        "trackId": 3,
+        "hits": 2,
+        "rankAll": 1,
+        "rankEligible": 1,
+        "verdict": "selector picked the oracle track intact",
+        "termRatiosVsWinner": null
+      },
+      "lossWaterfall": {
+        "top1": 2,
+        "top2": 3,
+        "top3": 3
+      },
+      "counterfactuals": [
+        {
+          "name": "CF0 current ranking, no flip deletion",
+          "winnerTrackId": 3,
+          "winnerHits": 2,
+          "winnerScore": 0.1618,
+          "oracleRank": 1,
+          "top2UnionHits": 3,
+          "top3UnionHits": 3
+        },
+        {
+          "name": "CF1 event-gated coverage",
+          "winnerTrackId": 3,
+          "winnerHits": 2,
+          "winnerScore": 0.136,
+          "oracleRank": 1,
+          "top2UnionHits": 3,
+          "top3UnionHits": 3
+        },
+        {
+          "name": "CF2 in-hand mass (window)",
+          "winnerTrackId": 3,
+          "winnerHits": 2,
+          "winnerScore": 10.9505,
+          "oracleRank": 1,
+          "top2UnionHits": 3,
+          "top3UnionHits": 3
+        },
+        {
+          "name": "CF3 wrist-speed correlation",
+          "winnerTrackId": 4,
+          "winnerHits": 1,
+          "winnerScore": 3.1511,
+          "oracleRank": 6,
+          "top2UnionHits": 1,
+          "top3UnionHits": 1
+        },
+        {
+          "name": "CF4 event-gated in-hand mass",
+          "winnerTrackId": 3,
+          "winnerHits": 2,
+          "winnerScore": 10.9505,
+          "oracleRank": 1,
+          "top2UnionHits": 3,
+          "top3UnionHits": 3
+        },
+        {
+          "name": "CF5 current + alias-suppressed identity",
+          "winnerTrackId": 3,
+          "winnerHits": 2,
+          "winnerScore": 0.161779,
+          "oracleRank": 1,
+          "top2UnionHits": 3,
+          "top3UnionHits": 3
+        }
+      ],
+      "aliasVariant": {
+        "note": "merged candidates + current scoring, but otherWrists built with duplicateAliasesOf (production identity)",
+        "winnerTrackId": 3,
+        "flipAtMs": null,
+        "hitsFull": 2,
+        "hitsAfterFlip": 2
+      },
+      "productionParity": {
+        "note": "raw tracklets (no merge) + duplicate-alias suppression, as analyzeVideo runs it",
+        "winnerTrackId": 3,
+        "winnerHitsFull": 2,
+        "status": "tracked"
+      }
+    }
+  ],
+  "aggregates": {
+    "CF0 current ranking, no flip deletion": {
+      "held_out": {
+        "hits": 11,
+        "visible": 25
+      },
+      "dev": {
+        "hits": 21,
+        "visible": 40
+      }
+    },
+    "CF0 current ranking, no flip deletion +top2merge": {
+      "held_out": {
+        "hits": 17,
+        "visible": 25
+      },
+      "dev": {
+        "hits": 30,
+        "visible": 40
+      }
+    },
+    "CF1 event-gated coverage": {
+      "held_out": {
+        "hits": 7,
+        "visible": 25
+      },
+      "dev": {
+        "hits": 18,
+        "visible": 40
+      }
+    },
+    "CF1 event-gated coverage +top2merge": {
+      "held_out": {
+        "hits": 17,
+        "visible": 25
+      },
+      "dev": {
+        "hits": 21,
+        "visible": 40
+      }
+    },
+    "CF2 in-hand mass (window)": {
+      "held_out": {
+        "hits": 5,
+        "visible": 25
+      },
+      "dev": {
+        "hits": 18,
+        "visible": 40
+      }
+    },
+    "CF2 in-hand mass (window) +top2merge": {
+      "held_out": {
+        "hits": 9,
+        "visible": 25
+      },
+      "dev": {
+        "hits": 22,
+        "visible": 40
+      }
+    },
+    "CF3 wrist-speed correlation": {
+      "held_out": {
+        "hits": 1,
+        "visible": 25
+      },
+      "dev": {
+        "hits": 19,
+        "visible": 40
+      }
+    },
+    "CF3 wrist-speed correlation +top2merge": {
+      "held_out": {
+        "hits": 10,
+        "visible": 25
+      },
+      "dev": {
+        "hits": 19,
+        "visible": 40
+      }
+    },
+    "CF4 event-gated in-hand mass": {
+      "held_out": {
+        "hits": 5,
+        "visible": 25
+      },
+      "dev": {
+        "hits": 18,
+        "visible": 40
+      }
+    },
+    "CF4 event-gated in-hand mass +top2merge": {
+      "held_out": {
+        "hits": 15,
+        "visible": 25
+      },
+      "dev": {
+        "hits": 20,
+        "visible": 40
+      }
+    },
+    "CF5 current + alias-suppressed identity": {
+      "held_out": {
+        "hits": 11,
+        "visible": 25
+      },
+      "dev": {
+        "hits": 8,
+        "visible": 40
+      }
+    },
+    "CF5 current + alias-suppressed identity +top2merge": {
+      "held_out": {
+        "hits": 17,
+        "visible": 25
+      },
+      "dev": {
+        "hits": 22,
+        "visible": 40
+      }
+    },
+    "oracle single-track ceiling": {
+      "held_out": {
+        "hits": 11,
+        "visible": 25
+      },
+      "dev": {
+        "hits": 22,
+        "visible": 40
+      }
+    }
+  }
+}

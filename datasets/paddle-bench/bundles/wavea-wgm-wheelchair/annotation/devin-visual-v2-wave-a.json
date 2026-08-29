@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-wgm-wheelchair",
+  "annotatorId": "devin-visual-v2-wave-a",
+  "createdAtIso": "2026-08-29T00:00:00.000Z",
+  "revision": 1,
+  "stroke": "dink",
+  "annotatedStrokeV3": "BACKHAND_DINK",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 182400,
+    "accelerationStartMs": 182500,
+    "contactMs": 182583,
+    "followThroughEndMs": 182833,
+    "recoveryEndMs": 183067
+  },
+  "contactUncertainty": "plus_minus_1",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.75,
+  "notes": "dvids-warriorgames-match (rec-960a1a200d6d, dvids-warriorgames-2026, DEV) window [182250..183300], RECORDING clock. WHEELCHAIR athlete, blue AIR FORCE jersey, white cap, green paddle in RIGHT hand, foreground = window auto-target (cov 0.94, torso ~(0.46,0.43); the original whole-scene window locked a barrier-side spectator, so the case window was cut to before the camera pan - disclosed). Reviewed at 12/30fps. Ball arrives low on his LEFT: ready-raise pre-exists; stroke-specific down-reach begins 182400; paddle sweeps under the bouncing ball across his midline; CONTACT 182583 +-1 frame (bracketed 182567 ball-at-blade / 182600 just-off at 30fps); the lift arcs over the net (ball rises through 182633-182800); cross-body follow-through peaks up-right at ~182800-182833; arm settles holding the paddle up 183033-183067 = stroke motion complete; WHEELING (locomotion) begins ~183100 and is excluded from the event. NOTE for completion replay: post-stroke wheel pushes look like new wrist motion - a genuinely honest hard case for settle-based policies (the D-029 valley condition is what can catch it). First adaptive-completion gold event on an adaptive-athlete recording.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T00:00:00.000Z"
+    }
+  ],
+  "eventLabels": [
+    {
+      "eventStartMs": 182400,
+      "contactMs": 182583,
+      "eventEndMs": 183067,
+      "owner": "target",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "wheelchair backhand lift/dink off the bounce: down-reach 182400, contact 182583 (30fps bracket 182567/182600), follow-through peak 182800-182833, arm settled (paddle held up) 183067; wheeling from ~183100 excluded"
+    }
+  ]
+}

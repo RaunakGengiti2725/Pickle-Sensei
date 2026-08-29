@@ -1,0 +1,777 @@
+{
+  "wm-volley-02": {
+    "goldContactMs": 6680,
+    "goldStroke": "FOREHAND_VOLLEY",
+    "labels": {
+      "paddleFrames": 14,
+      "visible": 8
+    },
+    "baseline": {
+      "outcome": "analyzed",
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 5000,
+        "endMs": 7440,
+        "windowMs": 3460,
+        "spanMs": 2440,
+        "prePassEvents": 1
+      },
+      "paddle": {
+        "status": "tracked",
+        "reason": null,
+        "trackId": 11,
+        "observationCount": 38,
+        "windowCoverage": 0.7398843930635838,
+        "meanDetectorScore": 0.3970500000000001,
+        "meanWristDistance": 0.047837884723324745,
+        "candidateTracks": 30
+      },
+      "ballStage": {
+        "status": "tracked",
+        "reason": null,
+        "observationCount": 9,
+        "windowOverlapMs": 320
+      },
+      "contact": {
+        "status": "estimated",
+        "estimatedContactMs": 6637,
+        "confidence": 0.6630000000000009,
+        "ballConfirmed": true,
+        "paddleConfirmed": true,
+        "reason": null,
+        "errorVsGoldMs": 43
+      },
+      "targetEvent": {
+        "status": "selected",
+        "eventId": "E1",
+        "reason": null
+      },
+      "temporalPhasesV2": {
+        "status": "segmented",
+        "reason": null
+      },
+      "strokePrediction": {
+        "label": "FOREHAND",
+        "confidence": 0.8
+      },
+      "eventProposals": [
+        {
+          "eventId": "E1",
+          "startMs": 5600,
+          "endMs": 6840,
+          "peakMs": 6690,
+          "source": "wrist"
+        }
+      ]
+    },
+    "candidate": {
+      "outcome": "analyzed",
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 5000,
+        "endMs": 7440,
+        "windowMs": 3460,
+        "spanMs": 2440,
+        "prePassEvents": 1
+      },
+      "paddle": {
+        "status": "tracked",
+        "reason": null,
+        "trackId": 1,
+        "observationCount": 20,
+        "windowCoverage": 0.5549132947976878,
+        "meanDetectorScore": 0.5364049999999999,
+        "meanWristDistance": 0.03876839570812796,
+        "candidateTracks": 13
+      },
+      "ballStage": {
+        "status": "tracked",
+        "reason": null,
+        "observationCount": 8,
+        "windowOverlapMs": 480
+      },
+      "contact": {
+        "status": "estimated",
+        "estimatedContactMs": 6593,
+        "confidence": 0.713333333333333,
+        "ballConfirmed": true,
+        "paddleConfirmed": false,
+        "reason": null,
+        "errorVsGoldMs": 87
+      },
+      "targetEvent": {
+        "status": "selected",
+        "eventId": "E1",
+        "reason": null
+      },
+      "temporalPhasesV2": {
+        "status": "abstained",
+        "reason": "PHASE_NO_POST_CONTACT_EVIDENCE: no kinematic samples after the contact anchor inside the event"
+      },
+      "strokePrediction": {
+        "label": "FOREHAND",
+        "confidence": 0.8
+      },
+      "eventProposals": [
+        {
+          "eventId": "E1",
+          "startMs": 5600,
+          "endMs": 6840,
+          "peakMs": 6720,
+          "source": "wrist"
+        }
+      ]
+    },
+    "eventSetComparison": {
+      "identicalBounds": true,
+      "identicalIncludingPeaks": false,
+      "peakDeltasMs": {
+        "E1": 30
+      }
+    },
+    "waterfall": {
+      "S0_rawDetector": {
+        "baseline": {
+          "hits": 8,
+          "visible": 8,
+          "claims": 14,
+          "recall": 1.0,
+          "precision": 0.571
+        },
+        "candidate": {
+          "hits": 5,
+          "visible": 8,
+          "claims": 8,
+          "recall": 0.625,
+          "precision": 0.625
+        }
+      },
+      "S5_finalPaddleTrack": {
+        "baseline": {
+          "hits": 3,
+          "visible": 8,
+          "claims": 8,
+          "recall": 0.375,
+          "precision": 0.375
+        },
+        "candidate": {
+          "hits": 3,
+          "visible": 8,
+          "claims": 6,
+          "recall": 0.375,
+          "precision": 0.5
+        }
+      },
+      "S0_gridConvention": {
+        "baseline": {
+          "labeledVisible": 8,
+          "labelsWithDetectorFrame": 8,
+          "hits": 8,
+          "recallVsAllLabels": 1.0
+        },
+        "candidate": {
+          "labeledVisible": 8,
+          "labelsWithDetectorFrame": 8,
+          "hits": 7,
+          "recallVsAllLabels": 0.875
+        }
+      }
+    },
+    "cascade": {
+      "baseline": {
+        "stages": {
+          "TARGET": {
+            "pass": true,
+            "detail": "coverage 1.00"
+          },
+          "EVENT": {
+            "pass": true,
+            "detail": "selected 5600-6840 vs gold 6300-7100 (overlap 68%, contact inside)"
+          },
+          "PADDLE": {
+            "pass": true,
+            "detail": "status tracked \u00b7 coverage 0.74"
+          },
+          "BALL": {
+            "pass": true,
+            "detail": "status tracked"
+          },
+          "CONTACT": {
+            "pass": true,
+            "detail": "error 43ms (est 6637 vs gold 6680)"
+          },
+          "PHASE": {
+            "pass": true,
+            "detail": "segmented, ordering valid"
+          },
+          "STROKE": {
+            "pass": true,
+            "detail": "predicted FOREHAND vs gold FOREHAND_VOLLEY"
+          }
+        },
+        "conditionalReached": "COMPLETE"
+      },
+      "candidate": {
+        "stages": {
+          "TARGET": {
+            "pass": true,
+            "detail": "coverage 1.00"
+          },
+          "EVENT": {
+            "pass": true,
+            "detail": "selected 5600-6840 vs gold 6300-7100 (overlap 68%, contact inside)"
+          },
+          "PADDLE": {
+            "pass": true,
+            "detail": "status tracked \u00b7 coverage 0.55"
+          },
+          "BALL": {
+            "pass": true,
+            "detail": "status tracked"
+          },
+          "CONTACT": {
+            "pass": false,
+            "detail": "error 87ms (est 6593 vs gold 6680)"
+          },
+          "PHASE": {
+            "pass": false,
+            "detail": "status abstained"
+          },
+          "STROKE": {
+            "pass": true,
+            "detail": "predicted FOREHAND vs gold FOREHAND_VOLLEY"
+          }
+        },
+        "conditionalReached": "LOST AT CONTACT"
+      }
+    }
+  },
+  "afn-sasebo-rally1": {
+    "goldContactMs": 2900,
+    "goldStroke": "BACKHAND_VOLLEY",
+    "labels": {
+      "paddleFrames": 13,
+      "visible": 13
+    },
+    "baseline": {
+      "outcome": "analyzed",
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 168,
+        "endMs": 3871,
+        "windowMs": 3703,
+        "spanMs": 3703,
+        "prePassEvents": 3
+      },
+      "paddle": {
+        "status": "tracked",
+        "reason": null,
+        "trackId": 9,
+        "observationCount": 46,
+        "windowCoverage": 0.44152308938698354,
+        "meanDetectorScore": 0.5296152173913043,
+        "meanWristDistance": 0.07535209103088295,
+        "candidateTracks": 33
+      },
+      "ballStage": {
+        "status": "tracked",
+        "reason": null,
+        "observationCount": 7,
+        "windowOverlapMs": 200.20000000000005
+      },
+      "contact": {
+        "status": "abstained",
+        "estimatedContactMs": null,
+        "confidence": null,
+        "ballConfirmed": null,
+        "paddleConfirmed": null,
+        "reason": "Contact signals disagree by 626ms; no single moment is defensible.",
+        "errorVsGoldMs": null
+      },
+      "targetEvent": {
+        "status": "ambiguous",
+        "eventId": null,
+        "reason": "MULTI_STROKE_AMBIGUOUS: 3 events with comparable prominence (ratio 1.11)"
+      },
+      "temporalPhasesV2": {
+        "status": "abstained",
+        "reason": "MULTI_STROKE_AMBIGUOUS: 3 events with comparable prominence (ratio 1.11)"
+      },
+      "strokePrediction": null,
+      "eventProposals": [
+        {
+          "eventId": "E1",
+          "startMs": 367,
+          "endMs": 901,
+          "peakMs": 467,
+          "source": "wrist"
+        },
+        {
+          "eventId": "E2",
+          "startMs": 967.5,
+          "endMs": 2636,
+          "peakMs": 1468,
+          "source": "wrist"
+        },
+        {
+          "eventId": "E3",
+          "startMs": 2703,
+          "endMs": 3770,
+          "peakMs": 3403,
+          "source": "wrist"
+        }
+      ]
+    },
+    "candidate": {
+      "outcome": "analyzed",
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 168,
+        "endMs": 3871,
+        "windowMs": 3703,
+        "spanMs": 3703,
+        "prePassEvents": 3
+      },
+      "paddle": {
+        "status": "tracked",
+        "reason": null,
+        "trackId": 5,
+        "observationCount": 19,
+        "windowCoverage": 0.5676748582230624,
+        "meanDetectorScore": 0.4863105263157894,
+        "meanWristDistance": 0.06843696122102398,
+        "candidateTracks": 18
+      },
+      "ballStage": {
+        "status": "tracked",
+        "reason": null,
+        "observationCount": 7,
+        "windowOverlapMs": 200.20000000000005
+      },
+      "contact": {
+        "status": "abstained",
+        "estimatedContactMs": null,
+        "confidence": null,
+        "ballConfirmed": null,
+        "paddleConfirmed": null,
+        "reason": "Contact signals disagree by 553ms; no single moment is defensible.",
+        "errorVsGoldMs": null
+      },
+      "targetEvent": {
+        "status": "ambiguous",
+        "eventId": null,
+        "reason": "MULTI_STROKE_AMBIGUOUS: 3 events with comparable prominence (ratio 1.11)"
+      },
+      "temporalPhasesV2": {
+        "status": "abstained",
+        "reason": "MULTI_STROKE_AMBIGUOUS: 3 events with comparable prominence (ratio 1.11)"
+      },
+      "strokePrediction": null,
+      "eventProposals": [
+        {
+          "eventId": "E1",
+          "startMs": 367,
+          "endMs": 901,
+          "peakMs": 467,
+          "source": "wrist"
+        },
+        {
+          "eventId": "E2",
+          "startMs": 967.5,
+          "endMs": 2636,
+          "peakMs": 1468,
+          "source": "wrist"
+        },
+        {
+          "eventId": "E3",
+          "startMs": 2703,
+          "endMs": 3770,
+          "peakMs": 3403,
+          "source": "wrist"
+        }
+      ]
+    },
+    "eventSetComparison": {
+      "identicalBounds": true,
+      "identicalIncludingPeaks": true,
+      "peakDeltasMs": {}
+    },
+    "waterfall": {
+      "S0_rawDetector": {
+        "baseline": {
+          "hits": 13,
+          "visible": 13,
+          "claims": 13,
+          "recall": 1.0,
+          "precision": 1.0
+        },
+        "candidate": {
+          "hits": 12,
+          "visible": 13,
+          "claims": 12,
+          "recall": 0.923,
+          "precision": 1.0
+        }
+      },
+      "S5_finalPaddleTrack": {
+        "baseline": {
+          "hits": 5,
+          "visible": 13,
+          "claims": 5,
+          "recall": 0.385,
+          "precision": 1.0
+        },
+        "candidate": {
+          "hits": 3,
+          "visible": 13,
+          "claims": 6,
+          "recall": 0.231,
+          "precision": 0.5
+        }
+      },
+      "S0_gridConvention": {
+        "baseline": {
+          "labeledVisible": 13,
+          "labelsWithDetectorFrame": 13,
+          "hits": 11,
+          "recallVsAllLabels": 0.846
+        },
+        "candidate": {
+          "labeledVisible": 13,
+          "labelsWithDetectorFrame": 13,
+          "hits": 12,
+          "recallVsAllLabels": 0.923
+        }
+      }
+    },
+    "cascade": {
+      "baseline": {
+        "stages": {
+          "TARGET": {
+            "pass": true,
+            "detail": "coverage 0.88"
+          },
+          "EVENT": {
+            "pass": false,
+            "detail": "targetEvent status ambiguous"
+          },
+          "PADDLE": {
+            "pass": true,
+            "detail": "status tracked \u00b7 coverage 0.44"
+          },
+          "BALL": {
+            "pass": true,
+            "detail": "status tracked"
+          },
+          "CONTACT": {
+            "pass": false,
+            "detail": "status abstained"
+          },
+          "PHASE": {
+            "pass": false,
+            "detail": "status abstained"
+          },
+          "STROKE": {
+            "pass": false,
+            "detail": "predicted none vs gold BACKHAND_VOLLEY"
+          }
+        },
+        "conditionalReached": "LOST AT EVENT"
+      },
+      "candidate": {
+        "stages": {
+          "TARGET": {
+            "pass": true,
+            "detail": "coverage 0.88"
+          },
+          "EVENT": {
+            "pass": false,
+            "detail": "targetEvent status ambiguous"
+          },
+          "PADDLE": {
+            "pass": true,
+            "detail": "status tracked \u00b7 coverage 0.57"
+          },
+          "BALL": {
+            "pass": true,
+            "detail": "status tracked"
+          },
+          "CONTACT": {
+            "pass": false,
+            "detail": "status abstained"
+          },
+          "PHASE": {
+            "pass": false,
+            "detail": "status abstained"
+          },
+          "STROKE": {
+            "pass": false,
+            "detail": "predicted none vs gold BACKHAND_VOLLEY"
+          }
+        },
+        "conditionalReached": "LOST AT EVENT"
+      }
+    }
+  },
+  "afn-sasebo-rally2": {
+    "goldContactMs": 2620,
+    "goldStroke": "OVERHEAD",
+    "labels": {
+      "paddleFrames": 4,
+      "visible": 2
+    },
+    "baseline": {
+      "outcome": "not_analyzable",
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 1636,
+        "endMs": 3603,
+        "windowMs": 2301,
+        "spanMs": 1967,
+        "prePassEvents": 2
+      },
+      "paddle": {
+        "status": "tracked",
+        "reason": null,
+        "trackId": 13,
+        "observationCount": 82,
+        "windowCoverage": 0.9860625814863104,
+        "meanDetectorScore": 0.26541341463414647,
+        "meanWristDistance": 0.12334385380140497,
+        "candidateTracks": 33
+      },
+      "ballStage": {
+        "status": "untracked",
+        "reason": "no_gated_track_is_a_plausible_in-play_ball (window overlap, speed, paddle proximity)",
+        "observationCount": null,
+        "windowOverlapMs": null
+      },
+      "contact": {
+        "status": "estimated",
+        "estimatedContactMs": 2346,
+        "confidence": 0.5272135294117648,
+        "ballConfirmed": false,
+        "paddleConfirmed": true,
+        "reason": null,
+        "errorVsGoldMs": 274
+      },
+      "targetEvent": {
+        "status": "selected",
+        "eventId": "E1",
+        "reason": null
+      },
+      "temporalPhasesV2": {
+        "status": "segmented",
+        "reason": null
+      },
+      "strokePrediction": {
+        "label": "BACKHAND",
+        "confidence": 0.8
+      },
+      "eventProposals": [
+        {
+          "eventId": "E1",
+          "startMs": 2236,
+          "endMs": 2836,
+          "peakMs": 2436,
+          "source": "wrist"
+        },
+        {
+          "eventId": "E2",
+          "startMs": 3604,
+          "endMs": 4538,
+          "peakMs": 4072.2,
+          "source": "wrist"
+        }
+      ]
+    },
+    "candidate": {
+      "outcome": "not_analyzable",
+      "detectSpan": {
+        "mode": "event-gated",
+        "startMs": 1636,
+        "endMs": 3603,
+        "windowMs": 2301,
+        "spanMs": 1967,
+        "prePassEvents": 2
+      },
+      "paddle": {
+        "status": "untracked",
+        "reason": "paddle_association_ambiguous (abstaining rather than guessing)",
+        "trackId": null,
+        "observationCount": null,
+        "windowCoverage": null,
+        "meanDetectorScore": null,
+        "meanWristDistance": null,
+        "candidateTracks": 25
+      },
+      "ballStage": {
+        "status": "tracked",
+        "reason": null,
+        "observationCount": 34,
+        "windowOverlapMs": 1101.1000000000001
+      },
+      "contact": {
+        "status": "estimated",
+        "estimatedContactMs": 2451,
+        "confidence": 0.602727272727273,
+        "ballConfirmed": true,
+        "paddleConfirmed": false,
+        "reason": null,
+        "errorVsGoldMs": 169
+      },
+      "targetEvent": {
+        "status": "selected",
+        "eventId": "E1",
+        "reason": null
+      },
+      "temporalPhasesV2": {
+        "status": "segmented",
+        "reason": null
+      },
+      "strokePrediction": {
+        "label": "BACKHAND",
+        "confidence": 0.8
+      },
+      "eventProposals": [
+        {
+          "eventId": "E1",
+          "startMs": 2236,
+          "endMs": 2836,
+          "peakMs": 2436,
+          "source": "wrist"
+        },
+        {
+          "eventId": "E2",
+          "startMs": 3604,
+          "endMs": 4538,
+          "peakMs": 3837,
+          "source": "wrist"
+        }
+      ]
+    },
+    "eventSetComparison": {
+      "identicalBounds": true,
+      "identicalIncludingPeaks": false,
+      "peakDeltasMs": {
+        "E2": -235.2
+      }
+    },
+    "waterfall": {
+      "S0_rawDetector": {
+        "baseline": {
+          "hits": 2,
+          "visible": 2,
+          "claims": 4,
+          "recall": 1.0,
+          "precision": 0.5
+        },
+        "candidate": {
+          "hits": 1,
+          "visible": 2,
+          "claims": 3,
+          "recall": 0.5,
+          "precision": 0.333
+        }
+      },
+      "S5_finalPaddleTrack": {
+        "baseline": {
+          "hits": 0,
+          "visible": 2,
+          "claims": 4,
+          "recall": 0.0,
+          "precision": 0.0
+        },
+        "candidate": {
+          "hits": 0,
+          "visible": 2,
+          "claims": 0,
+          "recall": 0.0,
+          "precision": null
+        }
+      },
+      "S0_gridConvention": {
+        "baseline": {
+          "labeledVisible": 2,
+          "labelsWithDetectorFrame": 2,
+          "hits": 1,
+          "recallVsAllLabels": 0.5
+        },
+        "candidate": {
+          "labeledVisible": 2,
+          "labelsWithDetectorFrame": 2,
+          "hits": 1,
+          "recallVsAllLabels": 0.5
+        }
+      }
+    },
+    "cascade": {
+      "baseline": {
+        "stages": {
+          "TARGET": {
+            "pass": true,
+            "detail": "coverage 0.95"
+          },
+          "EVENT": {
+            "pass": true,
+            "detail": "selected 2236-2836 vs gold 2380-3050 (overlap 68%, contact inside)"
+          },
+          "PADDLE": {
+            "pass": true,
+            "detail": "status tracked \u00b7 coverage 0.99"
+          },
+          "BALL": {
+            "pass": false,
+            "detail": "status untracked"
+          },
+          "CONTACT": {
+            "pass": false,
+            "detail": "error 274ms (est 2346 vs gold 2620)"
+          },
+          "PHASE": {
+            "pass": true,
+            "detail": "segmented, ordering valid"
+          },
+          "STROKE": {
+            "pass": false,
+            "detail": "predicted BACKHAND vs gold OVERHEAD"
+          }
+        },
+        "conditionalReached": "LOST AT BALL"
+      },
+      "candidate": {
+        "stages": {
+          "TARGET": {
+            "pass": true,
+            "detail": "coverage 0.95"
+          },
+          "EVENT": {
+            "pass": true,
+            "detail": "selected 2236-2836 vs gold 2380-3050 (overlap 68%, contact inside)"
+          },
+          "PADDLE": {
+            "pass": false,
+            "detail": "status untracked \u00b7 coverage 0.00"
+          },
+          "BALL": {
+            "pass": true,
+            "detail": "status tracked"
+          },
+          "CONTACT": {
+            "pass": false,
+            "detail": "error 169ms (est 2451 vs gold 2620)"
+          },
+          "PHASE": {
+            "pass": true,
+            "detail": "segmented, ordering valid"
+          },
+          "STROKE": {
+            "pass": false,
+            "detail": "predicted BACKHAND vs gold OVERHEAD"
+          }
+        },
+        "conditionalReached": "LOST AT PADDLE"
+      }
+    }
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "wm-volley-02": {
+    "contact": {
+      "status": "estimated",
+      "estimatedContactMs": 6650,
+      "confidence": 0.8683667599519799,
+      "paddleConfirmed": true,
+      "ballConfirmed": true
+    },
+    "strokePrediction": {
+      "classifierVersion": "stroke-heuristic-1 (uncalibrated)",
+      "label": "FOREHAND",
+      "leaf": null,
+      "depth": 2,
+      "confidence": 0.8,
+      "limitingFactors": [
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "bounce_not_observed_level3_uncommitted"
+      ]
+    }
+  },
+  "afn-sasebo-rally1": {
+    "contact": {
+      "status": "abstained",
+      "estimatedContactMs": null,
+      "confidence": null,
+      "paddleConfirmed": null,
+      "ballConfirmed": null
+    },
+    "strokePrediction": null
+  },
+  "afn-sasebo-rally2": {
+    "contact": {
+      "status": "estimated",
+      "estimatedContactMs": 2650,
+      "confidence": 0.6055046162669437,
+      "paddleConfirmed": true,
+      "ballConfirmed": false
+    },
+    "strokePrediction": {
+      "classifierVersion": "stroke-heuristic-1 (uncalibrated)",
+      "label": "BACKHAND",
+      "leaf": null,
+      "depth": 2,
+      "confidence": 0.8,
+      "limitingFactors": [
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "bounce_not_observed_level3_uncommitted"
+      ]
+    }
+  }
+}

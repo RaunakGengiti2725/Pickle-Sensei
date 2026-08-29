@@ -1,0 +1,7313 @@
+{
+  "schemaVersion": 1,
+  "replayVersion": "ta-replay-1",
+  "cases": [
+    {
+      "caseId": "ta-44c0c451500c-s0w0-p2",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 0,
+        "end": 12000
+      },
+      "regionNorm": {
+        "x": 0.5889,
+        "y": 0.6897
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "wheelchair adaptive athlete at equipment table (pre-game); background staff/spectators; close distance"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s0w0-p3",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 0,
+        "end": 12000
+      },
+      "regionNorm": {
+        "x": 0.883,
+        "y": 0.3717
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s0w1-p1",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 18443
+      },
+      "regionNorm": {
+        "x": 0.7689,
+        "y": 0.5635
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s0w1-p2",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 18443
+      },
+      "regionNorm": {
+        "x": 0.2336,
+        "y": 0.5337
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "live doubles, ball in flight over net: far ARMY player ready at kitchen; ARMY partner just outside region; near blue player back-to-camera; barrier spectators behind"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s0w1-p4",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 18443
+      },
+      "regionNorm": {
+        "x": 0.4502,
+        "y": 0.5646
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s0w1-p3",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 18443
+      },
+      "regionNorm": {
+        "x": 0.9744,
+        "y": 0.5233
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s1w0-p21",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 18443,
+        "end": 30443
+      },
+      "regionNorm": {
+        "x": 0.0771,
+        "y": 0.4707
+      },
+      "trueTrackId": 21,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s1w0-p1",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 18443,
+        "end": 30443
+      },
+      "regionNorm": {
+        "x": 0.3861,
+        "y": 0.6586
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s1w0-p6",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 18443,
+        "end": 30443
+      },
+      "regionNorm": {
+        "x": 0.1545,
+        "y": 0.3256
+      },
+      "trueTrackId": 6,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "black-shirt staff filming on phone behind barrier is target, partly occluded by foreground ARMY player's shoulder; wheelchair athlete raises paddle center — occlusion-heavy bystander case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s1w0-p2",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 18443,
+        "end": 30443
+      },
+      "regionNorm": {
+        "x": 0.2425,
+        "y": 0.3872
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s1w2-p5",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 38443,
+        "end": 50443
+      },
+      "regionNorm": {
+        "x": 0.4258,
+        "y": 0.5992
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s1w2-p14",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 38443,
+        "end": 50443
+      },
+      "regionNorm": {
+        "x": 0.0292,
+        "y": 0.448
+      },
+      "trueTrackId": 14,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s1w3-p1",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 48443,
+        "end": 54488
+      },
+      "regionNorm": {
+        "x": 0.4622,
+        "y": 0.6012
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s2w0-p1",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 54488,
+        "end": 62996
+      },
+      "regionNorm": {
+        "x": 0.4273,
+        "y": 0.3932
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s2w0-p2",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 54488,
+        "end": 62996
+      },
+      "regionNorm": {
+        "x": 0.2716,
+        "y": 0.2564
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s3w0-p1",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 62996,
+        "end": 71430
+      },
+      "regionNorm": {
+        "x": 0.3861,
+        "y": 0.345
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "standing player + wheelchair partner both near region; spectators at barrier; indoor arena"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s3w0-p2",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 62996,
+        "end": 71430
+      },
+      "regionNorm": {
+        "x": 0.2492,
+        "y": 0.421
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s3w0-p5",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 62996,
+        "end": 71430
+      },
+      "regionNorm": {
+        "x": 0.1217,
+        "y": 0.3214
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s4w2-p1",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 91430,
+        "end": 103430
+      },
+      "regionNorm": {
+        "x": 0.701,
+        "y": 0.5829
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s4w2-p3",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 91430,
+        "end": 103430
+      },
+      "regionNorm": {
+        "x": 0.3502,
+        "y": 0.5135
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "rejected",
+        "by": "devin-visual-v2-wave-a",
+        "note": "CROWD-ONLY CUTAWAY: bleacher fans (Team Army signs, Pikachu poster), no court/athlete in frame; target is a seated spectator — out of product capture domain"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s4w2-p5",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 91430,
+        "end": 103430
+      },
+      "regionNorm": {
+        "x": 0.2409,
+        "y": 0.5418
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s4w3-p1",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 101430,
+        "end": 109459
+      },
+      "regionNorm": {
+        "x": 0.7117,
+        "y": 0.6413
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s4w3-p4",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 101430,
+        "end": 109459
+      },
+      "regionNorm": {
+        "x": 0.2683,
+        "y": 0.6085
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s4w3-p35",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 101430,
+        "end": 109459
+      },
+      "regionNorm": {
+        "x": 0.8562,
+        "y": 0.471
+      },
+      "trueTrackId": 35,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s4w3-p29",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 101430,
+        "end": 109459
+      },
+      "regionNorm": {
+        "x": 0.3545,
+        "y": 0.5635
+      },
+      "trueTrackId": 29,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-44c0c451500c-s4w3-p3",
+      "recordingId": "rec-44c0c451500c",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 101430,
+        "end": 109459
+      },
+      "regionNorm": {
+        "x": 0.1827,
+        "y": 0.6406
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w0-p2",
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "windowMs": {
+        "start": 500,
+        "end": 12500
+      },
+      "regionNorm": {
+        "x": 0.2061,
+        "y": 0.4926
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "interview context; stationary subject holding paddle — in-domain for acquisition phase (user standing at start region)"
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w0-p3",
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "windowMs": {
+        "start": 500,
+        "end": 12500
+      },
+      "regionNorm": {
+        "x": 0.8493,
+        "y": 0.4379
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w1-p1",
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "windowMs": {
+        "start": 10500,
+        "end": 22500
+      },
+      "regionNorm": {
+        "x": 0.4724,
+        "y": 0.4915
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w1-p2",
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "windowMs": {
+        "start": 10500,
+        "end": 22500
+      },
+      "regionNorm": {
+        "x": 0.8544,
+        "y": 0.4377
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w2-p10",
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "windowMs": {
+        "start": 20500,
+        "end": 32500
+      },
+      "regionNorm": {
+        "x": 0.9373,
+        "y": 0.3944
+      },
+      "trueTrackId": 10,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w2-p8",
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "windowMs": {
+        "start": 20500,
+        "end": 32500
+      },
+      "regionNorm": {
+        "x": 0.3154,
+        "y": 0.3762
+      },
+      "trueTrackId": 8,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w2-p20",
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "windowMs": {
+        "start": 20500,
+        "end": 32500
+      },
+      "regionNorm": {
+        "x": 0.6284,
+        "y": 0.4069
+      },
+      "trueTrackId": 20,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "clinic demo: black cap+shirt instructor mid-stride w/ paddle; seated onlooker, arms-crossed staff woman + tall gray-shirt student inside region"
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w2-p11",
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "windowMs": {
+        "start": 20500,
+        "end": 32500
+      },
+      "regionNorm": {
+        "x": 0.1295,
+        "y": 0.3878
+      },
+      "trueTrackId": 11,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w2-p12",
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "windowMs": {
+        "start": 20500,
+        "end": 32500
+      },
+      "regionNorm": {
+        "x": 0.7468,
+        "y": 0.39
+      },
+      "trueTrackId": 12,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "clinic sideline lineup: navy-polo woman holding paddle is target; instructor gestures foreground; ≥5 students/staff inside region — heaviest sideline crowd"
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w3-p2",
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "windowMs": {
+        "start": 30500,
+        "end": 42500
+      },
+      "regionNorm": {
+        "x": 0.8573,
+        "y": 0.4193
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s2w0-p1",
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "windowMs": {
+        "start": 43310,
+        "end": 51051
+      },
+      "regionNorm": {
+        "x": 0.5017,
+        "y": 0.3578
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "lime-cap player lunging mid-stroke; partner behind; region at his start position"
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s2w0-p2",
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "windowMs": {
+        "start": 43310,
+        "end": 51051
+      },
+      "regionNorm": {
+        "x": 0.6389,
+        "y": 0.3527
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s3w0-p2",
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "windowMs": {
+        "start": 51051,
+        "end": 59560
+      },
+      "regionNorm": {
+        "x": 0.8781,
+        "y": 0.4704
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s3w0-p10",
+      "recordingId": "rec-5bf0e6a85afb",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "windowMs": {
+        "start": 51051,
+        "end": 59560
+      },
+      "regionNorm": {
+        "x": 0.1293,
+        "y": 0.5723
+      },
+      "trueTrackId": 10,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s0w0-p13",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 0,
+        "end": 12000
+      },
+      "regionNorm": {
+        "x": 0.5032,
+        "y": 0.6065
+      },
+      "trueTrackId": 13,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s0w1-p1",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 13146
+      },
+      "regionNorm": {
+        "x": 0.8196,
+        "y": 0.7172
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s0w1-p2",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 13146
+      },
+      "regionNorm": {
+        "x": 0.2628,
+        "y": 0.6887
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "dense SASEBO gym queue backs-to-camera: target = white patterned-shirt man; black-shirt + maroon neighbors inside region — crowd-occupant acquisition"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s0w1-p3",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 13146
+      },
+      "regionNorm": {
+        "x": 0.6258,
+        "y": 0.6389
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s0w1-p4",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 13146
+      },
+      "regionNorm": {
+        "x": 0.1573,
+        "y": 0.7057
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "real person in dense gym crowd (acquisition-in-crowd stress case)"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s0w1-p5",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 13146
+      },
+      "regionNorm": {
+        "x": 0.4494,
+        "y": 0.6583
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "same gym queue, region center: target = maroon-shirt man w/ shoulder strap; GO-print, gray + pickle-shirt bystanders inside region — heavy contested"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s0w1-p6",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 13146
+      },
+      "regionNorm": {
+        "x": 0.5157,
+        "y": 0.6546
+      },
+      "trueTrackId": 6,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s2w2-p2",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 40320,
+        "end": 52320
+      },
+      "regionNorm": {
+        "x": 0.8557,
+        "y": 0.5126
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s2w2-p11",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 40320,
+        "end": 52320
+      },
+      "regionNorm": {
+        "x": 0.1334,
+        "y": 0.5376
+      },
+      "trueTrackId": 11,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "wide multi-court gym; jersey-10 player among many background athletes; far distance/small target"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s2w3-p3",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 50320,
+        "end": 55088
+      },
+      "regionNorm": {
+        "x": 0.4641,
+        "y": 0.5226
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "camo-shirt near player mid-rally, ball in flight; opponent + adjacent courts in region"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s2w3-p1",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 50320,
+        "end": 55088
+      },
+      "regionNorm": {
+        "x": 0.2931,
+        "y": 0.5337
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "live volley: camo GO-shirt headband player, ball at his paddle; foreground partner arm inside region; adjacent courts + kneeling red-shirt at net post"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s2w3-p4",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 50320,
+        "end": 55088
+      },
+      "regionNorm": {
+        "x": 0.783,
+        "y": 0.7069
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s2w3-p5",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 50320,
+        "end": 55088
+      },
+      "regionNorm": {
+        "x": 0.0312,
+        "y": 0.6259
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s3w0-p2",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 55088,
+        "end": 60027
+      },
+      "regionNorm": {
+        "x": 0.5236,
+        "y": 0.5681
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s3w0-p4",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 55088,
+        "end": 60027
+      },
+      "regionNorm": {
+        "x": 0.9309,
+        "y": 0.5118
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "sideline bystander cluster: target standing beside camo player + staff; live rally on adjacent net; caption overlay"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s3w0-p6",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 55088,
+        "end": 60027
+      },
+      "regionNorm": {
+        "x": 0.113,
+        "y": 0.5469
+      },
+      "trueTrackId": 6,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s3w0-p3",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 55088,
+        "end": 60027
+      },
+      "regionNorm": {
+        "x": 0.651,
+        "y": 0.5488
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-6e06a3157947-s3w0-p7",
+      "recordingId": "rec-6e06a3157947",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "windowMs": {
+        "start": 55088,
+        "end": 60027
+      },
+      "regionNorm": {
+        "x": 0.8869,
+        "y": 0.5208
+      },
+      "trueTrackId": 7,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-912aeaa8c30c-s1w0-p1",
+      "recordingId": "rec-912aeaa8c30c",
+      "sessionKey": "dvids-1008415",
+      "split": "dev",
+      "windowMs": {
+        "start": 534,
+        "end": 5539
+      },
+      "regionNorm": {
+        "x": 0.8543,
+        "y": 0.7201
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "solo",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "rejected",
+        "by": "devin-visual-v1",
+        "note": "POSE FALSE POSITIVE: human on stylized graphic title card (still image), not a live player — preserved as failure exhibit"
+      }
+    },
+    {
+      "caseId": "ta-912aeaa8c30c-s3w0-p3",
+      "recordingId": "rec-912aeaa8c30c",
+      "sessionKey": "dvids-1008415",
+      "split": "dev",
+      "windowMs": {
+        "start": 5572,
+        "end": 14982
+      },
+      "regionNorm": {
+        "x": 0.1472,
+        "y": 0.7386
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "rejected",
+        "by": "devin-visual-v1",
+        "note": "GRAPHIC TITLE CARD #2: still collage human + statue; whole recording is motion graphics"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s0w0-p2",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 0,
+        "end": 12000
+      },
+      "regionNorm": {
+        "x": 0.6159,
+        "y": 0.3569
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "far red-shirt player AT ball contact; partner inside region (two-in-region); near players; 60fps"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s0w1-p1",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 22000
+      },
+      "regionNorm": {
+        "x": 0.5884,
+        "y": 0.3867
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s0w1-p9",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 22000
+      },
+      "regionNorm": {
+        "x": 0.0302,
+        "y": 0.3162
+      },
+      "trueTrackId": 9,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s0w1-p4",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 22000
+      },
+      "regionNorm": {
+        "x": 0.8893,
+        "y": 0.343
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s0w1-p7",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 22000
+      },
+      "regionNorm": {
+        "x": 0.9517,
+        "y": 0.3652
+      },
+      "trueTrackId": 7,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "red-shirt player mid-backhand, ball inbound; 4 players + sideline spectators; overcast outdoor"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s0w2-p1",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 20000,
+        "end": 27060
+      },
+      "regionNorm": {
+        "x": 0.1899,
+        "y": 0.4411
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s0w2-p2",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 20000,
+        "end": 27060
+      },
+      "regionNorm": {
+        "x": 0.7882,
+        "y": 0.4188
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s0w2-p3",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 20000,
+        "end": 27060
+      },
+      "regionNorm": {
+        "x": 0.5357,
+        "y": 0.3542
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "far-court player mid-overhead prep, ball in flight; near players + fence-line soldiers; 60fps outdoor"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w0-p1",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 27060,
+        "end": 39060
+      },
+      "regionNorm": {
+        "x": 0.7246,
+        "y": 0.4787
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "outdoor doubles mid-rally (ball at left player's paddle): near red-shirt crest player back-to-camera; gray-sweater opponent inside region across net; 4th player occluded behind target"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w0-p3",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 27060,
+        "end": 39060
+      },
+      "regionNorm": {
+        "x": 0.6029,
+        "y": 0.4035
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w1-p17",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 37060,
+        "end": 49060
+      },
+      "regionNorm": {
+        "x": 0.0363,
+        "y": 0.2528
+      },
+      "trueTrackId": 17,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w2-p2",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 47060,
+        "end": 59060
+      },
+      "regionNorm": {
+        "x": 0.3358,
+        "y": 0.2642
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w3-p1",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 57060,
+        "end": 69060
+      },
+      "regionNorm": {
+        "x": 0.6516,
+        "y": 0.3434
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w4-p7",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 67060,
+        "end": 73707
+      },
+      "regionNorm": {
+        "x": 0.5994,
+        "y": 0.5312
+      },
+      "trueTrackId": 7,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w4-p15",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 67060,
+        "end": 73707
+      },
+      "regionNorm": {
+        "x": 0.0225,
+        "y": 0.3823
+      },
+      "trueTrackId": 15,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w4-p11",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 67060,
+        "end": 73707
+      },
+      "regionNorm": {
+        "x": 0.1815,
+        "y": 0.4312
+      },
+      "trueTrackId": 11,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w4-p14",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 67060,
+        "end": 73707
+      },
+      "regionNorm": {
+        "x": 0.8149,
+        "y": 0.3573
+      },
+      "trueTrackId": 14,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "background bystander behind fence during live rally — non-player target, measures acquisition among non-players"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s2w0-p1",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 73707,
+        "end": 85369
+      },
+      "regionNorm": {
+        "x": 0.2437,
+        "y": 0.4549
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "live rally: Glory's-Guns red-shirt near player is target; partner mid-forehand w/ ball in flight; black-shirt opponent's paddle at region edge across net"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s2w0-p6",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 73707,
+        "end": 85369
+      },
+      "regionNorm": {
+        "x": 0.9435,
+        "y": 0.453
+      },
+      "trueTrackId": 6,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s2w0-p2",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 73707,
+        "end": 85369
+      },
+      "regionNorm": {
+        "x": 0.4357,
+        "y": 0.3845
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s3w0-p8",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 85369,
+        "end": 95912
+      },
+      "regionNorm": {
+        "x": 0.97,
+        "y": 0.4054
+      },
+      "trueTrackId": 8,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s3w0-p13",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 85369,
+        "end": 95912
+      },
+      "regionNorm": {
+        "x": 0.0282,
+        "y": 0.3879
+      },
+      "trueTrackId": 13,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "between-rally: skull-crest red player w/ blue paddle walks near left region; opponents paddle-tap at net; region overlaps pavilion bystanders behind fence"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s3w0-p3",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 85369,
+        "end": 95912
+      },
+      "regionNorm": {
+        "x": 0.1031,
+        "y": 0.355
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-916657917f2b-s3w0-p14",
+      "recordingId": "rec-916657917f2b",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 85369,
+        "end": 95912
+      },
+      "regionNorm": {
+        "x": 0.4549,
+        "y": 0.3655
+      },
+      "trueTrackId": 14,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w1-p2",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 22000
+      },
+      "regionNorm": {
+        "x": 0.7159,
+        "y": 0.4761
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w1-p3",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 22000
+      },
+      "regionNorm": {
+        "x": 0.5906,
+        "y": 0.2733
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w1-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 22000
+      },
+      "regionNorm": {
+        "x": 0.4175,
+        "y": 0.4848
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "team huddle: 6 standing + 2 wheelchair athletes overlapping region; extreme multi-occupancy; identical uniforms"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w1-p4",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 22000
+      },
+      "regionNorm": {
+        "x": 0.3773,
+        "y": 0.2398
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w2-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 20000,
+        "end": 24800
+      },
+      "regionNorm": {
+        "x": 0.6756,
+        "y": 0.394
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "wheelchair athlete moving with group through region (adaptive athlete)"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w2-p3",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 20000,
+        "end": 24800
+      },
+      "regionNorm": {
+        "x": 0.3635,
+        "y": 0.2262
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w2-p5",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 20000,
+        "end": 24800
+      },
+      "regionNorm": {
+        "x": 0.4491,
+        "y": 0.1879
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w2-p2",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 20000,
+        "end": 24800
+      },
+      "regionNorm": {
+        "x": 0.1318,
+        "y": 0.4256
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w2-p4",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 20000,
+        "end": 24800
+      },
+      "regionNorm": {
+        "x": 0.2212,
+        "y": 0.1672
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s0w2-p13",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 20000,
+        "end": 24800
+      },
+      "regionNorm": {
+        "x": 0.7171,
+        "y": 0.277
+      },
+      "trueTrackId": 13,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s1w1-p2",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 34800,
+        "end": 46800
+      },
+      "regionNorm": {
+        "x": 0.6381,
+        "y": 0.5439
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s1w1-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 34800,
+        "end": 46800
+      },
+      "regionNorm": {
+        "x": 0.3078,
+        "y": 0.4117
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s1w2-p2",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 44800,
+        "end": 52833
+      },
+      "regionNorm": {
+        "x": 0.4743,
+        "y": 0.3968
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s1w2-p4",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 44800,
+        "end": 52833
+      },
+      "regionNorm": {
+        "x": 0.1347,
+        "y": 0.6434
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s2w0-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 52833,
+        "end": 64333
+      },
+      "regionNorm": {
+        "x": 0.8772,
+        "y": 0.4988
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s2w0-p5",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 52833,
+        "end": 64333
+      },
+      "regionNorm": {
+        "x": 0.9558,
+        "y": 0.4885
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s3w0-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 64333,
+        "end": 72800
+      },
+      "regionNorm": {
+        "x": 0.6809,
+        "y": 0.406
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s3w0-p4",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 64333,
+        "end": 72800
+      },
+      "regionNorm": {
+        "x": 0.4619,
+        "y": 0.3491
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s4w0-p7",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 72800,
+        "end": 84800
+      },
+      "regionNorm": {
+        "x": 0.1231,
+        "y": 0.3897
+      },
+      "trueTrackId": 7,
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s4w1-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 82800,
+        "end": 94800
+      },
+      "regionNorm": {
+        "x": 0.0539,
+        "y": 0.448
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s4w2-p2",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 92800,
+        "end": 97700
+      },
+      "regionNorm": {
+        "x": 0.746,
+        "y": 0.4082
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s4w2-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 92800,
+        "end": 97700
+      },
+      "regionNorm": {
+        "x": 0.232,
+        "y": 0.4512
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "white-cap player at kitchen; ARMY opponent; dense left-barrier spectators inside region; ball-pickup person"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s5w0-p2",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 97700,
+        "end": 109700
+      },
+      "regionNorm": {
+        "x": 0.768,
+        "y": 0.3002
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s5w0-p3",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 97700,
+        "end": 109700
+      },
+      "regionNorm": {
+        "x": 0.4638,
+        "y": 0.3028
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "seated/low-stance adaptive athlete at net; opponent + banner-side spectators inside region"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s5w1-p2",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 107700,
+        "end": 113133
+      },
+      "regionNorm": {
+        "x": 0.6442,
+        "y": 0.291
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s5w1-p3",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 107700,
+        "end": 113133
+      },
+      "regionNorm": {
+        "x": 0.3919,
+        "y": 0.3035
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s5w1-p4",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 107700,
+        "end": 113133
+      },
+      "regionNorm": {
+        "x": 0.9464,
+        "y": 0.2694
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "small_target"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "barrier spectator as mechanical region occupant during live match; players nearby; far/small"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s6w0-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 113133,
+        "end": 125133
+      },
+      "regionNorm": {
+        "x": 0.443,
+        "y": 0.4339
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s6w1-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 123133,
+        "end": 135133
+      },
+      "regionNorm": {
+        "x": 0.4294,
+        "y": 0.4579
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s6w1-p2",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 123133,
+        "end": 135133
+      },
+      "regionNorm": {
+        "x": 0.1662,
+        "y": 0.4184
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s6w2-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 133133,
+        "end": 145133
+      },
+      "regionNorm": {
+        "x": 0.3006,
+        "y": 0.6714
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s6w2-p2",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 133133,
+        "end": 145133
+      },
+      "regionNorm": {
+        "x": 0.477,
+        "y": 0.636
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s6w3-p2",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 143133,
+        "end": 155133
+      },
+      "regionNorm": {
+        "x": 0.2861,
+        "y": 0.6723
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s7w0-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 156267,
+        "end": 168267
+      },
+      "regionNorm": {
+        "x": 0.2121,
+        "y": 0.7672
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s7w1-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 166267,
+        "end": 172800
+      },
+      "regionNorm": {
+        "x": 0.3331,
+        "y": 0.7145
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "solo"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "wheelchair athlete beside empty starting region (court); pre-rally; foreground spectator heads"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w0-p7",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 172800,
+        "end": 184800
+      },
+      "regionNorm": {
+        "x": 0.0442,
+        "y": 0.4517
+      },
+      "trueTrackId": 7,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w0-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 172800,
+        "end": 184800
+      },
+      "regionNorm": {
+        "x": 0.1201,
+        "y": 0.3015
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "barrier-lean spectator (tan cap, white tee) as region occupant while AIR FORCE wheelchair athlete plays center court; camo soldier also in region"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w0-p4",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 172800,
+        "end": 184800
+      },
+      "regionNorm": {
+        "x": 0.7125,
+        "y": 0.265
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w0-p3",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 172800,
+        "end": 184800
+      },
+      "regionNorm": {
+        "x": 0.612,
+        "y": 0.2688
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w0-p9",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 172800,
+        "end": 184800
+      },
+      "regionNorm": {
+        "x": 0.2787,
+        "y": 0.2788
+      },
+      "trueTrackId": 9,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w0-p10",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 172800,
+        "end": 184800
+      },
+      "regionNorm": {
+        "x": 0.9604,
+        "y": 0.3167
+      },
+      "trueTrackId": 10,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w2-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 192800,
+        "end": 204800
+      },
+      "regionNorm": {
+        "x": 0.5696,
+        "y": 0.4542
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "ARMY standing player at baseline pre-serve (ball raised) — correct clean target; dense barrier crowd directly behind inside region; wheelchair teammate right"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w2-p3",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 192800,
+        "end": 204800
+      },
+      "regionNorm": {
+        "x": 0.9,
+        "y": 0.5073
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w3-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 202800,
+        "end": 214800
+      },
+      "regionNorm": {
+        "x": 0.4838,
+        "y": 0.4731
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w3-p2",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 202800,
+        "end": 214800
+      },
+      "regionNorm": {
+        "x": 0.8824,
+        "y": 0.5082
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "ARMY wheelchair athlete rolling along sideline; barrier crowd (blue-polo staff, kids, white-shirt man) inside region behind him; standing partner mid-overhead"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w3-p3",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 202800,
+        "end": 214800
+      },
+      "regionNorm": {
+        "x": 0.9453,
+        "y": 0.4321
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w4-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 212800,
+        "end": 224800
+      },
+      "regionNorm": {
+        "x": 0.2794,
+        "y": 0.4602
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w4-p3",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 212800,
+        "end": 224800
+      },
+      "regionNorm": {
+        "x": 0.5101,
+        "y": 0.5283
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w5-p28",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 222800,
+        "end": 234800
+      },
+      "regionNorm": {
+        "x": 0.6014,
+        "y": 0.3925
+      },
+      "trueTrackId": 28,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w5-p22",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 222800,
+        "end": 234800
+      },
+      "regionNorm": {
+        "x": 0.3192,
+        "y": 0.3343
+      },
+      "trueTrackId": 22,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w6-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 232800,
+        "end": 244800
+      },
+      "regionNorm": {
+        "x": 0.3408,
+        "y": 0.3707
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w7-p18",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 242800,
+        "end": 254800
+      },
+      "regionNorm": {
+        "x": 0.5644,
+        "y": 0.4448
+      },
+      "trueTrackId": 18,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w7-p5",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 242800,
+        "end": 254800
+      },
+      "regionNorm": {
+        "x": 0.931,
+        "y": 0.2781
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w8-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 252800,
+        "end": 264800
+      },
+      "regionNorm": {
+        "x": 0.5932,
+        "y": 0.4677
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w8-p4",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 252800,
+        "end": 264800
+      },
+      "regionNorm": {
+        "x": 0.7968,
+        "y": 0.2816
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "cowboy-hat spectator at barrier is region occupant; AIR FORCE wheelchair athlete mid-serve toss on court; cap-man + teal woman also in region — bystander-lock stress"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w8-p7",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 252800,
+        "end": 264800
+      },
+      "regionNorm": {
+        "x": 0.9634,
+        "y": 0.283
+      },
+      "trueTrackId": 7,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w8-p9",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 252800,
+        "end": 264800
+      },
+      "regionNorm": {
+        "x": 0.8905,
+        "y": 0.2686
+      },
+      "trueTrackId": 9,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w9-p7",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 262800,
+        "end": 272033
+      },
+      "regionNorm": {
+        "x": 0.0579,
+        "y": 0.3692
+      },
+      "trueTrackId": 7,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w9-p4",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 262800,
+        "end": 272033
+      },
+      "regionNorm": {
+        "x": 0.5249,
+        "y": 0.3646
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w9-p3",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 262800,
+        "end": 272033
+      },
+      "regionNorm": {
+        "x": 0.4477,
+        "y": 0.2759
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w9-p2",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 262800,
+        "end": 272033
+      },
+      "regionNorm": {
+        "x": 0.3507,
+        "y": 0.312
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w0-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 272033,
+        "end": 284033
+      },
+      "regionNorm": {
+        "x": 0.3796,
+        "y": 0.5267
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w1-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 282033,
+        "end": 294033
+      },
+      "regionNorm": {
+        "x": 0.5518,
+        "y": 0.4895
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w1-p12",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 282033,
+        "end": 294033
+      },
+      "regionNorm": {
+        "x": 0.3715,
+        "y": 0.5625
+      },
+      "trueTrackId": 12,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "post-point net gathering: standing headband athlete at region edge; two wheelchair athletes + reaching white-shirt athlete inside region; barrier crowd behind"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w1-p3",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 282033,
+        "end": 294033
+      },
+      "regionNorm": {
+        "x": 0.3972,
+        "y": 0.623
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w1-p4",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 282033,
+        "end": 294033
+      },
+      "regionNorm": {
+        "x": 0.5476,
+        "y": 0.6235
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w1-p5",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 282033,
+        "end": 294033
+      },
+      "regionNorm": {
+        "x": 0.0238,
+        "y": 0.4588
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w2-p1",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 292033,
+        "end": 304033
+      },
+      "regionNorm": {
+        "x": 0.6348,
+        "y": 0.525
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w2-p5",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 292033,
+        "end": 304033
+      },
+      "regionNorm": {
+        "x": 0.5653,
+        "y": 0.61
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w2-p2",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 292033,
+        "end": 304033
+      },
+      "regionNorm": {
+        "x": 0.3135,
+        "y": 0.7109
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w2-p12",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 292033,
+        "end": 304033
+      },
+      "regionNorm": {
+        "x": 0.3502,
+        "y": 0.5735
+      },
+      "trueTrackId": 12,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w3-p9",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 302033,
+        "end": 307500
+      },
+      "regionNorm": {
+        "x": 0.0511,
+        "y": 0.5036
+      },
+      "trueTrackId": 9,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s9w3-p11",
+      "recordingId": "rec-960a1a200d6d",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "windowMs": {
+        "start": 302033,
+        "end": 307500
+      },
+      "regionNorm": {
+        "x": 0.1912,
+        "y": 0.542
+      },
+      "trueTrackId": 11,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-96ae65019c30-s0w1-p2",
+      "recordingId": "rec-96ae65019c30",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 18118
+      },
+      "regionNorm": {
+        "x": 0.7705,
+        "y": 0.5263
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-96ae65019c30-s0w1-p1",
+      "recordingId": "rec-96ae65019c30",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 18118
+      },
+      "regionNorm": {
+        "x": 0.1097,
+        "y": 0.5329
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "near player at kitchen mid-rally (ball in flight); bystander in black at region edge; partner right"
+      }
+    },
+    {
+      "caseId": "ta-96ae65019c30-s0w1-p3",
+      "recordingId": "rec-96ae65019c30",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 18118
+      },
+      "regionNorm": {
+        "x": 0.0366,
+        "y": 0.4447
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-96ae65019c30-s1w1-p6",
+      "recordingId": "rec-96ae65019c30",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 28118,
+        "end": 33350
+      },
+      "regionNorm": {
+        "x": 0.0402,
+        "y": 0.5217
+      },
+      "trueTrackId": 6,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "player crossing court with paddle toward region; second player + fence-line soldiers; outdoor overcast"
+      }
+    },
+    {
+      "caseId": "ta-96ae65019c30-s2w0-p1",
+      "recordingId": "rec-96ae65019c30",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 33350,
+        "end": 39656
+      },
+      "regionNorm": {
+        "x": 0.6167,
+        "y": 0.4438
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "solo"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "solo close-up: red ARMY-shirt player in ready stance w/ teal paddle + ball; clean box; nobody else in frame — simple-slice control"
+      }
+    },
+    {
+      "caseId": "ta-96ae65019c30-s3w0-p2",
+      "recordingId": "rec-96ae65019c30",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 39656,
+        "end": 46196
+      },
+      "regionNorm": {
+        "x": 0.9204,
+        "y": 0.4488
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "red-shirt player mid-return, ball visible, second player in frame"
+      }
+    },
+    {
+      "caseId": "ta-96ae65019c30-s4w0-p1",
+      "recordingId": "rec-96ae65019c30",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 46196,
+        "end": 56340
+      },
+      "regionNorm": {
+        "x": 0.3818,
+        "y": 0.4014
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "near player large, ready position; partner behind; fence spectators; dark clothing/light paddle"
+      }
+    },
+    {
+      "caseId": "ta-96ae65019c30-s5w0-p25",
+      "recordingId": "rec-96ae65019c30",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 56340,
+        "end": 67551
+      },
+      "regionNorm": {
+        "x": 0.0349,
+        "y": 0.3774
+      },
+      "trueTrackId": 25,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s2w0-p3",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 2417,
+        "end": 6542
+      },
+      "regionNorm": {
+        "x": 0.5484,
+        "y": 0.3026
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "rejected",
+        "by": "devin-visual-v2-wave-a",
+        "note": "NON-PICKLEBALL: sprint-start drill on track (blade prosthetic, stylized vignette filter); target = blue-jacket starter/coach"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s2w0-p5",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 2417,
+        "end": 6542
+      },
+      "regionNorm": {
+        "x": 0.7959,
+        "y": 0.1398
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s8w0-p1",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 11292,
+        "end": 14375
+      },
+      "regionNorm": {
+        "x": 0.4947,
+        "y": 0.397
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s8w0-p4",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 11292,
+        "end": 14375
+      },
+      "regionNorm": {
+        "x": 0.7392,
+        "y": 0.4632
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s10w0-p11",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 15667,
+        "end": 19167
+      },
+      "regionNorm": {
+        "x": 0.5128,
+        "y": 0.4804
+      },
+      "trueTrackId": 11,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s12w0-p6",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 20042,
+        "end": 25375
+      },
+      "regionNorm": {
+        "x": 0.6179,
+        "y": 0.4004
+      },
+      "trueTrackId": 6,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s12w0-p1",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 20042,
+        "end": 25375
+      },
+      "regionNorm": {
+        "x": 0.5354,
+        "y": 0.4051
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "rejected",
+        "by": "devin-visual-v2-wave-a",
+        "note": "NON-PICKLEBALL: ARMY PT group standing on running track (cones, blade-prosthetic athlete, coach) — sport-context validity exhibit"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s12w0-p9",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 20042,
+        "end": 25375
+      },
+      "regionNorm": {
+        "x": 0.1146,
+        "y": 0.4553
+      },
+      "trueTrackId": 9,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s12w0-p10",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 20042,
+        "end": 25375
+      },
+      "regionNorm": {
+        "x": 0.2646,
+        "y": 0.4874
+      },
+      "trueTrackId": 10,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s13w0-p1",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 25375,
+        "end": 31167
+      },
+      "regionNorm": {
+        "x": 0.188,
+        "y": 0.7358
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s13w0-p2",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 25375,
+        "end": 31167
+      },
+      "regionNorm": {
+        "x": 0.1062,
+        "y": 0.4558
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s14w0-p4",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 31167,
+        "end": 35292
+      },
+      "regionNorm": {
+        "x": 0.8736,
+        "y": 0.4985
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s14w0-p1",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 31167,
+        "end": 35292
+      },
+      "regionNorm": {
+        "x": 0.4684,
+        "y": 0.5202
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s14w0-p5",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 31167,
+        "end": 35292
+      },
+      "regionNorm": {
+        "x": 0.4027,
+        "y": 0.2552
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s17w0-p2",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 38792,
+        "end": 43375
+      },
+      "regionNorm": {
+        "x": 0.2061,
+        "y": 0.568
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "rejected",
+        "by": "devin-visual-v1",
+        "note": "non-court interview lobby; target is deep-background bokeh bystander — out of product domain"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s17w0-p4",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 38792,
+        "end": 43375
+      },
+      "regionNorm": {
+        "x": 0.8433,
+        "y": 0.4807
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s20w0-p1",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 49125,
+        "end": 52292
+      },
+      "regionNorm": {
+        "x": 0.272,
+        "y": 0.5735
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "rejected",
+        "by": "devin-visual-v2-wave-a",
+        "note": "non-court interview lobby #2: target is blurred background soldier at info table behind foreground interviewee — out of product domain"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s20w0-p2",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 49125,
+        "end": 52292
+      },
+      "regionNorm": {
+        "x": 0.1205,
+        "y": 0.5532
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s20w0-p3",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 49125,
+        "end": 52292
+      },
+      "regionNorm": {
+        "x": 0.8478,
+        "y": 0.4827
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s31w0-p1",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 75000,
+        "end": 79625
+      },
+      "regionNorm": {
+        "x": 0.6006,
+        "y": 0.452
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-afd0b6bad5d0-s38w0-p1",
+      "recordingId": "rec-afd0b6bad5d0",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "windowMs": {
+        "start": 96000,
+        "end": 100292
+      },
+      "regionNorm": {
+        "x": 0.6399,
+        "y": 0.3513
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "solo",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w0-p4",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 0,
+        "end": 12000
+      },
+      "regionNorm": {
+        "x": 0.5874,
+        "y": 0.7209
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w0-p10",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 0,
+        "end": 12000
+      },
+      "regionNorm": {
+        "x": 0.0733,
+        "y": 0.6083
+      },
+      "trueTrackId": 10,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w0-p1",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 0,
+        "end": 12000
+      },
+      "regionNorm": {
+        "x": 0.2022,
+        "y": 0.4117
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "far-court gray-shirt player mid-rally; spectators behind fence overlap region"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w1-p2",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 22000
+      },
+      "regionNorm": {
+        "x": 0.2526,
+        "y": 0.439
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w1-p1",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 22000
+      },
+      "regionNorm": {
+        "x": 0.6554,
+        "y": 0.4681
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "yellow-cap near player walking to position; opponent inside region across net; sideline crowd"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w2-p1",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 20000,
+        "end": 32000
+      },
+      "regionNorm": {
+        "x": 0.3512,
+        "y": 0.4242
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "doubles partner directly beside target inside region (two-players-in-spot); rear view; crowd"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w2-p12",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 20000,
+        "end": 32000
+      },
+      "regionNorm": {
+        "x": 0.4128,
+        "y": 0.729
+      },
+      "trueTrackId": 12,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "4-player rally with ball in flight; yellow-cap near player; adjacent court + dense crowd"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w2-p5",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 20000,
+        "end": 32000
+      },
+      "regionNorm": {
+        "x": 0.7366,
+        "y": 0.3121
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w3-p2",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 30000,
+        "end": 42000
+      },
+      "regionNorm": {
+        "x": 0.6028,
+        "y": 0.5226
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "4-player rally: yellow-cap near player ready at kitchen; red-cap dinking player (ball at paddle) + far-court pair inside region; dense tent/fence crowd left"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w3-p3",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 30000,
+        "end": 42000
+      },
+      "regionNorm": {
+        "x": 0.4302,
+        "y": 0.4221
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w3-p4",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 30000,
+        "end": 42000
+      },
+      "regionNorm": {
+        "x": 0.6891,
+        "y": 0.4709
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w4-p2",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 40000,
+        "end": 52000
+      },
+      "regionNorm": {
+        "x": 0.6403,
+        "y": 0.5306
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "yellow-cap player at kitchen; crouching red/black partner directly beside him inside region (two-in-region); far-court pair + right-fence spectators also in region"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w4-p5",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 40000,
+        "end": 52000
+      },
+      "regionNorm": {
+        "x": 0.0258,
+        "y": 0.5274
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w4-p4",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 40000,
+        "end": 52000
+      },
+      "regionNorm": {
+        "x": 0.7805,
+        "y": 0.4686
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w4-p3",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 40000,
+        "end": 52000
+      },
+      "regionNorm": {
+        "x": 0.4437,
+        "y": 0.4079
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w5-p2",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 50000,
+        "end": 62000
+      },
+      "regionNorm": {
+        "x": 0.3317,
+        "y": 0.4689
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w6-p1",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 60000,
+        "end": 72000
+      },
+      "regionNorm": {
+        "x": 0.7534,
+        "y": 0.4539
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w7-p8",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 70000,
+        "end": 82000
+      },
+      "regionNorm": {
+        "x": 0.0453,
+        "y": 0.53
+      },
+      "trueTrackId": 8,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w7-p1",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 70000,
+        "end": 82000
+      },
+      "regionNorm": {
+        "x": 0.8361,
+        "y": 0.323
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "sideline chat: gray-shirt man w/ paddle behind back; black-shirt cap man shoulder-to-shoulder inside region; walkway spectators behind fence; player walks court foreground"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w7-p3",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 70000,
+        "end": 82000
+      },
+      "regionNorm": {
+        "x": 0.4435,
+        "y": 0.2933
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w8-p12",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 80000,
+        "end": 92000
+      },
+      "regionNorm": {
+        "x": 0.0488,
+        "y": 0.5468
+      },
+      "trueTrackId": 12,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w8-p1",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 80000,
+        "end": 92000
+      },
+      "regionNorm": {
+        "x": 0.9382,
+        "y": 0.4035
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w8-p15",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 80000,
+        "end": 92000
+      },
+      "regionNorm": {
+        "x": 0.0394,
+        "y": 0.361
+      },
+      "trueTrackId": 15,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "dense on-deck crowd occupant; foreground player + far-court players; crowd-region acquisition"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w9-p5",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 90000,
+        "end": 102000
+      },
+      "regionNorm": {
+        "x": 0.6951,
+        "y": 0.7344
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w9-p1",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 90000,
+        "end": 102000
+      },
+      "regionNorm": {
+        "x": 0.2733,
+        "y": 0.451
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w9-p2",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 90000,
+        "end": 102000
+      },
+      "regionNorm": {
+        "x": 0.0339,
+        "y": 0.3879
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "on-deck fence crowd: navy-top spectator w/ white towel is region occupant among ~10 packed onlookers; live 4-player rally (ball in flight) on court — bystander-lock stress"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w10-p1",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 100000,
+        "end": 112000
+      },
+      "regionNorm": {
+        "x": 0.7939,
+        "y": 0.4663
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w10-p2",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 100000,
+        "end": 112000
+      },
+      "regionNorm": {
+        "x": 0.0354,
+        "y": 0.3883
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w10-p3",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 100000,
+        "end": 112000
+      },
+      "regionNorm": {
+        "x": 0.5071,
+        "y": 0.3588
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w11-p1",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 110000,
+        "end": 122000
+      },
+      "regionNorm": {
+        "x": 0.7721,
+        "y": 0.4663
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w11-p7",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 110000,
+        "end": 122000
+      },
+      "regionNorm": {
+        "x": 0.0587,
+        "y": 0.5031
+      },
+      "trueTrackId": 7,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w11-p3",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 110000,
+        "end": 122000
+      },
+      "regionNorm": {
+        "x": 0.4734,
+        "y": 0.3342
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w12-p1",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 120000,
+        "end": 132000
+      },
+      "regionNorm": {
+        "x": 0.1982,
+        "y": 0.4758
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w12-p2",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 120000,
+        "end": 132000
+      },
+      "regionNorm": {
+        "x": 0.6697,
+        "y": 0.5104
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w12-p4",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 120000,
+        "end": 132000
+      },
+      "regionNorm": {
+        "x": 0.4369,
+        "y": 0.4223
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "far gray-shirt opponent crouched at kitchen (ball mid-flight); walkway bystanders behind banner inside region; note spurious oversized neighbor track on right fence"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w13-p1",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 130000,
+        "end": 142000
+      },
+      "regionNorm": {
+        "x": 0.6423,
+        "y": 0.5059
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w13-p2",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 130000,
+        "end": 142000
+      },
+      "regionNorm": {
+        "x": 0.042,
+        "y": 0.4615
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w13-p6",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 130000,
+        "end": 142000
+      },
+      "regionNorm": {
+        "x": 0.0308,
+        "y": 0.3761
+      },
+      "trueTrackId": 6,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w13-p17",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 130000,
+        "end": 142000
+      },
+      "regionNorm": {
+        "x": 0.6753,
+        "y": 0.4046
+      },
+      "trueTrackId": 17,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w14-p15",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 140000,
+        "end": 152000
+      },
+      "regionNorm": {
+        "x": 0.8336,
+        "y": 0.6799
+      },
+      "trueTrackId": 15,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w15-p1",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 150000,
+        "end": 162000
+      },
+      "regionNorm": {
+        "x": 0.6431,
+        "y": 0.5136
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w15-p13",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 150000,
+        "end": 162000
+      },
+      "regionNorm": {
+        "x": 0.3752,
+        "y": 0.3695
+      },
+      "trueTrackId": 13,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "far player at kitchen line; crowd behind fence in region"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w15-p9",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 150000,
+        "end": 162000
+      },
+      "regionNorm": {
+        "x": 0.7176,
+        "y": 0.387
+      },
+      "trueTrackId": 9,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w16-p13",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 160000,
+        "end": 172000
+      },
+      "regionNorm": {
+        "x": 0.6731,
+        "y": 0.693
+      },
+      "trueTrackId": 13,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w16-p1",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 160000,
+        "end": 172000
+      },
+      "regionNorm": {
+        "x": 0.3727,
+        "y": 0.3671
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w17-p2",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 170000,
+        "end": 182000
+      },
+      "regionNorm": {
+        "x": 0.053,
+        "y": 0.481
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w17-p3",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 170000,
+        "end": 182000
+      },
+      "regionNorm": {
+        "x": 0.4521,
+        "y": 0.4181
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w17-p21",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 170000,
+        "end": 182000
+      },
+      "regionNorm": {
+        "x": 0.7433,
+        "y": 0.4045
+      },
+      "trueTrackId": 21,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w18-p2",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 180000,
+        "end": 192000
+      },
+      "regionNorm": {
+        "x": 0.6898,
+        "y": 0.3722
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w18-p3",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 180000,
+        "end": 192000
+      },
+      "regionNorm": {
+        "x": 0.4762,
+        "y": 0.3322
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w19-p5",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 190000,
+        "end": 202000
+      },
+      "regionNorm": {
+        "x": 0.7228,
+        "y": 0.7386
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w19-p1",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 190000,
+        "end": 202000
+      },
+      "regionNorm": {
+        "x": 0.1672,
+        "y": 0.5029
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w19-p2",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 190000,
+        "end": 202000
+      },
+      "regionNorm": {
+        "x": 0.4128,
+        "y": 0.4097
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w19-p8",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 190000,
+        "end": 202000
+      },
+      "regionNorm": {
+        "x": 0.0472,
+        "y": 0.353
+      },
+      "trueTrackId": 8,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w20-p7",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 200000,
+        "end": 212000
+      },
+      "regionNorm": {
+        "x": 0.689,
+        "y": 0.4203
+      },
+      "trueTrackId": 7,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w22-p13",
+      "recordingId": "rec-b6f280b2900c",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "windowMs": {
+        "start": 220000,
+        "end": 232000
+      },
+      "regionNorm": {
+        "x": 0.2895,
+        "y": 0.5822
+      },
+      "trueTrackId": 13,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s3w0-p5",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 234,
+        "end": 9576
+      },
+      "regionNorm": {
+        "x": 0.3286,
+        "y": 0.305
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s3w0-p1",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 234,
+        "end": 9576
+      },
+      "regionNorm": {
+        "x": 0.3653,
+        "y": 0.3237
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "rejected",
+        "by": "devin-visual-v2-wave-a",
+        "note": "NON-PICKLEBALL: formation run on road under 'Liberaider Games Highlights' title overlay — multi-sport reel"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s3w0-p6",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 234,
+        "end": 9576
+      },
+      "regionNorm": {
+        "x": 0.4596,
+        "y": 0.2815
+      },
+      "trueTrackId": 6,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s3w0-p3",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 234,
+        "end": 9576
+      },
+      "regionNorm": {
+        "x": 0.4147,
+        "y": 0.3169
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s5w0-p2",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 12112,
+        "end": 24112
+      },
+      "regionNorm": {
+        "x": 0.2918,
+        "y": 0.7859
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s7w0-p1",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 33066,
+        "end": 37170
+      },
+      "regionNorm": {
+        "x": 0.4617,
+        "y": 0.5978
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s7w0-p4",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 33066,
+        "end": 37170
+      },
+      "regionNorm": {
+        "x": 0.3278,
+        "y": 0.5901
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s11w0-p2",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 41608,
+        "end": 47247
+      },
+      "regionNorm": {
+        "x": 0.6307,
+        "y": 0.6206
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s13w1-p9",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 60017,
+        "end": 64865
+      },
+      "regionNorm": {
+        "x": 0.7053,
+        "y": 0.5322
+      },
+      "trueTrackId": 9,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "rejected",
+        "by": "devin-visual-v2-wave-a",
+        "note": "NON-PICKLEBALL: flag-football play (QB throw, flag belts, turf) — multi-sport reel, sport-context validity exhibit"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s13w1-p11",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 60017,
+        "end": 64865
+      },
+      "regionNorm": {
+        "x": 0.3659,
+        "y": 0.5865
+      },
+      "trueTrackId": 11,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s13w1-p12",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 60017,
+        "end": 64865
+      },
+      "regionNorm": {
+        "x": 0.7724,
+        "y": 0.5621
+      },
+      "trueTrackId": 12,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s13w1-p18",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 60017,
+        "end": 64865
+      },
+      "regionNorm": {
+        "x": 0.2622,
+        "y": 0.6037
+      },
+      "trueTrackId": 18,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s15w0-p9",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 67000,
+        "end": 72105
+      },
+      "regionNorm": {
+        "x": 0.1005,
+        "y": 0.5589
+      },
+      "trueTrackId": 9,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s15w0-p3",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 67000,
+        "end": 72105
+      },
+      "regionNorm": {
+        "x": 0.6479,
+        "y": 0.5586
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "rejected",
+        "by": "devin-visual-v1",
+        "note": "NON-PICKLEBALL: flag-football sprint + 2 pose ghosts on blurred fence — sport-context validity exhibit #2"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s20w0-p9",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 75242,
+        "end": 83150
+      },
+      "regionNorm": {
+        "x": 0.2663,
+        "y": 0.657
+      },
+      "trueTrackId": 9,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s20w0-p11",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 75242,
+        "end": 83150
+      },
+      "regionNorm": {
+        "x": 0.5547,
+        "y": 0.6743
+      },
+      "trueTrackId": 11,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s22w0-p7",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 85552,
+        "end": 91491
+      },
+      "regionNorm": {
+        "x": 0.3523,
+        "y": 0.6103
+      },
+      "trueTrackId": 7,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s22w0-p2",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 85552,
+        "end": 91491
+      },
+      "regionNorm": {
+        "x": 0.5044,
+        "y": 0.6298
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s22w0-p3",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 85552,
+        "end": 91491
+      },
+      "regionNorm": {
+        "x": 0.6967,
+        "y": 0.6129
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s22w0-p1",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 85552,
+        "end": 91491
+      },
+      "regionNorm": {
+        "x": 0.0856,
+        "y": 0.6386
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "rejected",
+        "by": "devin-visual-v1",
+        "note": "NON-PICKLEBALL: wallyball scene inside multi-sport highlight reel — sport-context validity exhibit #1"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s22w0-p5",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 85552,
+        "end": 91491
+      },
+      "regionNorm": {
+        "x": 0.8129,
+        "y": 0.6579
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s22w0-p10",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 85552,
+        "end": 91491
+      },
+      "regionNorm": {
+        "x": 0.4226,
+        "y": 0.6352
+      },
+      "trueTrackId": 10,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s24w0-p10",
+      "recordingId": "rec-d230484fbaa5",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "windowMs": {
+        "start": 105138,
+        "end": 116083
+      },
+      "regionNorm": {
+        "x": 0.1015,
+        "y": 0.654
+      },
+      "trueTrackId": 10,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s0w0-p2",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 0,
+        "end": 12000
+      },
+      "regionNorm": {
+        "x": 0.3814,
+        "y": 0.3144
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s0w0-p1",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 0,
+        "end": 12000
+      },
+      "regionNorm": {
+        "x": 0.6378,
+        "y": 0.3019
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s0w0-p8",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 0,
+        "end": 12000
+      },
+      "regionNorm": {
+        "x": 0.5913,
+        "y": 0.3083
+      },
+      "trueTrackId": 8,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s0w1-p1",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 15000
+      },
+      "regionNorm": {
+        "x": 0.3584,
+        "y": 0.3281
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s0w1-p7",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 15000
+      },
+      "regionNorm": {
+        "x": 0.9674,
+        "y": 0.2904
+      },
+      "trueTrackId": 7,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s0w1-p3",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 15000
+      },
+      "regionNorm": {
+        "x": 0.6165,
+        "y": 0.3093
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s0w1-p9",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 10000,
+        "end": 15000
+      },
+      "regionNorm": {
+        "x": 0.9372,
+        "y": 0.2996
+      },
+      "trueTrackId": 9,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s2w0-p1",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 22167,
+        "end": 34167
+      },
+      "regionNorm": {
+        "x": 0.3396,
+        "y": 0.3269
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s2w0-p2",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 22167,
+        "end": 34167
+      },
+      "regionNorm": {
+        "x": 0.6288,
+        "y": 0.3117
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s2w0-p3",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 22167,
+        "end": 34167
+      },
+      "regionNorm": {
+        "x": 0.9417,
+        "y": 0.3015
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s2w1-p1",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 32167,
+        "end": 44042
+      },
+      "regionNorm": {
+        "x": 0.3575,
+        "y": 0.3156
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s2w1-p2",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 32167,
+        "end": 44042
+      },
+      "regionNorm": {
+        "x": 0.9254,
+        "y": 0.295
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s2w1-p7",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 32167,
+        "end": 44042
+      },
+      "regionNorm": {
+        "x": 0.9097,
+        "y": 0.3019
+      },
+      "trueTrackId": 7,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "small_target"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "spectator/referee behind fence during live outdoor doubles; small target; rear view"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w0-p2",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 44042,
+        "end": 56042
+      },
+      "regionNorm": {
+        "x": 0.5206,
+        "y": 0.3693
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "player with paddle mid-walk; similar-dressed second player behind in region; sideline soldiers; between-rally"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w1-p1",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 54042,
+        "end": 66042
+      },
+      "regionNorm": {
+        "x": 0.479,
+        "y": 0.3576
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "two_players",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "black-shirt white-cap near player at kitchen; red partner mid-serve toss (ball visible); fence-line soldiers + bench crowd inside region behind net; blue opponents far court"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w1-p2",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 54042,
+        "end": 66042
+      },
+      "regionNorm": {
+        "x": 0.9801,
+        "y": 0.3558
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "two_players",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w2-p1",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 64042,
+        "end": 76042
+      },
+      "regionNorm": {
+        "x": 0.5002,
+        "y": 0.3642
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w2-p2",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 64042,
+        "end": 76042
+      },
+      "regionNorm": {
+        "x": 0.8329,
+        "y": 0.3548
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w3-p1",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 74042,
+        "end": 86042
+      },
+      "regionNorm": {
+        "x": 0.47,
+        "y": 0.3566
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w3-p5",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 74042,
+        "end": 86042
+      },
+      "regionNorm": {
+        "x": 0.9826,
+        "y": 0.3538
+      },
+      "trueTrackId": 5,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "red-shirt player at sideline; teammate gesturing; bench soldiers in region background; cracked outdoor court"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w4-p2",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 84042,
+        "end": 96042
+      },
+      "regionNorm": {
+        "x": 0.8265,
+        "y": 0.3558
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w4-p1",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 84042,
+        "end": 96042
+      },
+      "regionNorm": {
+        "x": 0.6403,
+        "y": 0.3803
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w5-p1",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 94042,
+        "end": 98000
+      },
+      "regionNorm": {
+        "x": 0.5358,
+        "y": 0.3413
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "two_players",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w5-p2",
+      "recordingId": "rec-faead33a362c",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "windowMs": {
+        "start": 94042,
+        "end": 98000
+      },
+      "regionNorm": {
+        "x": 0.6982,
+        "y": 0.3607
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "two_players",
+        "contested_region"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v2-wave-a",
+        "note": "near black-shirt player mid-serve (ball in hand) at right edge of region otherwise full of bench + fence crowd (seated soldier, cheering arms-up bystanders) — worst-case crowd-vs-server"
+      }
+    },
+    {
+      "caseId": "ta-274544640cc6-s1w0-p4",
+      "recordingId": "rec-274544640cc6",
+      "sessionKey": "afn-vic-2025",
+      "split": "locked_test",
+      "windowMs": {
+        "start": 500,
+        "end": 9042
+      },
+      "regionNorm": {
+        "x": 0.8973,
+        "y": 0.6522
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "two_players"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "wide gym; mint-shirt player standing; bleacher spectators + second player in region; lower-third graphic"
+      }
+    },
+    {
+      "caseId": "ta-274544640cc6-s1w0-p3",
+      "recordingId": "rec-274544640cc6",
+      "sessionKey": "afn-vic-2025",
+      "split": "locked_test",
+      "windowMs": {
+        "start": 500,
+        "end": 9042
+      },
+      "regionNorm": {
+        "x": 0.0397,
+        "y": 0.6542
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "two_players",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-274544640cc6-s2w0-p1",
+      "recordingId": "rec-274544640cc6",
+      "sessionKey": "afn-vic-2025",
+      "split": "locked_test",
+      "windowMs": {
+        "start": 9042,
+        "end": 13714
+      },
+      "regionNorm": {
+        "x": 0.7321,
+        "y": 0.3645
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "group of 3 standing players (green-shirt target); runner crossing left; bleacher phone spectator; close distance"
+      }
+    },
+    {
+      "caseId": "ta-274544640cc6-s2w0-p3",
+      "recordingId": "rec-274544640cc6",
+      "sessionKey": "afn-vic-2025",
+      "split": "locked_test",
+      "windowMs": {
+        "start": 9042,
+        "end": 13714
+      },
+      "regionNorm": {
+        "x": 0.4773,
+        "y": 0.3732
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "runner crossing court away from region (motion blur); standing group of 4; target-leaves-region case"
+      }
+    },
+    {
+      "caseId": "ta-274544640cc6-s2w0-p4",
+      "recordingId": "rec-274544640cc6",
+      "sessionKey": "afn-vic-2025",
+      "split": "locked_test",
+      "windowMs": {
+        "start": 9042,
+        "end": 13714
+      },
+      "regionNorm": {
+        "x": 0.2366,
+        "y": 0.1983
+      },
+      "trueTrackId": 4,
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-274544640cc6-s3w0-p25",
+      "recordingId": "rec-274544640cc6",
+      "sessionKey": "afn-vic-2025",
+      "split": "locked_test",
+      "windowMs": {
+        "start": 13714,
+        "end": 25225
+      },
+      "regionNorm": {
+        "x": 0.4466,
+        "y": 0.5842
+      },
+      "trueTrackId": 25,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-274544640cc6-s4w0-p1",
+      "recordingId": "rec-274544640cc6",
+      "sessionKey": "afn-vic-2025",
+      "split": "locked_test",
+      "windowMs": {
+        "start": 25225,
+        "end": 31198
+      },
+      "regionNorm": {
+        "x": 0.4814,
+        "y": 0.5965
+      },
+      "trueTrackId": 1,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "whiteboard clinic huddle: coach writing (target) + 3 students in/near region; instructional context"
+      }
+    },
+    {
+      "caseId": "ta-274544640cc6-s4w0-p3",
+      "recordingId": "rec-274544640cc6",
+      "sessionKey": "afn-vic-2025",
+      "split": "locked_test",
+      "windowMs": {
+        "start": 25225,
+        "end": 31198
+      },
+      "regionNorm": {
+        "x": 0.9235,
+        "y": 0.4816
+      },
+      "trueTrackId": 3,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-274544640cc6-s4w0-p2",
+      "recordingId": "rec-274544640cc6",
+      "sessionKey": "afn-vic-2025",
+      "split": "locked_test",
+      "windowMs": {
+        "start": 25225,
+        "end": 31198
+      },
+      "regionNorm": {
+        "x": 0.7206,
+        "y": 0.6425
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "contested_region",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "rejected",
+        "by": "devin-visual-v1",
+        "note": "AMBIGUOUS track-person binding at render (box straddles coach bag + student) — cannot certify true-target identity"
+      }
+    },
+    {
+      "caseId": "ta-274544640cc6-s6w1-p7",
+      "recordingId": "rec-274544640cc6",
+      "sessionKey": "afn-vic-2025",
+      "split": "locked_test",
+      "windowMs": {
+        "start": 43033,
+        "end": 46113
+      },
+      "regionNorm": {
+        "x": 0.0481,
+        "y": 0.5851
+      },
+      "trueTrackId": 7,
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "verification": {
+        "state": "verified",
+        "by": "devin-visual-v1",
+        "note": "live doubles: teal-shirt woman mid-swing with motion blur (target); two more players + bleacher spectators"
+      }
+    },
+    {
+      "caseId": "ta-274544640cc6-s6w1-p2",
+      "recordingId": "rec-274544640cc6",
+      "sessionKey": "afn-vic-2025",
+      "split": "locked_test",
+      "windowMs": {
+        "start": 43033,
+        "end": 46113
+      },
+      "regionNorm": {
+        "x": 0.548,
+        "y": 0.4225
+      },
+      "trueTrackId": 2,
+      "situation": [
+        "multi_player",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    },
+    {
+      "caseId": "ta-274544640cc6-s6w1-p8",
+      "recordingId": "rec-274544640cc6",
+      "sessionKey": "afn-vic-2025",
+      "split": "locked_test",
+      "windowMs": {
+        "start": 43033,
+        "end": 46113
+      },
+      "regionNorm": {
+        "x": 0.8444,
+        "y": 0.414
+      },
+      "trueTrackId": 8,
+      "situation": [
+        "multi_player",
+        "target_loss_periods",
+        "small_target"
+      ],
+      "verification": {
+        "state": "proposed",
+        "by": "ta-bench propose (machine)",
+        "note": "unverified Tier-C case"
+      }
+    }
+  ]
+}

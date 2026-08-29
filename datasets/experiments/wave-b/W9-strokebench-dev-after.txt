@@ -1,0 +1,26 @@
+══════════════════════════════════════════════════════════════════
+REAL STROKE-EVENT BENCHMARK (stroke-event-1)
+labeled events: 11 (target 8, other-player 3) · proposals: 6
+event recall: target 8/8 · other-swing detected (contamination signal): 3/3
+boundary error: start median 449.5ms (11) · end median 401ms (11)
+contact-inside-matched-event: 10/11 · false/unmatched proposals: 0/6
+══════════════════════════════════════════════════════════════════
+REAL STROKE BENCHMARK [provenance: licensed] — heuristic baseline
+labeled strokes: 2
+classes present: FOREHAND_VOLLEY, OVERHEAD
+CLASS LIMITATION: metrics below cover ONLY these classes; absent classes are untested.
+══════════════════════════════════════════════════════════════════
+wm-volley-02: annotated FOREHAND_VOLLEY · predicted FOREHAND depth 2/3 conf 0.80 · L1 correct · L2 correct · L3 abstained
+afn-sasebo-rally2: annotated OVERHEAD · predicted OVERHEAD depth 1/3 conf 0.70 · L1 correct · L2 n/a · L3 abstained
+──────────────────────────────────────────────────────────────────
+L1 category: 2/2 correct, 0 abstained · L2 side: 1/1 correct, 0 abstained · L3 full: 0/2 correct, 2 abstained
+══════════════════════════════════════════════════════════════════
+REAL PHASE-BOUNDARY BENCHMARK — baselines: A wrist-geometry, B paddle-speed
+labeled boundaries: 15 (uncertainty ±2 frames typical; see annotations)
+══════════════════════════════════════════════════════════════════
+preparationStart: n=3 · A(wrist-geometry) median |err| 2366ms (2) · B(paddle-speed) n/ams (0) · C(v1) 670ms (2) · D(v2 event-local) 220.73000000000002ms (1)
+accelerationStart: n=3 · A(wrist-geometry) median |err| 880ms (2) · B(paddle-speed) 258ms (3) · C(v1) 170ms (2) · D(v2 event-local) 170ms (2)
+contact: n=3 · A(wrist-geometry) median |err| 403ms (2) · B(paddle-speed) 251ms (3) · C(v1) 30ms (2) · D(v2 event-local) 30ms (2)
+followThroughEnd: n=3 · A(wrist-geometry) median |err| 870ms (2) · B(paddle-speed) 320ms (3) · C(v1) 320ms (2) · D(v2 event-local) 320ms (2)
+recoveryEnd: n=3 · A(wrist-geometry) median |err| n/ams (0) · B(paddle-speed) n/ams (0) · C(v1) 28.769999999999982ms (1) · D(v2 event-local) 28.769999999999982ms (1)
+NOTE: contact row here is the SEGMENTER's contact boundary; the multimodal contact estimator is benchmarked separately in ball-bench.

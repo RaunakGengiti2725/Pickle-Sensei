@@ -1,0 +1,49 @@
+{
+  "workstream": "K — TA gold expansion (verified target-acquisition cases 36 → 59, crowd-slice biased)",
+  "status": "GREEN",
+  "baseline": {
+    "verifiedCases": { "total": 36, "dev": 31, "locked_test": 5, "rejects": 6, "devContested": 16, "devNonContested": 15 },
+    "shippedDevMetrics": { "n": 31, "lockRate": 1.0, "lockCorrect": "22/31 (0.71)", "meanOnTargetFraction": 0.612, "medianLockLatencyMs": 431, "ambiguityEntered": 8 },
+    "documentedWeakness": "crowd-region locks pick bystanders ~29%; post-lock on-target ≈ .61 dev (D-027 promotion residual)"
+  },
+  "candidate": "none — measurement-only workstream. No product/replay logic touched; zero tuning. 29 machine proposals from DEV-split sessions were rendered (pnpm lab:ta-bench render <caseId>) and visually adjudicated frame-by-frame; verdicts recorded as annotator devin-visual-v2-wave-a in datasets/ta-bench/cases.json using the existing verification schema. SHADOW sessions untouched (none exist in the case pool); locked_test cases untouched (still 5 verified + 6 unreviewed proposals); no existing verdict overwritten (asserted state==proposed and split==dev before each write).",
+  "measured": {
+    "reviewOutcomes": {
+      "reviewed": 29,
+      "verified": 23,
+      "rejected": 6,
+      "rejectReasons": "4 non-pickleball (track drills x2, formation-run title shot, flag football — multi-sport reels dvids-943757/dvids-1007845), 1 crowd-only bleacher cutaway (no court/athlete in frame), 1 non-court interview-lobby bokeh bystander",
+      "newSliceComposition": "20 contested_region (crowd/bystander-risk, incl. 4 spectator-as-region-occupant + 1 occlusion-heavy staff-behind-player), 2 plain multi_player live-play, 1 solo control",
+      "goldAfter": { "totalVerified": 59, "devVerified": 54, "locked_testVerified": 5, "rejects": 12, "devContested": 36, "devNonContested": 18 }
+    },
+    "shippedDevAtNewN": { "n": 54, "lockRate": 1.0, "lockCorrect": "37/54 (0.685)", "meanOnTargetFraction": 0.592, "medianLockLatencyMs": 477, "ambiguityEntered": 20, "gestureLocks": 2, "postLockStable90": 21, "resultsFile": "datasets/ta-bench/results/ta-bench-1787968192588.json" },
+    "legacyDevAtNewN": { "n": 54, "lockRate": 0.741, "lockCorrect": "26/40 locked (0.65)", "meanOnTargetFraction": 0.496, "medianLockLatencyMs": 320, "resultsFile": "datasets/ta-bench/results/ta-bench-1787968214635.json" },
+    "populationCaveat": "Metric movement (correct .71→.685, on-target .612→.592) is POPULATION CHANGE, not regression: the original 31 cases reproduce their baseline results exactly (22/31 correct, .612) under the same shipped variant; the added 23 cases are deliberately crowd-biased and score 15/23 correct, .565 on-target. No thresholds or logic were altered.",
+    "sliceBreakdownShipped": {
+      "contested_region": { "n": 36, "lockCorrect": "23/36 (0.639)", "wrongLockRate": 0.361, "meanOnTargetFraction": 0.497 },
+      "nonContested": { "n": 18, "lockCorrect": "14/18 (0.778)", "wrongLockRate": 0.222, "meanOnTargetFraction": 0.78 },
+      "legacyContested": { "n": 36, "locked": 24, "lockCorrect": "14/24 (0.583)" }
+    },
+    "failureAnatomyShipped54": {
+      "wrongLocks": 17,
+      "silentInstantWrongRegionLock": { "count": 9, "source": "start_region_occupancy, ambiguity never triggered — lock grabbed a different region occupant immediately" },
+      "ambiguityResolvedWrong": { "count": 8, "detail": "6 ambiguity_timeout defaulted to the wrong person, 2 gesture_confirmed fired on a non-target's arm motion (both afn-sigonella clinic lineup)" },
+      "latencySignal": "median lock latency 320ms when correct vs 750ms when wrong — slow locks are a wrongness signal",
+      "postLockDrift": "11 of 37 correct locks hold the target <50% of post-lock frames; contested-slice mean on-target .497"
+    }
+  },
+  "filesChanged": [
+    "datasets/ta-bench/cases.json (29 verification objects flipped proposed→verified/rejected, annotator devin-visual-v2-wave-a; no other fields touched)",
+    "datasets/experiments/wave-a/K-summary.json (this file)",
+    "datasets/ta-bench/results/ta-bench-1787968192588.json + ta-bench-1787968214635.json (new bench runs, generated artifacts)",
+    "datasets/ta-bench/review/*.png (29 re-rendered review frames, gitignored)"
+  ],
+  "recommendation": "The contested_region slice now has n=36 with a measured 36.1% wrong-lock rate (was n=16 / ~29-31%) — enough to justify the next acquisition change and to see a >=15pp movement directionally. Target, in priority order: (1) require occupancy dominance or a sustained gesture before start_region_occupancy insta-lock when >=2 tracks occupy the region (kills the 9 silent wrong occupant locks — the largest failure bucket); (2) replace blind ambiguity_timeout default with 'hold + require sustained gesture' (6 wrong timeouts; bench variant sustained-gesture already exists — run it at n=54); (3) follower hysteresis for post-lock identity in crowds (contested on-target .497; bench variant hysteresis exists). The 2 gesture_confirmed false accepts suggest raising the gesture evidence bar (sustainedGestureFrames) rather than elevation-only.",
+  "risks": [
+    "Single-annotator visual verification from one mid-window rendered frame per case (existing bench convention); track-person binding in dense crowds carries residual mislabel risk — flagged in-note where boxes overlap (e.g. ta-44c0c451500c-s1w0-p6 occlusion case).",
+    "Crowd bias was intentional; dev aggregate metrics are no longer comparable to pre-expansion dashboards without slice filters — always report contested vs non-contested separately.",
+    "n=54 still gives ~±13pp (95% CI) on the contested wrong-lock rate; treat single-digit-pp variant deltas as noise and keep growing gold (230 dev proposals remain).",
+    "dvids-943757 and dvids-1007845 are multi-sport reels — remaining proposals from them will skew toward rejects; fine for validity exhibits, poor yield for gold.",
+    "One spurious oversized person-track observed in wm-tournament footage (noted in ta-b6f280b2900c-s0w12-p4) — upstream playerTracker artifact worth a look if it recurs."
+  ]
+}

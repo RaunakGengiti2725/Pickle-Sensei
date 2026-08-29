@@ -135,7 +135,8 @@ export function registerSocialRoutes(app: FastifyInstance, context: AppContext):
        FROM circle c
        JOIN user_setting us ON us.user_id = c.friend_id AND us.social_visibility <> 'private'
        JOIN user_profile up ON up.user_id = c.friend_id
-       JOIN shot s ON s.user_id = c.friend_id AND s.result_kind = 'scored'
+       JOIN shot s ON s.user_id = c.friend_id
+         AND s.source = 'real' AND s.result_kind = 'scored'
          AND s.captured_at > now() - interval '7 days'
        GROUP BY up.display_name, up.handle, c.friend_id
        ORDER BY avg_score DESC LIMIT 50`,

@@ -1,0 +1,2300 @@
+{
+  "generatedAtIso": "2026-08-29T01:41:32.975Z",
+  "frames": [
+    {
+      "caseId": "wm-dink-01",
+      "tMs": 40,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+        "width": 1100,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            746.4,
+            564.5,
+            837.3,
+            613.7
+          ],
+          "score": 0.8666
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            228.8,
+            458.2,
+            296,
+            530.9
+          ],
+          "score": 0.478
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            307,
+            423.6,
+            327.3,
+            474.1
+          ],
+          "score": 0.3704
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-dink-01-40.png"
+    },
+    {
+      "caseId": "wm-dink-01",
+      "tMs": 480,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+        "width": 1100,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            629,
+            386.4,
+            680.1,
+            482.8
+          ],
+          "score": 0.8444
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            206.2,
+            461.9,
+            311.8,
+            528.3
+          ],
+          "score": 0.685
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            378.8,
+            575.4,
+            455.1,
+            682.4
+          ],
+          "score": 0.318
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-dink-01-480.png"
+    },
+    {
+      "caseId": "wm-dink-01",
+      "tMs": 880,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+        "width": 1100,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            377.4,
+            578.5,
+            454.9,
+            684.6
+          ],
+          "score": 0.79
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            829.1,
+            489,
+            862.3,
+            521.3
+          ],
+          "score": 0.5923
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            128.1,
+            475.1,
+            228.2,
+            533.9
+          ],
+          "score": 0.4798
+        },
+        {
+          "index": 3,
+          "boxPx": [
+            233.3,
+            460.5,
+            314.4,
+            510.8
+          ],
+          "score": 0.4603
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-dink-01-880.png"
+    },
+    {
+      "caseId": "wm-dink-01",
+      "tMs": 1360,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+        "width": 1100,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            776.6,
+            524.8,
+            829.8,
+            580.4
+          ],
+          "score": 0.7696
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            209.9,
+            462.5,
+            307.2,
+            518.5
+          ],
+          "score": 0.6857
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-dink-01-1360.png"
+    },
+    {
+      "caseId": "wm-dink-01",
+      "tMs": 1760,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+        "width": 1100,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            954.9,
+            456.1,
+            1013.3,
+            525
+          ],
+          "score": 0.8286
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            264,
+            423.8,
+            327.7,
+            495.9
+          ],
+          "score": 0.7919
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            712.1,
+            588.5,
+            761.1,
+            671.3
+          ],
+          "score": 0.5972
+        },
+        {
+          "index": 3,
+          "boxPx": [
+            941.6,
+            348.4,
+            960.3,
+            401.3
+          ],
+          "score": 0.3167
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-dink-01-1760.png"
+    },
+    {
+      "caseId": "wm-dink-01",
+      "tMs": 2160,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+        "width": 1100,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            317.2,
+            438.2,
+            377.4,
+            502.9
+          ],
+          "score": 0.7211
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            355.7,
+            397.5,
+            390,
+            476
+          ],
+          "score": 0.6897
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            741.2,
+            643,
+            801.9,
+            693.8
+          ],
+          "score": 0.4393
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-dink-01-2160.png"
+    },
+    {
+      "caseId": "wm-dink-01",
+      "tMs": 2560,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+        "width": 1100,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            282.1,
+            455.7,
+            351.7,
+            509.7
+          ],
+          "score": 0.7489
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            643.5,
+            389.8,
+            679.7,
+            455.7
+          ],
+          "score": 0.4527
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            507.4,
+            516.1,
+            565.9,
+            641.1
+          ],
+          "score": 0.3704
+        },
+        {
+          "index": 3,
+          "boxPx": [
+            684.6,
+            563.2,
+            725.2,
+            639
+          ],
+          "score": 0.3656
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-dink-01-2560.png"
+    },
+    {
+      "caseId": "wm-dink-01",
+      "tMs": 2960,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+        "width": 1100,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            378.6,
+            593.9,
+            443.2,
+            685
+          ],
+          "score": 0.7791
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            173.7,
+            477.1,
+            265.3,
+            526.9
+          ],
+          "score": 0.5979
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-dink-01-2960.png"
+    },
+    {
+      "caseId": "wm-dink-01",
+      "tMs": 3360,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+        "width": 1100,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            140.7,
+            487,
+            196.1,
+            533.9
+          ],
+          "score": 0.6937
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            773.3,
+            501.9,
+            818.7,
+            550.5
+          ],
+          "score": 0.6191
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            381.8,
+            591.8,
+            445.2,
+            682.5
+          ],
+          "score": 0.5946
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-dink-01-3360.png"
+    },
+    {
+      "caseId": "wm-dink-01",
+      "tMs": 3760,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+        "width": 1100,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            382.2,
+            572.5,
+            492.8,
+            682.4
+          ],
+          "score": 0.6143
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            671.8,
+            390.6,
+            690.8,
+            449.8
+          ],
+          "score": 0.5264
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            802.8,
+            462.1,
+            863,
+            521
+          ],
+          "score": 0.4769
+        },
+        {
+          "index": 3,
+          "boxPx": [
+            457.1,
+            569.9,
+            510.2,
+            621.2
+          ],
+          "score": 0.4711
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-dink-01-3760.png"
+    },
+    {
+      "caseId": "wm-dink-01",
+      "tMs": 4160,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+        "width": 1100,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            707.8,
+            496.9,
+            742.6,
+            545
+          ],
+          "score": 0.6507
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            505.3,
+            520.8,
+            559.6,
+            633.5
+          ],
+          "score": 0.5499
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            321.7,
+            607.8,
+            384.5,
+            665.4
+          ],
+          "score": 0.3526
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-dink-01-4160.png"
+    },
+    {
+      "caseId": "wm-dink-01",
+      "tMs": 4560,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+        "width": 1100,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            737.4,
+            491.3,
+            788.2,
+            541.7
+          ],
+          "score": 0.7533
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            671.3,
+            394,
+            689.8,
+            449.2
+          ],
+          "score": 0.4168
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-dink-01-4560.png"
+    },
+    {
+      "caseId": "wm-dink-01",
+      "tMs": 4960,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+        "width": 1100,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            714.2,
+            502,
+            762,
+            548.7
+          ],
+          "score": 0.755
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            318,
+            633.7,
+            367.7,
+            688.6
+          ],
+          "score": 0.5018
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            36.3,
+            479.5,
+            77.1,
+            520.9
+          ],
+          "score": 0.3973
+        },
+        {
+          "index": 3,
+          "boxPx": [
+            671.1,
+            394.1,
+            688.2,
+            451.5
+          ],
+          "score": 0.3862
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-dink-01-4960.png"
+    },
+    {
+      "caseId": "wm-dink-01",
+      "tMs": 5360,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+        "width": 1100,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            206.9,
+            627.1,
+            300.1,
+            675.2
+          ],
+          "score": 0.5354
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            73,
+            480.2,
+            136.6,
+            527
+          ],
+          "score": 0.5324
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            709.1,
+            337,
+            757.8,
+            382.6
+          ],
+          "score": 0.3993
+        },
+        {
+          "index": 3,
+          "boxPx": [
+            713.6,
+            376.9,
+            757,
+            433.9
+          ],
+          "score": 0.3872
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-dink-01-5360.png"
+    },
+    {
+      "caseId": "wm-volley-02",
+      "tMs": 4290,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+        "width": 1000,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            523.1,
+            490.8,
+            693.2,
+            606.4
+          ],
+          "score": 0.902
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            862.3,
+            422.7,
+            906,
+            460.2
+          ],
+          "score": 0.5498
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            325.5,
+            98.2,
+            371.9,
+            214
+          ],
+          "score": 0.4255
+        },
+        {
+          "index": 3,
+          "boxPx": [
+            129,
+            333.2,
+            204.7,
+            460.5
+          ],
+          "score": 0.3936
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-volley-02-4290.png"
+    },
+    {
+      "caseId": "wm-volley-02",
+      "tMs": 4690,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+        "width": 1000,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            583.8,
+            485.6,
+            665.2,
+            574.8
+          ],
+          "score": 0.8862
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            326,
+            103,
+            368.1,
+            213.9
+          ],
+          "score": 0.4587
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-volley-02-4690.png"
+    },
+    {
+      "caseId": "wm-volley-02",
+      "tMs": 5090,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+        "width": 1000,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            327.4,
+            104.6,
+            368,
+            213.4
+          ],
+          "score": 0.533
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            353.4,
+            416.1,
+            373.2,
+            499
+          ],
+          "score": 0.4959
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-volley-02-5090.png"
+    },
+    {
+      "caseId": "wm-volley-02",
+      "tMs": 5490,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+        "width": 1000,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            528.5,
+            539.7,
+            577.2,
+            728
+          ],
+          "score": 0.62
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            328.6,
+            105.8,
+            368.4,
+            213.4
+          ],
+          "score": 0.5037
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            953.8,
+            333.1,
+            998.3,
+            362.2
+          ],
+          "score": 0.3588
+        },
+        {
+          "index": 3,
+          "boxPx": [
+            861.2,
+            362.3,
+            880.3,
+            437.8
+          ],
+          "score": 0.3038
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-volley-02-5490.png"
+    },
+    {
+      "caseId": "wm-volley-02",
+      "tMs": 5890,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+        "width": 1000,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            328.8,
+            106,
+            369.3,
+            213.6
+          ],
+          "score": 0.5119
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            910.4,
+            423.8,
+            962.3,
+            461.6
+          ],
+          "score": 0.4379
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            698.1,
+            404,
+            750.6,
+            467.4
+          ],
+          "score": 0.3843
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-volley-02-5890.png"
+    },
+    {
+      "caseId": "wm-volley-02",
+      "tMs": 6290,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+        "width": 1000,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            811.3,
+            601.1,
+            921.9,
+            665.1
+          ],
+          "score": 0.8528
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            864.9,
+            416.8,
+            927.6,
+            462.5
+          ],
+          "score": 0.7334
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            325.8,
+            104.3,
+            371,
+            213.5
+          ],
+          "score": 0.3999
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-volley-02-6290.png"
+    },
+    {
+      "caseId": "wm-volley-02",
+      "tMs": 6690,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+        "width": 1000,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            685.4,
+            559.7,
+            878,
+            624.7
+          ],
+          "score": 0.8476
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            821.1,
+            459.3,
+            885.8,
+            503.5
+          ],
+          "score": 0.7201
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            324.7,
+            103.9,
+            372,
+            213.4
+          ],
+          "score": 0.4241
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-volley-02-6690.png"
+    },
+    {
+      "caseId": "wm-volley-02",
+      "tMs": 7090,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+        "width": 1000,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            865,
+            454.9,
+            965.4,
+            512.8
+          ],
+          "score": 0.6434
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            325.1,
+            103.9,
+            374.4,
+            213.4
+          ],
+          "score": 0.4632
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-volley-02-7090.png"
+    },
+    {
+      "caseId": "wm-volley-02",
+      "tMs": 7490,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+        "width": 1000,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            887.8,
+            416.7,
+            1000,
+            494.1
+          ],
+          "score": 0.7595
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            677.1,
+            550,
+            772.9,
+            627.4
+          ],
+          "score": 0.6752
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            325,
+            103.8,
+            375.4,
+            213.6
+          ],
+          "score": 0.5102
+        },
+        {
+          "index": 3,
+          "boxPx": [
+            649.6,
+            416.3,
+            709.8,
+            470.3
+          ],
+          "score": 0.3162
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-volley-02-7490.png"
+    },
+    {
+      "caseId": "wm-volley-02",
+      "tMs": 7890,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+        "width": 1000,
+        "height": 1080,
+        "fps": 25,
+        "durationMs": 8000
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            597.7,
+            556.4,
+            739.9,
+            642.3
+          ],
+          "score": 0.6774
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            325.7,
+            102,
+            376.4,
+            213.3
+          ],
+          "score": 0.4716
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/wm-volley-02-7890.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "tMs": 33.37,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 4404.4
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            793.6,
+            273.5,
+            916.4,
+            436.2
+          ],
+          "score": 0.8587
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            1141.7,
+            630.3,
+            1178.8,
+            801.8
+          ],
+          "score": 0.4366
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            849.8,
+            491.5,
+            908.7,
+            533.8
+          ],
+          "score": 0.304
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-33.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "tMs": 433.77,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 4404.4
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            857.4,
+            333.1,
+            980.4,
+            615.4
+          ],
+          "score": 0.8509
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            856.9,
+            474.2,
+            923.4,
+            615.6
+          ],
+          "score": 0.5454
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            872.9,
+            332.6,
+            984.6,
+            528.1
+          ],
+          "score": 0.3009
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-434.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "tMs": 1001,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 4404.4
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            756.2,
+            557.4,
+            979.6,
+            653.5
+          ],
+          "score": 0.894
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            943.2,
+            488,
+            1010.1,
+            555.7
+          ],
+          "score": 0.5842
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            941.6,
+            651.9,
+            1021,
+            825.3
+          ],
+          "score": 0.3174
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-1001.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "tMs": 1401.4,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 4404.4
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            898.7,
+            460.3,
+            1017,
+            556.9
+          ],
+          "score": 0.8113
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            781.4,
+            368.6,
+            832,
+            448.7
+          ],
+          "score": 0.6182
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            907.8,
+            610.2,
+            1009.8,
+            750.2
+          ],
+          "score": 0.464
+        },
+        {
+          "index": 3,
+          "boxPx": [
+            1700.4,
+            387.7,
+            1729.9,
+            448.9
+          ],
+          "score": 0.3471
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-1401.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "tMs": 1801.8,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 4404.4
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            881.2,
+            430.5,
+            1081.6,
+            535
+          ],
+          "score": 0.8711
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            822.7,
+            625,
+            889.1,
+            766.9
+          ],
+          "score": 0.8155
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-1802.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "tMs": 2202.2,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 4404.4
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            858.1,
+            607.6,
+            1030.8,
+            724.5
+          ],
+          "score": 0.7169
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            741.2,
+            641.3,
+            810.3,
+            733.5
+          ],
+          "score": 0.6972
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-2202.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "tMs": 2602.6,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 4404.4
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            805.5,
+            567.4,
+            890.9,
+            668
+          ],
+          "score": 0.7074
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            882.9,
+            645.1,
+            985,
+            827.9
+          ],
+          "score": 0.6939
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-2603.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "tMs": 3003,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 4404.4
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            787.4,
+            410.2,
+            938.6,
+            523.6
+          ],
+          "score": 0.8759
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            562.9,
+            392.7,
+            605.9,
+            448
+          ],
+          "score": 0.4269
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            925.3,
+            374.2,
+            995.2,
+            487.7
+          ],
+          "score": 0.3881
+        },
+        {
+          "index": 3,
+          "boxPx": [
+            859.9,
+            406.7,
+            997.7,
+            513.1
+          ],
+          "score": 0.31
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-3003.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "tMs": 3436.77,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 4404.4
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            886.5,
+            428.5,
+            974.5,
+            515.5
+          ],
+          "score": 0.6457
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            745.3,
+            377.4,
+            801,
+            446.6
+          ],
+          "score": 0.3555
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            944.1,
+            440.7,
+            1043.2,
+            585.9
+          ],
+          "score": 0.3307
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-3437.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "tMs": 3837.17,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 4404.4
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            828.1,
+            447.6,
+            957,
+            517.3
+          ],
+          "score": 0.8367
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            271.1,
+            364.9,
+            309.1,
+            415.9
+          ],
+          "score": 0.4554
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            778.5,
+            379.2,
+            801.5,
+            450.3
+          ],
+          "score": 0.4376
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-3837.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "tMs": 568.73,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 5405.400000000001
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            1631.5,
+            650.4,
+            1749.3,
+            796.1
+          ],
+          "score": 0.5042
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            1686.3,
+            645.1,
+            1747.5,
+            719.9
+          ],
+          "score": 0.4528
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            1224,
+            864.2,
+            1294.4,
+            929.5
+          ],
+          "score": 0.3343
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally2-569.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "tMs": 1002.5,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 5405.400000000001
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            1595.7,
+            451.3,
+            1702.7,
+            546.3
+          ],
+          "score": 0.7333
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            652.5,
+            471,
+            678.6,
+            494.6
+          ],
+          "score": 0.4208
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            375.7,
+            466.6,
+            405.6,
+            505.5
+          ],
+          "score": 0.4015
+        },
+        {
+          "index": 3,
+          "boxPx": [
+            1226.3,
+            491.8,
+            1250.9,
+            538.1
+          ],
+          "score": 0.3826
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally2-1003.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "tMs": 1402.9,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 5405.400000000001
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            1243.9,
+            713.2,
+            1379.5,
+            758.4
+          ],
+          "score": 0.5164
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            1744.5,
+            629.6,
+            1809.7,
+            707.2
+          ],
+          "score": 0.3765
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally2-1403.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "tMs": 1803.3,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 5405.400000000001
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            466.9,
+            510.1,
+            508.9,
+            529.6
+          ],
+          "score": 0.5312
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            1298.6,
+            719.9,
+            1383.1,
+            748.9
+          ],
+          "score": 0.503
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            1729.8,
+            570.8,
+            1799.7,
+            701.3
+          ],
+          "score": 0.319
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally2-1803.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "tMs": 2203.7,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 5405.400000000001
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            423.9,
+            500.2,
+            477.5,
+            527.3
+          ],
+          "score": 0.6947
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            1729.1,
+            637.8,
+            1820.6,
+            801.6
+          ],
+          "score": 0.5061
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            1342.6,
+            502.2,
+            1435.1,
+            620
+          ],
+          "score": 0.3045
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally2-2204.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "tMs": 2604.1,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 5405.400000000001
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            425.8,
+            484.2,
+            474,
+            515
+          ],
+          "score": 0.8077
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            1139.8,
+            387.2,
+            1264,
+            448.2
+          ],
+          "score": 0.4412
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally2-2604.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "tMs": 3004.5,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 5405.400000000001
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            383.5,
+            474.1,
+            427.2,
+            507
+          ],
+          "score": 0.7182
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            1185.9,
+            493.7,
+            1233.2,
+            535.9
+          ],
+          "score": 0.4648
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally2-3005.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "tMs": 3404.9,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 5405.400000000001
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            1188.4,
+            500,
+            1234.7,
+            535.5
+          ],
+          "score": 0.5587
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            1812.2,
+            516.7,
+            1844.8,
+            551.1
+          ],
+          "score": 0.3501
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            1785.3,
+            558.7,
+            1822.4,
+            602.5
+          ],
+          "score": 0.3486
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally2-3405.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "tMs": 3805.3,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 5405.400000000001
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            201.6,
+            459.6,
+            247.7,
+            501
+          ],
+          "score": 0.6673
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            104.4,
+            492.5,
+            179.4,
+            528.6
+          ],
+          "score": 0.6351
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            68.4,
+            530.1,
+            119.5,
+            579.1
+          ],
+          "score": 0.4518
+        },
+        {
+          "index": 3,
+          "boxPx": [
+            1185,
+            495.8,
+            1220.4,
+            535.5
+          ],
+          "score": 0.4024
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally2-3805.png"
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "tMs": 4339.17,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 5405.400000000001
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            1817,
+            489.9,
+            1889.7,
+            551.6
+          ],
+          "score": 0.3541
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            1807.7,
+            549.9,
+            1919.7,
+            635.7
+          ],
+          "score": 0.3165
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally2-4339.png"
+    },
+    {
+      "caseId": "afn-vic-rally1",
+      "tMs": 33.37,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 3103.1
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            508.8,
+            913.2,
+            616,
+            1013.2
+          ],
+          "score": 0.8622
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            1663.2,
+            586.7,
+            1705.6,
+            613.8
+          ],
+          "score": 0.5158
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            831.4,
+            686.7,
+            888.9,
+            773.3
+          ],
+          "score": 0.419
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-vic-rally1-33.png"
+    },
+    {
+      "caseId": "afn-vic-rally1",
+      "tMs": 433.77,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 3103.1
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            929.7,
+            858.9,
+            1063.2,
+            946
+          ],
+          "score": 0.8492
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            1386,
+            560.1,
+            1442.7,
+            596.6
+          ],
+          "score": 0.4499
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            816.7,
+            678.4,
+            868.4,
+            742.8
+          ],
+          "score": 0.4379
+        },
+        {
+          "index": 3,
+          "boxPx": [
+            1638.5,
+            555.6,
+            1673.9,
+            591.5
+          ],
+          "score": 0.3842
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-vic-rally1-434.png"
+    },
+    {
+      "caseId": "afn-vic-rally1",
+      "tMs": 834.17,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 3103.1
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            957,
+            475.5,
+            999.3,
+            565.2
+          ],
+          "score": 0.5223
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            1009.9,
+            1049.4,
+            1073.6,
+            1079.7
+          ],
+          "score": 0.3322
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            1642.6,
+            551.9,
+            1683.5,
+            591.2
+          ],
+          "score": 0.3173
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-vic-rally1-834.png"
+    },
+    {
+      "caseId": "afn-vic-rally1",
+      "tMs": 1234.57,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 3103.1
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            1288.7,
+            615,
+            1329.8,
+            655.8
+          ],
+          "score": 0.7141
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            1638.8,
+            546.7,
+            1675.7,
+            586.2
+          ],
+          "score": 0.3368
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-vic-rally1-1235.png"
+    },
+    {
+      "caseId": "afn-vic-rally1",
+      "tMs": 1634.97,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 3103.1
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            1243.7,
+            602.3,
+            1279.4,
+            652.9
+          ],
+          "score": 0.6763
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            934.2,
+            671.8,
+            1007.8,
+            731.2
+          ],
+          "score": 0.5059
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            950.8,
+            996.3,
+            1070.9,
+            1080.4
+          ],
+          "score": 0.5035
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-vic-rally1-1635.png"
+    },
+    {
+      "caseId": "afn-vic-rally1",
+      "tMs": 2035.37,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 3103.1
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            1237,
+            537,
+            1271.6,
+            557.9
+          ],
+          "score": 0.4572
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            798.2,
+            591.6,
+            880.6,
+            604.9
+          ],
+          "score": 0.3987
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            949.7,
+            675.6,
+            987.1,
+            701.1
+          ],
+          "score": 0.3693
+        },
+        {
+          "index": 3,
+          "boxPx": [
+            1650.9,
+            558.9,
+            1685.2,
+            585.5
+          ],
+          "score": 0.3661
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-vic-rally1-2035.png"
+    },
+    {
+      "caseId": "afn-vic-rally1",
+      "tMs": 2435.77,
+      "videoPath": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+      "videoSize": {
+        "path": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+        "width": 1920,
+        "height": 1080,
+        "fps": 29.97002997002997,
+        "durationMs": 3103.1
+      },
+      "boxes": [
+        {
+          "index": 0,
+          "boxPx": [
+            849.3,
+            774.7,
+            931.3,
+            896.9
+          ],
+          "score": 0.6282
+        },
+        {
+          "index": 1,
+          "boxPx": [
+            1261,
+            569.5,
+            1295.7,
+            636
+          ],
+          "score": 0.3599
+        },
+        {
+          "index": 2,
+          "boxPx": [
+            913.9,
+            760.6,
+            953.6,
+            822.9
+          ],
+          "score": 0.35
+        }
+      ],
+      "png": "datasets/paddle-bench/ownership-review/afn-vic-rally1-2436.png"
+    }
+  ]
+}

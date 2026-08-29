@@ -1,0 +1,50 @@
+
+══════════════════════════════════════════════════════════════════════════════
+wm-volley-02 · gold contact 6680ms · stroke volley
+window 4500–7960 peak 6680 · scan 6240–6840 (provisional E1)
+events: E1[5600–6840 peak 6690]
+modalities: paddle 38 centers · ball 9 obs 6340–6660
+v3 signals (raw):
+  paddle_speed_peak          6690ms  +10ms vs gold    w0.45  peak 1.61 u/s
+  wrist_speed_peak           6680ms  +0ms vs gold     w0.4  peak 1.28 u/s
+  ball_direction_change      6500ms  -180ms vs gold   w0.35  54°
+  ball_paddle_proximity      6660ms  -20ms vs gold    w0.3  min dist 0.049
+v3 flat fusion: 6637ms (-43ms vs gold), spread 137ms
+current estimator: 6650ms (-30ms vs gold) conf 0.87 ballConfirmed=true paddleConfirmed=true
+  paddle_speed_peak          6690ms  +10ms vs gold    w0.451  1.61 u/s (+2 lesser peak(s))
+  wrist_speed_peak           6680ms  +0ms vs gold     w0.414  1.28 u/s (+4 lesser peak(s))
+  ball_direction_change      6620ms  -60ms vs gold    w0.194  50°, speed ratio 0.21, 0.30 torso from target paddle; turn@6500ms 54° rejected: 1.50 torso from target paddle → REJECTED
+  ball_paddle_proximity      6660ms  -20ms vs gold    w0.242  min 0.28 torso (0.046 u), at track edge (censored)
+  density maxima: 6655ms(1.00)
+
+══════════════════════════════════════════════════════════════════════════════
+afn-sasebo-rally1 · gold contact 2900ms · stroke volley
+window 168–3871 peak 3403 · scan 168–3871 (provisional ambiguous)
+events: E1[367–901 peak 467] E2[968–2636 peak 1468] E3[2703–3770 peak 3403]
+modalities: paddle 46 centers · ball 7 obs 1802–2002
+v3 signals (raw):
+  paddle_speed_peak          2469ms  -431ms vs gold   w0.45  peak 1.86 u/s
+  wrist_speed_peak           1268ms  -1632ms vs gold  w0.4  peak 1.11 u/s
+  ball_direction_change      1835ms  -1065ms vs gold  w0.35  70°
+  ball_paddle_proximity      1935ms  -965ms vs gold   w0.3  min dist 0.115
+v3 flat fusion: ABSTAINED (spread 626ms > 250)
+current estimator: ABSTAINED — Fused contact evidence peaks at 1970ms but the scanned movement's peak motion is at 3403ms (1433ms apart): the strongest tracked evidence belongs to a different moment than the stroke under analysis.
+  modes: 1970ms (100%) · 2655ms (25%) · 3565ms (23%) · 1215ms (21%)
+  density maxima: 1970ms(1.00) · 2630ms(0.25) · 3590ms(0.23) · 1190ms(0.21) · 470ms(0.17)
+
+══════════════════════════════════════════════════════════════════════════════
+afn-sasebo-rally2 · gold contact 2620ms · stroke volley
+window 1302–3603 peak 2469 · scan 2236–2836 (provisional E1)
+events: E1[2236–2836 peak 2436] E2[3604–4538 peak 4072]
+modalities: paddle 82 centers · ball 43 obs 936–2504
+v3 signals (raw):
+  paddle_speed_peak          2237ms  -383ms vs gold   w0.45  peak 1.71 u/s
+  wrist_speed_peak           2469ms  -151ms vs gold   w0.4  peak 11.42 u/s
+  ball_direction_change      2471ms  -149ms vs gold   w0.35  125°
+  ball_paddle_proximity      2338ms  -282ms vs gold   w0.3  min dist 0.354
+v3 flat fusion: 2374ms (-246ms vs gold), spread 137ms
+current estimator: 2650ms (+30ms vs gold) conf 0.61 ballConfirmed=false paddleConfirmed=true
+  paddle_speed_peak          2404ms  -216ms vs gold   w0.406  1.69 u/s (+3 lesser peak(s)); gating: ball_direction_change: turn@2471ms 125° rejected: 1.86 torso from target paddle → REJECTED; ball_paddle_proximity: proximity minimum 1.78 torso from target paddle → rejected
+  wrist_speed_peak           2636ms  +16ms vs gold    w0.466  4.67 u/s, paddle-corroboration ×0.88 (+2 lesser peak(s)); peak 11.42 u/s @2469ms = 47 torso/s > 25 → tracking glitch, rejected
+  limiting: implausible_motion_peak_rejected, ball_turns_rejected_far_from_target, ball_never_near_target_paddle, no_ball_evidence
+  density maxima: 2645ms(1.00)

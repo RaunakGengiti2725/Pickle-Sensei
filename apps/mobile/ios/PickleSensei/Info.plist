@@ -33,8 +33,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string></string>
+	<key>NSCameraUsageDescription</key>
+	<string>Pickle Sensei uses guided automatic capture to find your body position, detect a stroke motion, and run private on-device analysis.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Pickle Sensei can include court audio in a stroke recording. Audio is stored with the private clip on this device.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
@@ -56,5 +58,12 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Manrope_400Regular.ttf</string>
+		<string>Manrope_600SemiBold.ttf</string>
+		<string>Manrope_500Medium.ttf</string>
+		<string>Manrope_700Bold.ttf</string>
+	</array>
 </dict>
 </plist>

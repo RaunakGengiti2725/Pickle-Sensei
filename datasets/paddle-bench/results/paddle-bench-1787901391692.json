@@ -1,0 +1,35 @@
+{
+  "manifest": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/paddle-bench.json",
+  "results": [
+    {
+      "caseId": "wm-dink-01",
+      "labeledFrames": 16,
+      "visibleFrames": 11,
+      "occludedOrAbsentFrames": 5,
+      "hits": 6,
+      "misses": 5,
+      "wrongLocation": 0,
+      "falsePositives": 3,
+      "correctRejections": 2,
+      "precision": 0.6666666666666666,
+      "recall": 0.5454545454545454,
+      "meanCenterErrorNorm": 0.06046589617548458,
+      "medianCenterErrorNorm": 0.07260119771605095
+    },
+    {
+      "caseId": "wm-volley-02",
+      "labeledFrames": 12,
+      "visibleFrames": 6,
+      "occludedOrAbsentFrames": 6,
+      "hits": 3,
+      "misses": 3,
+      "wrongLocation": 0,
+      "falsePositives": 5,
+      "correctRejections": 1,
+      "precision": 0.375,
+      "recall": 0.5,
+      "meanCenterErrorNorm": 0.021084637415494017,
+      "medianCenterErrorNorm": 0.010342989812989587
+    }
+  ]
+}

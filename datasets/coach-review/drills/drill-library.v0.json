@@ -1,0 +1,71 @@
+{
+  "generatedAtIso": "2026-08-29T01:51:06.841Z",
+  "version": "drill-library-v0",
+  "status": "schema + two well-known public drills as UNVALIDATED placeholders. validatedFaultMappings stay EMPTY until coach reviews supply evidence; nothing here may be recommended to users.",
+  "drills": [
+    {
+      "id": "drill.wall-dink-rally",
+      "name": "Wall dink rally",
+      "supportedTechniques": [
+        "FOREHAND_DINK",
+        "BACKHAND_DINK"
+      ],
+      "validatedFaultMappings": [],
+      "description": "Continuous soft dinks against a practice wall with a net-height line; keep every contact out front with a stable face.",
+      "difficulty": "beginner",
+      "equipment": [
+        "paddle",
+        "ball",
+        "wall with net-height line (34 in)"
+      ],
+      "repsOrDuration": "3 × 2 min continuous rally",
+      "progressions": [
+        "alternate forehand/backhand each contact",
+        "target box 6–12 in above the line"
+      ],
+      "regressions": [
+        "allow one bounce between contacts",
+        "stand closer to the wall"
+      ],
+      "coachProvenance": null,
+      "provenance": "engineering placeholder — well-known public drill; NOT coach-validated",
+      "validationStatus": "UNVALIDATED",
+      "mediaRefs": [],
+      "version": "drill-library-v0"
+    },
+    {
+      "id": "drill.skinny-singles",
+      "name": "Skinny singles",
+      "supportedTechniques": [
+        "SERVE",
+        "RETURN",
+        "FOREHAND_DRIVE",
+        "BACKHAND_DRIVE",
+        "DROP",
+        "FOREHAND_DINK",
+        "BACKHAND_DINK"
+      ],
+      "validatedFaultMappings": [],
+      "description": "Half-court singles (straight or crosscourt halves): full point play with less court to cover, concentrating reps on serve, return, third shot and kitchen play.",
+      "difficulty": "intermediate",
+      "equipment": [
+        "paddle",
+        "ball",
+        "court"
+      ],
+      "repsOrDuration": "games to 7, switch halves",
+      "progressions": [
+        "crosscourt halves only (longer diagonal)",
+        "third shot must be a drop"
+      ],
+      "regressions": [
+        "serve-and-return only, replay the point after the 4th ball"
+      ],
+      "coachProvenance": null,
+      "provenance": "engineering placeholder — well-known public drill; NOT coach-validated",
+      "validationStatus": "UNVALIDATED",
+      "mediaRefs": [],
+      "version": "drill-library-v0"
+    }
+  ]
+}

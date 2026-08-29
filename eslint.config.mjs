@@ -20,7 +20,40 @@ export default tseslint.config(
     },
   },
   {
-    files: ["**/test/**/*.ts", "**/*.test.ts", "**/scripts/**/*.ts", "**/src/cli.ts"],
+    // React Native resolves static image assets via require() by design.
+    files: ["apps/mobile/**/*.tsx"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
+  {
+    files: [
+      "**/test/**/*.ts",
+      "**/*.test.ts",
+      "**/scripts/**/*.ts",
+      "**/src/cli.ts",
+      "**/eval/**/*.ts",
+      // swing-lab is a terminal research bench; its entrypoints print reports.
+      "packages/swing-lab/src/analyzeVideo.ts",
+      "packages/swing-lab/src/exportDataset.ts",
+      "packages/swing-lab/src/annotate.ts",
+      "packages/swing-lab/src/paddleBench.ts",
+      "packages/swing-lab/src/ballBench.ts",
+      "packages/swing-lab/src/strokeBench.ts",
+      "packages/swing-lab/src/datasetReport.ts",
+      "packages/swing-lab/src/datasetRelease.ts",
+      "packages/swing-lab/src/dataGaps.ts",
+      "packages/swing-lab/src/mineVideo.ts",
+      "packages/swing-lab/src/paddleWaterfall.ts",
+      "packages/swing-lab/src/targetAcquisitionBench.ts",
+      "packages/swing-lab/src/learningCurve.ts",
+      "packages/swing-lab/src/ownershipAnnotate.ts",
+      "packages/swing-lab/src/eventCompletionBench.ts",
+      "packages/swing-lab/src/cascadeWaterfall.ts",
+      "packages/swing-lab/src/coachReview.ts",
+      // data-engine CLIs (acquire/factory/status/import/failure-mine) print reports.
+      "packages/swing-lab/src/engine/**/*.ts",
+    ],
     rules: {
       "no-console": "off",
     },

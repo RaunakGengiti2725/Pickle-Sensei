@@ -1,0 +1,80 @@
+{
+  "manifest": "/Users/raunakgengiti/Pickle-Sensei/datasets/paddle-bench/paddle-bench.json",
+  "results": [
+    {
+      "caseId": "wm-dink-01",
+      "labeledFrames": 24,
+      "visibleFrames": 19,
+      "occludedOrAbsentFrames": 5,
+      "hits": 5,
+      "misses": 4,
+      "wrongLocation": 10,
+      "falsePositives": 3,
+      "correctRejections": 2,
+      "precision": 0.2777777777777778,
+      "recall": 0.2631578947368421,
+      "meanCenterErrorNorm": 0.019797578918826546,
+      "medianCenterErrorNorm": 0.023487339452510823
+    },
+    {
+      "caseId": "wm-volley-02",
+      "labeledFrames": 23,
+      "visibleFrames": 17,
+      "occludedOrAbsentFrames": 6,
+      "hits": 7,
+      "misses": 8,
+      "wrongLocation": 2,
+      "falsePositives": 4,
+      "correctRejections": 2,
+      "precision": 0.5384615384615384,
+      "recall": 0.4117647058823529,
+      "meanCenterErrorNorm": 0.010099431654994566,
+      "medianCenterErrorNorm": 0.00004259259259253856
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "labeledFrames": 20,
+      "visibleFrames": 20,
+      "occludedOrAbsentFrames": 0,
+      "hits": 9,
+      "misses": 11,
+      "wrongLocation": 0,
+      "falsePositives": 0,
+      "correctRejections": 0,
+      "precision": 1,
+      "recall": 0.45,
+      "meanCenterErrorNorm": 0.01671932891016399,
+      "medianCenterErrorNorm": 0.009467160369588072
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "labeledFrames": 5,
+      "visibleFrames": 3,
+      "occludedOrAbsentFrames": 2,
+      "hits": 1,
+      "misses": 0,
+      "wrongLocation": 2,
+      "falsePositives": 2,
+      "correctRejections": 0,
+      "precision": 0.2,
+      "recall": 0.3333333333333333,
+      "meanCenterErrorNorm": 0.00005497392779759081,
+      "medianCenterErrorNorm": 0.00005497392779759081
+    },
+    {
+      "caseId": "afn-vic-rally1",
+      "labeledFrames": 6,
+      "visibleFrames": 6,
+      "occludedOrAbsentFrames": 0,
+      "hits": 2,
+      "misses": 4,
+      "wrongLocation": 0,
+      "falsePositives": 0,
+      "correctRejections": 0,
+      "precision": 1,
+      "recall": 0.3333333333333333,
+      "meanCenterErrorNorm": 0.000035314548292504987,
+      "medianCenterErrorNorm": 0.000035465048048180296
+    }
+  ]
+}

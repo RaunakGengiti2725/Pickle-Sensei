@@ -1,0 +1,113 @@
+{
+  "workstream": "H — full-pipeline validation of the D-032 shortlist (paddle detector stride 3 + target ROI) on the 3 DEV cases",
+  "status": "complete — candidate is NOT full-pipeline non-inferior on dev (2 of 3 cases regress at a cascade stage); detector-compute claim CONFIRMED (−67% invocations, −72.7% aggregate inference wall time); DO NOT promote as-is",
+  "baseline": {
+    "config": "detect_paddle.py stride 1, full frame (canonical paddle-dets.json in datasets/paddle-bench/runs/<case>, read-only); canonical report.json/debug.json as the downstream reference",
+    "perCase": {
+      "wm-volley-02": {
+        "detector": "93 invocations · same-day rerun 13.663s inference / 38.287s wall (canonical recorded: 6.55s inference on an earlier machine state)",
+        "paddle": "tracked · 38 obs · windowCoverage 0.740 · selected track spans 4930-6730ms (4 obs inside contact zone)",
+        "ballStage": "tracked (9 obs)",
+        "contact": "estimated 6637ms · ball+paddle confirmed · error vs gold 6680 = 43ms (PASS ≤66ms)",
+        "phaseV2": "segmented, ordering valid",
+        "stroke": "FOREHAND vs gold FOREHAND_VOLLEY (L1 PASS)",
+        "cascade": "COMPLETE (7/7 stages)"
+      },
+      "afn-sasebo-rally1": {
+        "detector": "124 invocations · rerun 19.427s inference / 58.015s wall (recorded: 8.864s)",
+        "paddle": "tracked · 46 obs · windowCoverage 0.442",
+        "ballStage": "tracked (7 obs)",
+        "contact": "abstained (signals disagree by 626ms) · gold 2900",
+        "phaseV2": "abstained (MULTI_STROKE_AMBIGUOUS)",
+        "stroke": "none predicted vs gold BACKHAND_VOLLEY",
+        "cascade": "LOST AT EVENT (targetEvent ambiguous, ratio 1.11 — pose-driven)"
+      },
+      "afn-sasebo-rally2": {
+        "detector": "117 invocations · rerun 17.224s inference / 56.785s wall (recorded: 8.36s)",
+        "paddle": "tracked · 82 obs · windowCoverage 0.986 · selection margin 1.2527 (barely above the 1.25 ambiguity gate)",
+        "ballStage": "untracked (no gated track is a plausible in-play ball)",
+        "contact": "estimated 2346ms · paddle-confirmed · error vs gold 2620 = 274ms (FAIL)",
+        "phaseV2": "segmented",
+        "stroke": "BACKHAND vs gold OVERHEAD (FAIL — L1 side undefined for OVERHEAD)",
+        "cascade": "LOST AT BALL"
+      }
+    },
+    "S0_S5_waterfallConvention_devTotals": "S0 R 1.00 (23/23 visible labels) · S5 R 0.348 (8/23)",
+    "S0_gridConvention": {"wm-volley-02": 1.0, "afn-sasebo-rally1": 0.846, "afn-sasebo-rally2": 0.5}
+  },
+  "candidate": {
+    "config": "detect_paddle.py stride 3 + static target ROI per D-032 (ROI = roi_keyframe_grid.target_roi over the event-gated span from people.json): wm-volley-02 roi [0.1075,0,1,1], rally1 [0.0257,0,1,1], rally2 [0.17,0,1,1]; same detection windows as baseline; fed to the untouched TS pipeline via sandbox paddle-dets.json + --reuse-extract (reuse verified: byte-identical dets after run, zero detector invocations by analyzeVideo)",
+    "perCase": {
+      "wm-volley-02": {
+        "detector": "31 invocations (−67%) · 4.556s inference (−66.7%) / 11.045s wall (−71.2%)",
+        "paddle": "tracked · 20 obs · windowCoverage 0.555 · selected track spans 4250-6530ms — ends 63ms BEFORE gold contact, 0 obs in contact zone [6593,6840]",
+        "ballStage": "tracked (8 obs)",
+        "contact": "estimated 6593ms · ball-confirmed only (paddleConfirmed true→false, limits gain no_paddle_evidence) · error 87ms (FAIL ≤66ms; was 43ms)",
+        "phaseV2": "ABSTAINED — PHASE_NO_POST_CONTACT_EVIDENCE (was segmented)",
+        "stroke": "FOREHAND (unchanged, L1 PASS)",
+        "cascade": "LOST AT CONTACT (was COMPLETE) — REGRESSION"
+      },
+      "afn-sasebo-rally1": {
+        "detector": "42 invocations (−66%) · 4.763s inference (−75.5%) / 13.713s wall (−76.4%)",
+        "paddle": "tracked · 19 obs · windowCoverage 0.568 (IMPROVED from 0.442)",
+        "ballStage": "tracked (7 obs, identical overlap)",
+        "contact": "abstained (disagreement 553ms vs 626ms) — same outcome",
+        "phaseV2": "abstained (same reason)",
+        "stroke": "none (same)",
+        "cascade": "LOST AT EVENT (identical to baseline) — NON-INFERIOR"
+      },
+      "afn-sasebo-rally2": {
+        "detector": "39 invocations (−67%) · 4.408s inference (−74.4%) / 12.96s wall (−77.2%)",
+        "paddle": "UNTRACKED — paddle_association_ambiguous (selection margin 1.1946 < 1.25 gate; two comparable tracks near different hands; was tracked @ 0.986 coverage) — REGRESSION at the owned stage",
+        "ballStage": "tracked (34 obs) — flipped untracked→tracked because ball gating runs WITHOUT paddle context when paddle is untracked (coupling artifact, not a win)",
+        "contact": "estimated 2451ms · ball-confirmed · error 169ms (FAIL, though numerically better than baseline 274ms)",
+        "phaseV2": "segmented via wrist (was paddle)",
+        "stroke": "BACKHAND (unchanged, FAIL vs OVERHEAD)",
+        "cascade": "LOST AT PADDLE (was LOST AT BALL) — loss moved one stage EARLIER"
+      }
+    },
+    "S0_S5_waterfallConvention_devTotals": "S0 R 0.783 (18/23; ±40ms tolerance structurally misses labels between stride-3 frames) · S5 R 0.261 (6/23)",
+    "S0_gridConvention": {"wm-volley-02": 0.875, "afn-sasebo-rally1": 0.923, "afn-sasebo-rally2": 0.5}
+  },
+  "measured": {
+    "detectorCompute": {
+      "invocations": {"wm-volley-02": "93→31", "afn-sasebo-rally1": "124→42", "afn-sasebo-rally2": "117→39", "aggregate": "334→112 (−66.5%)"},
+      "inferenceSec_sameDayBackToBack": {"wm-volley-02": "13.663→4.556", "afn-sasebo-rally1": "19.427→4.763", "afn-sasebo-rally2": "17.224→4.408", "aggregate": "50.31→13.73 (−72.7%)"},
+      "wallSecInclDecode": {"wm-volley-02": "38.287→11.045", "afn-sasebo-rally1": "58.015→13.713", "afn-sasebo-rally2": "56.785→12.960", "aggregate": "153.09→37.72 (−75.4%)"},
+      "msPerFrame": "unchanged by ROI within noise (147/157/147 baseline vs 147/113/113 candidate) — confirms D-032: ROI is a quality lever, stride is the latency lever",
+      "timingMethod": "baseline re-run once per case same-day back-to-back with candidate (canonical recorded timings cited in H-timing.json were ~2x faster ms/frame from an earlier machine state; not used for the comparison)"
+    },
+    "eventProposals": "bounds identical in all 3 cases (body-motion invariant holds); NOT byte-identical: paddle-speed peak refinement shifted wm-volley-02 E1 peak +30ms and rally2 E2 peak −235.2ms; rally1 all-identical; target-event selection outcome unchanged in all cases",
+    "cascadeStageFlips": {
+      "wm-volley-02": {"CONTACT": "pass→FAIL (43→87ms)", "PHASE": "pass→FAIL (segmented→abstained)"},
+      "afn-sasebo-rally1": {},
+      "afn-sasebo-rally2": {"PADDLE": "pass→FAIL (tracked 0.986→untracked ambiguous)", "BALL": "fail→pass (paddle-coupling artifact)"}
+    },
+    "rootCauses": [
+      "stride-3 tracker starvation at contact: the volley candidate's selected track dies at 6530ms (larger inter-frame displacement vs constant matchRadius 0.07 during the fastest motion) so contact loses paddle evidence and phase v2 has no post-contact samples",
+      "selection-margin erosion: rally2 baseline margin 1.2527 was already borderline vs the 1.25 ambiguity gate; stride-3 fragmentation (25 vs 33 candidate tracks, fewer obs each) dropped it to 1.1946 → honest abstention",
+      "raw detection quality did NOT degrade (grid-convention S0: 0.875/0.923/0.5 vs baseline 1.0/0.846/0.5) — the loss is in tracking/selection density, exactly the layer D-032 could not see"
+    ],
+    "artifacts": ["datasets/experiments/wave-a/H-downstream.json", "datasets/experiments/wave-a/H-timing.json", "datasets/experiments/wave-a/H-config.json", "datasets/experiments/wave-a/H-runs/<3 cases>", "datasets/experiments/wave-a/H-logs/"]
+  },
+  "filesChanged": [
+    "tools/paddle-lab/h_fullpipe_compare.py (new, additive analysis script; no existing tool modified)",
+    "datasets/experiments/wave-a/H-runs/** (new sandbox: copies of 3 dev run dirs with candidate paddle-dets.json + pipeline-regenerated report/debug/analysis/sequence)",
+    "datasets/experiments/wave-a/H-config.json (new)",
+    "datasets/experiments/wave-a/H-timing.json (new)",
+    "datasets/experiments/wave-a/H-downstream.json (new)",
+    "datasets/experiments/wave-a/H-logs/** (new: analyzeVideo logs + baseline timing re-run dets)",
+    "datasets/experiments/wave-a/H-summary.json (this file)"
+  ],
+  "recommendation": "Do NOT promote static stride-3+ROI. The compute win is real (−67% invocations, −72.7% inference) but it moves failures EARLIER in the cascade on 2/3 dev cases via tracker/selection starvation, not detection quality. For Wave B, integrate an ADAPTIVE two-pass detector policy in analyzeVideo.ts runPaddleStage (the only required TS change; detect_paddle.py already supports --stride/--roi): (1) scan pass at stride 3 + target ROI over detectSpan±250ms, ROI derived from the SEEDED target track's torso union over the event-gated span (not the largest-torso proxy) and derived over the event-gated span only — over the full window the ROI degenerates to the full frame (measured on wm-volley-02); (2) densification pass at stride 1 over selected-event peak ±450ms (the contact scope), appended into the same paddle-dets.json before tracking — this directly re-feeds the two measured failure points (contact-zone track death, selection margin) while keeping most savings since the contact scope is ~25-35% of the detect span on these cases; (3) full-frame/stride-1 FALLBACK triggers: target identity uncertain (no seed and selection confidence low, or targetCoverage < 0.5), ROI area > ~0.9 of frame (ROI no-op), torso union touching an ROI edge mid-span (motion exceeds crop), paddle stage returns untracked/ambiguous or windowCoverage < 0.3, or contact paddleConfirmed=false — re-run dense and re-track before shipping the paddle-unavailable answer; (4) flag design: --paddle-stride N (default 1), --paddle-roi auto|x0,y0,x1,y1|off, wired into the runPaddleStage execFileSync argv; CRITICAL: the reuse gate must also compare detector.stride/roiNorm in the existing file against the requested config — today it only checks window coverage, so a stride-3 file is silently reused for a stride-1 request (this is what made the sandbox swap work, and it is also a footgun); (5) re-validate the adaptive policy full-pipeline on dev before any held-out run, and only then regenerate held-out ONCE.",
+  "risks": [
+    "n=3 dev cases, 23 visible paddle labels, 3 gold events — per-stage flips of a single case dominate rates; treat deltas as directional forensics, not stable estimates",
+    "rally2 baseline was already marginal (selection margin 1.2527 vs 1.25 gate): the PADDLE regression there is gate-edge sensitivity, and any detector nondeterminism on mps could flip it run-to-run",
+    "the ROI derivation in roi_keyframe_grid.py uses the largest-torso person as 'target' proxy, not the seeded target track — on far-player or multi-player footage a production ROI from the wrong person would crop out the real paddle; must derive from the seeded identity",
+    "wm-volley-02 ROI computed over the full detector window degenerates to [0,0,1,1]; ROI is only meaningful when derived from the event-gated span — an integration that derives it from the padded window silently loses the quality lever",
+    "S0 under the waterfall convention (±40ms) structurally penalizes stride 3 (inter-frame gap 100-120ms); quality conclusions here rest on the grid convention and on downstream stages, and the downstream regressions are the binding constraint",
+    "timing measured on one mps laptop with ~2x day-to-day ms/frame variance vs recorded canonicals; relative deltas (same-day back-to-back) are trustworthy, absolute seconds are not",
+    "held-out cases (wm-dink-01, afn-vic-rally1) and the shadow split were not touched; the adaptive Wave B policy must be re-validated on dev first, then held-out exactly once",
+    "ball-stage coupling: when paddle goes untracked, ball gating loosens and can flip untracked→tracked (measured on rally2) — cascade accounting should treat that flip as an artifact, not an improvement"
+  ]
+}

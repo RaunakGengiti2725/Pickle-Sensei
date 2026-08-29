@@ -1,0 +1,23 @@
+[
+  {
+    "caseId": "afn-sasebo-rally1",
+    "tMs": 434,
+    "annotator": "devin-visual-v2-wave-a",
+    "owners": { "0": "reject", "1": "other", "2": "target" },
+    "note": "DUAL — resolves what 400 could not certify: 2 = target's dark-gray JOOLA raised vertically in front of chest, grip-to-hand continuity into HER right hand with yellow wrap clearly visible at this render; 1 = partner's maroon paddle hanging blade-down directly below it (her arm reaches from behind target's arm) — two paddles with adjacent grips, the nastiest wrong-player geometry yet; 0 = enclosing duplicate box around both paddles (same trio structure as 400)"
+  },
+  {
+    "caseId": "wm-dink-01",
+    "tMs": 4960,
+    "annotator": "devin-visual-v2-wave-a",
+    "owners": { "0": "other", "1": "target", "2": "other", "3": "reject" },
+    "note": "DUAL x2, all three paddles boxed: 1 = target's GREEN paddle face at left-front waist, hand at top of box; 0 = red-shirt opponent's sunlit white paddle in front of shorts; 2 = gray-shirt opponent's pale paddle at his crotch, far-left edge; 3 = static divider-post sliver (identical box as 3760/4560)"
+  },
+  {
+    "caseId": "wm-dink-01",
+    "tMs": 5360,
+    "annotator": "devin-visual-v2-wave-a",
+    "owners": { "0": "ambiguous", "1": "other", "2": "reject", "3": "reject" },
+    "note": "1 = gray-shirt opponent's pale paddle at chest; 0 = dark object over the near-net band at left — possibly his blade tip mid-reach but he already holds the box-1 paddle, not certifiable; 2 = red-shirt opponent's WHITE CAP boxed as paddle (cap FP family, matches wm-volley 5490); 3 = his face/neck directly below the cap. Target's green paddle not detected this frame"
+  }
+]

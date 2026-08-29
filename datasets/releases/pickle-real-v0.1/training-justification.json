@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "datasetVersion": "pickle-real-v0.1",
+  "assessedAtIso": "2026-08-28T17:30:00.000Z",
+  "principle": "A learned baseline requires enough INDEPENDENT labeled examples for a train/val/test experiment whose held-out set is bigger than noise. Below the floor, training is theater and is refused.",
+  "tasks": {
+    "paddle_detection": {
+      "labeled": "40 frames / 3 sources",
+      "floorEstimate": "1500+ boxes, 10+ sources (small-object fine-tune)",
+      "verdict": "BLOCKED_ON_DATA"
+    },
+    "paddle_ownership": {
+      "labeled": "2 dual-labeled frames",
+      "floorEstimate": "200+ dual frames across 20+ doubles sequences",
+      "verdict": "BLOCKED_ON_DATA"
+    },
+    "ball_detection_tracking": {
+      "labeled": "20 frames / 3 sources + 3 hard-negative exhibits",
+      "floorEstimate": "2000+ frames incl. occlusion sequences",
+      "verdict": "BLOCKED_ON_DATA"
+    },
+    "event_isolation": {
+      "labeled": "9 events (5 target)",
+      "floorEstimate": "300+ events across 30+ sessions",
+      "verdict": "BLOCKED_ON_DATA"
+    },
+    "contact": {
+      "labeled": "5 contacts",
+      "floorEstimate": "500+ contacts",
+      "verdict": "BLOCKED_ON_DATA"
+    },
+    "phase_segmentation": {
+      "labeled": "23 boundaries",
+      "floorEstimate": "1000+ boundaries, multi-annotator",
+      "verdict": "BLOCKED_ON_DATA"
+    },
+    "stroke_classification": {
+      "labeled": "5 strokes / 5 classes (1 each)",
+      "floorEstimate": "50+ per class minimum for L2; class diversity for L3",
+      "verdict": "BLOCKED_ON_DATA"
+    },
+    "technique_scoring": {
+      "labeled": "0 expert labels",
+      "floorEstimate": "expert protocol + multi-coach agreement first",
+      "verdict": "BLOCKED_ON_VALIDATION"
+    }
+  },
+  "trainingReadyInfrastructure": "release manifest ships per-event training records (refs+hashes+masks+splits+provenance); learning curves become measurable as counts grow",
+  "decision": "NO MODEL TRAINED in this run \u2014 corpus below every task floor. This is the honest Step-64 stop."
+}

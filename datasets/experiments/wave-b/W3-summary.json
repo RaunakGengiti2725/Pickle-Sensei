@@ -1,0 +1,54 @@
+{
+  "workstream": "W3 — next target-acquisition candidate, BENCH-ONLY (no Swift; D-026 gate). Designed + measured replay variants against the wave-a failure anatomy on dev n=54.",
+  "status": "GREEN",
+  "baseline": {
+    "shippedDev54": { "lockRate": 1.0, "lockCorrect": "37/54 (0.685)", "wrongLocks": 17, "falseGestureLocks": 2, "medianLockLatencyMs": 477, "meanOnTargetFraction": 0.592, "resultsFile": "datasets/ta-bench/results/ta-bench-1787969176233.json (byte-identical to wave-a ta-bench-1787968192588.json)" },
+    "shippedContested36": { "lockCorrect": "23/36 (0.639)", "wrongLockRateOfCases": 0.361, "meanOnTargetFraction": 0.497 },
+    "waveABuckets": { "silentInstantWrongGrab": 9, "ambiguityTimeoutWrong": 6, "falseGestureLock": 2, "correctButDriftBelow50": 11 }
+  },
+  "candidate": "acquire-v4 = shipped + (a2) tap-proximity occupancy gate + (b) ambiguity sustained-dominance resolution + 6s last-resort timeout. (a2): a sole region occupant may insta-lock ONLY within centeredRadius 0.05 of the tapped point; an off-center loner waits patienceFrames 30 then enters honest ambiguity; while soft-crowded (second person at v>=0.1, radius x1.35) a lock additionally needs sustained 1.5x-closest dominance (9 frames, continuity-checked). (b): ambiguity resolves by sustained dominance (1.5x closer than every soft rival, centered, 12 consecutive frames) or gesture; the blind closest-occupant timeout only fires as last resort at 6000ms (was a 3s snapshot). All knobs are additive optional ReplayVariant fields; shipped/legacy replay byte-identically (regression-verified on all 54 result objects) and never emit the two new lock sources occupancy_dominance/ambiguity_dominance. KEY MEASUREMENT that redirected the design: in ALL 9 silent instant wrong grabs the true target is pose-undetected entirely for 0.5-6.5s (region seeded on their later first detection), so NO crowd detector can fire at decision time — the separating signal is the occupant's distance to the tapped point (correct instant locks: 23/25 at <=0.04; wrong grabs: 8/9 at >=0.056). The v1 soft-crowd-only gate (variant dominance-gate) measurably did NOTHING to the bucket (still 9/9 wrong) and is kept in the registry as the honest ablation.",
+  "measured": {
+    "devN54VariantTable": {
+      "shipped": { "lockRate": 1.0, "lockCorrect": "37/54 (.685)", "wrongLocks": 17, "falseGesture": 2, "medianMs": 477, "meanOnTarget": 0.592, "nonLocks": 0, "contestedWrongLocks": "13/36 cases (.361)" },
+      "legacy": { "lockRate": 0.741, "lockCorrect": "26/40 (.650)", "wrongLocks": 14, "falseGesture": 5, "medianMs": 320, "meanOnTarget": 0.496, "nonLocks": 14 },
+      "hysteresis": { "lockRate": 0.741, "lockCorrect": "26/40 (.650)", "wrongLocks": 14, "falseGesture": 5, "medianMs": 320, "meanOnTarget": 0.56, "nonLocks": 14 },
+      "sustained-gesture": { "lockRate": 0.704, "lockCorrect": "26/38 (.684)", "wrongLocks": 12, "falseGesture": 3, "medianMs": 320, "meanOnTarget": 0.522, "nonLocks": 16 },
+      "ambiguity-timeout": { "lockRate": 1.0, "lockCorrect": "36/54 (.667)", "wrongLocks": 18, "falseGesture": 3, "medianMs": 477, "meanOnTarget": 0.509, "nonLocks": 0 },
+      "dominance-gate (W3a v1)": { "lockRate": 1.0, "lockCorrect": "37/54 (.685)", "wrongLocks": 17, "falseGesture": 2, "medianMs": 520, "meanOnTarget": 0.591, "nonLocks": 0, "note": "soft-crowd gate alone cannot see pose-undetected targets — instant-wrong bucket unchanged 9/9" },
+      "sustained-ambiguity (W3b)": { "lockRate": 1.0, "lockCorrect": "42/54 (.778)", "wrongLocks": 12, "falseGesture": 0, "medianMs": 400, "meanOnTarget": 0.602, "nonLocks": 0, "note": "strictly dominates shipped on every aggregate metric; converts timeout-wrong 4/6 and gesture-wrong 1/2" },
+      "acquire-v3 (a1+b)": { "lockRate": 1.0, "lockCorrect": "42/54 (.778)", "wrongLocks": 12, "falseGesture": 0, "medianMs": 401, "meanOnTarget": 0.601, "nonLocks": 0 },
+      "acquire-v3-strict-gesture": { "sameAs": "acquire-v3 on n=54" },
+      "centered-gate (W3a2 alone)": { "lockRate": 0.963, "lockCorrect": "40/52 (.769)", "wrongLocks": 12, "falseGesture": 2, "medianMs": 1833, "meanOnTarget": 0.582, "nonLocks": 2, "note": "converts instant-wrongs but dumps them on the blind 3s timeout — needs (b)" },
+      "acquire-v4 (a2+b)": { "lockRate": 0.944, "lockCorrect": "44/51 (.863)", "wrongLocks": 7, "falseGesture": 1, "medianMs": 410, "meanOnTarget": 0.585, "nonLocks": 3, "contestedWrongLocks": "6/36 cases (.167)", "latencyTail": "p75 1602 / p90 4725 / max 6874 ms (vs shipped p75 3037 / p90 3046 / max 5160)" },
+      "acquire-v4-strict-gesture": { "sameAs": "acquire-v4 on n=54 (the surviving false gesture outlasts 8 frames too)" }
+    },
+    "acquireV4Slices": {
+      "contested_region_n36": { "lockRate": 0.972, "lockCorrect": "29/35 (.829)", "wrongLocks": 6, "meanOnTargetFraction": 0.522, "vsShipped": "wrong-lock rate .361 -> .167 (-19.4pp); correct 23 -> 29" },
+      "nonContested_n18": { "lockRate": 0.889, "lockCorrect": "15/16 (.938)", "wrongLocks": 1, "meanOnTargetFraction": 0.722, "vsShipped": "wrong 4 -> 1; one formerly-correct off-center instant lock became never_locked (recoverable)" },
+      "instantGrabBucket9": "5 -> correct (4 via ambiguity_dominance, 1 delayed occupancy), 1 -> honest ambiguous_unresolved, 3 residual wrong (one bystander sits exactly on the tapped point d=0.005 — indistinguishable at decision time; one truth first detected at 6.5s > 6s last resort)",
+      "timeoutWrongBucket6": "3 -> correct, 1 -> unresolved, 2 residual wrong",
+      "gestureWrongBucket2": "1 -> correct via dominance, 1 residual (afn-sigonella arm motion outlasts even 8-frame gesture bar)",
+      "driftBucket11": "10 still lock correct (unchanged post-lock follower), 1 became the single correct->wrong regression (ta-960a1a200d6d-s0w2-p1); correct-lock drift<50% count 11/37 -> 15/44 (rate .30 -> .34) — follower work is NOT this candidate's scope",
+      "caseEndStates": "correct 37 -> 44, wrong 17 -> 7, non-lock 0 -> 3 (2 were shipped-wrong, 1 was shipped-correct)"
+    },
+    "sensitivity": "centeredRadius 0.04/0.05/0.06/0.07 -> wrong locks 8/7/7/9, correct 42/44/45/43 (all far better than shipped's 17 wrong); marginRatio 1.3/1.5/1.8 and patienceFrames 15/30/60 identical outputs — the candidate is not knife-edge-tuned, though 0.05 itself was chosen from the dev separation",
+    "resultsFiles": "see datasets/experiments/wave-b/W3-variant-table.json (generatedFrom lists all 12 dev bench runs; per-bucket per-case outcomes included)"
+  },
+  "filesChanged": [
+    "packages/swing-lab/src/engine/taReplay.ts (additive: LockSource union +occupancy_dominance/+ambiguity_dominance, optional ReplayVariant.occupancyDominance/.ambiguityDominance fields, soft-occupant helpers, REPLAY_VARIANTS registry with W3 configs; shipped/legacy byte-semantically unchanged — verified by result-file diff)",
+    "packages/swing-lab/src/targetAcquisitionBench.ts (variant table now imported from the taReplay registry; CLI flags/names unchanged)",
+    "packages/swing-lab/test/taVariantsW3.test.ts (13 new tests: shipped wrong-grab class pinned unchanged, gate/dominance/patience/centered semantics, strict-gesture bar)",
+    "datasets/experiments/wave-b/W3-summary.json + W3-variant-table.json + W3-analyze.mjs (analysis artifacts)",
+    "datasets/ta-bench/results/ta-bench-17879691*.json + ta-bench-17879697*.json (generated bench runs; dev split only)"
+  ],
+  "recommendation": "Promote-candidate: acquire-v4. It attacks exactly what poisons sessions — wrong locks 17 -> 7 overall, contested wrong-lock rate .361 -> .167 (beyond the >=15pp bar wave-a set), false gestures 2 -> 1, correct case end-states 37 -> 44 — while paying 3 recoverable non-locks (lockRate .944) and a slower p90 (4.7s, honest-ambiguity tail). If the commander weighs lockRate 1.0 or minimal Swift diff heavily, sustained-ambiguity is the conservative fallback: it strictly dominates shipped on every aggregate (42/54 correct, 12 wrong, 0 false gestures, 400ms median, .602 on-target, zero non-locks) and only touches ambiguity resolution. D-027-STYLE GATE for acquire-v4 (all on dev n=54 unless stated): (1) wrongLocks <= 10 [measured 7]; (2) contested wrong-lock rate <= .25 [.167]; (3) correct locks >= shipped's 37 [44]; (4) false gesture locks <= 2 [1]; (5) non-locks <= 4 [3]; (6) median latency <= 600ms [410]; (7) mean on-target >= .55 [.585]; (8) shipped/legacy replay regression suite green [green]; (9) ONE-SHOT locked_test n=5 by the commander at promotion time only: zero wrong locks (shipped has 0 there), >=4/5 locks, on-target >= shipped-0.05 — n=5 cannot support finer claims; (10) live Swift port must instrument tap-to-occupant distance for one release BEFORE hard-coding centeredRadius=0.05, because the bench tap point is idealized (truth's first-detection torso mean).",
+  "risks": [
+    "centeredRadius transfers from an idealized tap point: bench regions are seeded from the true target's own first-detected torso; real user taps are sloppier, which could push legitimate targets outside 0.05 and lengthen latency (mitigation in gate item 10; sensitivity shows 0.04-0.07 all beat shipped).",
+    "n=54 dev, contested n=36 (~±13pp CI): v4's -10 wrong locks is beyond noise, but bucket-level counts (e.g. 3 residual instant-wrongs) are single-case granularity; keep growing verified gold (230 dev proposals remain) before the one-shot.",
+    "Latency tail is real UX: p90 4.7s / max 6.9s in contested scenes (was 3.0s/5.2s); the product must show waiting/raise-paddle affordances during honest ambiguity or users will re-tap into the patience window.",
+    "1 measured correct->wrong regression (ta-960a1a200d6d-s0w2-p1: gate defers a correct instant lock, later dominance picks the wrong occupant at 4.5s) and 1 correct->never_locked (ta-b6f280b2900c-s0w2-p12, off-center loner, recoverable).",
+    "Post-lock drift untouched: correct-lock <50%-on-target count rose 11 -> 15 because v4 wins MORE locks in messy crowds; contested mean on-target .522 still poor — follower identity is a separate workstream (hysteresis is already shipped).",
+    "2 residual wrong locks are provably unwinnable by any occupancy-geometry rule (bystander exactly on the tapped point; truth first pose-detected after the 6s last resort) — further gains need appearance/re-id evidence, not threshold tuning.",
+    "Flake observed once in test/paddleTracker.test.ts (windowCoverage 'greaterThan 0.95' hit exactly 0.95) in an UNTOUCHED file; passed standalone and in two consecutive full runs afterward — worth a boundary fix by its owning workstream."
+  ]
+}

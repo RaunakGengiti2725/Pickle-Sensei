@@ -1,0 +1,59 @@
+{
+  "workstream": "W5 — phases v2 anchor-free mode (decouple phase segmentation from the contact anchor)",
+  "generatedAtIso": "2026-08-29T02:25:00Z",
+  "heldOutPolicy": "wm-dink-01 and afn-vic-rally1 never read, never run, never tuned against. All measurement on DEV cases only (wm-volley-02, afn-sasebo-rally1, afn-sasebo-rally2) in datasets/experiments/wave-b/W5-runs sandboxes; canonical datasets/paddle-bench/runs untouched.",
+  "byteIdentityRegression": {
+    "claim": "when a contact anchor IS provided, segmentPhasesTemporalV2 output is byte-identical to the pre-W5 implementation",
+    "unitLevel": "6 pinned JSON.stringify snapshots captured by executing the PRE-change code (4 segmented incl. wrist-source and follow-through-repair, 2 abstentions) are asserted verbatim in test/phaseTemporal.test.ts — all pass against the new code",
+    "pipelineLevel": {
+      "method": "each dev case copied to <case>-baseline and <case>-candidate sandboxes; identical CLI (npx tsx src/analyzeVideo.ts <video> --stroke volley --target-tap <tap> --out <sandbox> --reuse-extract) run at pre-change code (baseline) and post-change code (candidate)",
+      "result": "temporalPhasesV2 AND temporalPhases(v1) byte-identical baseline↔candidate on all 3 dev cases (all three estimated a contact at current HEAD, so all exercised the anchored path)",
+      "confound": "non-phase report fields (paddle association stats, random run ids, ISO timestamps) differ between runs — paddleTracker.ts was being edited concurrently by another workstream during measurement (mtime 19:17:28, between my baseline and candidate runs) and ids/timestamps are inherently run-specific; phases stayed byte-identical DESPITE that upstream churn, which strengthens the isolation claim"
+    }
+  },
+  "anchorFreeMeasurement": {
+    "callSiteVerification": "analyzeVideo.ts:746-752 passes contactMs: estimatedContactMs (null when contact abstains) with NO null guard — anchor-free mode goes live with zero integration change wherever a target event is selected and contact abstains. At current HEAD no DEV case is naturally in that state (all 3 estimate a contact when the event is selected; rally1's contact abstains only in runs where event selection is also ambiguous), so a TEMPORARY sandbox call-site patch was required and used.",
+    "temporaryPatchDisclosure": "for the *-anchorfree sandbox runs only, analyzeVideo.ts was patched to (a) null contactMs into the phases-v2 call to simulate contact abstention on real kinematics, (b) fall back to the leading proposal when event selection is ambiguous, and (c) dump a per-proposal anchor-free sweep to w5-anchorfree-sweep.json. The patch was fully reverted: sha256 of analyzeVideo.ts before patch and after revert are identical (6d3e6516e5a61af073210a0367d8ab8854f87084755b5538d884531733747c49).",
+    "perProposalSweep": {
+      "afn-sasebo-rally1": [
+        { "eventId": "E1", "spanMs": [367, 901], "outcome": "ABSTAINED — PHASE_NO_MOTION_EVIDENCE: only 2 kinematic samples strictly inside the event" },
+        { "eventId": "E2", "spanMs": [968, 2636], "outcome": "ABSTAINED — PHASE_PEAK_MISMATCH: measured kinematic peak 2469ms disagrees with the event's own peak 1468ms by more than 250ms" },
+        {
+          "eventId": "E3",
+          "spanMs": [2703, 3770],
+          "outcome": "SEGMENTED (the honest ordered timeline the contract clause (c) needs)",
+          "boundaries": {
+            "anchorBasis": "event_peak",
+            "source": "wrist",
+            "confidence": 0.32,
+            "preparationStartMs": 3270,
+            "accelerationStartMs": 3303,
+            "motionPeakMs": 3403,
+            "contactMs": null,
+            "followThroughEndMs": 3537,
+            "recoveryEndMs": 3570,
+            "orderingValid": "prep 3270 ≤ accel 3303 < motionPeak 3403 < followEnd 3537 ≤ recovery 3570; cascade predicate (followEnd==null || contact==null || followEnd>contact) = PASS via null contact",
+            "version": "phase.paddle-temporal.v2.1 (event-local, anchor-free around measured motion peak; timeline from motion evidence — exact contact not established; heuristic, uncalibrated)"
+          }
+        }
+      ],
+      "afn-sasebo-rally2": [
+        { "eventId": "E1", "spanMs": [2236, 2836], "outcome": "ABSTAINED — PHASE_PEAK_OUTSIDE_EVENT: a stronger kinematic peak sits in the margin just outside the event (the fabricated-contact case: anchor-free refuses to segment an event that does not own its apex)" },
+        { "eventId": "E2", "spanMs": [3604, 4538], "outcome": "ABSTAINED — PHASE_NO_POST_PEAK_EVIDENCE: fewer than 2 kinematic samples after the motion peak" }
+      ],
+      "wm-volley-02": [
+        { "eventId": "E1", "spanMs": [5600, 6840], "outcome": "ABSTAINED — PHASE_NO_POST_PEAK_EVIDENCE (peak sits at the sparse tail of the event); the ANCHORED path segments this case fine (contact 6650 est) — anchored remains strictly preferred when contact exists, anchor-free is only a fallback" }
+      ]
+    },
+    "reading": "anchor-free mode is demonstrably NOT a free pass: 4 of 6 real proposals abstained with precise reasons; 1 (rally1 E3) produced a fully ordered, honestly-labeled timeline with the contact boundary explicitly absent (null in JSON) — exactly the artifact usable-result-v1 clause (c) requires"
+  },
+  "benchContinuity": {
+    "pnpm lab:stroke-bench phase section": "byte-identical before/after (bench reads stored canonical run artifacts, which were not regenerated this wave)",
+    "measuredPhaseSection": "preparationStart D 346.5ms(1) · accelerationStart D 376.4ms(2) · contact D 274ms(2) · followThroughEnd D 546.1ms(2) · recoveryEnd D 596ms(1)",
+    "note": "the briefing quoted dev accel 170 / contact 66 / followEnd 266ms; the repo's CURRENT bench (before and after W5, identical both times) measures the D(v2) numbers above — the quoted figures do not match the current repo state and predate concurrent wave-b workstream churn"
+  },
+  "gates": {
+    "pnpm typecheck": "green (all packages)",
+    "swing-lab vitest": "143/143 passed (114 at W5 start; +25 W5 phase tests; +4 added concurrently by another workstream, unbroken)"
+  }
+}

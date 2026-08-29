@@ -1,0 +1,688 @@
+{
+  "datasetId": "pickle-real",
+  "version": "pickle-real-v0.2",
+  "schemaVersion": 2,
+  "createdAtIso": "2026-08-28T22:53:41.497Z",
+  "immutable": true,
+  "counts": {
+    "uniqueSources": 8,
+    "registeredFiles": 13,
+    "sessions": 7,
+    "annotatedCases": 5,
+    "targetEvents": 5,
+    "annotators": 1,
+    "expertCoaches": 0
+  },
+  "corpus": {
+    "sources": 20,
+    "sourcesByOrigin": {
+      "wikimedia_commons": 4,
+      "dvids": 16
+    },
+    "trainingEligibleSources": 20,
+    "rightsQuarantinedSources": 0,
+    "recordings": 26,
+    "rootRecordings": 17,
+    "sessions": 12,
+    "rootFootageMinutes": 62.9,
+    "splitLadder": {
+      "dev": {
+        "sessions": [
+          "dvids-warriorgames-2026",
+          "afn-sigonella-2025",
+          "afn-sasebo-2025-06",
+          "dvids-986421",
+          "dvids-1008415",
+          "dvids-marne-2024",
+          "dvids-943757",
+          "wm-tournament-2014",
+          "dvids-1007845"
+        ],
+        "rootMinutes": 21.6
+      },
+      "locked_test": {
+        "sessions": [
+          "afn-vic-2025"
+        ],
+        "rootMinutes": 1
+      },
+      "shadow": {
+        "sessions": [
+          "dvids-espn-oneyearout-2026",
+          "dvids-906546"
+        ],
+        "rootMinutes": 40.1
+      }
+    },
+    "splitPolicy": "session-level, deterministic salted-hash assignment for new sessions; pinned (documented) for previously inspected sessions; derived recordings inherit the parent session; shadow is never mined/inspected"
+  },
+  "tiers": {
+    "GOLD": {
+      "definition": "human-verified ground truth (single annotator devin-visual-v1 — second annotator still absent, recorded gap)",
+      "labels": {
+        "paddleFrames": 40,
+        "otherPaddleFrames": 4,
+        "ballFrames": 22,
+        "contactEstimates": 5,
+        "strokeLabels": 5,
+        "phaseBoundaries": 25,
+        "eventLabels": 9
+      },
+      "taBenchVerifiedCases": 7
+    },
+    "SILVER": {
+      "definition": "verified teacher/prelabel output",
+      "count": 0,
+      "note": "no teacher output has passed verification yet — nothing is silver-washed"
+    },
+    "TIER_C": {
+      "definition": "machine-mined candidates; NEVER reported as labels",
+      "candidateStrokeEvents": 199,
+      "byMiner": [
+        "video-mining-3 (corpus factory: scene → 12s windows → tracks → kinematic proposals → cross-window dedup)"
+      ],
+      "taBenchProposedCases": 281
+    }
+  },
+  "corpusArtifacts": {
+    "sources": {
+      "path": "datasets/corpus/sources.json",
+      "sha256": "33d87264180736e23e422364bf7541a7292a96b753949b01feac66a48f6ba6c5"
+    },
+    "recordings": {
+      "path": "datasets/corpus/recordings.json",
+      "sha256": "81b647087f1d27a69ad85f5d8063cf618e84be736571a540ca2a2ca706f1c620"
+    },
+    "splits": {
+      "path": "datasets/corpus/splits.json",
+      "sha256": "de4635d41f28da6ecdd73610c1fa2f639e414f0b4d682e06c9217497fa217772"
+    },
+    "dedupReport": {
+      "path": "datasets/corpus/dedup-report.json",
+      "sha256": "ad49de6cf91c1966b500c06bb9f5db2cea345dbf7e4651531beaa53dfbee06e8"
+    },
+    "failureQueue": {
+      "path": "datasets/corpus/failure-queue.json",
+      "sha256": "93dce243f7d718e8dbeb58c7a4539bdfacc9dfe49a3b99ff32c6cbf9defb1c1e"
+    },
+    "annotationQueue": {
+      "path": "datasets/corpus/annotation-queue.json",
+      "sha256": "a6c6d640c1be3d01b4b94904c5ae18b50db631fa4b51712fb4cd410abb4fc532"
+    },
+    "learningCurves": {
+      "path": "datasets/corpus/learning-curves.json",
+      "sha256": "e77e50b436cd7db10b945271818cd5cef1fdc688cba70bbcbfd89e69c25a19e3"
+    },
+    "taCases": {
+      "path": "datasets/ta-bench/cases.json",
+      "sha256": "171201203357037893c58b75678d24c920b5db914af3599d2d0f765e94653e81"
+    },
+    "eventShards": [
+      {
+        "path": "datasets/corpus/events/rec-1c1286ce675e.jsonl",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "events": 0
+      },
+      {
+        "path": "datasets/corpus/events/rec-44c0c451500c.jsonl",
+        "sha256": "b109a386c7dd0e518b4e2848b70604ef497cdf5ff1c30429e7cb9528a562db26",
+        "events": 20
+      },
+      {
+        "path": "datasets/corpus/events/rec-5bf0e6a85afb.jsonl",
+        "sha256": "b100aeffc313e5a4d3146beda8f59d3597b63a197623940a78fa1057bf191f98",
+        "events": 19
+      },
+      {
+        "path": "datasets/corpus/events/rec-6e06a3157947.jsonl",
+        "sha256": "820d1589f3f90c053a9c519d528824a5004a625334806c51f5a66ddaa432dd1b",
+        "events": 5
+      },
+      {
+        "path": "datasets/corpus/events/rec-75c28e175c47.jsonl",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "events": 0
+      },
+      {
+        "path": "datasets/corpus/events/rec-912aeaa8c30c.jsonl",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "events": 0
+      },
+      {
+        "path": "datasets/corpus/events/rec-916657917f2b.jsonl",
+        "sha256": "119ccd9f40c879bff1c2f5b2483dc2615911110c70cdfb8361703db8a01a70c4",
+        "events": 28
+      },
+      {
+        "path": "datasets/corpus/events/rec-960a1a200d6d.jsonl",
+        "sha256": "af93a73b5d01f59641f7893057bedef4e7f90d42cd1b7e4a90f13834e1e8084b",
+        "events": 47
+      },
+      {
+        "path": "datasets/corpus/events/rec-96ae65019c30.jsonl",
+        "sha256": "0dad0cc4bffc3d10d39ddcad11f710ff47e66fdd17e850098933e45c4fb389cd",
+        "events": 9
+      },
+      {
+        "path": "datasets/corpus/events/rec-afd0b6bad5d0.jsonl",
+        "sha256": "7483b71111e8e08cc59d18084a104e0afd65b662fba3799e857a666bf9a03096",
+        "events": 14
+      },
+      {
+        "path": "datasets/corpus/events/rec-b6f280b2900c.jsonl",
+        "sha256": "129f21a8d6d6d61222f5fdf0d727a2394b58ce26be9b4978c57590fdcf120c1b",
+        "events": 24
+      },
+      {
+        "path": "datasets/corpus/events/rec-d230484fbaa5.jsonl",
+        "sha256": "8cb2ae4b3c6a2056c7570311007efe87cd777f0cb9604ec5db4385725c40b15c",
+        "events": 12
+      },
+      {
+        "path": "datasets/corpus/events/rec-faead33a362c.jsonl",
+        "sha256": "5a6ec978e028d15b4772156d06fbbe95326c310c2571c88d40feae605caab10b",
+        "events": 21
+      }
+    ]
+  },
+  "splitStrategy": "by sessionKey (player identity unavailable beyond session grouping at this corpus size); frames are never split",
+  "splits": {
+    "held_out": [
+      "wm-tournament-2014"
+    ],
+    "development": [
+      "wm-tournament-2014",
+      "afn-sasebo-2025-06"
+    ],
+    "test_held_out": [
+      "afn-vic-2025"
+    ]
+  },
+  "devInspectionLog": [
+    "wm-volley-02, afn-sasebo-rally1, afn-sasebo-rally2: used for identity/occlusion/event debugging",
+    "wm-dink-01: held out from tuning; inspected only for annotation + causal verification",
+    "afn-vic-rally1: selected from two stills; single pipeline run; no threshold iteration"
+  ],
+  "exclusions": [
+    {
+      "id": "wm-farplayer-return",
+      "reason": "PLAYER_ASSOCIATION_FAILURE exhibit — multi-player far-court scene, target-player concept ill-defined"
+    },
+    {
+      "id": "afn-vic-rally1 (original 22-28s cut)",
+      "reason": "SCENE_CUT_UNDETECTED — spans rally + interview shots; preserved as failure exhibit"
+    },
+    {
+      "id": "afn-infocus-pro",
+      "reason": "registered, unlabeled (clinic/interview footage; gameplay segments pending annotation)"
+    }
+  ],
+  "hardNegativePool": [
+    "datasets/ball-bench/failures/BALL_FALSE_POSITIVE_BACKGROUND-wm-dink-01 (background drift track)",
+    "datasets/ball-bench/failures/SCENE_CUT_UNDETECTED-afn-vic-rally1 (whiteboard-scene ball+contact false positives)",
+    "datasets/ball-bench/failures/BALL_BODY_OVERLAP-afn-sasebo-rally1 (fragmentation region)"
+  ],
+  "cases": [
+    {
+      "caseId": "wm-dink-01",
+      "sessionKey": "wm-tournament-2014",
+      "sourceKey": "wm-pickleball-game",
+      "split": "held_out",
+      "annotators": [
+        "devin-visual-v1"
+      ],
+      "refs": {
+        "video": {
+          "path": "datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+          "sha256": "7d396a6d65669fc3b7fc3c33988e257be08f830e93ca20c51f38171fca0959a7"
+        },
+        "annotation": {
+          "path": "datasets/paddle-bench/bundles/wm-dink-01/annotation/devin-visual-v1.json",
+          "sha256": "ed4298e7c8c63ac0de874a981a3085814b0dfb6ecea5bc4943eaea33ea08e8d7"
+        },
+        "pose": {
+          "path": "datasets/paddle-bench/runs/wm-dink-01/pose.json",
+          "sha256": "610ddbeadd7202cc8441130572eaf679f716b94fa8a03054cc66de4a1858d4a0"
+        },
+        "people": {
+          "path": "datasets/paddle-bench/runs/wm-dink-01/people.json",
+          "sha256": "40154839a3ef7405bf9f24308640e39b8c52a40052e83f345d8a91d557759d64"
+        },
+        "report": {
+          "path": "datasets/paddle-bench/runs/wm-dink-01/report.json",
+          "sha256": "060244dc619ba5a9b5718e928e481c402894e15aa278fa87d5456dcda31a1034"
+        },
+        "debug": {
+          "path": "datasets/paddle-bench/runs/wm-dink-01/debug.json",
+          "sha256": "15e9d7ab1973156c84f733082ac1e59569dddb98655550e159342efcea3de3ae"
+        },
+        "sequence": {
+          "path": "datasets/paddle-bench/runs/wm-dink-01/sequence.json",
+          "sha256": "5a6fe40d092b2b37955926480ccbb1c34a91828dbbc54e66ecb483e6c0872405"
+        }
+      }
+    },
+    {
+      "caseId": "wm-volley-02",
+      "sessionKey": "wm-tournament-2014",
+      "sourceKey": "wm-pickleball-game",
+      "split": "development",
+      "annotators": [
+        "devin-visual-v1"
+      ],
+      "refs": {
+        "video": {
+          "path": "datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+          "sha256": "8b77606225ba0e3543accc6195c7fb10a7d312f445a73a5e4a03ab68b8862c15"
+        },
+        "annotation": {
+          "path": "datasets/paddle-bench/bundles/wm-volley-02/annotation/devin-visual-v1.json",
+          "sha256": "0e8ae24906807a43869ea27d9d6a53062cf0a11fba158c9b9777b0e1d4efb9de"
+        },
+        "pose": {
+          "path": "datasets/paddle-bench/runs/wm-volley-02/pose.json",
+          "sha256": "4d65c985b0176eb6051afcab66657105d33353192163426b20768cdf61307952"
+        },
+        "people": {
+          "path": "datasets/paddle-bench/runs/wm-volley-02/people.json",
+          "sha256": "ee7cb8bca69ddec0e31d4b7ed434607f637f87feb2021019d86be08019202323"
+        },
+        "report": {
+          "path": "datasets/paddle-bench/runs/wm-volley-02/report.json",
+          "sha256": "df8e1c95337b15b0415a0dd8ee9ffc6f42250f096c932a346baf0d7f58944ef4"
+        },
+        "debug": {
+          "path": "datasets/paddle-bench/runs/wm-volley-02/debug.json",
+          "sha256": "8a83207dd3cace1bfe292128c80cd08229785d8563902a868503ab0c825f7ef5"
+        },
+        "sequence": {
+          "path": "datasets/paddle-bench/runs/wm-volley-02/sequence.json",
+          "sha256": "867c869e5c5648d5681e86b0536c2b985143f10b948a5f58bbdf5981ad143105"
+        }
+      }
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "sessionKey": "afn-sasebo-2025-06",
+      "sourceKey": "afn-sasebo-indoor",
+      "split": "development",
+      "annotators": [
+        "devin-visual-v1"
+      ],
+      "refs": {
+        "video": {
+          "path": "datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+          "sha256": "21fb75446a038ed5fb268b4287b7b6b2831d3712cbb05fedb21b97e440ad2daf"
+        },
+        "annotation": {
+          "path": "datasets/paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v1.json",
+          "sha256": "5d1db250d07563cadf0f63d5aef827eefe801a864abbef3923c284f4cef22820"
+        },
+        "pose": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally1/pose.json",
+          "sha256": "53449dfa2a56241bae68d951db58e13d37a7266f0286b9e9cb588a7483221369"
+        },
+        "people": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally1/people.json",
+          "sha256": "67b3e01a279ab983d6d8b20cd0b438aff1411976d60b081af8a781bee6189d26"
+        },
+        "report": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally1/report.json",
+          "sha256": "09367c80a88dd4d8efe7703f7ea3bd9c907454a41ebccb739c8b33f16ccb0573"
+        },
+        "debug": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally1/debug.json",
+          "sha256": "0d83630e1faacdc4a89eeef585c3aa473b04329e32d590b77959a8919926eba7"
+        },
+        "sequence": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally1/sequence.json",
+          "sha256": "374b88a3f1b279d6e860e99e8f5142c7a5b374216a0e614efbe04186f8bfa489"
+        }
+      }
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "sessionKey": "afn-sasebo-2025-06",
+      "sourceKey": "afn-sasebo-indoor",
+      "split": "development",
+      "annotators": [
+        "devin-visual-v1"
+      ],
+      "refs": {
+        "video": {
+          "path": "datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+          "sha256": "0c19a6f0251d78c859d4855edc6fda1253b674fc29ea235b0f676706aa00eafc"
+        },
+        "annotation": {
+          "path": "datasets/paddle-bench/bundles/afn-sasebo-rally2/annotation/devin-visual-v1.json",
+          "sha256": "9cd4de4b0adc1d995dfeb958ddf84d562e2ded200e44cd097897dcd6ece00fe4"
+        },
+        "pose": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally2/pose.json",
+          "sha256": "68d220206a03c38ce938f8a691ecd718fc874406b4d89222d991ba457abad04d"
+        },
+        "people": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally2/people.json",
+          "sha256": "4f001238587d8bd7641292373fd1bd7dffc98aae777a33a7255187974ec7437b"
+        },
+        "report": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally2/report.json",
+          "sha256": "4887092b36541b82eb47edbfb2b0065961f93faede46d58df93629515ec6a110"
+        },
+        "debug": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally2/debug.json",
+          "sha256": "31d1c4de1556da05d6ef351cc71dc3c6f13864b63dc021792614c39beac859f2"
+        },
+        "sequence": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally2/sequence.json",
+          "sha256": "b8f303f1f9a483cf91702daf82ce3793ef1976706c807d2bfff72955ee580e7a"
+        }
+      }
+    },
+    {
+      "caseId": "afn-vic-rally1",
+      "sessionKey": "afn-vic-2025",
+      "sourceKey": "afn-provic",
+      "split": "test_held_out",
+      "annotators": [
+        "devin-visual-v1"
+      ],
+      "refs": {
+        "video": {
+          "path": "datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+          "sha256": "024decaeb66e7eacd2b4d98673aa3adc02d00af591afcc5ccc851a679836a05c"
+        },
+        "annotation": {
+          "path": "datasets/paddle-bench/bundles/afn-vic-rally1/annotation/devin-visual-v1.json",
+          "sha256": "fbad0dd87634770dcbb6d93ebf3f6de9d7eb268475003649f637924503f7e4d4"
+        },
+        "pose": {
+          "path": "datasets/paddle-bench/runs/afn-vic-rally1/pose.json",
+          "sha256": "521456b17422940c84fc69d6ee7628e3cfe4ba5119c597f7f6191a86389c0dba"
+        },
+        "people": {
+          "path": "datasets/paddle-bench/runs/afn-vic-rally1/people.json",
+          "sha256": "b2b28ba7eb56a5c8cbec4a18c09fc6bb97ff93c6fd804bcbc1738d79f2e7d644"
+        },
+        "report": {
+          "path": "datasets/paddle-bench/runs/afn-vic-rally1/report.json",
+          "sha256": "dd09a708121551ad594bb0b555135db304d1ab4caf0d8855cf3a3188acc002b2"
+        },
+        "debug": {
+          "path": "datasets/paddle-bench/runs/afn-vic-rally1/debug.json",
+          "sha256": "654999db7240e3ef6a698ebe8b9ee81515ed577d4665f5e450f8ff9d470633a9"
+        },
+        "sequence": {
+          "path": "datasets/paddle-bench/runs/afn-vic-rally1/sequence.json",
+          "sha256": "67c6549b403cbe60b2340ae1b02a1eec9901d9a268a71f96c41797159f1ec526"
+        }
+      }
+    }
+  ],
+  "events": [
+    {
+      "exampleId": "wm-dink-01#E1",
+      "caseId": "wm-dink-01",
+      "sessionKey": "wm-tournament-2014",
+      "split": "held_out",
+      "event": {
+        "eventStartMs": 1050,
+        "contactMs": 1260,
+        "eventEndMs": 1650,
+        "owner": "target",
+        "note": "yellow-cap backhand dink"
+      },
+      "strokeV3": "BACKHAND_DINK",
+      "contactUncertainty": "plus_minus_2",
+      "refs": {
+        "video": {
+          "path": "datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+          "sha256": "7d396a6d65669fc3b7fc3c33988e257be08f830e93ca20c51f38171fca0959a7"
+        },
+        "annotation": {
+          "path": "datasets/paddle-bench/bundles/wm-dink-01/annotation/devin-visual-v1.json",
+          "sha256": "ed4298e7c8c63ac0de874a981a3085814b0dfb6ecea5bc4943eaea33ea08e8d7"
+        },
+        "pose": {
+          "path": "datasets/paddle-bench/runs/wm-dink-01/pose.json",
+          "sha256": "610ddbeadd7202cc8441130572eaf679f716b94fa8a03054cc66de4a1858d4a0"
+        },
+        "people": {
+          "path": "datasets/paddle-bench/runs/wm-dink-01/people.json",
+          "sha256": "40154839a3ef7405bf9f24308640e39b8c52a40052e83f345d8a91d557759d64"
+        },
+        "report": {
+          "path": "datasets/paddle-bench/runs/wm-dink-01/report.json",
+          "sha256": "060244dc619ba5a9b5718e928e481c402894e15aa278fa87d5456dcda31a1034"
+        },
+        "debug": {
+          "path": "datasets/paddle-bench/runs/wm-dink-01/debug.json",
+          "sha256": "15e9d7ab1973156c84f733082ac1e59569dddb98655550e159342efcea3de3ae"
+        },
+        "sequence": {
+          "path": "datasets/paddle-bench/runs/wm-dink-01/sequence.json",
+          "sha256": "5a6fe40d092b2b37955926480ccbb1c34a91828dbbc54e66ecb483e6c0872405"
+        }
+      },
+      "masks": {
+        "paddleTrack": true,
+        "ballTrack": true,
+        "contactEstimate": true
+      },
+      "annotator": "devin-visual-v1",
+      "annotationRevision": 3
+    },
+    {
+      "exampleId": "wm-volley-02#E1",
+      "caseId": "wm-volley-02",
+      "sessionKey": "wm-tournament-2014",
+      "split": "development",
+      "event": {
+        "eventStartMs": 6300,
+        "contactMs": 6680,
+        "eventEndMs": 7100,
+        "owner": "target",
+        "note": "near player forehand volley"
+      },
+      "strokeV3": "FOREHAND_VOLLEY",
+      "contactUncertainty": "exact",
+      "refs": {
+        "video": {
+          "path": "datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+          "sha256": "8b77606225ba0e3543accc6195c7fb10a7d312f445a73a5e4a03ab68b8862c15"
+        },
+        "annotation": {
+          "path": "datasets/paddle-bench/bundles/wm-volley-02/annotation/devin-visual-v1.json",
+          "sha256": "0e8ae24906807a43869ea27d9d6a53062cf0a11fba158c9b9777b0e1d4efb9de"
+        },
+        "pose": {
+          "path": "datasets/paddle-bench/runs/wm-volley-02/pose.json",
+          "sha256": "4d65c985b0176eb6051afcab66657105d33353192163426b20768cdf61307952"
+        },
+        "people": {
+          "path": "datasets/paddle-bench/runs/wm-volley-02/people.json",
+          "sha256": "ee7cb8bca69ddec0e31d4b7ed434607f637f87feb2021019d86be08019202323"
+        },
+        "report": {
+          "path": "datasets/paddle-bench/runs/wm-volley-02/report.json",
+          "sha256": "df8e1c95337b15b0415a0dd8ee9ffc6f42250f096c932a346baf0d7f58944ef4"
+        },
+        "debug": {
+          "path": "datasets/paddle-bench/runs/wm-volley-02/debug.json",
+          "sha256": "8a83207dd3cace1bfe292128c80cd08229785d8563902a868503ab0c825f7ef5"
+        },
+        "sequence": {
+          "path": "datasets/paddle-bench/runs/wm-volley-02/sequence.json",
+          "sha256": "867c869e5c5648d5681e86b0536c2b985143f10b948a5f58bbdf5981ad143105"
+        }
+      },
+      "masks": {
+        "paddleTrack": true,
+        "ballTrack": true,
+        "contactEstimate": true
+      },
+      "annotator": "devin-visual-v1",
+      "annotationRevision": 4
+    },
+    {
+      "exampleId": "afn-sasebo-rally1#E1",
+      "caseId": "afn-sasebo-rally1",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "development",
+      "event": {
+        "eventStartMs": 2600,
+        "contactMs": 2900,
+        "eventEndMs": 3600,
+        "owner": "target",
+        "note": "white-shirt woman backhand volley (labels ±2 frames)"
+      },
+      "strokeV3": "BACKHAND_VOLLEY",
+      "contactUncertainty": "plus_minus_1",
+      "refs": {
+        "video": {
+          "path": "datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+          "sha256": "21fb75446a038ed5fb268b4287b7b6b2831d3712cbb05fedb21b97e440ad2daf"
+        },
+        "annotation": {
+          "path": "datasets/paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v1.json",
+          "sha256": "5d1db250d07563cadf0f63d5aef827eefe801a864abbef3923c284f4cef22820"
+        },
+        "pose": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally1/pose.json",
+          "sha256": "53449dfa2a56241bae68d951db58e13d37a7266f0286b9e9cb588a7483221369"
+        },
+        "people": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally1/people.json",
+          "sha256": "67b3e01a279ab983d6d8b20cd0b438aff1411976d60b081af8a781bee6189d26"
+        },
+        "report": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally1/report.json",
+          "sha256": "09367c80a88dd4d8efe7703f7ea3bd9c907454a41ebccb739c8b33f16ccb0573"
+        },
+        "debug": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally1/debug.json",
+          "sha256": "0d83630e1faacdc4a89eeef585c3aa473b04329e32d590b77959a8919926eba7"
+        },
+        "sequence": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally1/sequence.json",
+          "sha256": "374b88a3f1b279d6e860e99e8f5142c7a5b374216a0e614efbe04186f8bfa489"
+        }
+      },
+      "masks": {
+        "paddleTrack": true,
+        "ballTrack": true,
+        "contactEstimate": false
+      },
+      "annotator": "devin-visual-v1",
+      "annotationRevision": 2
+    },
+    {
+      "exampleId": "afn-sasebo-rally2#E1",
+      "caseId": "afn-sasebo-rally2",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "development",
+      "event": {
+        "eventStartMs": 2380,
+        "contactMs": 2620,
+        "eventEndMs": 3050,
+        "owner": "target",
+        "note": "near gray-shirt man overhead/high hit; contact interpolated from ball transit 2500->2682 stills"
+      },
+      "strokeV3": "OVERHEAD",
+      "contactUncertainty": "plus_minus_2",
+      "refs": {
+        "video": {
+          "path": "datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+          "sha256": "0c19a6f0251d78c859d4855edc6fda1253b674fc29ea235b0f676706aa00eafc"
+        },
+        "annotation": {
+          "path": "datasets/paddle-bench/bundles/afn-sasebo-rally2/annotation/devin-visual-v1.json",
+          "sha256": "9cd4de4b0adc1d995dfeb958ddf84d562e2ded200e44cd097897dcd6ece00fe4"
+        },
+        "pose": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally2/pose.json",
+          "sha256": "68d220206a03c38ce938f8a691ecd718fc874406b4d89222d991ba457abad04d"
+        },
+        "people": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally2/people.json",
+          "sha256": "4f001238587d8bd7641292373fd1bd7dffc98aae777a33a7255187974ec7437b"
+        },
+        "report": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally2/report.json",
+          "sha256": "4887092b36541b82eb47edbfb2b0065961f93faede46d58df93629515ec6a110"
+        },
+        "debug": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally2/debug.json",
+          "sha256": "31d1c4de1556da05d6ef351cc71dc3c6f13864b63dc021792614c39beac859f2"
+        },
+        "sequence": {
+          "path": "datasets/paddle-bench/runs/afn-sasebo-rally2/sequence.json",
+          "sha256": "b8f303f1f9a483cf91702daf82ce3793ef1976706c807d2bfff72955ee580e7a"
+        }
+      },
+      "masks": {
+        "paddleTrack": true,
+        "ballTrack": false,
+        "contactEstimate": true
+      },
+      "annotator": "devin-visual-v1",
+      "annotationRevision": 1
+    },
+    {
+      "exampleId": "afn-vic-rally1#E1",
+      "caseId": "afn-vic-rally1",
+      "sessionKey": "afn-vic-2025",
+      "split": "test_held_out",
+      "event": {
+        "eventStartMs": 450,
+        "contactMs": 680,
+        "eventEndMs": 1150,
+        "owner": "target",
+        "note": "near gray-shirt man low forehand, blue ball departs toward net (still at 700ms shows ball just off paddle)"
+      },
+      "strokeV3": "FOREHAND_DRIVE",
+      "contactUncertainty": "plus_minus_1",
+      "refs": {
+        "video": {
+          "path": "datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+          "sha256": "024decaeb66e7eacd2b4d98673aa3adc02d00af591afcc5ccc851a679836a05c"
+        },
+        "annotation": {
+          "path": "datasets/paddle-bench/bundles/afn-vic-rally1/annotation/devin-visual-v1.json",
+          "sha256": "fbad0dd87634770dcbb6d93ebf3f6de9d7eb268475003649f637924503f7e4d4"
+        },
+        "pose": {
+          "path": "datasets/paddle-bench/runs/afn-vic-rally1/pose.json",
+          "sha256": "521456b17422940c84fc69d6ee7628e3cfe4ba5119c597f7f6191a86389c0dba"
+        },
+        "people": {
+          "path": "datasets/paddle-bench/runs/afn-vic-rally1/people.json",
+          "sha256": "b2b28ba7eb56a5c8cbec4a18c09fc6bb97ff93c6fd804bcbc1738d79f2e7d644"
+        },
+        "report": {
+          "path": "datasets/paddle-bench/runs/afn-vic-rally1/report.json",
+          "sha256": "dd09a708121551ad594bb0b555135db304d1ab4caf0d8855cf3a3188acc002b2"
+        },
+        "debug": {
+          "path": "datasets/paddle-bench/runs/afn-vic-rally1/debug.json",
+          "sha256": "654999db7240e3ef6a698ebe8b9ee81515ed577d4665f5e450f8ff9d470633a9"
+        },
+        "sequence": {
+          "path": "datasets/paddle-bench/runs/afn-vic-rally1/sequence.json",
+          "sha256": "67c6549b403cbe60b2340ae1b02a1eec9901d9a268a71f96c41797159f1ec526"
+        }
+      },
+      "masks": {
+        "paddleTrack": true,
+        "ballTrack": true,
+        "contactEstimate": true
+      },
+      "annotator": "devin-visual-v1",
+      "annotationRevision": 1
+    }
+  ],
+  "problems": [],
+  "warnings": [
+    "session wm-tournament-2014 spans splits: held_out, development — KNOWN LIMITATION: dev volley-02 and held-out dink-01 come from one recording (different players). Acceptable only while the corpus is tiny; future releases must separate."
+  ]
+}

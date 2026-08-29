@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "layer": "second-annotator overlap (NOT primary labels — datasets/ta-bench/cases.json untouched)",
+  "annotatorId": "devin-visual-overlap-w14",
+  "frozenAtIso": "2026-08-29T02:20:00Z",
+  "blindness": "Verdicts below were formed from the re-rendered frames (pnpm lab:ta-bench render <caseId>, datasets/ta-bench/review/<caseId>.png) BEFORE reading any verification.state/note of the primary annotator. Selection used only caseId/split/situation/verification.by.",
+  "taxonomy": "correct-lock | wrong-lock | reject (+reason). Judged from single mid-window frame: yellow=start region, lime=proposed true target, red=other tracks.",
+  "verdicts": [
+    {
+      "caseId": "ta-96ae65019c30-s2w0-p1",
+      "verdict": "correct-lock",
+      "confidence": 0.97,
+      "note": "Solo red-shirt player with paddle; lime box on his torso; yellow region centered on him; no other tracks or people."
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w1-p1",
+      "verdict": "correct-lock",
+      "confidence": 0.9,
+      "note": "Near black-shirt white-cap player centered in region, lime on torso; red-shirt opponent (red box) outside region receiving serve; fence spectators in region background are behind the fence and unboxed."
+    },
+    {
+      "caseId": "ta-faead33a362c-s3w5-p2",
+      "verdict": "correct-lock",
+      "confidence": 0.55,
+      "note": "UNCERTAIN. Region covers bench/spectator cluster; lime white-cap on-court player only clips region's right edge at mid-frame. He is the only on-court player intersecting the region (spectators behind fence line / on apron), so plausible he occupied region at window start and drifted right. Single-frame render cannot confirm start-of-window occupancy — needs video scrub guideline."
+    },
+    {
+      "caseId": "ta-44c0c451500c-s0w1-p2",
+      "verdict": "correct-lock",
+      "confidence": 0.95,
+      "note": "White ARMY player mid-rally (ball inbound) squarely inside region, lime on torso; partner + near players correctly red."
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w2-p1",
+      "verdict": "correct-lock",
+      "confidence": 0.95,
+      "note": "Serving ARMY player (ball at mouth, paddle in hand) centered in region, lime on torso; wheelchair player and khaki bystander correctly red; fence spectators behind barrier."
+    },
+    {
+      "caseId": "ta-6e06a3157947-s2w3-p1",
+      "verdict": "correct-lock",
+      "confidence": 0.8,
+      "note": "Far camo player mid-rally, ball at his paddle, lime on torso, centered in region. Contested: near camo partner's upper body overlaps region edge (red box). Machine choice = region-center occupant; reasonable."
+    },
+    {
+      "caseId": "ta-916657917f2b-s1w0-p1",
+      "verdict": "correct-lock",
+      "confidence": 0.85,
+      "note": "Near red-shirt player dominant and centered in region, lime on torso, paddle up at net; far gray-sweater opponent inside region-left (red) is a 2D depth overlap, not the region owner."
+    },
+    {
+      "caseId": "ta-b6f280b2900c-s0w3-p2",
+      "verdict": "correct-lock",
+      "confidence": 0.8,
+      "note": "White-shirt yellow-cap player in ready stance at kitchen line, centered in region, lime on torso; lunging red-vest player at region right edge and background-court figures inside region are red tracks."
+    },
+    {
+      "caseId": "ta-44c0c451500c-s1w0-p6",
+      "verdict": "wrong-lock",
+      "confidence": 0.75,
+      "note": "Lime box sits on a phone-filming staffer (black polo, lanyard) behind the ARMY player — not a player. The live region occupant is the ARMY standing player (tracked separately, red box on his torso, head/shoulder inside region). Close-up sideline scene; secondary reading is reject(unusable-scene), but a valid person exists for the region so wrong-lock is my primary call. Guideline needed: precedence of wrong-person vs unusable-scene."
+    },
+    {
+      "caseId": "ta-5bf0e6a85afb-s1w2-p20",
+      "verdict": "correct-lock",
+      "confidence": 0.7,
+      "note": "Clinic/demo segment: instructor in black actively demonstrating with paddle, lime on torso, centered in region; bench sitters and gray-shirt observer inside region are static. Target choice correct; flag whether non-rally instruction segments belong in TA gold."
+    },
+    {
+      "caseId": "ta-960a1a200d6d-s8w0-p1",
+      "verdict": "reject",
+      "rejectReason": "region_on_crowd_target_is_spectator",
+      "confidence": 0.85,
+      "note": "Lime box is on a white-shirt capped SPECTATOR leaning on the barrier (holding bottle), inside a region covering the left spectator cluster; the only live player (AIR FORCE wheelchair athlete mid-play) is outside region with a red box. Not a valid acquisition target."
+    },
+    {
+      "caseId": "ta-d230484fbaa5-s3w0-p1",
+      "verdict": "reject",
+      "rejectReason": "not_pickleball_gameplay",
+      "confidence": 0.98,
+      "note": "Formation run b-roll with 'Liberaider Games Highlights' title overlay; region covers a pack of runners, lime on one runner. No court, no paddles, no acquisition scenario."
+    }
+  ]
+}

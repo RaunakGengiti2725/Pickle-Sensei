@@ -1,0 +1,597 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://picklesensei.app/schemas/pickleball-collection-manifest.schema.json",
+  "title": "Pickle Sensei consent-first temporal stroke collection manifest",
+  "description": "Schema for first-party pickleball clips that have explicit commercial-training consent, verified capture rights, temporal technique labels, and independent human review. This file defines records; it does not claim that any records have been collected.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "datasetSnapshotId",
+    "createdAt",
+    "taxonomyVersion",
+    "consentTermsVersion",
+    "records"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "datasetSnapshotId": {
+      "$ref": "#/$defs/opaqueId"
+    },
+    "createdAt": {
+      "$ref": "#/$defs/dateTime"
+    },
+    "taxonomyVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "consentTermsVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "records": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/clipRecord"
+      }
+    }
+  },
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+    },
+    "dateTime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "frameIndex": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "clipRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clipId",
+        "athleteId",
+        "athleteGroupId",
+        "sessionId",
+        "rawAsset",
+        "capture",
+        "consent",
+        "rights",
+        "annotation",
+        "review",
+        "quality",
+        "split",
+        "eligibility"
+      ],
+      "properties": {
+        "clipId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "athleteId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "athleteGroupId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "rawAsset": {
+          "$ref": "#/$defs/rawAsset"
+        },
+        "capture": {
+          "$ref": "#/$defs/capture"
+        },
+        "consent": {
+          "$ref": "#/$defs/consent"
+        },
+        "rights": {
+          "$ref": "#/$defs/rights"
+        },
+        "annotation": {
+          "$ref": "#/$defs/annotation"
+        },
+        "review": {
+          "$ref": "#/$defs/review"
+        },
+        "quality": {
+          "$ref": "#/$defs/quality"
+        },
+        "split": {
+          "$ref": "#/$defs/split"
+        },
+        "eligibility": {
+          "$ref": "#/$defs/eligibility"
+        }
+      }
+    },
+    "rawAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assetId",
+        "sha256",
+        "recordedAt",
+        "durationMs",
+        "frameCount",
+        "frameRateFps",
+        "widthPx",
+        "heightPx",
+        "audioRemoved",
+        "derivatives"
+      ],
+      "properties": {
+        "assetId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "recordedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frameCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "frameRateFps": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "widthPx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "heightPx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "audioRemoved": {
+          "const": true
+        },
+        "derivatives": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["assetId", "sha256", "purpose"],
+            "properties": {
+              "assetId": {
+                "$ref": "#/$defs/opaqueId"
+              },
+              "sha256": {
+                "$ref": "#/$defs/sha256"
+              },
+              "purpose": {
+                "enum": ["training_clip", "pose_features", "review_proxy", "redacted_clip"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceKind",
+        "cameraView",
+        "environment",
+        "lighting",
+        "deviceClass",
+        "handedness",
+        "skillBand",
+        "ageBand",
+        "adaptivePlay",
+        "bystanderState"
+      ],
+      "properties": {
+        "sourceKind": {
+          "const": "consented_first_party_capture"
+        },
+        "cameraView": {
+          "enum": [
+            "front",
+            "rear",
+            "dominant_side",
+            "nondominant_side",
+            "diagonal",
+            "overhead",
+            "other"
+          ]
+        },
+        "environment": {
+          "enum": ["indoor", "outdoor"]
+        },
+        "lighting": {
+          "enum": ["daylight", "court_lighting", "mixed", "low_light"]
+        },
+        "deviceClass": {
+          "type": "string",
+          "minLength": 1
+        },
+        "handedness": {
+          "enum": ["left", "right", "ambidextrous", "unknown"]
+        },
+        "skillBand": {
+          "enum": ["novice", "recreational", "intermediate", "advanced", "professional", "unknown"]
+        },
+        "ageBand": {
+          "enum": ["minor_13_17", "adult_18_34", "adult_35_54", "adult_55_plus", "withheld"]
+        },
+        "adaptivePlay": {
+          "type": "boolean"
+        },
+        "bystanderState": {
+          "enum": ["none", "released", "irreversibly_redacted"]
+        }
+      }
+    },
+    "consent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "participantReleaseId",
+        "termsVersion",
+        "signedAt",
+        "ageClass",
+        "guardianReleaseId",
+        "scopes",
+        "withdrawalProcessVersion",
+        "state"
+      ],
+      "properties": {
+        "participantReleaseId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "termsVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "signedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "ageClass": {
+          "enum": ["adult", "minor"]
+        },
+        "guardianReleaseId": {
+          "oneOf": [{ "$ref": "#/$defs/opaqueId" }, { "type": "null" }]
+        },
+        "scopes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "commercialModelTraining",
+            "productEvaluation",
+            "derivedFeatures",
+            "internalHumanReview",
+            "publicRedistribution"
+          ],
+          "properties": {
+            "commercialModelTraining": {
+              "const": true
+            },
+            "productEvaluation": {
+              "const": true
+            },
+            "derivedFeatures": {
+              "const": true
+            },
+            "internalHumanReview": {
+              "const": true
+            },
+            "publicRedistribution": {
+              "type": "boolean"
+            }
+          }
+        },
+        "withdrawalProcessVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "const": "active"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "ageClass": { "const": "minor" }
+            }
+          },
+          "then": {
+            "properties": {
+              "guardianReleaseId": {
+                "$ref": "#/$defs/opaqueId"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "guardianReleaseId": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "rights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "captureRightsHolderId",
+        "commercialTrainingGrantId",
+        "thirdPartyMediaPresent",
+        "bystanderClearanceComplete",
+        "verifiedBy",
+        "verifiedAt",
+        "state"
+      ],
+      "properties": {
+        "captureRightsHolderId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "commercialTrainingGrantId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "thirdPartyMediaPresent": {
+          "const": false
+        },
+        "bystanderClearanceComplete": {
+          "const": true
+        },
+        "verifiedBy": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "verifiedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "state": {
+          "const": "cleared"
+        }
+      }
+    },
+    "annotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "annotationVersion",
+        "techniqueId",
+        "outcome",
+        "strokeStartFrame",
+        "contactStartFrame",
+        "contactEndFrame",
+        "strokeEndFrame",
+        "phases",
+        "modifiers",
+        "checkpointObservability",
+        "modelSuggestion"
+      ],
+      "properties": {
+        "annotationVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "techniqueId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outcome": {
+          "enum": ["recognized_technique", "unknown_technique", "no_stroke", "partial_or_aborted"]
+        },
+        "strokeStartFrame": {
+          "$ref": "#/$defs/frameIndex"
+        },
+        "contactStartFrame": {
+          "$ref": "#/$defs/frameIndex"
+        },
+        "contactEndFrame": {
+          "$ref": "#/$defs/frameIndex"
+        },
+        "strokeEndFrame": {
+          "$ref": "#/$defs/frameIndex"
+        },
+        "phases": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "startFrame", "endFrame", "observable"],
+            "properties": {
+              "name": {
+                "enum": ["ready", "load", "acceleration", "contact", "follow_through", "recovery"]
+              },
+              "startFrame": {
+                "$ref": "#/$defs/frameIndex"
+              },
+              "endFrame": {
+                "$ref": "#/$defs/frameIndex"
+              },
+              "observable": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "modifiers": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" },
+              { "type": "null" }
+            ]
+          }
+        },
+        "checkpointObservability": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "enum": ["observable", "partially_observable", "not_observable"]
+          }
+        },
+        "modelSuggestion": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["modelId", "modelVersion", "techniqueId", "confidence"],
+              "properties": {
+                "modelId": {
+                  "$ref": "#/$defs/opaqueId"
+                },
+                "modelVersion": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "techniqueId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "confidence": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              }
+            },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "independentAnnotatorIds",
+        "coachReviewerId",
+        "reviewedAt",
+        "agreement",
+        "adjudicationDecision"
+      ],
+      "properties": {
+        "independentAnnotatorIds": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/opaqueId"
+          }
+        },
+        "coachReviewerId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "reviewedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "agreement": {
+          "enum": ["agreed", "disputed_then_adjudicated"]
+        },
+        "adjudicationDecision": {
+          "enum": ["accepted", "rejected", "needs_recapture"]
+        }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "athleteVisibility",
+        "paddleVisibility",
+        "ballVisibility",
+        "motionBlur",
+        "occlusion",
+        "poseTrackCoverage",
+        "usableForTechnique",
+        "usableForContact"
+      ],
+      "properties": {
+        "athleteVisibility": {
+          "enum": ["full_body", "required_joints_only", "insufficient"]
+        },
+        "paddleVisibility": {
+          "enum": ["clear", "partial", "not_visible"]
+        },
+        "ballVisibility": {
+          "enum": ["clear", "partial", "not_visible"]
+        },
+        "motionBlur": {
+          "enum": ["low", "moderate", "severe"]
+        },
+        "occlusion": {
+          "enum": ["none", "partial", "severe"]
+        },
+        "poseTrackCoverage": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "usableForTechnique": {
+          "type": "boolean"
+        },
+        "usableForContact": {
+          "type": "boolean"
+        }
+      }
+    },
+    "split": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["partition", "assignmentVersion", "groupedByAthlete", "leakageAuditId"],
+      "properties": {
+        "partition": {
+          "enum": ["train", "validation", "test", "locked_holdout"]
+        },
+        "assignmentVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "groupedByAthlete": {
+          "const": true
+        },
+        "leakageAuditId": {
+          "$ref": "#/$defs/opaqueId"
+        }
+      }
+    },
+    "eligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "approvedBy", "approvedAt", "withdrawalState"],
+      "properties": {
+        "state": {
+          "const": "approved_for_snapshot"
+        },
+        "approvedBy": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "approvedAt": {
+          "$ref": "#/$defs/dateTime"
+        },
+        "withdrawalState": {
+          "const": "active"
+        }
+      }
+    }
+  }
+}

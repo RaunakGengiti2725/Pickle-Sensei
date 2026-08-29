@@ -1,0 +1,44 @@
+{
+  "experimentId": "EXP-2026-08-28-ownership-gold-expansion",
+  "question": "Turn the microscopic paddle-ownership evidence (2 dual frames; every S3 change validated on 2 points) into a real measurement set, using D-FINE prelabels so the human only decides ownership.",
+  "method": "lab:own propose — frames with ≥2 confident spatially-distinct D-FINE detections inside bench cases, ≥400ms spacing, rendered with color-indexed boxes; human (devin-visual-v1) verdicts per box: target/other/reject/ambiguous; geometry = detection box center (S0 recall 1.0 on visible paddles). All verdicts + notes preserved in ownership-review.json; ambiguous is legitimate truth and stays out of P/R.",
+  "labelsAdded": {
+    "framesReviewed": 27,
+    "targetLabels": 14,
+    "otherLabels": 33,
+    "rejectsHardNegatives": 15,
+    "ambiguous": 7,
+    "dualLabeledFrames": { "before": 2, "after": 20 },
+    "perCase": { "afn-sasebo-rally1": 15, "afn-sasebo-rally2": 9, "afn-vic-rally1": 18, "wm-volley-02": 3, "wm-dink-01": 8 }
+  },
+  "hardNegativeClasses": [
+    "paddle-graphic banner flag (3 occurrences, wm-volley)",
+    "adidas stripe pants (2 occurrences, sasebo)",
+    "wall electrical box (2 occurrences, vic)",
+    "net tape sections (2 occurrences)",
+    "ground paddle with NO owner (2 occurrences, sasebo-rally2 — poisons ownership if selected)",
+    "ball itself boxed as paddle (1)",
+    "duplicate sub-boxes of one paddle (4)"
+  ],
+  "measurements": {
+    "wrongPlayerRate": "1/19 dual frames (5.3%) — first real measurement (was 0/2)",
+    "waterfallOnExpandedInstrument": {
+      "note": "label set grew 27→41 visible target frames; stage numbers are a NEW BASELINE, not comparable to the old 27-label instrument",
+      "S0": { "P": 0.76, "R": 1.0 },
+      "S3_ownership": { "P": 0.63, "R": 0.49, "deltaRecall": -0.49 },
+      "S4_selection": { "P": 0.69, "R": 0.27, "deltaRecall": -0.22 },
+      "S5_final": { "P": 0.42, "R": 0.32 },
+      "oracle": { "perfectSelection": 0.51, "perfectMerge": 0.98 }
+    },
+    "newFinding": "S4 primary selection ZEROES OUT afn-sasebo-rally1 (S3 keeps 9/13 → S4 0/13): after ownership, hypothesis selection discards the correct paddle track entirely on that case. Selection is a second measured bottleneck, distinct from ownership."
+  },
+  "knownSliceEvidence": [
+    "edge-on target paddle: rally2 target's paddle undetected in every reviewed frame while 2-3 other paddles visible (S2 R 0.50, S3 R 0.00 on that case)",
+    "hidden-at-ready: dink/volley targets hide the paddle in front of the body between strokes"
+  ],
+  "nextActions": [
+    "S3/S4 fixes can now be validated on 20 dual frames + 15 hard negatives instead of 2 points",
+    "remaining 12 unreviewed queue frames + corpus event windows can extend past 20 dual frames",
+    "fragment-merge promotion (ceiling R 0.98) still blocked on the event-selection cascade — decouple event proposal from paddle-speed first"
+  ]
+}

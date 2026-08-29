@@ -1,0 +1,1223 @@
+{
+  "generatedAtIso": "2026-08-29T02:12:47.172Z",
+  "entries": [
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-44c0c451500c scene 0 [0–18443ms]",
+      "why": "20 tracks, 14 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-44c0c451500c scene 1 [18443–54488ms]",
+      "why": "56 tracks, 54 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-44c0c451500c scene 4 [71430–109459ms]",
+      "why": "95 tracks, 93 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-5bf0e6a85afb scene 1 [500–43310ms]",
+      "why": "46 tracks, 45 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-5bf0e6a85afb scene 3 [51051–59560ms]",
+      "why": "23 tracks, 15 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-6e06a3157947 scene 0 [0–13146ms]",
+      "why": "23 tracks, 15 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-6e06a3157947 scene 2 [20320–55088ms]",
+      "why": "30 tracks, 29 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-916657917f2b scene 0 [0–27060ms]",
+      "why": "32 tracks, 26 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-916657917f2b scene 1 [27060–73707ms]",
+      "why": "117 tracks, 117 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-916657917f2b scene 2 [73707–85369ms]",
+      "why": "17 tracks, 13 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-960a1a200d6d scene 0 [0–24800ms]",
+      "why": "33 tracks, 29 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-960a1a200d6d scene 1 [24800–52833ms]",
+      "why": "13 tracks, 10 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-960a1a200d6d scene 3 [64333–72800ms]",
+      "why": "14 tracks, 10 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-960a1a200d6d scene 4 [72800–97700ms]",
+      "why": "13 tracks, 11 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-960a1a200d6d scene 8 [172800–272033ms]",
+      "why": "134 tracks, 132 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-960a1a200d6d scene 9 [272033–307500ms]",
+      "why": "37 tracks, 33 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-96ae65019c30 scene 0 [0–18118ms]",
+      "why": "13 tracks, 10 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-96ae65019c30 scene 1 [18118–33350ms]",
+      "why": "35 tracks, 35 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-96ae65019c30 scene 4 [46196–56340ms]",
+      "why": "15 tracks, 11 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-96ae65019c30 scene 5 [56340–67551ms]",
+      "why": "35 tracks, 33 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:SCENE_CHURN",
+      "ref": "rec-afd0b6bad5d0 scene -1 [0–107792ms]",
+      "why": "51 cuts in 1.8min (28.4/min) — gameplay rarely stabilizes"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-afd0b6bad5d0 scene 2 [2417–6542ms]",
+      "why": "17 tracks, 11 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-b6f280b2900c scene 0 [0–237240ms]",
+      "why": "232 tracks, 232 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-d230484fbaa5 scene 5 [12112–30931ms]",
+      "why": "21 tracks, 20 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-d230484fbaa5 scene 13 [50017–64865ms]",
+      "why": "49 tracks, 48 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-d230484fbaa5 scene 15 [67000–72105ms]",
+      "why": "16 tracks, 13 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-d230484fbaa5 scene 20 [75242–83150ms]",
+      "why": "20 tracks, 17 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-d230484fbaa5 scene 23 [91491–105138ms]",
+      "why": "14 tracks, 13 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-d230484fbaa5 scene 24 [105138–116083ms]",
+      "why": "23 tracks, 17 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 1,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-96ae65019c30-s3w0-p2-43327",
+      "why": "low prominence (is this a stroke at all?); 3 people in scene (ownership/contamination risk); small player (far court / small paddle+ball); target track has loss periods"
+    },
+    {
+      "priority": 1,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-96ae65019c30-s3w0-p2-46029",
+      "why": "low prominence (is this a stroke at all?); 3 people in scene (ownership/contamination risk); small player (far court / small paddle+ball); target track has loss periods"
+    },
+    {
+      "priority": 0.95,
+      "kind": "FAILURE:TRACK_FRAGMENTATION",
+      "ref": "rec-faead33a362c scene 2 [22167–44042ms]",
+      "why": "13 tracks, 9 short (<30% coverage) — identity churn"
+    },
+    {
+      "priority": 0.95,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-faead33a362c-s0w1-p3-12583",
+      "why": "low prominence (is this a stroke at all?); 5 people in scene (ownership/contamination risk); small player (far court / small paddle+ball)"
+    },
+    {
+      "priority": 0.95,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-faead33a362c-s0w1-p3-11292",
+      "why": "low prominence (is this a stroke at all?); 5 people in scene (ownership/contamination risk); small player (far court / small paddle+ball)"
+    },
+    {
+      "priority": 0.95,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-faead33a362c-s0w1-p3-10292",
+      "why": "low prominence (is this a stroke at all?); 5 people in scene (ownership/contamination risk); small player (far court / small paddle+ball)"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-44c0c451500c-s0w1-p4-15090",
+      "why": "9 people in scene (ownership/contamination risk); small player (far court / small paddle+ball); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-44c0c451500c-s0w1-p1-11019",
+      "why": "low prominence (is this a stroke at all?); 9 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-44c0c451500c-s2w0-p1-59868",
+      "why": "low prominence (is this a stroke at all?); 9 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-44c0c451500c-s2w0-p1-62921",
+      "why": "low prominence (is this a stroke at all?); 9 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-44c0c451500c-s1w3-p8-51577",
+      "why": "low prominence (is this a stroke at all?); 11 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-44c0c451500c-s2w0-p1-60953",
+      "why": "low prominence (is this a stroke at all?); 9 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-44c0c451500c-s1w3-p8-50325",
+      "why": "low prominence (is this a stroke at all?); 11 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-5bf0e6a85afb-s1w0-p2-45012",
+      "why": "low prominence (is this a stroke at all?); 5 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-5bf0e6a85afb-s1w0-p1-49650",
+      "why": "low prominence (is this a stroke at all?); 5 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-5bf0e6a85afb-s1w0-p1-47714",
+      "why": "low prominence (is this a stroke at all?); 5 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-5bf0e6a85afb-s1w0-p1-46547",
+      "why": "low prominence (is this a stroke at all?); 5 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-5bf0e6a85afb-s1w0-p1-45279",
+      "why": "low prominence (is this a stroke at all?); 5 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s0w2-p3-23991",
+      "why": "low prominence (is this a stroke at all?); 10 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s0w1-p1-14781",
+      "why": "low prominence (is this a stroke at all?); 15 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s1w1-p2-41425",
+      "why": "low prominence (is this a stroke at all?); 26 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s1w1-p2-38422",
+      "why": "low prominence (is this a stroke at all?); 26 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s1w1-p2-39189",
+      "why": "low prominence (is this a stroke at all?); 26 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s0w1-p1-11161",
+      "why": "low prominence (is this a stroke at all?); 15 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s0w1-p20-20437",
+      "why": "low prominence (is this a stroke at all?); 15 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s1w4-p15-69319",
+      "why": "low prominence (is this a stroke at all?); 21 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s0w1-p1-10494",
+      "why": "low prominence (is this a stroke at all?); 15 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s0w1-p1-10093",
+      "why": "low prominence (is this a stroke at all?); 15 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s1w1-p2-40724",
+      "why": "low prominence (is this a stroke at all?); 26 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s9w2-p1-301700",
+      "why": "low prominence (is this a stroke at all?); 16 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s8w6-p1-238400",
+      "why": "low prominence (is this a stroke at all?); 27 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s0w1-p2-13600",
+      "why": "low prominence (is this a stroke at all?); 15 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s8w5-p28-231367",
+      "why": "low prominence (is this a stroke at all?); 35 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s8w9-p4-265500",
+      "why": "low prominence (is this a stroke at all?); 20 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s1w2-p4-47367",
+      "why": "low prominence (is this a stroke at all?); 5 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s1w0-p2-28800",
+      "why": "low prominence (is this a stroke at all?); 9 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s8w9-p4-267200",
+      "why": "low prominence (is this a stroke at all?); 20 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s8w5-p28-229167",
+      "why": "low prominence (is this a stroke at all?); 35 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s1w2-p4-48933",
+      "why": "low prominence (is this a stroke at all?); 5 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s8w6-p1-237500",
+      "why": "low prominence (is this a stroke at all?); 27 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s5w0-p2-106967",
+      "why": "low prominence (is this a stroke at all?); 6 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s8w6-p1-233167",
+      "why": "low prominence (is this a stroke at all?); 27 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s8w6-p1-234000",
+      "why": "low prominence (is this a stroke at all?); 27 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s8w6-p1-235067",
+      "why": "low prominence (is this a stroke at all?); 27 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s8w6-p1-235700",
+      "why": "low prominence (is this a stroke at all?); 27 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-96ae65019c30-s4w0-p4-48899",
+      "why": "low prominence (is this a stroke at all?); 15 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-b6f280b2900c-s0w11-p3-113480",
+      "why": "14 people in scene (ownership/contamination risk); small player (far court / small paddle+ball); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-b6f280b2900c-s0w13-p1-130880",
+      "why": "low prominence (is this a stroke at all?); 12 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-b6f280b2900c-s0w4-p3-40600",
+      "why": "low prominence (is this a stroke at all?); 6 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-b6f280b2900c-s0w9-p5-92840",
+      "why": "low prominence (is this a stroke at all?); 11 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-b6f280b2900c-s0w7-p8-73120",
+      "why": "low prominence (is this a stroke at all?); 10 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-b6f280b2900c-s0w15-p1-150480",
+      "why": "low prominence (is this a stroke at all?); 12 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-b6f280b2900c-s0w6-p9-67680",
+      "why": "low prominence (is this a stroke at all?); 11 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-d230484fbaa5-s8w1-p9-62529",
+      "why": "low prominence (is this a stroke at all?); 17 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-d230484fbaa5-s9w0-p10-65465",
+      "why": "low prominence (is this a stroke at all?); 11 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-d230484fbaa5-s9w0-p10-66500",
+      "why": "low prominence (is this a stroke at all?); 11 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-d230484fbaa5-s9w0-p1-65332",
+      "why": "low prominence (is this a stroke at all?); 11 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-d230484fbaa5-s8w1-p11-61995",
+      "why": "low prominence (is this a stroke at all?); 17 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-d230484fbaa5-s9w0-p1-66900",
+      "why": "low prominence (is this a stroke at all?); 11 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-d230484fbaa5-s8w1-p11-62396",
+      "why": "low prominence (is this a stroke at all?); 17 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.9,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-d230484fbaa5-s8w1-p11-63397",
+      "why": "low prominence (is this a stroke at all?); 17 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-1c1286ce675e scene 0 [0–2060ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-44c0c451500c scene 1 [18443–54488ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-44c0c451500c scene 4 [71430–109459ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-5bf0e6a85afb scene 1 [500–43310ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-5bf0e6a85afb scene 3 [51051–59560ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-6e06a3157947 scene 0 [0–13146ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-6e06a3157947 scene 2 [20320–55088ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-6e06a3157947 scene 3 [55088–60027ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-916657917f2b scene 0 [0–27060ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-916657917f2b scene 1 [27060–73707ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-916657917f2b scene 2 [73707–85369ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-960a1a200d6d scene 0 [0–24800ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-960a1a200d6d scene 3 [64333–72800ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-960a1a200d6d scene 6 [113133–156267ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-960a1a200d6d scene 8 [172800–272033ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-960a1a200d6d scene 9 [272033–307500ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-96ae65019c30 scene 1 [18118–33350ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-96ae65019c30 scene 5 [56340–67551ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-afd0b6bad5d0 scene 2 [2417–6542ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-afd0b6bad5d0 scene 8 [11292–14375ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-afd0b6bad5d0 scene 10 [15667–19167ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-afd0b6bad5d0 scene 12 [20042–25375ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-afd0b6bad5d0 scene 14 [31167–35292ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-afd0b6bad5d0 scene 24 [58708–64083ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-afd0b6bad5d0 scene 31 [75000–79625ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-b6f280b2900c scene 0 [0–237240ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-d230484fbaa5 scene 3 [234–9576ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-d230484fbaa5 scene 4 [9576–12112ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-d230484fbaa5 scene 7 [33066–37170ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.875,
+      "kind": "FAILURE:CROWDED_SCENE",
+      "ref": "rec-d230484fbaa5 scene 9 [38338–40741ms]",
+      "why": "6 concurrent people at peak — ownership/contamination stress"
+    },
+    {
+      "priority": 0.85,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-44c0c451500c-s2w0-p1-58325",
+      "why": "very fast swing (blur risk); 9 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.85,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s0w0-p2-3687",
+      "why": "very fast swing (blur risk); 19 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-44c0c451500c-s1w2-p5-43393",
+      "why": "low prominence (is this a stroke at all?); 16 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-44c0c451500c-s1w2-p5-42543",
+      "why": "low prominence (is this a stroke at all?); 16 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-44c0c451500c-s1w2-p5-43694",
+      "why": "low prominence (is this a stroke at all?); 16 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-44c0c451500c-s1w2-p5-40232",
+      "why": "low prominence (is this a stroke at all?); 16 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-44c0c451500c-s1w2-p5-40891",
+      "why": "low prominence (is this a stroke at all?); 16 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-5bf0e6a85afb-s0w0-p2-11245",
+      "why": "low prominence (is this a stroke at all?); 4 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-5bf0e6a85afb-s0w0-p2-12112",
+      "why": "low prominence (is this a stroke at all?); 4 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-5bf0e6a85afb-s2w0-p1-54488",
+      "why": "low prominence (is this a stroke at all?); 23 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-5bf0e6a85afb-s0w0-p2-9710",
+      "why": "low prominence (is this a stroke at all?); 4 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-5bf0e6a85afb-s0w1-p1-10711",
+      "why": "low prominence (is this a stroke at all?); 18 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-5bf0e6a85afb-s0w1-p1-11712",
+      "why": "low prominence (is this a stroke at all?); 18 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-6e06a3157947-s2w3-p1-53954",
+      "why": "low prominence (is this a stroke at all?); 6 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-6e06a3157947-s2w0-p3-29463",
+      "why": "low prominence (is this a stroke at all?); 15 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-6e06a3157947-s2w0-p3-27294",
+      "why": "low prominence (is this a stroke at all?); 15 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-6e06a3157947-s2w0-p3-27995",
+      "why": "low prominence (is this a stroke at all?); 15 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s0w1-p19-19970",
+      "why": "low prominence (is this a stroke at all?); 15 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s3w0-p13-90907",
+      "why": "low prominence (is this a stroke at all?); 8 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s0w1-p19-17801",
+      "why": "low prominence (is this a stroke at all?); 15 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s2w0-p2-80047",
+      "why": "low prominence (is this a stroke at all?); 17 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s1w0-p1-32833",
+      "why": "low prominence (is this a stroke at all?); 20 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s1w0-p1-31215",
+      "why": "low prominence (is this a stroke at all?); 20 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s1w0-p1-27761",
+      "why": "low prominence (is this a stroke at all?); 20 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s1w0-p1-27211",
+      "why": "low prominence (is this a stroke at all?); 20 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s1w1-p2-43867",
+      "why": "low prominence (is this a stroke at all?); 5 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s0w2-p2-20400",
+      "why": "low prominence (is this a stroke at all?); 10 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s8w3-p1-212900",
+      "why": "low prominence (is this a stroke at all?); 4 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s4w2-p2-97500",
+      "why": "low prominence (is this a stroke at all?); 3 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s6w2-p2-143833",
+      "why": "low prominence (is this a stroke at all?); 4 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s8w3-p1-210833",
+      "why": "low prominence (is this a stroke at all?); 4 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-96ae65019c30-s0w1-p1-11295",
+      "why": "low prominence (is this a stroke at all?); 9 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-96ae65019c30-s0w1-p1-14364",
+      "why": "low prominence (is this a stroke at all?); 9 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-afd0b6bad5d0-s3w0-p4-11417",
+      "why": "low prominence (is this a stroke at all?); 9 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-afd0b6bad5d0-s20w0-p1-75458",
+      "why": "low prominence (is this a stroke at all?); 6 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-afd0b6bad5d0-s1w0-p5-5917",
+      "why": "low prominence (is this a stroke at all?); 17 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-afd0b6bad5d0-s17w0-p2-65875",
+      "why": "low prominence (is this a stroke at all?); 3 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-b6f280b2900c-s0w12-p1-123360",
+      "why": "low prominence (is this a stroke at all?); 11 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-faead33a362c-s0w1-p3-13292",
+      "why": "5 people in scene (ownership/contamination risk); small player (far court / small paddle+ball)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-faead33a362c-s0w1-p3-12917",
+      "why": "5 people in scene (ownership/contamination risk); small player (far court / small paddle+ball)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-faead33a362c-s2w0-p1-28208",
+      "why": "low prominence (is this a stroke at all?); 7 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-faead33a362c-s0w0-p2-4542",
+      "why": "low prominence (is this a stroke at all?); 8 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-faead33a362c-s0w0-p2-3292",
+      "why": "low prominence (is this a stroke at all?); 8 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.75,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-faead33a362c-s0w0-p2-5083",
+      "why": "low prominence (is this a stroke at all?); 8 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-44c0c451500c-s0w1-p1-15591",
+      "why": "9 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-44c0c451500c-s2w0-p2-58417",
+      "why": "9 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-44c0c451500c-s2w0-p1-58934",
+      "why": "9 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-44c0c451500c-s0w1-p1-11787",
+      "why": "9 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s0w2-p2-22105",
+      "why": "very fast swing (blur risk); 10 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s0w1-p1-12679",
+      "why": "15 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s1w4-p15-68418",
+      "why": "21 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s0w1-p1-16583",
+      "why": "15 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-916657917f2b-s0w2-p3-24625",
+      "why": "10 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s8w0-p7-183233",
+      "why": "18 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s8w7-p12-245867",
+      "why": "30 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s5w0-p2-99733",
+      "why": "6 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s6w0-p1-117800",
+      "why": "4 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s5w0-p2-105433",
+      "why": "6 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s5w0-p2-106367",
+      "why": "6 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s5w0-p2-103367",
+      "why": "6 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s0w1-p2-18400",
+      "why": "15 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s8w0-p7-174600",
+      "why": "18 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s8w9-p4-267800",
+      "why": "20 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s9w2-p5-300800",
+      "why": "16 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-960a1a200d6d-s5w0-p2-102367",
+      "why": "6 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-96ae65019c30-s0w1-p2-13113",
+      "why": "9 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-afd0b6bad5d0-s4w0-p1-16125",
+      "why": "very fast swing (blur risk); 14 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-afd0b6bad5d0-s20w0-p1-77292",
+      "why": "very fast swing (blur risk); 6 people in scene (ownership/contamination risk)"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-b6f280b2900c-s0w4-p2-42200",
+      "why": "6 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-b6f280b2900c-s0w14-p17-148760",
+      "why": "15 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-b6f280b2900c-s0w15-p1-151240",
+      "why": "12 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-b6f280b2900c-s0w0-p4-2920",
+      "why": "15 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-b6f280b2900c-s0w9-p1-94720",
+      "why": "11 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-b6f280b2900c-s0w13-p1-135080",
+      "why": "12 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-b6f280b2900c-s0w9-p5-93120",
+      "why": "11 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-b6f280b2900c-s0w6-p9-67920",
+      "why": "11 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-b6f280b2900c-s0w4-p3-42000",
+      "why": "6 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-d230484fbaa5-s9w0-p7-65766",
+      "why": "11 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-d230484fbaa5-s12w0-p9-80914",
+      "why": "20 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-d230484fbaa5-s8w1-p9-61261",
+      "why": "17 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-faead33a362c-s3w4-p2-90083",
+      "why": "4 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-faead33a362c-s2w0-p2-23542",
+      "why": "7 people in scene (ownership/contamination risk); target track has loss periods"
+    },
+    {
+      "priority": 0.7,
+      "kind": "CANDIDATE_EVENT",
+      "ref": "evt-faead33a362c-s3w4-p2-90375",
+      "why": "4 people in scene (ownership/contamination risk); target track has loss periods"
+    }
+  ]
+}

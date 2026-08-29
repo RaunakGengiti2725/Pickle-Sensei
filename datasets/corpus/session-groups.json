@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "comment": "Same real-world venue+occasion = one session = one split unit. Two camera crews at one event must never straddle splits. Members are sourceIds; every group carries its evidence.",
+  "groups": [
+    {
+      "session": "dvids-marne-2024",
+      "members": ["src-dvids-944593", "src-dvids-944403", "src-dvids-944209"],
+      "reason": "Same event: Marne Week 2024 pickleball, Fort Stewart GA, Nov 20-21 2024 (matching titles + location + dates; 944593 was the v0.1 recording)"
+    },
+    {
+      "session": "dvids-warriorgames-2026",
+      "members": ["src-dvids-1011384", "src-dvids-1011773", "src-dvids-1011822"],
+      "reason": "Same event: DoD Warrior Games 2026, San Antonio TX. v0.1 treated match/b-roll as separate sessions; same venue+occasion is the stricter, safer grouping. Folding the possibly-viewed b-roll INTO the dev session only tightens exposure."
+    },
+    {
+      "session": "dvids-espn-oneyearout-2026",
+      "members": ["src-dvids-1019773", "src-dvids-1019785"],
+      "reason": "Same event: 2027 Warrior Games one-year-out at ESPN Wide World of Sports (matching titles + dates)"
+    }
+  ]
+}

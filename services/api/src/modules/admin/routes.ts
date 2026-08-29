@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { sendFailure } from "../../lib/replies.js";
-import { audit, many, one } from "../../lib/db.js";
+import { audit, many, one, withTransaction } from "../../lib/db.js";
 
 /**
  * Admin module (directive §45): elevated role required; every access audited.
@@ -45,7 +45,7 @@ export function registerAdminRoutes(app: FastifyInstance, context: AppContext): 
     );
     const counts = await one(
       context.pool!,
-      "SELECT (SELECT count(*) FROM shot WHERE user_id = $1)::int AS shots, (SELECT count(*) FROM practice_session WHERE user_id = $1)::int AS sessions",
+      "SELECT (SELECT count(*) FROM shot WHERE user_id = $1 AND source = 'real')::int AS shots, (SELECT count(DISTINCT session_id) FROM shot WHERE user_id = $1 AND source = 'real')::int AS sessions",
       [id],
     );
     return { user, profile, subscription, counts };
@@ -195,6 +195,89 @@ export function registerAdminRoutes(app: FastifyInstance, context: AppContext): 
           [b.version],
         ),
       };
+    },
+  );
+
+  const ScoringModelRelease = z.object({
+    modelBundleVersion: z.string().min(1).max(40),
+    datasetSnapshotId: z.string().min(8).max(160),
+    evaluationReportSha256: z.string().regex(/^[0-9a-f]{64}$/),
+    coachValidationReference: z.string().min(3).max(300),
+  });
+  app.put(
+    "/v1/admin/scoring-models/:shotType/:version/release",
+    { preHandler: app.requireAdmin },
+    async (request, reply) => {
+      const { shotType, version } = request.params as {
+        shotType: string;
+        version: string;
+      };
+      const parsed = ScoringModelRelease.safeParse(request.body);
+      if (!parsed.success || !/^[a-z0-9_]{3,60}$/.test(shotType) || !version.trim()) {
+        return sendFailure(
+          reply,
+          request,
+          400,
+          "permanent",
+          "validation.scoring_model_release",
+          parsed.success ? "Invalid shot type or scoring version." : parsed.error.message,
+        );
+      }
+      const released = await withTransaction(context.pool!, async (tx) => {
+        const bundle = await one<{ id: string }>(
+          tx,
+          `SELECT id FROM model_bundle
+           WHERE version = $1 AND status = 'active' AND rollout_percent = 100
+             AND manifest_sha256 ~ '^[0-9a-f]{64}$'
+           FOR UPDATE`,
+          [parsed.data.modelBundleVersion],
+        );
+        if (!bundle) return null;
+        return one(
+          tx,
+          `UPDATE scoring_model sm SET
+             model_bundle_id = $3, status = 'active',
+             dataset_snapshot_id = $4, evaluation_report_sha256 = $5,
+             coach_validation_reference = $6, released_by = $7,
+             released_at = now(), active_from = now(), active_to = NULL
+           FROM shot_type st
+           WHERE sm.shot_type_id = st.id AND st.slug = $1 AND sm.version = $2
+           RETURNING sm.id`,
+          [
+            shotType,
+            version,
+            bundle.id,
+            parsed.data.datasetSnapshotId,
+            parsed.data.evaluationReportSha256,
+            parsed.data.coachValidationReference,
+            request.user!.id,
+          ],
+        );
+      });
+      if (!released) {
+        return sendFailure(
+          reply,
+          request,
+          409,
+          "permanent",
+          "scoring.release_prerequisite_missing",
+          "Release requires an existing scoring model and a 100% active hashed model bundle.",
+        );
+      }
+      await audit(context.pool!, {
+        actorUserId: request.user!.id,
+        action: "scoring_model.released",
+        targetKind: "scoring_model",
+        targetId: `${shotType}:${version}`,
+        requestId: request.id,
+        metadata: {
+          modelBundleVersion: parsed.data.modelBundleVersion,
+          datasetSnapshotId: parsed.data.datasetSnapshotId,
+          evaluationReportSha256: parsed.data.evaluationReportSha256,
+          coachValidationReference: parsed.data.coachValidationReference,
+        },
+      });
+      return { released: true, shotType, version };
     },
   );
 

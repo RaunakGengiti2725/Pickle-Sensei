@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "layer": "second-annotator overlap (NOT primary labels — annotation bundles and ownership sidecar untouched)",
+  "annotatorId": "devin-visual-overlap-w14",
+  "frozenAtIso": "2026-08-29T02:25:00Z",
+  "blindness": "Verdicts formed from the retained review PNGs in datasets/paddle-bench/ownership-review/ BEFORE reading any owners values/notes in L-verdicts files or the ownership-review.json sidecar. Selection used only caseId/tMs/owners key-indices. Box identity = render color: 0=yellow, 1=lime, 2=red, 3=cyan.",
+  "taxonomy": "TARGET | NOT_TARGET | AMBIGUOUS per box (3-class; sub-reason in note distinguishes other-player-paddle vs not-a-paddle for NOT_TARGET). Mapping to primary 4-class for agreement: target→TARGET, other→NOT_TARGET, reject→NOT_TARGET, ambiguous→AMBIGUOUS.",
+  "targetDefinitions": {
+    "wm-volley-02": "near white-shirt player (rear-side view)",
+    "afn-sasebo-rally1": "white-shirt/cream woman, front-oblique, gray paddle; second player behind her",
+    "afn-sasebo-rally2": "near gray-haired man in white polo at net, rear view"
+  },
+  "correction": "worklist.json listed boxIndices [0,1,2] for afn-sasebo-rally2@3372 — typo; the L owners keys and the rendered frame have boxes 0,1 only.",
+  "verdicts": [
+    {
+      "caseId": "wm-volley-02", "tMs": 4290, "png": "datasets/paddle-bench/ownership-review/wm-volley-02-4290.png",
+      "boxes": {
+        "0": { "class": "TARGET", "confidence": 0.95, "note": "blue/green-faced paddle in near white-shirt player's hand" },
+        "1": { "class": "NOT_TARGET", "sub": "other_player_paddle", "confidence": 0.9, "note": "far red-shirt player's paddle across net" },
+        "2": { "class": "NOT_TARGET", "sub": "not_a_paddle", "confidence": 0.95, "note": "sponsor feather banner on fence with paddle graphic" },
+        "3": { "class": "NOT_TARGET", "sub": "not_a_paddle", "confidence": 0.7, "note": "spectator behind fence; no in-play paddle discernible in box" }
+      }
+    },
+    {
+      "caseId": "wm-volley-02", "tMs": 5850, "png": "datasets/paddle-bench/ownership-review/wm-volley-02-5850.png",
+      "boxes": {
+        "0": { "class": "NOT_TARGET", "sub": "not_a_paddle", "confidence": 0.95, "note": "feather banner graphic" },
+        "1": { "class": "NOT_TARGET", "sub": "other_player_paddle", "confidence": 0.9, "note": "far red-shirt player's light-faced paddle" },
+        "2": { "class": "AMBIGUOUS", "confidence": 0.5, "note": "box straddles target's right-shoulder edge; content reads as background seen past shoulder, but target's paddle is occluded in front of torso and a tip could sit there — cannot commit from single frame" }
+      }
+    },
+    {
+      "caseId": "wm-volley-02", "tMs": 6290, "png": "datasets/paddle-bench/ownership-review/wm-volley-02-6290.png",
+      "boxes": {
+        "0": { "class": "TARGET", "confidence": 0.95, "note": "target's dark paddle extended over net for volley, ball just above net beside it" },
+        "1": { "class": "NOT_TARGET", "sub": "other_player_paddle", "confidence": 0.9, "note": "far player's light-faced paddle after his shot" },
+        "2": { "class": "NOT_TARGET", "sub": "not_a_paddle", "confidence": 0.95, "note": "feather banner graphic" }
+      }
+    },
+    {
+      "caseId": "wm-volley-02", "tMs": 7050, "png": "datasets/paddle-bench/ownership-review/wm-volley-02-7050.png",
+      "boxes": {
+        "0": { "class": "NOT_TARGET", "sub": "other_player_paddle", "confidence": 0.9, "note": "far red-shirt player's paddle in ready position; target's own paddle occluded in front of his body and unboxed" },
+        "1": { "class": "NOT_TARGET", "sub": "not_a_paddle", "confidence": 0.95, "note": "feather banner graphic" }
+      }
+    },
+    {
+      "caseId": "wm-volley-02", "tMs": 7890, "png": "datasets/paddle-bench/ownership-review/wm-volley-02-7890.png",
+      "boxes": {
+        "0": { "class": "TARGET", "confidence": 0.97, "note": "target's dark paddle at contact moment — ball visibly on the face" },
+        "1": { "class": "NOT_TARGET", "sub": "not_a_paddle", "confidence": 0.95, "note": "feather banner graphic" }
+      }
+    },
+    {
+      "caseId": "afn-sasebo-rally1", "tMs": 434, "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-434.png",
+      "boxes": {
+        "0": { "class": "NOT_TARGET", "sub": "not_a_paddle_union_box", "confidence": 0.6, "note": "tall union/duplicate box spanning BOTH the target's raised paddle and the behind player's low paddle; center falls between them on the behind player's body — as a center-point label it marks no paddle. Contains real paddles though; guideline needed for union boxes" },
+        "1": { "class": "NOT_TARGET", "sub": "other_player_paddle", "confidence": 0.8, "note": "dark 'AND?' paddle held low at behind player's thigh, her hand at its handle" },
+        "2": { "class": "TARGET", "confidence": 0.85, "note": "dark logo paddle raised in front of target's left shoulder, atop her two-handed grip" }
+      }
+    },
+    {
+      "caseId": "afn-sasebo-rally1", "tMs": 1802, "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-1802.png",
+      "boxes": {
+        "0": { "class": "TARGET", "confidence": 0.65, "note": "large gray paddle face with ball at its edge, shoulder-height in front of target's left side — matches registry 'forehand with gray paddle, ball near contact'; her gripping hand not clearly visible (depth compression), moderate confidence" },
+        "1": { "class": "NOT_TARGET", "sub": "other_player_paddle", "confidence": 0.85, "note": "pink/red paddle extended low by lunging behind player, her arm traced to its handle" }
+      }
+    },
+    {
+      "caseId": "afn-sasebo-rally1", "tMs": 2603, "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-2603.png",
+      "boxes": {
+        "0": { "class": "NOT_TARGET", "sub": "other_player_paddle", "confidence": 0.85, "note": "maroon paddle at behind player's waist, her arm to handle" },
+        "1": { "class": "TARGET", "confidence": 0.9, "note": "target's gray paddle held low by her knee, handle butt visibly in her right hand" }
+      }
+    },
+    {
+      "caseId": "afn-sasebo-rally1", "tMs": 3837, "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally1-3837.png",
+      "boxes": {
+        "0": { "class": "NOT_TARGET", "sub": "other_player_paddle", "confidence": 0.8, "note": "maroon paddle horizontal at behind player's front (same paddle as 2603-box0); target's own paddle occluded while ball approaches her shoulder — unboxed" },
+        "1": { "class": "NOT_TARGET", "sub": "not_a_paddle", "confidence": 0.7, "note": "far-left background: blue-shirt person's torso; no discernible paddle face in box (possibly a held ball)" },
+        "2": { "class": "NOT_TARGET", "sub": "not_a_paddle", "confidence": 0.75, "note": "thin vertical strip on net-post/barrier marking with white lettering; not a paddle" }
+      }
+    },
+    {
+      "caseId": "afn-sasebo-rally2", "tMs": 2204, "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally2-2204.png",
+      "boxes": {
+        "0": { "class": "NOT_TARGET", "sub": "other_player_paddle", "confidence": 0.75, "note": "background-court black-vest woman's dark paddle at her waist (far left court)" },
+        "1": { "class": "NOT_TARGET", "sub": "not_a_paddle", "confidence": 0.7, "note": "box frames the right-side near-court woman's LEGS; a real teal paddle sits just ABOVE the box top edge and belongs to that other player anyway — either reading is NOT_TARGET" },
+        "2": { "class": "AMBIGUOUS", "confidence": 0.5, "note": "target (near white-polo man) is mid-swing with heavy motion blur; box sits mostly on background/net right of the blur core — plausibly a mislocalized detection of the target's blurred paddle; center-point would miss the paddle. Cannot commit" }
+      }
+    },
+    {
+      "caseId": "afn-sasebo-rally2", "tMs": 2604, "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally2-2604.png",
+      "boxes": {
+        "0": { "class": "NOT_TARGET", "sub": "other_player_paddle", "confidence": 0.8, "note": "background-court black-vest woman's paddle, light face visible in front of her" },
+        "1": { "class": "NOT_TARGET", "sub": "other_player_paddle", "confidence": 0.6, "note": "light paddle face raised above/near far-side red-shirt player across the net; some phantom-on-blur risk but reads paddle-like; target's own blurred paddle is at his raised hand far right, unboxed" }
+      }
+    },
+    {
+      "caseId": "afn-sasebo-rally2", "tMs": 3372, "png": "datasets/paddle-bench/ownership-review/afn-sasebo-rally2-3372.png",
+      "boxes": {
+        "0": { "class": "NOT_TARGET", "sub": "other_player_paddle", "confidence": 0.7, "note": "small light paddle face at far-side player's waist across the net" },
+        "1": { "class": "TARGET", "confidence": 0.75, "note": "dark paddle face held flat at hip height directly in front of target's hanging right hand (black wristband); handle partially visible toward his grip" }
+      }
+    }
+  ]
+}

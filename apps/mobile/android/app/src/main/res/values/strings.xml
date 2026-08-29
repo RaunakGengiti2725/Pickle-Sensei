@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">PickleSensei</string>
+    <string name="camera_status_opening">Opening camera…</string>
+    <string name="camera_detail_waiting">ON-DEVICE POSE  ·  Waiting for camera</string>
+    <string name="video_import_preparing_private">Preparing your video privately…</string>
 </resources>

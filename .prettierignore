@@ -3,3 +3,11 @@ dist
 coverage
 pnpm-lock.yaml
 *.sql
+apps/mobile/android/.gradle/
+apps/mobile/android/**/.cxx/
+apps/mobile/android/**/build/
+apps/mobile/ios/Pods/
+apps/mobile/ios/build/
+native/**/.build/
+apps/mobile/android/link-assets-manifest.json
+apps/mobile/ios/link-assets-manifest.json

@@ -1,0 +1,30 @@
+{
+  "experimentId": "EXP-2026-08-28-roi-keyframe-grid",
+  "question": "How much detector compute can keyframing + target-ROI remove before S0 paddle quality degrades? (D-FINE is ~14.6s of the ~23s research path.)",
+  "method": "detect_paddle.py extended with --roi (normalized crop, boxes mapped back to full-frame; D-FINE runs at a fixed input size so ROI is a QUALITY lever — measured ms/frame is ~constant — while STRIDE is the latency lever). Grid: {stride 1,2,3,4} x {full, target-ROI} on the two DEV cases' event-gated spans; target ROI = union of target torso positions + 2.6x torso-span reach margin from people.json. Scored S0-level vs gold visible paddle labels (hit = det center within 0.05 of label; labels without a detector frame within half the stride interval count as misses — keyframing pays for what it skips).",
+  "results": {
+    "afn-sasebo-rally1_13labels": {
+      "stride1_full": { "recall": 0.846, "invocations": 124, "inferenceSec": 12.2 },
+      "stride3_target": { "recall": 0.846, "invocations": 42, "inferenceSec": 4.0 },
+      "stride4_target": { "recall": 0.923, "invocations": 31, "inferenceSec": 3.2 }
+    },
+    "wm-volley-02_8labels": {
+      "stride1_full": { "recall": 0.25, "invocations": 60, "inferenceSec": 6.1 },
+      "stride1_target": { "recall": 0.375, "invocations": 60, "inferenceSec": 5.4 },
+      "stride3_target": { "recall": 0.5, "invocations": 20, "inferenceSec": 2.2 }
+    }
+  },
+  "findings": [
+    "STRIDE IS NEARLY FREE AT S0 on these cases: rally1 keeps 0.846-0.923 recall from stride 1→4 while inference drops 12.2s→2.9s (−76%).",
+    "TARGET ROI IMPROVES QUALITY where the player is small in frame (volley 0.25→0.375 at stride 1; 0.5 at stride 2-3) and is neutral when the target already fills the frame (rally1) — consistent with a fixed-input-size detector seeing the paddle at higher effective resolution.",
+    "ms/frame is ~constant (~90-120ms) across ROI settings — ROI does NOT reduce per-frame cost; candidate shortlist for the production point: STRIDE 3 + TARGET ROI (−65% detector compute, S0 recall ≥ stride-1 full-frame on both dev cases).",
+    "Volley stride-1 recall (0.25) below stride-2/3 is small-n label-timing noise (8 visible labels; nearest-frame reach criterion), not evidence that skipping frames improves detection."
+  ],
+  "caveats": [
+    "S0-level only: tracking/ownership/contact/stroke NOT evaluated per cell — the stride-3+ROI operating point must run the FULL pipeline (cascade + benches) before promotion.",
+    "n = 21 visible labels on 2 dev cases; per-cell differences of one hit move recall by 0.08-0.12.",
+    "Static per-clip ROI; dynamic per-frame ROI with full-frame recovery unimplemented.",
+    "Wall-time includes fixed model-load overhead per run (~2-4s) that amortizes differently in production."
+  ],
+  "artifacts": "/tmp/roi-grid/grid-results.json (16 cells) · tools/paddle-lab/roi_keyframe_grid.py · detect_paddle.py --roi"
+}

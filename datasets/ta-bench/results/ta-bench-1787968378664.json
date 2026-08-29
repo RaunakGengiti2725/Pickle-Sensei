@@ -1,0 +1,139 @@
+{
+  "benchVersion": "ta-replay-2 (D-027 promoted semantics as shipped)",
+  "generatedAtIso": "2026-08-29T01:52:58.663Z",
+  "variant": {
+    "name": "shipped",
+    "config": {
+      "followerHysteresis": true,
+      "ambiguityTimeoutMs": 3000,
+      "sustainedGestureFrames": 5
+    },
+    "shipped": true
+  },
+  "constants": {
+    "START_REGION_RADIUS": 0.17,
+    "framesToLock": 9,
+    "gestureElevation": 0.03,
+    "onTargetRadius": 0.06
+  },
+  "scope": "verified cases only",
+  "summaryVerified": {
+    "cases": 5,
+    "locked": 5,
+    "lockRate": 1,
+    "lockCorrect": 5,
+    "lockCorrectRate": 1,
+    "medianLockLatencyMs": 1578,
+    "ambiguityEntered": 1,
+    "gestureLocks": 0,
+    "postLockStable90": 2,
+    "meanOnTargetFraction": 0.639
+  },
+  "summaryAll": {
+    "cases": 5,
+    "locked": 5,
+    "lockRate": 1,
+    "lockCorrect": 5,
+    "lockCorrectRate": 1,
+    "medianLockLatencyMs": 1578,
+    "ambiguityEntered": 1,
+    "gestureLocks": 0,
+    "postLockStable90": 2,
+    "meanOnTargetFraction": 0.639
+  },
+  "results": [
+    {
+      "caseId": "ta-274544640cc6-s1w0-p4",
+      "verification": "verified",
+      "situation": [
+        "two_players"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 6941,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 47,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-274544640cc6-s2w0-p1",
+      "verification": "verified",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "ambiguity_timeout",
+      "lockLatencyMs": 3037,
+      "lockCorrect": true,
+      "ambiguityEntered": true,
+      "postLock": {
+        "frames": 48,
+        "onTargetFraction": 0.875,
+        "switches": 1,
+        "longestOffTargetMs": 166
+      }
+    },
+    {
+      "caseId": "ta-274544640cc6-s2w0-p3",
+      "verification": "verified",
+      "situation": [
+        "multi_player"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 131,
+        "onTargetFraction": 1,
+        "switches": 0,
+        "longestOffTargetMs": 0
+      }
+    },
+    {
+      "caseId": "ta-274544640cc6-s4w0-p1",
+      "verification": "verified",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 267,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 108,
+        "onTargetFraction": 0.046,
+        "switches": 3,
+        "longestOffTargetMs": 2936
+      }
+    },
+    {
+      "caseId": "ta-274544640cc6-s6w1-p7",
+      "verification": "verified",
+      "situation": [
+        "multi_player",
+        "target_loss_periods"
+      ],
+      "outcome": "locked",
+      "lockSource": "start_region_occupancy",
+      "lockLatencyMs": 1578,
+      "lockCorrect": true,
+      "ambiguityEntered": false,
+      "postLock": {
+        "frames": 44,
+        "onTargetFraction": 0.273,
+        "switches": 1,
+        "longestOffTargetMs": 1034
+      }
+    }
+  ]
+}

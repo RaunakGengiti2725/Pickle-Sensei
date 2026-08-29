@@ -1,0 +1,28 @@
+{
+  "name": "@pickle/vision-geometry",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "eval": "vitest run --config vitest.eval.config.ts"
+  },
+  "dependencies": {
+    "@pickle/shared-types": "workspace:*",
+    "@pickle/vision-contracts": "workspace:*",
+    "@pickle/swing-domain": "workspace:*"
+  },
+  "devDependencies": {
+    "@pickle/analysis-pipeline": "workspace:*",
+    "@pickle/scoring": "workspace:*",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4",
+    "@pickle/evaluation": "workspace:*"
+  }
+}

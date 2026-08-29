@@ -2,6 +2,8 @@ node_modules/
 dist/
 coverage/
 *.log
+__pycache__/
+*.pyc
 .env
 .env.local
 .env.*.local
@@ -10,3 +12,33 @@ coverage/
 .turbo/
 ios/Pods/
 android/.gradle/
+native/vision-core/.build/
+datasets/paddle-bench/videos/
+datasets/paddle-bench/runs/
+# corpus media + extraction artifacts are content-addressed and re-derivable
+# via lab:acquire / lab:factory; registries + manifests + hashes ARE committed.
+datasets/corpus/media/
+datasets/corpus/runs/
+datasets/mining/*/pose.json
+datasets/mining/*/people.json
+datasets/mining/*/ball.json
+datasets/ta-bench/review/
+# research tooling environments + native build artifacts (re-derivable)
+tools/paddle-lab/.venv/
+native/swing-lab/.build/
+# rendered overlay videos are re-derivable from run artifacts (lab:analyze --overlay)
+datasets/**/overlay.mp4
+# experiment sandboxes are copies of canonical run dirs (re-derivable via lab:regen);
+# loose measurement/summary JSONs inside *-runs/ ARE committed.
+datasets/experiments/*/*-runs/*/
+datasets/experiments/*/*-runs-abcheck/*/
+datasets/experiments/wave-b/merge-check/
+# W12 probe frame renders (visual-truth/manifest/report JSONs ARE committed)
+datasets/experiments/wave-b/W12-probe/frames/
+datasets/experiments/wave-b/W12-probe/grids/
+datasets/experiments/wave-b/W12-probe/truthviz/
+# annotation-review frame renders are re-renderable (lab:own propose / render
+# tooling); verdicts, sidecars, and queue JSONs ARE committed.
+datasets/paddle-bench/ownership-review/*.png
+datasets/experiments/wave-a/frames/
+datasets/experiments/wave-a/slices/

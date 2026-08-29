@@ -4,6 +4,20 @@
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
         <!-- Customize your theme here. -->
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        <!-- Matches the JS splash so cold start doesn't flash white first. -->
+        <item name="android:windowBackground">#06130E</item>
+        <item name="android:statusBarColor">#06130E</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <style name="GuidedCameraTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">#06130E</item>
+        <item name="android:colorAccent">#D7FA45</item>
+        <item name="android:navigationBarColor">#06130E</item>
+        <item name="android:statusBarColor">#06130E</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 
 </resources>

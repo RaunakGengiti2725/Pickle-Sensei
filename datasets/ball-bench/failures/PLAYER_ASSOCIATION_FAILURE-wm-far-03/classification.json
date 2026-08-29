@@ -1,0 +1,7 @@
+{
+  "failureClass": "PLAYER_ASSOCIATION_FAILURE",
+  "capturedAtIso": "2026-08-28T10:05:00.000Z",
+  "video": "datasets/paddle-bench/videos/wm-farplayer-return.mp4",
+  "description": "Two similar-size far players plus a foreground walk-in; the pose primary-person selection flips targets mid-window (torso-anchor stickiness helps but a decisively larger walk-in still steals focus at ~4500ms and ~4900ms). 'The player's paddle/ball' becomes ill-defined; excluded from benchmarks.",
+  "regressionExpectation": "Guided single-player capture framing avoids this; multi-player scenes need explicit subject locking before their metrics count."
+}

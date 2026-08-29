@@ -28,10 +28,13 @@ export async function grantEntitlement(
   validTo: Date | null,
 ): Promise<void> {
   await context.pool!.query(
-    `INSERT INTO entitlement (user_id, feature_key, subscription_id, valid_from, valid_to)
-     VALUES ($1, $2, $3, now(), $4)
+    `INSERT INTO entitlement (user_id, feature_key, subscription_id, valid_from, valid_to, source)
+     VALUES ($1, $2, $3, now(), $4, 'admin')
      ON CONFLICT (user_id, feature_key) DO UPDATE SET
-       subscription_id = EXCLUDED.subscription_id, valid_to = EXCLUDED.valid_to`,
+       subscription_id = EXCLUDED.subscription_id,
+       valid_from = EXCLUDED.valid_from,
+       valid_to = EXCLUDED.valid_to,
+       source = 'admin'`,
     [userId, featureKey, subscriptionId, validTo],
   );
 }

@@ -1,0 +1,440 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "afn-sasebo-rally1",
+  "annotatorId": "devin-visual-v1",
+  "createdAtIso": "2026-08-28T10:55:00.000Z",
+  "revision": 6,
+  "stroke": "volley",
+  "annotatedStrokeV3": "BACKHAND_VOLLEY",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 2600,
+    "accelerationStartMs": 2830,
+    "contactMs": 2900,
+    "followThroughEndMs": 3200,
+    "recoveryEndMs": 3600
+  },
+  "contactUncertainty": "plus_minus_1",
+  "faults": [],
+  "checkpointScores": {},
+  "paddleFrames": [
+    {
+      "tMs": 0,
+      "point": {
+        "x": 0.442,
+        "y": 0.3326
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 433.77,
+      "point": {
+        "x": 0.4837,
+        "y": 0.3985
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 800.8,
+      "point": {
+        "x": 0.4677,
+        "y": 0.5256
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1001,
+      "point": {
+        "x": 0.452,
+        "y": 0.5606
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1201.2,
+      "point": {
+        "x": 0.4758,
+        "y": 0.6455
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1401.4,
+      "point": {
+        "x": 0.4994,
+        "y": 0.6298
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1601.6,
+      "point": {
+        "x": 0.4873,
+        "y": 0.4878
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1801.8,
+      "point": {
+        "x": 0.5111,
+        "y": 0.447
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2002,
+      "point": {
+        "x": 0.5265,
+        "y": 0.5354
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2202.2,
+      "point": {
+        "x": 0.4919,
+        "y": 0.6167
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2435.77,
+      "point": {
+        "x": 0.4655,
+        "y": 0.6434
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2602.6,
+      "point": {
+        "x": 0.4864,
+        "y": 0.6819
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2700,
+      "point": {
+        "x": 0.489,
+        "y": 0.605
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2830,
+      "point": {
+        "x": 0.495,
+        "y": 0.653
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2836.17,
+      "point": {
+        "x": 0.4604,
+        "y": 0.6137
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2900,
+      "point": {
+        "x": 0.457,
+        "y": 0.495
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2960,
+      "point": {
+        "x": 0.458,
+        "y": 0.495
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 3003,
+      "point": {
+        "x": 0.4495,
+        "y": 0.4323
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 3030,
+      "point": {
+        "x": 0.46,
+        "y": 0.432
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 3300,
+      "point": {
+        "x": 0.512,
+        "y": 0.369
+      },
+      "visibility": "visible"
+    }
+  ],
+  "ballFrames": [
+    {
+      "tMs": 2830,
+      "point": {
+        "x": 0.366,
+        "y": 0.49
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2900,
+      "point": {
+        "x": 0.457,
+        "y": 0.495
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2960,
+      "point": {
+        "x": 0.359,
+        "y": 0.503
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 3030,
+      "point": {
+        "x": 0.272,
+        "y": 0.438
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 3300,
+      "point": null,
+      "visibility": "uncertain"
+    }
+  ],
+  "overallScore": null,
+  "annotatorConfidence": 0.65,
+  "notes": "AFN Sasebo indoor, front-oblique, right-handed woman (white shirt, glasses, yellow wristband) at the kitchen line. Cross-body contact on her LEFT side with follow-through high-right = BACKHAND volley (ball taken out of the air at chest height). Her PARTNER (black shirt, pink paddle) reaches from behind - a wrong-paddle trap. She also holds a SPARE BALL in her left hand throughout (ball-color confuser). Labels eyeballed from raw stills (~±0.02). Phases: prep/accel/follow estimated ±2 frames; recoveryEnd uncertain. Rev2: event labels (target volley E + partner swing E), partner pink-paddle labels (visible 2830, occluded 2900/2960). Rev6 (wave-a, devin-visual-v2-wave-a): +4 target dink-battle events (contacts 317/1117/1484/1717, all ball-at-paddle verified at 29.97fps) +1 partner dig (1934, ball-reversal) in the previously-unlabeled 0-2100ms of this clip; existing labels untouched. The 2118-2600 stretch (one more possible dig before the labeled volley's prep) is deliberately left unlabeled to avoid semantic collision with the existing 2600-3600 event.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-28T10:55:00.000Z"
+    },
+    {
+      "revision": 2,
+      "savedAtIso": "2026-08-28T14:10:00.000Z"
+    },
+    {
+      "revision": 3,
+      "savedAtIso": "2026-08-28T23:41:27.191Z"
+    },
+    {
+      "revision": 4,
+      "savedAtIso": "2026-08-29T01:57:02.228Z"
+    },
+    {
+      "revision": 5,
+      "savedAtIso": "2026-08-29T02:00:07.869Z"
+    },
+    {
+      "revision": 6,
+      "savedAtIso": "2026-08-29T02:23:47.264Z"
+    }
+  ],
+  "eventLabels": [
+    {
+      "eventStartMs": 2600,
+      "contactMs": 2900,
+      "eventEndMs": 3600,
+      "owner": "target",
+      "note": "white-shirt woman backhand volley (labels ±2 frames)"
+    },
+    {
+      "eventStartMs": 3500,
+      "contactMs": 3870,
+      "eventEndMs": 4300,
+      "owner": "other",
+      "note": "partner (black shirt) swing behind target; contact from ball turn, ±2 frames"
+    },
+    {
+      "eventStartMs": 233,
+      "contactMs": 317,
+      "eventEndMs": 500,
+      "owner": "target",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "wave-a: backhand punch volley at face height - paddle already raised at clip start, stroke-directed motion from 233; contact bracketed 300 (ball at paddle) / 334 (struck) at 29.97fps -> 317 +-1 frame; punch recovered to ready 500"
+    },
+    {
+      "eventStartMs": 1017,
+      "contactMs": 1117,
+      "eventEndMs": 1284,
+      "owner": "target",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "wave-a: low backhand dink at knee height - turn-down 1017, contact 1117 (ball ON paddle at 29.97fps, bracket 1083/1150), re-centered ready 1284"
+    },
+    {
+      "eventStartMs": 1417,
+      "contactMs": 1484,
+      "eventEndMs": 1617,
+      "owner": "target",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "wave-a: low backhand dig #2 - reach-down 1417, contact 1484 (ball ON paddle at shin height), paddle back up at chest-ready 1617; flows into next dig"
+    },
+    {
+      "eventStartMs": 1651,
+      "contactMs": 1717,
+      "eventEndMs": 1818,
+      "owner": "target",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "wave-a: low backhand dig #3 - turn-down 1651, contact 1717 (ball at paddle face, knee height), chest-ready 1818; fast dink battle, no settle between digs"
+    },
+    {
+      "eventStartMs": 1818,
+      "contactMs": 1934,
+      "eventEndMs": 2084,
+      "owner": "other",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "wave-a: PARTNER (black shirt, pink paddle) low dig behind target - lunge first visible 1818 (onset partly occluded behind target), contact from ball reversal bracketed 1918/1951 -> 1934, stays crouched at low-ready 2084"
+    }
+  ],
+  "otherPaddleFrames": [
+    {
+      "tMs": 400.4,
+      "point": {
+        "x": 0.4621,
+        "y": 0.5146
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 433.77,
+      "point": {
+        "x": 0.4636,
+        "y": 0.5045
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 800.8,
+      "point": {
+        "x": 0.483,
+        "y": 0.4234
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1001,
+      "point": {
+        "x": 0.5087,
+        "y": 0.4832
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1201.2,
+      "point": {
+        "x": 0.5165,
+        "y": 0.4926
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1401.4,
+      "point": {
+        "x": 0.4989,
+        "y": 0.4709
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1801.8,
+      "point": {
+        "x": 0.4458,
+        "y": 0.6444
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2002,
+      "point": {
+        "x": 0.3854,
+        "y": 0.5755
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2202.2,
+      "point": {
+        "x": 0.404,
+        "y": 0.6365
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2602.6,
+      "point": {
+        "x": 0.4418,
+        "y": 0.5719
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2830,
+      "point": {
+        "x": 0.4605,
+        "y": 0.5
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2836.17,
+      "point": {
+        "x": 0.455,
+        "y": 0.4794
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2836.17,
+      "point": {
+        "x": 0.8916,
+        "y": 0.3123
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2900,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 2960,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 3436.77,
+      "point": {
+        "x": 0.4846,
+        "y": 0.437
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 3837.17,
+      "point": {
+        "x": 0.4649,
+        "y": 0.4467
+      },
+      "visibility": "visible"
+    }
+  ]
+}

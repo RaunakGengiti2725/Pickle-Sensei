@@ -49,6 +49,10 @@ describe.skipIf(!testUrl)("migration runner (integration)", () => {
       expect(rows[0]?.n).toBe(8);
       const { rows: sm } = await pool.query("SELECT count(*)::int AS n FROM scoring_model");
       expect(sm[0]?.n).toBe(8);
+      const { rows: released } = await pool.query(
+        "SELECT count(*)::int AS n FROM scoring_model WHERE status = 'active'",
+      );
+      expect(released[0]?.n).toBe(0);
     } finally {
       await pool.end();
     }

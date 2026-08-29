@@ -1,4 +1,5 @@
 import Foundation
+import CoreVideo
 
 /// VisionCore contracts (directive §13/§61) — the native mirror of
 /// packages/vision-contracts. React Native orchestrates; native owns camera
@@ -55,14 +56,63 @@ public struct PaddleFrame: Sendable {
 public struct StrokeEvent: Sendable {
   public let startMs: Int
   public let endMs: Int
-  public let contactMs: Int?
+  /// Timestamp of the detector's peak camera-relative wrist/paddle motion.
+  /// This is not evidence of ball contact.
+  public let peakMotionMs: Int?
   public let confidence: Double
+  /// Motion detection and shot recognition are intentionally separate. A
+  /// temporal trigger is useful for automatic capture, but it is not evidence
+  /// for a named pickleball stroke without a validated classifier.
+  public let recognition: StrokeRecognition
 
-  public init(startMs: Int, endMs: Int, contactMs: Int?, confidence: Double) {
+  public init(
+    startMs: Int,
+    endMs: Int,
+    peakMotionMs: Int?,
+    confidence: Double,
+    recognition: StrokeRecognition = .unknown(reason: "validated_classifier_unavailable")
+  ) {
     self.startMs = startMs
     self.endMs = endMs
-    self.contactMs = contactMs
+    self.peakMotionMs = peakMotionMs
     self.confidence = confidence
+    self.recognition = recognition
+  }
+}
+
+public enum StrokeRecognitionStatus: String, Sendable {
+  case recognized
+  case unknown
+  case abstained
+}
+
+public struct StrokeRecognition: Sendable {
+  public let status: StrokeRecognitionStatus
+  public let shotType: String?
+  public let confidence: Double?
+  public let reason: String?
+  public let modelVersion: String?
+
+  public init(
+    status: StrokeRecognitionStatus,
+    shotType: String? = nil,
+    confidence: Double? = nil,
+    reason: String? = nil,
+    modelVersion: String? = nil
+  ) {
+    self.status = status
+    self.shotType = shotType
+    self.confidence = confidence
+    self.reason = reason
+    self.modelVersion = modelVersion
+  }
+
+  public static func unknown(reason: String) -> StrokeRecognition {
+    StrokeRecognition(status: .unknown, reason: reason)
+  }
+
+  public static func abstained(reason: String) -> StrokeRecognition {
+    StrokeRecognition(status: .abstained, reason: reason)
   }
 }
 

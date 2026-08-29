@@ -1,0 +1,42 @@
+
+======================================================================
+afn-sasebo-rally2 @ contact 2650ms
+======================================================================
+--- paddle obs within ±120ms ---
+  t= 2537.0 center=(0.731,0.533) conf=0.281
+  t= 2571.0 center=(0.730,0.531) conf=0.178
+  t= 2604.0 center=(0.762,0.523) conf=0.218
+  t= 2671.0 center=(0.746,0.563) conf=0.076
+  t= 2704.0 center=(0.746,0.570) conf=0.163
+  t= 2738.0 center=(0.694,0.568) conf=0.228
+--- dominant wrist: left (travel L=0.620 R=0.075) ---
+arm length (median of 14 frames, all vis>=0.5): 0.171
+nearest frame t=2636 shY=0.337 hipY=0.574 torso=0.237
+paddle@2671 conf=0.076 center=(0.746,0.563) vs left wrist (0.766,0.504 v0.33) dist=0.062
+  dist/arm=0.36  dist/torso=0.26
+--- raise stats (dominant wrist/elbow above shoulder line, torso units) ---
+  ±80ms: wrist frames(v>=0.5)=1 vals=[-0.28] median=-0.28 | elbow frames=1 vals=[-0.2]
+    wrist frames >= +0.25: 0  | elbow frames >= +0.10: 0
+  ±150ms: wrist frames(v>=0.5)=6 vals=[-0.51, -0.43, -0.28, 0.37, 0.55, 0.64] median=0.05 | elbow frames=6 vals=[-0.38, -0.29, -0.2, 0.2, 0.2, 0.26]
+    wrist frames >= +0.25: 3  | elbow frames >= +0.10: 3
+
+======================================================================
+wm-volley-02 @ contact 6650ms
+======================================================================
+--- paddle obs within ±120ms ---
+  t= 6530.0 center=(0.827,0.682) conf=0.734
+  t= 6570.0 center=(0.825,0.676) conf=0.771
+  t= 6610.0 center=(0.817,0.660) conf=0.795
+  t= 6650.0 center=(0.819,0.601) conf=0.678
+  t= 6690.0 center=(0.782,0.548) conf=0.848
+  t= 6730.0 center=(0.744,0.512) conf=0.131
+--- dominant wrist: right (travel L=0.147 R=0.231) ---
+arm length (median of 11 frames, all vis>=0.5): 0.16
+nearest frame t=6640 shY=0.465 hipY=0.589 torso=0.123
+paddle@6650 conf=0.678 center=(0.819,0.601) vs right wrist (0.755,0.618 v0.82) dist=0.066
+  dist/arm=0.41  dist/torso=0.54
+--- raise stats (dominant wrist/elbow above shoulder line, torso units) ---
+  ±80ms: wrist frames(v>=0.5)=3 vals=[-1.26, -1.24, -0.92] median=-1.24 | elbow frames=4 vals=[-0.98, -0.94, -0.77, -0.68]
+    wrist frames >= +0.25: 0  | elbow frames >= +0.10: 0
+  ±150ms: wrist frames(v>=0.5)=6 vals=[-1.31, -1.29, -1.26, -1.24, -0.92, -0.24] median=-1.25 | elbow frames=7 vals=[-1.0, -0.98, -0.98, -0.94, -0.77, -0.68, -0.5]
+    wrist frames >= +0.25: 0  | elbow frames >= +0.10: 0

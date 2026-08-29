@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "note": "HUMAN-managed registry. Provisioning a real coach (docs/COACHING.md §2) means appending {coachId, credentialRef, status:'active', provisionedAtIso, provisionedBy} here in a reviewed commit. coachId is opaque/pseudonymous; credentials + PII stay OFF-REPO behind credentialRef. This file is never written by tooling and MUST NOT contain synthetic/demo identities.",
+  "coaches": []
+}

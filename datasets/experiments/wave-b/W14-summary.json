@@ -1,0 +1,46 @@
+{
+  "workstream": "W14 — independent second-annotator overlap pass + agreement measurement (TA verification + paddle ownership)",
+  "status": "complete",
+  "baseline": "Every gold label single-annotator (TA cases verified only by devin-visual-v2-wave-a; ownership verdicts only by devin-visual-v2-wave-a). Inter-annotator agreement unmeasured — label reliability unknown, the top credibility gap.",
+  "candidate": "Blind second-annotator overlap layer by devin-visual-overlap-w14: 12 TA cases (stratified verdict-blind from the 29 wave-a-verified dev cases) re-rendered and re-judged from frames only; 12 ownership frames (31 boxes, development-role cases only) re-judged from retained review PNGs. Verdicts frozen to disk BEFORE reading any primary verdict. Primary label files untouched.",
+  "measured": {
+    "taAgreement": {
+      "n": 12,
+      "rawAgreement": 0.8333,
+      "kappa3Class": 0.4419,
+      "kappaBinaryUsableVsReject": 0.625,
+      "caveat": "n=12 with 11/12 primary correct-lock: kappa prevalence-dominated, approx SE 0.36 — treat as directional only",
+      "disagreements": 2,
+      "disagreementNature": "BOTH definitional, ZERO perceptual: non-player region occupants (phone-filming staffer ta-44c0c451500c-s1w0-p6, barrier spectator ta-960a1a200d6d-s8w0-p1) — primary verifies them as adversarial region-occupant cases, W14 read them as wrong-lock/reject. Identical scene descriptions on both sides."
+    },
+    "ownershipAgreement": {
+      "nFrames": 12,
+      "nBoxes": 31,
+      "rawAgreement3Class": 0.9032,
+      "kappa3Class": 0.7807,
+      "rawAgreement4Class": 0.871,
+      "kappa4Class": 0.8144,
+      "confusion3Class_W14_vs_primary": { "TARGET/TARGET": 6, "NOT_TARGET/NOT_TARGET": 21, "AMBIGUOUS/AMBIGUOUS": 1, "AMBIGUOUS/TARGET": 1, "NOT_TARGET/AMBIGUOUS": 1, "TARGET/NOT_TARGET": 1 },
+      "caveat": "boxes clustered in 12 frames / 3 videos — effective n < 31; nominal SE 0.12 understates uncertainty",
+      "disagreements": 3,
+      "disagreementNature": "1 genuine perception miss by single-frame review (floor paddle judged held, rally2@3372 box1 — primary's cross-frame static-object evidence decisive), 2 threshold/evidence-standard splits on motion blur (rally2@2204 box2, rally2@2604 box1). All 3 in afn-sasebo-rally2 (blur + clutter); wm-volley-02 and rally1 were 100% agreement including both ambiguous calls."
+    },
+    "blindnessProtocol": "followed: worklist built from ids/frame-paths only → frames viewed → verdicts written and frozen (ta-overlap.json, ownership-overlap.json) → primary verdicts read → agreement computed"
+  },
+  "filesChanged": [
+    "datasets/experiments/wave-b/W14-overlap/worklist.json (new)",
+    "datasets/experiments/wave-b/W14-overlap/ta-overlap.json (new)",
+    "datasets/experiments/wave-b/W14-overlap/ownership-overlap.json (new)",
+    "datasets/experiments/wave-b/W14-overlap/agreement.json (new)",
+    "datasets/experiments/wave-b/W14-summary.json (new)",
+    "datasets/ta-bench/review/<12 caseId>.png (re-rendered via pnpm lab:ta-bench render — render artifacts only, no label files touched)"
+  ],
+  "recommendation": "Ownership labels are reliable enough to scale ONCE the review tool shows temporal context: mandate ±1-2 adjacent frames (or 3-frame strips from lab:own propose), a static-object ledger (floor paddles / net-tape / banners are named traps), a numeric center-offset rule for blurred paddles (~0.03-0.05 norm), and hand-continuity as the bar for 'other'. TA verification needs its operational definition WRITTEN before more annotation: verified = region→person correspondence regardless of player status, plus a mandatory bystander_target situation tag (both TA disagreements were this one undefined rule, not perception). Add a 3-frame scrub rule for crowd-heavy regions and per-verdict confidence fields to both schemas. Adjudication of the 5 flagged items stays with commander — nothing was overwritten.",
+  "risks": [
+    "Small n: TA kappa 0.44±0.36 is directional, not conclusive; 12 ownership frames cluster in 3 videos so agreement may not transfer to new footage",
+    "Both annotators are Devin-family visual passes — shared failure modes (e.g., both fooled by the same render limitation) would inflate agreement vs a human pair",
+    "Primary TA notes for the 2 disagreement cases show intent (adversarial bystander cases), but if downstream lock-correct metrics do not slice bystander_target cases, product numbers inherit a silent flattery bias",
+    "Ownership overlap deliberately excluded held-out material (wm-dink-01, afn-vic-rally1) — agreement on held-out-style footage remains unmeasured by design",
+    "Single mid-frame TA rendering caps achievable verification quality (faead-s3w5-p2 verified at 0.55 confidence by W14); scrub-based re-verification may flip edge cases"
+  ]
+}

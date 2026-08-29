@@ -1,0 +1,264 @@
+{
+  "generatedAtIso": "2026-08-29T02:45:17.128Z",
+  "goldEvents": 5,
+  "caveat": "n=5 gold events — the waterfall SHAPE is the product diagnosis; rates are not stable estimates (learning curves prove instability at this n)",
+  "unconditionalPass": {
+    "TARGET": 5,
+    "EVENT": 3,
+    "PADDLE": 5,
+    "BALL": 5,
+    "CONTACT": 2,
+    "PHASE": 2,
+    "STROKE": 3
+  },
+  "conditionalSurvival": {
+    "TARGET": 5,
+    "EVENT": 3,
+    "PADDLE": 3,
+    "BALL": 3,
+    "CONTACT": 2,
+    "PHASE": 2,
+    "STROKE": 2
+  },
+  "strictSurvival": {
+    "survived": 2,
+    "total": 5
+  },
+  "usableResult": {
+    "contract": {
+      "version": "usable-result-v1",
+      "clauses": {
+        "target": "TARGET pass (strict criterion: coverage >= 0.5) — wrong/unlocked target is never usable",
+        "event": "EVENT pass (strict criterion: >=50% gold-span overlap or gold contact inside selection) — wrong event is never usable",
+        "strokeHonesty": "L1-side prediction matches gold (strict criterion) OR explicit abstention/unknown; a wrong confident prediction is never usable",
+        "replayEvidence": "(a) contact estimated |err| <= 66ms; OR (b) contact estimated 66 < err <= 132ms AND ballConfirmed or paddleConfirmed; OR (c) contact abstained BUT phases v2 segmented with valid ordering",
+        "noFabricatedEvidence": "contact estimated with error vs gold > 132ms is never usable — a misleading marker is worse than none"
+      }
+    },
+    "usable": 2,
+    "total": 5,
+    "note": "second north-star: complements strict survival, never replaces it; per-case verdicts in rows[].usable"
+  },
+  "rows": [
+    {
+      "caseId": "wm-dink-01",
+      "split": "held_out",
+      "stroke": "BACKHAND_DINK",
+      "stages": {
+        "TARGET": {
+          "pass": true,
+          "detail": "policy user_tapped_person · coverage 1.00 · conf 0.88"
+        },
+        "EVENT": {
+          "pass": false,
+          "detail": "selected 1400–1960 vs gold 1050–1650 (overlap 42%)"
+        },
+        "PADDLE": {
+          "pass": true,
+          "detail": "status tracked · coverage 0.52"
+        },
+        "BALL": {
+          "pass": true,
+          "detail": "status tracked"
+        },
+        "CONTACT": {
+          "pass": false,
+          "detail": "status abstained"
+        },
+        "PHASE": {
+          "pass": false,
+          "detail": "status abstained"
+        },
+        "STROKE": {
+          "pass": true,
+          "detail": "predicted BACKHAND vs gold BACKHAND_DINK"
+        }
+      },
+      "conditionalReached": "LOST AT EVENT",
+      "usable": {
+        "usable": false,
+        "replayClause": null,
+        "reasons": [
+          "EVENT fail — wrong event is never usable (selected 1400–1960 vs gold 1050–1650 (overlap 42%))",
+          "no trustworthy replay artifact (contact abstained; phases abstained)"
+        ]
+      }
+    },
+    {
+      "caseId": "wm-volley-02",
+      "split": "development",
+      "stroke": "FOREHAND_VOLLEY",
+      "stages": {
+        "TARGET": {
+          "pass": true,
+          "detail": "policy user_tapped_person · coverage 1.00 · conf 0.97"
+        },
+        "EVENT": {
+          "pass": true,
+          "detail": "selected 5600–6840 vs gold 6300–7100 (overlap 68%, contact inside)"
+        },
+        "PADDLE": {
+          "pass": true,
+          "detail": "status tracked · coverage 0.52"
+        },
+        "BALL": {
+          "pass": true,
+          "detail": "status tracked"
+        },
+        "CONTACT": {
+          "pass": true,
+          "detail": "error 30ms (est 6650 vs gold 6680)"
+        },
+        "PHASE": {
+          "pass": true,
+          "detail": "segmented, ordering valid"
+        },
+        "STROKE": {
+          "pass": true,
+          "detail": "predicted FOREHAND vs gold FOREHAND_VOLLEY"
+        }
+      },
+      "conditionalReached": "COMPLETE",
+      "usable": {
+        "usable": true,
+        "replayClause": "a",
+        "reasons": [
+          "replay (a): contact |err| 30ms <= 66ms",
+          "stroke L1 match"
+        ]
+      }
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "split": "development",
+      "stroke": "BACKHAND_VOLLEY",
+      "stages": {
+        "TARGET": {
+          "pass": true,
+          "detail": "policy user_tapped_person · coverage 0.88 · conf 0.97"
+        },
+        "EVENT": {
+          "pass": false,
+          "detail": "targetEvent status ambiguous"
+        },
+        "PADDLE": {
+          "pass": true,
+          "detail": "status tracked · coverage 0.44"
+        },
+        "BALL": {
+          "pass": true,
+          "detail": "status tracked"
+        },
+        "CONTACT": {
+          "pass": false,
+          "detail": "status abstained"
+        },
+        "PHASE": {
+          "pass": false,
+          "detail": "status abstained"
+        },
+        "STROKE": {
+          "pass": false,
+          "detail": "predicted none vs gold BACKHAND_VOLLEY"
+        }
+      },
+      "conditionalReached": "LOST AT EVENT",
+      "usable": {
+        "usable": false,
+        "replayClause": null,
+        "reasons": [
+          "EVENT fail — wrong event is never usable (targetEvent status ambiguous)",
+          "no trustworthy replay artifact (contact abstained; phases abstained)"
+        ]
+      }
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "split": "development",
+      "stroke": "OVERHEAD",
+      "stages": {
+        "TARGET": {
+          "pass": true,
+          "detail": "policy user_tapped_person · coverage 0.95 · conf 0.97"
+        },
+        "EVENT": {
+          "pass": true,
+          "detail": "selected 2236–2836 vs gold 2380–3050 (overlap 68%, contact inside)"
+        },
+        "PADDLE": {
+          "pass": true,
+          "detail": "status tracked · coverage 0.99"
+        },
+        "BALL": {
+          "pass": true,
+          "detail": "status tracked"
+        },
+        "CONTACT": {
+          "pass": true,
+          "detail": "error 30ms (est 2650 vs gold 2620)"
+        },
+        "PHASE": {
+          "pass": true,
+          "detail": "segmented, ordering valid"
+        },
+        "STROKE": {
+          "pass": true,
+          "detail": "predicted OVERHEAD vs gold OVERHEAD"
+        }
+      },
+      "conditionalReached": "COMPLETE",
+      "usable": {
+        "usable": true,
+        "replayClause": "a",
+        "reasons": [
+          "replay (a): contact |err| 30ms <= 66ms",
+          "stroke L1 match"
+        ]
+      }
+    },
+    {
+      "caseId": "afn-vic-rally1",
+      "split": "test_held_out",
+      "stroke": "FOREHAND_DRIVE",
+      "stages": {
+        "TARGET": {
+          "pass": true,
+          "detail": "policy user_tapped_person · coverage 1.00 · conf 0.71"
+        },
+        "EVENT": {
+          "pass": true,
+          "detail": "selected 100–1068 vs gold 450–1150 (overlap 88%, contact inside)"
+        },
+        "PADDLE": {
+          "pass": true,
+          "detail": "status tracked · coverage 0.31"
+        },
+        "BALL": {
+          "pass": true,
+          "detail": "status tracked"
+        },
+        "CONTACT": {
+          "pass": false,
+          "detail": "status abstained"
+        },
+        "PHASE": {
+          "pass": false,
+          "detail": "status abstained"
+        },
+        "STROKE": {
+          "pass": false,
+          "detail": "predicted OVERHEAD vs gold FOREHAND_DRIVE"
+        }
+      },
+      "conditionalReached": "LOST AT CONTACT",
+      "usable": {
+        "usable": false,
+        "replayClause": null,
+        "reasons": [
+          "stroke not honest: wrong confident prediction (predicted OVERHEAD vs gold FOREHAND_DRIVE)",
+          "no trustworthy replay artifact (contact abstained; phases abstained)"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "contractVersion": "usable-result-v1",
+  "definedBeforeMeasuring": true,
+  "measuredAtIso": "2026-08-28T00:00:00Z",
+  "sourceArtifact": "datasets/cascade/cascade-1787967090683.json",
+  "goldEvents": 5,
+  "strictSurvival": "1/5",
+  "usableResultRate": "1/5",
+  "perCase": [
+    {
+      "caseId": "wm-dink-01",
+      "split": "held_out",
+      "strict": "LOST AT EVENT",
+      "usable": false,
+      "replayClause": null,
+      "reasons": [
+        "EVENT fail — wrong event is never usable (selected 1400–1960 vs gold 1050–1650, overlap 42%)",
+        "no trustworthy replay artifact (contact abstained; phases abstained)"
+      ],
+      "comparison": "strict and usable agree; note STROKE side happened to match gold but on the wrong event, which the contract correctly refuses to count"
+    },
+    {
+      "caseId": "wm-volley-02",
+      "split": "development",
+      "strict": "COMPLETE",
+      "usable": true,
+      "replayClause": "a",
+      "reasons": ["replay (a): contact |err| 43ms <= 66ms", "stroke L1 match"],
+      "comparison": "strict survivor is also usable — full-pipeline pass with trustworthy contact marker"
+    },
+    {
+      "caseId": "afn-sasebo-rally1",
+      "split": "development",
+      "strict": "LOST AT EVENT",
+      "usable": false,
+      "replayClause": null,
+      "reasons": [
+        "EVENT fail — wrong event is never usable (targetEvent status ambiguous)",
+        "no trustworthy replay artifact (contact abstained; phases abstained)"
+      ],
+      "comparison": "pipeline abstained everywhere downstream (honest), but with no selected event there is nothing usable to show; missing strokePrediction treated as abstention (ambiguity #1)"
+    },
+    {
+      "caseId": "afn-sasebo-rally2",
+      "split": "development",
+      "strict": "LOST AT BALL",
+      "usable": false,
+      "replayClause": null,
+      "reasons": [
+        "fabricated evidence veto: contact marker 274ms off gold (>132ms) — a misleading marker is worse than none",
+        "stroke not honest: wrong confident prediction (predicted BACKHAND vs gold OVERHEAD)",
+        "no trustworthy replay artifact (contact estimated err 274ms; phases segmented)"
+      ],
+      "comparison": "strict loses it at BALL; usable flags it for WORSE product reasons — a confidently wrong stroke label AND a fabricated contact marker (phases were segmented with valid ordering, but clause (c) requires contact abstention, not a wrong marker)"
+    },
+    {
+      "caseId": "afn-vic-rally1",
+      "split": "test_held_out",
+      "strict": "LOST AT CONTACT",
+      "usable": false,
+      "replayClause": null,
+      "reasons": [
+        "stroke not honest: wrong confident prediction (predicted OVERHEAD vs gold FOREHAND_DRIVE)",
+        "no trustworthy replay artifact (contact abstained; phases abstained)"
+      ],
+      "comparison": "contact abstention was honest, but phases also abstained so clause (c) has no timeline to show, and the stroke call is confidently wrong (0.76) — usable agrees with strict for independent reasons"
+    }
+  ],
+  "ambiguitiesForAdjudication": [
+    "1. 'explicit abstention/unknown': afn-sasebo-rally1 has NO strokePrediction block at all (pipeline never reached classification). v1 treats a missing block or null label as an explicit abstention. If the commander rules that only a literal emitted UNKNOWN/abstain label counts, the code point is evaluateUsableResult() strokeAbstained; today's verdicts do not change (that case already fails EVENT).",
+    "2. contact 'estimated' with unverifiable error (gold contactMs null or estimate timestamp missing): v1 fails replay (a)/(b), does not grant (c) (status is not 'abstained'), and does NOT apply the fabrication veto since >132ms cannot be proven. Not exercised by today's 5 cases (all golds have contactMs).",
+    "3. Clause (c) 'valid ordering' reuses the strict PHASE predicate exactly (segmented AND followThroughEndMs > contactMs when both present) so the two metrics cannot drift.",
+    "4. Clause (b) 'within 4 frames' encoded as err <= 132ms per the bench 30fps convention (66ms = 2 frames), matching the strict CONTACT convention."
+  ]
+}

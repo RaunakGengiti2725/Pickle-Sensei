@@ -1,40 +1,189 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://picklesensei.dev/schemas/dataset-manifest/v1",
-  "title": "Dataset manifest (v1)",
-  "description": "Versioned dataset with provenance + consent tracking (directive §39). Production training runs consume manifests, never loose folders.",
+  "$id": "https://picklesensei.dev/schemas/dataset-manifest/v2",
+  "title": "Eligible temporal dataset manifest (v2)",
+  "description": "A versioned manifest of real media that has passed consent, commercial-training-rights, provenance, human-review, and athlete-group split gates. This schema defines eligible records and does not assert that any records have been collected.",
   "type": "object",
-  "required": ["dataset_id", "version", "created_at", "annotation_schema_version", "items"],
+  "required": [
+    "dataset_id",
+    "version",
+    "created_at",
+    "taxonomy_version",
+    "annotation_schema_version",
+    "consent_terms_version",
+    "withdrawal_process_version",
+    "rights_reviewed_at",
+    "items"
+  ],
   "additionalProperties": false,
   "properties": {
-    "dataset_id": { "type": "string" },
-    "version": { "type": "string" },
-    "created_at": { "type": "string", "format": "date-time" },
-    "annotation_schema_version": { "type": "string" },
+    "dataset_id": { "$ref": "#/$defs/opaqueId" },
+    "version": { "type": "string", "minLength": 1 },
+    "created_at": { "$ref": "#/$defs/dateTime" },
+    "taxonomy_version": { "type": "string", "minLength": 1 },
+    "annotation_schema_version": { "type": "string", "minLength": 1 },
+    "consent_terms_version": { "type": "string", "minLength": 1 },
+    "withdrawal_process_version": { "type": "string", "minLength": 1 },
+    "rights_reviewed_at": { "$ref": "#/$defs/dateTime" },
     "description": { "type": "string" },
     "items": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "required": [
-          "clip_id",
-          "media_sha256",
-          "annotation_path",
-          "split",
-          "consent_version",
-          "source"
-        ],
-        "additionalProperties": false,
-        "properties": {
-          "clip_id": { "type": "string" },
-          "media_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-          "annotation_path": { "type": "string" },
-          "split": { "enum": ["train", "validation", "test", "holdout"] },
-          "consent_version": { "type": "string" },
-          "source": { "enum": ["consented_user", "commissioned_shoot", "licensed", "synthetic"] },
-          "athlete_id": { "type": ["string", "null"] },
-          "removed_at": { "type": ["string", "null"], "format": "date-time" }
+      "items": { "$ref": "#/$defs/item" }
+    }
+  },
+  "$defs": {
+    "opaqueId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+    },
+    "dateTime": { "type": "string", "format": "date-time" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "item": {
+      "type": "object",
+      "required": [
+        "clip_id",
+        "media_sha256",
+        "annotation_path",
+        "athlete_id",
+        "athlete_group_id",
+        "session_id",
+        "split",
+        "source",
+        "capture_provenance",
+        "consent",
+        "rights",
+        "human_review",
+        "training_eligible"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "clip_id": { "$ref": "#/$defs/opaqueId" },
+        "media_sha256": { "$ref": "#/$defs/sha256" },
+        "annotation_path": { "type": "string", "minLength": 1 },
+        "athlete_id": { "$ref": "#/$defs/opaqueId" },
+        "athlete_group_id": { "$ref": "#/$defs/opaqueId" },
+        "session_id": { "$ref": "#/$defs/opaqueId" },
+        "split": { "enum": ["train", "validation", "test", "locked_holdout"] },
+        "source": {
+          "enum": ["consented_first_party_capture", "commissioned_capture", "licensed_media"]
+        },
+        "capture_provenance": { "$ref": "#/$defs/captureProvenance" },
+        "consent": { "$ref": "#/$defs/consent" },
+        "rights": { "$ref": "#/$defs/rights" },
+        "human_review": { "$ref": "#/$defs/humanReview" },
+        "training_eligible": { "const": true }
+      }
+    },
+    "captureProvenance": {
+      "type": "object",
+      "required": [
+        "raw_asset_id",
+        "recorder_or_licensor_id",
+        "recorded_at",
+        "origin_description",
+        "third_party_broadcast"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "raw_asset_id": { "$ref": "#/$defs/opaqueId" },
+        "recorder_or_licensor_id": { "$ref": "#/$defs/opaqueId" },
+        "recorded_at": {
+          "oneOf": [{ "$ref": "#/$defs/dateTime" }, { "type": "null" }]
+        },
+        "origin_description": { "type": "string", "minLength": 1 },
+        "third_party_broadcast": { "const": false }
+      }
+    },
+    "consent": {
+      "type": "object",
+      "required": [
+        "participant_release_id",
+        "terms_version",
+        "signed_at",
+        "age_class",
+        "guardian_release_id",
+        "commercial_model_training",
+        "product_evaluation",
+        "derived_features",
+        "internal_human_review",
+        "withdrawal_process_version",
+        "state"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "participant_release_id": { "$ref": "#/$defs/opaqueId" },
+        "terms_version": { "type": "string", "minLength": 1 },
+        "signed_at": { "$ref": "#/$defs/dateTime" },
+        "age_class": { "enum": ["adult", "minor"] },
+        "guardian_release_id": {
+          "oneOf": [{ "$ref": "#/$defs/opaqueId" }, { "type": "null" }]
+        },
+        "commercial_model_training": { "const": true },
+        "product_evaluation": { "const": true },
+        "derived_features": { "const": true },
+        "internal_human_review": { "const": true },
+        "withdrawal_process_version": { "type": "string", "minLength": 1 },
+        "state": { "const": "active" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "age_class": { "const": "minor" } } },
+          "then": {
+            "properties": { "guardian_release_id": { "$ref": "#/$defs/opaqueId" } }
+          },
+          "else": { "properties": { "guardian_release_id": { "type": "null" } } }
         }
+      ]
+    },
+    "rights": {
+      "type": "object",
+      "required": [
+        "rights_holder_id",
+        "commercial_training_grant_id",
+        "evidence_uri",
+        "commercial_model_training_permitted",
+        "derived_feature_use_permitted",
+        "third_party_media_clearance_complete",
+        "bystander_clearance_complete",
+        "verified_by",
+        "verified_at",
+        "state"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "rights_holder_id": { "$ref": "#/$defs/opaqueId" },
+        "commercial_training_grant_id": { "$ref": "#/$defs/opaqueId" },
+        "evidence_uri": { "type": "string", "minLength": 1 },
+        "commercial_model_training_permitted": { "const": true },
+        "derived_feature_use_permitted": { "const": true },
+        "third_party_media_clearance_complete": { "const": true },
+        "bystander_clearance_complete": { "const": true },
+        "verified_by": { "$ref": "#/$defs/opaqueId" },
+        "verified_at": { "$ref": "#/$defs/dateTime" },
+        "state": { "const": "cleared" }
+      }
+    },
+    "humanReview": {
+      "type": "object",
+      "required": [
+        "independent_annotator_ids",
+        "coach_reviewer_id",
+        "reviewed_at",
+        "agreement",
+        "decision"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "independent_annotator_ids": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/opaqueId" }
+        },
+        "coach_reviewer_id": { "$ref": "#/$defs/opaqueId" },
+        "reviewed_at": { "$ref": "#/$defs/dateTime" },
+        "agreement": { "enum": ["agreed", "disputed_then_adjudicated"] },
+        "decision": { "const": "accepted" }
       }
     }
   }

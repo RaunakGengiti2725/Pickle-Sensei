@@ -1,0 +1,244 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wm-dink-01",
+  "annotatorId": "devin-visual-v1",
+  "createdAtIso": "2026-08-28T07:20:00.000Z",
+  "revision": 5,
+  "stroke": "dink",
+  "handedness": "right",
+  "analyzable": false,
+  "notAnalyzableReason": "rear tournament view; body partially cropped; labels are for paddle perception only",
+  "phases": {
+    "preparationStartMs": 700,
+    "accelerationStartMs": 1080,
+    "contactMs": 1260,
+    "followThroughEndMs": 1560,
+    "recoveryEndMs": 2000
+  },
+  "faults": [],
+  "checkpointScores": {},
+  "paddleFrames": [
+    {
+      "tMs": 200,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 400,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 600,
+      "point": {
+        "x": 0.452,
+        "y": 0.581
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 800,
+      "point": {
+        "x": 0.45,
+        "y": 0.61
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1000,
+      "point": {
+        "x": 0.405,
+        "y": 0.607
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1160,
+      "point": {
+        "x": 0.402,
+        "y": 0.605
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1240,
+      "point": {
+        "x": 0.37,
+        "y": 0.615
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1320,
+      "point": {
+        "x": 0.388,
+        "y": 0.607
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1400,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 1480,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 1560,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 1680,
+      "point": {
+        "x": 0.6655,
+        "y": 0.5773
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1720,
+      "point": {
+        "x": 0.647,
+        "y": 0.576
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1880,
+      "point": {
+        "x": 0.688,
+        "y": 0.622
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2040,
+      "point": {
+        "x": 0.702,
+        "y": 0.602
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2200,
+      "point": {
+        "x": 0.691,
+        "y": 0.625
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2400,
+      "point": {
+        "x": 0.66,
+        "y": 0.57
+      },
+      "visibility": "visible"
+    }
+  ],
+  "overallScore": null,
+  "annotatorConfidence": 0.6,
+  "notes": "Center-point labels of the PRIMARY (yellow-cap, camera-near) player's paddle, eyeballed from raw stills at 1100x1080. Estimated label precision ~±0.02 normalized. Occluded = paddle hidden in front of body (rear view). Rev2: annotatedStrokeV3=BACKHAND_DINK (cross-body left-side reach at kitchen, soft; handedness assumed right); phases labeled from stills (±2 frames); contact uncertainty widened to plus_minus_2 (soft dink, blur). Rev3: event labels (target dink + far-opponent dink; opponent contact ±2 frames).",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-28T07:20:00.000Z"
+    },
+    {
+      "revision": 2,
+      "savedAtIso": "2026-08-28T11:20:00.000Z"
+    },
+    {
+      "revision": 3,
+      "savedAtIso": "2026-08-28T14:10:00.000Z"
+    },
+    {
+      "revision": 4,
+      "savedAtIso": "2026-08-28T23:41:27.195Z"
+    },
+    {
+      "revision": 5,
+      "savedAtIso": "2026-08-28T23:43:33.912Z"
+    }
+  ],
+  "annotatedStrokeV3": "BACKHAND_DINK",
+  "contactUncertainty": "plus_minus_2",
+  "eventLabels": [
+    {
+      "eventStartMs": 1050,
+      "contactMs": 1260,
+      "eventEndMs": 1650,
+      "owner": "target",
+      "note": "yellow-cap backhand dink"
+    },
+    {
+      "eventStartMs": 4150,
+      "contactMs": 4360,
+      "eventEndMs": 4600,
+      "owner": "other",
+      "note": "far red-shirt opponent dink (target is stationary at 4360 — verified from still)"
+    }
+  ],
+  "otherPaddleFrames": [
+    {
+      "tMs": 0,
+      "point": {
+        "x": 0.7135,
+        "y": 0.5413
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 0,
+      "point": {
+        "x": 0.229,
+        "y": 0.4606
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 840,
+      "point": {
+        "x": 0.1608,
+        "y": 0.4641
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1680,
+      "point": {
+        "x": 0.8531,
+        "y": 0.4731
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1680,
+      "point": {
+        "x": 0.262,
+        "y": 0.4346
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2480,
+      "point": {
+        "x": 0.309,
+        "y": 0.4449
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2480,
+      "point": {
+        "x": 0.7968,
+        "y": 0.4006
+      },
+      "visibility": "visible"
+    }
+  ]
+}

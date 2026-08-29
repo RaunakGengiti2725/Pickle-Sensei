@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { sendFailure } from "../../lib/replies.js";
 import { many, one } from "../../lib/db.js";
+import { computePracticeStreak } from "../training/logic.js";
 
 /**
  * Progress + weekly reports. All trend queries group by scoring model version —
@@ -30,17 +31,68 @@ export function registerProgressRoutes(app: FastifyInstance, context: AppContext
     const q = parsed.data;
     const userId = request.user!.id;
 
+    const localToday = await one<{ today: string }>(
+      context.pool!,
+      `SELECT (now() AT TIME ZONE timezone)::date::text AS today
+       FROM app_user WHERE id = $1`,
+      [userId],
+    );
+    const practiceDates = await many<{ day: string }>(
+      context.pool!,
+      `WITH user_zone AS (
+         SELECT timezone FROM app_user WHERE id = $1
+       ), evidence AS (
+         SELECT (s.captured_at AT TIME ZONE uz.timezone)::date AS day
+         FROM shot s CROSS JOIN user_zone uz
+         WHERE s.user_id = $1 AND s.source = 'real'
+           AND s.result_kind = 'scored' AND s.overall_score IS NOT NULL
+         UNION
+         SELECT (dc.completed_at AT TIME ZONE uz.timezone)::date AS day
+         FROM drill_completion dc CROSS JOIN user_zone uz
+         WHERE dc.user_id = $1 AND dc.qualifies_for_streak
+         UNION
+         SELECT (COALESCE(ps.ended_at, ps.started_at) AT TIME ZONE uz.timezone)::date AS day
+         FROM practice_session ps CROSS JOIN user_zone uz
+         WHERE ps.user_id = $1 AND ps.mode = 'live' AND ps.completed
+           AND (
+             SELECT count(*) FROM shot live_shot
+             WHERE live_shot.session_id = ps.id AND live_shot.user_id = $1
+               AND live_shot.source = 'real' AND live_shot.result_kind = 'scored'
+               AND live_shot.overall_score IS NOT NULL
+           ) >= 3
+       )
+       SELECT day::text FROM evidence ORDER BY day`,
+      [userId],
+    );
+    const streak = computePracticeStreak(
+      practiceDates.map((row) => row.day),
+      localToday?.today ?? new Date().toISOString().slice(0, 10),
+    );
+
     const series = await many(
       context.pool!,
-      `SELECT pd.day, st.slug AS shot_type, sm.version AS scoring_model_version,
-              pd.shot_count, round(pd.avg_score::numeric, 1) AS avg_score, round(pd.best_score::numeric, 1) AS best_score
-       FROM progress_daily pd
-       JOIN shot_type st ON st.id = pd.shot_type_id
-       JOIN scoring_model sm ON sm.id = pd.scoring_model_id
-       WHERE pd.user_id = $1 AND pd.checkpoint_id IS NULL
-         AND ($2::date IS NULL OR pd.day >= $2) AND ($3::date IS NULL OR pd.day <= $3)
-         AND ($4::text IS NULL OR st.slug = $4)
-       ORDER BY pd.day ASC`,
+      `WITH user_zone AS (
+         SELECT timezone FROM app_user WHERE id = $1
+       ), localized_shots AS (
+         SELECT (s.captured_at AT TIME ZONE uz.timezone)::date AS day,
+                st.slug AS shot_type, sm.version AS scoring_model_version,
+                s.overall_score
+         FROM shot s
+         JOIN shot_type st ON st.id = s.shot_type_id
+         JOIN scoring_model sm ON sm.id = s.scoring_model_id
+         CROSS JOIN user_zone uz
+         WHERE s.user_id = $1 AND s.source = 'real' AND s.result_kind = 'scored'
+           AND s.overall_score IS NOT NULL
+       )
+       SELECT day::text AS day, shot_type, scoring_model_version, count(*)::int AS shot_count,
+              round((avg(overall_score) * 10)::numeric, 1) AS avg_score,
+              round((max(overall_score) * 10)::numeric, 1) AS best_score
+       FROM localized_shots
+       WHERE ($2::date IS NULL OR day >= $2::date)
+         AND ($3::date IS NULL OR day <= $3::date)
+         AND ($4::text IS NULL OR shot_type = $4)
+       GROUP BY day, shot_type, scoring_model_version
+       ORDER BY day ASC`,
       [userId, q.from ?? null, q.to ?? null, q.shotType ?? null],
     );
 
@@ -60,7 +112,8 @@ export function registerProgressRoutes(app: FastifyInstance, context: AppContext
          FROM shot_checkpoint_score scs
          JOIN shot s ON s.id = scs.shot_id
          JOIN scoring_model sm ON sm.id = s.scoring_model_id
-         WHERE s.user_id = $1 AND s.captured_at > now() - interval '30 days'
+         WHERE s.user_id = $1 AND s.source = 'real'
+           AND s.captured_at > now() - interval '30 days'
            AND scs.score_0_100 IS NOT NULL
        )
        SELECT cd.slug, r.version AS scoring_model_version,
@@ -84,7 +137,7 @@ export function registerProgressRoutes(app: FastifyInstance, context: AppContext
           needsAttention.push({ checkpoint: t.slug, avg: Math.round(second * 10) / 10 });
       }
     }
-    return { series, improving, needsAttention };
+    return { series, improving, needsAttention, streak };
   });
 
   app.get(
@@ -108,12 +161,18 @@ export function registerProgressRoutes(app: FastifyInstance, context: AppContext
         );
       const series = await many(
         context.pool!,
-        `SELECT date_trunc('day', s.captured_at)::date AS day, sm.version AS scoring_model_version,
+        `WITH user_zone AS (
+           SELECT timezone FROM app_user WHERE id = $1
+         )
+         SELECT (s.captured_at AT TIME ZONE uz.timezone)::date::text AS day,
+              sm.version AS scoring_model_version,
               round(avg(scs.score_0_100)::numeric, 1) AS avg_score, count(*) AS n
        FROM shot_checkpoint_score scs
        JOIN shot s ON s.id = scs.shot_id
        JOIN scoring_model sm ON sm.id = s.scoring_model_id
-       WHERE s.user_id = $1 AND scs.checkpoint_definition_id = $2 AND scs.score_0_100 IS NOT NULL
+       CROSS JOIN user_zone uz
+       WHERE s.user_id = $1 AND s.source = 'real'
+         AND scs.checkpoint_definition_id = $2 AND scs.score_0_100 IS NOT NULL
        GROUP BY 1, 2 ORDER BY 1 ASC`,
         [request.user!.id, checkpoint.id],
       );
@@ -140,10 +199,11 @@ export function registerProgressRoutes(app: FastifyInstance, context: AppContext
               max(overall_score)::text AS best_score,
               (SELECT st.slug FROM shot s2 JOIN shot_type st ON st.id = s2.shot_type_id
                 WHERE s2.user_id = $1 AND s2.captured_at >= date_trunc('week', now() - interval '7 days')
-                  AND s2.captured_at < date_trunc('week', now()) AND s2.result_kind = 'scored'
+                  AND s2.captured_at < date_trunc('week', now())
+                  AND s2.source = 'real' AND s2.result_kind = 'scored'
                 GROUP BY st.slug ORDER BY avg(s2.overall_score) DESC LIMIT 1) AS best_stroke
        FROM shot
-       WHERE user_id = $1 AND result_kind = 'scored'
+       WHERE user_id = $1 AND source = 'real' AND result_kind = 'scored'
          AND captured_at >= date_trunc('week', now() - interval '7 days')
          AND captured_at < date_trunc('week', now())`,
       [userId],
@@ -151,7 +211,8 @@ export function registerProgressRoutes(app: FastifyInstance, context: AppContext
     const versions = await many<{ version: string }>(
       context.pool!,
       `SELECT DISTINCT sm.version FROM shot s JOIN scoring_model sm ON sm.id = s.scoring_model_id
-       WHERE s.user_id = $1 AND s.captured_at >= date_trunc('week', now() - interval '7 days')`,
+       WHERE s.user_id = $1 AND s.source = 'real'
+         AND s.captured_at >= date_trunc('week', now() - interval '7 days')`,
       [userId],
     );
     const reps = Number(stats?.["reps"] ?? 0);

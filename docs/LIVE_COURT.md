@@ -1,40 +1,37 @@
 # LIVE COURT
 
-The product's centerpiece (directive §4, spec pp. 9, 35–37). Near-screenless: player hits, app scores, coach speaks.
+Live Court is the intended near-screenless coaching loop: the player hits, a validated model recognizes each repetition, a trustworthy score is produced, and the coach gives one concise cue. It is **not currently available** because the learned pickleball recognition and scoring models do not yet exist at release quality.
 
-## Loop
+## Implemented building blocks
+
+| Piece                        | Current state                                                                                                                       |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Native iOS capture           | AVFoundation capture, rolling pre/post buffer, Apple Vision live body pose, measured joint-motion overlay, automatic motion trigger |
+| Native Android capture       | CameraX capture, bundled MediaPipe body pose, measured joint-motion overlay, automatic motion trigger                               |
+| Short-clip result            | Private clip plus `unknown`/`awaiting_model`; no invented recognition or score                                                      |
+| Cue engine                   | Deterministic correction/improvement/repeat/stable/silence policy, tested with test-only inputs                                     |
+| Native speech                | iOS text-to-speech binding implemented                                                                                              |
+| Session and sync foundations | Owner-scoped local persistence, permit-bound outbox, canonical server acknowledgement                                               |
+
+## Missing release-critical pieces
+
+- A validated temporal pickleball stroke classifier with measured recall and false-trigger performance.
+- Paddle tracking, phase segmentation, trustworthy feature extraction, and coach-calibrated scoring.
+- Representative physical-device thermal, latency, lifecycle, and camera-placement validation.
+- Reviewed drills and rights-cleared instructional media connected to verified diagnoses.
+
+Until those pieces pass their gates, the product must not synthesize repetitions on a timer, feed deterministic test data into the UI, announce scores, claim progress, or consume a free rating.
+
+## Intended validated loop
 
 ```
-CameraEngine 720p60 → rolling ~2.0s YUV ring buffer (native/camera-engine)
-→ pose sampling 15–30fps (ApplePoseProvider baseline, native/vision-core)
-→ TemporalStrokeDetector: velocity state machine, min-confidence trigger,
-  refractory period (no paddle-twirl false strokes)
-→ stroke window frozen (~2s pre + ~1.5s post)
-→ phases → features → scoring engine (same math as single-shot; native mirror
-  must pass the shared golden vectors)
-→ CueEngine (@pickle/audio-coach-core): CORRECTION / IMPROVEMENT /
-  PERSONAL_BEST / REPEAT / STABLE / SILENCE with cooldowns
-→ PickleAudioCoach (AVSpeechSynthesizer; .playback + .duckOthers so cues play
-  through the silent switch; latest cue preempts stale ones)
-→ local persistence (SQLite) → outbox sync
+continuous native capture → validated repetition event → retain pre/post window
+→ pose + paddle (+ optional calibrated ball) → phases → mechanics + confidence
+→ score or explicit abstention → one cue → owner-scoped persistence → canonical sync
 ```
 
-Zero network dependency for the core loop. Cues also render on-screen (never audio-only, §56).
+Core coaching remains designed for zero network dependency. A future score is accepted only with its complete model/config version vector and sufficient confidence. The server consumes one of the two free ratings only when that successful result is atomically accepted.
 
-## Implementation state (honest)
+## Measurement gates
 
-| Piece                                                    | State                                                                                                                   |
-| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| LiveCourtEngine (rep → analyze → cue → summary), pure TS | TESTED (jest, real scoring + real cue engine)                                                                           |
-| Cue engine + cooldown/silence rules                      | TESTED (unit, incl. spec dialogue)                                                                                      |
-| Native TTS module (PickleAudioCoach pod)                 | Built into the app (iOS build succeeded); speaks in dev sessions                                                        |
-| Session persistence + summary + outbox                   | TESTED (jest logic suites; server finalize integration-tested)                                                          |
-| CameraEngine rolling buffer (Swift)                      | IMPLEMENTED, parse-verified; not yet wired into the RN app                                                              |
-| ApplePoseProvider (real Vision body-pose)                | IMPLEMENTED, parse-verified; wiring + accuracy validation pending                                                       |
-| TemporalStrokeDetector heuristic v0                      | IMPLEMENTED, parse-verified; learned model replaces it behind the same protocol                                         |
-| Dev mode                                                 | Reps driven by the labeled FixtureVisionProvider on a 6s cadence — banner on screen, `source:"fixture"` in every record |
-| Thermal capability tiers A/B/C                           | NOT_STARTED (device-tier column + config shipped; runtime adaptation with native wiring)                                |
-
-## Performance targets (gates, not aspirations — spec p. 36)
-
-stroke recall >95% (supported setup) · false strokes <1/10min · first score p50 <1.5s / p95 <2.5s · cue <3s · 30-min session without thermal failure · crash-free >99.5%. Measured once the native loop is wired; no invented benchmark numbers before then.
+The planned performance gates remain: supported-setup stroke recall above 95%, false strokes below 1 per 10 minutes, first-score p50 below 1.5 seconds / p95 below 2.5 seconds, cue below 3 seconds, 30-minute thermal pass, and crash-free sessions above 99.5%. These are targets, not achieved measurements. No benchmark is reported until it is measured on the released model and representative devices.

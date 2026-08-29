@@ -22,6 +22,22 @@ const pickleAliases = {
     monorepoRoot,
     'packages/vision-contracts/src/index.ts',
   ),
+  '@pickle/swing-domain': path.join(
+    monorepoRoot,
+    'packages/swing-domain/src/index.ts',
+  ),
+  '@pickle/model-registry': path.join(
+    monorepoRoot,
+    'packages/model-registry/src/index.ts',
+  ),
+  '@pickle/evaluation': path.join(
+    monorepoRoot,
+    'packages/evaluation/src/index.ts',
+  ),
+  '@pickle/vision-geometry': path.join(
+    monorepoRoot,
+    'packages/vision-geometry/src/index.ts',
+  ),
   '@pickle/analysis-pipeline': path.join(
     monorepoRoot,
     'packages/analysis-pipeline/src/index.ts',

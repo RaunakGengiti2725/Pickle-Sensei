@@ -6,7 +6,7 @@ import Foundation
 /// heuristic v0 the learned temporal classifier will replace behind the same
 /// StrokeDetecting protocol.
 public final class TemporalStrokeDetector: StrokeDetecting {
-  public let modelVersion = "temporal-stroke-heuristic-1"
+  public let modelVersion = "temporal-stroke-heuristic-2"
 
   private enum State { case idle, candidate, postStroke }
 
@@ -37,7 +37,7 @@ public final class TemporalStrokeDetector: StrokeDetecting {
 
   private let config: Config
   private var state: State = .idle
-  private var lastWrist: (x: Double, y: Double, tMs: Int)?
+  private var lastPoints: [String: (x: Double, y: Double, tMs: Int)] = [:]
   private var strokeStartMs = 0
   private var peakSpeedMs = 0
   private var peakSpeed = 0.0
@@ -49,27 +49,42 @@ public final class TemporalStrokeDetector: StrokeDetecting {
 
   public func ingest(pose: PoseFrame, paddle: PaddleFrame?) -> StrokeEvent? {
     guard pose.confidence >= config.minPoseConfidence else { return nil }
-    // Prefer the paddle center when tracked; fall back to dominant wrist.
-    let point: (x: Double, y: Double)
+    // Prefer a validated paddle center when available. Until then, evaluate
+    // each wrist against its own prior location and use the faster wrist. This
+    // avoids assuming handedness and avoids false speed spikes when the chosen
+    // point switches sides.
+    let points: [(key: String, x: Double, y: Double)]
     if let center = paddle?.center, (paddle?.confidence ?? 0) > 0.5 {
-      point = (Double(center.x), Double(center.y))
-    } else if let wrist = pose.landmarks.first(where: { $0.name == "right_wrist" || $0.name == "left_wrist" }) {
-      point = (wrist.x, wrist.y)
+      points = [("paddle", Double(center.x), Double(center.y))]
     } else {
-      return nil
+      points = pose.landmarks
+        .filter { ($0.name == "right_wrist" || $0.name == "left_wrist") && $0.visibility >= 0.35 }
+        .map { ($0.name, $0.x, $0.y) }
     }
+    guard !points.isEmpty else { return nil }
 
-    defer { lastWrist = (point.x, point.y, pose.timestampMs) }
-    guard let previous = lastWrist, pose.timestampMs > previous.tMs else { return nil }
-    let dt = Double(pose.timestampMs - previous.tMs) / 1000.0
-    let speed = ((point.x - previous.x) * (point.x - previous.x) + (point.y - previous.y) * (point.y - previous.y)).squareRoot() / dt
+    var speeds: [(speed: Double, previousTimestampMs: Int)] = []
+    for point in points {
+      if let previous = lastPoints[point.key], pose.timestampMs > previous.tMs {
+        let elapsedMs = pose.timestampMs - previous.tMs
+        if elapsedMs <= 250 {
+          let dt = Double(elapsedMs) / 1000.0
+          let dx = point.x - previous.x
+          let dy = point.y - previous.y
+          speeds.append(((dx * dx + dy * dy).squareRoot() / dt, previous.tMs))
+        }
+      }
+      lastPoints[point.key] = (point.x, point.y, pose.timestampMs)
+    }
+    guard let fastest = speeds.max(by: { $0.speed < $1.speed }) else { return nil }
+    let speed = fastest.speed
 
     switch state {
     case .idle:
       guard pose.timestampMs >= refractoryUntilMs else { return nil }
       if speed >= config.triggerWristSpeed {
         state = .candidate
-        strokeStartMs = previous.tMs
+        strokeStartMs = fastest.previousTimestampMs
         peakSpeed = speed
         peakSpeedMs = pose.timestampMs
       }
@@ -92,8 +107,7 @@ public final class TemporalStrokeDetector: StrokeDetecting {
         let event = StrokeEvent(
           startMs: strokeStartMs,
           endMs: pose.timestampMs,
-          // Contact neighborhood ≈ peak paddle/wrist speed (probabilistic, not exact).
-          contactMs: peakSpeedMs,
+          peakMotionMs: peakSpeedMs,
           confidence: min(0.95, 0.5 + peakSpeed / (config.triggerWristSpeed * 4))
         )
         state = .idle
@@ -109,7 +123,7 @@ public final class TemporalStrokeDetector: StrokeDetecting {
 
   public func reset() {
     state = .idle
-    lastWrist = nil
+    lastPoints.removeAll(keepingCapacity: true)
     refractoryUntilMs = 0
   }
 }

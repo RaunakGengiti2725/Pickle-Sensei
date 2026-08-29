@@ -1,0 +1,399 @@
+{
+  "generatedAtIso": "2026-08-29T01:51:06.841Z",
+  "version": "fault-taxonomy-v0-draft",
+  "status": "engineering draft — pending expert validation, will be revised by coaches. Ids are stable within v0-draft; coach corrections produce v1 with a recorded mapping.",
+  "strokeTaxonomyVersion": "pickleball-stroke-taxonomy-v3",
+  "strokeFamilyByV3Label": {
+    "FOREHAND_DRIVE": "drive",
+    "BACKHAND_DRIVE": "drive",
+    "SERVE": "serve",
+    "RETURN": "return",
+    "FOREHAND_DINK": "dink",
+    "BACKHAND_DINK": "dink",
+    "FOREHAND_VOLLEY": "volley",
+    "BACKHAND_VOLLEY": "volley",
+    "DROP": "drop_reset",
+    "RESET": "drop_reset",
+    "OVERHEAD": "overhead",
+    "SPEEDUP": "speedup",
+    "UNKNOWN": "global"
+  },
+  "families": [
+    {
+      "family": "global",
+      "displayName": "Any stroke",
+      "faults": [
+        {
+          "id": "global.late_contact",
+          "name": "Late contact",
+          "description": "Ball is struck later than intended relative to the body, jamming the stroke.",
+          "observableEvidence": "At the contact frame the ball is level with or behind the torso midline instead of out front.",
+          "typicalPhase": "contact"
+        },
+        {
+          "id": "global.off_balance_base",
+          "name": "Off-balance base",
+          "description": "The base is unstable through the hit; balance, not the ball, becomes the problem.",
+          "observableEvidence": "Feet still moving at contact, torso lean, stumble or hop immediately after the hit.",
+          "typicalPhase": "contact"
+        },
+        {
+          "id": "global.eyes_off_ball",
+          "name": "Eyes leave the ball",
+          "description": "Head/gaze pulls off the contact zone before the ball is struck.",
+          "observableEvidence": "In the frames before contact the chin/gaze visibly turns toward the target early.",
+          "typicalPhase": "contact"
+        },
+        {
+          "id": "global.no_recovery_to_ready",
+          "name": "No recovery to ready",
+          "description": "After the follow-through the player does not return paddle and base to a neutral ready position.",
+          "observableEvidence": "Paddle hangs low / player static while the opponent strikes the next ball.",
+          "typicalPhase": "recovery"
+        },
+        {
+          "id": "global.other_see_rationale",
+          "name": "Other (see rationale)",
+          "description": "Anything the draft vocabulary cannot express. The free-text rationale is the record.",
+          "observableEvidence": "Cite timestamps in the rationale; this is how the taxonomy grows from coach language.",
+          "typicalPhase": "any"
+        }
+      ]
+    },
+    {
+      "family": "dink",
+      "displayName": "Dinks",
+      "faults": [
+        {
+          "id": "dink.wristy_flick",
+          "name": "Wristy flick",
+          "description": "Wrist snaps through contact instead of a stable paddle face pushed from the shoulder.",
+          "observableEvidence": "Paddle face angle changes rapidly in the frames around contact while the forearm barely moves.",
+          "typicalPhase": "contact"
+        },
+        {
+          "id": "dink.backswing_too_big",
+          "name": "Backswing too big",
+          "description": "Take-back exceeds the compact dink envelope, costing control and time.",
+          "observableEvidence": "Paddle travels behind the hip/torso plane before moving forward.",
+          "typicalPhase": "preparation"
+        },
+        {
+          "id": "dink.standing_tall",
+          "name": "Standing tall (no leg bend)",
+          "description": "Player bends at the wrist/back instead of loading the legs to get under the ball.",
+          "observableEvidence": "Knees near straight at contact on a below-net ball; torso hinges down instead.",
+          "typicalPhase": "contact"
+        },
+        {
+          "id": "dink.contact_not_out_front",
+          "name": "Contact not out front",
+          "description": "Ball is played beside or behind the body instead of in front of the front knee.",
+          "observableEvidence": "At contact the paddle is inside/behind the front knee line.",
+          "typicalPhase": "contact"
+        },
+        {
+          "id": "dink.lifting_trajectory",
+          "name": "Lifted, attackable trajectory",
+          "description": "Upward flick sends the ball high over the net where it can be attacked.",
+          "observableEvidence": "Outgoing arc apexes well above the net tape (visible against the net in frame).",
+          "typicalPhase": "follow_through"
+        },
+        {
+          "id": "dink.paddle_drops_between",
+          "name": "Paddle drops between dinks",
+          "description": "Paddle falls below knee height between contacts instead of resetting in front.",
+          "observableEvidence": "Between dinks the paddle head is visibly below the knees / pointing at the ground.",
+          "typicalPhase": "recovery"
+        }
+      ]
+    },
+    {
+      "family": "volley",
+      "displayName": "Volleys",
+      "faults": [
+        {
+          "id": "volley.takeback_beyond_shoulder",
+          "name": "Take-back beyond the shoulder",
+          "description": "Punch volley is wound up like a groundstroke; no time to recover at NVZ pace.",
+          "observableEvidence": "Paddle drawn behind the shoulder plane before the forward move.",
+          "typicalPhase": "preparation"
+        },
+        {
+          "id": "volley.paddle_below_net_ready",
+          "name": "Low ready paddle",
+          "description": "Paddle carried below net height at the NVZ, so high balls arrive before the paddle does.",
+          "observableEvidence": "Between volleys the paddle head is below the tape while the player is at the line.",
+          "typicalPhase": "recovery"
+        },
+        {
+          "id": "volley.wrist_breakdown",
+          "name": "Wrist breaks down at contact",
+          "description": "Wrist collapses under pace; the face flips and the ball leaves off-line.",
+          "observableEvidence": "Abrupt face-angle change exactly at ball arrival; rebound direction inconsistent with face before contact.",
+          "typicalPhase": "contact"
+        },
+        {
+          "id": "volley.no_split_step",
+          "name": "No split step",
+          "description": "Feet are not set when the opponent strikes, so the first move is late.",
+          "observableEvidence": "Player mid-stride (weight on one foot) at the opponent's contact frame.",
+          "typicalPhase": "preparation"
+        },
+        {
+          "id": "volley.overswing_follow_through",
+          "name": "Overswing / long follow-through",
+          "description": "Volley finishes like a drive; compactness is lost and recovery is late.",
+          "observableEvidence": "Paddle continues far across the body after contact instead of stopping in front.",
+          "typicalPhase": "follow_through"
+        },
+        {
+          "id": "volley.contact_low_late",
+          "name": "Contact low and late",
+          "description": "Ball taken beside the torso below net height instead of out front at the highest comfortable point.",
+          "observableEvidence": "Contact frame shows paddle below tape height and level with the torso.",
+          "typicalPhase": "contact"
+        }
+      ]
+    },
+    {
+      "family": "drive",
+      "displayName": "Drives / groundstrokes",
+      "faults": [
+        {
+          "id": "drive.no_unit_turn",
+          "name": "No unit turn",
+          "description": "Shoulders/hips never coil; preparation is arm-only.",
+          "observableEvidence": "Shoulder line stays square to the net through the backswing.",
+          "typicalPhase": "preparation"
+        },
+        {
+          "id": "drive.late_preparation",
+          "name": "Late preparation",
+          "description": "Paddle is not back before the bounce; the swing is rushed.",
+          "observableEvidence": "Backswing still moving backward at/after the ball's bounce frame.",
+          "typicalPhase": "preparation"
+        },
+        {
+          "id": "drive.arm_only_power",
+          "name": "Arm-only power",
+          "description": "Kinetic chain skipped: hips/torso do not rotate into contact.",
+          "observableEvidence": "Hips visibly static while the arm accelerates; belt buckle never turns toward target.",
+          "typicalPhase": "acceleration"
+        },
+        {
+          "id": "drive.weight_on_back_foot",
+          "name": "Weight stuck on the back foot",
+          "description": "Weight moves backward (or never forward) through contact.",
+          "observableEvidence": "Rear-leaning torso at contact; back foot loaded or stepping away.",
+          "typicalPhase": "contact"
+        },
+        {
+          "id": "drive.open_face_at_contact",
+          "name": "Open face at contact",
+          "description": "Paddle face open at impact; ball sails high/long.",
+          "observableEvidence": "Slow-motion contact frame shows face angled skyward; outgoing flight climbs.",
+          "typicalPhase": "contact"
+        },
+        {
+          "id": "drive.incomplete_follow_through",
+          "name": "Incomplete follow-through",
+          "description": "Swing decelerates into/at contact instead of finishing across the body.",
+          "observableEvidence": "Paddle stops shortly after the contact frame; no finish over shoulder/across torso.",
+          "typicalPhase": "follow_through"
+        }
+      ]
+    },
+    {
+      "family": "overhead",
+      "displayName": "Overheads",
+      "faults": [
+        {
+          "id": "overhead.no_sideways_turn",
+          "name": "No sideways turn",
+          "description": "Body stays square to the net; the overhead becomes an arm wave.",
+          "observableEvidence": "Chest faces the net for the whole motion; no hip/shoulder line rotation sideways.",
+          "typicalPhase": "preparation"
+        },
+        {
+          "id": "overhead.ball_drifts_behind",
+          "name": "Ball drifts behind the head",
+          "description": "Contact point ends up behind the head instead of up-and-slightly-in-front.",
+          "observableEvidence": "At contact the ball is above/behind the head plane; back arches to reach it.",
+          "typicalPhase": "contact"
+        },
+        {
+          "id": "overhead.dropped_elbow",
+          "name": "Dropped elbow",
+          "description": "Hitting elbow collapses below the shoulder before acceleration; power and reach are lost.",
+          "observableEvidence": "Elbow visibly below the shoulder line as the paddle starts forward.",
+          "typicalPhase": "acceleration"
+        },
+        {
+          "id": "overhead.no_offhand_tracking",
+          "name": "No off-hand tracking",
+          "description": "Non-paddle arm never points at / tracks the lob, so spacing is a guess.",
+          "observableEvidence": "Off arm hangs at the side during the setup instead of raising toward the ball.",
+          "typicalPhase": "preparation"
+        },
+        {
+          "id": "overhead.no_feet_under_ball",
+          "name": "Feet never get under the ball",
+          "description": "Player reaches from where they stand instead of repositioning under the lob.",
+          "observableEvidence": "Zero adjustment steps between the lob going up and the swing.",
+          "typicalPhase": "preparation"
+        },
+        {
+          "id": "overhead.off_balance_landing",
+          "name": "Off-balance landing",
+          "description": "Player falls backward/sideways after the smash and cannot play the next ball.",
+          "observableEvidence": "Backward stumble or hop after contact; no balanced landing.",
+          "typicalPhase": "recovery"
+        }
+      ]
+    },
+    {
+      "family": "serve",
+      "displayName": "Serves (technique only — legality is Serve Check, a separate concept)",
+      "faults": [
+        {
+          "id": "serve.inconsistent_drop_toss",
+          "name": "Inconsistent drop/toss",
+          "description": "Ball release point wanders serve to serve, so contact must chase it.",
+          "observableEvidence": "Across serves the release/drop point visibly differs relative to the stance.",
+          "typicalPhase": "preparation"
+        },
+        {
+          "id": "serve.arm_only_no_legs",
+          "name": "Arm-only serve",
+          "description": "No leg drive or weight transfer; all pace comes from the shoulder.",
+          "observableEvidence": "Hips static, back foot never releases through the strike.",
+          "typicalPhase": "acceleration"
+        },
+        {
+          "id": "serve.no_unit_turn",
+          "name": "No unit turn",
+          "description": "Shoulders/hips do not coil during preparation.",
+          "observableEvidence": "Shoulder line square to the target through the whole motion.",
+          "typicalPhase": "preparation"
+        },
+        {
+          "id": "serve.rushed_motion",
+          "name": "Rushed motion",
+          "description": "No settled routine; the serve is hit hurried and off-rhythm.",
+          "observableEvidence": "Almost no pause between setup and strike; off-balance finish.",
+          "typicalPhase": "preparation"
+        },
+        {
+          "id": "serve.contact_point_wanders",
+          "name": "Contact point wanders",
+          "description": "Contact varies between out-front and beside-the-hip across serves.",
+          "observableEvidence": "Comparing serve contact frames shows widely different paddle/ball positions.",
+          "typicalPhase": "contact"
+        },
+        {
+          "id": "serve.incomplete_follow_through",
+          "name": "Incomplete follow-through",
+          "description": "Motion decelerates at contact instead of finishing toward the target.",
+          "observableEvidence": "Paddle stops near waist height right after contact.",
+          "typicalPhase": "follow_through"
+        }
+      ]
+    },
+    {
+      "family": "return",
+      "displayName": "Returns",
+      "faults": [
+        {
+          "id": "return.no_split_at_serve",
+          "name": "No split step at serve contact",
+          "description": "Returner is flat-footed or mid-stride when the serve is struck.",
+          "observableEvidence": "At the server's contact frame the returner's feet are not set/split.",
+          "typicalPhase": "preparation"
+        },
+        {
+          "id": "return.overswing_on_pace",
+          "name": "Overswing against pace",
+          "description": "Full groundstroke swing against a fast serve instead of a compact block/drive.",
+          "observableEvidence": "Long take-back past the torso plane against a visibly fast serve.",
+          "typicalPhase": "preparation"
+        },
+        {
+          "id": "return.jammed_contact",
+          "name": "Jammed contact",
+          "description": "Body not cleared; the ball plays the returner at the hip/torso.",
+          "observableEvidence": "Elbow pinned against the torso at contact; no space between body and paddle.",
+          "typicalPhase": "contact"
+        },
+        {
+          "id": "return.no_forward_transition",
+          "name": "No forward transition",
+          "description": "Returner stays parked at the baseline after the return instead of advancing.",
+          "observableEvidence": "Several frames after contact the returner has not started moving up-court.",
+          "typicalPhase": "recovery"
+        }
+      ]
+    },
+    {
+      "family": "drop_reset",
+      "displayName": "Drops / resets",
+      "faults": [
+        {
+          "id": "drop.overpowered_arc",
+          "name": "Overpowered arc",
+          "description": "Drop is driven flat/deep instead of apexing on the hitter's side and dying in the kitchen.",
+          "observableEvidence": "Ball apex occurs at/beyond the net plane; landing deep past the NVZ.",
+          "typicalPhase": "follow_through"
+        },
+        {
+          "id": "drop.wrist_scoop",
+          "name": "Wrist scoop",
+          "description": "Wrist scoops the lift instead of a stable face lifted from shoulder/legs.",
+          "observableEvidence": "Face angle rotates through contact; wrist visibly hinges upward.",
+          "typicalPhase": "contact"
+        },
+        {
+          "id": "drop.no_leg_lift",
+          "name": "No leg lift",
+          "description": "All arm on the lift; legs never load, so height control is inconsistent.",
+          "observableEvidence": "Knees straight through the lift on a low ball.",
+          "typicalPhase": "acceleration"
+        },
+        {
+          "id": "reset.stiff_hands",
+          "name": "Stiff hands on the reset",
+          "description": "Punching at a defensive reset instead of absorbing pace with soft hands.",
+          "observableEvidence": "Paddle moves forward into the ball on a defensive reset; rebound too hot.",
+          "typicalPhase": "contact"
+        }
+      ]
+    },
+    {
+      "family": "speedup",
+      "displayName": "Speed-ups / attacks",
+      "faults": [
+        {
+          "id": "speedup.telegraphed_windup",
+          "name": "Telegraphed wind-up",
+          "description": "Attack is announced by a visibly different preparation than the dink pattern.",
+          "observableEvidence": "Distinct pause/backswing before the attack that did not exist on previous dinks.",
+          "typicalPhase": "preparation"
+        },
+        {
+          "id": "speedup.attack_from_below_net",
+          "name": "Attack initiated below net height",
+          "description": "Speed-up attempted on a ball below the tape — low-percentage, rises into counters.",
+          "observableEvidence": "Contact frame shows the ball clearly below net height at initiation.",
+          "typicalPhase": "contact"
+        },
+        {
+          "id": "speedup.no_reset_after_attack",
+          "name": "No reset after the attack",
+          "description": "Player admires the speed-up instead of returning to ready for the counter.",
+          "observableEvidence": "Paddle/base not back to neutral by the opponent's counter contact.",
+          "typicalPhase": "recovery"
+        }
+      ]
+    }
+  ]
+}

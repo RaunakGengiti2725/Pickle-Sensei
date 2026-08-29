@@ -1,0 +1,246 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "afn-sasebo-rally2",
+  "annotatorId": "devin-visual-v1",
+  "createdAtIso": "2026-08-28T16:40:00.000Z",
+  "revision": 6,
+  "stroke": "volley",
+  "annotatedStrokeV3": "OVERHEAD",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 2350,
+    "accelerationStartMs": 2480,
+    "contactMs": 2620,
+    "followThroughEndMs": 2950,
+    "recoveryEndMs": 3100
+  },
+  "contactUncertainty": "plus_minus_2",
+  "eventLabels": [
+    {
+      "eventStartMs": 2380,
+      "contactMs": 2620,
+      "eventEndMs": 3050,
+      "owner": "target",
+      "note": "near gray-shirt man overhead/high hit; contact interpolated from ball transit 2500->2682 stills"
+    },
+    {
+      "eventStartMs": 3600,
+      "contactMs": 3834,
+      "eventEndMs": 4233,
+      "owner": "target",
+      "annotator": "devin-visual-v2-wave-a",
+      "note": "wave-a: second target overhead smash - lob incoming, turn+raise underway at 3600 (begins 3567-3633), contact 3834 (ball at paddle bracketed 3800/3867 at 29.97fps), follow-through 3867-4067, paddle settles at side 4233; walk to net after (4317+) = locomotion, excluded; point ends (no far return)"
+    }
+  ],
+  "faults": [],
+  "checkpointScores": {},
+  "paddleFrames": [
+    {
+      "tMs": 2200,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 2203.7,
+      "point": {
+        "x": 0.7234,
+        "y": 0.5195
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2500,
+      "point": {
+        "x": 0.742,
+        "y": 0.09
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2682,
+      "point": {
+        "x": 0.641,
+        "y": 0.449
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2850,
+      "point": null,
+      "visibility": "occluded"
+    }
+  ],
+  "ballFrames": [
+    {
+      "tMs": 2200,
+      "point": null,
+      "visibility": "not_visible"
+    },
+    {
+      "tMs": 2500,
+      "point": {
+        "x": 0.586,
+        "y": 0.156
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2682,
+      "point": {
+        "x": 0.698,
+        "y": 0.238
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2850,
+      "point": null,
+      "visibility": "not_visible"
+    }
+  ],
+  "overallScore": null,
+  "annotatorConfidence": 0.6,
+  "notes": "AFN Sasebo rear view. Near large gray-shirt man performs an OVERHEAD (paddle raised high at 2500, ball above at 0.16y; departure by 2682). Paddle motion-blurred at reach. Labels from raw stills (~±0.02); contact plus_minus_2 (interpolated between stills). Rev6 (wave-a, devin-visual-v2-wave-a): +1 target overhead event at 3600/3834/4233 (contact bracket 3800/3867), the smash that ends the rally; existing labels untouched.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-28T16:40:00.000Z"
+    },
+    {
+      "revision": 2,
+      "savedAtIso": "2026-08-28T23:41:27.193Z"
+    },
+    {
+      "revision": 3,
+      "savedAtIso": "2026-08-28T23:43:33.911Z"
+    },
+    {
+      "revision": 4,
+      "savedAtIso": "2026-08-29T01:40:30.765Z"
+    },
+    {
+      "revision": 5,
+      "savedAtIso": "2026-08-29T01:57:02.230Z"
+    },
+    {
+      "revision": 6,
+      "savedAtIso": "2026-08-29T02:23:47.264Z"
+    }
+  ],
+  "otherPaddleFrames": [
+    {
+      "tMs": 502,
+      "point": {
+        "x": 0.6829,
+        "y": 0.4482
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 902.4,
+      "point": {
+        "x": 0.8527,
+        "y": 0.4614
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 902.4,
+      "point": {
+        "x": 0.6348,
+        "y": 0.4521
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1302.8,
+      "point": {
+        "x": 0.2332,
+        "y": 0.5036
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1302.8,
+      "point": {
+        "x": 0.348,
+        "y": 0.4736
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1703.2,
+      "point": {
+        "x": 0.2503,
+        "y": 0.4902
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 1703.2,
+      "point": {
+        "x": 0.9004,
+        "y": 0.6183
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2103.6,
+      "point": {
+        "x": 0.2391,
+        "y": 0.4795
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2103.6,
+      "point": {
+        "x": 0.9139,
+        "y": 0.6074
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2203.7,
+      "point": {
+        "x": 0.2347,
+        "y": 0.4757
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2570.73,
+      "point": {
+        "x": 0.2358,
+        "y": 0.4626
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2604.1,
+      "point": {
+        "x": 0.2343,
+        "y": 0.4626
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 2971.13,
+      "point": {
+        "x": 0.2117,
+        "y": 0.4517
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 3004.5,
+      "point": {
+        "x": 0.2111,
+        "y": 0.4542
+      },
+      "visibility": "visible"
+    }
+  ]
+}

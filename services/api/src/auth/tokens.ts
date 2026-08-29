@@ -6,8 +6,7 @@ import { fail, failure, ok } from "@pickle/shared-types";
  * Token verification (spec pp. 22–23). OIDC access tokens verified against the
  * provider's JWKS. A dev HS256 issuer exists for local/test ONLY:
  *   - it requires PICKLE_ENV development|test AND DEV_AUTH_SECRET set;
- *   - constructing it in production throws (same guard philosophy as
- *     FixtureVisionProvider, directive §5);
+ *   - constructing it in production throws;
  *   - no password handling anywhere — identity lives in the IdP.
  */
 
