@@ -100,6 +100,16 @@ export {
   type CropRect,
 } from "./paddleCropRecovery.js";
 export {
+  DEFAULT_TWO_PASS_CONFIG,
+  mergePaddleDetectionFiles,
+  PADDLE_SCHEDULE_VERSION,
+  planTwoPassSchedule,
+  type DenseRegion,
+  type TwoPassSchedule,
+  type TwoPassScheduleConfig,
+  type TwoPassScheduleInput,
+} from "./paddleSchedule.js";
+export {
   proposeStrokeEvents,
   selectTargetEvent,
   STROKE_EVENT_VERSION,

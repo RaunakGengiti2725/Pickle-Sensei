@@ -58,13 +58,17 @@ interface ManifestEntry {
 export const REPORT_TIMING_STAGES: ReadonlyArray<{ reportKey: string; stage: string }> = [
   { reportKey: "poseExtractMs", stage: "poseExtract" },
   { reportKey: "playerTrackMs", stage: "playerTrack" },
+  { reportKey: "poseDerivativesMs", stage: "poseDerivatives" },
   { reportKey: "eventPrePassMs", stage: "eventPrePass" },
   { reportKey: "paddleDetectMs", stage: "paddleDetect" },
+  { reportKey: "paddleDetectSparseMs", stage: "paddleDetectSparse" },
+  { reportKey: "paddleDetectDenseMs", stage: "paddleDetectDense" },
   { reportKey: "paddleTrackMs", stage: "paddleTrack" },
   { reportKey: "ballCandidatesMs", stage: "ballCandidates" },
   { reportKey: "ballTrackMs", stage: "ballTrack" },
   { reportKey: "eventIsolationMs", stage: "eventIsolation" },
   { reportKey: "fusionAnalysisMs", stage: "fusionAnalysis" },
+  { reportKey: "overlayRenderMs", stage: "overlayRender" },
 ];
 
 export function harvestStageSamples(

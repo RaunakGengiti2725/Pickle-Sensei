@@ -68,9 +68,12 @@ export interface MacBenchResultsV1 {
   provenance: MacBenchProvenance;
   plan: MacBenchRunPlan;
   extractor: MacBenchExtractorBuild;
-  /** Per-stage cold/warm latency summaries (see run-mac-bench.sh for the
-   * stage vocabulary: e2e, poseExtract, playerTrack, eventPrePass,
-   * paddleDetect, ballDetect, eventIsolation, fusionAnalysis, cascade). */
+  /** Per-stage cold/warm latency summaries. The stage vocabulary is
+   * REPORT_TIMING_STAGES in runCase.ts (e2e, poseExtract, playerTrack,
+   * poseDerivatives, eventPrePass, paddleDetect, paddleDetectSparse,
+   * paddleDetectDense, paddleTrack, ballCandidates, ballTrack,
+   * eventIsolation, fusionAnalysis, overlayRender) plus cascade; stages the
+   * pipeline did not reach are absent, never 0. */
   stages: StageLatencySummary[];
   cascade: MacBenchCascadeSummary | null;
   /** Required (non-empty) when cascade is null. */

@@ -12,9 +12,11 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
     "assemble": "tsx src/assembleResults.ts",
+    "profile:linux": "tsx src/profileLinuxPieces.ts",
     "compare": "tsx src/compareResults.ts"
   },
   "devDependencies": {
+    "@pickle/swing-lab": "workspace:*",
     "@types/node": "^20.17.0",
     "tsx": "^4.19.2",
     "typescript": "^5.9.2",
