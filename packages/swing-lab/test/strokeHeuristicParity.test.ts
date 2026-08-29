@@ -5,13 +5,13 @@ import { classifyStroke as classifyLab } from "../src/strokeHeuristic.js";
 import { classifyStroke as classifyLite } from "@pickle/vision-geometry";
 
 /**
- * PARITY LOCK (D-036): packages/swing-lab/src/strokeHeuristic.ts and the
- * mobile port packages/vision-geometry/src/strokeHeuristicLite.ts must stay
- * byte-equivalent in semantics until the planned dedup lands. Every fixture
- * below runs through BOTH implementations and asserts the full prediction
+ * PARITY LOCK (D-036, dedup landed in wave G): the classifier now has a
+ * single implementation in packages/vision-geometry/src/strokeHeuristicLite.ts,
+ * and packages/swing-lab/src/strokeHeuristic.ts re-exports it. Every fixture
+ * below still runs through BOTH import paths and asserts the full prediction
  * objects (label, leaf, depth, confidence, evidence strings, limiting
- * factors, provenance fields) are deeply identical, so any one-sided change
- * fails CI.
+ * factors, provenance fields) are deeply identical, so any reintroduced
+ * divergence (e.g. a resurrected local copy or a broken re-export) fails CI.
  *
  * Fixtures deliberately route through every decision branch the heuristics
  * share: contact-point provenance (paddle plausible / implausible /
