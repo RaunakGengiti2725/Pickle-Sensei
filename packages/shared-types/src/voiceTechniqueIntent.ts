@@ -10,7 +10,7 @@ import {
 } from "./techniqueIntent.js";
 
 /**
- * VOICE INTENT — transcript-in, intent-out (voice-intent-v1).
+ * VOICE INTENT — transcript-in, intent-out (voice-intent-v2).
  *
  * Deterministic mapping from a speech transcript to the 61-technique
  * pickleball taxonomy (pickleballTaxonomy.ts). NOT a language model: a
@@ -27,6 +27,19 @@ import {
  *    the tappable grid stays available);
  *  - "auto" / "not sure" style phrases resolve to AUTO (declared-null).
  *
+ * voice-intent-v2 robustness additions (all still bounded and deterministic;
+ * strictly fewer silent accepts than v1, never more):
+ *  - common misspellings/ASR variants of technique words are in the grammar
+ *    ("forhand", "bakhand", "volly", "surve", "crosscort", "ernie"…);
+ *  - a bounded idiom list scrubs everyday phrases that reuse technique
+ *    words ("serve dinner", "return my call", "drop it", "on a roll",
+ *    "drive home"…) so they resolve to honest UNKNOWN, not a technique;
+ *  - phrases mentioning BOTH sides ("forehand and backhand dink") stay a
+ *    coarse candidate set across both sides — a side is never guessed;
+ *  - a phrase whose only technique word IS a stroke family ("volley",
+ *    "dink") keeps candidates within that family, so compound slugs from
+ *    other families (volley serve, volley reset) don't leak in.
+ *
  * The declared intent remains a PRIOR everywhere: this module only produces
  * declarations. Projection into the product-selectable capture registry
  * (SELECTABLE_TECHNIQUES_V1 → TechniqueIntent → declaredStroke) happens via
@@ -34,7 +47,7 @@ import {
  * separate record (see analysis-pipeline strokeAutoResolution.ts).
  */
 
-export const VOICE_INTENT_VERSION = "voice-intent-v1" as const;
+export const VOICE_INTENT_VERSION = "voice-intent-v2" as const;
 
 export type VoiceSide = "forehand" | "backhand" | "two_hand_backhand";
 
@@ -74,10 +87,31 @@ export type VoiceIntentResolution =
 const AUTO_PATTERN =
   /\bauto\b|\bdetect\b|\banything\b|\bwhatever\b|\bnot sure\b|\bdon'?t know\b|\bno idea\b|\bsurprise me\b/;
 
-const SIDE_PATTERNS: ReadonlyArray<[RegExp, VoiceSide]> = [
-  [/\btwo[-\s]?hand(ed)?\b/, "two_hand_backhand"],
-  [/\bfore\s?hand\b|\bfh\b/, "forehand"],
-  [/\bback\s?hand\b|\bbh\b/, "backhand"],
+const TWO_HAND_PATTERN = /\btwo[-\s]?hand(ed)?(\s*(back\s?hands?|bh))?\b/;
+const FOREHAND_PATTERN = /\bfore\s?hands?\b|\bforhands?\b|\bfour\s?hands?\b|\bfh\b/;
+const BACKHAND_PATTERN = /\bback\s?hands?\b|\bbackands?\b|\bbakhands?\b|\bbh\b/;
+
+/**
+ * Everyday idioms that reuse technique vocabulary. When one matches, the
+ * matched span is scrubbed before technique detection — if nothing else in
+ * the transcript names a technique, the resolution is an honest unknown.
+ * Bounded list, no fuzziness: only these exact patterns are scrubbed.
+ */
+const NON_TECHNIQUE_IDIOMS: readonly RegExp[] = [
+  /\bserv\w*\s+(dinner|lunch|breakfast|food|drinks?|tables?)\b/,
+  /\bserves?\s+(you|me|him|her|them|us)\s+right\b/,
+  /\breturn\w*\s+(my|your|his|her|their|our|the|a)\s+(calls?|texts?|emails?|messages?)\b/,
+  /\breturn\s+(it|that|this)\b/,
+  /\bdrop\w*\s+(me|him|her|them|us)\s+off\b/,
+  /\bdrop\s+(it|that|this)\b/,
+  /\bkitchen\s+counters?\b/,
+  /\bcounter\s?tops?\b/,
+  /\bon\s+a\s+roll\b/,
+  /\blet'?s\s+roll\b/,
+  /\broll\s+(out|call)\b/,
+  /\bblock\s+(out|of)\b/,
+  /\broad\s?blocks?\b/,
+  /\bdriv\w*\s+(home|back|over|away|safely?|to|us|me)\b/,
 ];
 
 /**
@@ -88,8 +122,8 @@ const SIDE_PATTERNS: ReadonlyArray<[RegExp, VoiceSide]> = [
  * intentional (nothing outside this grammar becomes a route).
  */
 const COMPONENT_PATTERNS: Readonly<Record<string, RegExp>> = {
-  volley: /\bvolley(s|ing|ed)?\b/,
-  serve: /\bserves?\b|\bserving\b/,
+  volley: /\bvolley(s|ing|ed)?\b|\bvoll(y|ys|ie|ies)\b|\bvoleys?\b/,
+  serve: /\bserves?\b|\bserving\b|\bservs?\b|\bsurves?\b/,
   drop: /\bdrops?\b|\bdrop\s?shots?\b/,
   return: /\breturns?\b|\breturning\b/,
   drive: /\bdrives?\b|\bdriving\b/,
@@ -99,10 +133,10 @@ const COMPONENT_PATTERNS: Readonly<Record<string, RegExp>> = {
   third_shot: /\b(third|3rd)[-\s]?shot\b/,
   transition: /\btransition(al)?\b/,
   reset: /\bresets?\b|\bresetting\b/,
-  half_volley: /\bhalf[-\s]?volley(s|ing)?\b/,
+  half_volley: /\bhalf[-\s]?(volley(s|ing)?|voll(y|ie))\b/,
   dink: /\bdinks?\b|\bdinking\b/,
   straight: /\bstraight\b|\bdown[-\s]the[-\s]line\b/,
-  crosscourt: /\bcross[-\s]?court\b/,
+  crosscourt: /\bcross[-\s]?court\b|\bcross\s?corts?\b/,
   punch: /\bpunch(es|ing)?\b/,
   speedup: /\bspeed[-\s]?ups?\b/,
   roll: /\broll(s|ing)?\b/,
@@ -114,7 +148,7 @@ const COMPONENT_PATTERNS: Readonly<Record<string, RegExp>> = {
   defensive: /\bdefensive\b/,
   lob: /\blobs?\b|\blobbing\b/,
   around_the_post: /\baround[-\s]the[-\s]post\b|\batp\b/,
-  erne: /\bernes?\b/,
+  erne: /\bernes?\b|\bernies?\b/,
   bert: /\bberts?\b/,
   tweener: /\btweeners?\b|\bbetween[-\s]the[-\s]legs\b/,
   squash_shot: /\bsquash(\s?shots?)?\b/,
@@ -174,11 +208,49 @@ function normalize(rawTranscript: string): string {
     .trim();
 }
 
-function detectSide(text: string): VoiceSide | null {
-  for (const [pattern, side] of SIDE_PATTERNS) {
-    if (pattern.test(text)) return side;
+/**
+ * Detects EVERY side the transcript mentions. A two-hand phrase consumes
+ * the "backhand" it contains ("two handed backhand dink" is ONE side); a
+ * transcript naming both sides ("forehand and backhand dink") reports both
+ * so the resolver stays coarse instead of guessing the first one.
+ */
+function detectSides(text: string): readonly VoiceSide[] {
+  const sides: VoiceSide[] = [];
+  let rest = text;
+  if (TWO_HAND_PATTERN.test(rest)) {
+    sides.push("two_hand_backhand");
+    rest = rest.replace(TWO_HAND_PATTERN, " ");
   }
-  return null;
+  if (FOREHAND_PATTERN.test(rest)) sides.push("forehand");
+  if (BACKHAND_PATTERN.test(rest)) sides.push("backhand");
+  return sides;
+}
+
+function scrubIdioms(text: string): string {
+  let scrubbed = text;
+  for (const idiom of NON_TECHNIQUE_IDIOMS) {
+    scrubbed = scrubbed.replace(idiom, " ");
+  }
+  return scrubbed.replace(/\s+/g, " ").trim();
+}
+
+const FAMILY_NAMES = new Set<string>(["serve", "return", "dink", "volley"]);
+
+/**
+ * When the transcript's only family-bearing technique word IS a stroke
+ * family name ("volley", "dink"), candidates stay within that family:
+ * compound slugs from other families that merely contain the word (volley
+ * serve → serve, volley reset → drop_reset) don't leak into the set.
+ */
+function filterToSpokenFamily(
+  candidates: readonly SlugGrammar[],
+  mentioned: readonly string[],
+): readonly SlugGrammar[] {
+  const spokenFamilies = mentioned.filter((component) => FAMILY_NAMES.has(component));
+  if (spokenFamilies.length !== 1) return candidates;
+  const family = spokenFamilies[0]! as StrokeFamily;
+  const withinFamily = candidates.filter((grammar) => grammar.family === family);
+  return withinFamily.length > 0 ? withinFamily : candidates;
 }
 
 /**
@@ -193,7 +265,7 @@ function detectSide(text: string): VoiceSide | null {
  * candidate set and stays a family/side-level intent.
  */
 export function resolveVoiceTechniqueIntent(rawTranscript: string): VoiceIntentResolution {
-  const text = normalize(rawTranscript);
+  const text = scrubIdioms(normalize(rawTranscript));
   if (text.length === 0) {
     return {
       version: VOICE_INTENT_VERSION,
@@ -206,7 +278,9 @@ export function resolveVoiceTechniqueIntent(rawTranscript: string): VoiceIntentR
     return { version: VOICE_INTENT_VERSION, status: "auto" };
   }
 
-  const side = detectSide(text);
+  const sides = detectSides(text);
+  const side = sides.length === 1 ? sides[0]! : null;
+  const multiSide = sides.length > 1;
   let mentioned = Object.entries(COMPONENT_PATTERNS)
     .filter(([, pattern]) => pattern.test(text))
     .map(([component]) => component)
@@ -220,7 +294,7 @@ export function resolveVoiceTechniqueIntent(rawTranscript: string): VoiceIntentR
     }
   }
 
-  if (mentioned.length === 0 && side === null) {
+  if (mentioned.length === 0 && sides.length === 0) {
     return {
       version: VOICE_INTENT_VERSION,
       status: "unknown",
@@ -229,7 +303,7 @@ export function resolveVoiceTechniqueIntent(rawTranscript: string): VoiceIntentR
     };
   }
 
-  if (mentioned.length === 0 && side !== null) {
+  if (mentioned.length === 0 && side !== null && !multiSide) {
     const sideCandidates = SLUG_GRAMMARS.filter((grammar) => grammar.side === side).map(
       (grammar) => grammar.slug,
     );
@@ -242,7 +316,18 @@ export function resolveVoiceTechniqueIntent(rawTranscript: string): VoiceIntentR
     };
   }
 
-  const sideMatches = (grammar: SlugGrammar): boolean => side === null || grammar.side === side;
+  const sideMatches = (grammar: SlugGrammar): boolean =>
+    multiSide
+      ? grammar.side !== null && sides.includes(grammar.side)
+      : side === null || grammar.side === side;
+
+  if (mentioned.length === 0 && multiSide) {
+    return coarseResolution(
+      SLUG_GRAMMARS.filter(sideMatches),
+      null,
+      "both sides mentioned — which one?",
+    );
+  }
 
   const candidates = SLUG_GRAMMARS.filter(
     (grammar) =>
@@ -268,7 +353,13 @@ export function resolveVoiceTechniqueIntent(rawTranscript: string): VoiceIntentR
         rePrompt: "That combination isn’t a technique I know — try again or tap one below.",
       };
     }
-    return coarseResolution(relaxed, side, "multiple techniques mentioned — which one?");
+    return coarseResolution(
+      filterToSpokenFamily(relaxed, mentioned),
+      multiSide ? null : side,
+      multiSide
+        ? "both sides mentioned — which one?"
+        : "multiple techniques mentioned — which one?",
+    );
   }
 
   // A LEAF is committed only when exactly one candidate is fully specified
@@ -276,11 +367,13 @@ export function resolveVoiceTechniqueIntent(rawTranscript: string): VoiceIntentR
   // side spoken when it has one). Extra candidates that would need
   // UNmentioned modifiers (e.g. "forehand drive" vs "forehand drive
   // RETURN") do not block the fully-specified one.
-  const fullyCovered = candidates.filter(
-    (grammar) =>
-      grammar.components.every((component) => mentioned.includes(component)) &&
-      (grammar.side === null || side !== null),
-  );
+  const fullyCovered = multiSide
+    ? []
+    : candidates.filter(
+        (grammar) =>
+          grammar.components.every((component) => mentioned.includes(component)) &&
+          (grammar.side === null || side !== null),
+      );
   if (fullyCovered.length === 1) {
     const only = fullyCovered[0]!;
     return {
@@ -292,7 +385,11 @@ export function resolveVoiceTechniqueIntent(rawTranscript: string): VoiceIntentR
     };
   }
 
-  return coarseResolution(candidates, side, null);
+  return coarseResolution(
+    filterToSpokenFamily(candidates, mentioned),
+    multiSide ? null : side,
+    multiSide ? "both sides mentioned — which one?" : null,
+  );
 }
 
 function coarseResolution(
