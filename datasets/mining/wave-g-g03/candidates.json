@@ -1,0 +1,3702 @@
+{
+ "meta": {
+  "schemaVersion": 1,
+  "generator": "tools/mining/wave_g_g03_multi_paddle_miner.py",
+  "workstream": "g03-f09-mining",
+  "tier": "C (machine-proposed; NOT Gold)",
+  "heldOutExcluded": [
+   "afn-vic-rally1",
+   "wm-dink-01"
+  ],
+  "heldOutStatement": "wm-dink-01 and afn-vic-rally1 were excluded by ID before any of their records were read into mining state; no frame, box, crop, or count from them appears in any output.",
+  "config": {
+   "REACH_TORSO_MULT": 2.2,
+   "REACH_BOX_DIAG_MULT": 2.5,
+   "MIN_BOX_SCORE": 0.3,
+   "IDLE_WRIST_MAX_NORM_VEL": 0.02,
+   "MOVING_PADDLE_MIN_NORM_VEL": 0.06,
+   "NEARBY_NORM_DIST": 0.25,
+   "POSE_OVERLAP_IOU": 0.05,
+   "CONF_DIP": 0.15
+  },
+  "provenance": [
+   {
+    "input": "datasets/paddle-bench/ownership-review/queue.json",
+    "sha256": "6fd255f69862b73f96ea391bc8e8d349b35685d43a2147b8237ec9201eeb9c65",
+    "framesUsed": 30,
+    "framesSkippedHeldOut": 21
+   },
+   {
+    "input": "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v2-waveC-ownership.json",
+    "sha256": "ee6f0535a018535db8d22749d5ba9f3960264d8fb2c2c77a376b135e4a6df67f",
+    "targetPoints": 11,
+    "otherPoints": 27,
+    "poseInput": "datasets/paddle-bench/runs-wave-a/wavea-944403-dink/people.json"
+   },
+   {
+    "input": "datasets/paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v2-waveC-ownership.json",
+    "sha256": "0cb5ff3c1159a6689f0ec860474ad1d80d20cc5626e86840a53fc22f216611e1",
+    "targetPoints": 3,
+    "otherPoints": 8,
+    "poseInput": "datasets/paddle-bench/runs-wave-a/wavea-944403-smash/people.json"
+   },
+   {
+    "input": "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-waveC-ownership.json",
+    "sha256": "339f0efdb4243898136130101d434560724593424a12bd326a24775232d65ca9",
+    "targetPoints": 2,
+    "otherPoints": 2,
+    "poseInput": "datasets/paddle-bench/runs-wave-a/wavea-faead-feed/people.json"
+   },
+   {
+    "input": "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v2-waveC-ownership.json",
+    "sha256": "295e61abb8b25724acef22656ca04041d4abff10d910bcfae0a547f6dc6f8089",
+    "targetPoints": 1,
+    "otherPoints": 10,
+    "poseInput": "datasets/paddle-bench/runs-wave-a/wavea-faead-rally/people.json"
+   },
+   {
+    "input": "datasets/paddle-bench/bundles/wavea-marne-dig/annotation/devin-visual-v2-waveC-ownership.json",
+    "sha256": "dafb2f668a11c285f315e9a3492b69f84b100bc3ee1653d61d63162d4d6e6c48",
+    "targetPoints": 1,
+    "otherPoints": 10,
+    "poseInput": "datasets/paddle-bench/runs-wave-a/wavea-marne-dig/people.json"
+   },
+   {
+    "input": "datasets/paddle-bench/runs-wave-a/wavea-944403-dink/people.json",
+    "sha256": "acbc59ce1746c5c7e5a4947caf4aa5463198cbb9b2e2155d33bf580c884230fd",
+    "frames": 204
+   },
+   {
+    "input": "datasets/paddle-bench/runs-wave-a/wavea-944403-smash/people.json",
+    "sha256": "0da50048d66aff8ced143231f85d9371aaf57ed2cd555ad5433dae1d1e5b8a66",
+    "frames": 120
+   },
+   {
+    "input": "datasets/paddle-bench/runs-wave-a/wavea-faead-feed/people.json",
+    "sha256": "ee1c00f4cb09abbbaed53582fdec9bcd47958d5185a90bb09acf80efc09c06df",
+    "frames": 50
+   },
+   {
+    "input": "datasets/paddle-bench/runs-wave-a/wavea-faead-rally/people.json",
+    "sha256": "a87391c846a685d65c53deb515988370829dd28d1f6651086788bd7feff7e252",
+    "frames": 58
+   },
+   {
+    "input": "datasets/paddle-bench/runs-wave-a/wavea-marne-dig/people.json",
+    "sha256": "633648b596fcd5aa4b589c8e05540ec62e74d4ddb1293ff262c5b60742f34a30",
+    "frames": 132
+   },
+   {
+    "input": "datasets/paddle-bench/runs-wave-a/wavea-marne-serve/people.json",
+    "sha256": "4b966588ad9e0385cc053155daa774023b88f508cca782f057ef76712c414a4b",
+    "frames": 379
+   },
+   {
+    "input": "datasets/paddle-bench/runs-wave-a/wavea-sasebo-volleys/people.json",
+    "sha256": "bbd733c85c59e6bdc8ce4b6d33217d6b7f9849057e0faccffbdaa1ca6200f53f",
+    "frames": 90
+   },
+   {
+    "input": "datasets/paddle-bench/runs-wave-a/wavea-wgm-wheelchair/people.json",
+    "sha256": "8c7f680d806585107e51cca82a5aa4e8639ce73cbec253e093492ff771ed7efc",
+    "frames": 32
+   }
+  ],
+  "countsPerScenario": {
+   "foreign_paddle_near_target": {
+    "candidates": 12,
+    "distinctCases": [
+     "wavea-944403-dink",
+     "wavea-944403-smash",
+     "wavea-faead-feed"
+    ]
+   },
+   "idle_wrist_moving_nearby_paddle": {
+    "candidates": 1,
+    "distinctCases": [
+     "wavea-944403-dink"
+    ]
+   },
+   "occlusion_identity_swap": {
+    "candidates": 28,
+    "distinctCases": [
+     "afn-sasebo-rally1",
+     "afn-sasebo-rally2",
+     "wavea-944403-dink",
+     "wavea-944403-smash",
+     "wavea-marne-dig",
+     "wavea-wgm-wheelchair"
+    ]
+   },
+   "partner_or_opponent_in_frame": {
+    "candidates": 54,
+    "distinctCases": [
+     "afn-sasebo-rally1",
+     "afn-sasebo-rally2",
+     "wavea-944403-dink",
+     "wavea-944403-smash",
+     "wavea-faead-feed",
+     "wavea-faead-rally",
+     "wavea-marne-dig",
+     "wm-volley-02"
+    ]
+   },
+   "two_paddles_within_reach": {
+    "candidates": 34,
+    "distinctCases": [
+     "afn-sasebo-rally1",
+     "afn-sasebo-rally2",
+     "wavea-944403-dink",
+     "wavea-944403-smash",
+     "wavea-faead-feed",
+     "wm-volley-02"
+    ]
+   }
+  },
+  "totalCandidates": 129
+ },
+ "candidates": [
+  {
+   "tier": "C",
+   "scenario": "foreign_paddle_near_target",
+   "caseId": "wavea-944403-dink",
+   "tMs": 20003.32,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "targetPoint": {
+     "x": 0.338,
+     "y": 0.6194
+    },
+    "otherPoint": {
+     "x": 0.3052,
+     "y": 0.3611
+    },
+    "distNorm": 0.2604,
+    "reachNorm": 0.3527,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.2618,
+   "candidateId": "g03-foreign_paddle-0000"
+  },
+  {
+   "tier": "C",
+   "scenario": "foreign_paddle_near_target",
+   "caseId": "wavea-944403-dink",
+   "tMs": 20253.57,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "targetPoint": {
+     "x": 0.3133,
+     "y": 0.5995
+    },
+    "otherPoint": {
+     "x": 0.4766,
+     "y": 0.4546
+    },
+    "distNorm": 0.2183,
+    "reachNorm": 0.3923,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.4434,
+   "candidateId": "g03-foreign_paddle-0001"
+  },
+  {
+   "tier": "C",
+   "scenario": "foreign_paddle_near_target",
+   "caseId": "wavea-944403-dink",
+   "tMs": 20503.82,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "targetPoint": {
+     "x": 0.2552,
+     "y": 0.5398
+    },
+    "otherPoint": {
+     "x": 0.3052,
+     "y": 0.3713
+    },
+    "distNorm": 0.1758,
+    "reachNorm": 0.3773,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.5342,
+   "candidateId": "g03-foreign_paddle-0002"
+  },
+  {
+   "tier": "C",
+   "scenario": "foreign_paddle_near_target",
+   "caseId": "wavea-944403-dink",
+   "tMs": 20754.07,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "targetPoint": {
+     "x": 0.2188,
+     "y": 0.5139
+    },
+    "otherPoint": {
+     "x": 0.3247,
+     "y": 0.3532
+    },
+    "distNorm": 0.1925,
+    "reachNorm": 0.362,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.4684,
+   "candidateId": "g03-foreign_paddle-0003"
+  },
+  {
+   "tier": "C",
+   "scenario": "foreign_paddle_near_target",
+   "caseId": "wavea-944403-dink",
+   "tMs": 21171.15,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "targetPoint": {
+     "x": 0.3021,
+     "y": 0.5315
+    },
+    "otherPoint": {
+     "x": 0.3177,
+     "y": 0.3611
+    },
+    "distNorm": 0.1711,
+    "reachNorm": 0.3604,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.5252,
+   "candidateId": "g03-foreign_paddle-0004"
+  },
+  {
+   "tier": "C",
+   "scenario": "foreign_paddle_near_target",
+   "caseId": "wavea-944403-dink",
+   "tMs": 21838.48,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "targetPoint": {
+     "x": 0.3333,
+     "y": 0.5602
+    },
+    "otherPoint": {
+     "x": 0.4419,
+     "y": 0.463
+    },
+    "distNorm": 0.1457,
+    "reachNorm": 0.3348,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.5647,
+   "candidateId": "g03-foreign_paddle-0005"
+  },
+  {
+   "tier": "C",
+   "scenario": "foreign_paddle_near_target",
+   "caseId": "wavea-944403-dink",
+   "tMs": 22088.73,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "targetPoint": {
+     "x": 0.349,
+     "y": 0.5167
+    },
+    "otherPoint": {
+     "x": 0.4479,
+     "y": 0.4477
+    },
+    "distNorm": 0.1206,
+    "reachNorm": 0.325,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.6289,
+   "candidateId": "g03-foreign_paddle-0006"
+  },
+  {
+   "tier": "C",
+   "scenario": "foreign_paddle_near_target",
+   "caseId": "wavea-944403-dink",
+   "tMs": 22338.98,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "targetPoint": {
+     "x": 0.3417,
+     "y": 0.4556
+    },
+    "otherPoint": {
+     "x": 0.3141,
+     "y": 0.3815
+    },
+    "distNorm": 0.0791,
+    "reachNorm": 0.2982,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.7348,
+   "candidateId": "g03-foreign_paddle-0007"
+  },
+  {
+   "tier": "C",
+   "scenario": "foreign_paddle_near_target",
+   "caseId": "wavea-944403-dink",
+   "tMs": 22589.23,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "targetPoint": {
+     "x": 0.3469,
+     "y": 0.462
+    },
+    "otherPoint": {
+     "x": 0.3547,
+     "y": 0.3843
+    },
+    "distNorm": 0.0781,
+    "reachNorm": 0.3368,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.7682,
+   "candidateId": "g03-foreign_paddle-0008"
+  },
+  {
+   "tier": "C",
+   "scenario": "foreign_paddle_near_target",
+   "caseId": "wavea-944403-smash",
+   "tMs": 3903.9,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "targetPoint": {
+     "x": 0.7701,
+     "y": 0.5324
+    },
+    "otherPoint": {
+     "x": 0.4938,
+     "y": 0.4454
+    },
+    "distNorm": 0.2897,
+    "reachNorm": 0.291,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.0044,
+   "candidateId": "g03-foreign_paddle-0009"
+  },
+  {
+   "tier": "C",
+   "scenario": "foreign_paddle_near_target",
+   "caseId": "wavea-faead-feed",
+   "tMs": 34375.0,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "targetPoint": {
+     "x": 0.4526,
+     "y": 0.4722
+    },
+    "otherPoint": {
+     "x": 0.5849,
+     "y": 0.387
+    },
+    "distNorm": 0.1574,
+    "reachNorm": 0.2845,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.4469,
+   "candidateId": "g03-foreign_paddle-0010"
+  },
+  {
+   "tier": "C",
+   "scenario": "foreign_paddle_near_target",
+   "caseId": "wavea-faead-feed",
+   "tMs": 34625.0,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "targetPoint": {
+     "x": 0.4583,
+     "y": 0.456
+    },
+    "otherPoint": {
+     "x": 0.5878,
+     "y": 0.4088
+    },
+    "distNorm": 0.1378,
+    "reachNorm": 0.2748,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.4984,
+   "candidateId": "g03-foreign_paddle-0011"
+  },
+  {
+   "tier": "C",
+   "scenario": "idle_wrist_moving_nearby_paddle",
+   "caseId": "wavea-944403-dink",
+   "tMs": 22464.1,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "intervalMs": [
+     22338.98,
+     22589.23
+    ],
+    "targetStepNorm": 0.0082,
+    "otherStepNorm": 0.1182,
+    "proximityNorm": 0.1121,
+    "note": "target paddle point ~static while nearby other paddle moves"
+   },
+   "minerScore": 0.7169,
+   "candidateId": "g03-idle_wrist_mov-0012"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 433.77,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     2
+    ],
+    "iou": 0.5889,
+    "note": "overlapping paddle detections: identity/ownership swap risk"
+   },
+   "minerScore": 0.5889,
+   "candidateId": "g03-occlusion_iden-0013"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 1001.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     2
+    ],
+    "iou": 0.0017,
+    "note": "overlapping paddle detections: identity/ownership swap risk"
+   },
+   "minerScore": 0.0017,
+   "candidateId": "g03-occlusion_iden-0014"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 2602.6,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     1
+    ],
+    "iou": 0.0068,
+    "note": "overlapping paddle detections: identity/ownership swap risk"
+   },
+   "minerScore": 0.0068,
+   "candidateId": "g03-occlusion_iden-0015"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 3003.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     3
+    ],
+    "iou": 0.3416,
+    "note": "overlapping paddle detections: identity/ownership swap risk"
+   },
+   "minerScore": 0.3416,
+   "candidateId": "g03-occlusion_iden-0016"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 3436.77,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     2
+    ],
+    "iou": 0.115,
+    "note": "overlapping paddle detections: identity/ownership swap risk"
+   },
+   "minerScore": 0.115,
+   "candidateId": "g03-occlusion_iden-0017"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 568.73,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     1
+    ],
+    "iou": 0.2432,
+    "note": "overlapping paddle detections: identity/ownership swap risk"
+   },
+   "minerScore": 0.2432,
+   "candidateId": "g03-occlusion_iden-0018"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 4339.17,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     1
+    ],
+    "iou": 0.0088,
+    "note": "overlapping paddle detections: identity/ownership swap risk"
+   },
+   "minerScore": 0.0088,
+   "candidateId": "g03-occlusion_iden-0019"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-944403-dink",
+   "tMs": 20020.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     0,
+     3
+    ],
+    "bboxIoU": 0.0736,
+    "confidenceDip": false,
+    "confidences": [
+     0.67,
+     0.759
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.0736,
+   "candidateId": "g03-occlusion_iden-0020"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-944403-dink",
+   "tMs": 20037.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     0,
+     3
+    ],
+    "bboxIoU": 0.0748,
+    "confidenceDip": false,
+    "confidences": [
+     0.662,
+     0.756
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.0748,
+   "candidateId": "g03-occlusion_iden-0021"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-944403-dink",
+   "tMs": 20187.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     0,
+     3
+    ],
+    "bboxIoU": 0.0578,
+    "confidenceDip": false,
+    "confidences": [
+     0.647,
+     0.806
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.0578,
+   "candidateId": "g03-occlusion_iden-0022"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-944403-dink",
+   "tMs": 21071.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     0,
+     2
+    ],
+    "bboxIoU": 0.0724,
+    "confidenceDip": false,
+    "confidences": [
+     0.653,
+     0.752
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.0724,
+   "candidateId": "g03-occlusion_iden-0023"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-944403-dink",
+   "tMs": 21221.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     0,
+     2
+    ],
+    "bboxIoU": 0.0931,
+    "confidenceDip": false,
+    "confidences": [
+     0.67,
+     0.692
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.0931,
+   "candidateId": "g03-occlusion_iden-0024"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-944403-dink",
+   "tMs": 21371.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     0,
+     2
+    ],
+    "bboxIoU": 0.1046,
+    "confidenceDip": false,
+    "confidences": [
+     0.704,
+     0.725
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.1046,
+   "candidateId": "g03-occlusion_iden-0025"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-944403-dink",
+   "tMs": 21388.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     0,
+     2
+    ],
+    "bboxIoU": 0.105,
+    "confidenceDip": false,
+    "confidences": [
+     0.709,
+     0.724
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.105,
+   "candidateId": "g03-occlusion_iden-0026"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-944403-dink",
+   "tMs": 21605.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     1,
+     3
+    ],
+    "bboxIoU": 0.1084,
+    "confidenceDip": true,
+    "confidences": [
+     0.629,
+     0.363
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.3584,
+   "candidateId": "g03-occlusion_iden-0027"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-944403-dink",
+   "tMs": 21688.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     0,
+     3
+    ],
+    "bboxIoU": 0.0548,
+    "confidenceDip": false,
+    "confidences": [
+     0.638,
+     0.242
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.0548,
+   "candidateId": "g03-occlusion_iden-0028"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-944403-dink",
+   "tMs": 22122.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     2,
+     3
+    ],
+    "bboxIoU": 0.1328,
+    "confidenceDip": false,
+    "confidences": [
+     0.674,
+     0.2
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.1328,
+   "candidateId": "g03-occlusion_iden-0029"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-944403-dink",
+   "tMs": 22239.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     2,
+     3
+    ],
+    "bboxIoU": 0.1141,
+    "confidenceDip": true,
+    "confidences": [
+     0.439,
+     0.698
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.3641,
+   "candidateId": "g03-occlusion_iden-0030"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-944403-dink",
+   "tMs": 22356.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     2,
+     3
+    ],
+    "bboxIoU": 0.1212,
+    "confidenceDip": true,
+    "confidences": [
+     0.38,
+     0.625
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.3712,
+   "candidateId": "g03-occlusion_iden-0031"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-944403-dink",
+   "tMs": 22472.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     2,
+     3
+    ],
+    "bboxIoU": 0.144,
+    "confidenceDip": true,
+    "confidences": [
+     0.193,
+     0.247
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.394,
+   "candidateId": "g03-occlusion_iden-0032"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-944403-smash",
+   "tMs": 3086.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     2,
+     3
+    ],
+    "bboxIoU": 0.0555,
+    "confidenceDip": true,
+    "confidences": [
+     0.575,
+     0.697
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.3055,
+   "candidateId": "g03-occlusion_iden-0033"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-944403-smash",
+   "tMs": 3537.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     2,
+     3
+    ],
+    "bboxIoU": 0.079,
+    "confidenceDip": false,
+    "confidences": [
+     0.43,
+     0.652
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.079,
+   "candidateId": "g03-occlusion_iden-0034"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-marne-dig",
+   "tMs": 12412.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     1,
+     3
+    ],
+    "bboxIoU": 0.0555,
+    "confidenceDip": false,
+    "confidences": [
+     0.647,
+     0.11
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.0555,
+   "candidateId": "g03-occlusion_iden-0035"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-wgm-wheelchair",
+   "tMs": 182467.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     2,
+     5
+    ],
+    "bboxIoU": 0.0798,
+    "confidenceDip": true,
+    "confidences": [
+     0.396,
+     0.371
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.3298,
+   "candidateId": "g03-occlusion_iden-0036"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-wgm-wheelchair",
+   "tMs": 182900.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     0,
+     5
+    ],
+    "bboxIoU": 0.1076,
+    "confidenceDip": false,
+    "confidences": [
+     0.599,
+     0.55
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.1076,
+   "candidateId": "g03-occlusion_iden-0037"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-wgm-wheelchair",
+   "tMs": 182967.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     1,
+     4
+    ],
+    "bboxIoU": 0.0575,
+    "confidenceDip": true,
+    "confidences": [
+     0.422,
+     0.362
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.3075,
+   "candidateId": "g03-occlusion_iden-0038"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-wgm-wheelchair",
+   "tMs": 183100.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     0,
+     1
+    ],
+    "bboxIoU": 0.0773,
+    "confidenceDip": false,
+    "confidences": [
+     0.609,
+     0.471
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.0773,
+   "candidateId": "g03-occlusion_iden-0039"
+  },
+  {
+   "tier": "C",
+   "scenario": "occlusion_identity_swap",
+   "caseId": "wavea-wgm-wheelchair",
+   "tMs": 183267.0,
+   "source": "pose-tracks:runs-wave-a/people.json",
+   "evidence": {
+    "personIndices": [
+     0,
+     1
+    ],
+    "bboxIoU": 0.0586,
+    "confidenceDip": false,
+    "confidences": [
+     0.553,
+     0.449
+    ],
+    "note": "pose bboxes overlap: association ambiguity / swap risk"
+   },
+   "minerScore": 0.0586,
+   "candidateId": "g03-occlusion_iden-0040"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 33.37,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 3,
+    "boxes": [
+     [
+      793.6,
+      273.5,
+      916.4,
+      436.2
+     ],
+     [
+      1141.7,
+      630.3,
+      1178.8,
+      801.8
+     ],
+     [
+      849.8,
+      491.5,
+      908.7,
+      533.8
+     ]
+    ],
+    "scores": [
+     0.8587,
+     0.4366,
+     0.304
+    ]
+   },
+   "minerScore": 0.304,
+   "candidateId": "g03-partner_or_opp-0041"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 433.77,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 3,
+    "boxes": [
+     [
+      857.4,
+      333.1,
+      980.4,
+      615.4
+     ],
+     [
+      856.9,
+      474.2,
+      923.4,
+      615.6
+     ],
+     [
+      872.9,
+      332.6,
+      984.6,
+      528.1
+     ]
+    ],
+    "scores": [
+     0.8509,
+     0.5454,
+     0.3009
+    ]
+   },
+   "minerScore": 0.3009,
+   "candidateId": "g03-partner_or_opp-0042"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 1001.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 3,
+    "boxes": [
+     [
+      756.2,
+      557.4,
+      979.6,
+      653.5
+     ],
+     [
+      943.2,
+      488,
+      1010.1,
+      555.7
+     ],
+     [
+      941.6,
+      651.9,
+      1021,
+      825.3
+     ]
+    ],
+    "scores": [
+     0.894,
+     0.5842,
+     0.3174
+    ]
+   },
+   "minerScore": 0.3174,
+   "candidateId": "g03-partner_or_opp-0043"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 1401.4,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 4,
+    "boxes": [
+     [
+      898.7,
+      460.3,
+      1017,
+      556.9
+     ],
+     [
+      781.4,
+      368.6,
+      832,
+      448.7
+     ],
+     [
+      907.8,
+      610.2,
+      1009.8,
+      750.2
+     ],
+     [
+      1700.4,
+      387.7,
+      1729.9,
+      448.9
+     ]
+    ],
+    "scores": [
+     0.8113,
+     0.6182,
+     0.464,
+     0.3471
+    ]
+   },
+   "minerScore": 0.3471,
+   "candidateId": "g03-partner_or_opp-0044"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 1801.8,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 2,
+    "boxes": [
+     [
+      881.2,
+      430.5,
+      1081.6,
+      535
+     ],
+     [
+      822.7,
+      625,
+      889.1,
+      766.9
+     ]
+    ],
+    "scores": [
+     0.8711,
+     0.8155
+    ]
+   },
+   "minerScore": 0.8155,
+   "candidateId": "g03-partner_or_opp-0045"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 2202.2,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 2,
+    "boxes": [
+     [
+      858.1,
+      607.6,
+      1030.8,
+      724.5
+     ],
+     [
+      741.2,
+      641.3,
+      810.3,
+      733.5
+     ]
+    ],
+    "scores": [
+     0.7169,
+     0.6972
+    ]
+   },
+   "minerScore": 0.6972,
+   "candidateId": "g03-partner_or_opp-0046"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 2602.6,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 2,
+    "boxes": [
+     [
+      805.5,
+      567.4,
+      890.9,
+      668
+     ],
+     [
+      882.9,
+      645.1,
+      985,
+      827.9
+     ]
+    ],
+    "scores": [
+     0.7074,
+     0.6939
+    ]
+   },
+   "minerScore": 0.6939,
+   "candidateId": "g03-partner_or_opp-0047"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 3003.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 4,
+    "boxes": [
+     [
+      787.4,
+      410.2,
+      938.6,
+      523.6
+     ],
+     [
+      562.9,
+      392.7,
+      605.9,
+      448
+     ],
+     [
+      925.3,
+      374.2,
+      995.2,
+      487.7
+     ],
+     [
+      859.9,
+      406.7,
+      997.7,
+      513.1
+     ]
+    ],
+    "scores": [
+     0.8759,
+     0.4269,
+     0.3881,
+     0.31
+    ]
+   },
+   "minerScore": 0.31,
+   "candidateId": "g03-partner_or_opp-0048"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 3436.77,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 3,
+    "boxes": [
+     [
+      886.5,
+      428.5,
+      974.5,
+      515.5
+     ],
+     [
+      745.3,
+      377.4,
+      801,
+      446.6
+     ],
+     [
+      944.1,
+      440.7,
+      1043.2,
+      585.9
+     ]
+    ],
+    "scores": [
+     0.6457,
+     0.3555,
+     0.3307
+    ]
+   },
+   "minerScore": 0.3307,
+   "candidateId": "g03-partner_or_opp-0049"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 3837.17,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 3,
+    "boxes": [
+     [
+      828.1,
+      447.6,
+      957,
+      517.3
+     ],
+     [
+      271.1,
+      364.9,
+      309.1,
+      415.9
+     ],
+     [
+      778.5,
+      379.2,
+      801.5,
+      450.3
+     ]
+    ],
+    "scores": [
+     0.8367,
+     0.4554,
+     0.4376
+    ]
+   },
+   "minerScore": 0.4376,
+   "candidateId": "g03-partner_or_opp-0050"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 568.73,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 3,
+    "boxes": [
+     [
+      1631.5,
+      650.4,
+      1749.3,
+      796.1
+     ],
+     [
+      1686.3,
+      645.1,
+      1747.5,
+      719.9
+     ],
+     [
+      1224,
+      864.2,
+      1294.4,
+      929.5
+     ]
+    ],
+    "scores": [
+     0.5042,
+     0.4528,
+     0.3343
+    ]
+   },
+   "minerScore": 0.3343,
+   "candidateId": "g03-partner_or_opp-0051"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 1002.5,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 4,
+    "boxes": [
+     [
+      1595.7,
+      451.3,
+      1702.7,
+      546.3
+     ],
+     [
+      652.5,
+      471,
+      678.6,
+      494.6
+     ],
+     [
+      375.7,
+      466.6,
+      405.6,
+      505.5
+     ],
+     [
+      1226.3,
+      491.8,
+      1250.9,
+      538.1
+     ]
+    ],
+    "scores": [
+     0.7333,
+     0.4208,
+     0.4015,
+     0.3826
+    ]
+   },
+   "minerScore": 0.3826,
+   "candidateId": "g03-partner_or_opp-0052"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 1402.9,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 2,
+    "boxes": [
+     [
+      1243.9,
+      713.2,
+      1379.5,
+      758.4
+     ],
+     [
+      1744.5,
+      629.6,
+      1809.7,
+      707.2
+     ]
+    ],
+    "scores": [
+     0.5164,
+     0.3765
+    ]
+   },
+   "minerScore": 0.3765,
+   "candidateId": "g03-partner_or_opp-0053"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 1803.3,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 3,
+    "boxes": [
+     [
+      466.9,
+      510.1,
+      508.9,
+      529.6
+     ],
+     [
+      1298.6,
+      719.9,
+      1383.1,
+      748.9
+     ],
+     [
+      1729.8,
+      570.8,
+      1799.7,
+      701.3
+     ]
+    ],
+    "scores": [
+     0.5312,
+     0.503,
+     0.319
+    ]
+   },
+   "minerScore": 0.319,
+   "candidateId": "g03-partner_or_opp-0054"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 2203.7,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 3,
+    "boxes": [
+     [
+      423.9,
+      500.2,
+      477.5,
+      527.3
+     ],
+     [
+      1729.1,
+      637.8,
+      1820.6,
+      801.6
+     ],
+     [
+      1342.6,
+      502.2,
+      1435.1,
+      620
+     ]
+    ],
+    "scores": [
+     0.6947,
+     0.5061,
+     0.3045
+    ]
+   },
+   "minerScore": 0.3045,
+   "candidateId": "g03-partner_or_opp-0055"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 2604.1,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 2,
+    "boxes": [
+     [
+      425.8,
+      484.2,
+      474,
+      515
+     ],
+     [
+      1139.8,
+      387.2,
+      1264,
+      448.2
+     ]
+    ],
+    "scores": [
+     0.8077,
+     0.4412
+    ]
+   },
+   "minerScore": 0.4412,
+   "candidateId": "g03-partner_or_opp-0056"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 3004.5,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 2,
+    "boxes": [
+     [
+      383.5,
+      474.1,
+      427.2,
+      507
+     ],
+     [
+      1185.9,
+      493.7,
+      1233.2,
+      535.9
+     ]
+    ],
+    "scores": [
+     0.7182,
+     0.4648
+    ]
+   },
+   "minerScore": 0.4648,
+   "candidateId": "g03-partner_or_opp-0057"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 3404.9,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 3,
+    "boxes": [
+     [
+      1188.4,
+      500,
+      1234.7,
+      535.5
+     ],
+     [
+      1812.2,
+      516.7,
+      1844.8,
+      551.1
+     ],
+     [
+      1785.3,
+      558.7,
+      1822.4,
+      602.5
+     ]
+    ],
+    "scores": [
+     0.5587,
+     0.3501,
+     0.3486
+    ]
+   },
+   "minerScore": 0.3486,
+   "candidateId": "g03-partner_or_opp-0058"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 3805.3,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 4,
+    "boxes": [
+     [
+      201.6,
+      459.6,
+      247.7,
+      501
+     ],
+     [
+      104.4,
+      492.5,
+      179.4,
+      528.6
+     ],
+     [
+      68.4,
+      530.1,
+      119.5,
+      579.1
+     ],
+     [
+      1185,
+      495.8,
+      1220.4,
+      535.5
+     ]
+    ],
+    "scores": [
+     0.6673,
+     0.6351,
+     0.4518,
+     0.4024
+    ]
+   },
+   "minerScore": 0.4024,
+   "candidateId": "g03-partner_or_opp-0059"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 4339.17,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 2,
+    "boxes": [
+     [
+      1817,
+      489.9,
+      1889.7,
+      551.6
+     ],
+     [
+      1807.7,
+      549.9,
+      1919.7,
+      635.7
+     ]
+    ],
+    "scores": [
+     0.3541,
+     0.3165
+    ]
+   },
+   "minerScore": 0.3165,
+   "candidateId": "g03-partner_or_opp-0060"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-944403-dink",
+   "tMs": 20003.32,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 1,
+    "numOtherPoints": 2,
+    "points": [
+     {
+      "x": 0.338,
+      "y": 0.6194
+     },
+     {
+      "x": 0.7393,
+      "y": 0.5653
+     },
+     {
+      "x": 0.3052,
+      "y": 0.3611
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0061"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-944403-dink",
+   "tMs": 20253.57,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 1,
+    "numOtherPoints": 3,
+    "points": [
+     {
+      "x": 0.3133,
+      "y": 0.5995
+     },
+     {
+      "x": 0.737,
+      "y": 0.5898
+     },
+     {
+      "x": 0.324,
+      "y": 0.3472
+     },
+     {
+      "x": 0.4766,
+      "y": 0.4546
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0062"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-944403-dink",
+   "tMs": 20503.82,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 1,
+    "numOtherPoints": 3,
+    "points": [
+     {
+      "x": 0.2552,
+      "y": 0.5398
+     },
+     {
+      "x": 0.6052,
+      "y": 0.563
+     },
+     {
+      "x": 0.4534,
+      "y": 0.4546
+     },
+     {
+      "x": 0.3052,
+      "y": 0.3713
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0063"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-944403-dink",
+   "tMs": 20754.07,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 1,
+    "numOtherPoints": 3,
+    "points": [
+     {
+      "x": 0.2188,
+      "y": 0.5139
+     },
+     {
+      "x": 0.7323,
+      "y": 0.587
+     },
+     {
+      "x": 0.3247,
+      "y": 0.3532
+     },
+     {
+      "x": 0.4318,
+      "y": 0.3981
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0064"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-944403-dink",
+   "tMs": 21087.73,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 1,
+    "numOtherPoints": 1,
+    "points": [
+     {
+      "x": 0.3021,
+      "y": 0.5407
+     },
+     {
+      "x": 0.3021,
+      "y": 0.3639
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0065"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-944403-dink",
+   "tMs": 21337.98,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 0,
+    "numOtherPoints": 2,
+    "points": [
+     {
+      "x": 0.3164,
+      "y": 0.3611
+     },
+     {
+      "x": 0.4635,
+      "y": 0.4324
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0066"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-944403-dink",
+   "tMs": 21588.23,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 1,
+    "numOtherPoints": 3,
+    "points": [
+     {
+      "x": 0.2812,
+      "y": 0.5565
+     },
+     {
+      "x": 0.3151,
+      "y": 0.3458
+     },
+     {
+      "x": 0.4695,
+      "y": 0.4551
+     },
+     {
+      "x": 0.8289,
+      "y": 0.5676
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0067"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-944403-dink",
+   "tMs": 21838.48,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 1,
+    "numOtherPoints": 3,
+    "points": [
+     {
+      "x": 0.3333,
+      "y": 0.5602
+     },
+     {
+      "x": 0.4419,
+      "y": 0.463
+     },
+     {
+      "x": 0.8151,
+      "y": 0.5694
+     },
+     {
+      "x": 0.3135,
+      "y": 0.3671
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0068"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-944403-dink",
+   "tMs": 22088.73,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 1,
+    "numOtherPoints": 3,
+    "points": [
+     {
+      "x": 0.349,
+      "y": 0.5167
+     },
+     {
+      "x": 0.7161,
+      "y": 0.6093
+     },
+     {
+      "x": 0.3255,
+      "y": 0.3773
+     },
+     {
+      "x": 0.4479,
+      "y": 0.4477
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0069"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-944403-dink",
+   "tMs": 22338.98,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 1,
+    "numOtherPoints": 2,
+    "points": [
+     {
+      "x": 0.3417,
+      "y": 0.4556
+     },
+     {
+      "x": 0.4536,
+      "y": 0.4491
+     },
+     {
+      "x": 0.3141,
+      "y": 0.3815
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0070"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-944403-dink",
+   "tMs": 22589.23,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 1,
+    "numOtherPoints": 1,
+    "points": [
+     {
+      "x": 0.3469,
+      "y": 0.462
+     },
+     {
+      "x": 0.3547,
+      "y": 0.3843
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0071"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-944403-smash",
+   "tMs": 2902.9,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 1,
+    "numOtherPoints": 2,
+    "points": [
+     {
+      "x": 0.8169,
+      "y": 0.5278
+     },
+     {
+      "x": 0.5169,
+      "y": 0.6125
+     },
+     {
+      "x": 0.5161,
+      "y": 0.4287
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0072"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-944403-smash",
+   "tMs": 3903.9,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 1,
+    "numOtherPoints": 3,
+    "points": [
+     {
+      "x": 0.7701,
+      "y": 0.5324
+     },
+     {
+      "x": 0.5818,
+      "y": 0.1167
+     },
+     {
+      "x": 0.4534,
+      "y": 0.5264
+     },
+     {
+      "x": 0.4938,
+      "y": 0.4454
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0073"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-faead-feed",
+   "tMs": 34375.0,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 1,
+    "numOtherPoints": 1,
+    "points": [
+     {
+      "x": 0.4526,
+      "y": 0.4722
+     },
+     {
+      "x": 0.5849,
+      "y": 0.387
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0074"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-faead-feed",
+   "tMs": 34625.0,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 1,
+    "numOtherPoints": 1,
+    "points": [
+     {
+      "x": 0.4583,
+      "y": 0.456
+     },
+     {
+      "x": 0.5878,
+      "y": 0.4088
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0075"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-faead-rally",
+   "tMs": 12833.33,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 0,
+    "numOtherPoints": 2,
+    "points": [
+     {
+      "x": 0.425,
+      "y": 0.4319
+     },
+     {
+      "x": 0.6365,
+      "y": 0.4014
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0076"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-faead-rally",
+   "tMs": 13333.33,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 1,
+    "numOtherPoints": 2,
+    "points": [
+     {
+      "x": 0.9078,
+      "y": 0.2472
+     },
+     {
+      "x": 0.4219,
+      "y": 0.4769
+     },
+     {
+      "x": 0.6445,
+      "y": 0.3773
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0077"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-faead-rally",
+   "tMs": 13750.0,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 0,
+    "numOtherPoints": 2,
+    "points": [
+     {
+      "x": 0.4479,
+      "y": 0.4227
+     },
+     {
+      "x": 0.6284,
+      "y": 0.4028
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0078"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-faead-rally",
+   "tMs": 14083.33,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 0,
+    "numOtherPoints": 2,
+    "points": [
+     {
+      "x": 0.4536,
+      "y": 0.4546
+     },
+     {
+      "x": 0.556,
+      "y": 0.3463
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0079"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-marne-dig",
+   "tMs": 12862.85,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 0,
+    "numOtherPoints": 2,
+    "points": [
+     {
+      "x": 0.4755,
+      "y": 0.4106
+     },
+     {
+      "x": 0.6979,
+      "y": 0.6352
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0080"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-marne-dig",
+   "tMs": 13263.25,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 0,
+    "numOtherPoints": 2,
+    "points": [
+     {
+      "x": 0.4609,
+      "y": 0.4444
+     },
+     {
+      "x": 0.6651,
+      "y": 0.625
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0081"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-marne-dig",
+   "tMs": 13596.92,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 0,
+    "numOtherPoints": 2,
+    "points": [
+     {
+      "x": 0.4523,
+      "y": 0.4676
+     },
+     {
+      "x": 0.6555,
+      "y": 0.6481
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0082"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-marne-dig",
+   "tMs": 14130.78,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 0,
+    "numOtherPoints": 2,
+    "points": [
+     {
+      "x": 0.4818,
+      "y": 0.3991
+     },
+     {
+      "x": 0.6448,
+      "y": 0.4944
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0083"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wavea-marne-dig",
+   "tMs": 14264.25,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "numTargetPoints": 1,
+    "numOtherPoints": 2,
+    "points": [
+     {
+      "x": 0.082,
+      "y": 0.5782
+     },
+     {
+      "x": 0.6432,
+      "y": 0.5
+     },
+     {
+      "x": 0.487,
+      "y": 0.4259
+     }
+    ]
+   },
+   "minerScore": 1.0,
+   "candidateId": "g03-partner_or_opp-0084"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wm-volley-02",
+   "tMs": 4290.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 4,
+    "boxes": [
+     [
+      523.1,
+      490.8,
+      693.2,
+      606.4
+     ],
+     [
+      862.3,
+      422.7,
+      906,
+      460.2
+     ],
+     [
+      325.5,
+      98.2,
+      371.9,
+      214
+     ],
+     [
+      129,
+      333.2,
+      204.7,
+      460.5
+     ]
+    ],
+    "scores": [
+     0.902,
+     0.5498,
+     0.4255,
+     0.3936
+    ]
+   },
+   "minerScore": 0.3936,
+   "candidateId": "g03-partner_or_opp-0085"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wm-volley-02",
+   "tMs": 4690.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 2,
+    "boxes": [
+     [
+      583.8,
+      485.6,
+      665.2,
+      574.8
+     ],
+     [
+      326,
+      103,
+      368.1,
+      213.9
+     ]
+    ],
+    "scores": [
+     0.8862,
+     0.4587
+    ]
+   },
+   "minerScore": 0.4587,
+   "candidateId": "g03-partner_or_opp-0086"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wm-volley-02",
+   "tMs": 5090.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 2,
+    "boxes": [
+     [
+      327.4,
+      104.6,
+      368,
+      213.4
+     ],
+     [
+      353.4,
+      416.1,
+      373.2,
+      499
+     ]
+    ],
+    "scores": [
+     0.533,
+     0.4959
+    ]
+   },
+   "minerScore": 0.4959,
+   "candidateId": "g03-partner_or_opp-0087"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wm-volley-02",
+   "tMs": 5490.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 4,
+    "boxes": [
+     [
+      528.5,
+      539.7,
+      577.2,
+      728
+     ],
+     [
+      328.6,
+      105.8,
+      368.4,
+      213.4
+     ],
+     [
+      953.8,
+      333.1,
+      998.3,
+      362.2
+     ],
+     [
+      861.2,
+      362.3,
+      880.3,
+      437.8
+     ]
+    ],
+    "scores": [
+     0.62,
+     0.5037,
+     0.3588,
+     0.3038
+    ]
+   },
+   "minerScore": 0.3038,
+   "candidateId": "g03-partner_or_opp-0088"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wm-volley-02",
+   "tMs": 5890.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 3,
+    "boxes": [
+     [
+      328.8,
+      106,
+      369.3,
+      213.6
+     ],
+     [
+      910.4,
+      423.8,
+      962.3,
+      461.6
+     ],
+     [
+      698.1,
+      404,
+      750.6,
+      467.4
+     ]
+    ],
+    "scores": [
+     0.5119,
+     0.4379,
+     0.3843
+    ]
+   },
+   "minerScore": 0.3843,
+   "candidateId": "g03-partner_or_opp-0089"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wm-volley-02",
+   "tMs": 6290.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 3,
+    "boxes": [
+     [
+      811.3,
+      601.1,
+      921.9,
+      665.1
+     ],
+     [
+      864.9,
+      416.8,
+      927.6,
+      462.5
+     ],
+     [
+      325.8,
+      104.3,
+      371,
+      213.5
+     ]
+    ],
+    "scores": [
+     0.8528,
+     0.7334,
+     0.3999
+    ]
+   },
+   "minerScore": 0.3999,
+   "candidateId": "g03-partner_or_opp-0090"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wm-volley-02",
+   "tMs": 6690.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 3,
+    "boxes": [
+     [
+      685.4,
+      559.7,
+      878,
+      624.7
+     ],
+     [
+      821.1,
+      459.3,
+      885.8,
+      503.5
+     ],
+     [
+      324.7,
+      103.9,
+      372,
+      213.4
+     ]
+    ],
+    "scores": [
+     0.8476,
+     0.7201,
+     0.4241
+    ]
+   },
+   "minerScore": 0.4241,
+   "candidateId": "g03-partner_or_opp-0091"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wm-volley-02",
+   "tMs": 7090.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 2,
+    "boxes": [
+     [
+      865,
+      454.9,
+      965.4,
+      512.8
+     ],
+     [
+      325.1,
+      103.9,
+      374.4,
+      213.4
+     ]
+    ],
+    "scores": [
+     0.6434,
+     0.4632
+    ]
+   },
+   "minerScore": 0.4632,
+   "candidateId": "g03-partner_or_opp-0092"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wm-volley-02",
+   "tMs": 7490.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 4,
+    "boxes": [
+     [
+      887.8,
+      416.7,
+      1000,
+      494.1
+     ],
+     [
+      677.1,
+      550,
+      772.9,
+      627.4
+     ],
+     [
+      325,
+      103.8,
+      375.4,
+      213.6
+     ],
+     [
+      649.6,
+      416.3,
+      709.8,
+      470.3
+     ]
+    ],
+    "scores": [
+     0.7595,
+     0.6752,
+     0.5102,
+     0.3162
+    ]
+   },
+   "minerScore": 0.3162,
+   "candidateId": "g03-partner_or_opp-0093"
+  },
+  {
+   "tier": "C",
+   "scenario": "partner_or_opponent_in_frame",
+   "caseId": "wm-volley-02",
+   "tMs": 7890.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "numBoxes": 2,
+    "boxes": [
+     [
+      597.7,
+      556.4,
+      739.9,
+      642.3
+     ],
+     [
+      325.7,
+      102,
+      376.4,
+      213.3
+     ]
+    ],
+    "scores": [
+     0.6774,
+     0.4716
+    ]
+   },
+   "minerScore": 0.4716,
+   "candidateId": "g03-partner_or_opp-0094"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 33.37,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     2
+    ],
+    "centerDistNorm": 0.1467,
+    "reachNorm": 0.4092,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      793.6,
+      273.5,
+      916.4,
+      436.2
+     ],
+     [
+      849.8,
+      491.5,
+      908.7,
+      533.8
+     ]
+    ]
+   },
+   "minerScore": 0.6416,
+   "candidateId": "g03-two_paddles_wi-0095"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 433.77,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     2
+    ],
+    "centerDistNorm": 0.041,
+    "reachNorm": 0.6728,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      857.4,
+      333.1,
+      980.4,
+      615.4
+     ],
+     [
+      872.9,
+      332.6,
+      984.6,
+      528.1
+     ]
+    ]
+   },
+   "minerScore": 0.9391,
+   "candidateId": "g03-two_paddles_wi-0096"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 1001.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     1
+    ],
+    "centerDistNorm": 0.0959,
+    "reachNorm": 0.3662,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      756.2,
+      557.4,
+      979.6,
+      653.5
+     ],
+     [
+      943.2,
+      488,
+      1010.1,
+      555.7
+     ]
+    ]
+   },
+   "minerScore": 0.7381,
+   "candidateId": "g03-two_paddles_wi-0097"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 1401.4,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     1
+    ],
+    "centerDistNorm": 0.1215,
+    "reachNorm": 0.2715,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      898.7,
+      460.3,
+      1017,
+      556.9
+     ],
+     [
+      781.4,
+      368.6,
+      832,
+      448.7
+     ]
+    ]
+   },
+   "minerScore": 0.5525,
+   "candidateId": "g03-two_paddles_wi-0098"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 1801.8,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     1
+    ],
+    "centerDistNorm": 0.2079,
+    "reachNorm": 0.3558,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      881.2,
+      430.5,
+      1081.6,
+      535
+     ],
+     [
+      822.7,
+      625,
+      889.1,
+      766.9
+     ]
+    ]
+   },
+   "minerScore": 0.4156,
+   "candidateId": "g03-two_paddles_wi-0099"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 2202.2,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     1
+    ],
+    "centerDistNorm": 0.0901,
+    "reachNorm": 0.3518,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      858.1,
+      607.6,
+      1030.8,
+      724.5
+     ],
+     [
+      741.2,
+      641.3,
+      810.3,
+      733.5
+     ]
+    ]
+   },
+   "minerScore": 0.744,
+   "candidateId": "g03-two_paddles_wi-0100"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 2602.6,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     1
+    ],
+    "centerDistNorm": 0.1187,
+    "reachNorm": 0.4435,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      805.5,
+      567.4,
+      890.9,
+      668
+     ],
+     [
+      882.9,
+      645.1,
+      985,
+      827.9
+     ]
+    ]
+   },
+   "minerScore": 0.7323,
+   "candidateId": "g03-two_paddles_wi-0101"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 3003.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     2,
+     3
+    ],
+    "centerDistNorm": 0.0314,
+    "reachNorm": 0.3047,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      925.3,
+      374.2,
+      995.2,
+      487.7
+     ],
+     [
+      859.9,
+      406.7,
+      997.7,
+      513.1
+     ]
+    ]
+   },
+   "minerScore": 0.8969,
+   "candidateId": "g03-two_paddles_wi-0102"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 3436.77,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     2
+    ],
+    "centerDistNorm": 0.0504,
+    "reachNorm": 0.36,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      886.5,
+      428.5,
+      974.5,
+      515.5
+     ],
+     [
+      944.1,
+      440.7,
+      1043.2,
+      585.9
+     ]
+    ]
+   },
+   "minerScore": 0.8599,
+   "candidateId": "g03-two_paddles_wi-0103"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "afn-sasebo-rally1",
+   "tMs": 3837.17,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     2
+    ],
+    "centerDistNorm": 0.0824,
+    "reachNorm": 0.2328,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      828.1,
+      447.6,
+      957,
+      517.3
+     ],
+     [
+      778.5,
+      379.2,
+      801.5,
+      450.3
+     ]
+    ]
+   },
+   "minerScore": 0.6463,
+   "candidateId": "g03-two_paddles_wi-0104"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 568.73,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     1
+    ],
+    "centerDistNorm": 0.0402,
+    "reachNorm": 0.3705,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      1631.5,
+      650.4,
+      1749.3,
+      796.1
+     ],
+     [
+      1686.3,
+      645.1,
+      1747.5,
+      719.9
+     ]
+    ]
+   },
+   "minerScore": 0.8916,
+   "candidateId": "g03-two_paddles_wi-0105"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 1002.5,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     3
+    ],
+    "centerDistNorm": 0.2144,
+    "reachNorm": 0.2603,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      1595.7,
+      451.3,
+      1702.7,
+      546.3
+     ],
+     [
+      1226.3,
+      491.8,
+      1250.9,
+      538.1
+     ]
+    ]
+   },
+   "minerScore": 0.1765,
+   "candidateId": "g03-two_paddles_wi-0106"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 1803.3,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     1,
+     2
+    ],
+    "centerDistNorm": 0.2388,
+    "reachNorm": 0.3155,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      1298.6,
+      719.9,
+      1383.1,
+      748.9
+     ],
+     [
+      1729.8,
+      570.8,
+      1799.7,
+      701.3
+     ]
+    ]
+   },
+   "minerScore": 0.243,
+   "candidateId": "g03-two_paddles_wi-0107"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 2203.7,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     1,
+     2
+    ],
+    "centerDistNorm": 0.249,
+    "reachNorm": 0.3974,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      1729.1,
+      637.8,
+      1820.6,
+      801.6
+     ],
+     [
+      1342.6,
+      502.2,
+      1435.1,
+      620
+     ]
+    ]
+   },
+   "minerScore": 0.3736,
+   "candidateId": "g03-two_paddles_wi-0108"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 3404.9,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     1,
+     2
+    ],
+    "centerDistNorm": 0.0451,
+    "reachNorm": 0.1123,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      1812.2,
+      516.7,
+      1844.8,
+      551.1
+     ],
+     [
+      1785.3,
+      558.7,
+      1822.4,
+      602.5
+     ]
+    ]
+   },
+   "minerScore": 0.5984,
+   "candidateId": "g03-two_paddles_wi-0109"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 3805.3,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     1,
+     2
+    ],
+    "centerDistNorm": 0.0478,
+    "reachNorm": 0.1315,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      104.4,
+      492.5,
+      179.4,
+      528.6
+     ],
+     [
+      68.4,
+      530.1,
+      119.5,
+      579.1
+     ]
+    ]
+   },
+   "minerScore": 0.6363,
+   "candidateId": "g03-two_paddles_wi-0110"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "afn-sasebo-rally2",
+   "tMs": 4339.17,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     1
+    ],
+    "centerDistNorm": 0.0669,
+    "reachNorm": 0.2464,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      1817,
+      489.9,
+      1889.7,
+      551.6
+     ],
+     [
+      1807.7,
+      549.9,
+      1919.7,
+      635.7
+     ]
+    ]
+   },
+   "minerScore": 0.7284,
+   "candidateId": "g03-two_paddles_wi-0111"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "wavea-944403-dink",
+   "tMs": 20003.32,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "pointA": {
+     "x": 0.338,
+     "y": 0.6194
+    },
+    "pointB": {
+     "x": 0.3052,
+     "y": 0.3611
+    },
+    "distNorm": 0.2604,
+    "reachNorm": 0.3527,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.2618,
+   "candidateId": "g03-two_paddles_wi-0112"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "wavea-944403-dink",
+   "tMs": 20253.57,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "pointA": {
+     "x": 0.3133,
+     "y": 0.5995
+    },
+    "pointB": {
+     "x": 0.4766,
+     "y": 0.4546
+    },
+    "distNorm": 0.2183,
+    "reachNorm": 0.3923,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.4434,
+   "candidateId": "g03-two_paddles_wi-0113"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "wavea-944403-dink",
+   "tMs": 20503.82,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "pointA": {
+     "x": 0.2552,
+     "y": 0.5398
+    },
+    "pointB": {
+     "x": 0.3052,
+     "y": 0.3713
+    },
+    "distNorm": 0.1758,
+    "reachNorm": 0.3773,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.5342,
+   "candidateId": "g03-two_paddles_wi-0114"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "wavea-944403-dink",
+   "tMs": 20754.07,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "pointA": {
+     "x": 0.2188,
+     "y": 0.5139
+    },
+    "pointB": {
+     "x": 0.3247,
+     "y": 0.3532
+    },
+    "distNorm": 0.1925,
+    "reachNorm": 0.362,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.4684,
+   "candidateId": "g03-two_paddles_wi-0115"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "wavea-944403-dink",
+   "tMs": 21171.15,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "pointA": {
+     "x": 0.3021,
+     "y": 0.5315
+    },
+    "pointB": {
+     "x": 0.3177,
+     "y": 0.3611
+    },
+    "distNorm": 0.1711,
+    "reachNorm": 0.3604,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.5252,
+   "candidateId": "g03-two_paddles_wi-0116"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "wavea-944403-dink",
+   "tMs": 21838.48,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "pointA": {
+     "x": 0.3333,
+     "y": 0.5602
+    },
+    "pointB": {
+     "x": 0.4419,
+     "y": 0.463
+    },
+    "distNorm": 0.1457,
+    "reachNorm": 0.3348,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.5647,
+   "candidateId": "g03-two_paddles_wi-0117"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "wavea-944403-dink",
+   "tMs": 22088.73,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "pointA": {
+     "x": 0.349,
+     "y": 0.5167
+    },
+    "pointB": {
+     "x": 0.4479,
+     "y": 0.4477
+    },
+    "distNorm": 0.1206,
+    "reachNorm": 0.325,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.6289,
+   "candidateId": "g03-two_paddles_wi-0118"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "wavea-944403-dink",
+   "tMs": 22338.98,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "pointA": {
+     "x": 0.3417,
+     "y": 0.4556
+    },
+    "pointB": {
+     "x": 0.3141,
+     "y": 0.3815
+    },
+    "distNorm": 0.0791,
+    "reachNorm": 0.2982,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.7348,
+   "candidateId": "g03-two_paddles_wi-0119"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "wavea-944403-dink",
+   "tMs": 22589.23,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "pointA": {
+     "x": 0.3469,
+     "y": 0.462
+    },
+    "pointB": {
+     "x": 0.3547,
+     "y": 0.3843
+    },
+    "distNorm": 0.0781,
+    "reachNorm": 0.3368,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.7682,
+   "candidateId": "g03-two_paddles_wi-0120"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "wavea-944403-smash",
+   "tMs": 3903.9,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "pointA": {
+     "x": 0.7701,
+     "y": 0.5324
+    },
+    "pointB": {
+     "x": 0.4938,
+     "y": 0.4454
+    },
+    "distNorm": 0.2897,
+    "reachNorm": 0.291,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.0044,
+   "candidateId": "g03-two_paddles_wi-0121"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "wavea-faead-feed",
+   "tMs": 34375.0,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "pointA": {
+     "x": 0.4526,
+     "y": 0.4722
+    },
+    "pointB": {
+     "x": 0.5849,
+     "y": 0.387
+    },
+    "distNorm": 0.1574,
+    "reachNorm": 0.2845,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.4469,
+   "candidateId": "g03-two_paddles_wi-0122"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "wavea-faead-feed",
+   "tMs": 34625.0,
+   "source": "ownership-points:devin-visual-v2-waveC-ownership",
+   "evidence": {
+    "pointA": {
+     "x": 0.4583,
+     "y": 0.456
+    },
+    "pointB": {
+     "x": 0.5878,
+     "y": 0.4088
+    },
+    "distNorm": 0.1378,
+    "reachNorm": 0.2748,
+    "normalization": "torso-normalized"
+   },
+   "minerScore": 0.4984,
+   "candidateId": "g03-two_paddles_wi-0123"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "wm-volley-02",
+   "tMs": 4290.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     1
+    ],
+    "centerDistNorm": 0.2933,
+    "reachNorm": 0.5024,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      523.1,
+      490.8,
+      693.2,
+      606.4
+     ],
+     [
+      862.3,
+      422.7,
+      906,
+      460.2
+     ]
+    ]
+   },
+   "minerScore": 0.4163,
+   "candidateId": "g03-two_paddles_wi-0124"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "wm-volley-02",
+   "tMs": 5490.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     2,
+     3
+    ],
+    "centerDistNorm": 0.1159,
+    "reachNorm": 0.1812,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      953.8,
+      333.1,
+      998.3,
+      362.2
+     ],
+     [
+      861.2,
+      362.3,
+      880.3,
+      437.8
+     ]
+    ]
+   },
+   "minerScore": 0.3601,
+   "candidateId": "g03-two_paddles_wi-0125"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "wm-volley-02",
+   "tMs": 6290.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     1
+    ],
+    "centerDistNorm": 0.1816,
+    "reachNorm": 0.3137,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      811.3,
+      601.1,
+      921.9,
+      665.1
+     ],
+     [
+      864.9,
+      416.8,
+      927.6,
+      462.5
+     ]
+    ]
+   },
+   "minerScore": 0.4212,
+   "candidateId": "g03-two_paddles_wi-0126"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "wm-volley-02",
+   "tMs": 6690.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     0,
+     1
+    ],
+    "centerDistNorm": 0.1252,
+    "reachNorm": 0.5045,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      685.4,
+      559.7,
+      878,
+      624.7
+     ],
+     [
+      821.1,
+      459.3,
+      885.8,
+      503.5
+     ]
+    ]
+   },
+   "minerScore": 0.7518,
+   "candidateId": "g03-two_paddles_wi-0127"
+  },
+  {
+   "tier": "C",
+   "scenario": "two_paddles_within_reach",
+   "caseId": "wm-volley-02",
+   "tMs": 7490.0,
+   "source": "detector-boxes:ownership-review/queue.json",
+   "evidence": {
+    "boxIndices": [
+     1,
+     3
+    ],
+    "centerDistNorm": 0.142,
+    "reachNorm": 0.2991,
+    "normalization": "box-diagonal fallback (no pose for this case)",
+    "boxesPx": [
+     [
+      677.1,
+      550,
+      772.9,
+      627.4
+     ],
+     [
+      649.6,
+      416.3,
+      709.8,
+      470.3
+     ]
+    ]
+   },
+   "minerScore": 0.5251,
+   "candidateId": "g03-two_paddles_wi-0128"
+  }
+ ]
+}

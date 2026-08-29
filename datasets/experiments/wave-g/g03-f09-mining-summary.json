@@ -1,0 +1,72 @@
+{
+ "schemaVersion": 1,
+ "workstream": "g03-f09-mining",
+ "wave": "G",
+ "createdAtIso": "2026-08-29T17:40:00.000Z",
+ "branch": "devin/wave-g/g03-f09-mining",
+ "baseBranch": "devin/1787988068-wave-c-integration",
+ "mission": "Mine every rights-cleared, Linux-available per-frame artifact in the repo for natural occurrences of six multi-paddle hazard scenarios (foreign paddle near target, crossing paddles, partner/opponent paddle in frame, idle target wrist with moving nearby paddle, two paddles inside torso-normalized reach, occlusion-induced identity swaps); emit a Tier-C candidate list, reviewable frame packs, and a frozen annotation queue + label schema for future human review. Nothing is called Gold.",
+ "method": "Deterministic geometric miner (tools/mining/wave_g_g03_multi_paddle_miner.py) over three committed signal sources: (1) machine paddle-detector boxes in datasets/paddle-bench/ownership-review/queue.json (score >= 0.30); (2) Wave-C ownership paddle points (target + other) in bundles/*/annotation/devin-visual-v2-waveC-ownership.json, used only as seed coordinates; (3) Apple-Vision pose tracks in datasets/paddle-bench/runs-wave-a/*/people.json for torso-normalized reach (2.2x shoulder-hip length), wrist velocity, and pose-bbox-overlap identity-swap risk. Candidates deduplicated per (scenario, case, 150 ms). Crops extracted with ffmpeg only where a committed clip.mp4 exists (afn-sasebo-rally1, wm-volley-02); all other frame-pack entries carry timestamps/coordinates only because source videos are gitignored on Linux. All inputs SHA-256 fingerprinted in candidates.json meta.provenance.",
+ "datasetScope": {
+  "grouping": "All mined material is pinned dev (datasets/corpus/splits.json); recordings are DVIDS/AFN PD-USGov and licensed wm-tournament footage per datasets/corpus/sources.json.",
+  "detectorBoxFramesUsed": 30,
+  "detectorBoxFramesSkippedAsHeldOut": 21,
+  "ownershipBundlesMined": 5,
+  "ownershipPointsMined": 79,
+  "ownershipConsecutiveIntervalsScanned": 23,
+  "poseBundlesMined": 8,
+  "poseFramesScanned": 1065,
+  "distinctCasesWithCandidates": 10
+ },
+ "holdoutStatement": "wm-dink-01 and afn-vic-rally1 were excluded by case ID before any of their records entered mining state: their queue.json frames, bundle annotations, and clip.mp4 were never inspected, counted, cropped, or emitted. The miner hard-fails if a held-out ID appears in its output; outputs were additionally grepped clean.",
+ "configuration": {
+  "REACH_TORSO_MULT": 2.2,
+  "REACH_BOX_DIAG_MULT": 2.5,
+  "MIN_BOX_SCORE": 0.3,
+  "IDLE_WRIST_MAX_NORM_VEL": 0.02,
+  "MOVING_PADDLE_MIN_NORM_VEL": 0.06,
+  "NEARBY_NORM_DIST": 0.25,
+  "POSE_OVERLAP_IOU": 0.05,
+  "CONF_DIP": 0.15,
+  "dedupWindowMs": 150
+ },
+ "measuredResults": {
+  "totalCandidates": 129,
+  "countsPerScenario": {
+   "partner_or_opponent_in_frame": { "candidates": 54, "distinctCases": 8 },
+   "two_paddles_within_reach": { "candidates": 34, "distinctCases": 6 },
+   "occlusion_identity_swap": { "candidates": 28, "distinctCases": 6 },
+   "foreign_paddle_near_target": { "candidates": 12, "distinctCases": 3 },
+   "idle_wrist_moving_nearby_paddle": { "candidates": 1, "distinctCases": 1 },
+   "crossing_paddles": { "candidates": 0, "distinctCases": 0, "intervalsScanned": 23 }
+  },
+  "cropsExtracted": 40,
+  "cropCases": ["afn-sasebo-rally1", "wm-volley-02"],
+  "queueEntries": 129
+ },
+ "findings": [
+  "Multi-paddle co-presence is pervasive in the dev pool: 54 partner/opponent-in-frame candidates across 8 of 10 minable cases, so ownership disambiguation is not an edge case.",
+  "34 candidates put two paddle observations inside one torso-normalized reach disc (6 cases) - the exact geometry where the tracker's S3/S4 ownership failures were previously observed.",
+  "28 occlusion/identity-swap risk frames were found from pose-bbox overlap (with confidence-dip flags) plus overlapping detector boxes; these are the natural candidates for the flip-truncation failure family proven by workstream B.",
+  "crossing_paddles produced 0 candidates from 23 consecutive labeled intervals: at the ~250 ms ownership-label sampling rate, labeled-point segment intersection is too coarse to catch crossings. SCIENTIFIC_NEGATIVE for this detection route; dense paddle tracks (Mac-only) or denser labels are needed.",
+  "idle_wrist_moving_nearby_paddle found exactly 1 candidate (wavea-944403-dink, ~22464 ms) - the sparse label sampling limits recall here too; the detector logic is in place for dense tracks.",
+  "Source videos and canonical run dirs are gitignored on Linux, so crops exist only for the 2 cases with committed clip.mp4; all other frame packs are timestamp/coordinate packs by necessity."
+ ],
+ "artifacts": {
+  "miner": "tools/mining/wave_g_g03_multi_paddle_miner.py",
+  "candidates": "datasets/mining/wave-g-g03/candidates.json",
+  "annotationQueue": "datasets/mining/wave-g-g03/annotation-queue.json",
+  "labelSchema": "datasets/mining/wave-g-g03/label-schema.json",
+  "framePacks": "datasets/mining/wave-g-g03/frame-packs/"
+ },
+ "tierStatement": "Every candidate and queue entry is machine-proposed Tier-C. Human ownership labels were consumed only as seed coordinates; scenario assignments are miner proposals. Nothing here is Gold; the frozen queue exists precisely so a future human pass can produce Gold.",
+ "gates": {
+  "pnpmTypecheck": "pass",
+  "pnpmTest": "pass (51 files, 593 passed | 4 skipped)",
+  "pnpmLint": "pass",
+  "pnpmFormatCheck": "pass",
+  "note": "No production TypeScript/Swift code was modified; changes are a Python mining tool plus dataset artifacts."
+ },
+ "verdict": "YELLOW",
+ "verdictRationale": "Mining succeeded with real counts for 4 of 6 scenarios (129 Tier-C candidates, frozen queue + schema delivered), but crossing_paddles is a measured 0 (label sampling too coarse - honest negative, not absence of the phenomenon) and idle-wrist recall is limited to 1 by the same sparsity. Dense per-frame paddle tracks (Mac-only extraction) are required to mine those two scenarios properly, so this is YELLOW rather than PROVISIONAL_GREEN."
+}
