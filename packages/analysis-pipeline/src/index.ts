@@ -23,3 +23,17 @@ export {
   type StrokeEventProposal,
   type StrokeEventProposalV2,
 } from "./sessionEngine.js";
+// Progressive per-event analysis scheduling over the session engine
+// (Wave E / e16): bounded-concurrency FIFO dispatch of closed events while
+// recording continues, with honest failure/retry/recovery semantics.
+export {
+  SESSION_SCHEDULER_VERSION,
+  SessionAnalysisScheduler,
+  type SessionAnalysisExecutor,
+  type SessionAnalysisTask,
+  type SessionAnalysisTaskOutcome,
+  type SessionSchedulerMetrics,
+  type SessionSchedulerOptions,
+  type SessionTaskRecord,
+  type SessionTaskTerminal,
+} from "./sessionScheduler.js";

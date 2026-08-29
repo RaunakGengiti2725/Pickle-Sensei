@@ -43,7 +43,8 @@
     "label:queue": "tsx src/labelQueueV2.ts",
     "bundle:experiments": "tsx src/experimentBundle.ts",
     "invariants:corpus": "tsx src/corpusCheck.ts",
-    "merge:safety": "tsx src/paddleMergeSafetySweep.ts"
+    "merge:safety": "tsx src/paddleMergeSafetySweep.ts",
+    "session:scheduler-sim": "tsx src/sessionSchedulerSim.ts"
   },
   "dependencies": {
     "@pickle/analysis-pipeline": "workspace:*",
