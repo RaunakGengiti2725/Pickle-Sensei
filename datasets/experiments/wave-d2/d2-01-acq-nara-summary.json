@@ -1,0 +1,69 @@
+{
+  "workstream": "wave-d2/d2-01-acq-nara",
+  "date": "2026-08-29",
+  "objective": "Find US-government public-domain pickleball or adaptable racket-sport footage in NARA (catalog.archives.gov) and US agency film/video archives, register every candidate with a quoted license/PD basis, and download only clearly-cleared items (<200 MB) as label-blind fresh candidates.",
+  "verdict": "honest empty result",
+  "downloaded": {
+    "count": 0,
+    "totalBytes": 0,
+    "note": "No item found that is both clearly US-government public domain and pickleball-relevant. Nothing was added to the corpus or to fresh-candidates. No labels were created."
+  },
+  "searchLog": {
+    "nara": {
+      "method": "catalog.archives.gov records/search API queried through the site's own proxy endpoint from an in-browser fetch (direct curl requests are served the SPA HTML by the WAF)",
+      "pickleballAllTypes": {
+        "query": "q=pickleball",
+        "totalHits": 15,
+        "movingImages": 0,
+        "finding": "All 15 records are Textual Records: Trademark Official Gazette issues, White House daily diaries/news reports, a National Children's Study resource guide."
+      },
+      "pickleballTwoWord": { "query": "q=\"pickle ball\"", "totalHits": 6, "movingImages": 0 },
+      "adaptableRacketSportMovingImages": {
+        "\"paddle tennis\"": 2,
+        "racquetball": 1,
+        "badminton": 30,
+        "\"table tennis\"": 42,
+        "racquet": 2,
+        "\"wheelchair tennis\"": 0,
+        "\"warrior games\"": 47,
+        "finding": "Every inspected item is 'Restricted - Possibly' (Copyright or Public Law 101-246) and/or has no downloadable digital objects; content is mostly 1940s-1970s military newsreel film with seconds of incidental play. The 2010-era Warrior Games items predate pickleball's inclusion in the event.",
+        "notRetrieved": "the 'tennis' moving-image count (proxy returned SPA HTML twice); not needed for the pickleball conclusion"
+      },
+      "itemsInspectedInDetail": [
+        "NAID 543949313 Harlem Day Camp (paddle tennis; only downloadable racket-play MP4s found, 216/221 MB reels; Harmon Foundation donated collection with quoted possible third-party copyright -> quarantined)",
+        "NAID 52717 The Chinese National Table Tennis Team Visits the United States (USIA; quoted Public Law 101-246 restriction; no digital objects -> quarantined)",
+        "NAID 602178033 Around the Services 2009 (sole racquetball hit; interview segment, no gameplay; restricted-possibly; no digital objects -> quarantined)",
+        "NAID 560674304 / 542331424 Danang Sports Festival reels (badminton; USMC film but catalog status 'Restricted - Possibly (Copyright)'; digital objects are catalog-card JPG scans, not video)"
+      ]
+    },
+    "dvidsRecheck": {
+      "query": "https://www.dvidshub.net/search?q=pickleball&filter[type]=video",
+      "totalVideos": 16,
+      "newVideos": 0,
+      "finding": "All 16 returned video IDs (906546, 943757, 944209, 944403, 944593, 956784, 957519, 967848, 986421, 1007845, 1008415, 1011384, 1011773, 1011822, 1019773, 1019785) already exist as dvids-* IDs in the corpus. DVIDS remains exhausted."
+    },
+    "nasa": {
+      "query": "https://images-api.nasa.gov/search?q=pickleball",
+      "totalVideos": 1,
+      "finding": "NHQ20230209ARMD01 'The Quiet Crew | Sriram Rallabhandi' (141 s): frame inspection of the downloaded medium rendition shows ~5 s of extremely distant recreational play on a tennis court; gameplay shots appear to be interviewee-contributed personal footage (NASA guidelines flag possible third-party material) with no perception value. Excluded, not added to the corpus. 'badminton' video search: 0."
+    },
+    "agencyMediaRooms": {
+      "checked": ["va.gov / news.va.gov", "nps.gov", "defense.gov"],
+      "finding": "Text articles and photos only (VA pickleball clinics, NPS court planning documents); defense.gov video pages embed DVIDS-hosted media already covered by the DVIDS re-check. No new downloadable US-government pickleball video outside DVIDS."
+    }
+  },
+  "registryChanges": {
+    "file": "datasets/pickleball/registry.json",
+    "appendedOfficialSearchChecks": 5,
+    "appendedQuarantinedUnknownRights": ["nara-543949313", "nara-52717", "nara-602178033"],
+    "overwrittenEntries": 0
+  },
+  "rulesCompliance": {
+    "heldOutCasesTouched": "none (wm-dink-01 and afn-vic-rally1 untouched)",
+    "labelsCreated": 0,
+    "annotationFilesModified": 0,
+    "mediaAddedBytes": 0,
+    "statusBoardOrHandoffModified": false
+  },
+  "conclusion": "NARA holds zero pickleball moving images (15/15 pickleball hits are textual). Adaptable racket-sport holdings are decades-old restricted-possibly film with no clear PD basis and near-zero perception value. DVIDS is confirmed still exhausted (16/16 videos already in corpus). US-government archives are a dead end for new pickleball footage; supply must come from CC-licensed community video (Wave C c16 path) or first-party consent-based collection."
+}
