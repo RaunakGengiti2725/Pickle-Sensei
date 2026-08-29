@@ -1,0 +1,83 @@
+{
+  "workstream": "wave-g/g18-fresh-footage",
+  "date": "2026-08-29",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "baseCommit": "104ea0f",
+  "mission": "Acquire NEW legally-usable pickleball footage the repo has never seen (per-item rights verification; unknown rights = quarantine), run the full available Linux pipeline on each new clip, record verdicts, and mine disagreements/failures as fresh-data evidence.",
+  "method": "YouTube CC-filtered search via yt-dlp; per-video license field read from the watch-page metadata (yt-dlp page parse, 2026-08-29); prioritized uploaders NOT already in datasets/pickleball/registry.json (5 of 6 accepted clips are from never-before-used channels); 60s video-only segments re-encoded (libx264 crf20, audio stripped); full-clip contact-sheet frame screening for third-party/broadcast watermarks before acceptance; append-only registry registration; then pose-free Linux pipeline replay (capture-envelope + OOD pre-analysis gate) per clip, plus a 10s-window probe of two clips to mine content-level gate misses.",
+  "datasetScope": {
+    "newClipsAccepted": 6,
+    "newClipsBytes": 193211864,
+    "newClipDurationSecondsEach": 60,
+    "newUploadersNeverInRegistry": [
+      "Duc Pham Value",
+      "All Things Pickleball TV",
+      "Duncan's Family Channel",
+      "SPORTS ENTHUSIAST",
+      "PickleballPlaybook - Austin Hardy"
+    ],
+    "repeatUploaderAlreadyAccepted": [
+      "pickleball4you (2014-era clip; camera/compression-era diversity)"
+    ],
+    "diversityAdded": [
+      "first vertical (1080x1920) CC BY gameplay clip in the fresh pool",
+      "covered-court singles with uploader score-overlay graphic and full-frame face close-ups (50 fps)",
+      "indoor club show court with spectators (purple/blue surface)",
+      "indoor gym 4.5 amateur tournament (multi-court, flag backdrop)",
+      "outdoor desert-court windy instructional segment (60 fps)",
+      "2014-era outdoor tournament final shot through a fence (oldest-vintage footage in the pool)"
+    ],
+    "grouping": "All 6 clips registered as role=fresh_candidate, labelBlind=true in datasets/pickleball/registry.json (append-only); excluded from corpus/splits/training until a future freeze; no labels created."
+  },
+  "holdoutStatement": "Held-out cases wm-dink-01 and afn-vic-rally1 were never read, listed, opened, or referenced by this workstream. All measurements below are on the 6 newly acquired clips only.",
+  "configuration": {
+    "acquisitionTools": "yt-dlp 2026.08.19, ffmpeg 4.4.2",
+    "rightsPolicy": "Only clips whose YouTube watch page declares 'Creative Commons Attribution license (reuse allowed)' (CC BY 3.0) accepted; video stream only (no audio) to avoid embedded-music risk; broadcast/league re-uploads treated as license-laundering risk and skipped; frame screening for third-party watermarks on every accepted clip; uploader-authority residual caveat recorded per item (channel-context assessment, not rights-holder confirmation)",
+    "pipelineStagesRun": [
+      "capture-envelope: measureClip -> evaluateCaptureEnvelope (thresholds v0.1, UNVALIDATED per e15/f18 preserved negatives; statuses are threshold classifications, not validated capture-quality truth)",
+      "OOD pre-analysis gate: extractFrameStats -> evaluateFrameAnalyzability -> preAnalysisGate({frame, pose: null, poseQuality: null})"
+    ],
+    "stagesNotRunnable": "Apple-Vision pose extraction, strict cascade, and all pose-conditioned stages are macOS-only; pose-derived envelope dimensions are NOT_MEASURED and pose-conditioned gate signals are notEvaluated by construction. No cascade numbers are claimed.",
+    "scripts": [
+      "datasets/experiments/wave-g/g18-register.py (registry append)",
+      "datasets/experiments/wave-g/g18-run-pipeline.ts (per-clip pipeline replay)",
+      "datasets/experiments/wave-g/g18-window-probe.ts (10s-window gate probe)"
+    ]
+  },
+  "measuredResults": {
+    "wholeClip": {
+      "clipsMeasured": 6,
+      "envelopeOverallSupported": "6/6 clips (all 8 video-derived dimensions SUPPORTED on every clip; 2 pose-derived dimensions NOT_MEASURED on every clip)",
+      "oodGatePassed": "6/6 clips (frameAnalyzable=true, gateOk=true, frameReasons=[] on all 6; camera_motion, scene_cuts, exposure_flicker, playback_speed, pose_presence, pose_capture_quality notEvaluated on all 6)",
+      "artifact": "datasets/experiments/wave-g/g18-fresh-footage-measurements.json"
+    },
+    "windowProbe": {
+      "windowsMeasured": 12,
+      "windowsPassedGate": 12,
+      "description": "10s windows (6 per clip) of yt-tuKiznvDJ4E and yt-jkiAWFrdc-g. Visual screening of a mid-window frame per window (montage): at least 2 of 6 yt-tuKiznvDJ4E windows are dominated by full-frame face close-ups with no court or play visible, and at least 4 of 6 yt-jkiAWFrdc-g windows are talking-to-camera instructional content rather than rally play. All 12 windows pass the pose-free gate with zero frameReasons.",
+      "artifact": "datasets/experiments/wave-g/g18-fresh-footage-window-measurements.json"
+    }
+  },
+  "findings": [
+    "FRESH-DATA GATE GAP (confirms e11's disclosed limitation on genuinely new footage): the pose-free OOD gate passes full-frame face close-up windows (no court, no play) and talking-head instructional windows with zero reasons - 12/12 windows passed including >=2 face-only and >=4 non-play windows. Rejecting these requires the pose-conditioned checks (macOS) or content-level signals that do not exist yet.",
+    "Envelope thresholds v0.1 classify all 6 new clips SUPPORTED on every video-derived dimension, including a vertical 1080x1920 clip and a 2014-era re-encode. Given e15/f18 could not validate these thresholds, 6/6 SUPPORTED is a threshold classification only; it does add 6 fresh in-envelope points showing the thresholds are not rejecting ordinary new footage.",
+    "Supply: YouTube CC BY remains the only productive lawful source found; 5 new never-before-used uploaders were still discoverable, so the CC BY pool is NOT yet exhausted (contrary to a possible reading of 'exhausted' in earlier boards, which applied to DVIDS/Commons/NARA). Broadcast/league re-uploads with CC flags remain the dominant contamination risk and were skipped.",
+    "One download defect: the initial 1080-height-capped format selection of the vertical video CWqy7OtTpe4 silently returned a 360x640 stream; corrected by re-downloading the full vertical stream. Recorded as an acquisition-tooling footgun for vertical sources."
+  ],
+  "verdict": "GREEN",
+  "verdictRationale": "Mission satisfied with honest evidence: 6 genuinely new rights-verified clips (5 from never-before-used uploaders) acquired, registered append-only and label-blind; every Linux-runnable pipeline stage replayed on all 6 with recorded verdicts (6/6 envelope SUPPORTED with unvalidated-thresholds caveat, 6/6 gate pass); and the window probe produced a concrete fresh-data finding (12/12 non-play/face-close-up windows pass the pose-free gate). No thresholds were changed, no labels created, no held-out case touched, no Mac/iPhone numbers fabricated. The gate-gap finding is disclosed as confirmation of a known limitation, now evidenced on footage the repo had never seen.",
+  "artifacts": [
+    "datasets/pickleball/fresh-candidates/yt-CWqy7OtTpe4.mp4",
+    "datasets/pickleball/fresh-candidates/yt-HlnDVB6hl4E.mp4",
+    "datasets/pickleball/fresh-candidates/yt-tuKiznvDJ4E.mp4",
+    "datasets/pickleball/fresh-candidates/yt-pZou8Mtcu3g.mp4",
+    "datasets/pickleball/fresh-candidates/yt-jkiAWFrdc-g.mp4",
+    "datasets/pickleball/fresh-candidates/yt-DD7uDPi_PJg.mp4",
+    "datasets/pickleball/registry.json (6 freshCandidates items appended)",
+    "datasets/experiments/wave-g/g18-register.py",
+    "datasets/experiments/wave-g/g18-run-pipeline.ts",
+    "datasets/experiments/wave-g/g18-window-probe.ts",
+    "datasets/experiments/wave-g/g18-fresh-footage-measurements.json",
+    "datasets/experiments/wave-g/g18-fresh-footage-window-measurements.json"
+  ]
+}

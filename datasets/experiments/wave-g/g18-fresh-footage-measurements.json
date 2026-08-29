@@ -1,0 +1,678 @@
+{
+  "workstream": "wave-g/g18-fresh-footage",
+  "measuredAt": "2026-08-29",
+  "environment": "Linux CPU; ffmpeg decode; pose extraction unavailable (Apple Vision is macOS-only), so pose-derived envelope dimensions are NOT_MEASURED and pose-conditioned gate signals are notEvaluated by construction",
+  "captureEnvelopeThresholdsVersion": "capture-envelope-thresholds-v0.3-provisional",
+  "captureEnvelopeThresholdsCaveat": "Envelope thresholds v0.1 remain UNVALIDATED (e15 and f18 corpus re-derivations both failed to validate them - preserved scientific negatives). Statuses below are threshold classifications, not validated capture-quality truth.",
+  "frameAnalyzabilityVersion": "frame-analyzability-3",
+  "preAnalysisGateVersion": "pre-analysis-gate-1",
+  "heldOutStatement": "Held-out cases wm-dink-01 and afn-vic-rally1 were not read, listed, or referenced. All six clips are newly acquired label-blind fresh candidates.",
+  "measurements": [
+    {
+      "id": "yt-CWqy7OtTpe4",
+      "path": "datasets/pickleball/fresh-candidates/yt-CWqy7OtTpe4.mp4",
+      "sha256": "2241a32d4349a8b9b4b6d814081a814398f4f6ad67a8abad2509d952837da983",
+      "captureEnvelope": {
+        "measurements": {
+          "frameWidthPx": 1080,
+          "frameHeightPx": 1920,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 116.96377241967427,
+          "brightnessStdLuma": 1.237794674887353,
+          "laplacianVarianceMedian": 1668.6591739174662,
+          "meanAbsFrameDiff": 1.982588608270964,
+          "frameIntervalCv": 0.000014144099590070639,
+          "clipDurationMs": 60000,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        },
+        "verdict": {
+          "thresholdsVersion": "capture-envelope-thresholds-v0.3-provisional",
+          "provisional": true,
+          "dimensions": [
+            {
+              "dimension": "resolution",
+              "status": "SUPPORTED",
+              "measured": 1080,
+              "unit": "px (short side)",
+              "thresholdId": "resolution-short-side-v0.1"
+            },
+            {
+              "dimension": "frame_rate",
+              "status": "SUPPORTED",
+              "measured": 30,
+              "unit": "fps",
+              "thresholdId": "frame-rate-avg-v0.2"
+            },
+            {
+              "dimension": "brightness",
+              "status": "SUPPORTED",
+              "measured": 116.96377241967427,
+              "unit": "luma 0-255",
+              "thresholdId": "brightness-mean-luma-v0.1"
+            },
+            {
+              "dimension": "motion_blur",
+              "status": "SUPPORTED",
+              "measured": 1668.6591739174662,
+              "unit": "laplacian variance @320w",
+              "thresholdId": "laplacian-variance-320w-median-v0.1"
+            },
+            {
+              "dimension": "camera_motion",
+              "status": "SUPPORTED",
+              "measured": 1.982588608270964,
+              "unit": "mean abs luma diff @320w",
+              "thresholdId": "global-frame-diff-320w-v0.2"
+            },
+            {
+              "dimension": "timing_stability",
+              "status": "SUPPORTED",
+              "measured": 0.000014144099590070639,
+              "unit": "cv of frame intervals",
+              "thresholdId": "timing-stability-interval-cv-v0.2"
+            },
+            {
+              "dimension": "clip_duration",
+              "status": "SUPPORTED",
+              "measured": 60000,
+              "unit": "ms",
+              "thresholdId": "clip-duration-v0.1"
+            },
+            {
+              "dimension": "player_pixel_height",
+              "status": "NOT_MEASURED",
+              "measured": null,
+              "unit": "fraction of frame height",
+              "thresholdId": "player-pixel-height-fraction-v0.1"
+            },
+            {
+              "dimension": "player_visibility",
+              "status": "NOT_MEASURED",
+              "measured": null,
+              "unit": "mean visibility 0-1",
+              "thresholdId": "player-mean-joint-visibility-v0.1"
+            }
+          ],
+          "overall": "SUPPORTED",
+          "notMeasured": [
+            "player_pixel_height",
+            "player_visibility"
+          ]
+        }
+      },
+      "oodGate": {
+        "frameCount": 1800,
+        "durationMs": 60000,
+        "frameAnalyzable": true,
+        "frameReasons": [],
+        "gateOk": true,
+        "gateFailureKind": null,
+        "gateFailureCode": null,
+        "notEvaluated": [
+          "camera_motion",
+          "scene_cuts",
+          "exposure_flicker",
+          "playback_speed",
+          "pose_presence",
+          "pose_capture_quality"
+        ]
+      }
+    },
+    {
+      "id": "yt-HlnDVB6hl4E",
+      "path": "datasets/pickleball/fresh-candidates/yt-HlnDVB6hl4E.mp4",
+      "sha256": "a72b4fd665c8d684be18a666e44adee491d8fa55172238e6437061813f0ff048",
+      "captureEnvelope": {
+        "measurements": {
+          "frameWidthPx": 1920,
+          "frameHeightPx": 1080,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 126.3925172887732,
+          "brightnessStdLuma": 2.5288165022321616,
+          "laplacianVarianceMedian": 1725.716299196913,
+          "meanAbsFrameDiff": 4.37119479311948,
+          "frameIntervalCv": 0.000014144099590070639,
+          "clipDurationMs": 60000,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        },
+        "verdict": {
+          "thresholdsVersion": "capture-envelope-thresholds-v0.3-provisional",
+          "provisional": true,
+          "dimensions": [
+            {
+              "dimension": "resolution",
+              "status": "SUPPORTED",
+              "measured": 1080,
+              "unit": "px (short side)",
+              "thresholdId": "resolution-short-side-v0.1"
+            },
+            {
+              "dimension": "frame_rate",
+              "status": "SUPPORTED",
+              "measured": 30,
+              "unit": "fps",
+              "thresholdId": "frame-rate-avg-v0.2"
+            },
+            {
+              "dimension": "brightness",
+              "status": "SUPPORTED",
+              "measured": 126.3925172887732,
+              "unit": "luma 0-255",
+              "thresholdId": "brightness-mean-luma-v0.1"
+            },
+            {
+              "dimension": "motion_blur",
+              "status": "SUPPORTED",
+              "measured": 1725.716299196913,
+              "unit": "laplacian variance @320w",
+              "thresholdId": "laplacian-variance-320w-median-v0.1"
+            },
+            {
+              "dimension": "camera_motion",
+              "status": "SUPPORTED",
+              "measured": 4.37119479311948,
+              "unit": "mean abs luma diff @320w",
+              "thresholdId": "global-frame-diff-320w-v0.2"
+            },
+            {
+              "dimension": "timing_stability",
+              "status": "SUPPORTED",
+              "measured": 0.000014144099590070639,
+              "unit": "cv of frame intervals",
+              "thresholdId": "timing-stability-interval-cv-v0.2"
+            },
+            {
+              "dimension": "clip_duration",
+              "status": "SUPPORTED",
+              "measured": 60000,
+              "unit": "ms",
+              "thresholdId": "clip-duration-v0.1"
+            },
+            {
+              "dimension": "player_pixel_height",
+              "status": "NOT_MEASURED",
+              "measured": null,
+              "unit": "fraction of frame height",
+              "thresholdId": "player-pixel-height-fraction-v0.1"
+            },
+            {
+              "dimension": "player_visibility",
+              "status": "NOT_MEASURED",
+              "measured": null,
+              "unit": "mean visibility 0-1",
+              "thresholdId": "player-mean-joint-visibility-v0.1"
+            }
+          ],
+          "overall": "SUPPORTED",
+          "notMeasured": [
+            "player_pixel_height",
+            "player_visibility"
+          ]
+        }
+      },
+      "oodGate": {
+        "frameCount": 1800,
+        "durationMs": 60000,
+        "frameAnalyzable": true,
+        "frameReasons": [],
+        "gateOk": true,
+        "gateFailureKind": null,
+        "gateFailureCode": null,
+        "notEvaluated": [
+          "camera_motion",
+          "scene_cuts",
+          "exposure_flicker",
+          "playback_speed",
+          "pose_presence",
+          "pose_capture_quality"
+        ]
+      }
+    },
+    {
+      "id": "yt-tuKiznvDJ4E",
+      "path": "datasets/pickleball/fresh-candidates/yt-tuKiznvDJ4E.mp4",
+      "sha256": "0abf2e6e4f26c2363c7a5aa741ba704ef7324d338e916d190781d633f4d865be",
+      "captureEnvelope": {
+        "measurements": {
+          "frameWidthPx": 1920,
+          "frameHeightPx": 1080,
+          "avgFrameRateFps": 50,
+          "brightnessMeanLuma": 143.3046116898149,
+          "brightnessStdLuma": 6.836665159445929,
+          "laplacianVarianceMedian": 2644.6125143288127,
+          "meanAbsFrameDiff": 9.542781409809395,
+          "frameIntervalCv": 1.2499795465101972e-13,
+          "clipDurationMs": 60000,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        },
+        "verdict": {
+          "thresholdsVersion": "capture-envelope-thresholds-v0.3-provisional",
+          "provisional": true,
+          "dimensions": [
+            {
+              "dimension": "resolution",
+              "status": "SUPPORTED",
+              "measured": 1080,
+              "unit": "px (short side)",
+              "thresholdId": "resolution-short-side-v0.1"
+            },
+            {
+              "dimension": "frame_rate",
+              "status": "SUPPORTED",
+              "measured": 50,
+              "unit": "fps",
+              "thresholdId": "frame-rate-avg-v0.2"
+            },
+            {
+              "dimension": "brightness",
+              "status": "SUPPORTED",
+              "measured": 143.3046116898149,
+              "unit": "luma 0-255",
+              "thresholdId": "brightness-mean-luma-v0.1"
+            },
+            {
+              "dimension": "motion_blur",
+              "status": "SUPPORTED",
+              "measured": 2644.6125143288127,
+              "unit": "laplacian variance @320w",
+              "thresholdId": "laplacian-variance-320w-median-v0.1"
+            },
+            {
+              "dimension": "camera_motion",
+              "status": "SUPPORTED",
+              "measured": 9.542781409809395,
+              "unit": "mean abs luma diff @320w",
+              "thresholdId": "global-frame-diff-320w-v0.2"
+            },
+            {
+              "dimension": "timing_stability",
+              "status": "SUPPORTED",
+              "measured": 1.2499795465101972e-13,
+              "unit": "cv of frame intervals",
+              "thresholdId": "timing-stability-interval-cv-v0.2"
+            },
+            {
+              "dimension": "clip_duration",
+              "status": "SUPPORTED",
+              "measured": 60000,
+              "unit": "ms",
+              "thresholdId": "clip-duration-v0.1"
+            },
+            {
+              "dimension": "player_pixel_height",
+              "status": "NOT_MEASURED",
+              "measured": null,
+              "unit": "fraction of frame height",
+              "thresholdId": "player-pixel-height-fraction-v0.1"
+            },
+            {
+              "dimension": "player_visibility",
+              "status": "NOT_MEASURED",
+              "measured": null,
+              "unit": "mean visibility 0-1",
+              "thresholdId": "player-mean-joint-visibility-v0.1"
+            }
+          ],
+          "overall": "SUPPORTED",
+          "notMeasured": [
+            "player_pixel_height",
+            "player_visibility"
+          ]
+        }
+      },
+      "oodGate": {
+        "frameCount": 3000,
+        "durationMs": 60000,
+        "frameAnalyzable": true,
+        "frameReasons": [],
+        "gateOk": true,
+        "gateFailureKind": null,
+        "gateFailureCode": null,
+        "notEvaluated": [
+          "camera_motion",
+          "scene_cuts",
+          "exposure_flicker",
+          "playback_speed",
+          "pose_presence",
+          "pose_capture_quality"
+        ]
+      }
+    },
+    {
+      "id": "yt-pZou8Mtcu3g",
+      "path": "datasets/pickleball/fresh-candidates/yt-pZou8Mtcu3g.mp4",
+      "sha256": "3e7b90dd334c5b895359d8356000863dee88b3b69472fb5a8554a50ad3f06f07",
+      "captureEnvelope": {
+        "measurements": {
+          "frameWidthPx": 1920,
+          "frameHeightPx": 1080,
+          "avgFrameRateFps": 29.97002997002997,
+          "brightnessMeanLuma": 165.4256300636574,
+          "brightnessStdLuma": 1.0036736887381814,
+          "laplacianVarianceMedian": 2414.798554932341,
+          "meanAbsFrameDiff": 3.4595624128312417,
+          "frameIntervalCv": 0.00001412800761456452,
+          "clipDurationMs": 59993,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        },
+        "verdict": {
+          "thresholdsVersion": "capture-envelope-thresholds-v0.3-provisional",
+          "provisional": true,
+          "dimensions": [
+            {
+              "dimension": "resolution",
+              "status": "SUPPORTED",
+              "measured": 1080,
+              "unit": "px (short side)",
+              "thresholdId": "resolution-short-side-v0.1"
+            },
+            {
+              "dimension": "frame_rate",
+              "status": "SUPPORTED",
+              "measured": 29.97002997002997,
+              "unit": "fps",
+              "thresholdId": "frame-rate-avg-v0.2"
+            },
+            {
+              "dimension": "brightness",
+              "status": "SUPPORTED",
+              "measured": 165.4256300636574,
+              "unit": "luma 0-255",
+              "thresholdId": "brightness-mean-luma-v0.1"
+            },
+            {
+              "dimension": "motion_blur",
+              "status": "SUPPORTED",
+              "measured": 2414.798554932341,
+              "unit": "laplacian variance @320w",
+              "thresholdId": "laplacian-variance-320w-median-v0.1"
+            },
+            {
+              "dimension": "camera_motion",
+              "status": "SUPPORTED",
+              "measured": 3.4595624128312417,
+              "unit": "mean abs luma diff @320w",
+              "thresholdId": "global-frame-diff-320w-v0.2"
+            },
+            {
+              "dimension": "timing_stability",
+              "status": "SUPPORTED",
+              "measured": 0.00001412800761456452,
+              "unit": "cv of frame intervals",
+              "thresholdId": "timing-stability-interval-cv-v0.2"
+            },
+            {
+              "dimension": "clip_duration",
+              "status": "SUPPORTED",
+              "measured": 59993,
+              "unit": "ms",
+              "thresholdId": "clip-duration-v0.1"
+            },
+            {
+              "dimension": "player_pixel_height",
+              "status": "NOT_MEASURED",
+              "measured": null,
+              "unit": "fraction of frame height",
+              "thresholdId": "player-pixel-height-fraction-v0.1"
+            },
+            {
+              "dimension": "player_visibility",
+              "status": "NOT_MEASURED",
+              "measured": null,
+              "unit": "mean visibility 0-1",
+              "thresholdId": "player-mean-joint-visibility-v0.1"
+            }
+          ],
+          "overall": "SUPPORTED",
+          "notMeasured": [
+            "player_pixel_height",
+            "player_visibility"
+          ]
+        }
+      },
+      "oodGate": {
+        "frameCount": 1798,
+        "durationMs": 60027,
+        "frameAnalyzable": true,
+        "frameReasons": [],
+        "gateOk": true,
+        "gateFailureKind": null,
+        "gateFailureCode": null,
+        "notEvaluated": [
+          "camera_motion",
+          "scene_cuts",
+          "exposure_flicker",
+          "playback_speed",
+          "pose_presence",
+          "pose_capture_quality"
+        ]
+      }
+    },
+    {
+      "id": "yt-jkiAWFrdc-g",
+      "path": "datasets/pickleball/fresh-candidates/yt-jkiAWFrdc-g.mp4",
+      "sha256": "739425f4846cbd8537a3bb6160472b73605c97dab6d911143bd0495f249ba98e",
+      "captureEnvelope": {
+        "measurements": {
+          "frameWidthPx": 1920,
+          "frameHeightPx": 1080,
+          "avgFrameRateFps": 60,
+          "brightnessMeanLuma": 127.90341681134261,
+          "brightnessStdLuma": 9.22071102193413,
+          "laplacianVarianceMedian": 1920.3360077483535,
+          "meanAbsFrameDiff": 9.576314650162717,
+          "frameIntervalCv": 0.000028286235514750775,
+          "clipDurationMs": 60000,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        },
+        "verdict": {
+          "thresholdsVersion": "capture-envelope-thresholds-v0.3-provisional",
+          "provisional": true,
+          "dimensions": [
+            {
+              "dimension": "resolution",
+              "status": "SUPPORTED",
+              "measured": 1080,
+              "unit": "px (short side)",
+              "thresholdId": "resolution-short-side-v0.1"
+            },
+            {
+              "dimension": "frame_rate",
+              "status": "SUPPORTED",
+              "measured": 60,
+              "unit": "fps",
+              "thresholdId": "frame-rate-avg-v0.2"
+            },
+            {
+              "dimension": "brightness",
+              "status": "SUPPORTED",
+              "measured": 127.90341681134261,
+              "unit": "luma 0-255",
+              "thresholdId": "brightness-mean-luma-v0.1"
+            },
+            {
+              "dimension": "motion_blur",
+              "status": "SUPPORTED",
+              "measured": 1920.3360077483535,
+              "unit": "laplacian variance @320w",
+              "thresholdId": "laplacian-variance-320w-median-v0.1"
+            },
+            {
+              "dimension": "camera_motion",
+              "status": "SUPPORTED",
+              "measured": 9.576314650162717,
+              "unit": "mean abs luma diff @320w",
+              "thresholdId": "global-frame-diff-320w-v0.2"
+            },
+            {
+              "dimension": "timing_stability",
+              "status": "SUPPORTED",
+              "measured": 0.000028286235514750775,
+              "unit": "cv of frame intervals",
+              "thresholdId": "timing-stability-interval-cv-v0.2"
+            },
+            {
+              "dimension": "clip_duration",
+              "status": "SUPPORTED",
+              "measured": 60000,
+              "unit": "ms",
+              "thresholdId": "clip-duration-v0.1"
+            },
+            {
+              "dimension": "player_pixel_height",
+              "status": "NOT_MEASURED",
+              "measured": null,
+              "unit": "fraction of frame height",
+              "thresholdId": "player-pixel-height-fraction-v0.1"
+            },
+            {
+              "dimension": "player_visibility",
+              "status": "NOT_MEASURED",
+              "measured": null,
+              "unit": "mean visibility 0-1",
+              "thresholdId": "player-mean-joint-visibility-v0.1"
+            }
+          ],
+          "overall": "SUPPORTED",
+          "notMeasured": [
+            "player_pixel_height",
+            "player_visibility"
+          ]
+        }
+      },
+      "oodGate": {
+        "frameCount": 3600,
+        "durationMs": 60000,
+        "frameAnalyzable": true,
+        "frameReasons": [],
+        "gateOk": true,
+        "gateFailureKind": null,
+        "gateFailureCode": null,
+        "notEvaluated": [
+          "camera_motion",
+          "scene_cuts",
+          "exposure_flicker",
+          "playback_speed",
+          "pose_presence",
+          "pose_capture_quality"
+        ]
+      }
+    },
+    {
+      "id": "yt-DD7uDPi_PJg",
+      "path": "datasets/pickleball/fresh-candidates/yt-DD7uDPi_PJg.mp4",
+      "sha256": "43da60a6ade2ff7d023acd5e4e682315fed3ab70a76fc873ed802f5f1777eb79",
+      "captureEnvelope": {
+        "measurements": {
+          "frameWidthPx": 1920,
+          "frameHeightPx": 1080,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 117.53162579571757,
+          "brightnessStdLuma": 4.711788255457087,
+          "laplacianVarianceMedian": 1840.3488414802582,
+          "meanAbsFrameDiff": 5.278417523826128,
+          "frameIntervalCv": 0.000014144099590070639,
+          "clipDurationMs": 60000,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        },
+        "verdict": {
+          "thresholdsVersion": "capture-envelope-thresholds-v0.3-provisional",
+          "provisional": true,
+          "dimensions": [
+            {
+              "dimension": "resolution",
+              "status": "SUPPORTED",
+              "measured": 1080,
+              "unit": "px (short side)",
+              "thresholdId": "resolution-short-side-v0.1"
+            },
+            {
+              "dimension": "frame_rate",
+              "status": "SUPPORTED",
+              "measured": 30,
+              "unit": "fps",
+              "thresholdId": "frame-rate-avg-v0.2"
+            },
+            {
+              "dimension": "brightness",
+              "status": "SUPPORTED",
+              "measured": 117.53162579571757,
+              "unit": "luma 0-255",
+              "thresholdId": "brightness-mean-luma-v0.1"
+            },
+            {
+              "dimension": "motion_blur",
+              "status": "SUPPORTED",
+              "measured": 1840.3488414802582,
+              "unit": "laplacian variance @320w",
+              "thresholdId": "laplacian-variance-320w-median-v0.1"
+            },
+            {
+              "dimension": "camera_motion",
+              "status": "SUPPORTED",
+              "measured": 5.278417523826128,
+              "unit": "mean abs luma diff @320w",
+              "thresholdId": "global-frame-diff-320w-v0.2"
+            },
+            {
+              "dimension": "timing_stability",
+              "status": "SUPPORTED",
+              "measured": 0.000014144099590070639,
+              "unit": "cv of frame intervals",
+              "thresholdId": "timing-stability-interval-cv-v0.2"
+            },
+            {
+              "dimension": "clip_duration",
+              "status": "SUPPORTED",
+              "measured": 60000,
+              "unit": "ms",
+              "thresholdId": "clip-duration-v0.1"
+            },
+            {
+              "dimension": "player_pixel_height",
+              "status": "NOT_MEASURED",
+              "measured": null,
+              "unit": "fraction of frame height",
+              "thresholdId": "player-pixel-height-fraction-v0.1"
+            },
+            {
+              "dimension": "player_visibility",
+              "status": "NOT_MEASURED",
+              "measured": null,
+              "unit": "mean visibility 0-1",
+              "thresholdId": "player-mean-joint-visibility-v0.1"
+            }
+          ],
+          "overall": "SUPPORTED",
+          "notMeasured": [
+            "player_pixel_height",
+            "player_visibility"
+          ]
+        }
+      },
+      "oodGate": {
+        "frameCount": 1800,
+        "durationMs": 60000,
+        "frameAnalyzable": true,
+        "frameReasons": [],
+        "gateOk": true,
+        "gateFailureKind": null,
+        "gateFailureCode": null,
+        "notEvaluated": [
+          "camera_motion",
+          "scene_cuts",
+          "exposure_flicker",
+          "playback_speed",
+          "pose_presence",
+          "pose_capture_quality"
+        ]
+      }
+    }
+  ]
+}

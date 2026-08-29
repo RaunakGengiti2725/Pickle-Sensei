@@ -1,0 +1,201 @@
+{
+  "workstream": "wave-g/g18-fresh-footage",
+  "measuredAt": "2026-08-29",
+  "method": "10s windows re-encoded from the two committed clips (ffmpeg -ss <start> -t 10, libx264 crf22); pose-free extractFrameStats -> evaluateFrameAnalyzability -> preAnalysisGate({pose:null})",
+  "frameAnalyzabilityVersion": "frame-analyzability-3",
+  "preAnalysisGateVersion": "pre-analysis-gate-1",
+  "measurements": [
+    {
+      "window": "yt-jkiAWFrdc-g-w0.mp4",
+      "frameCount": 600,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "window": "yt-jkiAWFrdc-g-w10.mp4",
+      "frameCount": 600,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "window": "yt-jkiAWFrdc-g-w20.mp4",
+      "frameCount": 600,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "window": "yt-jkiAWFrdc-g-w30.mp4",
+      "frameCount": 600,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "window": "yt-jkiAWFrdc-g-w40.mp4",
+      "frameCount": 600,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "window": "yt-jkiAWFrdc-g-w50.mp4",
+      "frameCount": 600,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "window": "yt-tuKiznvDJ4E-w0.mp4",
+      "frameCount": 500,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "window": "yt-tuKiznvDJ4E-w10.mp4",
+      "frameCount": 500,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "window": "yt-tuKiznvDJ4E-w20.mp4",
+      "frameCount": 500,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "window": "yt-tuKiznvDJ4E-w30.mp4",
+      "frameCount": 500,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "window": "yt-tuKiznvDJ4E-w40.mp4",
+      "frameCount": 500,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "window": "yt-tuKiznvDJ4E-w50.mp4",
+      "frameCount": 500,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    }
+  ]
+}
