@@ -189,6 +189,15 @@ export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-5 (uncalibrated)";
  *   (synthetic default 0.2); below 0.04 the hip line has collapsed onto the
  *   shoulder line (e.g. chair-back occlusion) and every torso-normalized
  *   ratio in this file is meaningless — abstain instead of dividing by it.
+ * SHOULDER_MIN_SEPARATION — normalized image units. The side decision
+ *   normalizes the contact→midline offset by the IMAGE-PLANE shoulder
+ *   separation and reads the facing sign from the shoulder x-order. Frontal
+ *   and rear fixtures measure ≈0.16–0.2; the near-profile E10-F3 fixture
+ *   measures 0.005 — estimator-noise scale, where the 0.02 clamp on
+ *   shoulderWidth only prevents a divide-by-zero without making the ratio
+ *   meaningful. 0.04 mirrors TORSO_MIN_EXTENT's reasoning; the strict `<`
+ *   keeps the mid-rotation crossing fixture (E10-F4, exactly 0.04u at
+ *   contact) outside the gate.
  *
  * Facing-consensus constants (stroke-heuristic-5, red-team derived —
  * conservative floors, NOT calibrated statistics):
@@ -223,6 +232,7 @@ const MIN_WINDOW_SPEED_SAMPLES = 3;
 const NON_SWING_TRAVEL_FLOOR = 0.05;
 const MIN_TRAVEL_SAMPLE_FRAMES = 5;
 const TORSO_MIN_EXTENT = 0.04;
+const SHOULDER_MIN_SEPARATION = 0.04;
 const TORSO_COLLAPSE_MEDIAN_RATIO = 0.6;
 const TORSO_MEDIAN_MIN_FRAMES = 5;
 const HANDEDNESS_CONTRADICTION_TRAVEL_RATIO = 1.5;
@@ -631,6 +641,25 @@ export function classifyStroke(input: {
   if (input.handedness === "ambidextrous") {
     limitingFactors.push("ambidextrous_declared_side_unresolvable");
     return unknown(null, evidence, limitingFactors, contactPointSource, contactPointReliability);
+  }
+  // ── Gate: degenerate shoulder separation (side normalization) ─────────
+  // Both the facing sign (shoulder x-order) and the offset normalization
+  // base (shoulderWidth) come from the image-plane shoulder separation.
+  // In a near-profile view that separation collapses to estimator-noise
+  // scale and both quantities are meaningless — abstain from the side
+  // decision regardless of contact-point provenance or margin.
+  const rawShoulderSeparation = Math.abs(rightShoulder.x - leftShoulder.x);
+  if (rawShoulderSeparation < SHOULDER_MIN_SEPARATION) {
+    evidence.push(
+      `image-plane shoulder separation ${rawShoulderSeparation.toFixed(3)}u at reference (floor ${SHOULDER_MIN_SEPARATION})`,
+    );
+    return unknown(
+      "shoulder_separation_degenerate_side_decision_unreliable",
+      evidence,
+      limitingFactors,
+      contactPointSource,
+      contactPointReliability,
+    );
   }
   // ── Cross-check: declared handedness vs dominant-motion wrist (v5) ────
   // The forehand/backhand decision below assumes the paddle is in the
