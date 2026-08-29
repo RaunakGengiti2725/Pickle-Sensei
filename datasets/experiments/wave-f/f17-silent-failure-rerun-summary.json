@@ -1,0 +1,88 @@
+{
+  "workstream": "f17-silent-failure-rerun",
+  "branch": "devin/wave-f/f17-silent-failure-rerun",
+  "base": "origin/devin/1787988068-wave-c-integration",
+  "baseCommit": "8588ddd (post all Wave E merges + stroke-heuristic-4 gates 347625a; e07 baseline was computed at pre-Wave-E base 8fc388e)",
+  "date": "2026-08-29",
+  "mission": "recompute silent-failure-v1 + coverage/abstention/calibration on the branch AFTER all Wave E merges and the stroke-heuristic-4 gates; compare to e07 artifacts; flag any subsystem whose Wave E integration increased silent failure, with forensics",
+  "environment": "Ubuntu Linux, node v20.18.1, pnpm 10.15.1, no Mac/Apple Vision, no iPhone",
+  "instruments": {
+    "tool": "datasets/experiments/wave-f/f17-rerun.ts (new; reuses the e07 instruments packages/swing-lab/src/silentFailureRetro.ts and coverageRisk.ts unmodified via their exports; run: cd packages/swing-lab && npx tsx ../../datasets/experiments/wave-f/f17-rerun.ts)",
+    "artifact": "datasets/experiments/wave-f/f17-rerun-report.json",
+    "nonMutation": "nothing under wave-e/ or production packages/ was modified; all rerun output lands under wave-f/"
+  },
+  "measured": {
+    "freshCascadeAtHead": {
+      "command": "pnpm lab:cascade at HEAD 8588ddd",
+      "result": "n=0 gold target events — SILENT FAILURES 0/0 ALL TRIALS · 0/0 ANSWERED TRIALS (contract silent-failure-v1.1); strict survival 0/0; usable results 0/0",
+      "provenance": "MEASURED on this Linux box; canonical run dirs (datasets/paddle-bench/runs/) are gitignored and absent; regeneration is Mac-gated (Apple Vision pose extraction). The generated datasets/cascade/cascade-1788001575876.json (rows: []) was deleted, not committed, to avoid polluting retro inputs with an empty Linux artifact — the committed e06 artifact cascade-1787996827490.json already documents the Linux n=0 outcome.",
+      "comparisonToE07": "identical honest 0/0 as e07's fresh run at 8fc388e — no change from Wave E merges or stroke-heuristic-4 gates on this box's fresh path"
+    },
+    "retroSilentFailureRerun": {
+      "contract": "silent-failure-v1.1 (unchanged), development split only (n=3 dev cases: wm-volley-02, afn-sasebo-rally1, afn-sasebo-rally2)",
+      "table": [
+        { "run": "cascade-1787960997164.json", "silentFailTrials": "2/3 answered of 3 dev", "perClaimSilent": "EVENT:1 STROKE_L1:2", "deltaVsE07": 0 },
+        { "run": "cascade-1787963165545.json", "silentFailTrials": "1/3 answered of 3 dev", "perClaimSilent": "STROKE_L1:1 CONTACT_MARKER:1", "deltaVsE07": 0 },
+        { "run": "cascade-1787963173891.json", "silentFailTrials": "1/3 answered of 3 dev", "deltaVsE07": 0 },
+        { "run": "cascade-1787965901691.json", "silentFailTrials": "1/3 answered of 3 dev", "deltaVsE07": 0 },
+        { "run": "cascade-1787966875746.json", "silentFailTrials": "1/3 answered of 3 dev", "deltaVsE07": 0 },
+        { "run": "cascade-1787967090683.json", "silentFailTrials": "1/3 answered of 3 dev", "deltaVsE07": 0 },
+        { "run": "cascade-1787968886850.json", "silentFailTrials": "1/3 answered of 3 dev", "deltaVsE07": 0 },
+        { "run": "cascade-1787971517129.json", "silentFailTrials": "0/3 answered of 3 dev", "deltaVsE07": 0 },
+        { "run": "cascade-1787971618835.json", "silentFailTrials": "0/3 answered of 3 dev", "deltaVsE07": 0 },
+        { "run": "cascade-1787971753680.json", "silentFailTrials": "0/3 answered of 3 dev", "deltaVsE07": 0 }
+      ],
+      "newSinceE07": "cascade-1787996827490.json (e06 Linux full-cascade replay attempt) has rows: [] and goldEvents 0 — skipped by the instrument, disclosed as emptyRunsSkipped; it contributes no claims and therefore no silent failures",
+      "verdict": "IDENTICAL to e07 for all 10 macOS runs (delta 0 on silentFailureTrials and answeredTrials for every run and every claim); latest run remains 0/3 answered dev trials silent-failing"
+    },
+    "coverageCalibrationRerun": {
+      "table": [
+        { "dataset": "W14 TA blind overlap", "n": 12, "nCorrect": 10, "ece10": 0.1208, "aurc": 0.0765, "deltaEce10VsE07": 0.0, "deltaAurcVsE07": 0.0 },
+        { "dataset": "W14 ownership blind overlap", "n": 31, "nCorrect": 30, "ece10": 0.0977, "aurc": 0.0176, "deltaEce10VsE07": 0.0, "deltaAurcVsE07": 0.0 },
+        { "dataset": "D2-04 ownership audit pooled (3 bundles)", "n": 80, "nCorrect": 66, "ece10": 0.1094, "aurc": 0.1245, "deltaEce10VsE07": 0.0, "deltaAurcVsE07": 0.0 },
+        { "dataset": "D2-04 wavea-944403-dink", "n": 44, "nCorrect": 38, "ece10": 0.1193, "aurc": 0.1379, "deltaEce10VsE07": 0.0, "deltaAurcVsE07": 0.0 },
+        { "dataset": "D2-04 wavea-944403-smash", "n": 16, "nCorrect": 10, "ece10": 0.2438, "aurc": 0.2695, "deltaEce10VsE07": 0.0, "deltaAurcVsE07": 0.0 },
+        { "dataset": "D2-04 wavea-faead-rally", "n": 20, "nCorrect": 18, "ece10": 0.2, "aurc": 0.0209, "deltaEce10VsE07": 0.0, "deltaAurcVsE07": 0.0 }
+      ],
+      "verdict": "IDENTICAL to e07 to 4 decimals on every dataset — expected, since these inputs (W14 overlap artifacts, D2-04 audit sidecars) are frozen committed files that Wave E did not rewrite (append-only discipline held)",
+      "abstentionCoverage": "latest macOS cascade run unchanged: afn-sasebo-rally1 abstains on EVENT/CONTACT/PHASE/STROKE (honest abstention), 2/3 dev cases fully answered on all 5 claims"
+    },
+    "d204PostAdjudicationSensitivity": {
+      "why": "the only calibration-relevant thing Wave E actually changed: e05 merged append-only waveE-ownership-corrections sidecars that adjudicated 16 D2-04 audit disagreement IDs (6 upheld as corrections: 4 add-visible + 2 supersede-point; 7 resolved-to-waveC; 2 downgraded-to-ambiguous; 1 unresolved). The frozen D2-04 proxy scores 'correct' as agreement with ORIGINAL waveC labels, so upheld audit disagreements are now scored wrong-signed. This is a SENSITIVITY VIEW keyed on adjudicationId, not a relabel: v1 numbers above are reported unchanged, and the sidecar files are untouched.",
+      "table": [
+        { "bundle": "wavea-944403-dink", "n": 42, "nCorrect": 41, "flippedToCorrect": 3, "excludedUnresolvedOrPartial": 2, "ece10": 0.1595, "aurc": 0.0261 },
+        { "bundle": "wavea-944403-smash", "n": 16, "nCorrect": 11, "flippedToCorrect": 1, "excludedUnresolvedOrPartial": 0, "ece10": 0.2125, "aurc": 0.1407 },
+        { "bundle": "wavea-faead-rally", "n": 20, "nCorrect": 18, "flippedToCorrect": 0, "excludedUnresolvedOrPartial": 0, "ece10": 0.2, "aurc": 0.0209 },
+        { "bundle": "POOLED (clustered, not i.i.d.)", "n": 78, "nCorrect": 70, "flippedToCorrect": 4, "excludedUnresolvedOrPartial": 2, "ece10": 0.1333, "aurc": 0.0374 }
+      ],
+      "reading": "against post-e05 labels the annotator agreement rate rises 66/80 -> 70/78 and pooled AURC improves 0.1245 -> 0.0374 (the upheld disagreements were high-confidence audit calls, so they were dominating the risk tail); pooled ECE10 worsens slightly 0.1094 -> 0.1333 because the flipped slots move accuracy above self-reported confidence in mid bins. n is small and clustered in 3 bundles — exact counts, not stable estimates."
+    },
+    "strokeHeuristic4Gates": {
+      "finding": "the e03 stroke-heuristic-4 change is gate/bench-side (strokeHeuristicV4Gates.test.ts, committed-data L1/L2 bench); no macOS cascade run exists after it landed (latest committed run with rows is 2026-08-29T02:49Z, pre-e03-merge), so its effect on live STROKE_L1 silent failure is unmeasurable on this box",
+      "status": "BLOCKED_EXTERNAL for a post-gates fresh cascade measurement (Mac-gated pose extraction)"
+    }
+  },
+  "subsystemFlags": {
+    "increasedSilentFailure": "NONE — no subsystem shows any increase vs e07 on any committed evidence: retro per-claim silent-failure counts are delta-0 for EVENT, STROKE_L1, CONTACT_MARKER, TARGET_IDENTITY, PHASE_RENDER on all 10 runs; fresh cascade remains honest 0/0; frozen calibration datasets are bit-identical",
+    "forensics": "no increases, so no per-increase forensics are owed; the structural finding instead is that Wave E cannot have changed these numbers on this box: (a) the retro inputs (datasets/cascade/cascade-*.json) gained only one empty Linux artifact, (b) the calibration inputs are frozen committed sidecars Wave E only appended beside, (c) the only semantic drift is the e05 adjudication making the D2-04 correctness proxy stale — quantified in the sensitivity view (4/80 slots wrong-signed, 2/80 unresolved)"
+  },
+  "honestNegatives": [
+    "No fresh post-Wave-E silent-failure measurement is possible on this box: cascade inputs are Mac-gated (Apple Vision pose extraction, no committed videos/pose.json). Fresh 0/0 confirms the code path stays honest at HEAD, not that the product is silent-failure-free.",
+    "No committed macOS cascade run postdates the Wave E merges or the stroke-heuristic-4 gates, so 'after all Wave E merges' can only be verified as no-change-in-derivable-metrics plus a fresh honest 0/0 — a post-merge Mac run is required for a live measurement.",
+    "All calibration curves use annotator self-reported confidence with agreement-as-correctness proxies; no committed artifact pairs MODEL confidences with gold.",
+    "n=3 development cases, n=80 audit slots in 3 bundles: exact counts, not stable population estimates."
+  ],
+  "heldOut": "wm-dink-01 and afn-vic-rally1 untouched: excluded by the split filter before any parsing; not viewed, labeled, tuned against, or regenerated; fresh-candidates pool untouched",
+  "gates": {
+    "typecheck": "pnpm typecheck clean (all workspace packages)",
+    "lint": "pnpm lint clean",
+    "format": "pnpm format:check clean after prettier --write on f17-rerun.ts",
+    "tests": "swing-lab vitest: 536 passed / 4 skipped (pre-existing skips), 47 files, 55.6s"
+  },
+  "filesChanged": [
+    "datasets/experiments/wave-f/f17-rerun.ts (new tool)",
+    "datasets/experiments/wave-f/f17-rerun-report.json (generated)",
+    "datasets/experiments/wave-f/f17-silent-failure-rerun-summary.json (this file)"
+  ],
+  "verdict": "GREEN"
+}
