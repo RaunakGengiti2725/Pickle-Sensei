@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-faead-rally",
+  "annotatorId": "devin-visual-v2-waveC",
+  "createdAtIso": "2026-08-29T06:45:00.000Z",
+  "revision": 1,
+  "stroke": "volley",
+  "annotatedStrokeV3": "FOREHAND_VOLLEY",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 13875,
+    "accelerationStartMs": 13958,
+    "contactMs": 14021,
+    "followThroughEndMs": 14208,
+    "recoveryEndMs": 14500
+  },
+  "contactUncertainty": "plus_minus_1",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.7,
+  "notes": "Wave C contact-only independent frame pass; event bounds identify the prior event and were not re-annotated. The earlier torso-occluded backhand remains abstained (contactMs null) and is not counted.",
+  "history": [{ "revision": 1, "savedAtIso": "2026-08-29T06:45:00.000Z" }],
+  "eventLabels": [
+    {
+      "eventStartMs": 13875,
+      "contactMs": 14021,
+      "eventEndMs": 14500,
+      "owner": "target",
+      "annotator": "devin-visual-v2-waveC",
+      "note": "high forehand volley; direct ball at raised paddle; source frames n336-n337, 14000-14042ms; contact window 14000-14042ms (1 frame at 24fps), midpoint label 14021ms"
+    }
+  ]
+}

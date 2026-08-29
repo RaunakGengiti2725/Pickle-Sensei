@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-marne-serve",
+  "annotatorId": "devin-visual-v2-waveC",
+  "createdAtIso": "2026-08-29T06:45:00.000Z",
+  "revision": 1,
+  "stroke": "serve",
+  "annotatedStrokeV3": "SERVE",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 34017,
+    "accelerationStartMs": 34630,
+    "contactMs": 34693,
+    "followThroughEndMs": 34933,
+    "recoveryEndMs": 35433
+  },
+  "contactUncertainty": "plus_minus_1",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.86,
+  "notes": "Wave C contact-only independent frame pass; event bounds identify the prior event and were not re-annotated.",
+  "history": [{ "revision": 1, "savedAtIso": "2026-08-29T06:45:00.000Z" }],
+  "eventLabels": [
+    {
+      "eventStartMs": 34017,
+      "contactMs": 34693,
+      "eventEndMs": 35433,
+      "owner": "target",
+      "annotator": "devin-visual-v2-waveC",
+      "note": "forehand drop serve; direct ball-paddle overlap; source frames n2079-n2080, 34685-34701ms; contact window 34685-34701ms (1 frame), midpoint label 34693ms"
+    }
+  ]
+}

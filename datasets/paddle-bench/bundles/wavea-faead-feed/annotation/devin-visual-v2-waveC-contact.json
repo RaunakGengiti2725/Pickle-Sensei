@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-faead-feed",
+  "annotatorId": "devin-visual-v2-waveC",
+  "createdAtIso": "2026-08-29T06:45:00.000Z",
+  "revision": 1,
+  "stroke": "unsure",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 33358,
+    "accelerationStartMs": 33400,
+    "contactMs": 33438,
+    "followThroughEndMs": 33650,
+    "recoveryEndMs": 34050
+  },
+  "contactUncertainty": "plus_minus_1",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.72,
+  "notes": "Wave C contact-only independent frame pass; event bounds identify the prior event and were not re-annotated.",
+  "history": [{ "revision": 1, "savedAtIso": "2026-08-29T06:45:00.000Z" }],
+  "eventLabels": [
+    {
+      "eventStartMs": 33358,
+      "contactMs": 33438,
+      "eventEndMs": 34050,
+      "owner": "target",
+      "annotator": "devin-visual-v2-waveC",
+      "note": "informal forehand feed after juggling; direct ball-paddle overlap/adjacency; source frames n802-n803, 33417-33458ms; contact window 33417-33458ms (1 frame at 24fps), midpoint label 33438ms"
+    }
+  ]
+}
