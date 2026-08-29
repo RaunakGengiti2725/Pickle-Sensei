@@ -3,8 +3,14 @@ import { detectOverlap, type Fingerprint, FINGERPRINT_ALGO } from "../src/engine
 import { rightsForLicense, trainingEligible } from "../src/engine/rights.js";
 import { deterministicSplit, auditSplits, type SplitsFile } from "../src/engine/splits.js";
 import {
-  replayAcquisition, resampleTo30fps, wristElevation, captureTorsoMid,
-  OCCUPANCY_FRAMES_TO_LOCK, SHIPPED_VARIANT, LEGACY_VARIANT, type ReplayFrame,
+  replayAcquisition,
+  resampleTo30fps,
+  wristElevation,
+  captureTorsoMid,
+  OCCUPANCY_FRAMES_TO_LOCK,
+  SHIPPED_VARIANT,
+  LEGACY_VARIANT,
+  type ReplayFrame,
 } from "../src/engine/taReplay.js";
 import { eventId, recordingIdForHash, commonsSourceId } from "../src/engine/corpus.js";
 
@@ -12,7 +18,10 @@ import { eventId, recordingIdForHash, commonsSourceId } from "../src/engine/corp
 
 describe("rightsForLicense", () => {
   it("public domain grants everything", () => {
-    const rights = rightsForLicense("Public domain (U.S. federal government work, PD-USGov; DVIDS)", "test");
+    const rights = rightsForLicense(
+      "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "test",
+    );
     expect(rights.train).toBe("yes");
     expect(rights.commercial).toBe("yes");
     expect(trainingEligible(rights)).toBe(true);
@@ -39,7 +48,9 @@ describe("stable ids", () => {
     expect(recordingIdForHash("abcdef0123456789".repeat(4))).toBe("rec-abcdef012345");
   });
   it("commons source id is deterministic across import and acquisition", () => {
-    expect(commonsSourceId("File:Pickleball game.webm")).toBe(commonsSourceId("Pickleball game.webm"));
+    expect(commonsSourceId("File:Pickleball game.webm")).toBe(
+      commonsSourceId("Pickleball game.webm"),
+    );
   });
   it("event ids are deterministic", () => {
     expect(eventId("rec-abc", 2, 3, 1500.4)).toBe("evt-abc-s2w0-p3-1500");
@@ -54,7 +65,9 @@ function print(hashes: string[]): Fingerprint {
 }
 
 describe("detectOverlap", () => {
-  const base = Array.from({ length: 60 }, (_, index) => (BigInt(index) * 0x9e3779b97f4a7c15n % (1n << 64n)).toString(16).padStart(16, "0"));
+  const base = Array.from({ length: 60 }, (_, index) =>
+    ((BigInt(index) * 0x9e3779b97f4a7c15n) % (1n << 64n)).toString(16).padStart(16, "0"),
+  );
   it("finds a time-crop at the right offset", () => {
     const clip = base.slice(20, 32);
     const match = detectOverlap(print(base), print(clip));
@@ -63,11 +76,17 @@ describe("detectOverlap", () => {
     expect(match!.meanHamming).toBe(0);
   });
   it("rejects unrelated content", () => {
-    const other = Array.from({ length: 30 }, (_, index) => ((BigInt(index) * 0xdeadbeefcafe1234n + 0x1234n) % (1n << 64n)).toString(16).padStart(16, "0"));
+    const other = Array.from({ length: 30 }, (_, index) =>
+      ((BigInt(index) * 0xdeadbeefcafe1234n + 0x1234n) % (1n << 64n))
+        .toString(16)
+        .padStart(16, "0"),
+    );
     expect(detectOverlap(print(base), print(other))).toBeNull();
   });
   it("tolerates re-encode noise (a few flipped bits per hash)", () => {
-    const noisy = base.slice(10, 22).map((hash) => (BigInt(`0x${hash}`) ^ 0b101n).toString(16).padStart(16, "0"));
+    const noisy = base
+      .slice(10, 22)
+      .map((hash) => (BigInt(`0x${hash}`) ^ 0b101n).toString(16).padStart(16, "0"));
     const match = detectOverlap(print(base), print(noisy));
     expect(match).not.toBeNull();
     expect(match!.offsetSec).toBe(10);
@@ -91,22 +110,49 @@ describe("splits", () => {
         "sess-b": { split: "shadow", method: "deterministic", assignedAtIso: "now" },
       },
     };
-    const probe = { durationMs: 1000, fps: 30, width: 1, height: 1, videoCodec: "h264", container: "mp4", bytes: 1 };
+    const probe = {
+      durationMs: 1000,
+      fps: 30,
+      width: 1,
+      height: 1,
+      videoCodec: "h264",
+      container: "mp4",
+      bytes: 1,
+    };
     const findings = auditSplits(
       [
         {
-          schemaVersion: 1, recordingId: "rec-a", sourceId: "s", path: "a", sha256: "a", probe,
-          sessionKey: "sess-a", registeredAtIso: "now", derivedFrom: [],
+          schemaVersion: 1,
+          recordingId: "rec-a",
+          sourceId: "s",
+          path: "a",
+          sha256: "a",
+          probe,
+          sessionKey: "sess-a",
+          registeredAtIso: "now",
+          derivedFrom: [],
         },
         {
-          schemaVersion: 1, recordingId: "rec-b", sourceId: "s", path: "b", sha256: "b", probe,
-          sessionKey: "sess-b", registeredAtIso: "now",
-          derivedFrom: [{ parentRecordingId: "rec-a", relation: "time_crop", detail: "", evidence: "declared" }],
+          schemaVersion: 1,
+          recordingId: "rec-b",
+          sourceId: "s",
+          path: "b",
+          sha256: "b",
+          probe,
+          sessionKey: "sess-b",
+          registeredAtIso: "now",
+          derivedFrom: [
+            { parentRecordingId: "rec-a", relation: "time_crop", detail: "", evidence: "declared" },
+          ],
         },
       ],
       splits,
     );
-    expect(findings.some((finding) => finding.severity === "problem" && finding.message.includes("LEAKAGE"))).toBe(true);
+    expect(
+      findings.some(
+        (finding) => finding.severity === "problem" && finding.message.includes("LEAKAGE"),
+      ),
+    ).toBe(true);
   });
 });
 
@@ -133,7 +179,14 @@ function syntheticTrack(kind: "live" | "rigid_pan" | "frozen"): PlayerTrack {
       torsoSpan: 0.12,
     };
   });
-  return { trackId: 1, frames, coverage: 1, meanTorsoSpan: 0.12, lossPeriods: [] };
+  return {
+    trackId: 1,
+    frames,
+    coverage: 1,
+    meanTorsoSpan: 0.12,
+    lossPeriods: [],
+    identityContests: [],
+  };
 }
 
 describe("gameplay validity (permanent title-card regression class)", () => {
@@ -177,7 +230,10 @@ describe("replayAcquisition (live product port)", () => {
   const region = { x: 0.5, y: 0.5 };
 
   it("locks after 9 consecutive single-occupant frames", () => {
-    const result = replayAcquisition(frames(15, () => [person(0.5, 0.5)]), region);
+    const result = replayAcquisition(
+      frames(15, () => [person(0.5, 0.5)]),
+      region,
+    );
     expect(result.lock?.source).toBe("start_region_occupancy");
     expect(result.lock?.t).toBe((OCCUPANCY_FRAMES_TO_LOCK - 1) * 33);
   });
@@ -203,7 +259,9 @@ describe("replayAcquisition (live product port)", () => {
 
   it("LEGACY ambiguity never falls back — the measured dead-end that D-027 fixed", () => {
     const result = replayAcquisition(
-      frames(40, (index) => (index < 3 ? [person(0.46, 0.5), person(0.54, 0.5)] : [person(0.46, 0.5)])),
+      frames(40, (index) =>
+        index < 3 ? [person(0.46, 0.5), person(0.54, 0.5)] : [person(0.46, 0.5)],
+      ),
       region,
       LEGACY_VARIANT,
     );
@@ -296,7 +354,10 @@ describe("replayAcquisition (live product port)", () => {
   });
 
   it("resample keeps ≥30ms spacing", () => {
-    const dense = Array.from({ length: 100 }, (_, index) => ({ t: index * 16.6, people: [person(0.5, 0.5)] }));
+    const dense = Array.from({ length: 100 }, (_, index) => ({
+      t: index * 16.6,
+      people: [person(0.5, 0.5)],
+    }));
     const sparse = resampleTo30fps(dense);
     for (let index = 1; index < sparse.length; index += 1) {
       expect(sparse[index]!.t - sparse[index - 1]!.t).toBeGreaterThanOrEqual(30);

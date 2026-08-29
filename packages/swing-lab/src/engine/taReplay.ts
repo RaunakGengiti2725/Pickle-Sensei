@@ -47,6 +47,11 @@ export const START_REGION_RADIUS = 0.17;
 export const OCCUPANCY_FRAMES_TO_LOCK = 9;
 export const GESTURE_ELEVATION = 0.03;
 
+/** Post-lock rival within this score ratio of the chosen person = contested. */
+export const FOLLOW_CONTEST_SCORE_RATIO = 0.7;
+/** Incumbent radius of the live follower (ApplePoseProvider.primaryPerson). */
+export const FOLLOW_INCUMBENT_RADIUS = 0.12;
+
 // ── W3 candidate constants (bench-only; not shipped — D-026 gate applies) ──
 /** Soft occupancy: people COUNT as region crowd at lower joint confidence… */
 export const SOFT_OCCUPANT_MIN_V = 0.1;
@@ -115,7 +120,11 @@ export function resampleTo30fps(frames: ReplayFrame[]): ReplayFrame[] {
   return out;
 }
 
-export function peopleFileToReplayFrames(file: PeopleFile, startMs: number, endMs: number): ReplayFrame[] {
+export function peopleFileToReplayFrames(
+  file: PeopleFile,
+  startMs: number,
+  endMs: number,
+): ReplayFrame[] {
   return file.frames
     .filter((frame) => frame.t >= startMs && frame.t < endMs)
     .map((frame) => ({ t: frame.t, people: frame.p.map((person) => ({ joints: person.l })) }));
@@ -151,8 +160,25 @@ export interface ReplayResult {
     torso: { x: number; y: number };
   } | null;
   ambiguityEntered: boolean;
-  /** Post-lock follower pick per frame: torso of the chosen person. */
-  follow: Array<{ t: number; torso: { x: number; y: number } | null }>;
+  /**
+   * Post-lock follower pick per frame: torso of the chosen person, plus
+   * ADDITIVE identity-continuity diagnostics (decisions are untouched):
+   *   contested — a rival person scored within FOLLOW_CONTEST_SCORE_RATIO of
+   *     the chosen one, or ≥2 people sat inside the incumbent radius of the
+   *     anchor — the geometry in which the follower can switch humans.
+   *   jumped — the anchor moved more than the incumbent radius in one frame
+   *     (a discontinuous identity hand-off, e.g. reacquiring after a loss).
+   */
+  follow: Array<{
+    t: number;
+    torso: { x: number; y: number } | null;
+    contested?: boolean;
+    jumped?: boolean;
+  }>;
+  /** Count of post-lock frames flagged contested. */
+  followContestedFrames: number;
+  /** Count of post-lock anchor jumps (> incumbent radius in one frame). */
+  followJumps: number;
 }
 
 /**
@@ -262,7 +288,11 @@ export function replayAcquisition(
   let ambDominanceStreak = 0;
   let lastAmbDominantTorso: { x: number; y: number } | null = null;
 
-  const lockAt = (t: number, source: NonNullable<ReplayResult["lock"]>["source"], torso: { x: number; y: number }) => {
+  const lockAt = (
+    t: number,
+    source: NonNullable<ReplayResult["lock"]>["source"],
+    torso: { x: number; y: number },
+  ) => {
     lock = { t, source, torso };
     anchor = torso;
     events.push({ t, kind: "locked", source, torso });
@@ -271,20 +301,33 @@ export function replayAcquisition(
   for (const frame of frames) {
     if (lock) {
       // ApplePoseProvider.primaryPerson with the anchor seeded at lock.
+      // Decisions below are the pinned live semantics; the contested/jumped
+      // flags are additive observation only.
       let best: { span: number; mid: { x: number; y: number } | null; score: number } | null = null;
-      let incumbent: { span: number; mid: { x: number; y: number } | null; score: number } | null = null;
+      let incumbent: { span: number; mid: { x: number; y: number } | null; score: number } | null =
+        null;
+      const scored: Array<{ mid: { x: number; y: number } | null; score: number }> = [];
+      let inRadius = 0;
       for (const person of frame.people) {
         const torso = providerTorso(person);
         const score: number =
           anchor && torso.mid
             ? torso.span / (1 + 3 * Math.hypot(torso.mid.x - anchor.x, torso.mid.y - anchor.y))
             : torso.span;
+        scored.push({ mid: torso.mid, score });
+        if (
+          anchor &&
+          torso.mid &&
+          Math.hypot(torso.mid.x - anchor.x, torso.mid.y - anchor.y) <= FOLLOW_INCUMBENT_RADIUS
+        ) {
+          inRadius += 1;
+        }
         if (!best || score > best.score) best = { ...torso, score };
         if (
           variant.followerHysteresis &&
           anchor &&
           torso.mid &&
-          Math.hypot(torso.mid.x - anchor.x, torso.mid.y - anchor.y) <= 0.12 &&
+          Math.hypot(torso.mid.x - anchor.x, torso.mid.y - anchor.y) <= FOLLOW_INCUMBENT_RADIUS &&
           (!incumbent || score > incumbent.score)
         ) {
           incumbent = { ...torso, score };
@@ -296,8 +339,28 @@ export function replayAcquisition(
         // challenger is decisively better (1/0.7 ≈ 1.43×, playerTracker gate).
         if (!best || best.score <= incumbent.score / 0.7) chosen = incumbent;
       }
+      const rivalContest =
+        chosen !== null &&
+        scored.some(
+          (entry) =>
+            entry !== null &&
+            entry.mid !== null &&
+            chosen!.mid !== null &&
+            (entry.mid.x !== chosen!.mid.x || entry.mid.y !== chosen!.mid.y) &&
+            entry.score >= FOLLOW_CONTEST_SCORE_RATIO * chosen!.score,
+        );
+      const contested = rivalContest || inRadius >= 2;
+      const jumped =
+        anchor !== null &&
+        chosen?.mid != null &&
+        Math.hypot(chosen.mid.x - anchor.x, chosen.mid.y - anchor.y) > FOLLOW_INCUMBENT_RADIUS;
       if (chosen?.mid) anchor = chosen.mid;
-      follow.push({ t: frame.t, torso: chosen?.mid ?? null });
+      follow.push({
+        t: frame.t,
+        torso: chosen?.mid ?? null,
+        ...(contested ? { contested: true } : {}),
+        ...(jumped ? { jumped: true } : {}),
+      });
       continue;
     }
 
@@ -305,7 +368,9 @@ export function replayAcquisition(
       .map((person) => ({ person, torso: captureTorsoMid(person) }))
       .filter((entry): entry is { person: Person; torso: { x: number; y: number } } => {
         if (!entry.torso) return false;
-        return Math.hypot(entry.torso.x - region.x, entry.torso.y - region.y) <= START_REGION_RADIUS;
+        return (
+          Math.hypot(entry.torso.x - region.x, entry.torso.y - region.y) <= START_REGION_RADIUS
+        );
       });
 
     if (ambiguous) {
@@ -332,17 +397,26 @@ export function replayAcquisition(
             ? occupant
             : bestOccupant,
         );
-        const candidateDist = Math.hypot(candidate.torso.x - region.x, candidate.torso.y - region.y);
-        const others = softRegionOccupants(frame.people, region).filter((soft) => soft.person !== candidate.person);
-        const centered = config.centeredRadius === undefined || candidateDist <= config.centeredRadius;
+        const candidateDist = Math.hypot(
+          candidate.torso.x - region.x,
+          candidate.torso.y - region.y,
+        );
+        const others = softRegionOccupants(frame.people, region).filter(
+          (soft) => soft.person !== candidate.person,
+        );
+        const centered =
+          config.centeredRadius === undefined || candidateDist <= config.centeredRadius;
         if (centered && others.every((other) => other.dist >= config.marginRatio * candidateDist)) {
           const continuous =
             !lastAmbDominantTorso ||
-            Math.hypot(candidate.torso.x - lastAmbDominantTorso.x, candidate.torso.y - lastAmbDominantTorso.y) <=
-              DOMINANCE_CONTINUITY_RADIUS;
+            Math.hypot(
+              candidate.torso.x - lastAmbDominantTorso.x,
+              candidate.torso.y - lastAmbDominantTorso.y,
+            ) <= DOMINANCE_CONTINUITY_RADIUS;
           ambDominanceStreak = continuous ? ambDominanceStreak + 1 : 1;
           lastAmbDominantTorso = candidate.torso;
-          if (ambDominanceStreak >= config.frames) lockAt(frame.t, "ambiguity_dominance", candidate.torso);
+          if (ambDominanceStreak >= config.frames)
+            lockAt(frame.t, "ambiguity_dominance", candidate.torso);
         } else {
           ambDominanceStreak = 0;
           lastAmbDominantTorso = null;
@@ -380,7 +454,9 @@ export function replayAcquisition(
     streak += 1;
     if (variant.occupancyDominance) {
       const gate = variant.occupancyDominance;
-      const others = softRegionOccupants(frame.people, region).filter((soft) => soft.person !== occupant.person);
+      const others = softRegionOccupants(frame.people, region).filter(
+        (soft) => soft.person !== occupant.person,
+      );
       const occupantDist = Math.hypot(occupant.torso.x - region.x, occupant.torso.y - region.y);
       const centered = gate.centeredRadius === undefined || occupantDist <= gate.centeredRadius;
       if (others.length > 0) {
@@ -393,8 +469,10 @@ export function replayAcquisition(
         if (centered && others.every((other) => other.dist >= gate.marginRatio * occupantDist)) {
           const continuous =
             !lastDominantTorso ||
-            Math.hypot(occupant.torso.x - lastDominantTorso.x, occupant.torso.y - lastDominantTorso.y) <=
-              DOMINANCE_CONTINUITY_RADIUS;
+            Math.hypot(
+              occupant.torso.x - lastDominantTorso.x,
+              occupant.torso.y - lastDominantTorso.y,
+            ) <= DOMINANCE_CONTINUITY_RADIUS;
           dominanceStreak = continuous ? dominanceStreak + 1 : 1;
           lastDominantTorso = occupant.torso;
           if (dominanceStreak >= gate.framesToDominate) {
@@ -435,7 +513,14 @@ export function replayAcquisition(
       lockAt(frame.t, "start_region_occupancy", occupant.torso);
     }
   }
-  return { events, lock, ambiguityEntered: ambiguous, follow };
+  return {
+    events,
+    lock,
+    ambiguityEntered: ambiguous,
+    follow,
+    followContestedFrames: follow.filter((entry) => entry.contested === true).length,
+    followJumps: follow.filter((entry) => entry.jumped === true).length,
+  };
 }
 
 // ── Variant registry ──────────────────────────────────────────────────────
