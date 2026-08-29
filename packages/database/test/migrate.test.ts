@@ -109,6 +109,75 @@ describe.skipIf(!testUrl)("D4-09 audit remediations (integration)", () => {
     }
   });
 
+  it("coach_review is append-only and amendments never rewrite the base row", async () => {
+    const pool = new pg.Pool({ connectionString: testUrl });
+    try {
+      await pool.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
+      await runMigrations(pool, migrationsDir);
+      await pool.query(
+        `INSERT INTO coach_review (review_id, queue_item_id, coach_id, coach_credential_ref,
+           schema_version, stroke_taxonomy_version, fault_taxonomy_version, drill_library_version,
+           record, qualification_snapshot)
+         VALUES ('item-1.coach-01', 'item-1', 'coach-01', 'cred-1', 3,
+           'pickleball-stroke-taxonomy-v3', 'fault-taxonomy-v0-draft', 'drill-library-v0',
+           '{"confidence": 0.8}'::jsonb, '{"coachId": "coach-01"}'::jsonb)`,
+      );
+      await expect(pool.query("UPDATE coach_review SET coach_id = 'coach-02'")).rejects.toThrow(
+        /append-only/,
+      );
+      await expect(pool.query("DELETE FROM coach_review")).rejects.toThrow(/append-only/);
+      await expect(pool.query("TRUNCATE coach_review CASCADE")).rejects.toThrow(/append-only/);
+      await expect(
+        pool.query(
+          `INSERT INTO coach_review (review_id, queue_item_id, coach_id, coach_credential_ref,
+             schema_version, stroke_taxonomy_version, fault_taxonomy_version, drill_library_version,
+             record, qualification_snapshot)
+           VALUES ('item-1.coach-01', 'item-1', 'coach-01', 'cred-1', 3,
+             'pickleball-stroke-taxonomy-v3', 'fault-taxonomy-v0-draft', 'drill-library-v0',
+             '{"confidence": 0.1}'::jsonb, '{"coachId": "coach-01"}'::jsonb)`,
+        ),
+      ).rejects.toThrow(/duplicate key/);
+      await expect(
+        pool.query(
+          `INSERT INTO coach_review (review_id, queue_item_id, coach_id, coach_credential_ref,
+             schema_version, stroke_taxonomy_version, fault_taxonomy_version, drill_library_version,
+             record, qualification_snapshot)
+           VALUES ('item-2.SYNTHETIC-COACH-A', 'item-2', 'SYNTHETIC-COACH-A', 'cred-x', 3,
+             'pickleball-stroke-taxonomy-v3', 'fault-taxonomy-v0-draft', 'drill-library-v0',
+             '{}'::jsonb, '{}'::jsonb)`,
+        ),
+      ).rejects.toThrow(/coach_review/);
+
+      await pool.query(
+        `INSERT INTO coach_review_amendment (amendment_id, review_id, revision, reason, record)
+         VALUES ('item-1.coach-01.r2', 'item-1.coach-01', 2, 'rewatched at quarter speed',
+           '{"confidence": 0.95}'::jsonb)`,
+      );
+      const { rows: base } = await pool.query<{ record: { confidence?: number } }>(
+        "SELECT record FROM coach_review WHERE review_id = 'item-1.coach-01'",
+      );
+      expect(base[0]?.record).toEqual({ confidence: 0.8 });
+      await expect(
+        pool.query("UPDATE coach_review_amendment SET reason = 'edited'"),
+      ).rejects.toThrow(/append-only/);
+      await expect(pool.query("DELETE FROM coach_review_amendment")).rejects.toThrow(/append-only/);
+      await expect(
+        pool.query(
+          `INSERT INTO coach_review_amendment (amendment_id, review_id, revision, reason, record)
+           VALUES ('item-1.coach-01.r2', 'item-1.coach-01', 2, 'second write attempt', '{}'::jsonb)`,
+        ),
+      ).rejects.toThrow(/duplicate key/);
+      await expect(
+        pool.query(
+          `INSERT INTO coach_review_amendment (amendment_id, review_id, revision, reason, record)
+           VALUES ('item-1.coach-01.r1', 'item-1.coach-01', 1, 'revision below two', '{}'::jsonb)`,
+        ),
+      ).rejects.toThrow(/revision/);
+    } finally {
+      await pool.end();
+    }
+  });
+
   it("re-seeding never rewrites a released scoring model's config", async () => {
     const pool = new pg.Pool({ connectionString: testUrl });
     try {

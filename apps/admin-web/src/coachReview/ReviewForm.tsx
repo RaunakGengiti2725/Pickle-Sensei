@@ -11,18 +11,25 @@ import {
 import { amendmentIdFor, type ReviewAmendment } from "./records";
 import {
   reviewIdFor,
+  SKILL_LEVEL_RELEVANCE,
+  STROKE_PHASES,
   type CoachReview,
+  type DrillSuggestion,
   type FaultEntry,
+  type PhaseAssessment,
+  type PhaseEvaluation,
   type QualityValue,
   type QueueItem,
+  type ReviewProvenance,
   type Severity,
+  type SkillLevelRelevance,
   type StrokeConfirmation,
 } from "./types";
 import { validateReview } from "./validate";
 import { labBox, mono } from "./CoachReviewLab";
 
 /**
- * Structured review form — mirrors CoachReview v2 (schema.json). Honest by
+ * Structured review form — mirrors CoachReview v3 (schema.json). Honest by
  * construction: with an empty coach registry there is no identity to sign
  * the review with, so persistence AND export stay disabled and the form says
  * exactly why. Typing in the form fabricates nothing: no bytes leave the
@@ -33,6 +40,7 @@ interface FaultDraft {
   faultId: string;
   severity: Severity;
   timestamps: number[];
+  frames: number[];
   region: { x: number; y: number; w: number; h: number } | null;
   rationale: string;
 }
@@ -41,9 +49,28 @@ const emptyFault = (faultId: string): FaultDraft => ({
   faultId,
   severity: 2,
   timestamps: [],
+  frames: [],
   region: null,
   rationale: "",
 });
+
+const emptyDrill = (): DrillSuggestion => ({
+  drillId: null,
+  freeText: "",
+  whyApplies: "",
+  role: "recommended",
+  progressionNote: null,
+  regressionNote: null,
+  equipmentNote: null,
+  skillLevelRelevance: "all",
+});
+
+const PHASE_ASSESSMENTS: PhaseAssessment[] = [
+  "good",
+  "minor_issue",
+  "major_issue",
+  "not_observable",
+];
 
 /** Primary = first listed fault of highest severity; all others secondary. */
 export function primaryFaultIndex(faults: Array<{ severity: Severity }>): number | null {
@@ -76,8 +103,15 @@ export function ReviewForm({
   const [cannotEvaluate, setCannotEvaluate] = useState(false);
   const [cannotEvaluateReason, setCannotEvaluateReason] = useState("");
   const [quality, setQuality] = useState<QualityValue | null>(null);
+  const [phaseEvals, setPhaseEvals] = useState<PhaseEvaluation[]>(() =>
+    STROKE_PHASES.map((phase) => ({
+      phaseId: phase.id,
+      assessment: "not_observable" as PhaseAssessment,
+      note: "",
+    })),
+  );
   const [faults, setFaults] = useState<FaultDraft[]>([]);
-  const [drills, setDrills] = useState<Array<{ drillId: string | null; freeText: string }>>([]);
+  const [drills, setDrills] = useState<DrillSuggestion[]>([]);
   const [confidence, setConfidence] = useState(0.7);
   const [rationale, setRationale] = useState("");
   const [createdAtIso] = useState(() => new Date().toISOString());
@@ -102,6 +136,31 @@ export function ReviewForm({
   );
   const context = useMemo(() => validationContextFrom(data), [data]);
 
+  const buildProvenance = (): ReviewProvenance => ({
+    coachQualificationSnapshot: {
+      coachId: coach?.coachId ?? "UNSET",
+      credentialRef: coach?.credentialRef ?? "",
+      registryStatus: "active",
+      provisionedAtIso: coach?.provisionedAtIso ?? "",
+      provisionedBy: coach?.provisionedBy ?? "",
+      snapshotAtIso: new Date().toISOString(),
+    },
+    videoRef: {
+      path: item.video,
+      annotatorId: item.bundle.annotatorId,
+      annotationRevision: item.bundle.revision,
+    },
+    /** The lab shows raw video + annotation labels only; no machine analysis
+     * output is rendered in the review console. */
+    analysisVersions: {},
+    rawLabelsShown: {
+      annotatedStrokeV3: item.annotatedStrokeV3,
+      contactMs: item.contactMs,
+      windowMs: item.windowMs,
+    },
+    adjudicationState: "unadjudicated",
+  });
+
   const buildReview = (): CoachReview => {
     const strokeConfirmation: StrokeConfirmation =
       confirmKind === "confirmed"
@@ -109,8 +168,9 @@ export function ReviewForm({
         : confirmKind === "corrected"
           ? { kind: "corrected", stroke: correctedStroke, note: correctedNote }
           : { kind: "cannot_judge", reason: cannotJudgeReason };
+    const primaryIdx = primaryFaultIndex(faults);
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       reviewId: reviewIdFor(item.queueItemId, coachId || "UNSET"),
       queueItemId: item.queueItemId,
       coachId: coachId || "UNSET",
@@ -122,16 +182,19 @@ export function ReviewForm({
       strokeConfirmation,
       overallQuality:
         quality === null ? null : { scaleId: data.schema.qualityScale.id, value: quality },
+      phaseEvaluations: cannotEvaluate ? [] : phaseEvals,
+      primaryFaultId: primaryIdx === null ? null : (faults[primaryIdx]?.faultId ?? null),
       faults: faults.map((draft): FaultEntry => ({
         faultId: draft.faultId,
         severity: draft.severity,
-        evidence: { timestampsMs: draft.timestamps, region: draft.region },
+        evidence: { timestampsMs: draft.timestamps, frames: draft.frames, region: draft.region },
         rationale: draft.rationale,
       })),
       drillSuggestions: drills,
       confidence,
       cannotEvaluate: cannotEvaluate ? { reason: cannotEvaluateReason } : null,
       rationale,
+      provenance: buildProvenance(),
       createdAtIso,
       submittedAtIso: new Date().toISOString(),
     };
@@ -273,6 +336,45 @@ export function ReviewForm({
                 />{" "}
                 <strong>{value}</strong> — {data.schema.qualityScale.anchors[String(value)]}
               </label>
+            ))}
+          </fieldset>
+
+          <fieldset style={{ border: "1px solid #dde5e1", borderRadius: 8, marginBottom: 12 }}>
+            <legend>
+              3b · Phase-specific evaluation (stroke-phases-v1 — “not observable” is an honest
+              answer)
+            </legend>
+            {phaseEvals.map((evaluation, index) => (
+              <div key={evaluation.phaseId} style={{ marginBottom: 6 }}>
+                <strong style={{ display: "inline-block", width: 220 }}>
+                  {STROKE_PHASES.find((phase) => phase.id === evaluation.phaseId)?.name ??
+                    evaluation.phaseId}
+                </strong>
+                {PHASE_ASSESSMENTS.map((assessment) => (
+                  <label key={assessment} style={{ marginRight: 8 }}>
+                    <input
+                      type="radio"
+                      checked={evaluation.assessment === assessment}
+                      onChange={() =>
+                        setPhaseEvals(
+                          phaseEvals.map((p, i) => (i === index ? { ...p, assessment } : p)),
+                        )
+                      }
+                    />{" "}
+                    {assessment.replace("_", " ")}
+                  </label>
+                ))}
+                <input
+                  placeholder="note (≥5 chars when flagging an issue)"
+                  value={evaluation.note}
+                  onChange={(e) =>
+                    setPhaseEvals(
+                      phaseEvals.map((p, i) => (i === index ? { ...p, note: e.target.value } : p)),
+                    )
+                  }
+                  style={{ width: 320 }}
+                />
+              </div>
             ))}
           </fieldset>
 
@@ -423,6 +525,22 @@ export function ReviewForm({
                     mark current video time
                   </button>
                   <label style={{ marginLeft: 12 }}>
+                    evidence frames (optional, comma-separated):{" "}
+                    <input
+                      value={draft.frames.join(",")}
+                      onChange={(e) => {
+                        const frames = e.target.value
+                          .split(",")
+                          .map((part) => part.trim())
+                          .filter((part) => part.length > 0)
+                          .map(Number)
+                          .filter((n) => Number.isInteger(n) && n >= 0);
+                        setFaults(faults.map((f, i) => (i === index ? { ...f, frames } : f)));
+                      }}
+                      style={{ width: 140 }}
+                    />
+                  </label>
+                  <label style={{ marginLeft: 12 }}>
                     region (optional, normalized x/y/w/h):{" "}
                     <input
                       type="checkbox"
@@ -495,45 +613,107 @@ export function ReviewForm({
               5 · Drill suggestions (seeds for the future library — never user-facing
               recommendations)
             </legend>
-            {drills.map((suggestion, index) => (
-              <div key={index} style={{ marginBottom: 6 }}>
-                <select
-                  value={suggestion.drillId ?? ""}
-                  onChange={(e) =>
-                    setDrills(
-                      drills.map((d, i) =>
-                        i === index
-                          ? { ...d, drillId: e.target.value === "" ? null : e.target.value }
-                          : d,
-                      ),
-                    )
-                  }
+            {drills.map((suggestion, index) => {
+              const update = (patch: Partial<DrillSuggestion>) =>
+                setDrills(drills.map((d, i) => (i === index ? { ...d, ...patch } : d)));
+              return (
+                <div
+                  key={index}
+                  style={{
+                    border: "1px dashed #cbd5d1",
+                    borderRadius: 8,
+                    padding: 8,
+                    marginBottom: 8,
+                  }}
                 >
-                  <option value="">free text only</option>
-                  {data.drills.drills.map((drill) => (
-                    <option key={drill.id} value={drill.id}>
-                      {drill.name} [{drill.validationStatus}]
-                    </option>
-                  ))}
-                </select>{" "}
-                <input
-                  placeholder="free text (what/why)"
-                  value={suggestion.freeText}
-                  onChange={(e) =>
-                    setDrills(
-                      drills.map((d, i) => (i === index ? { ...d, freeText: e.target.value } : d)),
-                    )
-                  }
-                  style={{ width: 380 }}
-                />{" "}
-                <button onClick={() => setDrills(drills.filter((_, i) => i !== index))}>
-                  remove
-                </button>
-              </div>
-            ))}
-            <button onClick={() => setDrills([...drills, { drillId: null, freeText: "" }])}>
-              + add suggestion
-            </button>
+                  <select
+                    value={suggestion.role}
+                    onChange={(e) => update({ role: e.target.value as DrillSuggestion["role"] })}
+                  >
+                    <option value="recommended">recommended</option>
+                    <option value="alternative">alternative</option>
+                  </select>{" "}
+                  <select
+                    value={suggestion.drillId ?? ""}
+                    onChange={(e) =>
+                      update({ drillId: e.target.value === "" ? null : e.target.value })
+                    }
+                  >
+                    <option value="">free text only</option>
+                    {data.drills.drills.map((drill) => (
+                      <option key={drill.id} value={drill.id}>
+                        {drill.name} [{drill.validationStatus}]
+                      </option>
+                    ))}
+                  </select>{" "}
+                  <input
+                    placeholder="free text (what)"
+                    value={suggestion.freeText}
+                    onChange={(e) => update({ freeText: e.target.value })}
+                    style={{ width: 280 }}
+                  />{" "}
+                  <label>
+                    skill level:{" "}
+                    <select
+                      value={suggestion.skillLevelRelevance}
+                      onChange={(e) =>
+                        update({ skillLevelRelevance: e.target.value as SkillLevelRelevance })
+                      }
+                    >
+                      {SKILL_LEVEL_RELEVANCE.map((level) => (
+                        <option key={level} value={level}>
+                          {level}
+                        </option>
+                      ))}
+                    </select>
+                  </label>{" "}
+                  <button onClick={() => setDrills(drills.filter((_, i) => i !== index))}>
+                    remove
+                  </button>
+                  <div style={{ marginTop: 6 }}>
+                    <input
+                      placeholder="why this drill applies to the observed faults (≥10 chars, required)"
+                      value={suggestion.whyApplies}
+                      onChange={(e) => update({ whyApplies: e.target.value })}
+                      style={{ width: "100%" }}
+                    />
+                  </div>
+                  <div style={{ marginTop: 6, display: "flex", gap: 6 }}>
+                    <input
+                      placeholder="progression (optional)"
+                      value={suggestion.progressionNote ?? ""}
+                      onChange={(e) =>
+                        update({
+                          progressionNote: e.target.value.trim() === "" ? null : e.target.value,
+                        })
+                      }
+                      style={{ flex: 1 }}
+                    />
+                    <input
+                      placeholder="regression (optional)"
+                      value={suggestion.regressionNote ?? ""}
+                      onChange={(e) =>
+                        update({
+                          regressionNote: e.target.value.trim() === "" ? null : e.target.value,
+                        })
+                      }
+                      style={{ flex: 1 }}
+                    />
+                    <input
+                      placeholder="equipment beyond paddle+ball (optional)"
+                      value={suggestion.equipmentNote ?? ""}
+                      onChange={(e) =>
+                        update({
+                          equipmentNote: e.target.value.trim() === "" ? null : e.target.value,
+                        })
+                      }
+                      style={{ flex: 1 }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+            <button onClick={() => setDrills([...drills, emptyDrill()])}>+ add suggestion</button>
           </fieldset>
         </>
       )}

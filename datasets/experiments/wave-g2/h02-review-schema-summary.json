@@ -1,0 +1,36 @@
+{
+  "workstreamId": "h02-review-schema",
+  "wave": "G2 GATE-READINESS",
+  "generatedAtIso": "2026-08-29T17:50:00.000Z",
+  "mission": "Make the coach review record production-complete and immutable-with-amendments, so that when real qualified coaches exist, only their human evidence remains external.",
+  "method": [
+    "Extended the authoritative CoachReview schema (packages/swing-lab/src/coachReview.ts) from v2 to v3: added phase-specific evaluation (stroke-phases-v1: preparation/backswing/contact/follow_through/recovery), explicit primaryFaultId (null when no faults), evidence frames alongside timestamps, structured DrillSuggestion (whyApplies, recommended/alternative role, progression/regression notes, equipment requirements, skill-level relevance), and a ReviewProvenance block (coach qualification snapshot, video/annotation ref + revision, analysis/model versions, raw labels shown to the coach, adjudication state). Pre-existing v2 fields already covered stroke identity confirmation, overall quality (anchored 1-5, nullable only when unassessable), secondary faults, severity, rationale, confidence, cannot-evaluate, taxonomy/drill-library versions, and timestamps.",
+    "validateCoachReview (and the admin-web mirror validate.ts) now enforces every new field: known/unique phase ids, notes required for flagged phases, primary fault consistency, non-negative integer frames, whyApplies on every drill suggestion, alternative drills require a recommended drill, and a provenance snapshot that must match the review's coach identity.",
+    "Dev API middleware (apps/admin-web/src/coachReview/labApi.ts) additionally cross-checks the provenance qualification snapshot against the HUMAN-managed coaches.json registry entry on both review and amendment writes, so qualification metadata cannot be fabricated client-side. Review/amendment/adjudication storage stays append-only (409 on any existing file; amendments are separate full-replacement files at sequential revisions >= 2).",
+    "Portal UI (ReviewForm.tsx) exposes the full v3 record: per-phase radio evaluation with honest 'not observable' default, evidence frame entry, structured drill suggestions with why-applies/progression/regression/equipment/skill-level, and automatic provenance capture from the registry entry and queue item at submission.",
+    "Added migration 0018_coach_review_records.sql via the repo migration runner: coach_review, coach_review_amendment, coach_review_adjudication tables, all append-only via BEFORE UPDATE/DELETE row triggers and BEFORE TRUNCATE statement triggers, sequential amendment revisions (>= 2, UNIQUE(review_id, revision), id-shape checks), synthetic coach ids rejected by CHECK constraint. Tables start and stay empty until real coaches exist.",
+    "Regenerated derived artifacts (queue.json v3, schema.json v3, taxonomy, drill library) via pnpm lab:coach-queue; held-out raw data untouched.",
+    "Tests: admin-web endpoint test proves an amendment is persisted as a NEW file while the base review bytes are unchanged and a duplicate amendment is refused; database integration test proves UPDATE/DELETE/TRUNCATE on all three tables raise 'append-only', duplicate inserts are rejected, and an amendment insert leaves the base row's record untouched; fabricated qualification snapshots are refused with 422."
+  ],
+  "deliverables": [
+    "packages/swing-lab/src/coachReview.ts (schema v3 + validator + descriptor)",
+    "packages/database/migrations/0018_coach_review_records.sql",
+    "packages/database/test/migrate.test.ts (append-only integration test, verified against Postgres 16)",
+    "apps/admin-web/src/coachReview/{types,validate,labApi,ReviewForm,syntheticFixtures}.ts[x]",
+    "apps/admin-web/src/coachReview/__tests__/{labApi,records,validate,redteam}.test.ts",
+    "datasets/coach-review/{queue,schema}.json regenerated at schema v3"
+  ],
+  "verification": {
+    "rootGates": "pnpm typecheck && pnpm test && pnpm lint && pnpm format:check — all green (593 passed, 4 skipped)",
+    "databaseIntegration": "migrations + append-only tests run green against local Postgres 16 with DATABASE_URL_TEST (same as CI)",
+    "mobile": "apps/mobile untouched; mobile gates not run",
+    "swiftMacIphone": "unavailable on this Linux box; no results claimed"
+  },
+  "whatRemainsIrreduciblyExternal": [
+    "Real qualified coaches: coaches.json registry is still EMPTY; zero real reviews exist; recruitment and credential verification are human steps (docs/COACHING.md).",
+    "GATE A evidence: real coach reviews, inter-coach agreement, and adjudication of technique score / fault diagnosis / drill recommendation — all remain BLOCKED_ON_VALIDATION.",
+    "GATE B evidence: physical-iPhone real-user end-to-end validation.",
+    "Drill library remains UNVALIDATED placeholders with empty validatedFaultMappings until coach evidence arrives."
+  ],
+  "verdict": "READY_PENDING_EXTERNAL_EVIDENCE: the coach review record is production-complete (all required fields + provenance) and immutability-with-amendments is enforced and tested at file, API, and database layers. No coach data was fabricated; the validation lock is strengthened, not weakened."
+}
