@@ -1,0 +1,71 @@
+{
+  "workstreamId": "C14",
+  "title": "Coach review portal — complete infra to 100% ready (recruitment stays external)",
+  "branch": "devin/wave-c/c14-coach-portal",
+  "generatedAtIso": "2026-08-29T06:25:00Z",
+  "verdict": "GREEN",
+  "auditFindings": {
+    "alreadyPresentBeforeC14": [
+      "structured review form mirroring CoachReview v2 (stroke confirmation/correction/cannot-judge, quality 1-5, faults with severity 1-3, evidence timestamps + optional normalized region, drill suggestions with free text, confidence, rationale)",
+      "cannot-evaluate as a first-class outcome (validator + form + agreement exclusion)",
+      "free-text notes (per-fault rationale, review-level rationale, drill free text)",
+      "append-only review persistence gated on the human-managed coach registry (empty => all writes 403)",
+      "per-item pairwise percent agreement (stroke, rating exact/meanAbsDiff, primary fault, severity, fault-set Jaccard) with adjudication-required triggers",
+      "synthetic dev fixtures strictly client-side behind ?synthetic=1 with screaming banner"
+    ],
+    "missingBeforeC14": [
+      "multi-coach assignment per queue item",
+      "blind-to-each-other review workflow (reviews were not shown at all; no disclosure policy)",
+      "adjudication view was an explicit stub — no record schema, editor, persistence, or display",
+      "explicit primary/secondary fault distinction in the UI (rule existed only as prose)",
+      "review versioning (append-only amendments)",
+      "chance-corrected agreement (kappa)",
+      "JSON export of adjudicated reviews",
+      "drill mapping editor against the drills schema"
+    ]
+  },
+  "built": {
+    "records": "apps/admin-web/src/coachReview/records.ts — schemas + validators for AssignmentEntry/AssignmentsFile, ReviewAmendment (full-replacement revision >=2, amendmentId=<reviewId>.r<revision>), AdjudicationRecord (uphold | new_verdict | unresolvable; adjudicator must not be an original reviewer, per docs/COACHING.md §6), DrillMappingProposal (proposalId=<drillId>.<faultId>.<coachId>, >=1 evidence ref, >=20-char rationale). All refuse SYNTHETIC identities.",
+    "kappa": "apps/admin-web/src/coachReview/kappa.ts — Cohen's kappa per coach pair across queue items, for stroke label and primary fault (zero faults => CLEAN). Kappa is null (never fabricated) with <2 shared evaluable items or no label variation; cannot-evaluate reviews excluded.",
+    "blind": "apps/admin-web/src/coachReview/blind.ts — disclosure policy: review contents hidden until the viewer has submitted their own review for the item OR the item reached requiredReviewsTarget; counts always visible.",
+    "endpoints": "apps/admin-web/vite.config.ts — GET/POST /api/coach-assignments (single assignments.json, replace-per-item), /api/coach-adjudications, /api/coach-review-amendments (server enforces existing base review, same coach, sequential revision), /api/drill-mapping-proposals (all append-only files). Every write path shares the identity gate: active registry entry + matching credentialRef + SYNTHETIC refused — with the registry empty, every write returns 403.",
+    "ui": [
+      "EventDetail: AssignmentPanel (multi-coach checkbox assignment, registry-gated) + ReviewsPanel (blind-gated existing reviews with revision badges and amendment history)",
+      "ReviewForm: explicit PRIMARY/secondary badge per fault + reorder buttons; amendment mode when the selected coach already has a review on file (submits full-replacement revision N+1 with required >=10-char reason; original file never edited)",
+      "AgreementView: kappa tables (stroke + primary fault) alongside per-item percent agreement; inline AdjudicationEditor on REQUIRED rows (third-coach eligibility enforced client- and server-side); RECORDED state once an adjudication exists; 'Export adjudicated reviews (JSON)' button (adjudicated-reviews-export-v1: adjudication + latest review revisions + full amendment history, synthetic always excluded, disabled at 0 adjudications)",
+      "ProgramView: DrillMappingEditor — coach-endorsed fault->drill mapping proposals against drill-library-v0 / fault-taxonomy-v0-draft; proposals never mutate the curated library"
+    ]
+  },
+  "measurements": {
+    "admin_web_typecheck": "pnpm --filter @pickle/admin-web typecheck → exit 0 (2026-08-29)",
+    "admin_web_tests": "pnpm --filter @pickle/admin-web test → 5 files, 50 tests passed (was 2 files / 19 tests before C14; +31 tests: kappa 7, records 13, portal 11)",
+    "vite_config_typecheck": "npx tsc --noEmit --strict --skipLibCheck vite.config.ts → exit 0 (vite.config.ts is outside tsconfig include, so checked separately)",
+    "endpoint_smoke_test": "live dev server: GET all 5 API routes OK ([] / empty assignments file); POST adjudication → 403 'no coach identity provisioned'; POST assignment → 403 'assignments require ≥1 active coach' — writes are structurally impossible with the empty registry",
+    "real_review_count": 0,
+    "real_adjudication_count": 0,
+    "real_amendment_count": 0,
+    "real_assignment_count": 0,
+    "real_mapping_proposal_count": 0,
+    "provisioned_coaches": 0
+  },
+  "honestNegatives": [
+    "Zero real coach reviews exist and none were created; all counts above are 0 by design. Test fixtures live only in tests and the ?synthetic=1 client-side dev mode, which cannot persist.",
+    "Kappa and the adjudication/export paths are exercised only by unit tests and synthetic dev fixtures — no real inter-coach agreement number exists or is claimed.",
+    "The adjudication editor requires an eligible third coach; with 0 provisioned coaches it renders its disabled explanation. End-to-end write paths were verified only up to the (correct) 403 gates.",
+    "fault-taxonomy-v0-draft remains an engineering draft pending expert validation; the drill library remains UNVALIDATED with empty validatedFaultMappings — mapping proposals are input for future curation, not validation.",
+    "No component/DOM-level UI tests were added (repo has none); UI logic that matters (blind gating, versioning, primary-fault rule, export, validators, kappa) is covered as pure functions."
+  ],
+  "remainingBlocked": [
+    {
+      "item": "Coach recruitment",
+      "status": "BLOCKED_EXTERNAL",
+      "why": "Provisioning real coaches into datasets/coach-review/coaches.json is a human/legal step (docs/COACHING.md §2); no software change can unblock it. Until then all review/adjudication/amendment/assignment/mapping counts stay 0."
+    }
+  ],
+  "constraintsRespected": [
+    "no canonical docs modified (HANDOFF_V3.md, STATUS_BOARD.md, DECISIONS.md untouched)",
+    "no files under datasets/paddle-bench/runs touched; no lab:regen attempted",
+    "no fake reviews seeded; datasets/coach-review/reviews|adjudications|amendments|drill-mappings all remain empty",
+    "held-out cases not iterated against (no threshold/metric logic touched)"
+  ]
+}
