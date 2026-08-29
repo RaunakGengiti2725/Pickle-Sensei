@@ -130,7 +130,7 @@ export function validateReview(raw: unknown, context: ValidationContext): string
       const region = fault.evidence?.region;
       if (region !== null && region !== undefined) {
         const values = [region.x, region.y, region.w, region.h];
-        if (values.some((v) => typeof v !== "number" || v < 0 || v > 1)) {
+        if (values.some((v) => typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 1)) {
           problems.push(`faults[${index}].evidence.region must be normalized 0..1 {x,y,w,h}`);
         }
       }
@@ -156,7 +156,12 @@ export function validateReview(raw: unknown, context: ValidationContext): string
       }
     }
   }
-  if (typeof review.confidence !== "number" || review.confidence < 0 || review.confidence > 1) {
+  if (
+    typeof review.confidence !== "number" ||
+    !Number.isFinite(review.confidence) ||
+    review.confidence < 0 ||
+    review.confidence > 1
+  ) {
     problems.push("confidence must be 0..1");
   }
   if (

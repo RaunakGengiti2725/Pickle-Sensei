@@ -144,7 +144,12 @@ export interface AdjudicationRecord {
 
 export function validateAdjudication(
   record: AdjudicationRecord,
-  context: ValidationContext & { reviewerCoachIdsByReviewId: Record<string, string> },
+  context: ValidationContext & {
+    reviewerCoachIdsByReviewId: Record<string, string>;
+    /** reviewId → the queue item that review belongs to; when provided,
+     * every reviewed review must belong to the adjudicated queue item. */
+    reviewQueueItemIdsByReviewId?: Record<string, string>;
+  },
 ): string[] {
   const problems: string[] = [];
   if (record.schemaVersion !== 1) problems.push("adjudication schemaVersion must be 1");
@@ -160,8 +165,8 @@ export function validateAdjudication(
   if (!record.adjudicatorCredentialRef || typeof record.adjudicatorCredentialRef !== "string") {
     problems.push("adjudicatorCredentialRef required");
   }
-  if (!Array.isArray(record.reviewedReviewIds) || record.reviewedReviewIds.length < 2) {
-    problems.push("reviewedReviewIds must list the ≥2 disagreeing reviews");
+  if (!Array.isArray(record.reviewedReviewIds) || new Set(record.reviewedReviewIds).size < 2) {
+    problems.push("reviewedReviewIds must list the ≥2 DISTINCT disagreeing reviews");
   } else {
     for (const reviewId of record.reviewedReviewIds) {
       const reviewer = context.reviewerCoachIdsByReviewId[reviewId];
@@ -169,6 +174,12 @@ export function validateAdjudication(
         problems.push(`reviewedReviewIds: no persisted review ${reviewId}`);
       else if (reviewer === record.adjudicatorId) {
         problems.push("adjudicator must not be one of the original reviewers");
+      }
+      const reviewItem = context.reviewQueueItemIdsByReviewId?.[reviewId];
+      if (reviewItem !== undefined && reviewItem !== record.queueItemId) {
+        problems.push(
+          `reviewedReviewIds: ${reviewId} reviews ${reviewItem}, not the adjudicated item ${record.queueItemId}`,
+        );
       }
     }
   }

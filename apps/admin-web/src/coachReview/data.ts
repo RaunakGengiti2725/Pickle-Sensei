@@ -126,6 +126,19 @@ export function currentReviewVersion(
   };
 }
 
+/** All loaded reviews resolved to their latest amendment revision (synthetic
+ * flags preserved). Consumers computing agreement/kappa must use this — a
+ * superseded revision 1 is history, not the coach's current judgment. */
+export function latestReviewVersions(
+  reviews: LoadedReview[],
+  amendments: ReviewAmendment[],
+): LoadedReview[] {
+  return reviews.map((entry) => ({
+    ...entry,
+    review: currentReviewVersion(entry.review, amendments).review,
+  }));
+}
+
 export function validationContextFrom(data: CoachReviewData): ValidationContext {
   return {
     knownQueueItemIds: data.queue.queue.map((item) => item.queueItemId),
