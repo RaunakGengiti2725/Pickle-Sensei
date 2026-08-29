@@ -51,6 +51,28 @@ export interface FrameStats {
     /** Spatial std of the mean-luma image inside the component (text contrast). */
     lumaStd: number;
   }>;
+  /**
+   * Container-declared source dimensions (before the stats rescale), used to
+   * reject extreme aspect ratios no real capture device produces. Absent =
+   * not measured (reported in `notEvaluated`).
+   */
+  source?: {
+    width: number;
+    height: number;
+  };
+  /**
+   * Decode-integrity measurements from the stats decode pass. Absent = not
+   * measured (reported in `notEvaluated`).
+   */
+  decode?: {
+    /** Count of decoder error lines emitted while producing the raster. */
+    errorCount: number;
+    /**
+     * Frames the container claims (duration × declared frame rate); null when
+     * either is unknown.
+     */
+    expectedFrameCount: number | null;
+  };
 }
 
 export interface FrameAnalyzabilityReport {
@@ -66,7 +88,7 @@ export interface FrameAnalyzabilityReport {
   };
 }
 
-export const FRAME_ANALYZABILITY_VERSION = "frame-analyzability-2";
+export const FRAME_ANALYZABILITY_VERSION = "frame-analyzability-3";
 
 export const FRAME_THRESHOLDS = {
   /** Below two frames there is no motion signal at all. */
@@ -91,6 +113,10 @@ export const FRAME_THRESHOLDS = {
   overlayMinComponentSize: 8,
   /** ...with at least this internal luma contrast = static graphic overlay. */
   overlayMinComponentLumaStd: 12,
+  /** Source width/height ratio above this (or below its inverse) = no real capture device. */
+  maxAspectRatio: 4,
+  /** With decoder errors present, decoding below this fraction of the declared frames = truncated/corrupt. */
+  minDecodedFrameFraction: 0.9,
 } as const;
 
 /** Reason codes this gate can emit (closed set, used by the fuzz suite). */
@@ -103,6 +129,9 @@ export const FRAME_ANALYZABILITY_REASONS = [
   "letterbox_dominant",
   "static_border_frame",
   "static_overlay_suspected",
+  "implausible_aspect_ratio",
+  "undecodable_media",
+  "decoded_frame_deficit",
 ] as const;
 
 export function evaluateFrameAnalyzability(stats: FrameStats): FrameAnalyzabilityReport {
@@ -142,6 +171,23 @@ export function evaluateFrameAnalyzability(stats: FrameStats): FrameAnalyzabilit
   ) {
     reasons.push("static_border_frame");
   }
+  if (stats.source !== undefined && stats.source.width > 0 && stats.source.height > 0) {
+    const aspect = stats.source.width / stats.source.height;
+    if (aspect > FRAME_THRESHOLDS.maxAspectRatio || aspect < 1 / FRAME_THRESHOLDS.maxAspectRatio) {
+      reasons.push("implausible_aspect_ratio");
+    }
+  }
+  if (stats.decode !== undefined && stats.decode.errorCount > 0) {
+    if (stats.frameCount === 0) {
+      reasons.push("undecodable_media");
+    } else if (
+      stats.decode.expectedFrameCount !== null &&
+      stats.decode.expectedFrameCount >= FRAME_THRESHOLDS.minFrames &&
+      stats.frameCount < FRAME_THRESHOLDS.minDecodedFrameFraction * stats.decode.expectedFrameCount
+    ) {
+      reasons.push("decoded_frame_deficit");
+    }
+  }
   if (
     stats.bottomFrozenComponents !== undefined &&
     !reasons.includes("still_image_video") &&
@@ -162,6 +208,8 @@ export function evaluateFrameAnalyzability(stats: FrameStats): FrameAnalyzabilit
   ];
   if (stats.borderRing === undefined) notEvaluated.push("static_border_frame");
   if (stats.bottomFrozenComponents === undefined) notEvaluated.push("static_overlay_suspected");
+  if (stats.source === undefined) notEvaluated.push("source_aspect_ratio");
+  if (stats.decode === undefined) notEvaluated.push("decode_integrity");
 
   return {
     analyzable: reasons.length === 0,

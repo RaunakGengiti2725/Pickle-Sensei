@@ -1,0 +1,412 @@
+{
+  "workstream": "wave-e/e11-ood-expansion",
+  "measuredAt": "2026-08-29",
+  "environment": "Linux CPU; ffmpeg decode; pose extraction unavailable (Apple Vision is macOS-only) so pose-conditioned signals are notEvaluated by construction",
+  "frameAnalyzabilityVersion": "frame-analyzability-3",
+  "gateVersion": "pre-analysis-gate-1",
+  "corpus": {
+    "realNegatives": 11,
+    "derivedNegatives": 9
+  },
+  "measurements": [
+    {
+      "id": "yt--wE27MoX2AM-tennis",
+      "role": "ood_negative",
+      "category": "other_racket_sport_tennis",
+      "path": "datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4",
+      "frameCount": 982,
+      "durationMs": 32767,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "id": "yt-RpPe0h9cD5E-tennis",
+      "role": "ood_negative",
+      "category": "other_racket_sport_tennis",
+      "path": "datasets/ood/negatives/yt-RpPe0h9cD5E-tennis.mp4",
+      "frameCount": 943,
+      "durationMs": 31465,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "id": "yt-Iw55LinAF0U-badminton",
+      "role": "ood_negative",
+      "category": "other_racket_sport_badminton",
+      "path": "datasets/ood/negatives/yt-Iw55LinAF0U-badminton.mp4",
+      "frameCount": 900,
+      "durationMs": 30000,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "id": "yt-2wV0Gs9r384-tabletennis",
+      "role": "ood_negative",
+      "category": "other_racket_sport_table_tennis",
+      "path": "datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4",
+      "frameCount": 900,
+      "durationMs": 30030,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "id": "yt-BCJGL5E9huM-tabletennis",
+      "role": "ood_negative",
+      "category": "other_racket_sport_table_tennis",
+      "path": "datasets/ood/negatives/yt-BCJGL5E9huM-tabletennis.mp4",
+      "frameCount": 350,
+      "durationMs": 14000,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "id": "yt-zWQs7kTKcEY-emptycourt",
+      "role": "ood_negative",
+      "category": "empty_court",
+      "path": "datasets/ood/negatives/yt-zWQs7kTKcEY-emptycourt.mp4",
+      "frameCount": 900,
+      "durationMs": 30000,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "id": "commons-ronpaul-crowd",
+      "role": "ood_negative",
+      "category": "crowd_non_sport",
+      "path": "datasets/ood/negatives/commons-ronpaul-crowd.mp4",
+      "frameCount": 900,
+      "durationMs": 30000,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "id": "ia-ProfileJ26-interview",
+      "role": "ood_negative",
+      "category": "interview_talking_head",
+      "path": "datasets/ood/negatives/ia-ProfileJ26-interview.mp4",
+      "frameCount": 900,
+      "durationMs": 30031,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "id": "ia-HanfordS1957-titlecard",
+      "role": "ood_negative",
+      "category": "title_card_tv_graphics",
+      "path": "datasets/ood/negatives/ia-HanfordS1957-titlecard.mp4",
+      "frameCount": 600,
+      "durationMs": 20021,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "id": "yt-x8T5I4YAKNw-squash",
+      "role": "ood_negative",
+      "category": "other_racket_sport_squash",
+      "path": "datasets/ood/negatives/yt-x8T5I4YAKNw-squash.mp4",
+      "frameCount": 899,
+      "durationMs": 29997,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "id": "yt-EckAW5V1wv0-racquetball",
+      "role": "ood_negative",
+      "category": "other_racket_sport_racquetball",
+      "path": "datasets/ood/negatives/yt-EckAW5V1wv0-racquetball.mp4",
+      "frameCount": 1799,
+      "durationMs": 30014,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "id": "derived-still-image",
+      "role": "ood_negative_derived",
+      "category": "still_image_file",
+      "path": "datasets/ood/derived/derived-still-image.jpg",
+      "frameCount": 1,
+      "durationMs": 40,
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "single_frame_clip"
+      ],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.single_frame_clip",
+      "notEvaluated": []
+    },
+    {
+      "id": "derived-still-image-video",
+      "role": "ood_negative_derived",
+      "category": "still_image_as_video",
+      "path": "datasets/ood/derived/derived-still-image-video.mp4",
+      "frameCount": 240,
+      "durationMs": 8000,
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "still_image_video"
+      ],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.still_image_video",
+      "notEvaluated": []
+    },
+    {
+      "id": "derived-graphics-testsrc",
+      "role": "ood_negative_derived",
+      "category": "synthetic_graphics_test_pattern",
+      "path": "datasets/ood/derived/derived-graphics-testsrc.mp4",
+      "frameCount": 240,
+      "durationMs": 8000,
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "static_overlay_suspected"
+      ],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.static_overlay_suspected",
+      "notEvaluated": []
+    },
+    {
+      "id": "derived-graphics-life",
+      "role": "ood_negative_derived",
+      "category": "synthetic_graphics_animated",
+      "path": "datasets/ood/derived/derived-graphics-life.mp4",
+      "frameCount": 240,
+      "durationMs": 8000,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "id": "derived-extreme-wide",
+      "role": "ood_negative_derived",
+      "category": "extreme_aspect_ratio",
+      "path": "datasets/ood/derived/derived-extreme-wide.mp4",
+      "frameCount": 240,
+      "durationMs": 8000,
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "implausible_aspect_ratio"
+      ],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.implausible_aspect_ratio",
+      "notEvaluated": []
+    },
+    {
+      "id": "derived-extreme-tall",
+      "role": "ood_negative_derived",
+      "category": "extreme_aspect_ratio",
+      "path": "datasets/ood/derived/derived-extreme-tall.mp4",
+      "frameCount": 240,
+      "durationMs": 8000,
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "implausible_aspect_ratio"
+      ],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.implausible_aspect_ratio",
+      "notEvaluated": []
+    },
+    {
+      "id": "derived-truncated",
+      "role": "ood_negative_derived",
+      "category": "truncated_media",
+      "path": "datasets/ood/derived/derived-truncated.mp4",
+      "frameCount": 67,
+      "durationMs": 8000,
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "decoded_frame_deficit"
+      ],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.decoded_frame_deficit",
+      "notEvaluated": []
+    },
+    {
+      "id": "derived-corrupt-bytes",
+      "role": "ood_negative_derived",
+      "category": "corrupt_media",
+      "path": "datasets/ood/derived/derived-corrupt-bytes.mp4",
+      "frameCount": 0,
+      "durationMs": 0,
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "single_frame_clip",
+        "undecodable_media"
+      ],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.single_frame_clip",
+      "notEvaluated": []
+    },
+    {
+      "id": "derived-garbage",
+      "role": "ood_negative_derived",
+      "category": "undecodable_random_bytes",
+      "path": "datasets/ood/derived/derived-garbage.mp4",
+      "frameCount": 0,
+      "durationMs": 0,
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "single_frame_clip",
+        "undecodable_media"
+      ],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.single_frame_clip",
+      "notEvaluated": []
+    }
+  ],
+  "findings": {
+    "poseFreePassedThrough": [
+      "yt--wE27MoX2AM-tennis",
+      "yt-RpPe0h9cD5E-tennis",
+      "yt-Iw55LinAF0U-badminton",
+      "yt-2wV0Gs9r384-tabletennis",
+      "yt-BCJGL5E9huM-tabletennis",
+      "yt-zWQs7kTKcEY-emptycourt",
+      "commons-ronpaul-crowd",
+      "ia-ProfileJ26-interview",
+      "ia-HanfordS1957-titlecard",
+      "yt-x8T5I4YAKNw-squash",
+      "yt-EckAW5V1wv0-racquetball",
+      "derived-graphics-life"
+    ],
+    "note": "Every id listed here is a negative that the pose-free signals alone would forward to analysis; rejecting these requires the pose-conditioned checks (macOS) or content-level signals that do not exist yet. Passing pose-free is NOT a confident-analysis verdict: pose_presence and pose_capture_quality remain notEvaluated."
+  }
+}

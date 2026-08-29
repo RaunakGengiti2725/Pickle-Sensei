@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import type { FrameStats } from "@pickle/vision-geometry";
 
 /**
@@ -22,7 +22,7 @@ const FROZEN_PIXEL_MAX_STD = 0.5;
 const BOTTOM_THIRD_START_ROW = Math.floor((STAT_HEIGHT * 2) / 3);
 
 export function extractFrameStats(videoPath: string): FrameStats {
-  const raw = execFileSync(
+  const decode = spawnSync(
     "ffmpeg",
     [
       "-v",
@@ -39,6 +39,13 @@ export function extractFrameStats(videoPath: string): FrameStats {
     ],
     { maxBuffer: 1024 * 1024 * 1024 },
   );
+  const raw = decode.stdout ?? Buffer.alloc(0);
+  const stderrText = decode.stderr?.toString("utf8") ?? "";
+  let decodeErrorCount = stderrText
+    .split("\n")
+    .filter((line) => /error|invalid data|partial file|truncat|corrupt|missing/i.test(line)).length;
+  if (decode.status !== 0 && decodeErrorCount === 0) decodeErrorCount = 1;
+  const source = probeSource(videoPath);
   const frameSize = STAT_WIDTH * STAT_HEIGHT;
   const frameCount = Math.floor(raw.length / frameSize);
 
@@ -101,9 +108,14 @@ export function extractFrameStats(videoPath: string): FrameStats {
     }
   }
 
+  const durationMs = probeDurationMs(videoPath);
+  const expectedFrameCount =
+    source !== null && source.fps !== null && durationMs > 0
+      ? Math.round((durationMs / 1000) * source.fps)
+      : null;
   return {
     frameCount,
-    durationMs: probeDurationMs(videoPath),
+    durationMs,
     width: STAT_WIDTH,
     height: STAT_HEIGHT,
     interFrameDiffs,
@@ -115,7 +127,43 @@ export function extractFrameStats(videoPath: string): FrameStats {
           bottomFrozenComponents: findBottomFrozenComponents(pixelMean, pixelStd),
         }
       : {}),
+    ...(source !== null ? { source: { width: source.width, height: source.height } } : {}),
+    decode: { errorCount: decodeErrorCount, expectedFrameCount },
   };
+}
+
+/** Container-declared source dimensions and frame rate; null when unprobeable. */
+function probeSource(
+  videoPath: string,
+): { width: number; height: number; fps: number | null } | null {
+  const probe = spawnSync(
+    "ffprobe",
+    [
+      "-v",
+      "error",
+      "-select_streams",
+      "v:0",
+      "-show_entries",
+      "stream=width,height,avg_frame_rate",
+      "-of",
+      "csv=p=0",
+      videoPath,
+    ],
+    { encoding: "utf8" },
+  );
+  if (probe.status !== 0) return null;
+  const [w, h, rate] = (probe.stdout ?? "").trim().split(",");
+  const width = Number(w);
+  const height = Number(h);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return null;
+  }
+  let fps: number | null = null;
+  if (rate !== undefined && rate.includes("/")) {
+    const [num, den] = rate.split("/").map(Number);
+    if (Number.isFinite(num) && Number.isFinite(den) && den! > 0 && num! > 0) fps = num! / den!;
+  }
+  return { width, height, fps };
 }
 
 function measureBorderRing(
@@ -197,7 +245,7 @@ function findBottomFrozenComponents(
 }
 
 function probeDurationMs(videoPath: string): number {
-  const out = execFileSync(
+  const probe = spawnSync(
     "ffprobe",
     [
       "-v",
@@ -209,7 +257,8 @@ function probeDurationMs(videoPath: string): number {
       videoPath,
     ],
     { encoding: "utf8" },
-  ).trim();
-  const seconds = Number(out);
+  );
+  if (probe.status !== 0) return 0;
+  const seconds = Number((probe.stdout ?? "").trim());
   return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : 0;
 }

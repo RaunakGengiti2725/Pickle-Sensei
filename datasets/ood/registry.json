@@ -4,7 +4,7 @@
   "workstream": "wave-d/d08-ood-corpus",
   "policy": "role=ood_negative. Real (non-synthetic) rights-cleared footage that contains NO pickleball stroke by a target athlete. These clips exist ONLY to measure and test the pre-analysis OOD gate's no-confident-analysis behavior. They are excluded from datasets/corpus, from all splits, from training, and from every positive-label pipeline. Never annotate strokes, contacts, or ownership on these clips.",
   "conventions": "Provenance and rights fields follow datasets/pickleball/registry.json freshCandidates (wave-c/c16) conventions: per-item verbatim license quote, license verification method, provenance assessment with residual caveats recorded in restrictions, sha256 of the committed file, and a quarantinedUnknownRights section for items that were considered but NOT downloaded.",
-  "totalBytes": 72845522,
+  "totalBytes": 82992006,
   "items": [
     {
       "id": "yt--wE27MoX2AM-tennis",
@@ -269,7 +269,9 @@
         "reviewedBy": "wave-d:d08-ood-corpus (Commons extmetadata-verified license)",
         "reviewedAtIso": "2026-08-29"
       },
-      "restrictions": ["attribution to the uploader required on redistribution"],
+      "restrictions": [
+        "attribution to the uploader required on redistribution"
+      ],
       "media": {
         "type": "video/mp4 (H.264, no audio; transcoded from source webm)",
         "segment": "0s-30s of the 58s source video, re-encoded libx264 crf20",
@@ -305,7 +307,9 @@
         "reviewedBy": "wave-d:d08-ood-corpus (IA metadata-verified licenseurl)",
         "reviewedAtIso": "2026-08-29"
       },
-      "restrictions": ["none (public domain)"],
+      "restrictions": [
+        "none (public domain)"
+      ],
       "media": {
         "type": "video/mp4 (H.264, no audio; from IA 512kb derivative)",
         "segment": "110s-140s of the source telecine, re-encoded libx264 crf20",
@@ -341,7 +345,9 @@
         "reviewedBy": "wave-d:d08-ood-corpus (IA metadata-verified licenseurl)",
         "reviewedAtIso": "2026-08-29"
       },
-      "restrictions": ["none (public domain)"],
+      "restrictions": [
+        "none (public domain)"
+      ],
       "media": {
         "type": "video/mp4 (H.264, no audio; from IA 512kb derivative)",
         "segment": "0s-20s of the source telecine (broadcast title card and opening graphics), re-encoded libx264 crf20",
@@ -353,8 +359,205 @@
       },
       "sha256": "d29bf312395ed2281164f695bcc467747dcd736f83a28ccb28d4f6bdf45ff965",
       "contentVerification": "Frame extracted and visually inspected 2026-08-29: 1957 black-and-white broadcast title card 'Hanford SCIENCE FORUM' over an atom graphic; real TV graphics, not a synthetic fixture."
+    },
+    {
+      "id": "yt-x8T5I4YAKNw-squash",
+      "role": "ood_negative",
+      "category": "other_racket_sport_squash",
+      "path": "datasets/ood/negatives/yt-x8T5I4YAKNw-squash.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=x8T5I4YAKNw",
+      "title": "PST Bobcat Classic Finals David Palmer/Thierry Lincou Game 5",
+      "uploader": "Maine Squash",
+      "uploaderChannelId": "UCcnXXPhqjP-B0cHP3TCN4Wg",
+      "uploadDate": "2013-10-01",
+      "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+      "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+      "provenanceAssessment": "Tournament footage of a professional squash exhibition recorded and uploaded by the regional association channel operating the event; recording copyright belongs to the videographer. Uploader authority is assessed from channel context (a state squash association channel of self-recorded event videos), not independently confirmed.",
+      "rights": {
+        "store": "yes_with_attribution",
+        "analyze": "yes_with_attribution",
+        "annotate": "yes_with_attribution",
+        "train": "yes_with_attribution",
+        "redistributeDerivatives": "yes_with_attribution",
+        "commercial": "yes_with_attribution",
+        "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+        "reviewedBy": "wave-e:e11-ood-expansion (page-verified license; channel-context provenance assessment)",
+        "reviewedAtIso": "2026-08-29"
+      },
+      "restrictions": [
+        "attribution to the uploader required on redistribution",
+        "uploader authority assessed from channel context, not independently confirmed"
+      ],
+      "media": {
+        "type": "video/mp4 (H.264, no audio)",
+        "segment": "120s-150s of the 882s source video, re-encoded libx264 crf24",
+        "clipWidth": 1280,
+        "clipHeight": 720,
+        "clipFps": 29.97,
+        "clipDurationSeconds": 30.0,
+        "bytes": 3495145
+      },
+      "sha256": "d2f845d62fdc4594e7f68b6e2d5736031b8db5ac859a1b7309272d359fce43f1",
+      "contentVerification": "Frame extracted and visually inspected 2026-08-29: indoor glass-walled squash court, two players with squash rackets mid-rally; no pickleball."
+    },
+    {
+      "id": "yt-EckAW5V1wv0-racquetball",
+      "role": "ood_negative",
+      "category": "other_racket_sport_racquetball",
+      "path": "datasets/ood/negatives/yt-EckAW5V1wv0-racquetball.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=EckAW5V1wv0",
+      "title": "Racquetball Singles - Barry vs Cajetan (Match 1 of 4)",
+      "uploader": "New Brunswick Racquetball Association",
+      "uploaderChannelId": "UCxTSnZPs4CwFciobqO9Sc3Q",
+      "uploadDate": "2017-04-13",
+      "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+      "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+      "provenanceAssessment": "Club match footage recorded and uploaded by the provincial racquetball association channel; recording copyright belongs to the videographer. Uploader authority is assessed from channel context (an association channel of self-recorded club matches), not independently confirmed.",
+      "rights": {
+        "store": "yes_with_attribution",
+        "analyze": "yes_with_attribution",
+        "annotate": "yes_with_attribution",
+        "train": "yes_with_attribution",
+        "redistributeDerivatives": "yes_with_attribution",
+        "commercial": "yes_with_attribution",
+        "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+        "reviewedBy": "wave-e:e11-ood-expansion (page-verified license; channel-context provenance assessment)",
+        "reviewedAtIso": "2026-08-29"
+      },
+      "restrictions": [
+        "attribution to the uploader required on redistribution",
+        "uploader authority assessed from channel context, not independently confirmed"
+      ],
+      "media": {
+        "type": "video/mp4 (H.264, no audio)",
+        "segment": "120s-150s of the 497s source video, re-encoded libx264 crf24",
+        "clipWidth": 1920,
+        "clipHeight": 1080,
+        "clipFps": 59.94,
+        "clipDurationSeconds": 30.01,
+        "bytes": 6651339
+      },
+      "sha256": "431f6deb2e800d7a7787ad18a496187b2a1fae0dacf651342bce89c422635df7",
+      "contentVerification": "Frame extracted and visually inspected 2026-08-29: indoor racquetball court, two players with racquetball rackets mid-rally, ball visible; no pickleball."
     }
   ],
+  "derivedItems": {
+    "policy": "role=ood_negative_derived. SYNTHETIC or derived OOD probes added by wave-e/e11-ood-expansion: still images, still-image-as-video, program-generated graphics, corrupt/truncated media, and extreme aspect ratios. Derived from the CC BY 3.0 item yt--wE27MoX2AM-tennis (whose license permits redistributed derivatives with attribution) or generated locally with ffmpeg lavfi / seeded PRNG byte edits (no external rights). These exist ONLY to measure the pre-analysis OOD gate; excluded from corpus, splits, training, and every positive-label pipeline. Kept in a separate section because items[] is real, non-synthetic footage by policy.",
+    "addedAt": "2026-08-29",
+    "workstream": "wave-e/e11-ood-expansion",
+    "generation": "Deterministic recipes recorded per item; ffmpeg 4.4.2, libx264; PRNG edits use recorded python random seeds.",
+    "totalBytes": 3169242,
+    "items": [
+      {
+        "id": "derived-still-image",
+        "role": "ood_negative_derived",
+        "category": "still_image_file",
+        "path": "datasets/ood/derived/derived-still-image.jpg",
+        "derivation": "single frame at t=3s of datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4 exported as JPEG (ffmpeg -ss 3 -frames:v 1 -q:v 2)",
+        "media": {
+          "bytes": 339688
+        },
+        "sha256": "b0987abb1469db936dc0e25d154d208adeb92695d6e1ec8b423f9b2905c1466e",
+        "contentVerification": "A single photographic still (tennis court scene); no motion, no pickleball."
+      },
+      {
+        "id": "derived-still-image-video",
+        "role": "ood_negative_derived",
+        "category": "still_image_as_video",
+        "path": "datasets/ood/derived/derived-still-image-video.mp4",
+        "derivation": "frame at t=3s of datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4 looped 8s at 30fps (ffmpeg -loop 1 -t 8 -r 30 libx264)",
+        "media": {
+          "bytes": 289602
+        },
+        "sha256": "526a10b57409adcbd58913276bc370bf12e438dfb90522b4e2e62d23e9fc44f6",
+        "contentVerification": "8s video whose every frame is the same still; no motion, no pickleball."
+      },
+      {
+        "id": "derived-graphics-testsrc",
+        "role": "ood_negative_derived",
+        "category": "synthetic_graphics_test_pattern",
+        "path": "datasets/ood/derived/derived-graphics-testsrc.mp4",
+        "derivation": "ffmpeg lavfi testsrc=size=640x360:rate=30, 8s, libx264",
+        "media": {
+          "bytes": 51461
+        },
+        "sha256": "109302c86201d871d2e5b700884b04f69f2401bb8aee2cba23fadeb88fc32876",
+        "contentVerification": "Program-generated SMPTE-style moving test pattern; pure graphics, no scene, no pickleball."
+      },
+      {
+        "id": "derived-graphics-life",
+        "role": "ood_negative_derived",
+        "category": "synthetic_graphics_animated",
+        "path": "datasets/ood/derived/derived-graphics-life.mp4",
+        "derivation": "ffmpeg lavfi life=size=320x180:rate=30:mold=10, 8s, libx264 crf28",
+        "media": {
+          "bytes": 1520354
+        },
+        "sha256": "88de9e9c3d9c3fbf881cf4e6bc9c1f804c8dfacb199fd5ebbb4f4422fca9c745",
+        "contentVerification": "Program-generated cellular-automaton animation; high motion, pure graphics, no scene, no pickleball."
+      },
+      {
+        "id": "derived-extreme-wide",
+        "role": "ood_negative_derived",
+        "category": "extreme_aspect_ratio",
+        "path": "datasets/ood/derived/derived-extreme-wide.mp4",
+        "derivation": "first 8s of datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4 rescaled to 1280x72 (aspect 17.8:1), libx264 crf28",
+        "media": {
+          "bytes": 117001
+        },
+        "sha256": "595921023865fd04ff2f9019eab95f60fad3e3fe151929f51584be96a62b5184",
+        "contentVerification": "Real footage distorted to a 17.8:1 banner aspect no capture device produces; no analyzable scene."
+      },
+      {
+        "id": "derived-extreme-tall",
+        "role": "ood_negative_derived",
+        "category": "extreme_aspect_ratio",
+        "path": "datasets/ood/derived/derived-extreme-tall.mp4",
+        "derivation": "first 8s of datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4 rescaled to 72x1280 (aspect 1:17.8), libx264 crf28",
+        "media": {
+          "bytes": 82337
+        },
+        "sha256": "ece2579b626b8616d34436ca8ae94875e68b1db92eaa7fcaf24349ecb5c9a773",
+        "contentVerification": "Real footage distorted to a 1:17.8 aspect no capture device produces; no analyzable scene."
+      },
+      {
+        "id": "derived-truncated",
+        "role": "ood_negative_derived",
+        "category": "truncated_media",
+        "path": "datasets/ood/derived/derived-truncated.mp4",
+        "derivation": "first 8s of datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4 re-encoded 640x360 crf28 faststart, then byte-truncated to the first 35% of the file (python)",
+        "media": {
+          "bytes": 147466
+        },
+        "sha256": "92c6fe61f5675728fb331ff0e265d7b4009d1b8ac2d56df3b7e41677d87941c4",
+        "contentVerification": "Faststart mp4 cut mid-mdat: container claims 8s/240 frames, only ~67 decode; decoder reports partial-file errors."
+      },
+      {
+        "id": "derived-corrupt-bytes",
+        "role": "ood_negative_derived",
+        "category": "corrupt_media",
+        "path": "datasets/ood/derived/derived-corrupt-bytes.mp4",
+        "derivation": "first 8s of datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4 re-encoded 640x360 crf28 faststart, then 3000 random bytes at offsets >=2000 overwritten (python random seed 42)",
+        "media": {
+          "bytes": 421333
+        },
+        "sha256": "86017474a2a961cf5fadf78ebfe9ea92431ffdfc3f10aff55d7b504877b3642c",
+        "contentVerification": "Header/moov region corrupted; ffprobe/ffmpeg cannot decode any frame on this build."
+      },
+      {
+        "id": "derived-garbage",
+        "role": "ood_negative_derived",
+        "category": "undecodable_random_bytes",
+        "path": "datasets/ood/derived/derived-garbage.mp4",
+        "derivation": "200000 uniform random bytes (python random seed 7) written to a .mp4 filename; not a media container",
+        "media": {
+          "bytes": 200000
+        },
+        "sha256": "929d584a86de164467f269a42316fb655b3cdc0ca884ed13370aff449661408b",
+        "contentVerification": "Not decodable media at all; ffprobe and ffmpeg both fail."
+      }
+    ]
+  },
   "quarantinedUnknownRights": [
     {
       "id": "yt-dTCcy2kDyvM",
@@ -400,7 +603,9 @@
     },
     {
       "source": "Wikimedia Commons search API (video namespace)",
-      "queries": ["crowd cheering filetype:video"],
+      "queries": [
+        "crowd cheering filetype:video"
+      ],
       "result": "1 accepted (CC BY 3.0 rally crowd); other hits were CC BY-SA (share-alike, avoided for derivative redistribution simplicity) or historical newsreels better represented by the Prelinger items."
     },
     {
@@ -413,7 +618,9 @@
     },
     {
       "source": "DVIDS (dvidshub.net API)",
-      "queries": ["interview"],
+      "queries": [
+        "interview"
+      ],
       "result": "API now requires an API key ('Bad Request - No API key was provided'); not usable in this environment. Public-domain interview/title-card needs were covered by Prelinger instead."
     }
   ]

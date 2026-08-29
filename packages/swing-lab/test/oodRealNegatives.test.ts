@@ -57,6 +57,11 @@ const KNOWN_PASS_THROUGH_FINDINGS = new Set([
   "yt-BCJGL5E9huM-tabletennis",
   "commons-ronpaul-crowd",
   "ia-ProfileJ26-interview",
+  // wave-e/e11-ood-expansion additions, measured 2026-08-29 under
+  // frame-analyzability-3: distinguishing squash/racquetball from pickleball
+  // is content-level and remains pose/macOS territory.
+  "yt-x8T5I4YAKNw-squash",
+  "yt-EckAW5V1wv0-racquetball",
 ]);
 
 describe("OOD gate on the real negative corpus (datasets/ood)", () => {
