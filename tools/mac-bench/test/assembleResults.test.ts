@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assembleResults,
+  cascadeUnmeasuredReasonFor,
   parseStageSamplesJsonl,
   summarizeCascadeDocument,
 } from "../src/assembleResults.js";
@@ -75,6 +76,34 @@ describe("summarizeCascadeDocument", () => {
     });
     expect(summary.silentFailure.contractVersion).toBe("silent-failure-v1");
     expect(summary.sourceFile).toBe("datasets/cascade/cascade-1.json");
+  });
+});
+
+describe("cascadeUnmeasuredReasonFor", () => {
+  const zeroGold = {
+    goldEvents: 0,
+    unconditionalPass: { TARGET: 0 },
+    conditionalSurvival: { TARGET: 0 },
+    strictSurvival: { survived: 0, total: 0 },
+    usableResult: { usable: 0, total: 0, contract: { version: "usable-result-v1" } },
+    silentFailure: {
+      silentFailures: 0,
+      answeredTrials: 0,
+      allTrials: 0,
+      contract: { version: "silent-failure-v1.1" },
+    },
+  };
+
+  it("turns a zero-gold-events cascade document into an explained absence", () => {
+    const reason = cascadeUnmeasuredReasonFor(zeroGold, "datasets/cascade/cascade-0.json");
+    expect(reason).toMatch(/0 gold events/);
+    expect(reason).toContain("datasets/cascade/cascade-0.json");
+  });
+
+  it("returns null when the cascade document has gold events", () => {
+    expect(
+      cascadeUnmeasuredReasonFor({ ...zeroGold, goldEvents: 5 }, "datasets/cascade/cascade-5.json"),
+    ).toBeNull();
   });
 });
 

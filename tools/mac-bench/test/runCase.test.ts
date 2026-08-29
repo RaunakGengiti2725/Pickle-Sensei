@@ -7,6 +7,7 @@ describe("harvestStageSamples", () => {
       {
         poseExtractMs: 6000,
         playerTrackMs: 150,
+        poseDerivativesMs: 40,
         paddleDetectMs: 9000,
         ballTrackMs: 90,
         fusionAnalysisMs: 300,
@@ -28,9 +29,26 @@ describe("harvestStageSamples", () => {
       "e2e",
       "poseExtract",
       "playerTrack",
+      "poseDerivatives",
       "paddleDetect",
       "ballTrack",
       "fusionAnalysis",
+    ]);
+  });
+
+  it("harvests the two-pass split timings when --two-pass produced them", () => {
+    const samples = harvestStageSamples(
+      { paddleDetectMs: 9000, paddleDetectSparseMs: 3000, paddleDetectDenseMs: 6000 },
+      17250,
+      "afn-sasebo-rally2",
+      "warm",
+      1,
+    );
+    expect(samples.map((sample) => sample.stage)).toEqual([
+      "e2e",
+      "paddleDetect",
+      "paddleDetectSparse",
+      "paddleDetectDense",
     ]);
   });
 

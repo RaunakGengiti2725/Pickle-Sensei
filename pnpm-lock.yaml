@@ -428,6 +428,9 @@ importers:
 
   tools/mac-bench:
     devDependencies:
+      '@pickle/swing-lab':
+        specifier: workspace:*
+        version: link:../../packages/swing-lab
       '@types/node':
         specifier: ^20.17.0
         version: 20.19.43

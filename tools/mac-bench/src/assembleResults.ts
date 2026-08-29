@@ -77,6 +77,19 @@ export function parseStageSamplesJsonl(content: string): StageSample[] {
   return samples;
 }
 
+/** A lab:cascade document with zero gold events (what cascadeWaterfall emits
+ * when the canonical run dirs or gold annotations are absent) carries no
+ * cascade evidence. It becomes cascade=null with an explicit reason instead
+ * of failing schema validation at the very end of a bench run — the timing
+ * evidence must survive, and absence stays explained, never zeroed. */
+export function cascadeUnmeasuredReasonFor(
+  raw: RawCascadeDocument,
+  sourceFile: string,
+): string | null {
+  if (raw.goldEvents >= 1) return null;
+  return `lab:cascade output ${sourceFile} contains 0 gold events (canonical runs or gold annotations absent) — no cascade evidence in this run`;
+}
+
 export function summarizeCascadeDocument(
   raw: RawCascadeDocument,
   sourceFile: string,
@@ -178,12 +191,17 @@ if (isMain) {
     process.exit(2);
   }
 
-  const cascade = cascadePath
-    ? summarizeCascadeDocument(
-        JSON.parse(readFileSync(cascadePath, "utf8")) as RawCascadeDocument,
-        cascadePath,
-      )
-    : null;
+  let cascade: MacBenchCascadeSummary | null = null;
+  let zeroGoldReason: string | null = null;
+  if (cascadePath) {
+    const raw = JSON.parse(readFileSync(cascadePath, "utf8")) as RawCascadeDocument;
+    zeroGoldReason = cascadeUnmeasuredReasonFor(raw, cascadePath);
+    if (zeroGoldReason === null) {
+      cascade = summarizeCascadeDocument(raw, cascadePath);
+    } else {
+      console.error(`assembleResults: ${zeroGoldReason}`);
+    }
+  }
 
   const document = assembleResults({
     samples: parseStageSamplesJsonl(readFileSync(samplesPath, "utf8")),
@@ -212,7 +230,7 @@ if (isMain) {
       binaryPath: flagValue("--extractor-bin", argv),
     },
     cascade,
-    cascadeUnmeasuredReason,
+    cascadeUnmeasuredReason: cascade === null ? (zeroGoldReason ?? cascadeUnmeasuredReason) : null,
     notes: flagValues("--note", argv),
   });
 
