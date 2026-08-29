@@ -1,0 +1,263 @@
+{
+  "engineVersion": "coach-agreement-v1",
+  "generatedAtIso": "2026-08-29T17:40:58.868Z",
+  "provenance": "EXAMPLE_NOT_GOLD",
+  "banner": "NOT-GOLD SYNTHETIC EXAMPLE RUN — inputs are fabricated fixtures used ONLY to prove the pipeline executes. NOTHING here is evidence about real technique truth; real review count is 0. This artifact must never feed any production path.",
+  "realReviewCount": 0,
+  "coachCount": 3,
+  "itemsWithMultipleReviews": 3,
+  "rejectedInputs": [],
+  "status": "EXAMPLE_NOT_GOLD pipeline proof",
+  "strokeIdentity": {
+    "pairwiseCohen": [
+      {
+        "coachA": "SYNTHETIC-coach-a",
+        "coachB": "SYNTHETIC-coach-b",
+        "sharedItems": 2,
+        "n": 2,
+        "observedAgreement": 0.5,
+        "expectedAgreement": 0.25,
+        "kappa": 0.3333333333333333
+      }
+    ],
+    "fleiss": {
+      "items": 3,
+      "ratersPerItem": 2,
+      "kappa": 0.14285714285714285
+    },
+    "excludedFromFleiss": 0,
+    "percentAgreementItems": 0.3333333333333333
+  },
+  "primaryFault": {
+    "pairwiseCohen": [
+      {
+        "coachA": "SYNTHETIC-coach-a",
+        "coachB": "SYNTHETIC-coach-b",
+        "sharedItems": 2,
+        "n": 2,
+        "observedAgreement": 0.5,
+        "expectedAgreement": 0.25,
+        "kappa": 0.3333333333333333
+      }
+    ],
+    "fleiss": {
+      "items": 2,
+      "ratersPerItem": 2,
+      "kappa": 0.2
+    },
+    "excludedFromFleiss": 0,
+    "percentAgreementItems": 0.5
+  },
+  "severity": {
+    "pairwiseWeightedKappa": [
+      {
+        "coachA": "SYNTHETIC-coach-a",
+        "coachB": "SYNTHETIC-coach-b",
+        "sharedItems": 2,
+        "n": 1,
+        "kappa": null,
+        "comparablePairs": 1
+      }
+    ],
+    "note": "linear-weighted kappa over primary-fault severity, compared only when both coaches named the same primary fault"
+  },
+  "techniqueRating": {
+    "icc2_1": {
+      "items": 2,
+      "raters": 2,
+      "icc": 0
+    },
+    "iccNote": "ICC(2,1) over the 2×2 complete matrix for coach set [SYNTHETIC-coach-a, SYNTHETIC-coach-b]; items rated by other coach sets are covered pairwise",
+    "pairwiseSpearman": [
+      {
+        "coachA": "SYNTHETIC-coach-a",
+        "coachB": "SYNTHETIC-coach-b",
+        "sharedItems": 2,
+        "n": 2,
+        "rho": null
+      }
+    ],
+    "pairwiseExactAgreement": [
+      {
+        "coachA": "SYNTHETIC-coach-a",
+        "coachB": "SYNTHETIC-coach-b",
+        "sharedItems": 2,
+        "ratedItems": 2,
+        "exactAgreement": 0
+      }
+    ],
+    "pairwiseMeanAbsDiff": [
+      {
+        "coachA": "SYNTHETIC-coach-a",
+        "coachB": "SYNTHETIC-coach-b",
+        "sharedItems": 2,
+        "ratedItems": 2,
+        "meanAbsDiff": 1.5
+      }
+    ],
+    "calibration": [
+      {
+        "coachId": "SYNTHETIC-coach-a",
+        "ratings": 3,
+        "meanRating": 3.3333333333333335,
+        "meanOffsetFromItemMean": -0.75
+      },
+      {
+        "coachId": "SYNTHETIC-coach-b",
+        "ratings": 2,
+        "meanRating": 4,
+        "meanOffsetFromItemMean": 0.75
+      },
+      {
+        "coachId": "SYNTHETIC-coach-c",
+        "ratings": 0,
+        "meanRating": null,
+        "meanOffsetFromItemMean": null
+      }
+    ]
+  },
+  "drillSelection": {
+    "pairwiseJaccard": [
+      {
+        "coachA": "SYNTHETIC-coach-a",
+        "coachB": "SYNTHETIC-coach-b",
+        "sharedItems": 2,
+        "comparablePairs": 2,
+        "meanJaccard": 0.5
+      }
+    ],
+    "freeTextOnlySuggestions": 1,
+    "note": "Jaccard over suggested drill-id sets; free-text-only suggestions are counted but not matched (taxonomy grows from coach language)"
+  },
+  "cannotEvaluate": {
+    "perCoach": [
+      {
+        "coachId": "SYNTHETIC-coach-a",
+        "reviews": 3,
+        "cannotEvaluate": 0,
+        "rate": 0
+      },
+      {
+        "coachId": "SYNTHETIC-coach-b",
+        "reviews": 2,
+        "cannotEvaluate": 0,
+        "rate": 0
+      },
+      {
+        "coachId": "SYNTHETIC-coach-c",
+        "reviews": 1,
+        "cannotEvaluate": 1,
+        "rate": 1
+      }
+    ],
+    "splitItems": 1
+  },
+  "disagreements": [
+    {
+      "queueItemId": "EXAMPLE-case-1-E1",
+      "dimension": "severity",
+      "detail": "same primary fault (dink.wristy_flick), severity 2 vs 1",
+      "perCoach": [
+        {
+          "coachId": "SYNTHETIC-coach-a",
+          "verdict": "2"
+        },
+        {
+          "coachId": "SYNTHETIC-coach-b",
+          "verdict": "1"
+        }
+      ]
+    },
+    {
+      "queueItemId": "EXAMPLE-case-2-E1",
+      "dimension": "stroke_identity",
+      "detail": "verdicts: BACKHAND_DRIVE vs FOREHAND_DRIVE",
+      "perCoach": [
+        {
+          "coachId": "SYNTHETIC-coach-a",
+          "verdict": "FOREHAND_DRIVE"
+        },
+        {
+          "coachId": "SYNTHETIC-coach-b",
+          "verdict": "BACKHAND_DRIVE"
+        }
+      ]
+    },
+    {
+      "queueItemId": "EXAMPLE-case-2-E1",
+      "dimension": "primary_fault",
+      "detail": "primary faults: drive.arm_only_power vs drive.late_preparation",
+      "perCoach": [
+        {
+          "coachId": "SYNTHETIC-coach-a",
+          "verdict": "drive.arm_only_power"
+        },
+        {
+          "coachId": "SYNTHETIC-coach-b",
+          "verdict": "drive.late_preparation"
+        }
+      ]
+    },
+    {
+      "queueItemId": "EXAMPLE-case-2-E1",
+      "dimension": "technique_rating",
+      "detail": "rating spread 2..4 (|Δ| >= 2)",
+      "perCoach": [
+        {
+          "coachId": "SYNTHETIC-coach-a",
+          "verdict": "2"
+        },
+        {
+          "coachId": "SYNTHETIC-coach-b",
+          "verdict": "4"
+        }
+      ]
+    },
+    {
+      "queueItemId": "EXAMPLE-case-2-E1",
+      "dimension": "drill_selection",
+      "detail": "drill sets differ (Jaccard 0.00)",
+      "perCoach": [
+        {
+          "coachId": "SYNTHETIC-coach-a",
+          "verdict": "drill.skinny-singles"
+        },
+        {
+          "coachId": "SYNTHETIC-coach-b",
+          "verdict": "(none)"
+        }
+      ]
+    },
+    {
+      "queueItemId": "EXAMPLE-case-3-E1",
+      "dimension": "cannot_evaluate_split",
+      "detail": "1/2 reviewers declined to evaluate",
+      "perCoach": [
+        {
+          "coachId": "SYNTHETIC-coach-a",
+          "verdict": "evaluated"
+        },
+        {
+          "coachId": "SYNTHETIC-coach-c",
+          "verdict": "CANNOT_EVALUATE: SYNTHETIC fixture: fabricated cannot-evaluate outcome for pipeline proof."
+        }
+      ]
+    },
+    {
+      "queueItemId": "EXAMPLE-case-3-E1",
+      "dimension": "stroke_identity",
+      "detail": "verdicts: CANNOT_JUDGE vs SERVE",
+      "perCoach": [
+        {
+          "coachId": "SYNTHETIC-coach-a",
+          "verdict": "SERVE"
+        },
+        {
+          "coachId": "SYNTHETIC-coach-c",
+          "verdict": "CANNOT_JUDGE"
+        }
+      ]
+    }
+  ],
+  "disagreementPolicy": "Disagreement is DATA: every divergence is listed here with per-coach verdicts and is never auto-collapsed into a consensus label. Resolution happens only through recorded adjudication (docs/COACHING.md §6), preserved separately from the original reviews."
+}

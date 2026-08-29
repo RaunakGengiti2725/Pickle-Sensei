@@ -1,0 +1,47 @@
+{
+  "workstreamId": "h03-agreement-stats",
+  "wave": "wave-g2",
+  "branch": "devin/wave-g2/h03-agreement-stats",
+  "mission": "Build the multi-coach agreement measurement engine so it is ready to run the day real qualified-coach reviews exist: blind multi-coach assignment planning plus agreement statistics on stroke identity, primary fault, severity, technique rating, drill selection, and cannot-evaluate frequency.",
+  "method": [
+    "Reused the existing CoachReview v2 schema and its validator; no new review format and no changes to the truth boundary.",
+    "Implemented packages/swing-lab/src/coachAgreement.ts: deterministic load-balanced assignment planner (>=2 independent coaches per item, blind protocol documented, infeasible with <2 active coaches — never invents coach identities), plus Cohen kappa, linear-weighted Cohen kappa, Fleiss kappa, ICC(2,1), Spearman rank correlation, exact agreement / mean absolute difference, per-coach calibration offsets, drill-selection Jaccard overlap, and per-coach cannot-evaluate rates.",
+    "Disagreement surfacing: every multi-review item emits per-dimension disagreement records with per-coach verdicts; disagreements are preserved, never averaged or auto-collapsed into a consensus label.",
+    "Strict provenance separation: loadProductionReviews reads only datasets/coach-review/reviews/ and rejects synthetic/example/fixture coach ids; loadExampleReviews requires an explicit NOT_GOLD_SYNTHETIC_EXAMPLE marker and always reports provenance EXAMPLE_NOT_GOLD with realReviewCount 0.",
+    "22 focused tests including hand-computed kappa/Fleiss/ICC/Spearman worked examples, assignment determinism/infeasibility, honest N=0 reporting, disagreement preservation, and synthetic containment on the production path."
+  ],
+  "deliverables": [
+    "packages/swing-lab/src/coachAgreement.ts (engine + CLI, `pnpm lab:coach-agreement`)",
+    "packages/swing-lab/test/coachAgreement.test.ts (22 tests)",
+    "datasets/coach-review/examples/EXAMPLE-synthetic-reviews.NOT-GOLD.json (fabricated fixtures, clearly marked, excluded from production loading)",
+    "datasets/coach-review/agreement/agreement-report.json (honest production run: N=0 real reviews, all metrics null)",
+    "datasets/coach-review/agreement/assignment-plan.json (INFEASIBLE — coach registry has 0 active coaches; planner refuses to invent identities)",
+    "datasets/coach-review/agreement/EXAMPLE-agreement-report.NOT-GOLD.json (pipeline-execution proof only; banner states it is not evidence)"
+  ],
+  "endToEndRunToday": {
+    "productionRun": "0 real reviews, 0 coaches, 0 multi-review items; status 'AWAITING QUALIFIED COACHES — engine ready; N=0 real reviews'; every metric null.",
+    "exampleRun": "6 synthetic NOT-GOLD reviews across 3 fabricated items; 7 disagreements surfaced across stroke identity, primary fault, severity, technique rating, drill selection, and cannot-evaluate split; realReviewCount stays 0."
+  },
+  "irreduciblyExternal": [
+    "Real qualified coaches (recruitment, credential verification, and their independent blind reviews) — GATE A evidence cannot be synthesized.",
+    "Real coach agreement statistics: no kappa/ICC value here is evidence about technique truth until N>0 real reviews exist.",
+    "Physical iPhone / real-user end-to-end validation (GATE B) — untouched by this workstream and never fabricated."
+  ],
+  "truthBoundary": {
+    "blockedCapabilities": [
+      "technique score",
+      "fault diagnosis",
+      "drill recommendation"
+    ],
+    "status": "BLOCKED_ON_VALIDATION — unchanged and re-verified; synthetic fixtures are rejected on the production loading path and the example report is marked NOT-GOLD with realReviewCount 0.",
+    "heldOutCases": "wm-dink-01 and afn-vic-rally1 untouched."
+  },
+  "gates": {
+    "pnpm typecheck": "pass",
+    "pnpm test": "pass (615 passed, 4 skipped)",
+    "pnpm lint": "pass",
+    "pnpm format:check": "pass",
+    "mobile": "not run — no mobile/shared code touched"
+  },
+  "verdict": "READY — agreement measurement engine runs end-to-end today and honestly reports N=0 real reviews; the only remaining external dependency is real qualified-coach review evidence itself."
+}
