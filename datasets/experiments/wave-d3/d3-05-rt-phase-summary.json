@@ -1,0 +1,45 @@
+{
+  "workstream": "D3-05 — Red-team PHASE determination (truncated clips, no follow-through, wheelchair kinematics, compact dinks <100ms)",
+  "branch": "devin/wave-d3/d3-05-rt-phase",
+  "date": "2026-08-29",
+  "environment": "Linux (no Apple Vision pose extraction; canonical Mac cascade runs absent as expected). All adversarial fixtures are SYNTHETIC and labeled as such in the tests; the positive-coverage measurement uses only committed wave-a dev bundles (datasets/paddle-bench/runs-wave-a + stroke-gold.json). Held-out cases wm-dink-01 / afn-vic-rally1 were never read or touched.",
+  "target": "packages/swing-lab/src/phaseTemporal.ts (segmentPhasesTemporal v1 + segmentPhasesTemporalV2 anchored/anchor-free); packages/vision-geometry/src/phaseSegmenter.ts probed read-only",
+  "breaks_found": [
+    {
+      "id": "B1-corrupt-samples-poison-gates",
+      "status": "FIXED",
+      "family": "corrupt kinematics (found while probing the requested families)",
+      "description": "A single non-finite kinematic sample (NaN or ±Infinity in value OR timestamp) poisoned the peak (Math.max) and every threshold derived from it, letting a QUIET window slip past the no-meaningful-swing gate and emit a garbage full-window timeline. Reproduced on v1 anchored, v2 anchored, and v2 anchor-free (flat series + one Infinity sample fabricated a motion peak).",
+      "fix": "finiteSamples() filter drops non-finite samples before any gate in v1 and in the v2 anchor-free slice; remaining coverage/sample-count gates then judge only real observations. NOT a blanket abstention: a real synthetic swing bump with injected NaN samples still segments (regression-tested).",
+      "regression_tests": "packages/swing-lab/test/phaseRedTeam.test.ts — family 1 (5 tests) + 300-seed non-finite-injection fuzz"
+    },
+    {
+      "id": "B2-periodic-motion-promoted-to-swing",
+      "status": "FIXED",
+      "family": "wheelchair kinematics",
+      "description": "Anchor-free mode promoted ONE of several near-equal wheelchair-propulsion peaks (sin^2 rhythm, period 900ms) to 'the swing apex' and segmented a full timeline around an arbitrary wheel push. The 2x-median prominence gate does not detect multi-modality: identical rival peaks keep the median low while none of them is a unique apex.",
+      "fix": "PHASE_PEAK_NOT_UNIQUE gate: any rival sample >180ms away from the apex with value >= 0.9x apex aborts anchor-free segmentation. Anchored mode is unaffected (a trusted contact anchor between/on pushes still yields an ordered timeline — regression-tested). Anchor-free version string re-versioned v2.1 -> v2.2 because abstention semantics changed.",
+      "regression_tests": "packages/swing-lab/test/phaseRedTeam.test.ts — family 4 (3 tests)"
+    }
+  ],
+  "families_probed_no_break": [
+    "truncated clips (starts mid-backswing): preparation stays null (unknown), never invented; anchor-free pre-peak evidence gate abstains — 2 regression tests pin this",
+    "no visible follow-through: anchored path abstains with PHASE_NO_POST_CONTACT_EVIDENCE when the clip ends at contact (never an inverted timeline); a single post-contact observation is the minimum honest bound; anchor-free post-peak gate abstains — 3 regression tests",
+    "compact dink events <100ms: at 30fps the event cannot carry enough in-window samples -> honest abstention; the SAME dink at 120fps segments with valid ordering and contact inside the event (abstention is evidence-driven, not event-size-driven) — 3 regression tests",
+    "geometric segmenter (vision-geometry/phaseSegmenter.ts): NaN pose coordinates fail closed with phase.no_distinct_stroke; no fabricated boundaries observed; no change needed"
+  ],
+  "invariants_asserted": "phase ordering (preparation <= acceleration <= contact|peak < followThroughEnd <= recovery), unobservable boundaries null / abstained (never invented), accel <= contact, checkArtifactInvariants == [] on every segmented output incl. 300-seed corruption fuzz",
+  "positive_coverage_before_after": {
+    "note": "measured with datasets/experiments/wave-d3/d3-05-measure-gold.ts + d3-05-measure-fuzz.ts on committed wave-a gold (13 events, 8 dev bundles; SYNTHETIC-free, held-out-free) and the propertyInvariants 300-seed fuzz corpus",
+    "committed_gold_anchored": { "before": "11/12", "after": "11/12" },
+    "committed_gold_anchor_free": { "before": "6/13", "after": "6/13" },
+    "fuzz_300_seeds_segmented": {
+      "before": "157 (145 anchored / 12 anchor-free)",
+      "after": "147 (145 anchored / 2 anchor-free)",
+      "delta_explanation": "the 10 lost fuzz segmentations are random-walk series with multiple near-equal spikes — exactly the multi-modal pattern B2 says must abstain; zero loss on committed positive gold"
+    }
+  },
+  "still_open": [],
+  "validation": "pnpm typecheck green; packages/swing-lab vitest 20 files / 248 passed (incl. new test/phaseRedTeam.test.ts, 17 tests); prettier --write on touched files",
+  "contracts": "usable-result-v1 / silent-failure-v1 untouched; PHASE_TEMPORAL_V2_ANCHOR_FREE_VERSION re-versioned to v2.2 (stricter apex-uniqueness semantics)"
+}
