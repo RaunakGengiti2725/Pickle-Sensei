@@ -88,6 +88,15 @@ final class GuidedCaptureViewController: UIViewController {
   private var gestureStreaks: [Int: Int] = [:]
   private var targetSeed: CGPoint?           // resolved PERSON anchor
   private var targetSeedSource = "start_region_occupancy"
+  /// Always-on target-lock instrumentation (acquire-v4 promotion gate
+  /// evidence, D-043 telemetry conventions): observes the shipped D-027
+  /// acquisition without influencing it, so a future replay can measure live
+  /// tap-to-track distances against the bench gate.
+  private var lockInstrumentFirstFrameMs: Int?
+  private var lockInstrumentLastFrameMs: Int?
+  private var lockInstrumentAmbiguousEnteredMs: Int?
+  private var lockInstrumentLock: (torso: CGPoint, source: String, timestampMs: Int)?
+  private static let targetLockAlgorithmVersion = "target-lock-live-v1"
   private let targetRing = CAShapeLayer()
   private let selectionHaptic = UIImpactFeedbackGenerator(style: .medium)
   private let evidenceAccumulator = CaptureEvidenceAccumulator()
@@ -718,6 +727,9 @@ final class GuidedCaptureViewController: UIViewController {
         "source": targetSeedSource,
       ]
     }
+    if let targetLock = targetLockTelemetryPayload() {
+      payload["targetLock"] = targetLock
+    }
     stateLock.lock()
     guard !terminal else {
       stateLock.unlock()
@@ -780,6 +792,10 @@ final class GuidedCaptureViewController: UIViewController {
     gestureBest = [:]
     gestureStreaks = [:]
     ambiguousSinceMs = nil
+    lockInstrumentFirstFrameMs = nil
+    lockInstrumentLastFrameMs = nil
+    lockInstrumentAmbiguousEnteredMs = nil
+    lockInstrumentLock = nil
     selectionHaptic.impactOccurred()
 
     // Persistent region marker (does not fade — the user is walking away and
@@ -834,6 +850,8 @@ final class GuidedCaptureViewController: UIViewController {
   /// them anywhere on court.
   private func considerTargetAcquisition(pixelBuffer: CVPixelBuffer, timestampMs: Int) {
     guard let region = startRegion else { return }
+    lockInstrumentFirstFrameMs = lockInstrumentFirstFrameMs ?? timestampMs
+    lockInstrumentLastFrameMs = timestampMs
     let people = (try? poseProvider.extractAllPoses(
       pixelBuffer: pixelBuffer, timestampMs: timestampMs
     )) ?? []
@@ -853,7 +871,7 @@ final class GuidedCaptureViewController: UIViewController {
         let streak = elevation > 0.03 ? (gestureStreaks[index] ?? 0) + 1 : 0
         gestureStreaks[index] = streak
         if streak >= Self.sustainedGestureFrames {
-          lockTarget(at: occupant.torso, source: "gesture_confirmed")
+          lockTarget(at: occupant.torso, source: "gesture_confirmed", timestampMs: timestampMs)
           return
         }
       }
@@ -865,13 +883,14 @@ final class GuidedCaptureViewController: UIViewController {
            hypot($0.torso.x - region.x, $0.torso.y - region.y)
              < hypot($1.torso.x - region.x, $1.torso.y - region.y)
          }) {
-        lockTarget(at: closest.torso, source: "ambiguity_timeout")
+        lockTarget(at: closest.torso, source: "ambiguity_timeout", timestampMs: timestampMs)
       }
       return
     }
 
     if occupants.count >= 2 {
       targetAcquisition = .ambiguous
+      lockInstrumentAmbiguousEnteredMs = lockInstrumentAmbiguousEnteredMs ?? timestampMs
       emit(type: "target", values: ["state": "ambiguous"])
       DispatchQueue.main.async { [weak self] in
         self?.updateCapturePresentation(
@@ -891,14 +910,15 @@ final class GuidedCaptureViewController: UIViewController {
     occupancyStreak += 1
     occupantTorso = occupant.torso
     if occupancyStreak >= Self.occupancyFramesToLock {
-      lockTarget(at: occupant.torso, source: "start_region_occupancy")
+      lockTarget(at: occupant.torso, source: "start_region_occupancy", timestampMs: timestampMs)
     }
   }
 
-  private func lockTarget(at torso: CGPoint, source: String) {
+  private func lockTarget(at torso: CGPoint, source: String, timestampMs: Int) {
     targetAcquisition = .locked
     targetSeed = torso
     targetSeedSource = source
+    lockInstrumentLock = (torso: torso, source: source, timestampMs: timestampMs)
     poseProvider.setPrimaryPersonSeed(x: Double(torso.x), y: Double(torso.y))
     emit(type: "target", values: [
       "state": "locked",
@@ -917,6 +937,48 @@ final class GuidedCaptureViewController: UIViewController {
         prominent: true
       )
     }
+  }
+
+  /// Target-lock telemetry payload (`targetLock`, schema v1). Present whenever
+  /// the user tapped a start region; absent otherwise (honest absence, no
+  /// reconstruction). Timestamps are camera-clock milliseconds and are NOT
+  /// rebased to the exported clip window — the lock precedes it; only
+  /// durations are persisted.
+  private func targetLockTelemetryPayload() -> [String: Any]? {
+    guard let tap = startRegion else { return nil }
+    var payload: [String: Any] = [
+      "schemaVersion": 1,
+      "algorithmVersion": Self.targetLockAlgorithmVersion,
+      "coordinateSystem": "normalized_capture_space",
+      "tapPoint": ["x": Double(tap.x), "y": Double(tap.y)],
+      "params": [
+        "startRegionRadius": Double(Self.startRegionRadius),
+        "occupancyFramesToLock": Self.occupancyFramesToLock,
+        "sustainedGestureFrames": Self.sustainedGestureFrames,
+        "ambiguityTimeoutMs": Self.ambiguityTimeoutMs,
+        "gestureElevationThreshold": 0.03,
+      ],
+    ]
+    let ambiguityEntered = lockInstrumentAmbiguousEnteredMs != nil
+    payload["ambiguityEntered"] = ambiguityEntered
+    if let entered = lockInstrumentAmbiguousEnteredMs {
+      let endMs = lockInstrumentLock?.timestampMs ?? lockInstrumentLastFrameMs ?? entered
+      payload["ambiguityDurationMs"] = max(0, endMs - entered)
+    }
+    if let lock = lockInstrumentLock {
+      payload["lockOutcome"] = "locked"
+      payload["lockSource"] = lock.source
+      payload["lockTorso"] = ["x": Double(lock.torso.x), "y": Double(lock.torso.y)]
+      payload["tapToLockDistance"] = Double(
+        hypot(lock.torso.x - tap.x, lock.torso.y - tap.y)
+      )
+      payload["timeToLockMs"] = max(
+        0, lock.timestampMs - (lockInstrumentFirstFrameMs ?? lock.timestampMs)
+      )
+    } else {
+      payload["lockOutcome"] = "no_lock"
+    }
+    return payload
   }
 
   @objc private func closePressed() {

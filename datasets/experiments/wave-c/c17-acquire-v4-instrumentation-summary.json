@@ -1,0 +1,31 @@
+{
+  "workstream": "C17",
+  "title": "acquire-v4 promotion prerequisites: live tap-distance instrumentation",
+  "date": "2026-08-29",
+  "branch": "devin/wave-c/c17-acquire-v4-instrumentation",
+  "what_was_built": {
+    "summary": "Always-on target-lock telemetry (schema v1, D-043 conventions) in the apps/mobile guided-capture target-lock flow. Whenever the user taps a start region, the capture persists a `targetLock` record alongside the clip payload (same path as `targetSeed`): tap point, acquired track's torso center at the lock frame, tap-to-track distance, time-to-lock, ambiguity flags/duration, lock source, and lock outcome ('locked' | 'no_lock'). Acquisition behavior is UNCHANGED: the instrument only observes the shipped D-027 state machine; no thresholds, states, or lock decisions were touched.",
+    "files": {
+      "apps/mobile/ios/LocalPods/PickleNative/Sources/GuidedCaptureViewController.swift": "Instrument state (first/last acquisition frame ms, ambiguity-entered ms, lock record), lockTarget now receives the frame timestamp for the record, targetLockTelemetryPayload() builds the schema-v1 payload attached in finishSuccess next to targetSeed.",
+      "apps/mobile/src/camera/capture.ts": "TargetLockTelemetryV1 type, TARGET_LOCK_PARAMS_V1 (frozen shipped D-027 constants: startRegionRadius .17, occupancyFramesToLock 9, sustainedGestureFrames 5, ambiguityTimeoutMs 3000, gestureElevationThreshold .03), and boundary validation: distance must recompute from the recorded points (tolerance 1e-6), locked records must match the clip targetSeed exactly (torso + source), gesture/timeout locks require the ambiguity flag, timeout locks require ambiguityDurationMs >= 3000, no_lock records may carry no lock evidence or seed, params must equal the frozen v1 constants, imported video rejects the field.",
+      "apps/mobile/__tests__/cameraCapture.test.ts": "11 new boundary tests (accept locked / no-lock / pre-instrument captures; reject fabricated distance, seed disagreement, missing ambiguity flags, sub-timeout timeout locks, drifted params, malformed points/sources/outcomes, no-lock with lock evidence, imported video with targetLock)."
+    },
+    "replay_readiness": "A future replay can run the D-027 gate pattern for acquire-v4's tap-centered lock gate directly from persisted captures: tapToLockDistance is the acquire-v4 gate signal (bench separation at .05: correct instant locks <= .04 in 23/25, wrong grabs >= .056 in 8/9, per packages/swing-lab taReplay comments), and lockSource/ambiguity flags map onto taReplay's event model."
+  },
+  "exact_numbers": {
+    "mobile_tsc": "clean (npx tsc --noEmit, exit 0)",
+    "mobile_jest": "225/225 tests green, 30 suites (was 214 canonical; +11 new targetLock boundary tests)",
+    "pnpm_r_typecheck": "all packages pass (analysis-pipeline, vision-geometry, swing-lab rebuilt; exit 0)",
+    "acquire_v4_bench_context": "correct .863 / contested wrong .167 at n=54 (HANDOFF_V3, unchanged; not re-measured here)"
+  },
+  "honest_negatives": [
+    "No live measurement exists yet: this session ran on Linux with no iPhone; the Swift instrumentation compiles only in an iOS build (not verifiable here) and has produced zero real telemetry records. The n=54 bench numbers are the only acquire-v4 evidence; nothing new was measured.",
+    "The Swift side has no unit tests (repo has no XCTest harness for GuidedCaptureViewController); correctness of the native payload is enforced indirectly by the TS boundary validation, which will reject a malformed native record at capture time.",
+    "apps/mobile `npx eslint` crashes on ALL files (including untouched App.tsx) from a preexisting eslint 8/9 hoisting conflict with the root pnpm workspace; lint could not be run. tsc + jest were the mandated checks and are green.",
+    "Telemetry timestamps are camera-clock durations only (timeToLockMs, ambiguityDurationMs); absolute lock timestamps are not persisted because the lock precedes the exported clip window and rebasing would produce negative, misleading values."
+  ],
+  "remains_blocked": [
+    "acquire-v4 promotion: still requires (1) real live captures carrying this telemetry from device use, and (2) the locked_test one-shot, which is Mac-gated (Apple Vision pose extraction is macOS-only). Neither is possible in this Linux environment.",
+    "The D-027-style gate replay over live tapToLockDistance values cannot run until live captures exist."
+  ]
+}
