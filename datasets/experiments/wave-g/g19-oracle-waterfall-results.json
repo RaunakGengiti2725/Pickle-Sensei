@@ -1,0 +1,3399 @@
+{
+  "workstream": "g19-oracle-waterfall",
+  "generatedAtIso": "2026-08-29T17:36:17.220Z",
+  "scope": {
+    "evaluationSet": "DEV gold TARGET events replayable from committed artifacts on Linux (wave-a windowed people.json bundles + W6 rally1 wrist fixture)",
+    "goldTargetEvents": 16,
+    "heldOutExcluded": [
+      "wm-dink-01",
+      "afn-vic-rally1"
+    ],
+    "notReplayable": [
+      "wm-volley-02",
+      "afn-sasebo-rally2"
+    ],
+    "baselineConditions": "EVENT: proposeStrokeEventsV2 wrist-only · CONTACT: estimateContact with pose+wrist, ball ABSENT, paddle ABSENT · PHASE: segmentPhasesTemporalV2 on the selected window anchored to estimated contact · STROKE: classifyStroke paddle-null, contact/eventPeak reference",
+    "usableCriterion": "usable-result-v1 clause mapping (TARGET structural pass, EVENT pass, stroke honesty, replay evidence a/b/c, >132ms fabrication veto)"
+  },
+  "baseline": {
+    "usable": 10,
+    "total": 16,
+    "failedOrAbstained": 6,
+    "failedEvents": [
+      {
+        "eventKey": "wavea-marne-dig#1",
+        "reasons": [
+          "no trustworthy replay artifact (contact estimated err 82ms; phase segmented)"
+        ]
+      },
+      {
+        "eventKey": "wavea-faead-rally#2",
+        "reasons": [
+          "EVENT fail (no proposal overlaps >0.3 of gold)",
+          "no trustworthy replay artifact (contact not_runnable; phase not_run)"
+        ]
+      },
+      {
+        "eventKey": "wavea-wgm-wheelchair#1",
+        "reasons": [
+          "no trustworthy replay artifact (contact abstained; phase abstained)"
+        ]
+      },
+      {
+        "eventKey": "wavea-sasebo-volleys#1",
+        "reasons": [
+          "EVENT fail (best proposal 52152–52920 overlap 0.37)",
+          "fabricated evidence veto: contact 515ms off gold (>132ms)",
+          "no trustworthy replay artifact (contact estimated err 515ms; phase segmented)"
+        ]
+      },
+      {
+        "eventKey": "wavea-sasebo-volleys#3",
+        "reasons": [
+          "fabricated evidence veto: contact 168ms off gold (>132ms)",
+          "no trustworthy replay artifact (contact estimated err 168ms; phase segmented)"
+        ]
+      },
+      {
+        "eventKey": "wavea-sasebo-volleys#5",
+        "reasons": [
+          "EVENT fail (no proposal overlaps >0.3 of gold)",
+          "no trustworthy replay artifact (contact not_runnable; phase not_run)"
+        ]
+      }
+    ]
+  },
+  "frontierAttribution": [
+    {
+      "oracle": "CONTACT",
+      "usable": 13,
+      "recoveredCount": 3,
+      "recoveredEvents": [
+        "wavea-marne-dig#1",
+        "wavea-wgm-wheelchair#1",
+        "wavea-sasebo-volleys#3"
+      ],
+      "brokenCount": 0,
+      "brokenEvents": []
+    },
+    {
+      "oracle": "EVENT",
+      "usable": 7,
+      "recoveredCount": 1,
+      "recoveredEvents": [
+        "wavea-wgm-wheelchair#1"
+      ],
+      "brokenCount": 4,
+      "brokenEvents": [
+        "afn-sasebo-rally1#4",
+        "afn-sasebo-rally1#6",
+        "wavea-faead-feed#1",
+        "wavea-faead-rally#1"
+      ]
+    },
+    {
+      "oracle": "BALL",
+      "usable": 10,
+      "recoveredCount": 1,
+      "recoveredEvents": [
+        "wavea-wgm-wheelchair#1"
+      ],
+      "brokenCount": 1,
+      "brokenEvents": [
+        "wavea-faead-rally#1"
+      ]
+    },
+    {
+      "oracle": "STROKE",
+      "usable": 10,
+      "recoveredCount": 0,
+      "recoveredEvents": [],
+      "brokenCount": 0,
+      "brokenEvents": []
+    }
+  ],
+  "structuralOracles": {
+    "TARGET": "NO-OP on this set: the committed windowed bundles were constructed so the auto-target policy resolves the annotator-verified player, and the rally1 fixture wrist series is replay-validated target truth — the baseline already runs on construction-truth TARGET. Recovery attributable to TARGET is 0 by construction here, NOT measured as zero on the full product (Mac TA bench covers that).",
+    "OWNERSHIP": "NO-OP on this set: every evaluated series is target-attributed by construction (target-owned gold events replayed on the target track). Ownership contamination cannot be expressed in this proxy; its frontier contribution is unmeasurable here.",
+    "PADDLE": "NOT CONSTRUCTIBLE: no committed paddle truth series (track or speed series) exists for any replayable case on Linux; substituting a fabricated paddle signal is forbidden. The paddle oracle needs Mac run dirs (datasets/paddle-bench/runs/) or a committed paddle-truth series."
+  },
+  "rows": [
+    {
+      "eventKey": "afn-sasebo-rally1#1",
+      "goldSpanMs": [
+        2600,
+        3600
+      ],
+      "goldContactMs": 2900,
+      "baseline": {
+        "trace": {
+          "event": {
+            "pass": true,
+            "window": {
+              "startMs": 2703,
+              "endMs": 3770
+            },
+            "bestOverlap": 0.9,
+            "contactInside": true,
+            "detail": "best proposal 2703–3770 overlap 0.9 contact-inside"
+          },
+          "contact": {
+            "status": "not_runnable",
+            "estimatedContactMs": null,
+            "errorMs": null,
+            "ballConfirmed": false,
+            "paddleConfirmed": false,
+            "detail": "no committed pose (wrist-only fixture)"
+          },
+          "phase": {
+            "status": "segmented",
+            "orderingValid": true,
+            "detail": "segmented, ordering valid"
+          },
+          "stroke": {
+            "state": "abstained",
+            "predictedLabel": null,
+            "l1Verdict": "abstained",
+            "detail": "no committed pose → classifier abstains"
+          }
+        },
+        "usable": {
+          "usable": true,
+          "replayClause": "c",
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        }
+      },
+      "oracles": {
+        "EVENT": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 2600,
+                "endMs": 3600
+              },
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "ORACLE: gold event bounds substituted"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no committed pose (wrist-only fixture)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no committed pose → classifier abstains"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        },
+        "BALL": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 2703,
+                "endMs": 3770
+              },
+              "bestOverlap": 0.9,
+              "contactInside": true,
+              "detail": "best proposal 2703–3770 overlap 0.9 contact-inside"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no committed pose (wrist-only fixture)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no committed pose → classifier abstains"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        },
+        "CONTACT": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 2703,
+                "endMs": 3770
+              },
+              "bestOverlap": 0.9,
+              "contactInside": true,
+              "detail": "best proposal 2703–3770 overlap 0.9 contact-inside"
+            },
+            "contact": {
+              "status": "oracle",
+              "estimatedContactMs": 2900,
+              "errorMs": 0,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "ORACLE: gold contactMs substituted (err 0 by construction)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no committed pose → classifier abstains"
+            }
+          },
+          "reasons": [
+            "replay (a): contact |err| 0ms ≤ 66ms",
+            "honest stroke abstention"
+          ]
+        },
+        "STROKE": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 2703,
+                "endMs": 3770
+              },
+              "bestOverlap": 0.9,
+              "contactInside": true,
+              "detail": "best proposal 2703–3770 overlap 0.9 contact-inside"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no committed pose (wrist-only fixture)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "oracle",
+              "predictedLabel": "SWING",
+              "l1Verdict": "correct",
+              "detail": "ORACLE: gold stroke label substituted"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "stroke L1 match"
+          ]
+        }
+      }
+    },
+    {
+      "eventKey": "afn-sasebo-rally1#3",
+      "goldSpanMs": [
+        233,
+        500
+      ],
+      "goldContactMs": 317,
+      "baseline": {
+        "trace": {
+          "event": {
+            "pass": true,
+            "window": {
+              "startMs": 367,
+              "endMs": 901
+            },
+            "bestOverlap": 0.5,
+            "contactInside": true,
+            "detail": "best proposal 367–901 overlap 0.5 contact-inside"
+          },
+          "contact": {
+            "status": "not_runnable",
+            "estimatedContactMs": null,
+            "errorMs": null,
+            "ballConfirmed": false,
+            "paddleConfirmed": false,
+            "detail": "no committed pose (wrist-only fixture)"
+          },
+          "phase": {
+            "status": "segmented",
+            "orderingValid": true,
+            "detail": "segmented, ordering valid"
+          },
+          "stroke": {
+            "state": "abstained",
+            "predictedLabel": null,
+            "l1Verdict": "abstained",
+            "detail": "no committed pose → classifier abstains"
+          }
+        },
+        "usable": {
+          "usable": true,
+          "replayClause": "c",
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        }
+      },
+      "oracles": {
+        "EVENT": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 233,
+                "endMs": 500
+              },
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "ORACLE: gold event bounds substituted"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no committed pose (wrist-only fixture)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no committed pose → classifier abstains"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        },
+        "BALL": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 367,
+                "endMs": 901
+              },
+              "bestOverlap": 0.5,
+              "contactInside": true,
+              "detail": "best proposal 367–901 overlap 0.5 contact-inside"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no committed pose (wrist-only fixture)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no committed pose → classifier abstains"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        },
+        "CONTACT": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 367,
+                "endMs": 901
+              },
+              "bestOverlap": 0.5,
+              "contactInside": true,
+              "detail": "best proposal 367–901 overlap 0.5 contact-inside"
+            },
+            "contact": {
+              "status": "oracle",
+              "estimatedContactMs": 317,
+              "errorMs": 0,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "ORACLE: gold contactMs substituted (err 0 by construction)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no committed pose → classifier abstains"
+            }
+          },
+          "reasons": [
+            "replay (a): contact |err| 0ms ≤ 66ms",
+            "honest stroke abstention"
+          ]
+        },
+        "STROKE": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 367,
+                "endMs": 901
+              },
+              "bestOverlap": 0.5,
+              "contactInside": true,
+              "detail": "best proposal 367–901 overlap 0.5 contact-inside"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no committed pose (wrist-only fixture)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "oracle",
+              "predictedLabel": "SWING",
+              "l1Verdict": "correct",
+              "detail": "ORACLE: gold stroke label substituted"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "stroke L1 match"
+          ]
+        }
+      }
+    },
+    {
+      "eventKey": "afn-sasebo-rally1#4",
+      "goldSpanMs": [
+        1017,
+        1284
+      ],
+      "goldContactMs": 1117,
+      "baseline": {
+        "trace": {
+          "event": {
+            "pass": true,
+            "window": {
+              "startMs": 967.5,
+              "endMs": 2636
+            },
+            "bestOverlap": 1,
+            "contactInside": true,
+            "detail": "best proposal 968–2636 overlap 1 contact-inside"
+          },
+          "contact": {
+            "status": "not_runnable",
+            "estimatedContactMs": null,
+            "errorMs": null,
+            "ballConfirmed": false,
+            "paddleConfirmed": false,
+            "detail": "no committed pose (wrist-only fixture)"
+          },
+          "phase": {
+            "status": "segmented",
+            "orderingValid": true,
+            "detail": "segmented, ordering valid"
+          },
+          "stroke": {
+            "state": "abstained",
+            "predictedLabel": null,
+            "l1Verdict": "abstained",
+            "detail": "no committed pose → classifier abstains"
+          }
+        },
+        "usable": {
+          "usable": true,
+          "replayClause": "c",
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        }
+      },
+      "oracles": {
+        "EVENT": {
+          "usable": false,
+          "flipped": "broken",
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 1017,
+                "endMs": 1284
+              },
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "ORACLE: gold event bounds substituted"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no committed pose (wrist-only fixture)"
+            },
+            "phase": {
+              "status": "abstained",
+              "orderingValid": false,
+              "detail": "abstained: PHASE_NO_MOTION_EVIDENCE"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no committed pose → classifier abstains"
+            }
+          },
+          "reasons": [
+            "no trustworthy replay artifact (contact not_runnable; phase abstained)"
+          ]
+        },
+        "BALL": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 967.5,
+                "endMs": 2636
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 968–2636 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no committed pose (wrist-only fixture)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no committed pose → classifier abstains"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        },
+        "CONTACT": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 967.5,
+                "endMs": 2636
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 968–2636 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "oracle",
+              "estimatedContactMs": 1117,
+              "errorMs": 0,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "ORACLE: gold contactMs substituted (err 0 by construction)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no committed pose → classifier abstains"
+            }
+          },
+          "reasons": [
+            "replay (a): contact |err| 0ms ≤ 66ms",
+            "honest stroke abstention"
+          ]
+        },
+        "STROKE": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 967.5,
+                "endMs": 2636
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 968–2636 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no committed pose (wrist-only fixture)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "oracle",
+              "predictedLabel": "SWING",
+              "l1Verdict": "correct",
+              "detail": "ORACLE: gold stroke label substituted"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "stroke L1 match"
+          ]
+        }
+      }
+    },
+    {
+      "eventKey": "afn-sasebo-rally1#5",
+      "goldSpanMs": [
+        1417,
+        1617
+      ],
+      "goldContactMs": 1484,
+      "baseline": {
+        "trace": {
+          "event": {
+            "pass": true,
+            "window": {
+              "startMs": 967.5,
+              "endMs": 2636
+            },
+            "bestOverlap": 1,
+            "contactInside": true,
+            "detail": "best proposal 968–2636 overlap 1 contact-inside"
+          },
+          "contact": {
+            "status": "not_runnable",
+            "estimatedContactMs": null,
+            "errorMs": null,
+            "ballConfirmed": false,
+            "paddleConfirmed": false,
+            "detail": "no committed pose (wrist-only fixture)"
+          },
+          "phase": {
+            "status": "segmented",
+            "orderingValid": true,
+            "detail": "segmented, ordering valid"
+          },
+          "stroke": {
+            "state": "abstained",
+            "predictedLabel": null,
+            "l1Verdict": "abstained",
+            "detail": "no committed pose → classifier abstains"
+          }
+        },
+        "usable": {
+          "usable": true,
+          "replayClause": "c",
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        }
+      },
+      "oracles": {
+        "EVENT": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 1417,
+                "endMs": 1617
+              },
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "ORACLE: gold event bounds substituted"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no committed pose (wrist-only fixture)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no committed pose → classifier abstains"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        },
+        "BALL": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 967.5,
+                "endMs": 2636
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 968–2636 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no committed pose (wrist-only fixture)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no committed pose → classifier abstains"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        },
+        "CONTACT": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 967.5,
+                "endMs": 2636
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 968–2636 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "oracle",
+              "estimatedContactMs": 1484,
+              "errorMs": 0,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "ORACLE: gold contactMs substituted (err 0 by construction)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no committed pose → classifier abstains"
+            }
+          },
+          "reasons": [
+            "replay (a): contact |err| 0ms ≤ 66ms",
+            "honest stroke abstention"
+          ]
+        },
+        "STROKE": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 967.5,
+                "endMs": 2636
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 968–2636 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no committed pose (wrist-only fixture)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "oracle",
+              "predictedLabel": "SWING",
+              "l1Verdict": "correct",
+              "detail": "ORACLE: gold stroke label substituted"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "stroke L1 match"
+          ]
+        }
+      }
+    },
+    {
+      "eventKey": "afn-sasebo-rally1#6",
+      "goldSpanMs": [
+        1651,
+        1818
+      ],
+      "goldContactMs": 1717,
+      "baseline": {
+        "trace": {
+          "event": {
+            "pass": true,
+            "window": {
+              "startMs": 967.5,
+              "endMs": 2636
+            },
+            "bestOverlap": 1,
+            "contactInside": true,
+            "detail": "best proposal 968–2636 overlap 1 contact-inside"
+          },
+          "contact": {
+            "status": "not_runnable",
+            "estimatedContactMs": null,
+            "errorMs": null,
+            "ballConfirmed": false,
+            "paddleConfirmed": false,
+            "detail": "no committed pose (wrist-only fixture)"
+          },
+          "phase": {
+            "status": "segmented",
+            "orderingValid": true,
+            "detail": "segmented, ordering valid"
+          },
+          "stroke": {
+            "state": "abstained",
+            "predictedLabel": null,
+            "l1Verdict": "abstained",
+            "detail": "no committed pose → classifier abstains"
+          }
+        },
+        "usable": {
+          "usable": true,
+          "replayClause": "c",
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        }
+      },
+      "oracles": {
+        "EVENT": {
+          "usable": false,
+          "flipped": "broken",
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 1651,
+                "endMs": 1818
+              },
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "ORACLE: gold event bounds substituted"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no committed pose (wrist-only fixture)"
+            },
+            "phase": {
+              "status": "abstained",
+              "orderingValid": false,
+              "detail": "abstained: PHASE_NO_MOTION_EVIDENCE"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no committed pose → classifier abstains"
+            }
+          },
+          "reasons": [
+            "no trustworthy replay artifact (contact not_runnable; phase abstained)"
+          ]
+        },
+        "BALL": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 967.5,
+                "endMs": 2636
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 968–2636 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no committed pose (wrist-only fixture)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no committed pose → classifier abstains"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        },
+        "CONTACT": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 967.5,
+                "endMs": 2636
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 968–2636 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "oracle",
+              "estimatedContactMs": 1717,
+              "errorMs": 0,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "ORACLE: gold contactMs substituted (err 0 by construction)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no committed pose → classifier abstains"
+            }
+          },
+          "reasons": [
+            "replay (a): contact |err| 0ms ≤ 66ms",
+            "honest stroke abstention"
+          ]
+        },
+        "STROKE": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 967.5,
+                "endMs": 2636
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 968–2636 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no committed pose (wrist-only fixture)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "oracle",
+              "predictedLabel": "SWING",
+              "l1Verdict": "correct",
+              "detail": "ORACLE: gold stroke label substituted"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "stroke L1 match"
+          ]
+        }
+      }
+    },
+    {
+      "eventKey": "wavea-marne-serve#1",
+      "goldSpanMs": [
+        34017,
+        35433
+      ],
+      "goldContactMs": 34689,
+      "baseline": {
+        "trace": {
+          "event": {
+            "pass": true,
+            "window": {
+              "startMs": 34117,
+              "endMs": 35335
+            },
+            "bestOverlap": 0.86,
+            "contactInside": true,
+            "detail": "best proposal 34117–35335 overlap 0.86 contact-inside"
+          },
+          "contact": {
+            "status": "estimated",
+            "estimatedContactMs": 34745,
+            "errorMs": 56,
+            "ballConfirmed": false,
+            "paddleConfirmed": false,
+            "detail": "estimated 34745ms conf 0.49 [no ball evidence]"
+          },
+          "phase": {
+            "status": "segmented",
+            "orderingValid": true,
+            "detail": "segmented, ordering valid"
+          },
+          "stroke": {
+            "state": "committed",
+            "predictedLabel": "FOREHAND",
+            "l1Verdict": "correct",
+            "detail": "predicted FOREHAND vs gold L1 SWING"
+          }
+        },
+        "usable": {
+          "usable": true,
+          "replayClause": "a",
+          "reasons": [
+            "replay (a): contact |err| 56ms ≤ 66ms",
+            "stroke L1 match"
+          ]
+        }
+      },
+      "oracles": {
+        "EVENT": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 34017,
+                "endMs": 35433
+              },
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "ORACLE: gold event bounds substituted"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 34745,
+              "errorMs": 56,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 34745ms conf 0.49 [no ball evidence]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "committed",
+              "predictedLabel": "FOREHAND",
+              "l1Verdict": "correct",
+              "detail": "predicted FOREHAND vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "replay (a): contact |err| 56ms ≤ 66ms",
+            "stroke L1 match"
+          ]
+        },
+        "BALL": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 34117,
+                "endMs": 35335
+              },
+              "bestOverlap": 0.86,
+              "contactInside": true,
+              "detail": "best proposal 34117–35335 overlap 0.86 contact-inside"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 34745,
+              "errorMs": 56,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 34745ms conf 0.49 [oracle ball]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "committed",
+              "predictedLabel": "FOREHAND",
+              "l1Verdict": "correct",
+              "detail": "predicted FOREHAND vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "replay (a): contact |err| 56ms ≤ 66ms",
+            "stroke L1 match"
+          ]
+        },
+        "CONTACT": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 34117,
+                "endMs": 35335
+              },
+              "bestOverlap": 0.86,
+              "contactInside": true,
+              "detail": "best proposal 34117–35335 overlap 0.86 contact-inside"
+            },
+            "contact": {
+              "status": "oracle",
+              "estimatedContactMs": 34689,
+              "errorMs": 0,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "ORACLE: gold contactMs substituted (err 0 by construction)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "committed",
+              "predictedLabel": "FOREHAND",
+              "l1Verdict": "correct",
+              "detail": "predicted FOREHAND vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "replay (a): contact |err| 0ms ≤ 66ms",
+            "stroke L1 match"
+          ]
+        },
+        "STROKE": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 34117,
+                "endMs": 35335
+              },
+              "bestOverlap": 0.86,
+              "contactInside": true,
+              "detail": "best proposal 34117–35335 overlap 0.86 contact-inside"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 34745,
+              "errorMs": 56,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 34745ms conf 0.49 [no ball evidence]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "oracle",
+              "predictedLabel": "SWING",
+              "l1Verdict": "correct",
+              "detail": "ORACLE: gold stroke label substituted"
+            }
+          },
+          "reasons": [
+            "replay (a): contact |err| 56ms ≤ 66ms",
+            "stroke L1 match"
+          ]
+        }
+      }
+    },
+    {
+      "eventKey": "wavea-marne-dig#1",
+      "goldSpanMs": [
+        14042,
+        14333
+      ],
+      "goldContactMs": 14188,
+      "baseline": {
+        "trace": {
+          "event": {
+            "pass": true,
+            "window": {
+              "startMs": 13830,
+              "endMs": 14398
+            },
+            "bestOverlap": 1,
+            "contactInside": true,
+            "detail": "best proposal 13830–14398 overlap 1 contact-inside"
+          },
+          "contact": {
+            "status": "estimated",
+            "estimatedContactMs": 14270,
+            "errorMs": 82,
+            "ballConfirmed": false,
+            "paddleConfirmed": false,
+            "detail": "estimated 14270ms conf 0.50 [no ball evidence]"
+          },
+          "phase": {
+            "status": "segmented",
+            "orderingValid": true,
+            "detail": "segmented, ordering valid"
+          },
+          "stroke": {
+            "state": "abstained",
+            "predictedLabel": "UNKNOWN",
+            "l1Verdict": "abstained",
+            "detail": "predicted UNKNOWN vs gold L1 OVERHEAD"
+          }
+        },
+        "usable": {
+          "usable": false,
+          "replayClause": null,
+          "reasons": [
+            "no trustworthy replay artifact (contact estimated err 82ms; phase segmented)"
+          ]
+        }
+      },
+      "oracles": {
+        "EVENT": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 14042,
+                "endMs": 14333
+              },
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "ORACLE: gold event bounds substituted"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 14270,
+              "errorMs": 82,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 14270ms conf 0.53 [no ball evidence]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 OVERHEAD"
+            }
+          },
+          "reasons": [
+            "no trustworthy replay artifact (contact estimated err 82ms; phase segmented)"
+          ]
+        },
+        "BALL": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 13830,
+                "endMs": 14398
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 13830–14398 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 14270,
+              "errorMs": 82,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 14270ms conf 0.50 [oracle ball]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 OVERHEAD"
+            }
+          },
+          "reasons": [
+            "no trustworthy replay artifact (contact estimated err 82ms; phase segmented)"
+          ]
+        },
+        "CONTACT": {
+          "usable": true,
+          "flipped": "recovered",
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 13830,
+                "endMs": 14398
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 13830–14398 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "oracle",
+              "estimatedContactMs": 14188,
+              "errorMs": 0,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "ORACLE: gold contactMs substituted (err 0 by construction)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 OVERHEAD"
+            }
+          },
+          "reasons": [
+            "replay (a): contact |err| 0ms ≤ 66ms",
+            "honest stroke abstention"
+          ]
+        },
+        "STROKE": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 13830,
+                "endMs": 14398
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 13830–14398 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 14270,
+              "errorMs": 82,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 14270ms conf 0.50 [no ball evidence]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "oracle",
+              "predictedLabel": "OVERHEAD",
+              "l1Verdict": "correct",
+              "detail": "ORACLE: gold stroke label substituted"
+            }
+          },
+          "reasons": [
+            "no trustworthy replay artifact (contact estimated err 82ms; phase segmented)"
+          ]
+        }
+      }
+    },
+    {
+      "eventKey": "wavea-faead-feed#1",
+      "goldSpanMs": [
+        33358,
+        34050
+      ],
+      "goldContactMs": 33442,
+      "baseline": {
+        "trace": {
+          "event": {
+            "pass": true,
+            "window": {
+              "startMs": 33083,
+              "endMs": 34417
+            },
+            "bestOverlap": 1,
+            "contactInside": true,
+            "detail": "best proposal 33083–34417 overlap 1 contact-inside"
+          },
+          "contact": {
+            "status": "abstained",
+            "estimatedContactMs": null,
+            "errorMs": null,
+            "ballConfirmed": false,
+            "paddleConfirmed": false,
+            "detail": "abstained: Contact evidence is multi-modal: comparable clusters at ~33325ms and ~33875ms (81% as strong, 550ms apart); no single mo"
+          },
+          "phase": {
+            "status": "segmented",
+            "orderingValid": true,
+            "detail": "segmented, ordering valid"
+          },
+          "stroke": {
+            "state": "abstained",
+            "predictedLabel": "UNKNOWN",
+            "l1Verdict": "abstained",
+            "detail": "predicted UNKNOWN vs gold L1 (no stroke gold)"
+          }
+        },
+        "usable": {
+          "usable": true,
+          "replayClause": "c",
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        }
+      },
+      "oracles": {
+        "EVENT": {
+          "usable": false,
+          "flipped": "broken",
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 33358,
+                "endMs": 34050
+              },
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "ORACLE: gold event bounds substituted"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 33755,
+              "errorMs": 313,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 33755ms conf 0.45 [no ball evidence]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "committed",
+              "predictedLabel": "FOREHAND",
+              "l1Verdict": "unverifiable",
+              "detail": "predicted FOREHAND vs gold L1 (no stroke gold)"
+            }
+          },
+          "reasons": [
+            "fabricated evidence veto: contact 313ms off gold (>132ms)",
+            "no trustworthy replay artifact (contact estimated err 313ms; phase segmented)"
+          ]
+        },
+        "BALL": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 33083,
+                "endMs": 34417
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 33083–34417 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "abstained",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "abstained: Contact evidence is multi-modal: comparable clusters at ~33875ms and ~33330ms (91% as strong, 545ms apart); no single mo"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 (no stroke gold)"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        },
+        "CONTACT": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 33083,
+                "endMs": 34417
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 33083–34417 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "oracle",
+              "estimatedContactMs": 33442,
+              "errorMs": 0,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "ORACLE: gold contactMs substituted (err 0 by construction)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 (no stroke gold)"
+            }
+          },
+          "reasons": [
+            "replay (a): contact |err| 0ms ≤ 66ms",
+            "honest stroke abstention"
+          ]
+        },
+        "STROKE": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 33083,
+                "endMs": 34417
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 33083–34417 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "abstained",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "abstained: Contact evidence is multi-modal: comparable clusters at ~33325ms and ~33875ms (81% as strong, 550ms apart); no single mo"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "not_runnable",
+              "predictedLabel": null,
+              "l1Verdict": "unverifiable",
+              "detail": "ORACLE STROKE not constructible: no stroke gold / gold L1 unknown"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        }
+      }
+    },
+    {
+      "eventKey": "wavea-faead-rally#1",
+      "goldSpanMs": [
+        13417,
+        13833
+      ],
+      "goldContactMs": null,
+      "baseline": {
+        "trace": {
+          "event": {
+            "pass": true,
+            "window": {
+              "startMs": 13333,
+              "endMs": 14042
+            },
+            "bestOverlap": 1,
+            "contactInside": null,
+            "detail": "best proposal 13333–14042 overlap 1"
+          },
+          "contact": {
+            "status": "abstained",
+            "estimatedContactMs": null,
+            "errorMs": null,
+            "ballConfirmed": false,
+            "paddleConfirmed": false,
+            "detail": "abstained: Contact evidence is multi-modal: comparable clusters at ~13610ms and ~13230ms (45% as strong, 380ms apart); no single mo"
+          },
+          "phase": {
+            "status": "segmented",
+            "orderingValid": true,
+            "detail": "segmented, ordering valid"
+          },
+          "stroke": {
+            "state": "committed",
+            "predictedLabel": "FOREHAND",
+            "l1Verdict": "correct",
+            "detail": "predicted FOREHAND vs gold L1 SWING"
+          }
+        },
+        "usable": {
+          "usable": true,
+          "replayClause": "c",
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "stroke L1 match"
+          ]
+        }
+      },
+      "oracles": {
+        "EVENT": {
+          "usable": false,
+          "flipped": "broken",
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 13417,
+                "endMs": 13833
+              },
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "ORACLE: gold event bounds substituted"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 13610,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 13610ms conf 0.55 [no ball evidence]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "committed",
+              "predictedLabel": "FOREHAND",
+              "l1Verdict": "correct",
+              "detail": "predicted FOREHAND vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "no trustworthy replay artifact (contact estimated · no gold contact; phase segmented)"
+          ]
+        },
+        "BALL": {
+          "usable": false,
+          "flipped": "broken",
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 13333,
+                "endMs": 14042
+              },
+              "bestOverlap": 1,
+              "contactInside": null,
+              "detail": "best proposal 13333–14042 overlap 1"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 13620,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 13620ms conf 0.55 [oracle ball]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "committed",
+              "predictedLabel": "FOREHAND",
+              "l1Verdict": "correct",
+              "detail": "predicted FOREHAND vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "no trustworthy replay artifact (contact estimated · no gold contact; phase segmented)"
+          ]
+        },
+        "CONTACT": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 13333,
+                "endMs": 14042
+              },
+              "bestOverlap": 1,
+              "contactInside": null,
+              "detail": "best proposal 13333–14042 overlap 1"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "ORACLE CONTACT not constructible: gold contactMs is null"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "committed",
+              "predictedLabel": "FOREHAND",
+              "l1Verdict": "correct",
+              "detail": "predicted FOREHAND vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "stroke L1 match"
+          ]
+        },
+        "STROKE": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 13333,
+                "endMs": 14042
+              },
+              "bestOverlap": 1,
+              "contactInside": null,
+              "detail": "best proposal 13333–14042 overlap 1"
+            },
+            "contact": {
+              "status": "abstained",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "abstained: Contact evidence is multi-modal: comparable clusters at ~13610ms and ~13230ms (45% as strong, 380ms apart); no single mo"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "oracle",
+              "predictedLabel": "SWING",
+              "l1Verdict": "correct",
+              "detail": "ORACLE: gold stroke label substituted"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "stroke L1 match"
+          ]
+        }
+      }
+    },
+    {
+      "eventKey": "wavea-faead-rally#2",
+      "goldSpanMs": [
+        13875,
+        14500
+      ],
+      "goldContactMs": 14042,
+      "baseline": {
+        "trace": {
+          "event": {
+            "pass": false,
+            "window": null,
+            "bestOverlap": null,
+            "contactInside": null,
+            "detail": "no proposal overlaps >0.3 of gold"
+          },
+          "contact": {
+            "status": "not_runnable",
+            "estimatedContactMs": null,
+            "errorMs": null,
+            "ballConfirmed": false,
+            "paddleConfirmed": false,
+            "detail": "no event window selected"
+          },
+          "phase": {
+            "status": "not_run",
+            "orderingValid": false,
+            "detail": "no event window selected"
+          },
+          "stroke": {
+            "state": "abstained",
+            "predictedLabel": null,
+            "l1Verdict": "abstained",
+            "detail": "no event window selected"
+          }
+        },
+        "usable": {
+          "usable": false,
+          "replayClause": null,
+          "reasons": [
+            "EVENT fail (no proposal overlaps >0.3 of gold)",
+            "no trustworthy replay artifact (contact not_runnable; phase not_run)"
+          ]
+        }
+      },
+      "oracles": {
+        "EVENT": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 13875,
+                "endMs": 14500
+              },
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "ORACLE: gold event bounds substituted"
+            },
+            "contact": {
+              "status": "abstained",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "abstained: Contact evidence is multi-modal: comparable clusters at ~14285ms and ~13730ms (73% as strong, 555ms apart); no single mo"
+            },
+            "phase": {
+              "status": "abstained",
+              "orderingValid": false,
+              "detail": "abstained: PHASE_NO_MOTION_EVIDENCE"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "no trustworthy replay artifact (contact abstained; phase abstained)"
+          ]
+        },
+        "BALL": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": false,
+              "window": null,
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "no proposal overlaps >0.3 of gold"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no event window selected"
+            },
+            "phase": {
+              "status": "not_run",
+              "orderingValid": false,
+              "detail": "no event window selected"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no event window selected"
+            }
+          },
+          "reasons": [
+            "EVENT fail (no proposal overlaps >0.3 of gold)",
+            "no trustworthy replay artifact (contact not_runnable; phase not_run)"
+          ]
+        },
+        "CONTACT": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": false,
+              "window": null,
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "no proposal overlaps >0.3 of gold"
+            },
+            "contact": {
+              "status": "oracle",
+              "estimatedContactMs": 14042,
+              "errorMs": 0,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "ORACLE: gold contactMs substituted (err 0 by construction)"
+            },
+            "phase": {
+              "status": "not_run",
+              "orderingValid": false,
+              "detail": "no event window selected"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no event window selected"
+            }
+          },
+          "reasons": [
+            "EVENT fail (no proposal overlaps >0.3 of gold)"
+          ]
+        },
+        "STROKE": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": false,
+              "window": null,
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "no proposal overlaps >0.3 of gold"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no event window selected"
+            },
+            "phase": {
+              "status": "not_run",
+              "orderingValid": false,
+              "detail": "no event window selected"
+            },
+            "stroke": {
+              "state": "oracle",
+              "predictedLabel": "SWING",
+              "l1Verdict": "correct",
+              "detail": "ORACLE: gold stroke label substituted"
+            }
+          },
+          "reasons": [
+            "EVENT fail (no proposal overlaps >0.3 of gold)",
+            "no trustworthy replay artifact (contact not_runnable; phase not_run)"
+          ]
+        }
+      }
+    },
+    {
+      "eventKey": "wavea-944403-dink#3",
+      "goldSpanMs": [
+        20950,
+        21500
+      ],
+      "goldContactMs": 21117,
+      "baseline": {
+        "trace": {
+          "event": {
+            "pass": true,
+            "window": {
+              "startMs": 20103,
+              "endMs": 21154
+            },
+            "bestOverlap": 0.37,
+            "contactInside": true,
+            "detail": "best proposal 20103–21154 overlap 0.37 contact-inside"
+          },
+          "contact": {
+            "status": "abstained",
+            "estimatedContactMs": null,
+            "errorMs": null,
+            "ballConfirmed": false,
+            "paddleConfirmed": false,
+            "detail": "abstained: Contact evidence is multi-modal: comparable clusters at ~20390ms and ~20940ms (68% as strong, 550ms apart); no single mo"
+          },
+          "phase": {
+            "status": "segmented",
+            "orderingValid": true,
+            "detail": "segmented, ordering valid"
+          },
+          "stroke": {
+            "state": "abstained",
+            "predictedLabel": "UNKNOWN",
+            "l1Verdict": "abstained",
+            "detail": "predicted UNKNOWN vs gold L1 SWING"
+          }
+        },
+        "usable": {
+          "usable": true,
+          "replayClause": "c",
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        }
+      },
+      "oracles": {
+        "EVENT": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 20950,
+                "endMs": 21500
+              },
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "ORACLE: gold event bounds substituted"
+            },
+            "contact": {
+              "status": "abstained",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "abstained: Contact evidence is multi-modal: comparable clusters at ~20945ms and ~21350ms (65% as strong, 405ms apart); no single mo"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        },
+        "BALL": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 20103,
+                "endMs": 21154
+              },
+              "bestOverlap": 0.37,
+              "contactInside": true,
+              "detail": "best proposal 20103–21154 overlap 0.37 contact-inside"
+            },
+            "contact": {
+              "status": "abstained",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "abstained: Contact evidence is multi-modal: comparable clusters at ~20390ms and ~20945ms (68% as strong, 555ms apart); no single mo"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        },
+        "CONTACT": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 20103,
+                "endMs": 21154
+              },
+              "bestOverlap": 0.37,
+              "contactInside": true,
+              "detail": "best proposal 20103–21154 overlap 0.37 contact-inside"
+            },
+            "contact": {
+              "status": "oracle",
+              "estimatedContactMs": 21117,
+              "errorMs": 0,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "ORACLE: gold contactMs substituted (err 0 by construction)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "replay (a): contact |err| 0ms ≤ 66ms",
+            "honest stroke abstention"
+          ]
+        },
+        "STROKE": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 20103,
+                "endMs": 21154
+              },
+              "bestOverlap": 0.37,
+              "contactInside": true,
+              "detail": "best proposal 20103–21154 overlap 0.37 contact-inside"
+            },
+            "contact": {
+              "status": "abstained",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "abstained: Contact evidence is multi-modal: comparable clusters at ~20390ms and ~20940ms (68% as strong, 550ms apart); no single mo"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "oracle",
+              "predictedLabel": "SWING",
+              "l1Verdict": "correct",
+              "detail": "ORACLE: gold stroke label substituted"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "stroke L1 match"
+          ]
+        }
+      }
+    },
+    {
+      "eventKey": "wavea-944403-smash#2",
+      "goldSpanMs": [
+        4317,
+        4525
+      ],
+      "goldContactMs": 4379,
+      "baseline": {
+        "trace": {
+          "event": {
+            "pass": true,
+            "window": {
+              "startMs": 4071,
+              "endMs": 4605
+            },
+            "bestOverlap": 1,
+            "contactInside": true,
+            "detail": "best proposal 4071–4605 overlap 1 contact-inside"
+          },
+          "contact": {
+            "status": "estimated",
+            "estimatedContactMs": 4390,
+            "errorMs": 11,
+            "ballConfirmed": false,
+            "paddleConfirmed": false,
+            "detail": "estimated 4390ms conf 0.53 [no ball evidence]"
+          },
+          "phase": {
+            "status": "segmented",
+            "orderingValid": true,
+            "detail": "segmented, ordering valid"
+          },
+          "stroke": {
+            "state": "abstained",
+            "predictedLabel": "UNKNOWN",
+            "l1Verdict": "abstained",
+            "detail": "predicted UNKNOWN vs gold L1 SWING"
+          }
+        },
+        "usable": {
+          "usable": true,
+          "replayClause": "a",
+          "reasons": [
+            "replay (a): contact |err| 11ms ≤ 66ms",
+            "honest stroke abstention"
+          ]
+        }
+      },
+      "oracles": {
+        "EVENT": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 4317,
+                "endMs": 4525
+              },
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "ORACLE: gold event bounds substituted"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 4375,
+              "errorMs": 4,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 4375ms conf 0.55 [no ball evidence]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "replay (a): contact |err| 4ms ≤ 66ms",
+            "honest stroke abstention"
+          ]
+        },
+        "BALL": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 4071,
+                "endMs": 4605
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 4071–4605 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "abstained",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "abstained: Contact evidence is multi-modal: comparable clusters at ~4395ms and ~4780ms (97% as strong, 385ms apart); no single mome"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "honest stroke abstention"
+          ]
+        },
+        "CONTACT": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 4071,
+                "endMs": 4605
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 4071–4605 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "oracle",
+              "estimatedContactMs": 4379,
+              "errorMs": 0,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "ORACLE: gold contactMs substituted (err 0 by construction)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "replay (a): contact |err| 0ms ≤ 66ms",
+            "honest stroke abstention"
+          ]
+        },
+        "STROKE": {
+          "usable": true,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 4071,
+                "endMs": 4605
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 4071–4605 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 4390,
+              "errorMs": 11,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 4390ms conf 0.53 [no ball evidence]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "oracle",
+              "predictedLabel": "SWING",
+              "l1Verdict": "correct",
+              "detail": "ORACLE: gold stroke label substituted"
+            }
+          },
+          "reasons": [
+            "replay (a): contact |err| 11ms ≤ 66ms",
+            "stroke L1 match"
+          ]
+        }
+      }
+    },
+    {
+      "eventKey": "wavea-wgm-wheelchair#1",
+      "goldSpanMs": [
+        182400,
+        183067
+      ],
+      "goldContactMs": 182583,
+      "baseline": {
+        "trace": {
+          "event": {
+            "pass": true,
+            "window": {
+              "startMs": 182567,
+              "endMs": 183300
+            },
+            "bestOverlap": 0.75,
+            "contactInside": true,
+            "detail": "best proposal 182567–183300 overlap 0.75 contact-inside"
+          },
+          "contact": {
+            "status": "abstained",
+            "estimatedContactMs": null,
+            "errorMs": null,
+            "ballConfirmed": false,
+            "paddleConfirmed": false,
+            "detail": "abstained: Contact evidence is multi-modal: comparable clusters at ~183180ms and ~182750ms (52% as strong, 430ms apart); no single "
+          },
+          "phase": {
+            "status": "abstained",
+            "orderingValid": false,
+            "detail": "abstained: PHASE_PEAK_NOT_UNIQUE"
+          },
+          "stroke": {
+            "state": "abstained",
+            "predictedLabel": "UNKNOWN",
+            "l1Verdict": "abstained",
+            "detail": "predicted UNKNOWN vs gold L1 SWING"
+          }
+        },
+        "usable": {
+          "usable": false,
+          "replayClause": null,
+          "reasons": [
+            "no trustworthy replay artifact (contact abstained; phase abstained)"
+          ]
+        }
+      },
+      "oracles": {
+        "EVENT": {
+          "usable": true,
+          "flipped": "recovered",
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 182400,
+                "endMs": 183067
+              },
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "ORACLE: gold event bounds substituted"
+            },
+            "contact": {
+              "status": "abstained",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "abstained: Contact evidence is multi-modal: comparable clusters at ~183180ms and ~182750ms (52% as strong, 430ms apart); no single "
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "committed",
+              "predictedLabel": "FOREHAND",
+              "l1Verdict": "correct",
+              "detail": "predicted FOREHAND vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "replay (c): contact abstained, phases segmented with valid ordering",
+            "stroke L1 match"
+          ]
+        },
+        "BALL": {
+          "usable": true,
+          "flipped": "recovered",
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 182567,
+                "endMs": 183300
+              },
+              "bestOverlap": 0.75,
+              "contactInside": true,
+              "detail": "best proposal 182567–183300 overlap 0.75 contact-inside"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 182670,
+              "errorMs": 87,
+              "ballConfirmed": true,
+              "paddleConfirmed": false,
+              "detail": "estimated 182670ms conf 0.86 [oracle ball]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "committed",
+              "predictedLabel": "FOREHAND",
+              "l1Verdict": "correct",
+              "detail": "predicted FOREHAND vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "replay (b): contact err 87ms ≤ 132ms with confirmation",
+            "stroke L1 match"
+          ]
+        },
+        "CONTACT": {
+          "usable": true,
+          "flipped": "recovered",
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 182567,
+                "endMs": 183300
+              },
+              "bestOverlap": 0.75,
+              "contactInside": true,
+              "detail": "best proposal 182567–183300 overlap 0.75 contact-inside"
+            },
+            "contact": {
+              "status": "oracle",
+              "estimatedContactMs": 182583,
+              "errorMs": 0,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "ORACLE: gold contactMs substituted (err 0 by construction)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "committed",
+              "predictedLabel": "FOREHAND",
+              "l1Verdict": "correct",
+              "detail": "predicted FOREHAND vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "replay (a): contact |err| 0ms ≤ 66ms",
+            "stroke L1 match"
+          ]
+        },
+        "STROKE": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 182567,
+                "endMs": 183300
+              },
+              "bestOverlap": 0.75,
+              "contactInside": true,
+              "detail": "best proposal 182567–183300 overlap 0.75 contact-inside"
+            },
+            "contact": {
+              "status": "abstained",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "abstained: Contact evidence is multi-modal: comparable clusters at ~183180ms and ~182750ms (52% as strong, 430ms apart); no single "
+            },
+            "phase": {
+              "status": "abstained",
+              "orderingValid": false,
+              "detail": "abstained: PHASE_PEAK_NOT_UNIQUE"
+            },
+            "stroke": {
+              "state": "oracle",
+              "predictedLabel": "SWING",
+              "l1Verdict": "correct",
+              "detail": "ORACLE: gold stroke label substituted"
+            }
+          },
+          "reasons": [
+            "no trustworthy replay artifact (contact abstained; phase abstained)"
+          ]
+        }
+      }
+    },
+    {
+      "eventKey": "wavea-sasebo-volleys#1",
+      "goldSpanMs": [
+        51900,
+        52300
+      ],
+      "goldContactMs": 52000,
+      "baseline": {
+        "trace": {
+          "event": {
+            "pass": false,
+            "window": {
+              "startMs": 52152,
+              "endMs": 52920
+            },
+            "bestOverlap": 0.37,
+            "contactInside": false,
+            "detail": "best proposal 52152–52920 overlap 0.37"
+          },
+          "contact": {
+            "status": "estimated",
+            "estimatedContactMs": 52515,
+            "errorMs": 515,
+            "ballConfirmed": false,
+            "paddleConfirmed": false,
+            "detail": "estimated 52515ms conf 0.53 [no ball evidence]"
+          },
+          "phase": {
+            "status": "segmented",
+            "orderingValid": true,
+            "detail": "segmented, ordering valid"
+          },
+          "stroke": {
+            "state": "abstained",
+            "predictedLabel": "UNKNOWN",
+            "l1Verdict": "abstained",
+            "detail": "predicted UNKNOWN vs gold L1 SWING"
+          }
+        },
+        "usable": {
+          "usable": false,
+          "replayClause": null,
+          "reasons": [
+            "EVENT fail (best proposal 52152–52920 overlap 0.37)",
+            "fabricated evidence veto: contact 515ms off gold (>132ms)",
+            "no trustworthy replay artifact (contact estimated err 515ms; phase segmented)"
+          ]
+        }
+      },
+      "oracles": {
+        "EVENT": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 51900,
+                "endMs": 52300
+              },
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "ORACLE: gold event bounds substituted"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 52365,
+              "errorMs": 365,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 52365ms conf 0.55 [no ball evidence]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "fabricated evidence veto: contact 365ms off gold (>132ms)",
+            "no trustworthy replay artifact (contact estimated err 365ms; phase segmented)"
+          ]
+        },
+        "BALL": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": false,
+              "window": {
+                "startMs": 52152,
+                "endMs": 52920
+              },
+              "bestOverlap": 0.37,
+              "contactInside": false,
+              "detail": "best proposal 52152–52920 overlap 0.37"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 52545,
+              "errorMs": 545,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 52545ms conf 0.55 [oracle ball]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "EVENT fail (best proposal 52152–52920 overlap 0.37)",
+            "fabricated evidence veto: contact 545ms off gold (>132ms)",
+            "no trustworthy replay artifact (contact estimated err 545ms; phase segmented)"
+          ]
+        },
+        "CONTACT": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": false,
+              "window": {
+                "startMs": 52152,
+                "endMs": 52920
+              },
+              "bestOverlap": 0.37,
+              "contactInside": false,
+              "detail": "best proposal 52152–52920 overlap 0.37"
+            },
+            "contact": {
+              "status": "oracle",
+              "estimatedContactMs": 52000,
+              "errorMs": 0,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "ORACLE: gold contactMs substituted (err 0 by construction)"
+            },
+            "phase": {
+              "status": "abstained",
+              "orderingValid": false,
+              "detail": "abstained: PHASE_WRONG_EVENT"
+            },
+            "stroke": {
+              "state": "committed",
+              "predictedLabel": "FOREHAND",
+              "l1Verdict": "correct",
+              "detail": "predicted FOREHAND vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "EVENT fail (best proposal 52152–52920 overlap 0.37)"
+          ]
+        },
+        "STROKE": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": false,
+              "window": {
+                "startMs": 52152,
+                "endMs": 52920
+              },
+              "bestOverlap": 0.37,
+              "contactInside": false,
+              "detail": "best proposal 52152–52920 overlap 0.37"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 52515,
+              "errorMs": 515,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 52515ms conf 0.53 [no ball evidence]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "oracle",
+              "predictedLabel": "SWING",
+              "l1Verdict": "correct",
+              "detail": "ORACLE: gold stroke label substituted"
+            }
+          },
+          "reasons": [
+            "EVENT fail (best proposal 52152–52920 overlap 0.37)",
+            "fabricated evidence veto: contact 515ms off gold (>132ms)",
+            "no trustworthy replay artifact (contact estimated err 515ms; phase segmented)"
+          ]
+        }
+      }
+    },
+    {
+      "eventKey": "wavea-sasebo-volleys#3",
+      "goldSpanMs": [
+        52434,
+        52900
+      ],
+      "goldContactMs": 52683,
+      "baseline": {
+        "trace": {
+          "event": {
+            "pass": true,
+            "window": {
+              "startMs": 52152,
+              "endMs": 52920
+            },
+            "bestOverlap": 1,
+            "contactInside": true,
+            "detail": "best proposal 52152–52920 overlap 1 contact-inside"
+          },
+          "contact": {
+            "status": "estimated",
+            "estimatedContactMs": 52515,
+            "errorMs": 168,
+            "ballConfirmed": false,
+            "paddleConfirmed": false,
+            "detail": "estimated 52515ms conf 0.53 [no ball evidence]"
+          },
+          "phase": {
+            "status": "segmented",
+            "orderingValid": true,
+            "detail": "segmented, ordering valid"
+          },
+          "stroke": {
+            "state": "abstained",
+            "predictedLabel": "UNKNOWN",
+            "l1Verdict": "abstained",
+            "detail": "predicted UNKNOWN vs gold L1 SWING"
+          }
+        },
+        "usable": {
+          "usable": false,
+          "replayClause": null,
+          "reasons": [
+            "fabricated evidence veto: contact 168ms off gold (>132ms)",
+            "no trustworthy replay artifact (contact estimated err 168ms; phase segmented)"
+          ]
+        }
+      },
+      "oracles": {
+        "EVENT": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 52434,
+                "endMs": 52900
+              },
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "ORACLE: gold event bounds substituted"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 52515,
+              "errorMs": 168,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 52515ms conf 0.53 [no ball evidence]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "fabricated evidence veto: contact 168ms off gold (>132ms)",
+            "no trustworthy replay artifact (contact estimated err 168ms; phase segmented)"
+          ]
+        },
+        "BALL": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 52152,
+                "endMs": 52920
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 52152–52920 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 52545,
+              "errorMs": 138,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 52545ms conf 0.55 [oracle ball]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "fabricated evidence veto: contact 138ms off gold (>132ms)",
+            "no trustworthy replay artifact (contact estimated err 138ms; phase segmented)"
+          ]
+        },
+        "CONTACT": {
+          "usable": true,
+          "flipped": "recovered",
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 52152,
+                "endMs": 52920
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 52152–52920 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "oracle",
+              "estimatedContactMs": 52683,
+              "errorMs": 0,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "ORACLE: gold contactMs substituted (err 0 by construction)"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "replay (a): contact |err| 0ms ≤ 66ms",
+            "honest stroke abstention"
+          ]
+        },
+        "STROKE": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 52152,
+                "endMs": 52920
+              },
+              "bestOverlap": 1,
+              "contactInside": true,
+              "detail": "best proposal 52152–52920 overlap 1 contact-inside"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 52515,
+              "errorMs": 168,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 52515ms conf 0.53 [no ball evidence]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "oracle",
+              "predictedLabel": "SWING",
+              "l1Verdict": "correct",
+              "detail": "ORACLE: gold stroke label substituted"
+            }
+          },
+          "reasons": [
+            "fabricated evidence veto: contact 168ms off gold (>132ms)",
+            "no trustworthy replay artifact (contact estimated err 168ms; phase segmented)"
+          ]
+        }
+      }
+    },
+    {
+      "eventKey": "wavea-sasebo-volleys#5",
+      "goldSpanMs": [
+        52934,
+        53234
+      ],
+      "goldContactMs": 53067,
+      "baseline": {
+        "trace": {
+          "event": {
+            "pass": false,
+            "window": null,
+            "bestOverlap": null,
+            "contactInside": null,
+            "detail": "no proposal overlaps >0.3 of gold"
+          },
+          "contact": {
+            "status": "not_runnable",
+            "estimatedContactMs": null,
+            "errorMs": null,
+            "ballConfirmed": false,
+            "paddleConfirmed": false,
+            "detail": "no event window selected"
+          },
+          "phase": {
+            "status": "not_run",
+            "orderingValid": false,
+            "detail": "no event window selected"
+          },
+          "stroke": {
+            "state": "abstained",
+            "predictedLabel": null,
+            "l1Verdict": "abstained",
+            "detail": "no event window selected"
+          }
+        },
+        "usable": {
+          "usable": false,
+          "replayClause": null,
+          "reasons": [
+            "EVENT fail (no proposal overlaps >0.3 of gold)",
+            "no trustworthy replay artifact (contact not_runnable; phase not_run)"
+          ]
+        }
+      },
+      "oracles": {
+        "EVENT": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": true,
+              "window": {
+                "startMs": 52934,
+                "endMs": 53234
+              },
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "ORACLE: gold event bounds substituted"
+            },
+            "contact": {
+              "status": "estimated",
+              "estimatedContactMs": 52930,
+              "errorMs": 137,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "estimated 52930ms conf 0.49 [no ball evidence]"
+            },
+            "phase": {
+              "status": "segmented",
+              "orderingValid": true,
+              "detail": "segmented, ordering valid"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": "UNKNOWN",
+              "l1Verdict": "abstained",
+              "detail": "predicted UNKNOWN vs gold L1 SWING"
+            }
+          },
+          "reasons": [
+            "fabricated evidence veto: contact 137ms off gold (>132ms)",
+            "no trustworthy replay artifact (contact estimated err 137ms; phase segmented)"
+          ]
+        },
+        "BALL": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": false,
+              "window": null,
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "no proposal overlaps >0.3 of gold"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no event window selected"
+            },
+            "phase": {
+              "status": "not_run",
+              "orderingValid": false,
+              "detail": "no event window selected"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no event window selected"
+            }
+          },
+          "reasons": [
+            "EVENT fail (no proposal overlaps >0.3 of gold)",
+            "no trustworthy replay artifact (contact not_runnable; phase not_run)"
+          ]
+        },
+        "CONTACT": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": false,
+              "window": null,
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "no proposal overlaps >0.3 of gold"
+            },
+            "contact": {
+              "status": "oracle",
+              "estimatedContactMs": 53067,
+              "errorMs": 0,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "ORACLE: gold contactMs substituted (err 0 by construction)"
+            },
+            "phase": {
+              "status": "not_run",
+              "orderingValid": false,
+              "detail": "no event window selected"
+            },
+            "stroke": {
+              "state": "abstained",
+              "predictedLabel": null,
+              "l1Verdict": "abstained",
+              "detail": "no event window selected"
+            }
+          },
+          "reasons": [
+            "EVENT fail (no proposal overlaps >0.3 of gold)"
+          ]
+        },
+        "STROKE": {
+          "usable": false,
+          "flipped": null,
+          "trace": {
+            "event": {
+              "pass": false,
+              "window": null,
+              "bestOverlap": null,
+              "contactInside": null,
+              "detail": "no proposal overlaps >0.3 of gold"
+            },
+            "contact": {
+              "status": "not_runnable",
+              "estimatedContactMs": null,
+              "errorMs": null,
+              "ballConfirmed": false,
+              "paddleConfirmed": false,
+              "detail": "no event window selected"
+            },
+            "phase": {
+              "status": "not_run",
+              "orderingValid": false,
+              "detail": "no event window selected"
+            },
+            "stroke": {
+              "state": "oracle",
+              "predictedLabel": "SWING",
+              "l1Verdict": "correct",
+              "detail": "ORACLE: gold stroke label substituted"
+            }
+          },
+          "reasons": [
+            "EVENT fail (no proposal overlaps >0.3 of gold)",
+            "no trustworthy replay artifact (contact not_runnable; phase not_run)"
+          ]
+        }
+      }
+    }
+  ]
+}
