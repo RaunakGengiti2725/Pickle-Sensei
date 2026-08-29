@@ -336,6 +336,9 @@ importers:
       '@pickle/evaluation':
         specifier: workspace:*
         version: link:../evaluation
+      '@pickle/model-registry':
+        specifier: workspace:*
+        version: link:../model-registry
       '@pickle/scoring':
         specifier: workspace:*
         version: link:../scoring

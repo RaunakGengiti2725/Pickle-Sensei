@@ -69,7 +69,7 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
     },
     {
       id: "stroke.heuristic-hierarchical",
-      version: "stroke-heuristic-1",
+      version: "stroke-heuristic-6",
       task: "stroke_classification",
       runtime: "deterministic",
       executionTarget: "on_device",

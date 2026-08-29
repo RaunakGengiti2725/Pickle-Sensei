@@ -211,7 +211,8 @@ export const TECHNIQUE_ANALYSIS_PROFILES_V1: Readonly<Record<string, TechniqueAn
  * SHARED SIDE PROFILES — the AUTO DETECT (declared-null) resolution targets
  * for predictions that honestly stop at taxonomy depth 2 (FOREHAND/BACKHAND).
  *
- * Today's hierarchical stroke classifier (stroke-heuristic-1) cannot commit
+ * Today's hierarchical stroke classifier (STROKE_HEURISTIC_VERSION in
+ * @pickle/vision-geometry) cannot commit
  * to a leaf technique without bounce observation, so a depth-2 prediction is
  * the deepest defensible identity for most swings. These profiles make that
  * depth an explicit, versioned registry entry — an AUTO run resolves to a
