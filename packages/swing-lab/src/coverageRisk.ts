@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { REPO_ROOT } from "./engine/corpus.js";
 import {
@@ -100,9 +100,58 @@ export function loadW14Datasets(experimentsDir = EXPERIMENTS): NamedDataset[] {
   ];
 }
 
+const BUNDLES = join(REPO_ROOT, "datasets/paddle-bench/bundles");
+
+interface D204AuditFile {
+  captureBundle: string;
+  frames: Array<{
+    audit?: { conf?: number };
+    classAgreement?: boolean;
+  }>;
+}
+
+/**
+ * D2-04 blind ownership audit (Wave D2): per-slot annotator confidences with
+ * class agreement against the committed waveC ownership labels — the same
+ * inter-annotator-proxy correctness signal as W14 (NOT gold, NOT a model).
+ * Grouped by capture bundle (independent source), plus a pooled dataset.
+ */
+export function loadD204OwnershipAuditDatasets(bundlesDir = BUNDLES): NamedDataset[] {
+  const perBundle: Array<{ bundle: string; samples: ConfidenceSample[] }> = [];
+  for (const bundle of readdirSync(bundlesDir).sort()) {
+    const auditPath = join(
+      bundlesDir,
+      bundle,
+      "annotation/devin-visual-v4-waveD2-ownership-audit.json",
+    );
+    if (!existsSync(auditPath)) continue;
+    const audit = JSON.parse(readFileSync(auditPath, "utf8")) as D204AuditFile;
+    const samples: ConfidenceSample[] = [];
+    for (const frame of audit.frames) {
+      const confidence = frame.audit?.conf;
+      if (confidence === undefined || frame.classAgreement === undefined) continue;
+      samples.push({ confidence, correct: frame.classAgreement });
+    }
+    if (samples.length > 0) perBundle.push({ bundle: audit.captureBundle, samples });
+  }
+  const provenanceBase =
+    "committed D2-04 audit sidecars bundles/*/annotation/devin-visual-v4-waveD2-ownership-audit.json; correct = 3-class agreement with the committed waveC ownership labels — inter-annotator proxy, not gold";
+  const pooled: NamedDataset = {
+    name: `D2-04 ownership audit pooled (n=${perBundle.reduce((sum, entry) => sum + entry.samples.length, 0)} slots, ${perBundle.length} bundles)`,
+    provenance: `${provenanceBase}; POOLED across bundles — samples cluster by bundle/video, not i.i.d.`,
+    samples: perBundle.flatMap((entry) => entry.samples),
+  };
+  const grouped = perBundle.map((entry) => ({
+    name: `D2-04 ownership audit — ${entry.bundle} (n=${entry.samples.length} slots)`,
+    provenance: `${provenanceBase}; single bundle ${entry.bundle}`,
+    samples: entry.samples,
+  }));
+  return [pooled, ...grouped];
+}
+
 const isMain = process.argv[1]?.endsWith("coverageRisk.ts");
 if (isMain) {
-  const datasets = loadW14Datasets();
+  const datasets = [...loadW14Datasets(), ...loadD204OwnershipAuditDatasets()];
   const report = {
     generatedAtIso: new Date().toISOString(),
     caveat:
@@ -117,9 +166,11 @@ if (isMain) {
       coverageRiskCurve: coverageRiskCurve(dataset.samples),
     })),
   };
-  const outDir = join(EXPERIMENTS, "wave-c");
+  // Wave C's c11-coverage-risk.json stays frozen as the baseline; recomputed
+  // curves land in the wave-e artifact.
+  const outDir = join(EXPERIMENTS, "wave-e");
   mkdirSync(outDir, { recursive: true });
-  const outPath = join(outDir, "c11-coverage-risk.json");
+  const outPath = join(outDir, "e07-coverage-risk.json");
   writeFileSync(outPath, JSON.stringify(report, null, 2));
 
   for (const dataset of report.datasets) {
