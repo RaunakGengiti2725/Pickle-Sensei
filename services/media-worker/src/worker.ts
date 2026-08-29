@@ -157,12 +157,21 @@ export async function handleJob(deps: WorkerDeps, job: JobEnvelope): Promise<Job
   }
 }
 
+export const DELETION_TASK_MAX_ATTEMPTS = 5;
+
 /** Deletion workflow executor (directive §58) — resumable, auditable. */
 export async function processDeletionTasks(deps: WorkerDeps): Promise<number> {
   // 'processing' rows are picked up too: a worker crash mid-task must not
-  // strand the deletion forever (every handler is idempotent).
+  // strand the deletion forever (every handler is idempotent). 'failed' rows
+  // are retried up to the attempt cap so a transient storage/DB error cannot
+  // permanently stall the account-deletion workflow; past the cap they stay
+  // visibly 'failed'.
   const { rows } = await deps.pool.query(
-    `SELECT id, user_id, kind FROM deletion_task WHERE status IN ('queued','processing') ORDER BY created_at LIMIT 20`,
+    `SELECT id, user_id, kind FROM deletion_task
+     WHERE status IN ('queued','processing')
+        OR (status = 'failed' AND attempts < $1)
+     ORDER BY created_at LIMIT 20`,
+    [DELETION_TASK_MAX_ATTEMPTS],
   );
   let processed = 0;
   for (const task of rows as Array<{ id: string; user_id: string; kind: string }>) {
@@ -241,7 +250,7 @@ export async function processDeletionTasks(deps: WorkerDeps): Promise<number> {
     } catch (error) {
       deps.log(`deletion task ${task.id} failed: ${String(error)}`);
       await deps.pool.query(
-        "UPDATE deletion_task SET status = 'failed', detail = $2 WHERE id = $1",
+        "UPDATE deletion_task SET status = 'failed', attempts = attempts + 1, detail = $2 WHERE id = $1",
         [task.id, JSON.stringify({ error: String(error) })],
       );
     }
@@ -261,7 +270,15 @@ export async function sweepDeletedMedia(deps: WorkerDeps): Promise<number> {
   );
   let swept = 0;
   for (const row of rows as Array<{ id: string; object_key: string }>) {
-    await deleteObjectAndDerived(deps.objectStore, row.object_key);
+    // One failing object must not abort the whole sweep: log and move on so
+    // the remaining rows still get purged; the failed row stays eligible for
+    // the next sweep (object_key remains set).
+    try {
+      await deleteObjectAndDerived(deps.objectStore, row.object_key);
+    } catch (error) {
+      deps.log(`sweep of media_asset ${row.id} failed: ${String(error)}`);
+      continue;
+    }
     await deps.pool.query(
       "UPDATE media_asset SET object_key = NULL WHERE id = $1 AND deleted_at IS NOT NULL",
       [row.id],

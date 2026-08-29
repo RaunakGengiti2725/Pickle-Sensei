@@ -95,10 +95,19 @@ export class SqsJobQueue implements IJobQueue {
         QueueUrl: this.queueUrl,
         MaxNumberOfMessages: max,
         WaitTimeSeconds: 1,
+        MessageSystemAttributeNames: ["ApproximateReceiveCount"],
       }),
     );
     return (result.Messages ?? []).map((message) => {
-      const parsed = JSON.parse(message.Body ?? "{}") as { kind: string; payload: unknown };
+      // A malformed body must never throw here: that would abort the whole
+      // receive batch and crash-loop the consumer on one poison message. It
+      // surfaces as an unknown kind instead, staying visible on the queue.
+      let parsed: { kind: string; payload: unknown };
+      try {
+        parsed = JSON.parse(message.Body ?? "{}") as { kind: string; payload: unknown };
+      } catch {
+        parsed = { kind: "__malformed__", payload: message.Body };
+      }
       return {
         job: {
           id: message.MessageId ?? "unknown",

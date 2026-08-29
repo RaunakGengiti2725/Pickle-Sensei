@@ -1,0 +1,95 @@
+{
+  "gate": "GATE 10 — backend/DB reliability",
+  "workstream": "h21-backend-cert",
+  "baseline": "devin/1787988068-wave-c-integration @ 104ea0f",
+  "branch": "devin/wave-h/h21-backend-cert",
+  "environment": {
+    "os": "Linux (Ubuntu), Node v20.18.1, pnpm 10.15.1",
+    "stack": "docker compose: PostgreSQL 5432/5433, Redis 6379, MinIO 9000, ElasticMQ 9324",
+    "boundary": "No iPhone/Mac measurements were or can be taken here; all results are Linux local-stack only."
+  },
+  "method": "Real-service certification on the local stack: existing integration suites re-run against real PostgreSQL, plus new certification suites written for this gate — migration certification (packages/database/test/migrate-cert.test.ts), worker failure certification (services/media-worker/test/worker-cert.test.ts), SQS-protocol behavior against a real ElasticMQ broker (packages/queue/test/sqs.integration.test.ts), and DB pool-exhaustion/transaction-boundary certification (services/api/test/db-cert.test.ts). Faults injected via failing object-store stubs, poison queue payloads, malformed SQS bodies, held pool connections, throwing transaction bodies, tampered migration files, and concurrent migration runners.",
+  "measured_results": {
+    "root_gates": {
+      "typecheck": "pass (all 20 workspace projects)",
+      "test": "pass — full workspace `pnpm test` green, incl. 593 passed / 4 skipped in swing-lab",
+      "lint": "pass (eslint, 0 errors)",
+      "format_check": "pass (prettier)"
+    },
+    "suite_counts_with_real_backends": {
+      "packages/queue": "6 passed (3 in-memory + 3 against real ElasticMQ via SQS_ENDPOINT_TEST)",
+      "packages/database": "12 passed (7 existing + 5 new migration-certification, real PostgreSQL)",
+      "services/media-worker": "29 passed (25 existing + 4 new failure-certification, real PostgreSQL)",
+      "services/api": "99 passed (96 existing + 3 new db-cert, real PostgreSQL)"
+    },
+    "migrations": {
+      "clean_db": "all 18 migrations apply + seed idempotently on a fresh database (existing migrate.test.ts, re-verified)",
+      "stepwise_order": "each of the 18 migrations applies on top of exactly its predecessors; orderMigrations enforces ^\\d{4}_[a-z0-9_]+\\.sql$ lexicographic order (new test, pass)",
+      "previous_schema_upgrade": "database at 0014 with seeded users/profiles/settings/media/consents/sessions/shots/deletion tasks upgraded to head: only 0015-0018 applied; all row counts and key field values preserved byte-for-byte (new test, pass)",
+      "production_like_seeded": "0009_real_data_boundary certified against a seeded DB: exactly the documented fixture scope is deleted (fixture shots + their dataset items), real shots survive, progress_daily and session aggregates are rebuilt from surviving real rows (new test, pass)",
+      "tamper_protection": "editing an already-applied migration file is rejected with a checksum mismatch error (new test, pass)",
+      "concurrency": "two concurrent runners serialize on the pg advisory lock; every migration applied exactly once, schema_migrations has no duplicates (new test, pass)",
+      "rollback_strategy": "forward-fix only, per docs/DATABASE.md: applied migrations are never edited (enforced by sha256 checksums in schema_migrations); a rollback is a new numbered migration that reverses the change; each migration runs in its own transaction so a failed migration rolls back atomically and the chain halts visibly"
+    },
+    "failure_modes": {
+      "idempotency": "shots:sync upserts idempotently with exact-replay payload-hash binding; duplicate client ids resolve via ON CONFLICT DO NOTHING + exact replay verification (existing api suite, pass)",
+      "retry_safety": "deletion tasks now retry after transient failure up to attempts cap 5 (new: 0018 migration + worker change + 2 tests, pass); upload-complete queue dispatch failure reverts to 'uploading' with typed retryable 503 and retry succeeds (existing test, pass)",
+      "queue_visibility": "unhandled/poison jobs stay visible on the queue, never silently dropped (existing + new tests, pass); real ElasticMQ: unacked message redelivers after visibility timeout with ApproximateReceiveCount=2 (new test, pass)",
+      "worker_crash_recovery": "deletion tasks in 'processing' are re-picked after a crash (existing behavior + suite, pass); worker main loop now survives a throwing poll cycle instead of crashing the process (fixed, see P1-2)",
+      "duplicate_jobs": "media.purge is idempotent (second run: 'no object to delete'); double-delete via API is typed 404, not duplicate purge (existing suites, pass)",
+      "timeouts": "exhausted pool times out with a typed connection-timeout error instead of hanging, and recovers fully after release (new test, pass)",
+      "partial_failure": "sweep continues past one failing object and purges remaining rows (fixed, see P1-3; new test, pass); poison job in a batch does not block the good jobs (new test, pass)",
+      "transaction_boundaries": "throwing transaction body rolls back with zero partial writes and releases its connection; successful body commits atomically (new tests, pass); shots:sync writes shot+details+rollups+permit finalization in one transaction (existing suite, pass)",
+      "db_connection_exhaustion": "pool max=2 with both connections held: withTransaction rejects with timeout error, waitingCount returns to 0 after release — no leak (new test, pass)",
+      "storage_failure": "media.purge with no object store returns handled:false and stays queued — never fake success; media_purge deletion task blocks visibly with detail 'object store unconfigured' so final_hard_delete cannot proceed with data left behind (existing suites, pass)",
+      "media_purge": "purge deletes master + derived artifacts and nulls object_key; live assets are refused (existing suites, pass)",
+      "account_deletion": "workflow completes media_purge → ml_dataset_review → final_hard_delete; final hard delete is blocked while any non-idp task is not done, including capped-out failed tasks (existing + new tests, pass)",
+      "export": "GDPR export returns the full structured bundle incl. the first-party consent ledger; export before any ledger is a typed 404 (existing suites, pass)",
+      "feature_flag_fallback": "flags evaluate with stable sha256 rollout buckets; disabled flags always false (existing suite, pass)"
+    }
+  },
+  "findings": {
+    "P0": [],
+    "P1": [
+      {
+        "id": "P1-1",
+        "title": "SqsJobQueue.receive crashed the whole receive batch on one malformed message body (JSON.parse throw) — poison-message crash-loop for the production queue path",
+        "status": "FIXED",
+        "fix": "packages/queue/src/index.ts: malformed bodies parse to kind '__malformed__' and stay visible; also actually request ApproximateReceiveCount (MessageSystemAttributeNames) so attempt counts are real instead of defaulting to 1",
+        "regression_tests": "packages/queue/test/sqs.integration.test.ts (real ElasticMQ): malformed body never throws; redelivered message carries attempt=2"
+      },
+      {
+        "id": "P1-2",
+        "title": "media-worker main loop had no try/catch: any transient DB/queue error crashed the worker process",
+        "status": "FIXED",
+        "fix": "services/media-worker/src/main.ts: poll cycle wrapped, error logged, polling continues"
+      },
+      {
+        "id": "P1-3",
+        "title": "deletion_task rows that failed once (e.g. transient storage outage) were never retried — account deletion stalled permanently; and one failing object aborted the entire deleted-media sweep",
+        "status": "FIXED",
+        "fix": "migration 0018_deletion_task_retry.sql adds attempts counter; worker retries failed tasks up to cap 5 then leaves them visibly failed (still blocking final_hard_delete); sweepDeletedMedia now continues past per-row failures",
+        "regression_tests": "services/media-worker/test/worker-cert.test.ts: transient failure retries to done; permanent failure caps at 5 attempts and blocks final_hard_delete; sweep purges remaining rows past a failing one"
+      }
+    ],
+    "P2": [
+      {
+        "id": "P2-1",
+        "title": "withTransaction: if ROLLBACK itself throws (dead connection), the rollback error masks the original error",
+        "status": "UNRESOLVED (polish; connection is still released via finally, no leak)"
+      },
+      {
+        "id": "P2-2",
+        "title": "SqsJobQueue.size() returns -1 by design (SQS depth is approximate); queue-depth observability relies on CloudWatch in production",
+        "status": "UNRESOLVED (documented behavior, not a defect)"
+      },
+      {
+        "id": "P2-3",
+        "title": "vitest ran integration test files in parallel against the shared test database (schema-drop races); made deterministic",
+        "status": "FIXED (vitest.config.ts with fileParallelism:false for packages/database and services/media-worker; new api test uses an isolated schema)"
+      }
+    ]
+  },
+  "verdict": "PASS",
+  "rationale": "All Gate 10 domains were exercised against real PostgreSQL/ElasticMQ on the local stack with injected faults. No P0 found: no data corruption, no privilege bypass, no fabricated success, no silent data destruction in any migration (0009's deletions are exactly its documented fixture scope and were certified against a seeded DB). Three P1 reliability defects (poison-message crash of the SQS consumer, worker process crash on transient poll failure, permanently stalled deletion tasks / aborted sweep) were found and fixed with regression tests. Root gates (typecheck, full test, lint, format:check) are green on this branch. Remaining P2 items are polish and documented. Verdict applies to backend/DB reliability on the Linux local stack only; device/Mac gates are outside this workstream."
+}
