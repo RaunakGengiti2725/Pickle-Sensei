@@ -1,11 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 import {
-  resolveTechniqueIntent,
+  projectVoiceResolution,
+  resolveVoiceTechniqueIntent,
   SELECTABLE_TECHNIQUES_V1,
   TECHNIQUE_INTENT_VERSION,
+  type IntentResolution,
   type SelectableTechnique,
   type TechniqueIntent,
+  type VoiceIntentResolution,
 } from '@pickle/shared-types';
 import { PressableScale } from '../design/components';
 import { color, font, radius, space, type } from '../design/tokens';
@@ -53,9 +56,16 @@ export function TechniqueIntentPicker(props: {
   const [text, setText] = useState('');
   const autoSelected = props.value?.source === 'auto';
 
-  const resolution = useMemo(
-    () => (text.trim().length >= 3 ? resolveTechniqueIntent(text) : null),
+  // Transcript-in, intent-out: the voice-intent-v1 grammar resolves against
+  // the 61-technique taxonomy, then projects into the capture-selectable
+  // registry. Both steps are deterministic and registry-terminated.
+  const voiceResolution: VoiceIntentResolution | null = useMemo(
+    () => (text.trim().length >= 3 ? resolveVoiceTechniqueIntent(text) : null),
     [text],
+  );
+  const resolution: IntentResolution | null = useMemo(
+    () => (voiceResolution ? projectVoiceResolution(voiceResolution) : null),
+    [voiceResolution],
   );
   const visibleTechniques: readonly SelectableTechnique[] =
     resolution?.status === 'ambiguous'
@@ -89,7 +99,9 @@ export function TechniqueIntentPicker(props: {
         onChangeText={value => {
           setText(value);
           const resolved =
-            value.trim().length >= 3 ? resolveTechniqueIntent(value) : null;
+            value.trim().length >= 3
+              ? projectVoiceResolution(resolveVoiceTechniqueIntent(value))
+              : null;
           if (resolved?.status === 'resolved')
             select(resolved.technique, 'voice');
         }}
@@ -108,7 +120,9 @@ export function TechniqueIntentPicker(props: {
         <Text
           style={[type.caption, styles.hint, props.dark && styles.hintDark]}
         >
-          No matching technique — tap one below.
+          {voiceResolution?.status === 'unknown'
+            ? voiceResolution.rePrompt
+            : 'No matching technique — tap one below.'}
         </Text>
       ) : null}
 
