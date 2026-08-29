@@ -1,0 +1,58 @@
+{
+  "workstream": "e21-consent-e2e",
+  "commit": "8f9b433c32d62e0f975ccf5cf5e2d78b61fa42ce",
+  "branch": "devin/wave-e/e21-consent-e2e",
+  "base_branch": "origin/devin/1787988068-wave-c-integration",
+  "mission": "End-to-end test the consent architecture: grant -> capture eligibility -> withdrawal -> retroactive exclusion from training-eligible sets; ledger export integrity; version bumps.",
+  "dataset_scope": {
+    "data": "Synthetic-only. All fixtures generated in-test (SYNTHETIC-TEST-FIXTURE pseudonyms in package tests; PostgreSQL-generated UUID subjects in API integration tests). No user media, no held-out cases touched (wm-dink-01, afn-vic-rally1 untouched).",
+    "database": "Real PostgreSQL 16 via docker compose postgres_test (localhost:5433), full migrations 0001-0016 applied per isolated schema per test process."
+  },
+  "configuration": {
+    "node": "v20.18.1",
+    "pnpm": "10.15.1",
+    "postgres_url": "postgres://pickle:***@localhost:5433/pickle_test",
+    "consent_versions": ["video-analysis-v1", "model-training-v1", "model-training-v2 (bump exercised in tests)"],
+    "new_contract": "consent-ledger-export-v1 (versioned envelope: exportVersion, exportedAtIso, subjectPseudonym, recordCount, maxSeq, recordsSha256 over canonical record JSON, records[]). Legacy bare-array ledgers remain accepted by first-party intake for backward compatibility; envelope semantics were added as a new version, not softened in place."
+  },
+  "findings_and_fixes": [
+    {
+      "id": "F1",
+      "finding": "No integrity-verifiable ledger export existed. The consent status endpoint's record shape (recordedAt) was incompatible with the first-party intake loader (recordedAtIso), and a bare-array export had no defense against tampering, truncation, reordering, record-count lies, or cross-subject record injection.",
+      "fix": "Added GET /v1/me/consent/export returning a consent-ledger-export-v1 envelope with sha256 over canonical records + seq monotonicity + maxSeq + recordCount + single-subject checks enforced by packages/first-party-intake/src/consentRef.ts. Export is audited (consent.ledger.exported) and pseudonymous (no user_id/email in payload).",
+      "regression_tests": "services/api/test/consent.e2e.integration.test.ts (tamper, truncation, reorder+count-lie, unknown version, foreign subject, pseudonymity+audit) and packages/first-party-intake/test/consentExport.test.ts (12 tests incl. empty-envelope default-deny, missing seq, wrong maxSeq, legacy array compat)."
+    },
+    {
+      "id": "F2",
+      "finding": "GDPR data export (POST /v1/me/export) omitted the first-party consent ledger entirely — a user's append-only consent history (grants AND withdrawals) was invisible in their own data export.",
+      "fix": "services/api/src/modules/privacy/routes.ts now joins consent_record via consent_subject and includes consentLedger in the export payload.",
+      "regression_tests": "consent.e2e.integration.test.ts: GDPR export contains all 4 ledger rows (2 grants, 1 v2 re-grant, 1 withdrawal) in seq order."
+    }
+  ],
+  "lifecycle_verified": [
+    "Grant video_analysis + model_training -> dataset item training-eligible (1 item selected, grant_consent_version=model-training-v1)",
+    "Version bump: re-grant under model-training-v2 -> selection exposes ingest-time version v1 and authorizing grant version v2 separately (no silent relabel)",
+    "Withdrawal -> fresh selection returns 0 items; consent watermark advances",
+    "TOCTOU: stale pre-withdrawal selection re-verified via verifyTrainingEligibility on fresh connection returns 0 items",
+    "Withdrawal side effects: existing item removed_at set + ml_dataset_review deletion task queued; post-withdrawal item never eligible",
+    "Post-withdrawal export: trailing withdrawn record present; first-party intake denies model_training while video_analysis stays active (scopes independent)",
+    "Export before any ledger exists: typed 404 consent.no_ledger (missing consent = deny, no default grant)"
+  ],
+  "metrics": {
+    "api_tests": { "files": 9, "tests": 86, "passed": 86, "failed": 0, "new_e2e_tests": 13, "baseline_before_workstream": 73 },
+    "first_party_intake_tests": { "files": 2, "tests": 21, "passed": 21, "failed": 0, "new_export_tests": 12 },
+    "media_worker_tests": { "files": 4, "tests": 24, "passed": 24, "failed": 0 },
+    "gates": { "typecheck": "pass (all packages)", "lint": "pass", "format_check": "pass" }
+  },
+  "artifacts": [
+    "services/api/test/consent.e2e.integration.test.ts (13-test E2E lifecycle + export integrity suite)",
+    "packages/first-party-intake/test/consentExport.test.ts (12-test export envelope verification suite)",
+    "packages/shared-types/src/consent.ts (consent-ledger-export-v1 contract + canonical serialization)",
+    "packages/first-party-intake/src/consentRef.ts (envelope verification in loadConsentLedger)",
+    "services/api/src/modules/consent/routes.ts (GET /v1/me/consent/export)",
+    "services/api/src/modules/privacy/routes.ts (GDPR export includes consent ledger)",
+    "packages/api-contracts (ConsentLedgerExportResponse schema + OpenAPI path)"
+  ],
+  "blocked_external": [],
+  "verdict": "GREEN"
+}
