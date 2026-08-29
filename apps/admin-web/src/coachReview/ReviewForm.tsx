@@ -1,5 +1,14 @@
 import React, { useMemo, useState } from "react";
-import { downloadReviewJson, submitReview, validationContextFrom, type CoachReviewData, type SubmitResult } from "./data";
+import {
+  currentReviewVersion,
+  downloadReviewJson,
+  submitAmendment,
+  submitReview,
+  validationContextFrom,
+  type CoachReviewData,
+  type SubmitResult,
+} from "./data";
+import { amendmentIdFor, type ReviewAmendment } from "./records";
 import { reviewIdFor, type CoachReview, type FaultEntry, type QualityValue, type QueueItem, type Severity, type StrokeConfirmation } from "./types";
 import { validateReview } from "./validate";
 import { labBox, mono } from "./CoachReviewLab";
@@ -28,6 +37,13 @@ const emptyFault = (faultId: string): FaultDraft => ({
   rationale: "",
 });
 
+/** Primary = first listed fault of highest severity; all others secondary. */
+export function primaryFaultIndex(faults: Array<{ severity: Severity }>): number | null {
+  if (faults.length === 0) return null;
+  const maxSeverity = Math.max(...faults.map((fault) => fault.severity));
+  return faults.findIndex((fault) => fault.severity === maxSeverity);
+}
+
 export function ReviewForm({
   data,
   item,
@@ -54,8 +70,13 @@ export function ReviewForm({
   const [rationale, setRationale] = useState("");
   const [createdAtIso] = useState(() => new Date().toISOString());
   const [result, setResult] = useState<SubmitResult | null>(null);
+  const [amendReason, setAmendReason] = useState("");
 
   const coach = activeCoaches.find((entry) => entry.coachId === coachId);
+  const existingLoaded = data.reviews.find(
+    (entry) => !entry.synthetic && entry.review.queueItemId === item.queueItemId && entry.review.coachId === coachId,
+  );
+  const amendBase = existingLoaded ? currentReviewVersion(existingLoaded.review, data.amendments) : null;
   const relevantFamilies = data.taxonomy.families.filter((family) => item.relevantFaultFamilies.includes(family.family));
   const otherFamilies = data.taxonomy.families.filter((family) => !item.relevantFaultFamilies.includes(family.family));
   const context = useMemo(() => validationContextFrom(data), [data]);
@@ -99,7 +120,9 @@ export function ReviewForm({
   const review = buildReview();
   const problems = validateReview(review, context);
   const identityMissing = activeCoaches.length === 0 || !coach;
-  const submitBlocked = identityMissing || problems.length > 0;
+  const amendReasonMissing = amendBase !== null && amendReason.trim().length < 10;
+  const submitBlocked = identityMissing || problems.length > 0 || amendReasonMissing;
+  const primaryIndex = primaryFaultIndex(faults);
 
   return (
     <section style={labBox}>
@@ -195,10 +218,35 @@ export function ReviewForm({
           <fieldset style={{ border: "1px solid #dde5e1", borderRadius: 8, marginBottom: 12 }}>
             <legend>
               4 · Faults ({data.schema.faultTaxonomyVersion} — draft, will be revised by coaches) · first fault of highest
-              severity = primary
+              severity = primary; reorder to change which
             </legend>
             {faults.map((draft, index) => (
               <div key={index} style={{ border: "1px dashed #cbd5d1", borderRadius: 8, padding: 8, marginBottom: 8 }}>
+                <strong style={{ color: index === primaryIndex ? "#b91c1c" : "#6b7a75", marginRight: 8 }}>
+                  {index === primaryIndex ? "PRIMARY" : "secondary"}
+                </strong>
+                <button
+                  disabled={index === 0}
+                  title="move up"
+                  onClick={() => {
+                    const next = [...faults];
+                    [next[index - 1], next[index]] = [next[index]!, next[index - 1]!];
+                    setFaults(next);
+                  }}
+                >
+                  ↑
+                </button>{" "}
+                <button
+                  disabled={index === faults.length - 1}
+                  title="move down"
+                  onClick={() => {
+                    const next = [...faults];
+                    [next[index + 1], next[index]] = [next[index]!, next[index + 1]!];
+                    setFaults(next);
+                  }}
+                >
+                  ↓
+                </button>{" "}
                 <select
                   value={draft.faultId}
                   onChange={(e) => setFaults(faults.map((f, i) => (i === index ? { ...f, faultId: e.target.value } : f)))}
@@ -380,11 +428,51 @@ export function ReviewForm({
         </details>
       )}
 
+      {amendBase && (
+        <div style={{ background: "#eff6ff", border: "1px solid #1d4ed8", borderRadius: 8, padding: 12, marginBottom: 12 }}>
+          <strong>Amendment mode:</strong> {coachId} already has revision {amendBase.revision} of{" "}
+          <code style={mono}>{amendBase.review.reviewId}</code> on file. The original is never edited — submitting
+          appends a full replacement record as revision {amendBase.revision + 1}.
+          <div>
+            <input
+              placeholder="amendment reason (≥10 chars, required)"
+              value={amendReason}
+              onChange={(e) => setAmendReason(e.target.value)}
+              style={{ width: 420, marginTop: 6 }}
+            />
+          </div>
+        </div>
+      )}
       <button
         disabled={submitBlocked}
-        title={identityMissing ? "no coach identity provisioned" : problems.length > 0 ? "fix validation problems" : "persist review"}
+        title={
+          identityMissing
+            ? "no coach identity provisioned"
+            : problems.length > 0
+              ? "fix validation problems"
+              : amendReasonMissing
+                ? "amendment reason required"
+                : amendBase
+                  ? "append amendment"
+                  : "persist review"
+        }
         onClick={() => {
-          submitReview(buildReview())
+          const submission = amendBase
+            ? (() => {
+                const revision = amendBase.revision + 1;
+                const amendment: ReviewAmendment = {
+                  schemaVersion: 1,
+                  amendmentId: amendmentIdFor(amendBase.review.reviewId, revision),
+                  reviewId: amendBase.review.reviewId,
+                  revision,
+                  reason: amendReason,
+                  review: buildReview(),
+                  createdAtIso: new Date().toISOString(),
+                };
+                return submitAmendment(amendment);
+              })()
+            : submitReview(buildReview());
+          submission
             .then((submitResult) => {
               setResult(submitResult);
               if (submitResult.ok) onPersisted();
@@ -393,7 +481,7 @@ export function ReviewForm({
         }}
         style={{ padding: "8px 16px", fontWeight: 700 }}
       >
-        Submit review (append-only)
+        {amendBase ? `Submit amendment (revision ${amendBase.revision + 1}, append-only)` : "Submit review (append-only)"}
       </button>{" "}
       <button disabled={submitBlocked} onClick={() => downloadReviewJson(buildReview())} title={identityMissing ? "no coach identity provisioned" : "download the exact JSON that would be persisted"}>
         Download review JSON
@@ -409,7 +497,10 @@ export function ReviewForm({
         </p>
       )}
       <p style={{ ...mono, fontSize: 11, color: "#6b7a75" }}>
-        would persist as: datasets/coach-review/reviews/{review.reviewId}.json
+        would persist as:{" "}
+        {amendBase
+          ? `datasets/coach-review/amendments/${amendmentIdFor(review.reviewId, amendBase.revision + 1)}.json`
+          : `datasets/coach-review/reviews/${review.reviewId}.json`}
       </p>
     </section>
   );
