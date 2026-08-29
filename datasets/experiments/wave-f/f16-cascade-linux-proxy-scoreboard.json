@@ -89,7 +89,7 @@
     "PHASE": {
       "runnableOnLinux": true,
       "harness": "datasets/experiments/wave-d3/d3-05-measure-gold.ts (unmodified) — segmentPhasesTemporalV2 on committed wave-a event-bounds gold",
-      "artifact": "datasets/experiments/wave-f/f16-phase-gold-linux-proxy.log",
+      "artifact": "datasets/experiments/wave-f/f16-phase-gold-linux-proxy.txt",
       "coverage": "18 anchor-free-eligible / 17 anchored gold labels across 8 dev bundles; abstention reasons preserved",
       "headMetrics": {
         "anchored": "15/17 segmented",

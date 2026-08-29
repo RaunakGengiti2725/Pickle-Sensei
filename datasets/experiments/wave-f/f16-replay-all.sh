@@ -38,7 +38,7 @@ pnpm --filter @pickle/swing-lab exec tsx src/ballHardSliceEval.ts \
 # PHASE — anchored + anchor-free coverage on committed wave-a gold (D3-05
 # measure script, unmodified).
 (cd packages/swing-lab && pnpm exec tsx ../../datasets/experiments/wave-d3/d3-05-measure-gold.ts) \
-  > "$WAVE_F/f16-phase-gold-linux-proxy.log"
+  > "$WAVE_F/f16-phase-gold-linux-proxy.txt"
 
 # STROKE — L1/L2 heuristic bench on committed stroke gold (e03 harness) via
 # the wave-f wrapper that persists the full report.

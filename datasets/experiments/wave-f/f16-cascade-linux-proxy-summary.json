@@ -39,7 +39,7 @@
     "datasets/experiments/wave-f/f16-ownership-eval-corrected-linux-proxy.json",
     "datasets/experiments/wave-f/f16-ball-hardslice-linux-proxy.json",
     "datasets/experiments/wave-f/f16-contact-replay-run.ts + f16-contact-replay-linux-proxy.json",
-    "datasets/experiments/wave-f/f16-phase-gold-linux-proxy.log",
+    "datasets/experiments/wave-f/f16-phase-gold-linux-proxy.txt",
     "datasets/experiments/wave-f/f16-stroke-bench-run.ts + f16-stroke-bench-linux-proxy.json"
   ],
   "honestyNotes": [
