@@ -1,0 +1,63 @@
+{
+  "generatedAtIso": "2026-08-29T09:47:07.490Z",
+  "goldEvents": 0,
+  "caveat": "n=5 gold events — the waterfall SHAPE is the product diagnosis; rates are not stable estimates (learning curves prove instability at this n)",
+  "unconditionalPass": {
+    "TARGET": 0,
+    "EVENT": 0,
+    "PADDLE": 0,
+    "BALL": 0,
+    "CONTACT": 0,
+    "PHASE": 0,
+    "STROKE": 0
+  },
+  "conditionalSurvival": {
+    "TARGET": 0,
+    "EVENT": 0,
+    "PADDLE": 0,
+    "BALL": 0,
+    "CONTACT": 0,
+    "PHASE": 0,
+    "STROKE": 0
+  },
+  "strictSurvival": {
+    "survived": 0,
+    "total": 0
+  },
+  "usableResult": {
+    "contract": {
+      "version": "usable-result-v1",
+      "clauses": {
+        "target": "TARGET pass (strict criterion: coverage >= 0.5) — wrong/unlocked target is never usable",
+        "event": "EVENT pass (strict criterion: >=50% gold-span overlap or gold contact inside selection) — wrong event is never usable",
+        "strokeHonesty": "L1-side prediction matches gold (strict criterion) OR explicit abstention/unknown; a wrong confident prediction is never usable",
+        "replayEvidence": "(a) contact estimated |err| <= 66ms; OR (b) contact estimated 66 < err <= 132ms AND ballConfirmed or paddleConfirmed; OR (c) contact abstained BUT phases v2 segmented with valid ordering",
+        "noFabricatedEvidence": "contact estimated with error vs gold > 132ms is never usable — a misleading marker is worse than none"
+      }
+    },
+    "usable": 0,
+    "total": 0,
+    "note": "second north-star: complements strict survival, never replaces it; per-case verdicts in rows[].usable"
+  },
+  "silentFailure": {
+    "contract": {
+      "version": "silent-failure-v1.1",
+      "definition": "a user-visible confident material claim (target identity, event, stroke L1, contact marker, phase render) that gold says is wrong; abstentions are NOT silent failures",
+      "claims": {
+        "targetIdentity": "lock presented but strict TARGET criterion fails (coverage < 0.5); no lock = abstention",
+        "event": "event selected but strict EVENT criterion fails; no selection = abstention",
+        "strokeL1": "non-null label whose L1 side contradicts gold; null/missing label = abstention",
+        "contactMarker": "estimated with |err| > 132ms vs gold, OR 66 < |err| <= 132ms without ball/paddle confirmation; abstained = abstention",
+        "phaseRender": "segmented timeline with impossible boundary ordering (followThroughEnd <= contact); not segmented = abstention"
+      },
+      "aggregation": "trial is ANSWERED if >=1 claim answered and gold-verifiable; trial is a SILENT FAILURE if >=1 answered claim is wrong; report silent failures over ALL trials and over ANSWERED trials",
+      "disputedGold": "a claim whose gold value is under a filed dispute is excluded-and-disclosed (excluded_disputed_gold): counted neither correct nor silent failure, disclosed in the per-claim detail",
+      "nonFiniteGuard": "non-finite values (NaN/Infinity) in gold or estimates make the claim unverifiable-with-disclosure, never a confident verdict"
+    },
+    "silentFailures": 0,
+    "answeredTrials": 0,
+    "allTrials": 0,
+    "note": "third north-star: confident wrongness only; abstentions never count; per-case verdicts in rows[].silent"
+  },
+  "rows": []
+}
