@@ -1,0 +1,74 @@
+{
+  "workstream": "f26-result-evidence-audit",
+  "wave": "F",
+  "branch": "devin/wave-f/f26-result-evidence-audit",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "commit": "f12745a9be0910bf9d4a068e5124801ffe7e283d",
+  "mission": "Claim-by-claim evidence-backing audit of the mobile Result surface: trace every visible element to its evidence source and verify it is hidden/uncertain when evidence is absent.",
+  "scope": {
+    "filesAudited": [
+      "apps/mobile/src/components/StrokeResult.tsx",
+      "apps/mobile/src/components/strokeResultModel.ts",
+      "apps/mobile/src/components/strokeResultData.ts",
+      "apps/mobile/src/components/UncertaintyNote.tsx",
+      "apps/mobile/src/screens/ResultScreen.tsx"
+    ],
+    "elementsAudited": 15,
+    "complementTo": "e19 resultStateProps.test.ts covers state transitions; this audit covers evidence backing."
+  },
+  "configuration": {
+    "method": "static code-path trace per visible element; stored records treated as unvalidated JSON (JSON.parse in strokeResultData.ts), so malformed shapes are runtime-reachable",
+    "datasetScope": "none (code audit; no dataset labels touched; held-out cases untouched)"
+  },
+  "findings": {
+    "defectsFound": 4,
+    "defectsFixed": 4,
+    "defects": [
+      {
+        "id": "D1",
+        "element": "stroke identity (declared)",
+        "issue": "resolutionBasis 'declared' with declaredStroke missing rendered analysis.shotType (or literal 'stroke') under 'You chose this technique.' — fabricated declaration provenance",
+        "fix": "missing declaration falls back to the no-provenance saved-analysis header"
+      },
+      {
+        "id": "D2",
+        "element": "stroke identity (predicted_l3)",
+        "issue": "predicted_l3 with predictedStroke.leaf missing rendered analyzed shot as 'Auto-detected by the on-device classifier' — unbacked classifier claim",
+        "fix": "recorded family label -> family-level framing; no prediction record -> no-provenance header"
+      },
+      {
+        "id": "D3",
+        "element": "technique score stage (ResultScreen)",
+        "issue": "gated on resultKind === 'scored' only; overallScore null rendered TECHNIQUE SCORE / SCORABLE pill / '\u2014' ring simultaneously with the abstention ledger stating scoring was withheld",
+        "fix": "new pure gate techniqueScoreSectionVisible (scored AND non-null overallScore) in strokeResultModel.ts, used by ResultScreen"
+      },
+      {
+        "id": "D4",
+        "element": "stroke identity (corrupt basis)",
+        "issue": "out-of-union resolutionBasis from a corrupt stored row fell off the exhaustive switch, returning undefined and crashing the surface",
+        "fix": "default case returns the no-provenance header"
+      }
+    ],
+    "elementsVerifiedOk": [
+      "contact marker gate (estimated + confirmation-or-confidence>=0.6 + finite ms)",
+      "phase strip (segmented + ordered boundaries; anchor-free never draws a tick)",
+      "replay time base (clip/window/phase-extent only; honest empty card otherwise)",
+      "one insight (re-derives the same gates; abstention sentence when nothing defensible)",
+      "measured rows (each row requires its field; provenance labels match source)",
+      "attempt chips (capture-order navigation, never rank; no chips on unknown/solo)",
+      "abstention ledger and uncertainty notes (each line mirrors a withheld element)",
+      "declared-vs-predicted disagreement line (both fields required; records kept separate)",
+      "training states (score + server sync receipt + server plan required)"
+    ]
+  },
+  "metrics": {
+    "mobileTypecheck": "npx tsc --noEmit: clean",
+    "mobileTests": "npm test: 40 suites passed, 397 tests passed (was 390 before; +7 regression tests in resultEvidenceAudit.test.tsx)",
+    "newTests": 7
+  },
+  "artifacts": [
+    "datasets/experiments/wave-f/f26-result-evidence-audit.md",
+    "apps/mobile/__tests__/resultEvidenceAudit.test.tsx"
+  ],
+  "verdict": "GREEN"
+}
