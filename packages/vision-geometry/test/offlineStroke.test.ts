@@ -463,6 +463,54 @@ describe("estimateContact", () => {
     expect(estimate.ballConfirmed).toBe(false);
   });
 
+  it("widens the wrist-proxy gate for extended strokes but keeps it tight for unknown family", () => {
+    const { sequence, window } = generateSwingSequence();
+    // Incoming→outgoing ball whose turn sits ~2 torso spans from the wrist —
+    // a legitimate contact point for an extended arm + paddle (drive/serve/
+    // overhead), but past the compact-tuned wrist-proxy gate.
+    const dy = 0.46;
+    const ball: BallObservation[] = [];
+    for (let index = 0; index < 12; index += 1) {
+      const t = window.peakMs - 180 + index * 30;
+      const before = t <= window.peakMs;
+      ball.push({
+        frameIndex: index,
+        timestampMs: t,
+        x: before
+          ? 0.9 - (0.9 - 0.584) * ((t - (window.peakMs - 180)) / 180)
+          : 0.584 + ((t - window.peakMs) / 180) * 0.5,
+        y: before
+          ? 0.6 - dy + 0.1 * ((t - (window.peakMs - 180)) / 180)
+          : 0.7 - dy - ((t - window.peakMs) / 180) * 0.25,
+        confidence: 0.8,
+      });
+    }
+    const targetWrists = Array.from({ length: 60 }, (_, index) => ({
+      timestampMs: window.startMs + index * 30,
+      x: 0.584,
+      y: 0.7,
+    }));
+    const base = {
+      sequence,
+      window: { startMs: window.startMs, endMs: window.endMs, peakMotionMs: window.peakMs },
+      ballObservations: ball,
+      targetWrists,
+    };
+    const unknown = estimateContact({ ...base, strokeFamily: "unknown" });
+    if (unknown.status === "estimated") {
+      expect(unknown.supportingEvidence.map((signal) => signal.signal)).not.toContain(
+        "ball_direction_change",
+      );
+    }
+    const drive = estimateContact({ ...base, strokeFamily: "drive" });
+    expect(drive.status).toBe("estimated");
+    if (drive.status !== "estimated") return;
+    expect(drive.supportingEvidence.map((signal) => signal.signal)).toContain(
+      "ball_direction_change",
+    );
+    expect(Math.abs(drive.estimatedContactMs - window.peakMs)).toBeLessThanOrEqual(60);
+  });
+
   it("rejects physically implausible motion peaks as tracking glitches", () => {
     const { sequence, window } = generateSwingSequence();
     // Inject a single-frame wrist landmark jump (≈30 u/s on a 0.2-torso body
