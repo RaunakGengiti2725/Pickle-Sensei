@@ -1,5 +1,7 @@
 import { z } from "zod";
 import {
+  ANALYSIS_FEEDBACK_CATEGORIES,
+  ANALYSIS_FEEDBACK_RATINGS,
   CAMERA_VIEWS,
   CHECKPOINTS,
   CONSENT_ACTIONS,
@@ -340,6 +342,32 @@ export const PracticeStreakSchema = z.object({
   practicedToday: z.boolean(),
   lastPracticeDate: z.iso.date().nullable(),
 });
+
+/** "Was this analysis accurate?" — a failure-mining signal, never gold.
+ * Category is required exactly when the answer is `not_quite`; the server
+ * copies the version vector from the shot row and derives review
+ * eligibility from the consent ledger, so neither is accepted here. */
+export const AnalysisFeedbackRequest = z
+  .object({
+    rating: z.enum(ANALYSIS_FEEDBACK_RATINGS),
+    category: z.enum(ANALYSIS_FEEDBACK_CATEGORIES).nullable(),
+  })
+  .refine((body) => (body.rating === "not_quite") === (body.category !== null), {
+    message: "category is required exactly when rating is not_quite",
+  });
+export type AnalysisFeedbackRequestT = z.infer<typeof AnalysisFeedbackRequest>;
+
+export const AnalysisFeedbackResponse = z.object({
+  feedback: z.object({
+    id: z.uuid(),
+    analysisId: z.uuid(),
+    rating: z.enum(ANALYSIS_FEEDBACK_RATINGS),
+    category: z.enum(ANALYSIS_FEEDBACK_CATEGORIES).nullable(),
+    reviewEligible: z.boolean(),
+    createdAt: z.iso.datetime(),
+  }),
+});
+export type AnalysisFeedbackResponseT = z.infer<typeof AnalysisFeedbackResponse>;
 
 /** First-party consent ledger contracts (append-only; scopes independent).
  * model_training is an explicit opt-in — no endpoint or default grants it. */
