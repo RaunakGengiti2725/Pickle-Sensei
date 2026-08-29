@@ -1,0 +1,60 @@
+{
+  "id": "g11-f23-tests",
+  "wave": "wave-g",
+  "date": "2026-08-29",
+  "mission": "Destructive integration tests against real local Postgres proving the g10-f23 least-privilege role separation holds from the runtime roles' OWN connections: consent-history rewrites denied, trigger/schema tampering denied, privilege escalation denied, while the legitimate paths (migration-role migrations, consent appends, export, delete-account) keep working.",
+  "baseBranch": "devin/wave-g/g10-f23-roles",
+  "branch": "devin/wave-g/g11-f23-tests",
+  "method": "New suite packages/database/test/roles.destructive.integration.test.ts. Unlike the g10 suite (SET ROLE from an admin session), every assertion runs over real password-authenticated connections as the login users from infra/postgres/init-roles.sql (pickle_app, pickle_worker, pickle_ro, pickle_migrator). The schema is created with AUTHORIZATION pickle_migration_owner and ALL 18 migrations are executed by the migrator login (session role pickle_migration_owner via connection options), so every table is owned by the migration role and runtime roles own nothing — the production deployment shape. Denials are asserted as actual server errors (permission denied / must be owner / must be superuser) raised on the runtime role's own connection; the one server-behavior-dependent case (self-GRANT of table privileges by a non-owner) is additionally asserted by effect via has_table_privilege plus a re-attempted UPDATE.",
+  "datasetScope": "Not a dataset experiment: database privilege-boundary testing against local PostgreSQL 16 (docker postgres_test service, port 5433). No annotation data, no gold labels, no cascade metrics involved.",
+  "holdoutStatement": "Held-out cases wm-dink-01 and afn-vic-rally1 were not touched, read, listed, or referenced. This workstream involves no video/label data at all.",
+  "configuration": {
+    "postgres": "postgres:16-alpine (docker compose service postgres_test)",
+    "node": "v20.18.1",
+    "pnpm": "10.15.1",
+    "testCommand": "DATABASE_URL_TEST=postgres://pickle:pickle_test_password@localhost:5433/pickle_test pnpm test",
+    "loginUsers": ["pickle_app", "pickle_worker", "pickle_ro", "pickle_migrator"],
+    "groupRoles": [
+      "pickle_application_runtime",
+      "pickle_worker_runtime",
+      "pickle_readonly",
+      "pickle_migration_owner"
+    ]
+  },
+  "measuredResults": {
+    "newSuite": {
+      "file": "packages/database/test/roles.destructive.integration.test.ts",
+      "tests": 8,
+      "passed": 8,
+      "failed": 0,
+      "deniedOperationAssertions": 63,
+      "deniedBreakdown": {
+        "consentHistoryRewrite (UPDATE/DELETE/TRUNCATE consent_record, DELETE consent_subject, writes to consent_subject_erasure and schema_migrations) x {app,worker}": 20,
+        "triggerAndSchemaTampering (DISABLE TRIGGER, DISABLE TRIGGER ALL, DROP TRIGGER, DROP FUNCTION, ALTER TABLE, DROP TABLE, CREATE TABLE, ALTER SCHEMA RENAME) x {app,worker}": 18,
+        "privilegeEscalation (SET ROLE to owner roles, GRANT role to self, ALTER ROLE SUPERUSER/CREATEROLE, CREATE ROLE) x {app,worker,ro} + cross-runtime SET ROLE + post-self-GRANT UPDATE": 21,
+        "readonlyWrites (INSERT consent_record, UPDATE/DELETE app_user, SET ROLE runtime)": 4
+      },
+      "allowedPathAssertions": {
+        "migrationRoleLegitimateMigration": "18 migrations applied by the pickle_migrator login; all tables owned by pickle_migration_owner (asserted via pg_tables)",
+        "consentAppendIntendedPath": "grant + withdrawal appended from pickle_app connection; 2 rows read back in seq order",
+        "exportSemantics": "privacy-module consentLedger join query run from pickle_app returns exactly the 2 appended rows",
+        "deleteAccountSemantics": "app login performs soft-delete/social removal/media flag/deletion_task queue; worker login performs the final DELETE FROM app_user; consent_subject mapping count 0, consent_subject_erasure tombstone count 1, consent_record ledger count 2 (ledger survives)"
+      }
+    },
+    "gates": {
+      "typecheck": "pass (19/19 packages)",
+      "test": "pass (51 test files, 593 passed | 4 skipped, includes new suite 8/8)",
+      "lint": "pass (exit 0)",
+      "formatCheck": "pass after prettier --write on the new file"
+    }
+  },
+  "findings": [
+    "The g10 boundaries hold identically from real login connections (password auth, membership-inherited privileges), not just via SET ROLE from an admin session: 63/63 destructive attempts denied by the server, 0 reached the data.",
+    "Running all 18 migrations as the migrator login with session role pickle_migration_owner works end-to-end with one external prerequisite: CREATE EXTENSION requires CREATE on the database, so the pgcrypto extension must pre-exist (created by an admin, as in any managed deployment). Everything else in 0001–0018 runs under non-superuser migration-owner privileges.",
+    "Suite-parallelism hazard found and fixed inside the new test's setup: migrate.test.ts drops schema public CASCADE, which destroyed a public-schema pgcrypto mid-run and broke the non-superuser migration. The suite now parks the extension in a dedicated pickle_ext schema (gen_random_uuid is a pg_catalog builtin since PG13, so nothing resolves through the extension schema).",
+    "Non-owner self-GRANT of table privileges is not reliably an error in PostgreSQL (it can be a warning no-op when the grantor holds some privilege without grant option), so that escalation path is asserted by effect: has_table_privilege stays false for UPDATE/DELETE and a subsequent UPDATE from the same connection is still denied.",
+    "Delete-account semantics need no consent-table write privileges on either runtime: the consent_subject cascade and erasure tombstone execute under the table owner's privileges via the FK referential action, confirmed from the worker's own connection."
+  ],
+  "verdict": "PROVISIONAL_GREEN",
+  "verdictRationale": "All 8 tests pass with 63 denied-operation assertions raised on the runtime roles' actual connections and all legitimate paths (migration, append, export, delete-account) verified working; full root gates green on the branch. PROVISIONAL rather than GREEN because this proves the privilege boundary on local docker Postgres 16 only — production credential wiring (managed login users, password policy, pg_hba) is not exercised here, and CI runs the suite against its own service container."
+}
