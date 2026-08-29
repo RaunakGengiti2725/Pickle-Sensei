@@ -1,0 +1,59 @@
+{
+  "workstream": "D05",
+  "branch": "devin/wave-d/d05-ball-occlusion",
+  "annotatorId": "devin-visual-v3-waveD",
+  "date": "2026-08-29",
+  "platform": "linux (Apple Vision pose extraction and pnpm lab:regen unavailable; canonical datasets/paddle-bench/runs/ absent/gitignored)",
+  "built": [
+    "packages/swing-lab/src/ballOcclusionBench.ts — state-aware ball evaluation harness: buckets every committed ball gold label (OBSERVED, ENTERING_OCCLUSION, OCCLUDED, REACQUIRED, plus NOT_VISIBLE and UNCERTAIN_EXCLUDED accounting buckets), scores tracker outputs only where committed run artifacts exist, flags any emitted point at OCCLUDED gold as a violation, and verifies bridge-point provenance (predicted:true, never colliding with canonical observation timestamps). CLI: pnpm --filter @pickle/swing-lab ball:occlusion",
+    "packages/swing-lab/test/ballOcclusionBench.test.ts — 9 replay/unit tests: bucketing (explicit occlusionState + legacy visibility), visible-point hit/miss scoring, OCCLUDED/NOT_VISIBLE abstention vs violation, unflagged-bridge detection, aggregation denominators, and full state-machine replays (successful body-emergence reacquisition, honest LOST, bridge separation) through buildBallTracks/selectPrimaryBallTrack/buildBallTimeline",
+    "packages/swing-lab/test/ballIdentityProperty.test.ts — 2 property tests: (a) 96-scenario deterministic sweep (4 decoy y-origins x 4 decoy slopes x 3 start offsets x 2 jitter levels, seeded LCG) asserting the selected primary track is composed of observations from exactly one generated ball identity; (b) 5-seed mid-flight-vanish sweep asserting reacquisition never links the adjacent-court decoy into the target rally"
+  ],
+  "committedGoldCensus": {
+    "totalLabels": 60,
+    "buckets": {
+      "OBSERVED": 43,
+      "ENTERING_OCCLUSION": 2,
+      "OCCLUDED": 4,
+      "REACQUIRED": 2,
+      "NOT_VISIBLE": 5,
+      "UNCERTAIN_EXCLUDED": 4
+    },
+    "provenance": "collectCommittedBallLabels() walks every ball annotation JSON under datasets/paddle-bench/bundles (devin-visual-v1 legacy + devin-visual-v2-waveC from C04); counts printed by pnpm ball:occlusion on this branch",
+    "note": "The two occlusion sequences are wavea-944403-smash (ENTERING 4821ms, OCCLUDED 4838-4855ms, REACQUIRED 4872ms; paddle occlusion) and wavea-faead-rally (ENTERING 13417ms, OCCLUDED 13458-13583ms, REACQUIRED 13625ms; body occlusion), matching C04's summary."
+  },
+  "trackerOutputScoring": {
+    "casesScored": 0,
+    "artifactsAbsent": [
+      "wm-volley-02",
+      "wm-dink-01",
+      "afn-sasebo-rally1",
+      "afn-sasebo-rally2",
+      "afn-vic-rally1",
+      "wavea-944403-dink-ball",
+      "wavea-944403-smash-ball",
+      "wavea-faead-feed-ball",
+      "wavea-faead-rally-ball",
+      "wavea-marne-dig-ball"
+    ],
+    "why": "Ball tracker debug artifacts live under gitignored runs/ dirs regenerated only via pnpm lab:regen (macOS/Apple Vision). No artifacts were fabricated; the harness prints ARTIFACTS_ABSENT per case and will score real outputs automatically once regenerated on a Mac."
+  },
+  "replayFixtureResults": {
+    "occludedAbstention": "0 violations — in both the successful-reacquisition replay and the honest-LOST replay, no canonical point is emitted at OCCLUDED gold timestamps (abstained n=1 per replay fixture); bounded-timeout LOST behavior preserved",
+    "provenance": "0 violations — all bridge points carry predicted:true and never share timestamps with canonical observations; bridge remains outside track.observations",
+    "identityContamination": "0 mixed-identity primary tracks across the 96-scenario sweep (trackedRuns > 0 asserted) and 0 across the 5-seed reacquisition sweep"
+  },
+  "stateMachineFixes": "NONE REQUIRED — no violations were found in the existing occlusion state machine by the new harness, replays, or property sweep. Predictions are already structurally separated (BallTimeline.bridge with predicted:true) and never enter track.observations.",
+  "gates": {
+    "typecheck": "pnpm typecheck (swing-lab) PASS",
+    "tests": "pnpm vitest run (swing-lab): 21 files, 242 passed, 4 skipped (pre-existing skips)",
+    "prettier": "pnpm exec prettier --write run on all added/modified files"
+  },
+  "honestNegatives": [
+    "Real tracker-output scoring against the 60-label gold is BLOCKED on Linux (no committed ball debug artifacts); only tracker LOGIC was scored via replay/unit fixtures.",
+    "Held-out cases wm-dink-01 and afn-vic-rally1 were not opened or iterated against; they appear only in the census/ARTIFACTS_ABSENT listing.",
+    "No net-crossing occlusion sequence exists in committed footage, so that occlusion mode remains untested by gold.",
+    "MOBBIN MCP UNAVAILABLE IN THIS ENVIRONMENT (not needed for D05)."
+  ],
+  "verdict": "GREEN (logic + harness); tracker-output scoring BLOCKED_EXTERNAL pending macOS artifact regeneration"
+}
