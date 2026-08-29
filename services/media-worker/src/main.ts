@@ -26,8 +26,14 @@ const intervalMs = Number(process.env["WORKER_INTERVAL_MS"] ?? 5000);
 console.error(`[media-worker] polling every ${intervalMs}ms`);
 
 while (true) {
-  const { jobs, deletions, swept } = await runOnce(deps);
-  if (jobs || deletions || swept)
-    console.error(`[media-worker] processed jobs=${jobs} deletions=${deletions} swept=${swept}`);
+  // A transient failure (DB outage, queue unreachable) must not crash the
+  // worker process: log loudly and keep polling.
+  try {
+    const { jobs, deletions, swept } = await runOnce(deps);
+    if (jobs || deletions || swept)
+      console.error(`[media-worker] processed jobs=${jobs} deletions=${deletions} swept=${swept}`);
+  } catch (error) {
+    console.error(`[media-worker] poll cycle failed: ${String(error)}`);
+  }
   await new Promise((resolve) => setTimeout(resolve, intervalMs));
 }
