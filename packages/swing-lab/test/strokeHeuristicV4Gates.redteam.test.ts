@@ -33,13 +33,12 @@ import type { StrokePrediction } from "../src/index.js";
  *  2. COVERAGE FINDINGS (F20-F3…F6) — measured FALSE ABSTENTIONS on
  *     genuine strokes, pinned the same way. Each is a case that SHOULD
  *     commit but abstains; F20-F4 is a measured coverage REGRESSION vs
- *     stroke-heuristic-3 (the vision-geometry lite port, still v3,
- *     commits it correctly).
+ *     stroke-heuristic-3 (which committed it correctly at 0.8).
  *
  * Root-cause references are to packages/swing-lab/src/strokeHeuristic.ts.
- * NOTE: vision-geometry/strokeHeuristicLite.ts is still the v3 port — the
- * v4 gates were never ported, so the two copies have DIVERGED (the e10
- * suite's "byte-equivalent port" premise no longer holds).
+ * NOTE: vision-geometry/strokeHeuristicLite.ts received the v4 gates in
+ * F19 (parity restored — see strokeHeuristicParity.test.ts), so the
+ * coverage findings apply to both copies identically.
  */
 
 function classifyFixture(
@@ -59,7 +58,7 @@ function classifyFixture(
 }
 
 describe("stroke-heuristic-4 gate OPEN FINDINGS (pinned confidently-wrong outputs)", () => {
-  it("F20-F1: a rival wrist measured in only 2 frames disarms the attribution gate and the wrong arm commits BACKHAND at 0.76", () => {
+  it("F20-F1: a rival wrist measured in only 2 frames disarms the attribution gate and the wrong arm still commits BACKHAND (v5 handedness cross-check caps it at 0.6, non-decisive)", () => {
     // Ground truth: a genuine RIGHT-arm forehand; the striking wrist was
     // glimpsed in 2 adjacent frames (travel 0.02u) while the non-striking
     // left counterbalance arm was measured everywhere (travel ~0.09u).
@@ -70,10 +69,19 @@ describe("stroke-heuristic-4 gate OPEN FINDINGS (pinned confidently-wrong output
     // e03 declined raising the floor above 0 as bench-fitting (sasebo
     // @52434 commits correctly with rival at 1 frame) — this fixture
     // realizes the attack that decision leaves open.
+    // v5's handedness cross-check sees the dominant-motion wrist (left)
+    // contradict the declared right hand, but the declared wrist's 2
+    // measured frames are below MIN_TRAVEL_SAMPLE_FRAMES so the
+    // contradiction is NOT decisive: the wrong-arm commit survives at the
+    // degraded 0.6 cap instead of 0.76. Still a wrong committed label —
+    // the finding stays open, now at degraded confidence.
     const prediction = classifyFixture(sparseRivalWrongArmFixture());
     expect(prediction.label).toBe("BACKHAND");
     expect(prediction.taxonomyDepth).toBe(2);
-    expect(prediction.confidence).toBeCloseTo(0.76, 2);
+    expect(prediction.confidence).toBeCloseTo(0.6, 2);
+    expect(prediction.limitingFactors).toContain(
+      "declared_handedness_unconfirmed_by_dominant_motion_wrist",
+    );
     expect(prediction.limitingFactors).not.toContain(
       "dominant_wrist_attribution_unverifiable_rival_unmeasured",
     );
@@ -137,11 +145,11 @@ describe("stroke-heuristic-4 gate COVERAGE FINDINGS (pinned false abstentions on
     );
   });
 
-  it("F20-F4 regression proof: the still-v3 vision-geometry lite port commits the same fixture correctly as FOREHAND at 0.8", () => {
-    // The lite port never received the v4 gates, so it measures the v3
-    // behavior directly: FOREHAND 0.80 on the identical input. (It also
-    // documents that the two copies have diverged — the e10 suites'
-    // "byte-equivalent port" premise no longer holds.)
+  it("F20-F4 divergence closed: the vision-geometry lite port (post-F19 parity) abstains identically on the same fixture", () => {
+    // F19 ported the v4 gates into the lite copy, restoring parity: the
+    // structural coverage cost pinned in F20-F4 now applies to BOTH copies
+    // identically (the pre-F19 lite committed FOREHAND 0.80 here — the
+    // measured v3 behavior this finding was a regression against).
     const fixture = occludedRivalGenuineForehandFixture();
     const prediction = classifyStrokeLiteV3({
       sequence: fixture.sequence,
@@ -152,9 +160,11 @@ describe("stroke-heuristic-4 gate COVERAGE FINDINGS (pinned false abstentions on
       paddleSpeeds: null,
       wristSpeeds: fixture.wristSpeeds,
     });
-    expect(prediction.classifierVersion).toContain("stroke-heuristic-3");
-    expect(prediction.label).toBe("FOREHAND");
-    expect(prediction.confidence).toBeCloseTo(0.8, 5);
+    expect(prediction.classifierVersion).toContain("stroke-heuristic-5");
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain(
+      "dominant_wrist_attribution_unverifiable_rival_unmeasured",
+    );
   });
 
   it("F20-F5: a one-sided 3-sample speed slice reads a genuine fast swing as 'no swing energy'", () => {
