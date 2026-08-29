@@ -22,16 +22,24 @@ export interface IJobQueue {
   /** Receive up to `max` jobs; each must be acked or it becomes visible again. */
   receive(max: number): Promise<Array<{ job: JobEnvelope; ack: () => Promise<void> }>>;
   size(): Promise<number>;
+  /**
+   * Age (ms) of the oldest job that has been enqueued but not yet acked,
+   * or null when the backend cannot measure it (SQS exposes this only via
+   * CloudWatch, not per-call — reported honestly, never guessed).
+   */
+  oldestJobAgeMs(): Promise<number | null>;
 }
 
 export class InMemoryJobQueue implements IJobQueue {
   private jobs: JobEnvelope[] = [];
   private inFlight = new Map<string, JobEnvelope>();
+  private enqueuedAt = new Map<string, number>();
   private counter = 0;
 
   async enqueue(kind: string, payload: unknown): Promise<string> {
     const id = `job-${++this.counter}`;
     this.jobs.push({ id, kind, payload, attempt: 0 });
+    this.enqueuedAt.set(id, Date.now());
     return id;
   }
 
@@ -44,6 +52,7 @@ export class InMemoryJobQueue implements IJobQueue {
         job: withAttempt,
         ack: async () => {
           this.inFlight.delete(job.id);
+          this.enqueuedAt.delete(job.id);
         },
       };
     });
@@ -57,6 +66,14 @@ export class InMemoryJobQueue implements IJobQueue {
 
   async size(): Promise<number> {
     return this.jobs.length;
+  }
+
+  /** Oldest unfinished (queued or in-flight, unacked) job age. */
+  async oldestJobAgeMs(): Promise<number | null> {
+    if (this.enqueuedAt.size === 0) return null;
+    let oldest = Number.POSITIVE_INFINITY;
+    for (const at of this.enqueuedAt.values()) if (at < oldest) oldest = at;
+    return Date.now() - oldest;
   }
 }
 
@@ -95,10 +112,19 @@ export class SqsJobQueue implements IJobQueue {
         QueueUrl: this.queueUrl,
         MaxNumberOfMessages: max,
         WaitTimeSeconds: 1,
+        MessageSystemAttributeNames: ["ApproximateReceiveCount"],
       }),
     );
     return (result.Messages ?? []).map((message) => {
-      const parsed = JSON.parse(message.Body ?? "{}") as { kind: string; payload: unknown };
+      // A malformed body must never throw here: that would abort the whole
+      // receive batch and crash-loop the consumer on one poison message. It
+      // surfaces as an unknown kind instead, staying visible on the queue.
+      let parsed: { kind: string; payload: unknown };
+      try {
+        parsed = JSON.parse(message.Body ?? "{}") as { kind: string; payload: unknown };
+      } catch {
+        parsed = { kind: "__malformed__", payload: message.Body };
+      }
       return {
         job: {
           id: message.MessageId ?? "unknown",
@@ -120,5 +146,9 @@ export class SqsJobQueue implements IJobQueue {
 
   async size(): Promise<number> {
     return -1; // SQS exposes approximate depth via CloudWatch, not per-call.
+  }
+
+  async oldestJobAgeMs(): Promise<number | null> {
+    return null; // ApproximateAgeOfOldestMessage lives in CloudWatch only.
   }
 }

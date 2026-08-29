@@ -1,0 +1,44 @@
+{
+  "__comment": "SYNTHETIC fixture for pickle.device-bench.v1 — structurally valid, NOT a measured device export. No physical iPhone existed when this was authored (Wave D D10, BLOCKED_EXTERNAL).",
+  "schemaVersion": "pickle.device-bench.v1",
+  "deviceModel": "iPhone16,1",
+  "osVersion": "iOS 18.5",
+  "appVersion": "0.1.0 (42)",
+  "startedAtIso": "2026-08-29T00:00:00.000Z",
+  "durationMs": 60000,
+  "thermal": {
+    "samples": [
+      { "tMs": 0, "state": "nominal" },
+      { "tMs": 30000, "state": "fair" },
+      { "tMs": 55000, "state": "serious" }
+    ],
+    "unavailableReason": null
+  },
+  "fps": {
+    "samples": [
+      { "tMs": 1000, "fps": 59.8, "windowMs": 1000 },
+      { "tMs": 2000, "fps": 60.1, "windowMs": 1000 },
+      { "tMs": 3000, "fps": 54.2, "windowMs": 1000 }
+    ],
+    "unavailableReason": null
+  },
+  "memory": {
+    "samples": [
+      { "tMs": 0, "footprintBytes": 412000256 },
+      { "tMs": 30000, "footprintBytes": 468713472 }
+    ],
+    "unavailableReason": null
+  },
+  "captures": [
+    {
+      "clipUri": "file:///var/mobile/clips/clip-0001.mov",
+      "finalizedAtMs": 21500,
+      "completionStrategy": "adaptive",
+      "telemetrySchemas": [
+        "capture-completion-telemetry-v1",
+        "target-lock-telemetry-v1"
+      ]
+    }
+  ],
+  "notes": ["synthetic fixture — schema validation only"]
+}

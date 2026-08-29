@@ -1,0 +1,2019 @@
+{
+  "schemaVersion": "g13-annotation-queue-v1",
+  "tier": "C",
+  "note": "Machine-proposed annotation queue — NOT truth. Every entry needs a human label before any use as gold.",
+  "generatedBy": "g13-h6-mining-v1",
+  "generatedAtIso": "2026-08-29T17:35:04.396Z",
+  "heldOutExcluded": [
+    "wm-dink-01",
+    "afn-vic-rally1"
+  ],
+  "categoryCounts": {
+    "partial_torso_compression": 5,
+    "perspective_distortion_near_profile": 30,
+    "wrong_arm_geometry": 56,
+    "torso_collapse": 2,
+    "overhead_like_arm_config": 2,
+    "non_overhead_high_wrist": 3
+  },
+  "entries": [
+    {
+      "rank": 1,
+      "unitId": "gold:wavea-sasebo-volleys@52434",
+      "caseId": "wavea-sasebo-volleys",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 52434,
+      "windowEndMs": 52900,
+      "referenceMs": 52683,
+      "source": "gold_event",
+      "infoScore": 8.076,
+      "disagreement": "v6_new_abstain",
+      "v6GateFired": "sparse_declared_wrist",
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "BACKHAND",
+        "confidence": 0.6
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 2,
+      "unitId": "mined:wavea-wgm-wheelchair:t2@183133",
+      "caseId": "wavea-wgm-wheelchair",
+      "trackId": 2,
+      "trackRole": "other",
+      "windowStartMs": 182733,
+      "windowEndMs": 183533,
+      "referenceMs": 183133,
+      "source": "mined_wrist_peak",
+      "infoScore": 7.606,
+      "disagreement": "v6_new_abstain",
+      "v6GateFired": "sparse_declared_wrist",
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "BACKHAND",
+        "confidence": 0.6
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 3,
+      "unitId": "mined:wavea-sasebo-volleys:t1@52586",
+      "caseId": "wavea-sasebo-volleys",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 52186,
+      "windowEndMs": 52986,
+      "referenceMs": 52586,
+      "source": "mined_wrist_peak",
+      "infoScore": 7.574,
+      "disagreement": "v6_new_abstain",
+      "v6GateFired": "sparse_declared_wrist",
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "BACKHAND",
+        "confidence": 0.6
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 4,
+      "unitId": "gold:wavea-faead-rally@13875",
+      "caseId": "wavea-faead-rally",
+      "trackId": 2,
+      "trackRole": "target",
+      "windowStartMs": 13875,
+      "windowEndMs": 14500,
+      "referenceMs": 14042,
+      "source": "gold_event",
+      "infoScore": 3.73,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 5,
+      "unitId": "mined:wavea-sasebo-volleys:t2@53253",
+      "caseId": "wavea-sasebo-volleys",
+      "trackId": 2,
+      "trackRole": "other",
+      "windowStartMs": 52853,
+      "windowEndMs": 53653,
+      "referenceMs": 53253,
+      "source": "mined_wrist_peak",
+      "infoScore": 3.358,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 6,
+      "unitId": "mined:wavea-sasebo-volleys:t2@52319",
+      "caseId": "wavea-sasebo-volleys",
+      "trackId": 2,
+      "trackRole": "other",
+      "windowStartMs": 51919,
+      "windowEndMs": 52719,
+      "referenceMs": 52319,
+      "source": "mined_wrist_peak",
+      "infoScore": 3.119,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 7,
+      "unitId": "mined:wavea-sasebo-volleys:t1@54555",
+      "caseId": "wavea-sasebo-volleys",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 54155,
+      "windowEndMs": 54955,
+      "referenceMs": 54555,
+      "source": "mined_wrist_peak",
+      "infoScore": 3.089,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "partial_torso_compression"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 8,
+      "unitId": "mined:wavea-faead-rally:t3@12792",
+      "caseId": "wavea-faead-rally",
+      "trackId": 3,
+      "trackRole": "other",
+      "windowStartMs": 12392,
+      "windowEndMs": 13192,
+      "referenceMs": 12792,
+      "source": "mined_wrist_peak",
+      "infoScore": 3.078,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 9,
+      "unitId": "mined:wavea-faead-rally:t3@14417",
+      "caseId": "wavea-faead-rally",
+      "trackId": 3,
+      "trackRole": "other",
+      "windowStartMs": 14017,
+      "windowEndMs": 14817,
+      "referenceMs": 14417,
+      "source": "mined_wrist_peak",
+      "infoScore": 3.077,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 10,
+      "unitId": "mined:wavea-faead-rally:t3@13458",
+      "caseId": "wavea-faead-rally",
+      "trackId": 3,
+      "trackRole": "other",
+      "windowStartMs": 13058,
+      "windowEndMs": 13858,
+      "referenceMs": 13458,
+      "source": "mined_wrist_peak",
+      "infoScore": 3.075,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 11,
+      "unitId": "gold:wavea-sasebo-volleys@52934",
+      "caseId": "wavea-sasebo-volleys",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 52934,
+      "windowEndMs": 53234,
+      "referenceMs": 53067,
+      "source": "gold_event",
+      "infoScore": 3.065,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 12,
+      "unitId": "mined:wavea-944403-smash:t1@2986",
+      "caseId": "wavea-944403-smash",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 2586,
+      "windowEndMs": 3386,
+      "referenceMs": 2986,
+      "source": "mined_wrist_peak",
+      "infoScore": 3.064,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 13,
+      "unitId": "mined:wavea-944403-dink:t4@21388",
+      "caseId": "wavea-944403-dink",
+      "trackId": 4,
+      "trackRole": "other",
+      "windowStartMs": 20988,
+      "windowEndMs": 21788,
+      "referenceMs": 21388,
+      "source": "mined_wrist_peak",
+      "infoScore": 2.615,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 14,
+      "unitId": "mined:wavea-faead-feed:t2@32958",
+      "caseId": "wavea-faead-feed",
+      "trackId": 2,
+      "trackRole": "other",
+      "windowStartMs": 32558,
+      "windowEndMs": 33358,
+      "referenceMs": 32958,
+      "source": "mined_wrist_peak",
+      "infoScore": 2.602,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 15,
+      "unitId": "mined:wavea-944403-smash:t7@3620",
+      "caseId": "wavea-944403-smash",
+      "trackId": 7,
+      "trackRole": "other",
+      "windowStartMs": 3220,
+      "windowEndMs": 4020,
+      "referenceMs": 3620,
+      "source": "mined_wrist_peak",
+      "infoScore": 2.589,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 16,
+      "unitId": "mined:wavea-faead-feed:t2@33750",
+      "caseId": "wavea-faead-feed",
+      "trackId": 2,
+      "trackRole": "other",
+      "windowStartMs": 33350,
+      "windowEndMs": 34150,
+      "referenceMs": 33750,
+      "source": "mined_wrist_peak",
+      "infoScore": 2.585,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 17,
+      "unitId": "mined:wavea-faead-feed:t2@34708",
+      "caseId": "wavea-faead-feed",
+      "trackId": 2,
+      "trackRole": "other",
+      "windowStartMs": 34308,
+      "windowEndMs": 35108,
+      "referenceMs": 34708,
+      "source": "mined_wrist_peak",
+      "infoScore": 2.578,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 18,
+      "unitId": "mined:wavea-944403-smash:t6@3837",
+      "caseId": "wavea-944403-smash",
+      "trackId": 6,
+      "trackRole": "other",
+      "windowStartMs": 3437,
+      "windowEndMs": 4237,
+      "referenceMs": 3837,
+      "source": "mined_wrist_peak",
+      "infoScore": 2.574,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 19,
+      "unitId": "mined:wavea-944403-smash:t6@3153",
+      "caseId": "wavea-944403-smash",
+      "trackId": 6,
+      "trackRole": "other",
+      "windowStartMs": 2753,
+      "windowEndMs": 3553,
+      "referenceMs": 3153,
+      "source": "mined_wrist_peak",
+      "infoScore": 2.573,
+      "disagreement": "none",
+      "v6GateFired": "sparse_declared_wrist",
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 20,
+      "unitId": "gold:wavea-944403-smash@3617",
+      "caseId": "wavea-944403-smash",
+      "trackId": 3,
+      "trackRole": "other",
+      "windowStartMs": 3617,
+      "windowEndMs": 4275,
+      "referenceMs": 3950,
+      "source": "gold_event",
+      "infoScore": 2.23,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "overhead_like_arm_config",
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "OVERHEAD",
+        "confidence": 0.85
+      },
+      "v6": {
+        "label": "OVERHEAD",
+        "confidence": 0.85
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 21,
+      "unitId": "gold:wavea-944403-dink@22000",
+      "caseId": "wavea-944403-dink",
+      "trackId": 2,
+      "trackRole": "other",
+      "windowStartMs": 22000,
+      "windowEndMs": 22333,
+      "referenceMs": 22125,
+      "source": "gold_event",
+      "infoScore": 1.874,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "torso_collapse"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 22,
+      "unitId": "mined:wavea-faead-rally:t4@12542",
+      "caseId": "wavea-faead-rally",
+      "trackId": 4,
+      "trackRole": "other",
+      "windowStartMs": 12142,
+      "windowEndMs": 12942,
+      "referenceMs": 12542,
+      "source": "mined_wrist_peak",
+      "infoScore": 1.741,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 23,
+      "unitId": "mined:wavea-944403-smash:t3@3971",
+      "caseId": "wavea-944403-smash",
+      "trackId": 3,
+      "trackRole": "other",
+      "windowStartMs": 3571,
+      "windowEndMs": 4371,
+      "referenceMs": 3971,
+      "source": "mined_wrist_peak",
+      "infoScore": 1.737,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "overhead_like_arm_config",
+        "non_overhead_high_wrist"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 24,
+      "unitId": "gold:wavea-944403-smash@4317",
+      "caseId": "wavea-944403-smash",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 4317,
+      "windowEndMs": 4525,
+      "referenceMs": 4379,
+      "source": "gold_event",
+      "infoScore": 1.721,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 25,
+      "unitId": "gold:wavea-944403-dink@20125",
+      "caseId": "wavea-944403-dink",
+      "trackId": 2,
+      "trackRole": "other",
+      "windowStartMs": 20125,
+      "windowEndMs": 20700,
+      "referenceMs": 20354,
+      "source": "gold_event",
+      "infoScore": 1.567,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "partial_torso_compression",
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 26,
+      "unitId": "mined:wavea-faead-feed:t1@33250",
+      "caseId": "wavea-faead-feed",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 32850,
+      "windowEndMs": 33650,
+      "referenceMs": 33250,
+      "source": "mined_wrist_peak",
+      "infoScore": 1.42,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 27,
+      "unitId": "mined:wavea-faead-rally:t4@13333",
+      "caseId": "wavea-faead-rally",
+      "trackId": 4,
+      "trackRole": "other",
+      "windowStartMs": 12933,
+      "windowEndMs": 13733,
+      "referenceMs": 13333,
+      "source": "mined_wrist_peak",
+      "infoScore": 1.409,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 28,
+      "unitId": "mined:wavea-944403-dink:t2@22122",
+      "caseId": "wavea-944403-dink",
+      "trackId": 2,
+      "trackRole": "other",
+      "windowStartMs": 21722,
+      "windowEndMs": 22522,
+      "referenceMs": 22122,
+      "source": "mined_wrist_peak",
+      "infoScore": 1.374,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "torso_collapse"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 29,
+      "unitId": "mined:wavea-marne-serve:t1@33367",
+      "caseId": "wavea-marne-serve",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 32967,
+      "windowEndMs": 33767,
+      "referenceMs": 33367,
+      "source": "mined_wrist_peak",
+      "infoScore": 1.277,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 30,
+      "unitId": "gold:wavea-944403-dink@20950",
+      "caseId": "wavea-944403-dink",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 20950,
+      "windowEndMs": 21500,
+      "referenceMs": 21117,
+      "source": "gold_event",
+      "infoScore": 1.273,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 31,
+      "unitId": "mined:wavea-wgm-wheelchair:t5@183200",
+      "caseId": "wavea-wgm-wheelchair",
+      "trackId": 5,
+      "trackRole": "other",
+      "windowStartMs": 182800,
+      "windowEndMs": 183600,
+      "referenceMs": 183200,
+      "source": "mined_wrist_peak",
+      "infoScore": 1.253,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "BACKHAND",
+        "confidence": 0.6
+      },
+      "v6": {
+        "label": "BACKHAND",
+        "confidence": 0.6
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 32,
+      "unitId": "mined:wavea-sasebo-volleys:t1@53253",
+      "caseId": "wavea-sasebo-volleys",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 52853,
+      "windowEndMs": 53653,
+      "referenceMs": 53253,
+      "source": "mined_wrist_peak",
+      "infoScore": 1.242,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "BACKHAND",
+        "confidence": 0.6
+      },
+      "v6": {
+        "label": "BACKHAND",
+        "confidence": 0.6
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 33,
+      "unitId": "mined:wavea-944403-dink:t2@20037",
+      "caseId": "wavea-944403-dink",
+      "trackId": 2,
+      "trackRole": "other",
+      "windowStartMs": 19637,
+      "windowEndMs": 20437,
+      "referenceMs": 20037,
+      "source": "mined_wrist_peak",
+      "infoScore": 1.226,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry",
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 34,
+      "unitId": "gold:wavea-sasebo-volleys@52867",
+      "caseId": "wavea-sasebo-volleys",
+      "trackId": 5,
+      "trackRole": "other",
+      "windowStartMs": 52867,
+      "windowEndMs": 53201,
+      "referenceMs": 52967,
+      "source": "gold_event",
+      "infoScore": 1.222,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 35,
+      "unitId": "mined:wavea-marne-serve:t1@34785",
+      "caseId": "wavea-marne-serve",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 34385,
+      "windowEndMs": 35185,
+      "referenceMs": 34785,
+      "source": "mined_wrist_peak",
+      "infoScore": 1.114,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "partial_torso_compression",
+        "non_overhead_high_wrist"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 36,
+      "unitId": "gold:wavea-faead-feed@33358",
+      "caseId": "wavea-faead-feed",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 33358,
+      "windowEndMs": 34050,
+      "referenceMs": 33442,
+      "source": "gold_event",
+      "infoScore": 1.11,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 37,
+      "unitId": "gold:wavea-marne-serve@34017",
+      "caseId": "wavea-marne-serve",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 34017,
+      "windowEndMs": 35433,
+      "referenceMs": 34689,
+      "source": "gold_event",
+      "infoScore": 1.071,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "partial_torso_compression"
+      ],
+      "v5": {
+        "label": "FOREHAND",
+        "confidence": 0.8
+      },
+      "v6": {
+        "label": "FOREHAND",
+        "confidence": 0.8
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 38,
+      "unitId": "mined:wavea-944403-dink:t6@21438",
+      "caseId": "wavea-944403-dink",
+      "trackId": 6,
+      "trackRole": "other",
+      "windowStartMs": 21038,
+      "windowEndMs": 21838,
+      "referenceMs": 21438,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.919,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 39,
+      "unitId": "mined:wavea-faead-rally:t1@13792",
+      "caseId": "wavea-faead-rally",
+      "trackId": 1,
+      "trackRole": "other",
+      "windowStartMs": 13392,
+      "windowEndMs": 14192,
+      "referenceMs": 13792,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.909,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 40,
+      "unitId": "mined:wavea-faead-feed:t1@34333",
+      "caseId": "wavea-faead-feed",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 33933,
+      "windowEndMs": 34733,
+      "referenceMs": 34333,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.905,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 41,
+      "unitId": "mined:wavea-wgm-wheelchair:t5@182533",
+      "caseId": "wavea-wgm-wheelchair",
+      "trackId": 5,
+      "trackRole": "other",
+      "windowStartMs": 182133,
+      "windowEndMs": 182933,
+      "referenceMs": 182533,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.839,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 42,
+      "unitId": "mined:wavea-944403-dink:t2@22856",
+      "caseId": "wavea-944403-dink",
+      "trackId": 2,
+      "trackRole": "other",
+      "windowStartMs": 22456,
+      "windowEndMs": 23256,
+      "referenceMs": 22856,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.835,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 43,
+      "unitId": "mined:wavea-wgm-wheelchair:t4@182533",
+      "caseId": "wavea-wgm-wheelchair",
+      "trackId": 4,
+      "trackRole": "other",
+      "windowStartMs": 182133,
+      "windowEndMs": 182933,
+      "referenceMs": 182533,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.833,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 44,
+      "unitId": "mined:wavea-sasebo-volleys:t3@51785",
+      "caseId": "wavea-sasebo-volleys",
+      "trackId": 3,
+      "trackRole": "other",
+      "windowStartMs": 51385,
+      "windowEndMs": 52185,
+      "referenceMs": 51785,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.821,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 45,
+      "unitId": "mined:wavea-marne-dig:t2@14064",
+      "caseId": "wavea-marne-dig",
+      "trackId": 2,
+      "trackRole": "other",
+      "windowStartMs": 13664,
+      "windowEndMs": 14464,
+      "referenceMs": 14064,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.803,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 46,
+      "unitId": "mined:wavea-sasebo-volleys:t2@53854",
+      "caseId": "wavea-sasebo-volleys",
+      "trackId": 2,
+      "trackRole": "other",
+      "windowStartMs": 53454,
+      "windowEndMs": 54254,
+      "referenceMs": 53854,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.788,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 47,
+      "unitId": "mined:wavea-944403-dink:t1@21371",
+      "caseId": "wavea-944403-dink",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 20971,
+      "windowEndMs": 21771,
+      "referenceMs": 21371,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.751,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 48,
+      "unitId": "mined:wavea-944403-smash:t3@3036",
+      "caseId": "wavea-944403-smash",
+      "trackId": 3,
+      "trackRole": "other",
+      "windowStartMs": 2636,
+      "windowEndMs": 3436,
+      "referenceMs": 3036,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.728,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 49,
+      "unitId": "mined:wavea-marne-dig:t2@12629",
+      "caseId": "wavea-marne-dig",
+      "trackId": 2,
+      "trackRole": "other",
+      "windowStartMs": 12229,
+      "windowEndMs": 13029,
+      "referenceMs": 12629,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.718,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "BACKHAND",
+        "confidence": 0.6
+      },
+      "v6": {
+        "label": "BACKHAND",
+        "confidence": 0.6
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 50,
+      "unitId": "mined:wavea-944403-smash:t1@4404",
+      "caseId": "wavea-944403-smash",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 4004,
+      "windowEndMs": 4804,
+      "referenceMs": 4404,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.706,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 51,
+      "unitId": "mined:wavea-944403-smash:t3@4621",
+      "caseId": "wavea-944403-smash",
+      "trackId": 3,
+      "trackRole": "other",
+      "windowStartMs": 4221,
+      "windowEndMs": 5021,
+      "referenceMs": 4621,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.702,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 52,
+      "unitId": "mined:wavea-marne-serve:t1@35485",
+      "caseId": "wavea-marne-serve",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 35085,
+      "windowEndMs": 35885,
+      "referenceMs": 35485,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.697,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 53,
+      "unitId": "mined:wavea-marne-serve:t1@38238",
+      "caseId": "wavea-marne-serve",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 37838,
+      "windowEndMs": 38638,
+      "referenceMs": 38238,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.69,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 54,
+      "unitId": "mined:wavea-marne-dig:t2@13297",
+      "caseId": "wavea-marne-dig",
+      "trackId": 2,
+      "trackRole": "other",
+      "windowStartMs": 12897,
+      "windowEndMs": 13697,
+      "referenceMs": 13297,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.683,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 55,
+      "unitId": "mined:wavea-944403-dink:t1@23006",
+      "caseId": "wavea-944403-dink",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 22606,
+      "windowEndMs": 23406,
+      "referenceMs": 23006,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.68,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "BACKHAND",
+        "confidence": 0.6
+      },
+      "v6": {
+        "label": "BACKHAND",
+        "confidence": 0.6
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 56,
+      "unitId": "mined:wavea-944403-dink:t4@20637",
+      "caseId": "wavea-944403-dink",
+      "trackId": 4,
+      "trackRole": "other",
+      "windowStartMs": 20237,
+      "windowEndMs": 21037,
+      "referenceMs": 20637,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.68,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 57,
+      "unitId": "mined:wavea-marne-serve:t1@37287",
+      "caseId": "wavea-marne-serve",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 36887,
+      "windowEndMs": 37687,
+      "referenceMs": 37287,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.678,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 58,
+      "unitId": "mined:wavea-944403-smash:t7@4621",
+      "caseId": "wavea-944403-smash",
+      "trackId": 7,
+      "trackRole": "other",
+      "windowStartMs": 4221,
+      "windowEndMs": 5021,
+      "referenceMs": 4621,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.668,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 59,
+      "unitId": "mined:wavea-944403-dink:t3@22489",
+      "caseId": "wavea-944403-dink",
+      "trackId": 3,
+      "trackRole": "other",
+      "windowStartMs": 22089,
+      "windowEndMs": 22889,
+      "referenceMs": 22489,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.667,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 60,
+      "unitId": "mined:wavea-sasebo-volleys:t3@52419",
+      "caseId": "wavea-sasebo-volleys",
+      "trackId": 3,
+      "trackRole": "other",
+      "windowStartMs": 52019,
+      "windowEndMs": 52819,
+      "referenceMs": 52419,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.61,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 61,
+      "unitId": "mined:wavea-944403-dink:t3@21221",
+      "caseId": "wavea-944403-dink",
+      "trackId": 3,
+      "trackRole": "other",
+      "windowStartMs": 20821,
+      "windowEndMs": 21621,
+      "referenceMs": 21221,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.604,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "non_overhead_high_wrist"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 62,
+      "unitId": "mined:wavea-marne-dig:t3@14031",
+      "caseId": "wavea-marne-dig",
+      "trackId": 3,
+      "trackRole": "other",
+      "windowStartMs": 13631,
+      "windowEndMs": 14431,
+      "referenceMs": 14031,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.596,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 63,
+      "unitId": "mined:wavea-wgm-wheelchair:t1@183233",
+      "caseId": "wavea-wgm-wheelchair",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 182833,
+      "windowEndMs": 183633,
+      "referenceMs": 183233,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.595,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 64,
+      "unitId": "mined:wavea-marne-dig:t1@14348",
+      "caseId": "wavea-marne-dig",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 13948,
+      "windowEndMs": 14748,
+      "referenceMs": 14348,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.594,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 65,
+      "unitId": "mined:wavea-marne-dig:t1@13497",
+      "caseId": "wavea-marne-dig",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 13097,
+      "windowEndMs": 13897,
+      "referenceMs": 13497,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.591,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "wrong_arm_geometry"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 66,
+      "unitId": "mined:wavea-sasebo-volleys:t10@54121",
+      "caseId": "wavea-sasebo-volleys",
+      "trackId": 10,
+      "trackRole": "other",
+      "windowStartMs": 53721,
+      "windowEndMs": 54521,
+      "referenceMs": 54121,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.59,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 67,
+      "unitId": "mined:wavea-944403-dink:t3@23090",
+      "caseId": "wavea-944403-dink",
+      "trackId": 3,
+      "trackRole": "other",
+      "windowStartMs": 22690,
+      "windowEndMs": 23490,
+      "referenceMs": 23090,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.586,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 68,
+      "unitId": "mined:wavea-marne-dig:t3@13413",
+      "caseId": "wavea-marne-dig",
+      "trackId": 3,
+      "trackRole": "other",
+      "windowStartMs": 13013,
+      "windowEndMs": 13813,
+      "referenceMs": 13413,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.586,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 69,
+      "unitId": "mined:wavea-marne-dig:t3@12813",
+      "caseId": "wavea-marne-dig",
+      "trackId": 3,
+      "trackRole": "other",
+      "windowStartMs": 12413,
+      "windowEndMs": 13213,
+      "referenceMs": 12813,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.583,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 70,
+      "unitId": "mined:wavea-marne-serve:t1@34167",
+      "caseId": "wavea-marne-serve",
+      "trackId": 1,
+      "trackRole": "target",
+      "windowStartMs": 33767,
+      "windowEndMs": 34567,
+      "referenceMs": 34167,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.577,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 71,
+      "unitId": "mined:wavea-faead-rally:t4@14417",
+      "caseId": "wavea-faead-rally",
+      "trackId": 4,
+      "trackRole": "other",
+      "windowStartMs": 14017,
+      "windowEndMs": 14817,
+      "referenceMs": 14417,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.576,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 72,
+      "unitId": "mined:wavea-wgm-wheelchair:t4@183267",
+      "caseId": "wavea-wgm-wheelchair",
+      "trackId": 4,
+      "trackRole": "other",
+      "windowStartMs": 182867,
+      "windowEndMs": 183667,
+      "referenceMs": 183267,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.574,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "partial_torso_compression"
+      ],
+      "v5": {
+        "label": "FOREHAND",
+        "confidence": 0.6
+      },
+      "v6": {
+        "label": "FOREHAND",
+        "confidence": 0.6
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 73,
+      "unitId": "mined:wavea-sasebo-volleys:t4@54521",
+      "caseId": "wavea-sasebo-volleys",
+      "trackId": 4,
+      "trackRole": "other",
+      "windowStartMs": 54121,
+      "windowEndMs": 54921,
+      "referenceMs": 54521,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.568,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 74,
+      "unitId": "mined:wavea-sasebo-volleys:t4@52920",
+      "caseId": "wavea-sasebo-volleys",
+      "trackId": 4,
+      "trackRole": "other",
+      "windowStartMs": 52520,
+      "windowEndMs": 53320,
+      "referenceMs": 52920,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.562,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 75,
+      "unitId": "mined:wavea-sasebo-volleys:t4@53887",
+      "caseId": "wavea-sasebo-volleys",
+      "trackId": 4,
+      "trackRole": "other",
+      "windowStartMs": 53487,
+      "windowEndMs": 54287,
+      "referenceMs": 53887,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.561,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    },
+    {
+      "rank": 76,
+      "unitId": "mined:wavea-944403-dink:t2@20754",
+      "caseId": "wavea-944403-dink",
+      "trackId": 2,
+      "trackRole": "other",
+      "windowStartMs": 20354,
+      "windowEndMs": 21154,
+      "referenceMs": 20754,
+      "source": "mined_wrist_peak",
+      "infoScore": 0.559,
+      "disagreement": "none",
+      "v6GateFired": null,
+      "categories": [
+        "perspective_distortion_near_profile"
+      ],
+      "v5": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "v6": {
+        "label": "UNKNOWN",
+        "confidence": 0.2
+      },
+      "annotationAsk": "Human: identify the striking arm, whether a real stroke occurs in the window, its L1/L2, and whether the torso is fully visible at the reference frame."
+    }
+  ]
+}

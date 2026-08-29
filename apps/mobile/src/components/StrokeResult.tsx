@@ -32,6 +32,7 @@ import {
   type PhaseSegmentKey,
   type StrokeResultEvidenceRecord,
 } from './strokeResultModel';
+import { UncertaintyNotes } from './UncertaintyNote';
 
 /**
  * STROKE RESULT — the ONE canonical result surface (MOBBIN brief §1),
@@ -530,6 +531,13 @@ export function StrokeResult(props: StrokeResultProps) {
             </PressableScale>
           ) : null}
         </Card>
+      ) : null}
+
+      {/* §4 — uncertainty microcopy: honest sentences for elements the
+          evidence gates withheld above. The abstained path already carries
+          the fuller ledger, so notes render only on scored results. */}
+      {!abstained ? (
+        <UncertaintyNotes record={props.record} analysis={analysis} />
       ) : null}
 
       {props.children}

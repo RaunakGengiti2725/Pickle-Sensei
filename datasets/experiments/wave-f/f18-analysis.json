@@ -1,0 +1,379 @@
+{
+  "experiment": "F18 analysis over f18-degradation-ladders.json",
+  "generatedBy": "packages/capture-envelope/src/f18Analysis.ts",
+  "sourceCommit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "thresholdsVersion": "capture-envelope-thresholds-v0.3-provisional",
+  "unitCount": 9,
+  "sessionCount": 3,
+  "constructValidity": {
+    "resolution": {
+      "unitsExactlyTracking": 9,
+      "unitsMonotone": 0,
+      "unitsTotal": 9,
+      "perUnit": [
+        {
+          "unitId": "bundle:wm-volley-02",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 240
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s0",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 240
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s1",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 240
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s3",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 240
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s4",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 240
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s5",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 240
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s18",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 240
+        },
+        {
+          "unitId": "scene:rec-d230484fbaa5:s8",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 240
+        },
+        {
+          "unitId": "scene:rec-d230484fbaa5:s12",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 240
+        }
+      ]
+    },
+    "frame_rate": {
+      "unitsExactlyTracking": 9,
+      "unitsMonotone": 0,
+      "unitsTotal": 9,
+      "perUnit": [
+        {
+          "unitId": "bundle:wm-volley-02",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 8
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s0",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 8
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s1",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 8
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s3",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 8
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s4",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 8
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s5",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 8
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s18",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 8
+        },
+        {
+          "unitId": "scene:rec-d230484fbaa5:s8",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 8
+        },
+        {
+          "unitId": "scene:rec-d230484fbaa5:s12",
+          "exact": true,
+          "monotone": null,
+          "firstBandFlip": 8
+        }
+      ]
+    },
+    "brightness": {
+      "unitsExactlyTracking": 0,
+      "unitsMonotone": 9,
+      "unitsTotal": 9,
+      "perUnit": [
+        {
+          "unitId": "bundle:wm-volley-02",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": -0.2
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s0",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": -0.1
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s1",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 0.3
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s3",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": -0.3
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s4",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": -0.2
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s5",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": -0.2
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s18",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": -0.1
+        },
+        {
+          "unitId": "scene:rec-d230484fbaa5:s8",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": -0.1
+        },
+        {
+          "unitId": "scene:rec-d230484fbaa5:s12",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 0.2
+        }
+      ]
+    },
+    "motion_blur": {
+      "unitsExactlyTracking": 0,
+      "unitsMonotone": 9,
+      "unitsTotal": 9,
+      "perUnit": [
+        {
+          "unitId": "bundle:wm-volley-02",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 2
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s0",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 1
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s1",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 1
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s3",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 1
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s4",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 2
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s5",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 2
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s18",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 1
+        },
+        {
+          "unitId": "scene:rec-d230484fbaa5:s8",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 2
+        },
+        {
+          "unitId": "scene:rec-d230484fbaa5:s12",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 1
+        }
+      ]
+    },
+    "camera_motion": {
+      "unitsExactlyTracking": 0,
+      "unitsMonotone": 9,
+      "unitsTotal": 9,
+      "perUnit": [
+        {
+          "unitId": "bundle:wm-volley-02",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 4
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s0",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 16
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s1",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 2
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s3",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 2
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s4",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 1
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s5",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 8
+        },
+        {
+          "unitId": "scene:rec-afd0b6bad5d0:s18",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 16
+        },
+        {
+          "unitId": "scene:rec-d230484fbaa5:s8",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 0
+        },
+        {
+          "unitId": "scene:rec-d230484fbaa5:s12",
+          "exact": null,
+          "monotone": true,
+          "firstBandFlip": 16
+        }
+      ]
+    }
+  },
+  "cameraMotionSeparability": {
+    "controlValuesSubjectMotionOnly": [
+      9.372925115207371,
+      12.240078125000002,
+      13.790390625,
+      19.774230090725812,
+      30.436060697115387,
+      31.473499755859372,
+      32.39259277343751,
+      35.94215207891949,
+      38.4639296875
+    ],
+    "controlMax": 38.4639296875,
+    "injected": [
+      {
+        "amplitudePx320": 1,
+        "min": 13.236070963541666,
+        "max": 38.56444140625,
+        "unitsBelowControlMax": 8,
+        "unitsTotal": 9
+      },
+      {
+        "amplitudePx320": 2,
+        "min": 16.884479166666665,
+        "max": 39.049123046875,
+        "unitsBelowControlMax": 8,
+        "unitsTotal": 9
+      },
+      {
+        "amplitudePx320": 4,
+        "min": 23.919928385416668,
+        "max": 40.29007812500001,
+        "unitsBelowControlMax": 7,
+        "unitsTotal": 9
+      },
+      {
+        "amplitudePx320": 8,
+        "min": 31.572944808467742,
+        "max": 45.17652343750001,
+        "unitsBelowControlMax": 4,
+        "unitsTotal": 9
+      },
+      {
+        "amplitudePx320": 16,
+        "min": 39.76687058971773,
+        "max": 54.381439302884615,
+        "unitsBelowControlMax": 0,
+        "unitsTotal": 9
+      }
+    ]
+  },
+  "predictiveValidityGap": {
+    "labeledGoodUnits": 9,
+    "independentGoodSessions": 3,
+    "ruleOfThree95UpperBound": {
+      "unitLevel": 0.2831,
+      "sessionLevel": 0.6316
+    },
+    "unitsNeededForUpperBound": {
+      "10pct": 29,
+      "5pct": 59
+    },
+    "boundaryBinCoverage": "0 labeled units exist in any degraded/unsupported bin of any dimension (all labeled-good units: short side ≥720, fps ≥24, luma in supported band, laplacian ≥100, interval CV ≈ 0)"
+  }
+}

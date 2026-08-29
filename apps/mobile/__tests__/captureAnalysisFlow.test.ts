@@ -6,6 +6,7 @@ import {
   setActiveDataOwner,
 } from '../src/data/accountScope';
 import type { CapturedClip } from '../src/camera/capture';
+import { attemptCaptureEnvelope } from '../src/camera/captureEnvelope';
 import { runCaptureAnalysis } from '../src/analysis/runCaptureAnalysis';
 
 /**
@@ -286,6 +287,68 @@ describe('runCaptureAnalysis', () => {
     expect(
       recordInserts.every(call => call.sql.startsWith('INSERT INTO')),
     ).toBe(true);
+  });
+
+  it('UNSUPPORTED capture envelope forces honest abstention BEFORE inference — no permit, no record, no score', async () => {
+    const { db, calls } = recordingDb();
+    const { clip, sidecarJson } = swingClipWithSidecar();
+    mockReadArtifact = async () => sidecarJson;
+    const fetchSpy = jest.fn();
+    (globalThis as { fetch?: unknown }).fetch = fetchSpy;
+
+    // 320x240 short side → resolution UNSUPPORTED → overall UNSUPPORTED.
+    const envelope = attemptCaptureEnvelope(
+      { width: 320, height: 240, fps: 60, durationMs: clip.durationMs },
+      null,
+      null,
+    );
+    expect(envelope.overall).toBe('UNSUPPORTED');
+
+    const outcome = await runCaptureAnalysis({
+      ...request(db, clip),
+      captureEnvelope: envelope,
+    });
+    expect(outcome.kind).toBe('quality_blocked');
+    if (outcome.kind !== 'quality_blocked') return;
+    expect(outcome.reason).toContain('resolution');
+    expect(outcome.reason).toContain('Nothing was rated');
+    expect(outcome.envelope).toBe(envelope);
+    // Poor input never silently became analysis: no permit reserved, no
+    // inference, no record, no rating.
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(calls).toHaveLength(0);
+  });
+
+  it('DEGRADED envelope proceeds and is attached to the attempt record', async () => {
+    const { db, calls } = recordingDb();
+    const { clip, sidecarJson } = swingClipWithSidecar();
+    mockReadArtifact = async () => sidecarJson;
+    const { fetchMock } = permitServer();
+    (globalThis as { fetch?: unknown }).fetch = fetchMock;
+
+    // 640 short side → resolution DEGRADED; nothing UNSUPPORTED.
+    const envelope = attemptCaptureEnvelope(
+      { width: 640, height: 1280, fps: clip.fps, durationMs: clip.durationMs },
+      null,
+      null,
+    );
+    expect(envelope.overall).toBe('DEGRADED');
+
+    const outcome = await runCaptureAnalysis({
+      ...request(db, clip),
+      captureEnvelope: envelope,
+    });
+    expect(outcome.kind).toBe('scored');
+    if (outcome.kind !== 'scored') return;
+    expect(outcome.record.captureEnvelope).toBe(envelope);
+
+    // The persisted record carries the verdict for downstream Result.
+    const recordInsert = calls.find(call =>
+      call.sql.includes('local_analysis_record'),
+    );
+    expect(recordInsert).toBeDefined();
+    const persisted = JSON.parse(String(recordInsert!.params[6]));
+    expect(persisted.captureEnvelope.overall).toBe('DEGRADED');
   });
 
   it('releases the permit on abstention and never syncs an unscored rating', async () => {

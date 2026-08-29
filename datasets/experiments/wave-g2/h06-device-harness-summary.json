@@ -1,0 +1,41 @@
+{
+  "workstreamId": "h06-device-harness",
+  "branch": "devin/wave-g2/h06-device-harness",
+  "mission": "Build the one-command physical-iPhone E2E trial harness — everything except the device — so that when real iPhones become available, only the device measurements themselves remain external (GATE B readiness).",
+  "method": [
+    "Added a standalone workspace package tools/iphone-trials (@pickle/iphone-trials) so no mobile implementation code was touched.",
+    "Defined pickle.iphone-device-matrix.v1 with four required tiers (older/mid/recent/flagship), explicit ACQUIRED/NOT_ACQUIRED acquisition state, and mandatory blocker reasons for unacquired devices; committed device-matrix.json lists 8 planned iPhones, all honestly NOT_ACQUIRED.",
+    "Defined pickle.iphone-trial.v1: every metric is a discriminated union — {measured:true,value} or {measured:false,unmeasuredReason} — so nothing can be silently defaulted or fabricated.",
+    "Per-trial context captures device model/tier/matrix ID, iOS version+build, app version/build/configuration/git commit, model+contract version map, thermal state, battery %/state/low-power mode, storage, and camera settings (resolution, fps, lens, stabilization, torch).",
+    "Full per-trial metric set: app launch, permission flow, camera start, capture FPS, target acquisition (lock success/correctness/time-to-lock/persistence/identity switches), stroke trigger, event recall/bounds, paddle+ball tracking, contact timing, phase validity, stroke classification, Auto Detect quality, adaptive completion, clip correctness, analysis latency, Result correctness/rendering, Try Again, crash/memory/thermal/battery stability.",
+    "Primary latency metric TRUE_MOVEMENT_COMPLETION -> RESULT_INTERACTIVE requires markerSource HUMAN_FRAME_MARKED_REFERENCE_RECORDING (app-generated ground-truth markers are rejected) and validated latency arithmetic.",
+    "Frozen targets committed (iphone-latency-targets-v1): ideal <=2000ms, strong <=3000ms, max <=5000ms, judged at p95; nearest-rank P50/P75/P90/P95 stats reported separately for cold and warm phases.",
+    "Report generator aggregates only provenance=DEVICE_MEASUREMENT trials, excludes SAMPLE_FIXTURE_NOT_A_MEASUREMENT files from all statistics, rejects unmanifested device IDs and invalid files loudly, and reports tier coverage (BLOCKED_EXTERNAL_NO_DEVICE_TRIALS / PARTIAL / FULL).",
+    "One-command run-iphone-trial.sh fails fast unless on macOS with xcrun devicectl, a connected iPhone, and a manifest-listed --device-id; it never emits trial JSON itself — the human operator records measurements.",
+    "48 vitest tests validate matrix, trial schema, latency stats/targets, and report generation on Linux, including empty-directory and sample-fixture-only report runs."
+  ],
+  "deliverables": [
+    "tools/iphone-trials/device-matrix.json (8 devices across 4 tiers, all NOT_ACQUIRED with blocker reasons)",
+    "tools/iphone-trials/src/deviceMatrix.ts (pickle.iphone-device-matrix.v1 + validator)",
+    "tools/iphone-trials/src/trialSchema.ts (pickle.iphone-trial.v1 + validator, full metric set, human-marker-only primary latency)",
+    "tools/iphone-trials/src/latencyTargets.ts (frozen iphone-latency-targets-v1)",
+    "tools/iphone-trials/src/latencyStats.ts (nearest-rank P50/P75/P90/P95, null for empty)",
+    "tools/iphone-trials/src/generateReport.ts + src/cli.ts (iphone-trial-report-v1, cold/warm, sample exclusion, tier coverage)",
+    "tools/iphone-trials/run-iphone-trial.sh (fail-fast Mac/device one-command runner + operator checklist)",
+    "tools/iphone-trials/README.md (BLOCKED_EXTERNAL documentation, ground-truth rules, usage)",
+    "tools/iphone-trials/test/* (48 tests, all passing on Linux)"
+  ],
+  "linuxValidation": {
+    "packageTests": "48 passed (deviceMatrix 6, trialSchema 10, latency 9, generateReport 23)",
+    "rootGates": "pnpm typecheck, pnpm test, pnpm lint, pnpm format:check all pass on this branch",
+    "emptyReport": "verdict BLOCKED_EXTERNAL_NO_DEVICE_TRIALS; cold/warm summaries null with explicit unmeasuredReason",
+    "sampleMarkedReport": "1 SAMPLE_FIXTURE_NOT_A_MEASUREMENT file read, 0 device trials, verdict BLOCKED_EXTERNAL_NO_DEVICE_TRIALS, no statistics aggregated from the fixture"
+  },
+  "irreduciblyExternal": [
+    "Physical iPhone hardware for every tier (all 8 matrix devices are NOT_ACQUIRED).",
+    "A macOS machine with Xcode/xcrun devicectl to build and deploy the app to a device.",
+    "Human operator performing real strokes on a real court and frame-marking the synchronized reference recording for TRUE_MOVEMENT_COMPLETION ground truth.",
+    "All actual trial measurements: no iPhone numbers exist and none were fabricated; the only committed trial-shaped JSON is a test fixture explicitly marked SAMPLE_FIXTURE_NOT_A_MEASUREMENT."
+  ],
+  "verdict": "HARNESS_READY_DEVICE_EVIDENCE_BLOCKED_EXTERNAL: the full GATE B trial harness (matrix, schemas, ground-truth rules, latency targets, cold/warm percentile reporting, fail-fast runner) is built and Linux-validated; every device measurement remains BLOCKED_EXTERNAL until physical iPhones and a Mac exist."
+}

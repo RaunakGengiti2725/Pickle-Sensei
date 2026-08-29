@@ -1,0 +1,5588 @@
+{
+  "id": "f25-two-pass-verdict",
+  "platformLabel": "LINUX-CPU",
+  "environment": {
+    "platform": "Linux-5.15.200-x86_64-with-glibc2.35",
+    "node": "v20.18.1",
+    "commit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc"
+  },
+  "arms": {
+    "default": [],
+    "twopass": ["--two-pass"]
+  },
+  "clips": {
+    "wm-volley-02": {
+      "kind": "bundle_clip",
+      "durationMs": 8000.0,
+      "fps": 25.0,
+      "frameIntervalMsTolerance": 40.0,
+      "repsMeasured": 5,
+      "arms": {
+        "default": {
+          "runs": [
+            {
+              "wallMs": 15041.9,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 4,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 2,
+                "ballCandidatesMs": 979,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 14296,
+                "paddleTrackMs": 12,
+                "ballTrackMs": 70,
+                "eventIsolationMs": 1
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 15269.0,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 4,
+                "poseDerivativesMs": 2,
+                "eventPrePassMs": 2,
+                "ballCandidatesMs": 980,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 14539,
+                "paddleTrackMs": 15,
+                "ballTrackMs": 68,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 19886.5,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 13,
+                "poseDerivativesMs": 2,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 1019,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 19144,
+                "paddleTrackMs": 14,
+                "ballTrackMs": 69,
+                "eventIsolationMs": 1
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 20597.2,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 4,
+                "poseDerivativesMs": 3,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 971,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 19860,
+                "paddleTrackMs": 16,
+                "ballTrackMs": 70,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 14389.2,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 4,
+                "poseDerivativesMs": 3,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 998,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 13672,
+                "paddleTrackMs": 12,
+                "ballTrackMs": 71,
+                "eventIsolationMs": 1
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 15269.0,
+            "p90": 20597.2,
+            "min": 14389.2,
+            "max": 20597.2,
+            "mean": 17036.8
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 980,
+            "ballTrackMs": 70,
+            "eventIsolationMs": 1,
+            "eventPrePassMs": 1,
+            "paddleDetectMs": 14539,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 14,
+            "playerTrackMs": 4,
+            "poseDerivativesMs": 2
+          }
+        },
+        "twopass": {
+          "runs": [
+            {
+              "wallMs": 12248.6,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 4,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 2,
+                "ballCandidatesMs": 1080,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 6785,
+                "paddleDetectDenseMs": 4707,
+                "paddleDetectMs": 11500,
+                "paddleTrackMs": 10,
+                "ballTrackMs": 68,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 12979.8,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 4,
+                "poseDerivativesMs": 9,
+                "eventPrePassMs": 3,
+                "ballCandidatesMs": 1004,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 6832,
+                "paddleDetectDenseMs": 5246,
+                "paddleDetectMs": 12088,
+                "paddleTrackMs": 11,
+                "ballTrackMs": 83,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 11971.2,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 3,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1015,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 6559,
+                "paddleDetectDenseMs": 4681,
+                "paddleDetectMs": 11248,
+                "paddleTrackMs": 8,
+                "ballTrackMs": 70,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 16616.0,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 4,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 2,
+                "ballCandidatesMs": 964,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 6719,
+                "paddleDetectDenseMs": 9136,
+                "paddleDetectMs": 15863,
+                "paddleTrackMs": 12,
+                "ballTrackMs": 75,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 12550.1,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 4,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 3,
+                "ballCandidatesMs": 966,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 6796,
+                "paddleDetectDenseMs": 5033,
+                "paddleDetectMs": 11837,
+                "paddleTrackMs": 8,
+                "ballTrackMs": 66,
+                "eventIsolationMs": 1
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 12550.1,
+            "p90": 16616.0,
+            "min": 11971.2,
+            "max": 16616.0,
+            "mean": 13273.1
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 1004,
+            "ballTrackMs": 70,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 2,
+            "paddleDetectDenseMs": 5033,
+            "paddleDetectMs": 11837,
+            "paddleDetectSparseMs": 6785,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 10,
+            "playerTrackMs": 4,
+            "poseDerivativesMs": 1
+          }
+        }
+      },
+      "equivalence": {
+        "toleranceStatement": "*Ms fields within one frame interval (40.00ms), confidence/score fields within 0.02, all else exact; report normalized by dropping timings/outDir/paddleSchedule",
+        "defaultVsTwopass": {
+          "reportDiffs": [
+            {
+              "path": "report.ballStage.medianSpeed",
+              "kind": "number",
+              "a": 1.2278945394454701,
+              "b": 0.4644620544242561,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.ballStage.minPaddleDistance",
+              "kind": "number",
+              "a": 0.09434589342578724,
+              "b": 0.02703705790207222,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.ballStage.observationCount",
+              "kind": "number",
+              "a": 13.0,
+              "b": 14.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.ballStage.timeline.bridgePointCount",
+              "kind": "number",
+              "a": 2.0,
+              "b": 0.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.ballStage.timeline.reacquisition",
+              "kind": "value",
+              "a": "\"SUCCESS: corridor: miss 0.064 of radius 0.098, dirCos 0.98\"",
+              "b": "\"FAILED_NO_CANDIDATE: body occlusion: no compatible segment emerged within 500ms (staying LOST beats grabbing a decoy)\""
+            },
+            {
+              "path": "report.ballStage.timeline.states[0]",
+              "kind": "value",
+              "a": "\"TRACKED 6340-6660ms\"",
+              "b": "\"ENTERING_OCCLUSION 5940-6580ms\""
+            },
+            {
+              "path": "report.ballStage.timeline.states[1]",
+              "kind": "value",
+              "a": "\"OCCLUDED 6660-6740ms\"",
+              "b": "\"OCCLUDED 6580-7080ms\""
+            },
+            {
+              "path": "report.ballStage.timeline.states[2]",
+              "kind": "value",
+              "a": "\"REACQUIRED 6740-6900ms\"",
+              "b": "\"LOST 7080-7960ms\""
+            },
+            {
+              "path": "report.ballStage.trackId",
+              "kind": "number",
+              "a": 326.0,
+              "b": 299.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.ballStage.windowOverlapMs",
+              "kind": "number",
+              "a": 320.0,
+              "b": 640.0,
+              "toleranceApplied": 40.0
+            },
+            {
+              "path": "report.contact.ballConfirmed",
+              "kind": "missing",
+              "a": true,
+              "b": false
+            },
+            {
+              "path": "report.contact.confidence",
+              "kind": "missing",
+              "a": true,
+              "b": false
+            },
+            {
+              "path": "report.contact.contactDistribution",
+              "kind": "length",
+              "a": 51,
+              "b": 60
+            },
+            {
+              "path": "report.contact.estimatedContactMs",
+              "kind": "missing",
+              "a": true,
+              "b": false
+            },
+            {
+              "path": "report.contact.limitingFactors[0]",
+              "kind": "value",
+              "a": "\"no_ball_evidence\"",
+              "b": "\"contact_evidence_multimodal\""
+            },
+            {
+              "path": "report.contact.modes",
+              "kind": "length",
+              "a": 3,
+              "b": 4
+            },
+            {
+              "path": "report.contact.paddleConfirmed",
+              "kind": "missing",
+              "a": true,
+              "b": false
+            },
+            {
+              "path": "report.contact.reason",
+              "kind": "missing",
+              "a": false,
+              "b": true
+            },
+            {
+              "path": "report.contact.status",
+              "kind": "value",
+              "a": "\"estimated\"",
+              "b": "\"abstained\""
+            },
+            {
+              "path": "report.contact.supportingEvidence",
+              "kind": "missing",
+              "a": true,
+              "b": false
+            },
+            {
+              "path": "report.events.proposals",
+              "kind": "length",
+              "a": 2,
+              "b": 0
+            },
+            {
+              "path": "report.events.source",
+              "kind": "value",
+              "a": "\"paddle_fallback\"",
+              "b": "\"wrist\""
+            },
+            {
+              "path": "report.kineticEvents",
+              "kind": "length",
+              "a": 5,
+              "b": 4
+            },
+            {
+              "path": "report.paddle.association.meanTargetWristDistance",
+              "kind": "number",
+              "a": 0.04766011875144188,
+              "b": 0.039749523532826285,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.association.selectionMargin",
+              "kind": "number",
+              "a": 4.936208155134164,
+              "b": 3.674106817774537,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.candidateTracks",
+              "kind": "number",
+              "a": 28.0,
+              "b": 25.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 116.9,
+              "b": 113.1,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.meanDetectorScore",
+              "kind": "number",
+              "a": 0.5322015151515151,
+              "b": 0.5430205882352942,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.meanWristDistance",
+              "kind": "number",
+              "a": 0.04766011875144188,
+              "b": 0.039749523532826285,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.observationCount",
+              "kind": "number",
+              "a": 66.0,
+              "b": 34.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.windowCoverage",
+              "kind": "number",
+              "a": 0.8092485549132948,
+              "b": 0.5895953757225434,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.strokePrediction",
+              "kind": "type",
+              "a": "{\"taxonomyVersion\": \"pickleball-stroke-taxonomy-v3\", \"classifierVersion\": \"stroke-heuristic-4 (uncalibrated)\", \"label\": \"UNKNOWN\", \"leaf\": \"UNKNOWN\", \"taxonomyDepth\": 1.0, \"confidence\": 0.2, \"evidence\u2026",
+              "b": "null"
+            },
+            {
+              "path": "report.targetEvent.event",
+              "kind": "missing",
+              "a": true,
+              "b": false
+            },
+            {
+              "path": "report.targetEvent.reason",
+              "kind": "missing",
+              "a": false,
+              "b": true
+            },
+            {
+              "path": "report.targetEvent.status",
+              "kind": "value",
+              "a": "\"selected\"",
+              "b": "\"none\""
+            },
+            {
+              "path": "report.targetEvent.via",
+              "kind": "missing",
+              "a": true,
+              "b": false
+            },
+            {
+              "path": "report.temporalPhases.boundaries.anchor",
+              "kind": "value",
+              "a": "\"contact_estimate\"",
+              "b": "\"speed_peak\""
+            },
+            {
+              "path": "report.temporalPhases.boundaries.confidence",
+              "kind": "number",
+              "a": 0.6,
+              "b": 0.48,
+              "toleranceApplied": 0.02
+            },
+            {
+              "path": "report.temporalPhases.boundaries.followThroughEndMs",
+              "kind": "number",
+              "a": 5400.0,
+              "b": 5480.0,
+              "toleranceApplied": 40.0
+            },
+            {
+              "path": "report.temporalPhases.boundaries.relative.followThroughEndMs",
+              "kind": "number",
+              "a": 30.0,
+              "b": 80.0,
+              "toleranceApplied": 40.0
+            },
+            {
+              "path": "report.temporalPhases.boundaries.relative.preparationStartMs",
+              "kind": "number",
+              "a": -570.0,
+              "b": -640.0,
+              "toleranceApplied": 40.0
+            },
+            {
+              "path": "report.temporalPhasesV2.boundaries",
+              "kind": "missing",
+              "a": true,
+              "b": false
+            },
+            {
+              "path": "report.temporalPhasesV2.reason",
+              "kind": "missing",
+              "a": false,
+              "b": true
+            },
+            {
+              "path": "report.temporalPhasesV2.status",
+              "kind": "value",
+              "a": "\"segmented\"",
+              "b": "\"abstained\""
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 93,
+            "framesB": 57,
+            "sharedFrames": 57,
+            "sharedFramesByteEqual": 56,
+            "mismatchedTMs": [5280.0]
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        },
+        "determinismControlDefaultRep1VsRep2": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 116.9,
+              "b": 119.2,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 93,
+            "framesB": 93,
+            "sharedFrames": 93,
+            "sharedFramesByteEqual": 93,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        }
+      }
+    },
+    "afn-sasebo-rally1": {
+      "kind": "bundle_clip",
+      "durationMs": 4404.4,
+      "fps": 29.97002997002997,
+      "frameIntervalMsTolerance": 33.37,
+      "repsMeasured": 5,
+      "arms": {
+        "default": {
+          "runs": [
+            {
+              "wallMs": 18441.7,
+              "exitCode": 0,
+              "outcome": "abstained",
+              "timings": {
+                "playerTrackMs": 3,
+                "poseDerivativesMs": 0,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1693,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 17648,
+                "paddleTrackMs": 15,
+                "ballTrackMs": 77,
+                "eventIsolationMs": 1,
+                "fusionAnalysisMs": 26
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 26774.0,
+              "exitCode": 0,
+              "outcome": "abstained",
+              "timings": {
+                "playerTrackMs": 3,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1652,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 25958,
+                "paddleTrackMs": 20,
+                "ballTrackMs": 83,
+                "eventIsolationMs": 0,
+                "fusionAnalysisMs": 26
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 25814.7,
+              "exitCode": 0,
+              "outcome": "abstained",
+              "timings": {
+                "playerTrackMs": 4,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1744,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 25028,
+                "paddleTrackMs": 15,
+                "ballTrackMs": 71,
+                "eventIsolationMs": 1,
+                "fusionAnalysisMs": 23
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 18404.9,
+              "exitCode": 0,
+              "outcome": "abstained",
+              "timings": {
+                "playerTrackMs": 3,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1635,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 17604,
+                "paddleTrackMs": 14,
+                "ballTrackMs": 88,
+                "eventIsolationMs": 1,
+                "fusionAnalysisMs": 17
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 24255.8,
+              "exitCode": 0,
+              "outcome": "abstained",
+              "timings": {
+                "playerTrackMs": 2,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1970,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 23444,
+                "paddleTrackMs": 14,
+                "ballTrackMs": 71,
+                "eventIsolationMs": 0,
+                "fusionAnalysisMs": 28
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 24255.8,
+            "p90": 26774.0,
+            "min": 18404.9,
+            "max": 26774.0,
+            "mean": 22738.2
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 1693,
+            "ballTrackMs": 77,
+            "eventIsolationMs": 1,
+            "eventPrePassMs": 1,
+            "fusionAnalysisMs": 26,
+            "paddleDetectMs": 23444,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 15,
+            "playerTrackMs": 3,
+            "poseDerivativesMs": 1
+          }
+        },
+        "twopass": {
+          "runs": [
+            {
+              "wallMs": 21788.9,
+              "exitCode": 0,
+              "outcome": "abstained",
+              "timings": {
+                "playerTrackMs": 3,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1708,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 8707,
+                "paddleDetectDenseMs": 12331,
+                "paddleDetectMs": 21048,
+                "paddleTrackMs": 11,
+                "ballTrackMs": 70,
+                "eventIsolationMs": 1,
+                "fusionAnalysisMs": 22
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 24855.5,
+              "exitCode": 0,
+              "outcome": "abstained",
+              "timings": {
+                "playerTrackMs": 3,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1754,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 7796,
+                "paddleDetectDenseMs": 16282,
+                "paddleDetectMs": 24087,
+                "paddleTrackMs": 11,
+                "ballTrackMs": 71,
+                "eventIsolationMs": 0,
+                "fusionAnalysisMs": 22
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 23280.9,
+              "exitCode": 0,
+              "outcome": "abstained",
+              "timings": {
+                "playerTrackMs": 3,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1625,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 7597,
+                "paddleDetectDenseMs": 14892,
+                "paddleDetectMs": 22499,
+                "paddleTrackMs": 12,
+                "ballTrackMs": 75,
+                "eventIsolationMs": 0,
+                "fusionAnalysisMs": 25
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 27493.0,
+              "exitCode": 0,
+              "outcome": "abstained",
+              "timings": {
+                "playerTrackMs": 3,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1655,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 9166,
+                "paddleDetectDenseMs": 17508,
+                "paddleDetectMs": 26684,
+                "paddleTrackMs": 14,
+                "ballTrackMs": 71,
+                "eventIsolationMs": 0,
+                "fusionAnalysisMs": 22
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 24526.1,
+              "exitCode": 0,
+              "outcome": "abstained",
+              "timings": {
+                "playerTrackMs": 3,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1995,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 12171,
+                "paddleDetectDenseMs": 11596,
+                "paddleDetectMs": 23777,
+                "paddleTrackMs": 11,
+                "ballTrackMs": 76,
+                "eventIsolationMs": 1,
+                "fusionAnalysisMs": 23
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 24526.1,
+            "p90": 27493.0,
+            "min": 21788.9,
+            "max": 27493.0,
+            "mean": 24388.9
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 1708,
+            "ballTrackMs": 71,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 1,
+            "fusionAnalysisMs": 22,
+            "paddleDetectDenseMs": 14892,
+            "paddleDetectMs": 23777,
+            "paddleDetectSparseMs": 8707,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 11,
+            "playerTrackMs": 3,
+            "poseDerivativesMs": 1
+          }
+        }
+      },
+      "equivalence": {
+        "toleranceStatement": "*Ms fields within one frame interval (33.37ms), confidence/score fields within 0.02, all else exact; report normalized by dropping timings/outDir/paddleSchedule",
+        "defaultVsTwopass": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.association.selectionMargin",
+              "kind": "number",
+              "a": 1.1952371093568175,
+              "b": 1.068761903726084,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.candidateTracks",
+              "kind": "number",
+              "a": 39.0,
+              "b": 34.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 125.8,
+              "b": 124.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.trackId",
+              "kind": "number",
+              "a": 24.0,
+              "b": 18.0,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 107,
+            "framesB": 97,
+            "sharedFrames": 97,
+            "sharedFramesByteEqual": 95,
+            "mismatchedTMs": [2035.37, 2969.63]
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        },
+        "determinismControlDefaultRep1VsRep2": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 125.8,
+              "b": 208.6,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 107,
+            "framesB": 107,
+            "sharedFrames": 107,
+            "sharedFramesByteEqual": 107,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        }
+      }
+    },
+    "voa-6108955": {
+      "kind": "fresh_candidate",
+      "durationMs": 196830.16349683018,
+      "fps": 29.97,
+      "frameIntervalMsTolerance": 33.37,
+      "repsMeasured": 3,
+      "arms": {
+        "default": {
+          "runs": [
+            {
+              "wallMs": 3581.8,
+              "exitCode": 0,
+              "outcome": "abstained",
+              "timings": {
+                "playerTrackMs": 363
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 3616.2,
+              "exitCode": 0,
+              "outcome": "abstained",
+              "timings": {
+                "playerTrackMs": 78
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 3438.3,
+              "exitCode": 0,
+              "outcome": "abstained",
+              "timings": {
+                "playerTrackMs": 80
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 3581.8,
+            "p90": 3616.2,
+            "min": 3438.3,
+            "max": 3616.2,
+            "mean": 3545.4
+          },
+          "stageMedianMs": {
+            "playerTrackMs": 80
+          }
+        },
+        "twopass": {
+          "runs": [
+            {
+              "wallMs": 3536.4,
+              "exitCode": 0,
+              "outcome": "abstained",
+              "timings": {
+                "playerTrackMs": 78
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 3548.3,
+              "exitCode": 0,
+              "outcome": "abstained",
+              "timings": {
+                "playerTrackMs": 77
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 3586.0,
+              "exitCode": 0,
+              "outcome": "abstained",
+              "timings": {
+                "playerTrackMs": 88
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 3548.3,
+            "p90": 3586.0,
+            "min": 3536.4,
+            "max": 3586.0,
+            "mean": 3556.9
+          },
+          "stageMedianMs": {
+            "playerTrackMs": 78
+          }
+        }
+      },
+      "equivalence": {
+        "toleranceStatement": "*Ms fields within one frame interval (33.37ms), confidence/score fields within 0.02, all else exact; report normalized by dropping timings/outDir/paddleSchedule",
+        "defaultVsTwopass": {
+          "reportDiffs": [],
+          "paddleDetsSharedFrames": {
+            "fileA": false,
+            "fileB": false,
+            "note": "paddle stage did not run"
+          },
+          "ballCandidates": {
+            "fileA": false,
+            "fileB": false,
+            "note": "ball stage did not run"
+          }
+        },
+        "determinismControlDefaultRep1VsRep2": {
+          "reportDiffs": [],
+          "paddleDetsSharedFrames": {
+            "fileA": false,
+            "fileB": false,
+            "note": "paddle stage did not run"
+          },
+          "ballCandidates": {
+            "fileA": false,
+            "fileB": false,
+            "note": "ball stage did not run"
+          }
+        }
+      }
+    },
+    "voa-6115790": {
+      "kind": "fresh_candidate",
+      "durationMs": 184117.45078411745,
+      "fps": 29.97,
+      "frameIntervalMsTolerance": 33.37,
+      "repsMeasured": 3,
+      "arms": {
+        "default": {
+          "runs": [
+            {
+              "wallMs": 20015.5,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 70,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 2310,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 18988,
+                "paddleTrackMs": 26,
+                "ballTrackMs": 72,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 8740.7,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 76,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 2230,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 7785,
+                "paddleTrackMs": 22,
+                "ballTrackMs": 71,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 18589.0,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 76,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 2321,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 17203,
+                "paddleTrackMs": 24,
+                "ballTrackMs": 61,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 18589.0,
+            "p90": 20015.5,
+            "min": 8740.7,
+            "max": 20015.5,
+            "mean": 15781.7
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 2310,
+            "ballTrackMs": 71,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 1,
+            "paddleDetectMs": 17203,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 24,
+            "playerTrackMs": 76,
+            "poseDerivativesMs": 1
+          }
+        },
+        "twopass": {
+          "runs": [
+            {
+              "wallMs": 19648.2,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 71,
+                "poseDerivativesMs": 0,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 2240,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 15084,
+                "paddleDetectDenseMs": 3498,
+                "paddleDetectMs": 18588,
+                "paddleTrackMs": 19,
+                "ballTrackMs": 64,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 9456.2,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 73,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 2283,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 4860,
+                "paddleDetectDenseMs": 3604,
+                "paddleDetectMs": 8468,
+                "paddleTrackMs": 17,
+                "ballTrackMs": 64,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 11699.8,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 84,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 2281,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 6215,
+                "paddleDetectDenseMs": 4382,
+                "paddleDetectMs": 10602,
+                "paddleTrackMs": 19,
+                "ballTrackMs": 74,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 11699.8,
+            "p90": 19648.2,
+            "min": 9456.2,
+            "max": 19648.2,
+            "mean": 13601.4
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 2281,
+            "ballTrackMs": 64,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 1,
+            "paddleDetectDenseMs": 3604,
+            "paddleDetectMs": 10602,
+            "paddleDetectSparseMs": 6215,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 19,
+            "playerTrackMs": 73,
+            "poseDerivativesMs": 1
+          }
+        }
+      },
+      "equivalence": {
+        "toleranceStatement": "*Ms fields within one frame interval (33.37ms), confidence/score fields within 0.02, all else exact; report normalized by dropping timings/outDir/paddleSchedule",
+        "defaultVsTwopass": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.association.meanTargetWristDistance",
+              "kind": "number",
+              "a": 0.10754777435769922,
+              "b": 0.09766082659738419,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.association.selectionMargin",
+              "kind": "number",
+              "a": 1.8930233275062873,
+              "b": 2.2994165948160514,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.candidateTracks",
+              "kind": "number",
+              "a": 11.0,
+              "b": 10.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 368.6,
+              "b": 363.3,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 43,
+            "framesB": 33,
+            "sharedFrames": 33,
+            "sharedFramesByteEqual": 33,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        },
+        "determinismControlDefaultRep1VsRep2": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 368.6,
+              "b": 113.4,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 43,
+            "framesB": 43,
+            "sharedFrames": 43,
+            "sharedFramesByteEqual": 43,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        }
+      }
+    },
+    "yt-6r4fOxRuKmM": {
+      "kind": "fresh_candidate",
+      "durationMs": 59993.26666666667,
+      "fps": 59.94005994005994,
+      "frameIntervalMsTolerance": 16.68,
+      "repsMeasured": 3,
+      "arms": {
+        "default": {
+          "runs": [
+            {
+              "wallMs": 25591.0,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 38,
+                "poseDerivativesMs": 4,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 4345,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 24280,
+                "paddleTrackMs": 19,
+                "ballTrackMs": 256,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 41460.8,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 40,
+                "poseDerivativesMs": 5,
+                "eventPrePassMs": 2,
+                "ballCandidatesMs": 4741,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 40206,
+                "paddleTrackMs": 50,
+                "ballTrackMs": 229,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 32946.6,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 43,
+                "poseDerivativesMs": 3,
+                "eventPrePassMs": 2,
+                "ballCandidatesMs": 4443,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 31802,
+                "paddleTrackMs": 56,
+                "ballTrackMs": 237,
+                "eventIsolationMs": 1
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 32946.6,
+            "p90": 41460.8,
+            "min": 25591.0,
+            "max": 41460.8,
+            "mean": 33332.8
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 4443,
+            "ballTrackMs": 237,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 2,
+            "paddleDetectMs": 31802,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 50,
+            "playerTrackMs": 40,
+            "poseDerivativesMs": 4
+          }
+        },
+        "twopass": {
+          "runs": [
+            {
+              "wallMs": 26266.6,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 47,
+                "poseDerivativesMs": 4,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 4008,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 9440,
+                "paddleDetectDenseMs": 15447,
+                "paddleDetectMs": 24901,
+                "paddleTrackMs": 38,
+                "ballTrackMs": 234,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 26353.6,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 46,
+                "poseDerivativesMs": 4,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 4356,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 9879,
+                "paddleDetectDenseMs": 15353,
+                "paddleDetectMs": 25245,
+                "paddleTrackMs": 36,
+                "ballTrackMs": 218,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 37228.8,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 42,
+                "poseDerivativesMs": 4,
+                "eventPrePassMs": 2,
+                "ballCandidatesMs": 5040,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 22287,
+                "paddleDetectDenseMs": 13862,
+                "paddleDetectMs": 36163,
+                "paddleTrackMs": 44,
+                "ballTrackMs": 210,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 26353.6,
+            "p90": 37228.8,
+            "min": 26266.6,
+            "max": 37228.8,
+            "mean": 29949.7
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 4356,
+            "ballTrackMs": 218,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 1,
+            "paddleDetectDenseMs": 15353,
+            "paddleDetectMs": 25245,
+            "paddleDetectSparseMs": 9879,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 38,
+            "playerTrackMs": 46,
+            "poseDerivativesMs": 4
+          }
+        }
+      },
+      "equivalence": {
+        "toleranceStatement": "*Ms fields within one frame interval (16.68ms), confidence/score fields within 0.02, all else exact; report normalized by dropping timings/outDir/paddleSchedule",
+        "defaultVsTwopass": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.association.meanTargetWristDistance",
+              "kind": "number",
+              "a": 0.028131769422890317,
+              "b": 0.0287956096706148,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.association.selectionMargin",
+              "kind": "number",
+              "a": 1.1199886794792229,
+              "b": 1.1481512256555544,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 147.5,
+              "b": 121.9,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.meanDetectorScore",
+              "kind": "number",
+              "a": 0.22270151515151518,
+              "b": 0.22793548387096774,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.meanWristDistance",
+              "kind": "number",
+              "a": 0.028131769422890317,
+              "b": 0.0287956096706148,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.observationCount",
+              "kind": "number",
+              "a": 66.0,
+              "b": 62.0,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 129,
+            "framesB": 120,
+            "sharedFrames": 120,
+            "sharedFramesByteEqual": 120,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        },
+        "determinismControlDefaultRep1VsRep2": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 147.5,
+              "b": 254.1,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 129,
+            "framesB": 129,
+            "sharedFrames": 129,
+            "sharedFramesByteEqual": 129,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        }
+      }
+    },
+    "yt-94KNxpNTyCw": {
+      "kind": "fresh_candidate",
+      "durationMs": 60000.0,
+      "fps": 30.0,
+      "frameIntervalMsTolerance": 33.33,
+      "repsMeasured": 3,
+      "arms": {
+        "default": {
+          "runs": [
+            {
+              "wallMs": 13219.9,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 72,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1535,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 12305,
+                "paddleTrackMs": 9,
+                "ballTrackMs": 87,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 17697.2,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 73,
+                "poseDerivativesMs": 2,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 1600,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 16798,
+                "paddleTrackMs": 14,
+                "ballTrackMs": 74,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 18073.4,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 81,
+                "poseDerivativesMs": 2,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 1567,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 17170,
+                "paddleTrackMs": 13,
+                "ballTrackMs": 87,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 17697.2,
+            "p90": 18073.4,
+            "min": 13219.9,
+            "max": 18073.4,
+            "mean": 16330.2
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 1567,
+            "ballTrackMs": 87,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 0,
+            "paddleDetectMs": 16798,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 13,
+            "playerTrackMs": 73,
+            "poseDerivativesMs": 2
+          }
+        },
+        "twopass": {
+          "runs": [
+            {
+              "wallMs": 13380.3,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 79,
+                "poseDerivativesMs": 2,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1647,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 6130,
+                "paddleDetectDenseMs": 6322,
+                "paddleDetectMs": 12457,
+                "paddleTrackMs": 12,
+                "ballTrackMs": 95,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 19150.2,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 77,
+                "poseDerivativesMs": 2,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1559,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 12009,
+                "paddleDetectDenseMs": 6234,
+                "paddleDetectMs": 18248,
+                "paddleTrackMs": 8,
+                "ballTrackMs": 80,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 19560.9,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 70,
+                "poseDerivativesMs": 2,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1814,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 12537,
+                "paddleDetectDenseMs": 6101,
+                "paddleDetectMs": 18643,
+                "paddleTrackMs": 13,
+                "ballTrackMs": 76,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 19150.2,
+            "p90": 19560.9,
+            "min": 13380.3,
+            "max": 19560.9,
+            "mean": 17363.8
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 1647,
+            "ballTrackMs": 80,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 1,
+            "paddleDetectDenseMs": 6234,
+            "paddleDetectMs": 18248,
+            "paddleDetectSparseMs": 12009,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 12,
+            "playerTrackMs": 77,
+            "poseDerivativesMs": 2
+          }
+        }
+      },
+      "equivalence": {
+        "toleranceStatement": "*Ms fields within one frame interval (33.33ms), confidence/score fields within 0.02, all else exact; report normalized by dropping timings/outDir/paddleSchedule",
+        "defaultVsTwopass": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.association.meanOtherWristDistance",
+              "kind": "number",
+              "a": 0.3123330418752262,
+              "b": 0.30901848510447677,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.association.meanTargetWristDistance",
+              "kind": "number",
+              "a": 0.05051521733640353,
+              "b": 0.04812678959059765,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.association.rejectedOtherPlayerTracks",
+              "kind": "number",
+              "a": 4.0,
+              "b": 3.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.association.selectionMargin",
+              "kind": "number",
+              "a": 1.9708497137778211,
+              "b": 1.728156720727784,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.candidateTracks",
+              "kind": "number",
+              "a": 11.0,
+              "b": 10.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 113.7,
+              "b": 114.5,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.meanDetectorScore",
+              "kind": "number",
+              "a": 0.6751714285714288,
+              "b": 0.6101185185185186,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.meanWristDistance",
+              "kind": "number",
+              "a": 0.05051521733640353,
+              "b": 0.04812678959059765,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.observationCount",
+              "kind": "number",
+              "a": 42.0,
+              "b": 27.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.windowCoverage",
+              "kind": "number",
+              "a": 0.555557142857142,
+              "b": 0.523809523809523,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.temporalPhases.boundaries.preparationStartMs",
+              "kind": "number",
+              "a": 16233.33,
+              "b": 16733.33,
+              "toleranceApplied": 33.333333333333336
+            },
+            {
+              "path": "report.temporalPhases.boundaries.relative.preparationStartMs",
+              "kind": "number",
+              "a": -1066.67,
+              "b": -566.6699999999983,
+              "toleranceApplied": 33.333333333333336
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 78,
+            "framesB": 60,
+            "sharedFrames": 60,
+            "sharedFramesByteEqual": 44,
+            "mismatchedTMs": [
+              15966.67, 16166.67, 16666.67, 16800.0, 16833.33, 16866.67, 16900.0, 17333.33,
+              17433.33, 17466.67, 17566.67, 18000.0, 18033.33, 18233.33, 18333.33, 18466.67
+            ]
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        },
+        "determinismControlDefaultRep1VsRep2": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 113.7,
+              "b": 169.8,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 78,
+            "framesB": 78,
+            "sharedFrames": 78,
+            "sharedFramesByteEqual": 78,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        }
+      }
+    },
+    "yt-9ru97zKV8mk": {
+      "kind": "fresh_candidate",
+      "durationMs": 60000.0,
+      "fps": 30.0,
+      "frameIntervalMsTolerance": 33.33,
+      "repsMeasured": 3,
+      "arms": {
+        "default": {
+          "runs": [
+            {
+              "wallMs": 4128.3,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 51,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1700,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 3275,
+                "paddleTrackMs": 1,
+                "ballTrackMs": 93,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 4193.4,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 34,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1794,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 3313,
+                "paddleTrackMs": 1,
+                "ballTrackMs": 90,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 7262.1,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 62,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 4321,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 6282,
+                "paddleTrackMs": 1,
+                "ballTrackMs": 92,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 4193.4,
+            "p90": 7262.1,
+            "min": 4128.3,
+            "max": 7262.1,
+            "mean": 5194.6
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 1794,
+            "ballTrackMs": 92,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 1,
+            "paddleDetectMs": 3313,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 1,
+            "playerTrackMs": 51,
+            "poseDerivativesMs": 1
+          }
+        },
+        "twopass": {
+          "runs": [
+            {
+              "wallMs": 4088.9,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 40,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1687,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 3229,
+                "paddleDetectDenseMs": 0,
+                "paddleDetectMs": 3230,
+                "paddleTrackMs": 1,
+                "ballTrackMs": 91,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 4143.1,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 68,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1700,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 3245,
+                "paddleDetectDenseMs": 0,
+                "paddleDetectMs": 3246,
+                "paddleTrackMs": 0,
+                "ballTrackMs": 89,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 4445.7,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 41,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 2396,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 3488,
+                "paddleDetectDenseMs": 0,
+                "paddleDetectMs": 3489,
+                "paddleTrackMs": 0,
+                "ballTrackMs": 91,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 4143.1,
+            "p90": 4445.7,
+            "min": 4088.9,
+            "max": 4445.7,
+            "mean": 4225.9
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 1700,
+            "ballTrackMs": 91,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 1,
+            "paddleDetectDenseMs": 0,
+            "paddleDetectMs": 3246,
+            "paddleDetectSparseMs": 3245,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 0,
+            "playerTrackMs": 41,
+            "poseDerivativesMs": 1
+          }
+        }
+      },
+      "equivalence": {
+        "toleranceStatement": "*Ms fields within one frame interval (33.33ms), confidence/score fields within 0.02, all else exact; report normalized by dropping timings/outDir/paddleSchedule",
+        "defaultVsTwopass": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 121.3,
+              "b": 110.0,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 1,
+            "framesB": 1,
+            "sharedFrames": 1,
+            "sharedFramesByteEqual": 1,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        },
+        "determinismControlDefaultRep1VsRep2": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 121.3,
+              "b": 117.0,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 1,
+            "framesB": 1,
+            "sharedFrames": 1,
+            "sharedFramesByteEqual": 1,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        }
+      }
+    },
+    "yt-I5wYCXCL4dY": {
+      "kind": "fresh_candidate",
+      "durationMs": 60000.0,
+      "fps": 60.0,
+      "frameIntervalMsTolerance": 16.67,
+      "repsMeasured": 3,
+      "arms": {
+        "default": {
+          "runs": [
+            {
+              "wallMs": 50603.2,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 60,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 4493,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 49269,
+                "paddleTrackMs": 240,
+                "ballTrackMs": 207,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 48715.4,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 62,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 4440,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 47363,
+                "paddleTrackMs": 251,
+                "ballTrackMs": 211,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 44859.7,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 59,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 4542,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 43526,
+                "paddleTrackMs": 237,
+                "ballTrackMs": 205,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 48715.4,
+            "p90": 50603.2,
+            "min": 44859.7,
+            "max": 50603.2,
+            "mean": 48059.4
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 4493,
+            "ballTrackMs": 207,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 0,
+            "paddleDetectMs": 47363,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 240,
+            "playerTrackMs": 60,
+            "poseDerivativesMs": 1
+          }
+        },
+        "twopass": {
+          "runs": [
+            {
+              "wallMs": 53929.1,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 61,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 4426,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 17068,
+                "paddleDetectDenseMs": 35510,
+                "paddleDetectMs": 52644,
+                "paddleTrackMs": 186,
+                "ballTrackMs": 202,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 56217.0,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 67,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 4472,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 18582,
+                "paddleDetectDenseMs": 36218,
+                "paddleDetectMs": 54863,
+                "paddleTrackMs": 269,
+                "ballTrackMs": 202,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 59485.6,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 62,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 4391,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 16021,
+                "paddleDetectDenseMs": 42153,
+                "paddleDetectMs": 58248,
+                "paddleTrackMs": 98,
+                "ballTrackMs": 212,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 56217.0,
+            "p90": 59485.6,
+            "min": 53929.1,
+            "max": 59485.6,
+            "mean": 56543.9
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 4426,
+            "ballTrackMs": 202,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 0,
+            "paddleDetectDenseMs": 36218,
+            "paddleDetectMs": 54863,
+            "paddleDetectSparseMs": 17068,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 186,
+            "playerTrackMs": 62,
+            "poseDerivativesMs": 1
+          }
+        }
+      },
+      "equivalence": {
+        "toleranceStatement": "*Ms fields within one frame interval (16.67ms), confidence/score fields within 0.02, all else exact; report normalized by dropping timings/outDir/paddleSchedule",
+        "defaultVsTwopass": {
+          "reportDiffs": [
+            {
+              "path": "report.contact.contactDistribution[13].density",
+              "kind": "number",
+              "a": 0.0,
+              "b": 0.003,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[14].density",
+              "kind": "number",
+              "a": 0.0,
+              "b": 0.013,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[15].density",
+              "kind": "number",
+              "a": 0.0,
+              "b": 0.039,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[16].density",
+              "kind": "number",
+              "a": 0.0,
+              "b": 0.07,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[17].density",
+              "kind": "number",
+              "a": 0.0,
+              "b": 0.079,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[18].density",
+              "kind": "number",
+              "a": 0.0,
+              "b": 0.061,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[19].density",
+              "kind": "number",
+              "a": 0.0,
+              "b": 0.059,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[20].density",
+              "kind": "number",
+              "a": 0.0,
+              "b": 0.116,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[21].density",
+              "kind": "number",
+              "a": 0.0,
+              "b": 0.201,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[22].density",
+              "kind": "number",
+              "a": 0.003,
+              "b": 0.223,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[23].density",
+              "kind": "number",
+              "a": 0.02,
+              "b": 0.151,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[24].density",
+              "kind": "number",
+              "a": 0.086,
+              "b": 0.063,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[25].density",
+              "kind": "number",
+              "a": 0.226,
+              "b": 0.016,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[26].density",
+              "kind": "number",
+              "a": 0.365,
+              "b": 0.003,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[27].density",
+              "kind": "number",
+              "a": 0.361,
+              "b": 0.001,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[28].density",
+              "kind": "number",
+              "a": 0.219,
+              "b": 0.01,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[29].density",
+              "kind": "number",
+              "a": 0.083,
+              "b": 0.048,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[30].density",
+              "kind": "number",
+              "a": 0.031,
+              "b": 0.141,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[31].density",
+              "kind": "number",
+              "a": 0.063,
+              "b": 0.256,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[32].density",
+              "kind": "number",
+              "a": 0.172,
+              "b": 0.285,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[33].density",
+              "kind": "number",
+              "a": 0.305,
+              "b": 0.198,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[34].density",
+              "kind": "number",
+              "a": 0.351,
+              "b": 0.099,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[35].density",
+              "kind": "number",
+              "a": 0.303,
+              "b": 0.076,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[36].density",
+              "kind": "number",
+              "a": 0.267,
+              "b": 0.126,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[37].density",
+              "kind": "number",
+              "a": 0.267,
+              "b": 0.202,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[38].density",
+              "kind": "number",
+              "a": 0.243,
+              "b": 0.245,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[39].density",
+              "kind": "number",
+              "a": 0.17,
+              "b": 0.217,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[40].density",
+              "kind": "number",
+              "a": 0.089,
+              "b": 0.141,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[41].density",
+              "kind": "number",
+              "a": 0.037,
+              "b": 0.068,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[42].density",
+              "kind": "number",
+              "a": 0.02,
+              "b": 0.033,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[43].density",
+              "kind": "number",
+              "a": 0.036,
+              "b": 0.044,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[44].density",
+              "kind": "number",
+              "a": 0.09,
+              "b": 0.105,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[45].density",
+              "kind": "number",
+              "a": 0.208,
+              "b": 0.24,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[46].density",
+              "kind": "number",
+              "a": 0.419,
+              "b": 0.475,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[47].density",
+              "kind": "number",
+              "a": 0.681,
+              "b": 0.766,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[48].density",
+              "kind": "number",
+              "a": 0.839,
+              "b": 0.951,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[49].density",
+              "kind": "number",
+              "a": 0.846,
+              "b": 0.947,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[50].density",
+              "kind": "number",
+              "a": 0.946,
+              "b": 0.979,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[51].density",
+              "kind": "number",
+              "a": 0.944,
+              "b": 0.923,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[52].density",
+              "kind": "number",
+              "a": 0.59,
+              "b": 0.572,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[53].density",
+              "kind": "number",
+              "a": 0.382,
+              "b": 0.358,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[54].density",
+              "kind": "number",
+              "a": 0.304,
+              "b": 0.222,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[55].density",
+              "kind": "number",
+              "a": 0.316,
+              "b": 0.102,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[56].density",
+              "kind": "number",
+              "a": 0.386,
+              "b": 0.044,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[57].density",
+              "kind": "number",
+              "a": 0.366,
+              "b": 0.041,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[58].density",
+              "kind": "number",
+              "a": 0.23,
+              "b": 0.063,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[59].density",
+              "kind": "number",
+              "a": 0.103,
+              "b": 0.091,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[60].density",
+              "kind": "number",
+              "a": 0.049,
+              "b": 0.114,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[61].density",
+              "kind": "number",
+              "a": 0.036,
+              "b": 0.123,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[62].density",
+              "kind": "number",
+              "a": 0.031,
+              "b": 0.114,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[63].density",
+              "kind": "number",
+              "a": 0.024,
+              "b": 0.091,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.modes[1].share",
+              "kind": "number",
+              "a": 0.851,
+              "b": 0.965,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.modes[2].share",
+              "kind": "number",
+              "a": 0.395,
+              "b": 0.291,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.modes[2].tMs",
+              "kind": "number",
+              "a": 18025.0,
+              "b": 16300.0,
+              "toleranceApplied": 16.666666666666668
+            },
+            {
+              "path": "report.contact.modes[3].share",
+              "kind": "number",
+              "a": 0.386,
+              "b": 0.245,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.modes[3].tMs",
+              "kind": "number",
+              "a": 15935.0,
+              "b": 16750.0,
+              "toleranceApplied": 16.666666666666668
+            },
+            {
+              "path": "report.contact.supportingEvidence[0].detail",
+              "kind": "value",
+              "a": "\"2.07 u/s (+4 lesser peak(s)); 23/284 paddle center(s) beyond 2 torso of every measured target wrist \\u2192 not the target's paddle, excluded; peak 2.42 u/s @14183ms = 29 torso/s > 25 \\u2192 tracking \u2026",
+              "b": "\"2.09 u/s (+4 lesser peak(s)); 14/268 paddle center(s) beyond 2 torso of every measured target wrist \\u2192 not the target's paddle, excluded; peak 2.69 u/s @14150ms = 32 torso/s > 25 \\u2192 tracking \u2026"
+            },
+            {
+              "path": "report.contact.supportingEvidence[0].timestampMs",
+              "kind": "number",
+              "a": 17433.33,
+              "b": 17450.0,
+              "toleranceApplied": 16.666666666666668
+            },
+            {
+              "path": "report.contact.supportingEvidence[0].weight",
+              "kind": "number",
+              "a": 0.457,
+              "b": 0.356,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.supportingEvidence[1].weight",
+              "kind": "number",
+              "a": 0.256,
+              "b": 0.326,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.supportingEvidence[2].detail",
+              "kind": "value",
+              "a": "\"104\\u00b0, speed ratio 0.30, 1.61 torso from target wrist, target motion quiet at this moment \\u00d70.34; turn@16950ms 167\\u00b0 rejected: 3.70 torso from target paddle \\u2192 REJECTED; turn@16967ms \u2026",
+              "b": "\"104\\u00b0, speed ratio 0.30, 1.61 torso from target wrist, target motion quiet at this moment \\u00d70.34; turn@16950ms 167\\u00b0 rejected: 3.64 torso from target paddle \\u2192 REJECTED; turn@16967ms \u2026"
+            },
+            {
+              "path": "report.kineticEvents[0].peakValue",
+              "kind": "number",
+              "a": 4.670995525815847,
+              "b": 4.393505659410426,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.kineticEvents[0].tMs",
+              "kind": "number",
+              "a": 14516.67,
+              "b": 15300.0,
+              "toleranceApplied": 16.666666666666668
+            },
+            {
+              "path": "report.kineticEvents[0].tRelContactMs",
+              "kind": "number",
+              "a": -3103.33,
+              "b": -2310.0,
+              "toleranceApplied": 16.666666666666668
+            },
+            {
+              "path": "report.paddle.association.meanTargetWristDistance",
+              "kind": "number",
+              "a": 0.09426372854656194,
+              "b": 0.08803048873880438,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.association.selectionMargin",
+              "kind": "number",
+              "a": 1.0447969441097835,
+              "b": 1.0257687987323896,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 149.0,
+              "b": 129.3,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.meanDetectorScore",
+              "kind": "number",
+              "a": 0.2686091549295776,
+              "b": 0.26936343283582087,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.meanWristDistance",
+              "kind": "number",
+              "a": 0.09426372854656194,
+              "b": 0.08803048873880438,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.observationCount",
+              "kind": "number",
+              "a": 284.0,
+              "b": 268.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.trackId",
+              "kind": "number",
+              "a": 12.0,
+              "b": 3.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.temporalPhases.boundaries.accelerationStartMs",
+              "kind": "number",
+              "a": 17616.67,
+              "b": 17600.0,
+              "toleranceApplied": 16.666666666666668
+            },
+            {
+              "path": "report.temporalPhases.boundaries.recoveryEndMs",
+              "kind": "number",
+              "a": 17650.0,
+              "b": 17633.33,
+              "toleranceApplied": 16.666666666666668
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 288,
+            "framesB": 268,
+            "sharedFrames": 268,
+            "sharedFramesByteEqual": 265,
+            "mismatchedTMs": [15633.33, 15650.0, 16383.33]
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        },
+        "determinismControlDefaultRep1VsRep2": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 149.0,
+              "b": 142.6,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 288,
+            "framesB": 288,
+            "sharedFrames": 288,
+            "sharedFramesByteEqual": 288,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        }
+      }
+    },
+    "yt-Y7DOO0j_1P4": {
+      "kind": "fresh_candidate",
+      "durationMs": 59993.26666666667,
+      "fps": 29.97002997002997,
+      "frameIntervalMsTolerance": 33.37,
+      "repsMeasured": 3,
+      "arms": {
+        "default": {
+          "runs": [
+            {
+              "wallMs": 12667.6,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 67,
+                "poseDerivativesMs": 2,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 1392,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 11763,
+                "paddleTrackMs": 23,
+                "ballTrackMs": 80,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 12692.9,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 79,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1441,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 11797,
+                "paddleTrackMs": 13,
+                "ballTrackMs": 81,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 12599.9,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 82,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 1398,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 11708,
+                "paddleTrackMs": 11,
+                "ballTrackMs": 80,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 12667.6,
+            "p90": 12692.9,
+            "min": 12599.9,
+            "max": 12692.9,
+            "mean": 12653.5
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 1398,
+            "ballTrackMs": 80,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 0,
+            "paddleDetectMs": 11763,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 13,
+            "playerTrackMs": 79,
+            "poseDerivativesMs": 1
+          }
+        },
+        "twopass": {
+          "runs": [
+            {
+              "wallMs": 15555.8,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 88,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1385,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 5829,
+                "paddleDetectDenseMs": 8824,
+                "paddleDetectMs": 14661,
+                "paddleTrackMs": 22,
+                "ballTrackMs": 81,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 15380.6,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 87,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1375,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 5795,
+                "paddleDetectDenseMs": 8671,
+                "paddleDetectMs": 14473,
+                "paddleTrackMs": 23,
+                "ballTrackMs": 79,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 15495.7,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 88,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1400,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 6026,
+                "paddleDetectDenseMs": 8574,
+                "paddleDetectMs": 14608,
+                "paddleTrackMs": 23,
+                "ballTrackMs": 79,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 15495.7,
+            "p90": 15555.8,
+            "min": 15380.6,
+            "max": 15555.8,
+            "mean": 15477.4
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 1385,
+            "ballTrackMs": 79,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 1,
+            "paddleDetectDenseMs": 8671,
+            "paddleDetectMs": 14608,
+            "paddleDetectSparseMs": 5829,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 23,
+            "playerTrackMs": 88,
+            "poseDerivativesMs": 1
+          }
+        }
+      },
+      "equivalence": {
+        "toleranceStatement": "*Ms fields within one frame interval (33.37ms), confidence/score fields within 0.02, all else exact; report normalized by dropping timings/outDir/paddleSchedule",
+        "defaultVsTwopass": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.association.rejectedOtherPlayerTracks",
+              "kind": "number",
+              "a": 7.0,
+              "b": 8.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.candidateTracks",
+              "kind": "number",
+              "a": 11.0,
+              "b": 12.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 116.3,
+              "b": 118.9,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 72,
+            "framesB": 68,
+            "sharedFrames": 68,
+            "sharedFramesByteEqual": 68,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        },
+        "determinismControlDefaultRep1VsRep2": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 116.3,
+              "b": 118.7,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 72,
+            "framesB": 72,
+            "sharedFrames": 72,
+            "sharedFramesByteEqual": 72,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        }
+      }
+    },
+    "yt-eK-iPN2XAJQ": {
+      "kind": "fresh_candidate",
+      "durationMs": 59993.26666666667,
+      "fps": 29.97002997002997,
+      "frameIntervalMsTolerance": 33.37,
+      "repsMeasured": 3,
+      "arms": {
+        "default": {
+          "runs": [
+            {
+              "wallMs": 32814.8,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 72,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 1881,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 31886,
+                "paddleTrackMs": 19,
+                "ballTrackMs": 71,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 14745.5,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 76,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1969,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 13569,
+                "paddleTrackMs": 18,
+                "ballTrackMs": 72,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 14069.1,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 78,
+                "poseDerivativesMs": 4,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 2500,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 13099,
+                "paddleTrackMs": 14,
+                "ballTrackMs": 61,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 14745.5,
+            "p90": 32814.8,
+            "min": 14069.1,
+            "max": 32814.8,
+            "mean": 20543.1
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 1969,
+            "ballTrackMs": 71,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 0,
+            "paddleDetectMs": 13569,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 18,
+            "playerTrackMs": 76,
+            "poseDerivativesMs": 1
+          }
+        },
+        "twopass": {
+          "runs": [
+            {
+              "wallMs": 15886.7,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 67,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 1933,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 5926,
+                "paddleDetectDenseMs": 9052,
+                "paddleDetectMs": 14986,
+                "paddleTrackMs": 13,
+                "ballTrackMs": 63,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 16003.4,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 77,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1863,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 5928,
+                "paddleDetectDenseMs": 9170,
+                "paddleDetectMs": 15106,
+                "paddleTrackMs": 13,
+                "ballTrackMs": 60,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 16295.4,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 83,
+                "poseDerivativesMs": 2,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 1965,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 6270,
+                "paddleDetectDenseMs": 9058,
+                "paddleDetectMs": 15337,
+                "paddleTrackMs": 13,
+                "ballTrackMs": 65,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 16003.4,
+            "p90": 16295.4,
+            "min": 15886.7,
+            "max": 16295.4,
+            "mean": 16061.8
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 1933,
+            "ballTrackMs": 63,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 0,
+            "paddleDetectDenseMs": 9058,
+            "paddleDetectMs": 15106,
+            "paddleDetectSparseMs": 5928,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 13,
+            "playerTrackMs": 77,
+            "poseDerivativesMs": 1
+          }
+        }
+      },
+      "equivalence": {
+        "toleranceStatement": "*Ms fields within one frame interval (33.37ms), confidence/score fields within 0.02, all else exact; report normalized by dropping timings/outDir/paddleSchedule",
+        "defaultVsTwopass": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 377.7,
+              "b": 116.4,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 73,
+            "framesB": 73,
+            "sharedFrames": 73,
+            "sharedFramesByteEqual": 73,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        },
+        "determinismControlDefaultRep1VsRep2": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 377.7,
+              "b": 139.1,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 73,
+            "framesB": 73,
+            "sharedFrames": 73,
+            "sharedFramesByteEqual": 73,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        }
+      }
+    },
+    "yt-hktiyFnghIw": {
+      "kind": "fresh_candidate",
+      "durationMs": 59993.26666666667,
+      "fps": 29.97002997002997,
+      "frameIntervalMsTolerance": 33.37,
+      "repsMeasured": 3,
+      "arms": {
+        "default": {
+          "runs": [
+            {
+              "wallMs": 25184.0,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 61,
+                "poseDerivativesMs": 2,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 2346,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 24132,
+                "paddleTrackMs": 33,
+                "ballTrackMs": 125,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 23970.0,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 68,
+                "poseDerivativesMs": 2,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 2344,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 22986,
+                "paddleTrackMs": 54,
+                "ballTrackMs": 117,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 24696.9,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 79,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 2242,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 23720,
+                "paddleTrackMs": 61,
+                "ballTrackMs": 109,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 24696.9,
+            "p90": 25184.0,
+            "min": 23970.0,
+            "max": 25184.0,
+            "mean": 24617.0
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 2344,
+            "ballTrackMs": 117,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 1,
+            "paddleDetectMs": 23720,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 54,
+            "playerTrackMs": 68,
+            "poseDerivativesMs": 2
+          }
+        },
+        "twopass": {
+          "runs": [
+            {
+              "wallMs": 24348.3,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 65,
+                "poseDerivativesMs": 2,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 2323,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 10015,
+                "paddleDetectDenseMs": 13349,
+                "paddleDetectMs": 23384,
+                "paddleTrackMs": 26,
+                "ballTrackMs": 133,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 22990.2,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 61,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 2276,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 9736,
+                "paddleDetectDenseMs": 12275,
+                "paddleDetectMs": 22027,
+                "paddleTrackMs": 26,
+                "ballTrackMs": 131,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 23848.2,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 68,
+                "poseDerivativesMs": 2,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 2254,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 9895,
+                "paddleDetectDenseMs": 12951,
+                "paddleDetectMs": 22858,
+                "paddleTrackMs": 45,
+                "ballTrackMs": 109,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 23848.2,
+            "p90": 24348.3,
+            "min": 22990.2,
+            "max": 24348.3,
+            "mean": 23728.9
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 2276,
+            "ballTrackMs": 131,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 0,
+            "paddleDetectDenseMs": 12951,
+            "paddleDetectMs": 22858,
+            "paddleDetectSparseMs": 9895,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 26,
+            "playerTrackMs": 65,
+            "poseDerivativesMs": 2
+          }
+        }
+      },
+      "equivalence": {
+        "toleranceStatement": "*Ms fields within one frame interval (33.37ms), confidence/score fields within 0.02, all else exact; report normalized by dropping timings/outDir/paddleSchedule",
+        "defaultVsTwopass": {
+          "reportDiffs": [
+            {
+              "path": "report.ballStage.confidenceModel",
+              "kind": "missing",
+              "a": false,
+              "b": true
+            },
+            {
+              "path": "report.ballStage.medianSpeed",
+              "kind": "missing",
+              "a": false,
+              "b": true
+            },
+            {
+              "path": "report.ballStage.minPaddleDistance",
+              "kind": "missing",
+              "a": false,
+              "b": true
+            },
+            {
+              "path": "report.ballStage.observationCount",
+              "kind": "missing",
+              "a": false,
+              "b": true
+            },
+            {
+              "path": "report.ballStage.reason",
+              "kind": "missing",
+              "a": true,
+              "b": false
+            },
+            {
+              "path": "report.ballStage.status",
+              "kind": "value",
+              "a": "\"untracked\"",
+              "b": "\"tracked\""
+            },
+            {
+              "path": "report.ballStage.timeline",
+              "kind": "missing",
+              "a": false,
+              "b": true
+            },
+            {
+              "path": "report.ballStage.trackId",
+              "kind": "missing",
+              "a": false,
+              "b": true
+            },
+            {
+              "path": "report.ballStage.windowOverlapMs",
+              "kind": "missing",
+              "a": false,
+              "b": true
+            },
+            {
+              "path": "report.contact.contactDistribution[3].density",
+              "kind": "number",
+              "a": 0.001,
+              "b": 0.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[4].density",
+              "kind": "number",
+              "a": 0.01,
+              "b": 0.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[5].density",
+              "kind": "number",
+              "a": 0.041,
+              "b": 0.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[6].density",
+              "kind": "number",
+              "a": 0.085,
+              "b": 0.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[7].density",
+              "kind": "number",
+              "a": 0.085,
+              "b": 0.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[8].density",
+              "kind": "number",
+              "a": 0.041,
+              "b": 0.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[9].density",
+              "kind": "number",
+              "a": 0.01,
+              "b": 0.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[10].density",
+              "kind": "number",
+              "a": 0.008,
+              "b": 0.001,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[11].density",
+              "kind": "number",
+              "a": 0.051,
+              "b": 0.007,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[12].density",
+              "kind": "number",
+              "a": 0.203,
+              "b": 0.024,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[13].density",
+              "kind": "number",
+              "a": 0.485,
+              "b": 0.05,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[14].density",
+              "kind": "number",
+              "a": 0.739,
+              "b": 0.066,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[15].density",
+              "kind": "number",
+              "a": 0.772,
+              "b": 0.065,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[16].density",
+              "kind": "number",
+              "a": 0.654,
+              "b": 0.076,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[17].density",
+              "kind": "number",
+              "a": 0.598,
+              "b": 0.117,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[18].density",
+              "kind": "number",
+              "a": 0.687,
+              "b": 0.154,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[19].density",
+              "kind": "number",
+              "a": 0.899,
+              "b": 0.155,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[20].density",
+              "kind": "number",
+              "a": 0.995,
+              "b": 0.15,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[21].density",
+              "kind": "number",
+              "a": 0.814,
+              "b": 0.171,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[22].density",
+              "kind": "number",
+              "a": 0.555,
+              "b": 0.174,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[23].density",
+              "kind": "number",
+              "a": 0.318,
+              "b": 0.119,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[24].density",
+              "kind": "number",
+              "a": 0.13,
+              "b": 0.051,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[25].density",
+              "kind": "number",
+              "a": 0.033,
+              "b": 0.013,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[26].density",
+              "kind": "number",
+              "a": 0.005,
+              "b": 0.002,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[43].density",
+              "kind": "number",
+              "a": 0.0,
+              "b": 0.002,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[44].density",
+              "kind": "number",
+              "a": 0.0,
+              "b": 0.027,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[45].density",
+              "kind": "number",
+              "a": 0.0,
+              "b": 0.187,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[46].density",
+              "kind": "number",
+              "a": 0.0,
+              "b": 0.647,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[47].density",
+              "kind": "number",
+              "a": 0.0,
+              "b": 1.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[48].density",
+              "kind": "number",
+              "a": 0.001,
+              "b": 0.607,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[49].density",
+              "kind": "number",
+              "a": 0.01,
+              "b": 0.173,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[50].density",
+              "kind": "number",
+              "a": 0.048,
+              "b": 0.05,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[51].density",
+              "kind": "number",
+              "a": 0.15,
+              "b": 0.064,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[52].density",
+              "kind": "number",
+              "a": 0.293,
+              "b": 0.117,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[53].density",
+              "kind": "number",
+              "a": 0.361,
+              "b": 0.143,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[54].density",
+              "kind": "number",
+              "a": 0.292,
+              "b": 0.116,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[55].density",
+              "kind": "number",
+              "a": 0.174,
+              "b": 0.069,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[56].density",
+              "kind": "number",
+              "a": 0.093,
+              "b": 0.037,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[57].density",
+              "kind": "number",
+              "a": 0.051,
+              "b": 0.02,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[58].density",
+              "kind": "number",
+              "a": 0.026,
+              "b": 0.01,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[59].density",
+              "kind": "number",
+              "a": 0.011,
+              "b": 0.004,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[60].density",
+              "kind": "number",
+              "a": 0.004,
+              "b": 0.002,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[61].density",
+              "kind": "number",
+              "a": 0.001,
+              "b": 0.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.limitingFactors[1]",
+              "kind": "value",
+              "a": "\"contact_evidence_multimodal\"",
+              "b": "\"contact_far_from_motion_peak\""
+            },
+            {
+              "path": "report.contact.modes[0].tMs",
+              "kind": "number",
+              "a": 20385.0,
+              "b": 22695.0,
+              "toleranceApplied": 33.36666666666667
+            },
+            {
+              "path": "report.contact.modes[1].share",
+              "kind": "number",
+              "a": 0.788,
+              "b": 0.179,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.modes[1].tMs",
+              "kind": "number",
+              "a": 19945.0,
+              "b": 20535.0,
+              "toleranceApplied": 33.36666666666667
+            },
+            {
+              "path": "report.contact.modes[2].share",
+              "kind": "number",
+              "a": 0.361,
+              "b": 0.158,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.modes[2].tMs",
+              "kind": "number",
+              "a": 23200.0,
+              "b": 20270.0,
+              "toleranceApplied": 33.36666666666667
+            },
+            {
+              "path": "report.contact.modes[3].share",
+              "kind": "number",
+              "a": 0.093,
+              "b": 0.143,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.modes[3].tMs",
+              "kind": "number",
+              "a": 19250.0,
+              "b": 23200.0,
+              "toleranceApplied": 33.36666666666667
+            },
+            {
+              "path": "report.contact.reason",
+              "kind": "value",
+              "a": "\"Contact evidence is multi-modal: comparable clusters at ~20385ms and ~19945ms (79% as strong, 440ms apart); no single moment is defensible.\"",
+              "b": "\"Fused contact evidence peaks at 22695ms but the scanned movement's peak motion is at 19820ms (2875ms apart): the strongest tracked evidence belongs to a different moment than the stroke under analysi\u2026"
+            },
+            {
+              "path": "report.kineticEvents",
+              "kind": "length",
+              "a": 3,
+              "b": 2
+            },
+            {
+              "path": "report.paddle.association.meanTargetWristDistance",
+              "kind": "number",
+              "a": 0.06012643484198519,
+              "b": 0.04567680310025198,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.association.selectionMargin",
+              "kind": "number",
+              "a": 1.4240081064265102,
+              "b": 1.4253843880003139,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.candidateTracks",
+              "kind": "number",
+              "a": 24.0,
+              "b": 22.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.confidenceModel",
+              "kind": "missing",
+              "a": true,
+              "b": false
+            },
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 116.1,
+              "b": 121.6,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.meanDetectorScore",
+              "kind": "missing",
+              "a": true,
+              "b": false
+            },
+            {
+              "path": "report.paddle.meanWristDistance",
+              "kind": "missing",
+              "a": true,
+              "b": false
+            },
+            {
+              "path": "report.paddle.observationCount",
+              "kind": "missing",
+              "a": true,
+              "b": false
+            },
+            {
+              "path": "report.paddle.reason",
+              "kind": "missing",
+              "a": false,
+              "b": true
+            },
+            {
+              "path": "report.paddle.status",
+              "kind": "value",
+              "a": "\"tracked\"",
+              "b": "\"untracked\""
+            },
+            {
+              "path": "report.paddle.trackId",
+              "kind": "missing",
+              "a": true,
+              "b": false
+            },
+            {
+              "path": "report.paddle.windowCoverage",
+              "kind": "missing",
+              "a": true,
+              "b": false
+            },
+            {
+              "path": "report.temporalPhases.reason",
+              "kind": "value",
+              "a": "\"insufficient kinematic coverage (paddle 31%, wrist 0%)\"",
+              "b": "\"insufficient kinematic coverage (paddle 0%, wrist 0%)\""
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 174,
+            "framesB": 126,
+            "sharedFrames": 126,
+            "sharedFramesByteEqual": 125,
+            "mismatchedTMs": [22722.33]
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        },
+        "determinismControlDefaultRep1VsRep2": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 116.1,
+              "b": 109.7,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 174,
+            "framesB": 174,
+            "sharedFrames": 174,
+            "sharedFramesByteEqual": 174,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        }
+      }
+    },
+    "yt-iuVdtmGoTbo": {
+      "kind": "fresh_candidate",
+      "durationMs": 60000.0,
+      "fps": 60.0,
+      "frameIntervalMsTolerance": 16.67,
+      "repsMeasured": 3,
+      "arms": {
+        "default": {
+          "runs": [
+            {
+              "wallMs": 33842.4,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 71,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 2,
+                "ballCandidatesMs": 4673,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 32786,
+                "paddleTrackMs": 40,
+                "ballTrackMs": 152,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 19150.0,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 69,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 2,
+                "ballCandidatesMs": 2547,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 18134,
+                "paddleTrackMs": 31,
+                "ballTrackMs": 130,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 19605.8,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 68,
+                "poseDerivativesMs": 2,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 2496,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 18543,
+                "paddleTrackMs": 37,
+                "ballTrackMs": 130,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 19605.8,
+            "p90": 33842.4,
+            "min": 19150.0,
+            "max": 33842.4,
+            "mean": 24199.4
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 2547,
+            "ballTrackMs": 130,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 2,
+            "paddleDetectMs": 18543,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 37,
+            "playerTrackMs": 69,
+            "poseDerivativesMs": 1
+          }
+        },
+        "twopass": {
+          "runs": [
+            {
+              "wallMs": 24710.1,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 62,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 2,
+                "ballCandidatesMs": 2554,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 7950,
+                "paddleDetectDenseMs": 15745,
+                "paddleDetectMs": 23712,
+                "paddleTrackMs": 37,
+                "ballTrackMs": 128,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 25391.4,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 70,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 2,
+                "ballCandidatesMs": 2487,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 8308,
+                "paddleDetectDenseMs": 16062,
+                "paddleDetectMs": 24383,
+                "paddleTrackMs": 32,
+                "ballTrackMs": 125,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 24556.9,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 67,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 2,
+                "ballCandidatesMs": 2474,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 7830,
+                "paddleDetectDenseMs": 15699,
+                "paddleDetectMs": 23542,
+                "paddleTrackMs": 31,
+                "ballTrackMs": 129,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 24710.1,
+            "p90": 25391.4,
+            "min": 24556.9,
+            "max": 25391.4,
+            "mean": 24886.1
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 2487,
+            "ballTrackMs": 128,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 2,
+            "paddleDetectDenseMs": 15745,
+            "paddleDetectMs": 23712,
+            "paddleDetectSparseMs": 7950,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 32,
+            "playerTrackMs": 67,
+            "poseDerivativesMs": 1
+          }
+        }
+      },
+      "equivalence": {
+        "toleranceStatement": "*Ms fields within one frame interval (16.67ms), confidence/score fields within 0.02, all else exact; report normalized by dropping timings/outDir/paddleSchedule",
+        "defaultVsTwopass": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 185.2,
+              "b": 112.6,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 132,
+            "framesB": 132,
+            "sharedFrames": 132,
+            "sharedFramesByteEqual": 132,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        },
+        "determinismControlDefaultRep1VsRep2": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 185.2,
+              "b": 110.5,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 132,
+            "framesB": 132,
+            "sharedFrames": 132,
+            "sharedFramesByteEqual": 132,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        }
+      }
+    },
+    "yt-n-QrBfQVK_w": {
+      "kind": "fresh_candidate",
+      "durationMs": 60000.0,
+      "fps": 30.0,
+      "frameIntervalMsTolerance": 33.33,
+      "repsMeasured": 3,
+      "arms": {
+        "default": {
+          "runs": [
+            {
+              "wallMs": 12451.2,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 49,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1501,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 11585,
+                "paddleTrackMs": 27,
+                "ballTrackMs": 82,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 12442.5,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 47,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1453,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 11578,
+                "paddleTrackMs": 13,
+                "ballTrackMs": 85,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 12620.0,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 47,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1475,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 11756,
+                "paddleTrackMs": 27,
+                "ballTrackMs": 86,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 12451.2,
+            "p90": 12620.0,
+            "min": 12442.5,
+            "max": 12620.0,
+            "mean": 12504.6
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 1475,
+            "ballTrackMs": 85,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 1,
+            "paddleDetectMs": 11585,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 27,
+            "playerTrackMs": 47,
+            "poseDerivativesMs": 1
+          }
+        },
+        "twopass": {
+          "runs": [
+            {
+              "wallMs": 10188.6,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 50,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1498,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 5773,
+                "paddleDetectDenseMs": 3545,
+                "paddleDetectMs": 9324,
+                "paddleTrackMs": 17,
+                "ballTrackMs": 84,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 10105.9,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 55,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1486,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 5870,
+                "paddleDetectDenseMs": 3313,
+                "paddleDetectMs": 9191,
+                "paddleTrackMs": 18,
+                "ballTrackMs": 94,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 10657.6,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 61,
+                "poseDerivativesMs": 2,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 1480,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 5967,
+                "paddleDetectDenseMs": 3735,
+                "paddleDetectMs": 9710,
+                "paddleTrackMs": 11,
+                "ballTrackMs": 103,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 10188.6,
+            "p90": 10657.6,
+            "min": 10105.9,
+            "max": 10657.6,
+            "mean": 10317.4
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 1486,
+            "ballTrackMs": 94,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 1,
+            "paddleDetectDenseMs": 3545,
+            "paddleDetectMs": 9324,
+            "paddleDetectSparseMs": 5870,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 17,
+            "playerTrackMs": 55,
+            "poseDerivativesMs": 1
+          }
+        }
+      },
+      "equivalence": {
+        "toleranceStatement": "*Ms fields within one frame interval (33.33ms), confidence/score fields within 0.02, all else exact; report normalized by dropping timings/outDir/paddleSchedule",
+        "defaultVsTwopass": {
+          "reportDiffs": [
+            {
+              "path": "report.contact.contactDistribution[12].density",
+              "kind": "number",
+              "a": 0.005,
+              "b": 0.003,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[13].density",
+              "kind": "number",
+              "a": 0.01,
+              "b": 0.007,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[14].density",
+              "kind": "number",
+              "a": 0.017,
+              "b": 0.012,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[15].density",
+              "kind": "number",
+              "a": 0.029,
+              "b": 0.02,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[16].density",
+              "kind": "number",
+              "a": 0.044,
+              "b": 0.031,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[17].density",
+              "kind": "number",
+              "a": 0.062,
+              "b": 0.044,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[18].density",
+              "kind": "number",
+              "a": 0.081,
+              "b": 0.057,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[19].density",
+              "kind": "number",
+              "a": 0.098,
+              "b": 0.069,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[20].density",
+              "kind": "number",
+              "a": 0.111,
+              "b": 0.08,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[21].density",
+              "kind": "number",
+              "a": 0.124,
+              "b": 0.097,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[22].density",
+              "kind": "number",
+              "a": 0.148,
+              "b": 0.143,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[23].density",
+              "kind": "number",
+              "a": 0.209,
+              "b": 0.263,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[24].density",
+              "kind": "number",
+              "a": 0.328,
+              "b": 0.496,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[25].density",
+              "kind": "number",
+              "a": 0.487,
+              "b": 0.791,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[26].density",
+              "kind": "number",
+              "a": 0.617,
+              "b": 0.985,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[27].density",
+              "kind": "number",
+              "a": 0.655,
+              "b": 0.949,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[28].density",
+              "kind": "number",
+              "a": 0.62,
+              "b": 0.733,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[29].density",
+              "kind": "number",
+              "a": 0.579,
+              "b": 0.505,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[30].density",
+              "kind": "number",
+              "a": 0.568,
+              "b": 0.362,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[31].density",
+              "kind": "number",
+              "a": 0.577,
+              "b": 0.294,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[32].density",
+              "kind": "number",
+              "a": 0.584,
+              "b": 0.261,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[33].density",
+              "kind": "number",
+              "a": 0.587,
+              "b": 0.237,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[34].density",
+              "kind": "number",
+              "a": 0.595,
+              "b": 0.218,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[35].density",
+              "kind": "number",
+              "a": 0.626,
+              "b": 0.206,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[36].density",
+              "kind": "number",
+              "a": 0.689,
+              "b": 0.201,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[37].density",
+              "kind": "number",
+              "a": 0.779,
+              "b": 0.205,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[38].density",
+              "kind": "number",
+              "a": 0.878,
+              "b": 0.216,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[39].density",
+              "kind": "number",
+              "a": 0.957,
+              "b": 0.237,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[40].density",
+              "kind": "number",
+              "a": 0.997,
+              "b": 0.274,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[41].density",
+              "kind": "number",
+              "a": 0.992,
+              "b": 0.335,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[42].density",
+              "kind": "number",
+              "a": 0.95,
+              "b": 0.426,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[43].density",
+              "kind": "number",
+              "a": 0.882,
+              "b": 0.544,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[44].density",
+              "kind": "number",
+              "a": 0.797,
+              "b": 0.669,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[45].density",
+              "kind": "number",
+              "a": 0.701,
+              "b": 0.766,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[46].density",
+              "kind": "number",
+              "a": 0.598,
+              "b": 0.803,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[47].density",
+              "kind": "number",
+              "a": 0.498,
+              "b": 0.761,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[48].density",
+              "kind": "number",
+              "a": 0.412,
+              "b": 0.651,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[49].density",
+              "kind": "number",
+              "a": 0.347,
+              "b": 0.501,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[50].density",
+              "kind": "number",
+              "a": 0.302,
+              "b": 0.349,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[51].density",
+              "kind": "number",
+              "a": 0.271,
+              "b": 0.221,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[52].density",
+              "kind": "number",
+              "a": 0.248,
+              "b": 0.129,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[53].density",
+              "kind": "number",
+              "a": 0.226,
+              "b": 0.071,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[54].density",
+              "kind": "number",
+              "a": 0.201,
+              "b": 0.037,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[55].density",
+              "kind": "number",
+              "a": 0.174,
+              "b": 0.019,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[56].density",
+              "kind": "number",
+              "a": 0.145,
+              "b": 0.009,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[57].density",
+              "kind": "number",
+              "a": 0.116,
+              "b": 0.004,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[58].density",
+              "kind": "number",
+              "a": 0.088,
+              "b": 0.002,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.modes[0].tMs",
+              "kind": "number",
+              "a": 37865.0,
+              "b": 37370.0,
+              "toleranceApplied": 33.333333333333336
+            },
+            {
+              "path": "report.contact.modes[1].share",
+              "kind": "number",
+              "a": 0.655,
+              "b": 0.803,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.modes[1].tMs",
+              "kind": "number",
+              "a": 37390.0,
+              "b": 38060.0,
+              "toleranceApplied": 33.333333333333336
+            },
+            {
+              "path": "report.contact.reason",
+              "kind": "value",
+              "a": "\"Contact evidence is multi-modal: comparable clusters at ~37865ms and ~37390ms (66% as strong, 475ms apart); no single moment is defensible.\"",
+              "b": "\"Contact evidence is multi-modal: comparable clusters at ~37370ms and ~38060ms (80% as strong, 690ms apart); no single moment is defensible.\""
+            },
+            {
+              "path": "report.kineticEvents[3].peakValue",
+              "kind": "number",
+              "a": 2.0143971647401773,
+              "b": 0.7348277086519037,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.kineticEvents[3].tMs",
+              "kind": "number",
+              "a": 38300.0,
+              "b": 38066.67,
+              "toleranceApplied": 33.333333333333336
+            },
+            {
+              "path": "report.paddle.association.meanOtherWristDistance",
+              "kind": "number",
+              "a": 0.20710774128224468,
+              "b": 0.21581118472090746,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.association.meanTargetWristDistance",
+              "kind": "number",
+              "a": 0.040533888409848215,
+              "b": 0.03643437262442783,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.association.selectionMargin",
+              "kind": "number",
+              "a": 4.0434653630557795,
+              "b": 7.145186321216551,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.candidateTracks",
+              "kind": "number",
+              "a": 13.0,
+              "b": 11.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 113.0,
+              "b": 112.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.meanDetectorScore",
+              "kind": "number",
+              "a": 0.6004803278688522,
+              "b": 0.6251,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.meanWristDistance",
+              "kind": "number",
+              "a": 0.040533888409848215,
+              "b": 0.03643437262442783,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.observationCount",
+              "kind": "number",
+              "a": 61.0,
+              "b": 42.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.windowCoverage",
+              "kind": "number",
+              "a": 0.9310344827586196,
+              "b": 0.9137948275862049,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.temporalPhases.boundaries",
+              "kind": "missing",
+              "a": false,
+              "b": true
+            },
+            {
+              "path": "report.temporalPhases.reason",
+              "kind": "missing",
+              "a": true,
+              "b": false
+            },
+            {
+              "path": "report.temporalPhases.status",
+              "kind": "value",
+              "a": "\"abstained\"",
+              "b": "\"segmented\""
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 73,
+            "framesB": 43,
+            "sharedFrames": 43,
+            "sharedFramesByteEqual": 43,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        },
+        "determinismControlDefaultRep1VsRep2": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 113.0,
+              "b": 113.2,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 73,
+            "framesB": 73,
+            "sharedFrames": 73,
+            "sharedFramesByteEqual": 73,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        }
+      }
+    },
+    "yt-o_NeuHjTEVE": {
+      "kind": "fresh_candidate",
+      "durationMs": 59993.26666666667,
+      "fps": 29.97002997002997,
+      "frameIntervalMsTolerance": 33.37,
+      "repsMeasured": 3,
+      "arms": {
+        "default": {
+          "runs": [
+            {
+              "wallMs": 5486.1,
+              "exitCode": 0,
+              "outcome": "analyzed",
+              "timings": {
+                "playerTrackMs": 80,
+                "poseDerivativesMs": 2,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1778,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 4266,
+                "paddleTrackMs": 1,
+                "ballTrackMs": 98,
+                "eventIsolationMs": 0,
+                "fusionAnalysisMs": 41
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 4074.6,
+              "exitCode": 0,
+              "outcome": "analyzed",
+              "timings": {
+                "playerTrackMs": 67,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1739,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 3190,
+                "paddleTrackMs": 0,
+                "ballTrackMs": 81,
+                "eventIsolationMs": 0,
+                "fusionAnalysisMs": 39
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 4225.2,
+              "exitCode": 0,
+              "outcome": "analyzed",
+              "timings": {
+                "playerTrackMs": 60,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1672,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 3270,
+                "paddleTrackMs": 1,
+                "ballTrackMs": 81,
+                "eventIsolationMs": 0,
+                "fusionAnalysisMs": 41
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 4225.2,
+            "p90": 5486.1,
+            "min": 4074.6,
+            "max": 5486.1,
+            "mean": 4595.3
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 1739,
+            "ballTrackMs": 81,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 1,
+            "fusionAnalysisMs": 41,
+            "paddleDetectMs": 3270,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 1,
+            "playerTrackMs": 67,
+            "poseDerivativesMs": 1
+          }
+        },
+        "twopass": {
+          "runs": [
+            {
+              "wallMs": 4952.9,
+              "exitCode": 0,
+              "outcome": "analyzed",
+              "timings": {
+                "playerTrackMs": 78,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 2216,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 3765,
+                "paddleDetectDenseMs": 0,
+                "paddleDetectMs": 3766,
+                "paddleTrackMs": 0,
+                "ballTrackMs": 88,
+                "eventIsolationMs": 0,
+                "fusionAnalysisMs": 50
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 4604.3,
+              "exitCode": 0,
+              "outcome": "analyzed",
+              "timings": {
+                "playerTrackMs": 66,
+                "poseDerivativesMs": 2,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1752,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 3636,
+                "paddleDetectDenseMs": 0,
+                "paddleDetectMs": 3638,
+                "paddleTrackMs": 0,
+                "ballTrackMs": 81,
+                "eventIsolationMs": 0,
+                "fusionAnalysisMs": 39
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 4068.4,
+              "exitCode": 0,
+              "outcome": "analyzed",
+              "timings": {
+                "playerTrackMs": 72,
+                "poseDerivativesMs": 1,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1664,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 3158,
+                "paddleDetectDenseMs": 0,
+                "paddleDetectMs": 3159,
+                "paddleTrackMs": 1,
+                "ballTrackMs": 81,
+                "eventIsolationMs": 0,
+                "fusionAnalysisMs": 40
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 4604.3,
+            "p90": 4952.9,
+            "min": 4068.4,
+            "max": 4952.9,
+            "mean": 4541.9
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 1752,
+            "ballTrackMs": 81,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 1,
+            "fusionAnalysisMs": 40,
+            "paddleDetectDenseMs": 0,
+            "paddleDetectMs": 3638,
+            "paddleDetectSparseMs": 3636,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 0,
+            "playerTrackMs": 72,
+            "poseDerivativesMs": 1
+          }
+        }
+      },
+      "equivalence": {
+        "toleranceStatement": "*Ms fields within one frame interval (33.37ms), confidence/score fields within 0.02, all else exact; report normalized by dropping timings/outDir/paddleSchedule",
+        "defaultVsTwopass": {
+          "reportDiffs": [
+            {
+              "path": "report.outcome.record.createdAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.232Z\"",
+              "b": "\"2026-08-29T12:09:09.181Z\""
+            },
+            {
+              "path": "report.outcome.record.id",
+              "kind": "value",
+              "a": "\"lab-analysis-1788005344226\"",
+              "b": "\"lab-analysis-1788005349174\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[0].completedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.229Z\"",
+              "b": "\"2026-08-29T12:09:09.177Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[0].id",
+              "kind": "value",
+              "a": "\"run-r3asn6ei\"",
+              "b": "\"run-r77lr8gd\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[0].startedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.227Z\"",
+              "b": "\"2026-08-29T12:09:09.175Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[1].completedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.231Z\"",
+              "b": "\"2026-08-29T12:09:09.180Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[1].id",
+              "kind": "value",
+              "a": "\"run-kiketbq6\"",
+              "b": "\"run-74lhpk3m\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[1].startedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.229Z\"",
+              "b": "\"2026-08-29T12:09:09.177Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[2].completedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.232Z\"",
+              "b": "\"2026-08-29T12:09:09.181Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[2].id",
+              "kind": "value",
+              "a": "\"run-c8zxf9v3\"",
+              "b": "\"run-u55tfvew\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[2].startedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.231Z\"",
+              "b": "\"2026-08-29T12:09:09.180Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[3].completedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.232Z\"",
+              "b": "\"2026-08-29T12:09:09.181Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[3].id",
+              "kind": "value",
+              "a": "\"run-7mjvwq8p\"",
+              "b": "\"run-f2xhbtus\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[3].startedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.232Z\"",
+              "b": "\"2026-08-29T12:09:09.181Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[4].completedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.232Z\"",
+              "b": "\"2026-08-29T12:09:09.181Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[4].id",
+              "kind": "value",
+              "a": "\"run-6xfrvg9l\"",
+              "b": "\"run-ueb0ggh4\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[4].startedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.232Z\"",
+              "b": "\"2026-08-29T12:09:09.181Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[5].completedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.232Z\"",
+              "b": "\"2026-08-29T12:09:09.181Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[5].id",
+              "kind": "value",
+              "a": "\"run-q8avgm5p\"",
+              "b": "\"run-pkopsriv\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[5].startedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.232Z\"",
+              "b": "\"2026-08-29T12:09:09.181Z\""
+            },
+            {
+              "path": "report.outcome.record.result.capturedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.226Z\"",
+              "b": "\"2026-08-29T12:09:09.174Z\""
+            },
+            {
+              "path": "report.outcome.record.result.id",
+              "kind": "value",
+              "a": "\"lab-analysis-1788005344226\"",
+              "b": "\"lab-analysis-1788005349174\""
+            },
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 194.9,
+              "b": 155.0,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 1,
+            "framesB": 1,
+            "sharedFrames": 1,
+            "sharedFramesByteEqual": 1,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        },
+        "determinismControlDefaultRep1VsRep2": {
+          "reportDiffs": [
+            {
+              "path": "report.outcome.record.createdAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.232Z\"",
+              "b": "\"2026-08-29T12:09:18.117Z\""
+            },
+            {
+              "path": "report.outcome.record.id",
+              "kind": "value",
+              "a": "\"lab-analysis-1788005344226\"",
+              "b": "\"lab-analysis-1788005358112\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[0].completedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.229Z\"",
+              "b": "\"2026-08-29T12:09:18.114Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[0].id",
+              "kind": "value",
+              "a": "\"run-r3asn6ei\"",
+              "b": "\"run-ut7icd6n\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[0].startedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.227Z\"",
+              "b": "\"2026-08-29T12:09:18.113Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[1].completedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.231Z\"",
+              "b": "\"2026-08-29T12:09:18.116Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[1].id",
+              "kind": "value",
+              "a": "\"run-kiketbq6\"",
+              "b": "\"run-oqu76wxa\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[1].startedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.229Z\"",
+              "b": "\"2026-08-29T12:09:18.114Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[2].completedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.232Z\"",
+              "b": "\"2026-08-29T12:09:18.117Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[2].id",
+              "kind": "value",
+              "a": "\"run-c8zxf9v3\"",
+              "b": "\"run-oz6iwva8\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[2].startedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.231Z\"",
+              "b": "\"2026-08-29T12:09:18.116Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[3].completedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.232Z\"",
+              "b": "\"2026-08-29T12:09:18.117Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[3].id",
+              "kind": "value",
+              "a": "\"run-7mjvwq8p\"",
+              "b": "\"run-riera7jq\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[3].startedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.232Z\"",
+              "b": "\"2026-08-29T12:09:18.117Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[4].completedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.232Z\"",
+              "b": "\"2026-08-29T12:09:18.117Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[4].id",
+              "kind": "value",
+              "a": "\"run-6xfrvg9l\"",
+              "b": "\"run-kyoeij0j\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[4].startedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.232Z\"",
+              "b": "\"2026-08-29T12:09:18.117Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[5].completedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.232Z\"",
+              "b": "\"2026-08-29T12:09:18.117Z\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[5].id",
+              "kind": "value",
+              "a": "\"run-q8avgm5p\"",
+              "b": "\"run-jicof4d2\""
+            },
+            {
+              "path": "report.outcome.record.modelRuns[5].startedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.232Z\"",
+              "b": "\"2026-08-29T12:09:18.117Z\""
+            },
+            {
+              "path": "report.outcome.record.result.capturedAtIso",
+              "kind": "value",
+              "a": "\"2026-08-29T12:09:04.226Z\"",
+              "b": "\"2026-08-29T12:09:18.111Z\""
+            },
+            {
+              "path": "report.outcome.record.result.id",
+              "kind": "value",
+              "a": "\"lab-analysis-1788005344226\"",
+              "b": "\"lab-analysis-1788005358112\""
+            },
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 194.9,
+              "b": 121.1,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 1,
+            "framesB": 1,
+            "sharedFrames": 1,
+            "sharedFramesByteEqual": 1,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        }
+      }
+    },
+    "yt-tJuJ4MQdYy0": {
+      "kind": "fresh_candidate",
+      "durationMs": 60000.0,
+      "fps": 60.0,
+      "frameIntervalMsTolerance": 16.67,
+      "repsMeasured": 3,
+      "arms": {
+        "default": {
+          "runs": [
+            {
+              "wallMs": 13511.3,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 54,
+                "poseDerivativesMs": 10,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 2002,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 12540,
+                "paddleTrackMs": 45,
+                "ballTrackMs": 31,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 13938.7,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 65,
+                "poseDerivativesMs": 8,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1893,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 12881,
+                "paddleTrackMs": 53,
+                "ballTrackMs": 30,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 13636.1,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 54,
+                "poseDerivativesMs": 9,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1905,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectMs": 12649,
+                "paddleTrackMs": 18,
+                "ballTrackMs": 35,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 13636.1,
+            "p90": 13938.7,
+            "min": 13511.3,
+            "max": 13938.7,
+            "mean": 13695.4
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 1905,
+            "ballTrackMs": 31,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 1,
+            "paddleDetectMs": 12649,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 45,
+            "playerTrackMs": 54,
+            "poseDerivativesMs": 9
+          }
+        },
+        "twopass": {
+          "runs": [
+            {
+              "wallMs": 17668.5,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 55,
+                "poseDerivativesMs": 10,
+                "eventPrePassMs": 0,
+                "ballCandidatesMs": 2093,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 6145,
+                "paddleDetectDenseMs": 10467,
+                "paddleDetectMs": 16617,
+                "paddleTrackMs": 19,
+                "ballTrackMs": 36,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 17811.9,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 60,
+                "poseDerivativesMs": 11,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1984,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 6325,
+                "paddleDetectDenseMs": 10369,
+                "paddleDetectMs": 16701,
+                "paddleTrackMs": 54,
+                "ballTrackMs": 39,
+                "eventIsolationMs": 0
+              },
+              "stderrTail": null
+            },
+            {
+              "wallMs": 18466.6,
+              "exitCode": 0,
+              "outcome": "not_analyzable",
+              "timings": {
+                "playerTrackMs": 55,
+                "poseDerivativesMs": 9,
+                "eventPrePassMs": 1,
+                "ballCandidatesMs": 1996,
+                "paddleDetectViaWorker": 1,
+                "paddleDetectSparseMs": 6290,
+                "paddleDetectDenseMs": 10952,
+                "paddleDetectMs": 17251,
+                "paddleTrackMs": 53,
+                "ballTrackMs": 178,
+                "eventIsolationMs": 1
+              },
+              "stderrTail": null
+            }
+          ],
+          "wallMs": {
+            "p50": 17811.9,
+            "p90": 18466.6,
+            "min": 17668.5,
+            "max": 18466.6,
+            "mean": 17982.3
+          },
+          "stageMedianMs": {
+            "ballCandidatesMs": 1996,
+            "ballTrackMs": 39,
+            "eventIsolationMs": 0,
+            "eventPrePassMs": 1,
+            "paddleDetectDenseMs": 10467,
+            "paddleDetectMs": 16701,
+            "paddleDetectSparseMs": 6290,
+            "paddleDetectViaWorker": 1,
+            "paddleTrackMs": 53,
+            "playerTrackMs": 55,
+            "poseDerivativesMs": 10
+          }
+        }
+      },
+      "equivalence": {
+        "toleranceStatement": "*Ms fields within one frame interval (16.67ms), confidence/score fields within 0.02, all else exact; report normalized by dropping timings/outDir/paddleSchedule",
+        "defaultVsTwopass": {
+          "reportDiffs": [
+            {
+              "path": "report.contact.contactDistribution[6].density",
+              "kind": "number",
+              "a": 0.553,
+              "b": 0.554,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[7].density",
+              "kind": "number",
+              "a": 0.65,
+              "b": 0.651,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[9].density",
+              "kind": "number",
+              "a": 0.823,
+              "b": 0.824,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[10].density",
+              "kind": "number",
+              "a": 0.89,
+              "b": 0.891,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[11].density",
+              "kind": "number",
+              "a": 0.94,
+              "b": 0.941,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[12].density",
+              "kind": "number",
+              "a": 0.974,
+              "b": 0.975,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[13].density",
+              "kind": "number",
+              "a": 0.993,
+              "b": 0.994,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[16].density",
+              "kind": "number",
+              "a": 0.976,
+              "b": 0.975,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[17].density",
+              "kind": "number",
+              "a": 0.944,
+              "b": 0.943,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[18].density",
+              "kind": "number",
+              "a": 0.897,
+              "b": 0.896,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[19].density",
+              "kind": "number",
+              "a": 0.836,
+              "b": 0.835,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[20].density",
+              "kind": "number",
+              "a": 0.761,
+              "b": 0.76,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[21].density",
+              "kind": "number",
+              "a": 0.675,
+              "b": 0.674,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[22].density",
+              "kind": "number",
+              "a": 0.583,
+              "b": 0.581,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[23].density",
+              "kind": "number",
+              "a": 0.491,
+              "b": 0.49,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[24].density",
+              "kind": "number",
+              "a": 0.41,
+              "b": 0.409,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[25].density",
+              "kind": "number",
+              "a": 0.348,
+              "b": 0.347,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[27].density",
+              "kind": "number",
+              "a": 0.288,
+              "b": 0.287,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[30].density",
+              "kind": "number",
+              "a": 0.274,
+              "b": 0.273,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.contactDistribution[48].density",
+              "kind": "number",
+              "a": 0.218,
+              "b": 0.219,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.contact.supportingEvidence[1].weight",
+              "kind": "number",
+              "a": 0.32,
+              "b": 0.319,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.association.meanTargetWristDistance",
+              "kind": "number",
+              "a": 0.09739461534099969,
+              "b": 0.09646823859133619,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.association.selectionMargin",
+              "kind": "number",
+              "a": 1.4391688734398365,
+              "b": 1.4463077645225084,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.candidateTracks",
+              "kind": "number",
+              "a": 13.0,
+              "b": 14.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 108.9,
+              "b": 113.4,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.meanDetectorScore",
+              "kind": "number",
+              "a": 0.45042823529411774,
+              "b": 0.45293488372093027,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.meanWristDistance",
+              "kind": "number",
+              "a": 0.09739461534099969,
+              "b": 0.09646823859133619,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.observationCount",
+              "kind": "number",
+              "a": 85.0,
+              "b": 86.0,
+              "toleranceApplied": 0.0
+            },
+            {
+              "path": "report.paddle.windowCoverage",
+              "kind": "number",
+              "a": 0.6388888888888888,
+              "b": 0.6481444444444444,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 85,
+            "framesB": 86,
+            "sharedFrames": 85,
+            "sharedFramesByteEqual": 85,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        },
+        "determinismControlDefaultRep1VsRep2": {
+          "reportDiffs": [
+            {
+              "path": "report.paddle.inferenceMsPerFrame",
+              "kind": "number",
+              "a": 108.9,
+              "b": 113.0,
+              "toleranceApplied": 0.0
+            }
+          ],
+          "paddleDetsSharedFrames": {
+            "framesA": 85,
+            "framesB": 85,
+            "sharedFrames": 85,
+            "sharedFramesByteEqual": 85,
+            "mismatchedTMs": []
+          },
+          "ballCandidates": {
+            "byteEqual": false,
+            "timingStrippedEqual": true
+          }
+        }
+      }
+    }
+  }
+}

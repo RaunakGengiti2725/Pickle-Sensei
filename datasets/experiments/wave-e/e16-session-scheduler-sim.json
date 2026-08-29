@@ -1,0 +1,433 @@
+{
+  "version": "session-scheduler-sim-1",
+  "schedulerVersion": "session-scheduler-1 (bounded-concurrency FIFO over SessionEventEngine closures · retryable-failure revert-to-pending · suspend/resume + recoverPending)",
+  "generatedAtIso": "2026-08-29T09:54:18.601Z",
+  "timeScale": 0.05,
+  "honesty": "Real SessionEventEngine + real SessionAnalysisScheduler under paced wall-clock playback. Analysis execution is a simulated workload behind the executor seam (deterministic seeded delays/outcomes) — native clip extraction does not exist on Linux (D-040 Gap 2). Latencies are stream-time ms (wall / scale) and describe SCHEDULING under a modeled service time, never device analysis performance. Streams are synthetic; no gold labels or held-out cases touched.",
+  "scenarios": [
+    {
+      "id": "steady-rally",
+      "title": "Steady rally: 20 strokes / 2.4s apart, analysis faster than arrivals",
+      "seed": 101,
+      "concurrency": 1,
+      "maxAttempts": 2,
+      "streamDurationMs": 51160,
+      "wallDurationMs": 3488.6,
+      "scheduler": {
+        "executorId": "sim-workload (service 800–1400ms stream-time · pRetryFail 0 · pFatal 0 · pAbstain 0)",
+        "concurrency": 1,
+        "maxAttempts": 2,
+        "enqueued": 20,
+        "duplicatesRefused": 0,
+        "dispatched": 20,
+        "retries": 0,
+        "ready": 20,
+        "abstained": 0,
+        "failedFinal": 0,
+        "retryExhausted": 0,
+        "executorThrows": 0,
+        "queueDepth": 0,
+        "inFlight": 0,
+        "maxQueueDepth": 1,
+        "maxInFlight": 1,
+        "suspended": false
+      },
+      "latenciesStreamMs": {
+        "queueWait": {
+          "n": 20,
+          "p50": 0,
+          "p95": 0,
+          "max": 0,
+          "mean": 0
+        },
+        "service": {
+          "n": 20,
+          "p50": 1120,
+          "p95": 1380,
+          "max": 1380,
+          "mean": 1071
+        },
+        "closeToTerminal": {
+          "n": 20,
+          "p50": 1120,
+          "p95": 1380,
+          "max": 1380,
+          "mean": 1071
+        }
+      },
+      "progressiveOverlap": {
+        "startedBeforeStreamEnd": 20,
+        "finishedBeforeStreamEnd": 20
+      },
+      "outcomes": {
+        "ready": 20
+      },
+      "correctness": {
+        "closedEvents": 20,
+        "strokesInStream": 20,
+        "everyClosedEventTracked": true,
+        "terminalOrHonestPending": true,
+        "readyIffAnalysisPresent": true,
+        "firstAttemptsFifo": true,
+        "attemptsWithinBudget": true,
+        "engineSchedulerStateAgreement": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "rapid-rally-backlog",
+      "title": "Rapid rally backlog: 30 strokes / 1.3s apart, 3–4s analyses (overloaded slot)",
+      "seed": 202,
+      "concurrency": 1,
+      "maxAttempts": 2,
+      "streamDurationMs": 43200,
+      "wallDurationMs": 5350.4,
+      "scheduler": {
+        "executorId": "sim-workload (service 3000–4000ms stream-time · pRetryFail 0 · pFatal 0 · pAbstain 0)",
+        "concurrency": 1,
+        "maxAttempts": 2,
+        "enqueued": 30,
+        "duplicatesRefused": 0,
+        "dispatched": 30,
+        "retries": 0,
+        "ready": 30,
+        "abstained": 0,
+        "failedFinal": 0,
+        "retryExhausted": 0,
+        "executorThrows": 0,
+        "queueDepth": 0,
+        "inFlight": 0,
+        "maxQueueDepth": 13,
+        "maxInFlight": 1,
+        "suspended": false
+      },
+      "latenciesStreamMs": {
+        "queueWait": {
+          "n": 30,
+          "p50": 25380,
+          "p95": 41400,
+          "max": 42820,
+          "mean": 23021.3
+        },
+        "service": {
+          "n": 30,
+          "p50": 3440,
+          "p95": 3980,
+          "max": 4000,
+          "mean": 3471.3
+        },
+        "closeToTerminal": {
+          "n": 30,
+          "p50": 28680,
+          "p95": 45260,
+          "max": 46140,
+          "mean": 26492.7
+        }
+      },
+      "progressiveOverlap": {
+        "startedBeforeStreamEnd": 19,
+        "finishedBeforeStreamEnd": 18
+      },
+      "outcomes": {
+        "ready": 30
+      },
+      "correctness": {
+        "closedEvents": 30,
+        "strokesInStream": 30,
+        "everyClosedEventTracked": true,
+        "terminalOrHonestPending": true,
+        "readyIffAnalysisPresent": true,
+        "firstAttemptsFifo": true,
+        "attemptsWithinBudget": true,
+        "engineSchedulerStateAgreement": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "rapid-rally-2slots",
+      "title": "Same rapid rally with concurrency 2 (backlog relief measured)",
+      "seed": 202,
+      "concurrency": 2,
+      "maxAttempts": 2,
+      "streamDurationMs": 43200,
+      "wallDurationMs": 3296.7,
+      "scheduler": {
+        "executorId": "sim-workload (service 3000–4000ms stream-time · pRetryFail 0 · pFatal 0 · pAbstain 0)",
+        "concurrency": 2,
+        "maxAttempts": 2,
+        "enqueued": 30,
+        "duplicatesRefused": 0,
+        "dispatched": 30,
+        "retries": 0,
+        "ready": 30,
+        "abstained": 0,
+        "failedFinal": 0,
+        "retryExhausted": 0,
+        "executorThrows": 0,
+        "queueDepth": 0,
+        "inFlight": 0,
+        "maxQueueDepth": 1,
+        "maxInFlight": 2,
+        "suspended": false
+      },
+      "latenciesStreamMs": {
+        "queueWait": {
+          "n": 30,
+          "p50": 0,
+          "p95": 1360,
+          "max": 1620,
+          "mean": 390
+        },
+        "service": {
+          "n": 30,
+          "p50": 3460,
+          "p95": 3920,
+          "max": 3980,
+          "mean": 3475.3
+        },
+        "closeToTerminal": {
+          "n": 30,
+          "p50": 3740,
+          "p95": 4880,
+          "max": 4900,
+          "mean": 3865.3
+        }
+      },
+      "progressiveOverlap": {
+        "startedBeforeStreamEnd": 30,
+        "finishedBeforeStreamEnd": 30
+      },
+      "outcomes": {
+        "ready": 30
+      },
+      "correctness": {
+        "closedEvents": 30,
+        "strokesInStream": 30,
+        "everyClosedEventTracked": true,
+        "terminalOrHonestPending": true,
+        "readyIffAnalysisPresent": true,
+        "firstAttemptsFifo": true,
+        "attemptsWithinBudget": true,
+        "engineSchedulerStateAgreement": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "flaky-extraction",
+      "title": "Failed extraction: 25% transient + 5% fatal failures, maxAttempts 3",
+      "seed": 303,
+      "concurrency": 1,
+      "maxAttempts": 3,
+      "streamDurationMs": 51640,
+      "wallDurationMs": 3595.7,
+      "scheduler": {
+        "executorId": "sim-workload (service 900–1500ms stream-time · pRetryFail 0.25 · pFatal 0.05 · pAbstain 0)",
+        "concurrency": 1,
+        "maxAttempts": 3,
+        "enqueued": 24,
+        "duplicatesRefused": 0,
+        "dispatched": 30,
+        "retries": 6,
+        "ready": 21,
+        "abstained": 0,
+        "failedFinal": 2,
+        "retryExhausted": 1,
+        "executorThrows": 0,
+        "queueDepth": 0,
+        "inFlight": 0,
+        "maxQueueDepth": 2,
+        "maxInFlight": 1,
+        "suspended": false
+      },
+      "latenciesStreamMs": {
+        "queueWait": {
+          "n": 24,
+          "p50": 0,
+          "p95": 140,
+          "max": 380,
+          "mean": 25.8
+        },
+        "service": {
+          "n": 24,
+          "p50": 1280,
+          "p95": 2680,
+          "max": 4040,
+          "mean": 1518.3
+        },
+        "closeToTerminal": {
+          "n": 24,
+          "p50": 1320,
+          "p95": 2680,
+          "max": 5320,
+          "mean": 1597.5
+        }
+      },
+      "progressiveOverlap": {
+        "startedBeforeStreamEnd": 24,
+        "finishedBeforeStreamEnd": 24
+      },
+      "outcomes": {
+        "ready": 21,
+        "retry_exhausted": 1,
+        "failed_final": 2
+      },
+      "correctness": {
+        "closedEvents": 24,
+        "strokesInStream": 24,
+        "everyClosedEventTracked": true,
+        "terminalOrHonestPending": true,
+        "readyIffAnalysisPresent": true,
+        "firstAttemptsFifo": true,
+        "attemptsWithinBudget": true,
+        "engineSchedulerStateAgreement": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "abstain-mix",
+      "title": "Abstained events: 20% modeled honest abstentions in the mix",
+      "seed": 404,
+      "concurrency": 1,
+      "maxAttempts": 2,
+      "streamDurationMs": 47360,
+      "wallDurationMs": 3188.9,
+      "scheduler": {
+        "executorId": "sim-workload (service 900–1500ms stream-time · pRetryFail 0.1 · pFatal 0 · pAbstain 0.2)",
+        "concurrency": 1,
+        "maxAttempts": 2,
+        "enqueued": 20,
+        "duplicatesRefused": 0,
+        "dispatched": 21,
+        "retries": 1,
+        "ready": 12,
+        "abstained": 8,
+        "failedFinal": 0,
+        "retryExhausted": 0,
+        "executorThrows": 0,
+        "queueDepth": 0,
+        "inFlight": 0,
+        "maxQueueDepth": 1,
+        "maxInFlight": 1,
+        "suspended": false
+      },
+      "latenciesStreamMs": {
+        "queueWait": {
+          "n": 20,
+          "p50": 0,
+          "p95": 340,
+          "max": 340,
+          "mean": 17
+        },
+        "service": {
+          "n": 20,
+          "p50": 1200,
+          "p95": 2920,
+          "max": 2920,
+          "mean": 1240
+        },
+        "closeToTerminal": {
+          "n": 20,
+          "p50": 1220,
+          "p95": 2920,
+          "max": 2920,
+          "mean": 1257
+        }
+      },
+      "progressiveOverlap": {
+        "startedBeforeStreamEnd": 20,
+        "finishedBeforeStreamEnd": 20
+      },
+      "outcomes": {
+        "ready": 12,
+        "abstained": 8
+      },
+      "correctness": {
+        "closedEvents": 20,
+        "strokesInStream": 20,
+        "everyClosedEventTracked": true,
+        "terminalOrHonestPending": true,
+        "readyIffAnalysisPresent": true,
+        "firstAttemptsFifo": true,
+        "attemptsWithinBudget": true,
+        "engineSchedulerStateAgreement": true,
+        "violations": []
+      }
+    },
+    {
+      "id": "interruption-recovery",
+      "title": "Interruption mid-rally (suspend 6s) then restart-path recovery of exhausted/pending events",
+      "seed": 505,
+      "concurrency": 1,
+      "maxAttempts": 2,
+      "streamDurationMs": 36240,
+      "wallDurationMs": 2524.7,
+      "scheduler": {
+        "executorId": "sim-workload (service 1200–1800ms stream-time · pRetryFail 0.15 · pFatal 0.1 · pAbstain 0)",
+        "concurrency": 1,
+        "maxAttempts": 2,
+        "enqueued": 18,
+        "duplicatesRefused": 0,
+        "dispatched": 21,
+        "retries": 3,
+        "ready": 16,
+        "abstained": 0,
+        "failedFinal": 0,
+        "retryExhausted": 2,
+        "executorThrows": 0,
+        "queueDepth": 0,
+        "inFlight": 0,
+        "maxQueueDepth": 3,
+        "maxInFlight": 1,
+        "suspended": false
+      },
+      "latenciesStreamMs": {
+        "queueWait": {
+          "n": 18,
+          "p50": 1940,
+          "p95": 5620,
+          "max": 5620,
+          "mean": 2178.9
+        },
+        "service": {
+          "n": 18,
+          "p50": 1660,
+          "p95": 3140,
+          "max": 3140,
+          "mean": 1824.4
+        },
+        "closeToTerminal": {
+          "n": 18,
+          "p50": 3720,
+          "p95": 11660,
+          "max": 11660,
+          "mean": 4354.4
+        }
+      },
+      "progressiveOverlap": {
+        "startedBeforeStreamEnd": 18,
+        "finishedBeforeStreamEnd": 18
+      },
+      "outcomes": {
+        "ready": 16,
+        "retry_exhausted": 2
+      },
+      "recovery": {
+        "readmitted": 2,
+        "readyAfterRecovery": 18,
+        "pendingAfterRecovery": 0
+      },
+      "correctness": {
+        "closedEvents": 18,
+        "strokesInStream": 18,
+        "everyClosedEventTracked": true,
+        "terminalOrHonestPending": true,
+        "readyIffAnalysisPresent": true,
+        "firstAttemptsFifo": true,
+        "attemptsWithinBudget": true,
+        "engineSchedulerStateAgreement": true,
+        "violations": []
+      }
+    }
+  ],
+  "allCorrect": true
+}

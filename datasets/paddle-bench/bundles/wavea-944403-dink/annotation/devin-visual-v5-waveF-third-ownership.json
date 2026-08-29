@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-944403-dink",
+  "annotatorId": "devin-visual-v5-waveF-f12",
+  "createdAtIso": "2026-08-29T11:12:00.000Z",
+  "revision": 1,
+  "appendOnly": true,
+  "modality": "ownership",
+  "queueSource": "datasets/experiments/wave-e/e23-label-queue-v3.json",
+  "queueRanks": [2, 3, 4, 5, 6, 7, 8, 9],
+  "method": "Third visual pass over the exact absolute-CFR frames requested by label-queue-v3. Each frame and a targeted crop were inspected directly. Paddle blade centers are normalized to the 1920x1080 source frame. Existing Wave C and Wave D2 labels were consulted only after this pass to record resolution; no prior record was edited.",
+  "source": {
+    "video": "datasets/corpus/media/dvids-944403-916657917f2b.mp4",
+    "sha256": "916657917f2be72f67717b35bdc0f163915c48a1126731c25f0ae1364121ad13",
+    "fps": "60000/1001",
+    "clock": "recording clock, absolute CFR frame index"
+  },
+  "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"],
+  "records": [
+    {"recordId":"f12-dink-1199-far-center","frameIdx":1199,"tMs":20003.32,"role":"far-center","classification":"visible","point":[0.497,0.434],"confidence":0.7,"visibility":"low-contrast-behind-net","resolves":{"waveC":"ambiguous","waveD2":"visible","disposition":"supports Wave D2 visible classification; coordinate remains low-confidence","references":["devin-visual-v2-waveC-ownership.json","devin-visual-v4-waveD2-ownership-audit.json#ADJ-D1"]}},
+    {"recordId":"f12-dink-1264-far-center","frameIdx":1264,"tMs":21087.73,"role":"far-center","classification":"visible","point":[0.412,0.285],"confidence":0.9,"visibility":"visible","resolves":{"waveC":"ambiguous","waveD2":"visible","disposition":"supports Wave D2","references":["devin-visual-v2-waveC-ownership.json","devin-visual-v4-waveD2-ownership-audit.json#ADJ-D3"]}},
+    {"recordId":"f12-dink-1264-near-left-target","frameIdx":1264,"tMs":21087.73,"role":"near-left-target","classification":"visible","point":[0.288,0.445],"confidence":0.9,"visibility":"visible","resolves":{"waveC":"visible at [0.3021,0.5407]","waveD2":"visible at [0.288,0.445]","disposition":"supports Wave D2 blade-center location","references":["devin-visual-v2-waveC-ownership.json","devin-visual-v4-waveD2-ownership-audit.json#ADJ-D2"]}},
+    {"recordId":"f12-dink-1279-near-left-target","frameIdx":1279,"tMs":21337.98,"role":"near-left-target","classification":"visible","point":[0.300,0.455],"confidence":0.85,"visibility":"visible","resolves":{"waveC":"not-visible","waveD2":"visible","disposition":"supports Wave D2","references":["devin-visual-v2-waveC-ownership.json","devin-visual-v4-waveD2-ownership-audit.json#ADJ-D4"]}},
+    {"recordId":"f12-dink-1309-far-left","frameIdx":1309,"tMs":21838.48,"role":"far-left","classification":"not-visible","point":null,"confidence":0.95,"visibility":"judged-out-of-frame","resolves":{"waveC":"visible at [0.3135,0.3671]","waveD2":"not-visible","disposition":"supports Wave D2; the dark blade at lower left belongs to the near-left player","references":["devin-visual-v2-waveC-ownership.json","devin-visual-v4-waveD2-ownership-audit.json#ADJ-D5"]}},
+    {"recordId":"f12-dink-1339-near-right","frameIdx":1339,"tMs":22338.98,"role":"near-right","classification":"visible","point":[0.650,0.510],"confidence":0.95,"visibility":"visible","resolves":{"waveC":"not-visible","waveD2":"visible","disposition":"supports Wave D2","references":["devin-visual-v2-waveC-ownership.json","devin-visual-v4-waveD2-ownership-audit.json#ADJ-D6"]}},
+    {"recordId":"f12-dink-1354-far-left","frameIdx":1354,"tMs":22589.23,"role":"far-left","classification":"visible","point":[0.293,0.388],"confidence":0.65,"visibility":"partially-occluded","resolves":{"waveC":"visible at [0.3547,0.3843]","waveD2":"visible at [0.293,0.388]","disposition":"supports Wave D2 blade-center location with partial occlusion","references":["devin-visual-v2-waveC-ownership.json","devin-visual-v4-waveD2-ownership-audit.json#ADJ-D7"]}},
+    {"recordId":"f12-dink-1354-near-right","frameIdx":1354,"tMs":22589.23,"role":"near-right","classification":"visible","point":[0.670,0.590],"confidence":0.9,"visibility":"partial-behind-leg","resolves":{"waveC":"not-visible","waveD2":"visible","disposition":"supports Wave D2","references":["devin-visual-v2-waveC-ownership.json","devin-visual-v4-waveD2-ownership-audit.json#ADJ-D8"]}}
+  ]
+}

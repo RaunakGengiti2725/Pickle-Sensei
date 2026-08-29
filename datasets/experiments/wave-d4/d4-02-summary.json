@@ -1,0 +1,51 @@
+{
+  "workstream": "D4-02 — learning curves + underfit/overfit diagnosis per modality (ownership, contact, event, stroke)",
+  "environment": "LINUX-CPU — artifact-join only; no pipeline stage was executed, no canonical run dir touched, no cascade number re-measured on this box",
+  "status": "complete — deterministic instrument (pnpm lab:learning-curve-modality) + 15 unit/integration tests green; versioned experiment JSON committed; every curve stops honestly where committed prediction coverage runs out",
+  "whatWasBuilt": {
+    "script": "packages/swing-lab/src/learningCurveModality.ts (extends the W13 learning-curve instrument from per-case paddle/ball bench pooling to the four uncovered modalities)",
+    "tests": "packages/swing-lab/test/learningCurveModality.test.ts — determinism, group-atomicity (sessions never split), no-fabricated-points (zero joined units ⇒ zero curve points), verdict rules, held-out exclusion, committed-artifact integration (34 event labels reconciled)",
+    "artifact": "datasets/experiments/wave-d4/EXP-2026-08-29-d4-02-modality-learning-curves.json (curveVersion modality-learning-curve-v1)",
+    "commands": "pnpm lab:learning-curve-modality (root script added)"
+  },
+  "protocol": {
+    "groupAwareSplits": "resampling unit = sessionKey (the corpus split unit, from paddle-bench.json + event-bounds-wave-a.json manifests); frames/labels of one session always move together; never random frames",
+    "noFabrication": "an accuracy point exists only where a committed label joins a committed prediction (latest datasets/cascade artifact rows[].stages.*); where coverage ends the curve stops and says so",
+    "heldOutDiscipline": "wm-dink-01 and afn-vic-rally1 never enter any curve; their already-committed cascade rows are quoted read-only as domain-shift evidence; no held-out file was opened or modified"
+  },
+  "labelSupplyMeasured": {
+    "ownership": "72 dev + 26 held-out sidecar frames with ≥1 target/other verdict (ownership-review.json, 100 rows total), 3 dev sessions",
+    "contact": "28 dev + 3 held-out unique contact events (43 committed contact records deduped at 60ms — dev count reconciles exactly with C05's 28 unique events), 4 dev sessions",
+    "event": "29 dev + 5 held-out event labels = 34 total (reconciles exactly with the C06 QA count: 18 wave-a + 16 v1), 4 dev sessions",
+    "stroke": "22 dev + 0 held-out stroke-gold labels (pickleball-taxonomy-v2), 4 dev sessions"
+  },
+  "joinedPredictionCoverage": {
+    "source": "latest committed lab:cascade artifact (datasets/cascade/cascade-1787971753680.json, Mac 2026-08-28 run) — 5 gold events (3 dev, 2 held-out)",
+    "ownership": "0 joined units — no committed per-frame ownership prediction artifact exists; accuracy curve has ZERO points; label-count-vs-accuracy snapshots quoted instead from wave-a/L-summary.json: n=19 pairs → 0.947, n=41 pairs → 0.902 (all 4 wrong-player pairs are the single held-out wm-dink edge-on episode; the dev slice has 0 wrong-player pairs)",
+    "contact": "3 dev units (2/3 pass: volley 30ms, rally2 30ms; rally1 honest abstention counted as fail) across 2 sessions; held-out 0/2 (250ms, 245ms)",
+    "event": "3 dev units (2/3 pass; rally1 MULTI_STROKE_AMBIGUOUS) across 2 sessions; held-out 1/2 (dink 42% overlap fail)",
+    "stroke": "3 dev units (2/3 pass) across 2 sessions; held-out 1/2 (vic BACKHAND vs gold FOREHAND_DRIVE confidently wrong)"
+  },
+  "verdicts": {
+    "ownership": "MEASUREMENT_LIMITED — but the quoted snapshots localize the failure: dev dual-pair accuracy is 1.0 at n=37 dev pairs while the only wrong-player mass is one held-out edge-on episode ⇒ the ownership problem is a DOMAIN/SLICE problem (edge-on/blur, already given a measured recovery strategy by W12/C02), not a bulk-label problem",
+    "contact": "MEASUREMENT_LIMITED with a domain-shift signature in committed rows (dev 0.667 vs held-out 0.0): consistent with HANDOFF_V3 rule 17 — held-out contact misses are DATA problems; the 25 dev contact labels without predictions are exactly the un-run measurement that would separate data- vs model-limited",
+    "event": "MEASUREMENT_LIMITED — 29 dev labels exist but only 3 have joined predictions; EVENT is the stage HANDOFF_V3 ranks as bottleneck #1 and the label supply is already there: the missing ingredient is a Mac regen/bench pass over the 34-label corpus, not more labels",
+    "stroke": "MEASUREMENT_LIMITED — 22 taxonomy labels vs 3 joined predictions; C18's bench harness exists but has no committed per-label results yet; held-out vic row shows the confidently-wrong failure mode that more dev families (>3 anchors per family) should fix"
+  },
+  "crossModalityDiagnosis": "At current committed-artifact coverage NO modality can honestly be called data-limited vs model-limited from a dev curve alone: the binding constraint everywhere is prediction coverage over the grown label sets (Mac-only pipeline stages). The two decidable facts are (a) ownership's error mass is slice-concentrated (edge-on), i.e. domain-shaped, and (b) contact shows a dev→held-out shift signature in already-committed rows. Concrete next measurement: one Mac session running lab:regen + the paddle/stroke/event benches over the 34-event / 28-contact / 22-stroke label sets would convert all four curves from 2-3 points to 4+ session groups without a single new label.",
+  "filesChanged": [
+    "packages/swing-lab/src/learningCurveModality.ts (new)",
+    "packages/swing-lab/test/learningCurveModality.test.ts (new)",
+    "packages/swing-lab/package.json (script learning:curve-modality)",
+    "package.json (script lab:learning-curve-modality)",
+    "eslint.config.mjs (console allowlist entry)",
+    "datasets/experiments/wave-d4/EXP-2026-08-29-d4-02-modality-learning-curves.json (new, instrument-written)",
+    "datasets/experiments/wave-d4/d4-02-summary.json (new)"
+  ],
+  "gates": "pnpm typecheck 19/19 green · swing-lab vitest 246 passed | 4 skipped (incl. 15 new) · prettier applied to touched files · no STATUS_BOARD/HANDOFF/DECISIONS edits · held-out untouched · no runs/ artifacts touched",
+  "risks": [
+    "The 3-unit cascade joins reuse ONE event per case; they are stage verdicts, not per-label accuracy — treated as such (curve stops, no reliability claim)",
+    "Ownership snapshots are quoted from L-summary prose fields (regex n/N extraction with recorded JSON paths); if L-summary is ever restructured the loader fails loudly rather than fabricating",
+    "60ms contact dedupe threshold is a labeled constant; dev count reconciling exactly with C05's independent 28-unique count is the calibration evidence"
+  ]
+}

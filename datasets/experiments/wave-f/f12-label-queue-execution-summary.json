@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "workstream": "f12-label-queue-execution",
+  "branch": "devin/wave-f/f12-label-queue-execution",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "baseCommit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "annotationCommit": "8a59d4a4bf917bc71e119e2ee585f78c4bdb9d55",
+  "createdAtIso": "2026-08-29T11:30:00.000Z",
+  "verdict": "ORANGE",
+  "verdictReason": "The mission target was exceeded with 35 append-only annotation records across four modalities, but queue ranks 14-18 could not be executed because their required source windows are absent locally and the registered source is not anonymously re-downloadable.",
+  "queue": {
+    "source": "datasets/experiments/wave-e/e23-label-queue-v3.json",
+    "version": "label-queue-v3",
+    "completedRanks": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 19, 20, 21, 22],
+    "blockedRanks": [14, 15, 16, 17, 18],
+    "heldOutTouched": 0,
+    "freshHoldoutCandidatesTouched": 0
+  },
+  "newLabels": {
+    "totalAnnotationRecords": 35,
+    "ownership": {
+      "records": 10,
+      "visible": 8,
+      "ambiguous": 1,
+      "notVisible": 1,
+      "targetRecords": 2,
+      "otherRecords": 8
+    },
+    "events": {
+      "records": 11,
+      "rallyRecords": 7,
+      "rallyPositiveEvents": 6,
+      "rallyVerifiedNegativeEvents": 1,
+      "oodVerifiedNegativeRecords": 4,
+      "targetOwnedRallyRecords": 5,
+      "otherOwnedRallyRecords": 2
+    },
+    "contact": {
+      "records": 7,
+      "observedPositive": 5,
+      "verifiedNegative": 1,
+      "censoredAbstention": 1
+    },
+    "stroke": {
+      "records": 7,
+      "positiveStrokeObservations": 5,
+      "verifiedNoStroke": 1,
+      "censoredAbstention": 1
+    },
+    "ball": {"records": 0, "reason": "required hard-slice media unavailable"},
+    "targetAcquisition": {"records": 0, "reason": "no completed top-queue item requested this modality"}
+  },
+  "updatedDenominators": {
+    "basis": "Wave E e25 programmatic recount at baseCommit plus this workstream's append-only records; annotation-record and positive-event bases remain explicitly separate.",
+    "ownershipAnnotationRecords": {
+      "before": {"target": 102, "other": 142, "total": 244},
+      "after": {"target": 104, "other": 150, "total": 254},
+      "dualFrameCount": {"before": 50, "after": 50, "note": "third annotations add observations, not new timestamp pairs"}
+    },
+    "eventAnnotationRecords": {
+      "before": {"total": 62, "targetOwned": 39, "inlineContactMs": 59},
+      "after": {"total": 73, "targetOwned": 44, "inlineContactMs": 59},
+      "note": "New Wave F event records reference separate contact records and intentionally do not duplicate contactMs inline. Four additions are clip-level OOD event negatives."
+    },
+    "uniqueObservedContactEvents": {
+      "before": 28,
+      "after": 33,
+      "annotationDecisionsAdded": 7,
+      "note": "Only five new records are observed positive contacts; one is a verified no-contact and one is censored."
+    },
+    "strokeAnnotationRecords": {
+      "before": 29,
+      "after": 36,
+      "positiveObservedAfter": 34,
+      "note": "Wave F adds five positive stroke observations, one NO_STROKE hard negative, and one censored abstention."
+    },
+    "ballGoldFrames": {"before": 103, "after": 103},
+    "taVerifiedCases": {"before": 59, "after": 59}
+  },
+  "mediaAndProvenance": [
+    {"scope":"wavea-944403-dink + wavea-944403-smash ownership","path":"datasets/corpus/media/dvids-944403-916657917f2b.mp4","sha256":"916657917f2be72f67717b35bdc0f163915c48a1126731c25f0ae1364121ad13","fps":"60000/1001","method":"direct absolute-CFR frame and crop inspection"},
+    {"scope":"afn-sasebo-rally1 events/contact/stroke","path":"datasets/paddle-bench/bundles/afn-sasebo-rally1/clip.mp4","sha256":"21fb75446a038ed5fb268b4287b7b6b2831d3712cbb05fedb21b97e440ad2daf","fps":"30000/1001","durationMs":4437.767,"method":"direct review of numbered CFR frames 0-131"},
+    {"scope":"OOD negatives","registry":"datasets/ood/registry.json","method":"sha256/duration verification plus direct frame inspection","verifiedClips":4}
+  ],
+  "blockedExternal": {
+    "queueRanks": [14, 15, 16, 17, 18],
+    "requiredMedia": ["datasets/paddle-bench/videos/afn-sasebo-rally2.mp4", "datasets/paddle-bench/videos/afn-sasebo-indoor.mp4"],
+    "observedState": "Both files are absent. e15-media-rederivation records rally2 as derived_not_redownloadable and the parent indoor recording as no_media_url. The public DVIDS 967848 page is accessible, but its download action requires registration/login.",
+    "result": "No ownership, ball, or contact label was guessed from prior annotations or metrics."
+  },
+  "artifacts": [
+    "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v5-waveF-third-ownership.json",
+    "datasets/paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v5-waveF-third-ownership.json",
+    "datasets/paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v5-waveF-events.json",
+    "datasets/paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v5-waveF-contacts.json",
+    "datasets/paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v5-waveF-strokes.json",
+    "datasets/experiments/wave-f/f12-ood-negative-annotations.json"
+  ],
+  "validation": {
+    "jsonParse": "PASS (all seven Wave F JSON artifacts)",
+    "formatCheck": "PASS (pnpm format:check)",
+    "typecheck": "PASS (20 workspace projects)",
+    "lint": "PASS (root eslint)",
+    "tests": "PASS (root pnpm test; all executed project suites passed; integration suites requiring external services remained repository-configured skips)",
+    "corpusInvariantTest": "PASS (464 files, 0 violations)",
+    "freshHoldoutGuard": "PASS (registered fresh-candidate files byte-match; no labels added)"
+  }
+}

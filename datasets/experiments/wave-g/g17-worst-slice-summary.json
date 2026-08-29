@@ -1,0 +1,64 @@
+{
+  "id": "g17-worst-slice",
+  "wave": "G",
+  "date": "2026-08-29",
+  "branch": "devin/wave-g/g17-worst-slice",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "mission": "Consume the existing f16 Linux-proxy evaluation artifacts to identify the single worst meaningful slice with N>=5 across the cascade, then root-cause EVERY failure in that slice with per-failure forensics, pin reproducible failures as regression fixtures where defensible, and implement fixes only if defensibly general.",
+  "sliceSelection": {
+    "artifactsConsumed": [
+      "datasets/experiments/wave-f/f16-cascade-linux-proxy-scoreboard.json",
+      "datasets/experiments/wave-f/f16-ball-hardslice-linux-proxy.json",
+      "datasets/experiments/wave-f/f16-contact-replay-linux-proxy.json",
+      "datasets/experiments/wave-f/f16-ownership-eval-linux-proxy.json",
+      "datasets/experiments/wave-f/f16-ownership-eval-corrected-linux-proxy.json",
+      "datasets/experiments/wave-f/f16-phase-gold-linux-proxy.txt",
+      "datasets/experiments/wave-f/f16-stroke-bench-linux-proxy.json"
+    ],
+    "selected": "BALL stage, OBSERVED bucket of the D2-06 hard-slice gold (N=35)",
+    "rationale": "The named D2-06 hard slices are each below N=5 except fastBlur (N=6, 0 hits), which is a subgroup of the same corpus; the OBSERVED bucket is the smallest meaningful cross-case slice with N>=5 that contains all of them. At the f16 artifact it measured hits 4/35; re-measured at the Wave C integration head (after the f08 fixes) it is hits 9/35 - still by far the weakest N>=5 metric on the scoreboard (ownership, contact, phase, stroke proxies are all far stronger per their artifacts). All forensics below are against the head measurement, not the stale artifact."
+  },
+  "method": "Re-ran the real tracker (buildBallTracks -> selectPrimaryBallTrack) over the committed e12 Linux motion candidates exactly as the hard-slice eval does, then for EVERY OBSERVED failure recorded: the eval outcome, raw candidate evidence within +/-40ms of the gold time, the 'carrier' track holding a gold-aligned observation (with itemized stage-C gate and primary-eligibility scorecards), what the primary emitted instead, a mechanical stage classification, and two measured counterfactuals: goldAlignedCount (how many golds a perfect gate/selection fix could recover from that track) and wouldWinSelectionIfGated (re-running primary selection with the carrier force-included).",
+  "datasetScope": {
+    "corpus": "datasets/experiments/wave-e/e12-ball-hard-slices (D2-06 gold, 43 labels; 35 OBSERVED)",
+    "cases": ["wm-volley-02", "afn-sasebo-rally2", "wavea-wgm-wheelchair", "wavea-sasebo-volleys"],
+    "grouping": "per-source-session cases; per-label forensics grouped by mechanical failure stage and by carrier track (failures sharing a carrier share a root cause)",
+    "denominators": "the committed 35 OBSERVED gold labels; nothing resampled, no labels added or removed"
+  },
+  "holdoutStatement": "The held-out cases wm-dink-01 and afn-vic-rally1 were not touched, read, listed, or referenced by any code or analysis in this workstream.",
+  "configuration": {
+    "platform": "LINUX-CPU pose-free proxy (Apple Vision pose and paddle track unavailable; canonical Mac strict cascade remains blocked - no Mac/iPhone/Swift numbers are claimed)",
+    "tracker": "ball-track-2 at integration head 104ea0f, unmodified",
+    "evalCriteria": { "hitRadiusNorm": 0.05, "matchToleranceMs": 40 },
+    "node": "20.18.1",
+    "commands": [
+      "pnpm exec tsx datasets/experiments/wave-g/g17-forensics.ts (from packages/swing-lab)",
+      "pnpm typecheck && pnpm test && pnpm lint && pnpm format:check"
+    ]
+  },
+  "measuredResults": {
+    "headSliceMetrics": { "OBSERVED": { "n": 35, "hits": 9, "misses": 16, "wrongLocation": 10 }, "OCCLUDED": { "n": 2, "abstained": 2, "violations": 0 } },
+    "failuresMined": 26,
+    "stageHistogram": { "GATE_REJECT": 19, "SELECTION_LOSS": 5, "ASSOCIATION_DROP": 2, "CANDIDATE_GEN": 0 },
+    "evidencePresence": "26/26 failures had a raw motion candidate within the hit radius at +/-40ms of the gold time (candidate generation is NOT the bottleneck on this slice)",
+    "counterfactuals": {
+      "gateOnlyFix": "of the 19 GATE_REJECT failures, force-gating the carrier track in made it win primary selection in only 1 case (wavea-sasebo-volleys t=52553, a 1-gold carrier that also fails maxSpeed); for the three dominant ghost-flight carriers (6, 7 and 7 gold-aligned observations) selection still preferred the incumbent primary - a gate-only relaxation recovers at most ~1/19",
+      "selectionOnlyFix": "the 5 SELECTION_LOSS carriers are gated-in mixed/limb tracks each carrying exactly 1 incidentally gold-aligned observation; selecting them would emit wrong locations across the rest of their windows"
+    }
+  },
+  "findings": [
+    "The dominant root cause (19/26) is 'ghost flights': association DOES build tracks carrying up to 7 gold-aligned observations, but stage-C gates reject them - jerkyFraction fails on genuine direction changes at bounce/hit (afn-sasebo-rally2 trk jerky=0.467 vs max 0.34; wavea-wgm-wheelchair jerky=0.400) and chronicFraction fails where real flight crosses chronically-active background cells (rally2 chronic=0.630, wavea-sasebo-volleys chronic=0.769 vs max 0.60).",
+    "Fixing gates alone would NOT fix the slice: measured counterfactuals show the ghost-flight tracks still lose primary selection even when force-gated in, so recovery needs a coupled gate + selection-score change. On N=4 cases, tuning both against this locked eval would be exactly the repeated-tuning-against-locked-tests failure mode the program forbids.",
+    "5/26 SELECTION_LOSS failures are incidental single-point overlaps of gated limb/mixed tracks with early flight - not recoverable by selection changes without emitting wrong locations elsewhere.",
+    "2/26 ASSOCIATION_DROP failures (wavea-wgm-wheelchair t=182800/182867, post-hit blur) have strong raw detections (distance 0.002/0.005 from gold) that never join a >=3-observation chain - the per-frame displacement of the fast ball exceeds the association gate; N=2 is too small to justify a gate-radius change.",
+    "The f16 BALL artifact (hits 4/35) is stale relative to head (hits 9/35 after the f08 fixes); the scoreboard's OCCLUDED violations are also gone at head (2/2 abstained).",
+    "No production change is defensible from this evidence; the failures are pinned as regression fixtures instead (packages/swing-lab/test/g17BallHardSlicePin.test.ts): the exact head aggregate (9/35, zero violations) plus the three ghost-flight signatures (gold-carrying track exists, is gate-rejected, and loses selection even if force-gated). A future ball fix must consciously flip these pins."
+  ],
+  "artifacts": [
+    "datasets/experiments/wave-g/g17-forensics.ts (read-only forensic runner)",
+    "datasets/experiments/wave-g/g17-forensics-evidence.json (all 26 per-failure records with scorecards and counterfactuals)",
+    "packages/swing-lab/test/g17BallHardSlicePin.test.ts (regression pins)"
+  ],
+  "verdict": "YELLOW",
+  "verdictRationale": "The mission (worst-slice identification + per-failure forensics on all 26 failures + defensible regression pins) is complete with measured evidence, and the root causes are now precisely localized (stage-C jerky/chronic gates plus selection scoring, not candidate generation). YELLOW rather than PROVISIONAL_GREEN because the slice itself remains weak (9/35 OBSERVED hits) and no general fix could be honestly shipped from N=4 cases; YELLOW rather than RED because zero abstention violations remain, misses are honest (no decoy emission), and the forensics + pins give the next wave an exact, reproducible target."
+}

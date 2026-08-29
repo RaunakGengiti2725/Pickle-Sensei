@@ -42,3 +42,8 @@ datasets/experiments/wave-b/W12-probe/truthviz/
 datasets/paddle-bench/ownership-review/*.png
 datasets/experiments/wave-a/frames/
 datasets/experiments/wave-a/slices/
+tools/latency-bench/.venv-pose/
+tools/latency-bench/*.task
+tools/latency-bench/artifacts/f25-seeds/
+tools/latency-bench/artifacts/f25-two-pass/outputs/
+datasets/release/

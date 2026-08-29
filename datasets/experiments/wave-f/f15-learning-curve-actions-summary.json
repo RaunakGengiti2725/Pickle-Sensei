@@ -1,0 +1,79 @@
+{
+  "id": "f15-learning-curve-actions",
+  "wave": "F",
+  "branch": "devin/wave-f/f15-learning-curve-actions",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "commitAtAnalysis": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "verdict": "GREEN",
+  "mission": "Turn E14's data-vs-features ranking into evidence-backed action: quantify expected gain per N new labels for the most label-starved subsystem (with bounds and stated assumptions) and generate the concrete label-acquisition plan.",
+  "environment": "LINUX-CPU, artifact-join only. No pipeline stage executed, no run dir touched, no bench re-measured, no production code modified. All numbers derive from committed artifacts.",
+  "datasetScope": {
+    "inputsReadOnly": [
+      "datasets/experiments/wave-e/EXP-2026-08-29-e14-learning-curves.json",
+      "datasets/experiments/wave-e/e14-learning-curves-summary.json",
+      "datasets/experiments/wave-e/e22-acquisition-wave2-summary.json",
+      "datasets/experiments/wave-e/e23-active-learning-queue-summary.json",
+      "datasets/paddle-bench/stroke-gold.json",
+      "datasets/ta-bench/cases.json",
+      "datasets/ta-bench/results/ta-bench-1787969692752.json",
+      "datasets/pickleball/registry.json (metadata only — no media opened)"
+    ],
+    "heldOutDiscipline": "wm-dink-01 and afn-vic-rally1 untouched. The 15 fresh candidates remain label-blind: only committed registry metadata quoted; the plan explicitly gates any labeling on an integrator split-freeze through the D-024 acquisition front door."
+  },
+  "configuration": {
+    "script": "datasets/experiments/wave-f/f15-learning-curve-actions.ts (run via npx tsx)",
+    "seed": 20260829,
+    "bootstrapDraws": 2000,
+    "curveModels": ["exponential_saturation a-b*exp(-n/c)", "power_law a-b*n^-c"],
+    "extrapolationNs": [10, 25, 50, 100],
+    "wilsonZ": 1.96
+  },
+  "metrics": {
+    "mostDataStarvedSubsystem": "stroke (the only LABEL_STARVED E14 call: dev corpus saturated 29/29, 4 of 9 L1 families at zero gold)",
+    "taCurveFit": {
+      "bestModel": "exponential_saturation",
+      "params": { "a": 0.6898, "b": 0.1855, "c": 14.8077 },
+      "asymptote": 0.69,
+      "currentAccuracyAt54": 0.685,
+      "gainPer50NewSameDistributionLabels": {
+        "pointEstimate": 0.0047,
+        "bootstrapMedian": 0.0104,
+        "bootstrap90Band": [0, 0.1525]
+      },
+      "conclusion": "TA has plateaued: +50 same-distribution labels buys ~0.01 accuracy vs the +0.178 the committed candidate config already measures on identical cases. Same-distribution TA labeling is quantitatively the worst use of annotation effort."
+    },
+    "strokeCurveExtrapolation": {
+      "provenNegative": "SCIENTIFIC_NEGATIVE for accuracy extrapolation: the stroke curve has 2 points / 3 joined units; a 3-parameter saturating fit is unidentifiable, so any accuracy-per-label number would be fabricated.",
+      "quantifiedInstead": {
+        "measurability": "12 labels/family (95% Wilson half-width ≤0.25 at worst-case p=0.5) × 4 zero-gold families (return, drop_reset, attack_counter, specialty) = 48 labels lifts L1 measurability 5/9 → 9/9; 21/family (+36 labels) tightens to ≤0.20.",
+        "groupWidthPrior": "Transferred TA width-vs-groups fit w(G)=0.587/√G (stated assumption, not a stroke measurement) predicts curve interval width ≈0.24 at 6 session groups vs 0.415 at 2 → spread new labels across ≥6 new session groups."
+      }
+    },
+    "taSliceSampleSizes": "Contested-session slice estimates to Wilson half-width ≤0.15: sasebo +32, sigonella +26, marne +19, wm-tournament +20 verified cases (warriorgames already at 0.143)."
+  },
+  "labelAcquisitionPlan": {
+    "artifact": "datasets/experiments/wave-f/f15-label-acquisition-plan.md",
+    "orderedActions": [
+      "P1: Mac prediction pass — 0 labels, converts 3 MEASUREMENT_LIMITED verdicts to real calls (BLOCKED_EXTERNAL: requires macOS/Apple Vision)",
+      "P2: TA feature/config work, not labels (curve fit proves labels ~worthless)",
+      "P3: 48 stroke-event labels (12/family × 4 zero-gold families) from NEW footage across ≥6 session groups; 15 registry-listed candidate clips enumerated with per-family content targeting; labeling gated on D-024 split-freeze",
+      "P4: 16 contact labels on edge-on/occluded events from the same new clips",
+      "P5: 97 TA verified cases to sharpen contested slice estimates (does not move aggregate)"
+    ]
+  },
+  "artifacts": [
+    "datasets/experiments/wave-f/f15-learning-curve-actions.ts",
+    "datasets/experiments/wave-f/EXP-2026-08-29-f15-learning-curve-actions.json",
+    "datasets/experiments/wave-f/f15-label-acquisition-plan.md",
+    "datasets/experiments/wave-f/f15-learning-curve-actions-summary.json"
+  ],
+  "gates": {
+    "formatCheck": "pass",
+    "typecheck": "pass",
+    "lint": "pass",
+    "tests": "no package source touched (analysis script + wave-f artifacts only); root typecheck/lint cover the workspace"
+  },
+  "externalBlockers": [
+    "Priority-1 Mac prediction pass remains BLOCKED_EXTERNAL (no macOS/Apple Vision in this environment) — recorded as a plan dependency, not fabricated"
+  ]
+}

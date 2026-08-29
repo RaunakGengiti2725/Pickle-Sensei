@@ -1,3 +1,7 @@
+import type {
+  AnalysisFeedbackCategory,
+  AnalysisFeedbackRating,
+} from '@pickle/shared-types';
 import type { SyncTransport } from './sync';
 
 /**
@@ -34,21 +38,43 @@ export class ApiError extends Error {
   }
 }
 
+/** Every request is bounded: a backend that stops responding must surface as
+ * a typed timeout the caller can retry, never an indefinitely pending await
+ * (which the capture flow would render as an unbounded spinner). */
+export const API_REQUEST_TIMEOUT_MS = 20_000;
+
 async function request<T>(
   config: ApiConfigState,
   method: string,
   path: string,
   body?: unknown,
 ): Promise<T> {
-  const response = await fetch(`${config.baseUrl}${path}`, {
-    method,
-    headers: {
-      'content-type': 'application/json',
-      ...(config.token ? { authorization: `Bearer ${config.token}` } : {}),
-      'x-client-version': '0.1.0',
-    },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(`${config.baseUrl}${path}`, {
+      method,
+      headers: {
+        'content-type': 'application/json',
+        ...(config.token ? { authorization: `Bearer ${config.token}` } : {}),
+        'x-client-version': '0.1.0',
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new ApiError(
+        408,
+        'network.timeout',
+        'The server took too long to respond. Your work is saved on this device — try again when the connection recovers.',
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
   const json = (await response.json().catch(() => null)) as
     (T & { error?: { code: string; message: string } }) | null;
   if (!response.ok) {
@@ -71,6 +97,9 @@ export function createTransport(config: ApiConfigState): SyncTransport {
     },
     async finalizeSession(id) {
       await request(config, 'POST', `/v1/sessions/${id}/finalize`);
+    },
+    async uploadEvaluationTrials(trials) {
+      return request(config, 'POST', '/v1/me/evaluation/trials', { trials });
     },
   };
 }
@@ -117,6 +146,30 @@ export function createAnalysisPermitClient(config: ApiConfigState) {
       );
     },
   };
+}
+
+/** "Was this analysis accurate?" — a failure-mining signal, never gold.
+ * The server derives review eligibility from the consent ledger and copies
+ * the version vector from the synced shot row; the client sends only the
+ * rating and, for a negative one, a category. */
+export async function submitAnalysisFeedback(
+  config: ApiConfigState,
+  analysisId: string,
+  rating: AnalysisFeedbackRating,
+  category: AnalysisFeedbackCategory | null,
+): Promise<{ reviewEligible: boolean }> {
+  const response = await request<{
+    feedback: { reviewEligible: boolean };
+  }>(
+    config,
+    'POST',
+    `/v1/analyses/${encodeURIComponent(analysisId)}/feedback`,
+    {
+      rating,
+      category,
+    },
+  );
+  return { reviewEligible: response.feedback.reviewEligible };
 }
 
 export const api = { request };

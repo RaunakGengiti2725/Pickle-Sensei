@@ -1,5 +1,6 @@
 import type { ShotAnalysis } from '@pickle/shared-types';
 import type { LocalDb } from './db';
+import { ApiError } from './api';
 import { getActiveDataOwner } from './accountScope';
 
 /**
@@ -15,6 +16,15 @@ export interface SyncTransport {
   }>;
   createSession(session: unknown): Promise<void>;
   finalizeSession(id: string): Promise<void>;
+  /**
+   * Consent-gated evaluation-trial upload (POST /v1/me/evaluation/trials).
+   * Optional: a transport without it leaves 'evaluation.trial' rows queued
+   * (no attempts burned) rather than dropping evidence.
+   */
+  uploadEvaluationTrials?(trials: unknown[]): Promise<{
+    acceptedTrialIds: string[];
+    rejected: Array<{ trialId: string; code: string; message: string }>;
+  }>;
 }
 
 /** Convert a persisted ShotAnalysis into the canonical sync payload (spec p. 21). */
@@ -51,7 +61,51 @@ export function toSyncPayload(
   };
 }
 
-const MAX_ATTEMPTS = 8;
+/** Bounded attempt budget for permanent failures; transient failures never
+ * consume it (see isPermanentSyncFailure). */
+export const OUTBOX_MAX_ATTEMPTS = 8;
+
+/**
+ * Only failures that can never succeed on retry consume the bounded attempt
+ * budget. Everything else — device offline, timeouts, server 5xx, an expired
+ * bearer that a fresh sign-in will replace — is transient: the row records
+ * the error and stays fully retryable, because a durable local rating must
+ * never be silently dropped from sync by a stretch of bad connectivity.
+ */
+export function isPermanentSyncFailure(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    return (
+      error.status >= 400 &&
+      error.status < 500 &&
+      error.status !== 401 &&
+      error.status !== 408 &&
+      error.status !== 429
+    );
+  }
+  return false;
+}
+
+async function recordRowFailure(
+  db: LocalDb,
+  owner: string,
+  rowId: unknown,
+  error: unknown,
+  permanent: boolean,
+): Promise<void> {
+  if (permanent) {
+    await db.execute(
+      `UPDATE outbox SET attempts = attempts + 1, last_error = ?
+       WHERE owner_key = ? AND id = ?`,
+      [String(error), owner, rowId],
+    );
+  } else {
+    await db.execute(
+      `UPDATE outbox SET last_error = ?
+       WHERE owner_key = ? AND id = ?`,
+      [String(error), owner, rowId],
+    );
+  }
+}
 
 export async function drainOutbox(
   db: LocalDb,
@@ -61,27 +115,39 @@ export async function drainOutbox(
   const { rows } = await db.execute(
     `SELECT id, kind, payload, attempts FROM outbox
      WHERE owner_key = ? AND attempts < ? ORDER BY id ASC LIMIT 50`,
-    [owner, MAX_ATTEMPTS],
+    [owner, OUTBOX_MAX_ATTEMPTS],
   );
   let synced = 0;
   let failed = 0;
 
   const shotRows = rows.filter(r => r['kind'] === 'shot.sync');
-  if (shotRows.length > 0) {
+  // A row whose payload cannot become a sync request (corrupt JSON, missing
+  // permit) fails alone and permanently; it never poisons the whole batch.
+  const entries: Array<{
+    row: (typeof shotRows)[number];
+    shotId: string;
+    payload: Record<string, unknown>;
+  }> = [];
+  for (const r of shotRows) {
     try {
-      const entries = shotRows.map(r => {
-        const analysis = JSON.parse(String(r['payload'])) as ShotAnalysis & {
-          analysisPermitId?: unknown;
-        };
-        if (typeof analysis.analysisPermitId !== 'string') {
-          throw new Error('shot.sync_missing_analysis_permit');
-        }
-        return {
-          row: r,
-          shotId: analysis.id,
-          payload: toSyncPayload(analysis, analysis.analysisPermitId),
-        };
+      const analysis = JSON.parse(String(r['payload'])) as ShotAnalysis & {
+        analysisPermitId?: unknown;
+      };
+      if (typeof analysis.analysisPermitId !== 'string') {
+        throw new Error('shot.sync_missing_analysis_permit');
+      }
+      entries.push({
+        row: r,
+        shotId: analysis.id,
+        payload: toSyncPayload(analysis, analysis.analysisPermitId),
       });
+    } catch (error) {
+      await recordRowFailure(db, owner, r['id'], error, true);
+      failed++;
+    }
+  }
+  if (entries.length > 0) {
+    try {
       const response = await transport.syncShots(
         entries.map(entry => entry.payload),
       );
@@ -129,7 +195,53 @@ export async function drainOutbox(
         failed++;
       }
     } catch (error) {
-      for (const r of shotRows) {
+      const permanent = isPermanentSyncFailure(error);
+      for (const entry of entries) {
+        await recordRowFailure(db, owner, entry.row['id'], error, permanent);
+        failed++;
+      }
+    }
+  }
+
+  const trialRows = rows.filter(r => r['kind'] === 'evaluation.trial');
+  if (trialRows.length > 0 && transport.uploadEvaluationTrials) {
+    try {
+      const entries = trialRows.map(r => ({
+        row: r,
+        trial: JSON.parse(String(r['payload'])) as { trialId: string },
+      }));
+      const response = await transport.uploadEvaluationTrials(
+        entries.map(entry => entry.trial),
+      );
+      const accepted = new Set(response.acceptedTrialIds);
+      const rejected = new Map(
+        response.rejected.map(item => [item.trialId, item] as const),
+      );
+      for (const entry of entries) {
+        if (accepted.has(entry.trial.trialId)) {
+          await db.execute(
+            `DELETE FROM outbox WHERE owner_key = ? AND id = ?`,
+            [owner, entry.row['id']],
+          );
+          synced++;
+          continue;
+        }
+        const rejection = rejected.get(entry.trial.trialId);
+        await db.execute(
+          `UPDATE outbox SET attempts = attempts + 1, last_error = ?
+           WHERE owner_key = ? AND id = ?`,
+          [
+            rejection
+              ? `${rejection.code}: ${rejection.message}`
+              : 'evaluation.trial_unacknowledged',
+            owner,
+            entry.row['id'],
+          ],
+        );
+        failed++;
+      }
+    } catch (error) {
+      for (const r of trialRows) {
         await db.execute(
           `UPDATE outbox SET attempts = attempts + 1, last_error = ?
            WHERE owner_key = ? AND id = ?`,
@@ -140,27 +252,36 @@ export async function drainOutbox(
     }
   }
 
-  for (const r of rows.filter(row => row['kind'] !== 'shot.sync')) {
+  for (const r of rows.filter(
+    row => row['kind'] !== 'shot.sync' && row['kind'] !== 'evaluation.trial',
+  )) {
+    let payload: Record<string, unknown>;
     try {
-      const payload = JSON.parse(String(r['payload'])) as Record<
-        string,
-        unknown
-      >;
+      payload = JSON.parse(String(r['payload'])) as Record<string, unknown>;
+      if (r['kind'] !== 'session.create' && r['kind'] !== 'session.finalize') {
+        throw new Error(`unknown outbox kind ${String(r['kind'])}`);
+      }
+    } catch (error) {
+      await recordRowFailure(db, owner, r['id'], error, true);
+      failed++;
+      continue;
+    }
+    try {
       if (r['kind'] === 'session.create')
         await transport.createSession(payload);
-      else if (r['kind'] === 'session.finalize')
-        await transport.finalizeSession(String(payload['id']));
-      else throw new Error(`unknown outbox kind ${String(r['kind'])}`);
+      else await transport.finalizeSession(String(payload['id']));
       await db.execute(`DELETE FROM outbox WHERE owner_key = ? AND id = ?`, [
         owner,
         r['id'],
       ]);
       synced++;
     } catch (error) {
-      await db.execute(
-        `UPDATE outbox SET attempts = attempts + 1, last_error = ?
-         WHERE owner_key = ? AND id = ?`,
-        [String(error), owner, r['id']],
+      await recordRowFailure(
+        db,
+        owner,
+        r['id'],
+        error,
+        isPermanentSyncFailure(error),
       );
       failed++;
     }

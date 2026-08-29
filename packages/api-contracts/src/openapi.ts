@@ -17,6 +17,11 @@ import {
   TrainingPlanResponse,
   TrainingPlanReassessmentRequest,
   DrillCompletionCreateRequest,
+  ConsentGrantRequest,
+  ConsentLedgerExportResponse,
+  ConsentWithdrawRequest,
+  ConsentStatusResponse,
+  QualityDashboardResponse,
 } from "./schemas.js";
 
 /**
@@ -190,6 +195,72 @@ export function buildOpenApiDocument(apiVersion: string): Record<string, unknown
           },
         },
       },
+      "/v1/me/consent/grant": {
+        post: {
+          operationId: "grantConsent",
+          summary:
+            "Append a scoped consent grant to the immutable ledger (model_training is explicit opt-in, never a default)",
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: schema(ConsentGrantRequest) } },
+          },
+          responses: {
+            "200": {
+              description: "Updated consent status",
+              content: { "application/json": { schema: schema(ConsentStatusResponse) } },
+            },
+            "400": errorResponse,
+            "401": errorResponse,
+          },
+        },
+      },
+      "/v1/me/consent/withdraw": {
+        post: {
+          operationId: "withdrawConsent",
+          summary:
+            "Append a withdrawal — an append-only state change that never deletes the audit trail",
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: schema(ConsentWithdrawRequest) } },
+          },
+          responses: {
+            "200": {
+              description: "Updated consent status",
+              content: { "application/json": { schema: schema(ConsentStatusResponse) } },
+            },
+            "400": errorResponse,
+            "401": errorResponse,
+          },
+        },
+      },
+      "/v1/me/consent/status": {
+        get: {
+          operationId: "getConsentStatus",
+          summary: "Derived per-scope consent status plus the full ledger",
+          responses: {
+            "200": {
+              description: "Consent status",
+              content: { "application/json": { schema: schema(ConsentStatusResponse) } },
+            },
+            "401": errorResponse,
+          },
+        },
+      },
+      "/v1/me/consent/export": {
+        get: {
+          operationId: "exportConsentLedger",
+          summary:
+            "Canonical consent ledger export for intake hosts — versioned envelope with integrity fields (recordCount, maxSeq, recordsSha256)",
+          responses: {
+            "200": {
+              description: "Consent ledger export envelope",
+              content: { "application/json": { schema: schema(ConsentLedgerExportResponse) } },
+            },
+            "401": errorResponse,
+            "404": errorResponse,
+          },
+        },
+      },
       "/v1/me/access": {
         get: {
           operationId: "getMyAccess",
@@ -253,6 +324,30 @@ export function buildOpenApiDocument(apiVersion: string): Record<string, unknown
               content: { "application/json": { schema: schema(RevenueCatSyncResponse) } },
             },
             "401": errorResponse,
+            "503": errorResponse,
+          },
+        },
+      },
+      "/v1/admin/quality-dashboard": {
+        get: {
+          operationId: "getQualityDashboard",
+          summary: "Aggregate production quality metrics (admin-only, audited)",
+          parameters: [
+            {
+              name: "windowDays",
+              in: "query",
+              required: false,
+              schema: { type: "integer", minimum: 1, maximum: 90, default: 7 },
+            },
+          ],
+          responses: {
+            "200": {
+              description: "Aggregate quality metrics; counts only, never raw private media",
+              content: { "application/json": { schema: schema(QualityDashboardResponse) } },
+            },
+            "400": errorResponse,
+            "401": errorResponse,
+            "403": errorResponse,
             "503": errorResponse,
           },
         },

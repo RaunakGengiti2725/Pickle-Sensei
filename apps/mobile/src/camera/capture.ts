@@ -8,6 +8,7 @@ import {
   Platform,
   type EmitterSubscription,
 } from 'react-native';
+import { stabilitySlo } from '../analysis/stabilityTelemetry';
 
 export type StrokeRecognition =
   | {
@@ -185,6 +186,62 @@ export interface CaptureCompletionTelemetryV1 {
 export const MAX_COMPLETION_MOTION_SAMPLES = 50;
 
 /**
+ * Live target-acquisition constants, frozen for telemetry schema v1. These
+ * mirror the promoted D-027 `GuidedCaptureViewController` acquisition
+ * verbatim; a native retune must bump the schema version, so a v1 record
+ * always replays with exactly these rules.
+ */
+export const TARGET_LOCK_PARAMS_V1 = {
+  startRegionRadius: 0.17,
+  occupancyFramesToLock: 9,
+  sustainedGestureFrames: 5,
+  ambiguityTimeoutMs: 3000,
+  gestureElevationThreshold: 0.03,
+} as const;
+
+/** Live lock sources the shipped (D-027) acquisition can emit. */
+export type TargetLockSource =
+  'start_region_occupancy' | 'gesture_confirmed' | 'ambiguity_timeout';
+
+/**
+ * Live target-lock instrumentation, recorded by guided capture whenever the
+ * user tapped a start region (always-on; acquisition behavior is unchanged —
+ * the shipped D-027 configuration stays default). Persisted with the clip so
+ * an offline replay can run the D-027-style promotion gate for acquire-v4's
+ * tap-centered lock gate against real live taps. Points are normalized
+ * capture space like `targetSeed`; durations are camera-clock milliseconds
+ * (never rebased — the lock happens before the exported clip window).
+ *
+ *  - `tapPoint` — where the user tapped (the start region center).
+ *  - `lockTorso` — the acquired track's torso center at the lock frame (its
+ *    earliest identity; the anchor the follower is seeded with).
+ *  - `tapToLockDistance` — hypot(lockTorso − tapPoint), the acquire-v4 gate
+ *    signal.
+ *  - `timeToLockMs` — first acquisition frame after the tap → lock frame.
+ *  - `ambiguityEntered` / `ambiguityDurationMs` — whether the ≥2-occupant
+ *    ambiguity state was entered and how long it lasted (to the lock, or to
+ *    the last acquisition frame when no lock happened).
+ *  - `lockOutcome` — 'locked' or 'no_lock' (capture completed without one).
+ */
+export interface TargetLockTelemetryV1 {
+  schemaVersion: 1;
+  algorithmVersion: string;
+  coordinateSystem: 'normalized_capture_space';
+  tapPoint: { x: number; y: number };
+  lockOutcome: 'locked' | 'no_lock';
+  lockSource?: TargetLockSource;
+  lockTorso?: { x: number; y: number };
+  tapToLockDistance?: number;
+  timeToLockMs?: number;
+  ambiguityEntered: boolean;
+  ambiguityDurationMs?: number;
+  params: typeof TARGET_LOCK_PARAMS_V1;
+}
+
+/** Tolerance for the recomputed tap-to-lock distance (JSON float round-trip). */
+export const TARGET_LOCK_DISTANCE_TOLERANCE = 1e-6;
+
+/**
  * Durable reference to the framework-neutral pose sequence recorded beside
  * the clip (`pickle.pose-sequence.v1`). Optional: legacy captures and builds
  * that predate pose retention simply lack it — an honest absence that keeps
@@ -209,6 +266,9 @@ export type CapturedClip =
        * target (source: 'start_region_occupancy' | 'gesture_confirmed').
        * Normalized capture-space PERSON anchor at lock time. */
       targetSeed?: { x: number; y: number; source: string };
+      /** Target-lock instrumentation (absent when the user never tapped a
+       * start region, and on builds that predate the instrument). */
+      targetLock?: TargetLockTelemetryV1;
       captureEvidence: CaptureEvidenceV1;
       ballSpeed: BallSpeedEvidence;
       preRollMs: number;
@@ -220,6 +280,7 @@ export type CapturedClip =
   | (CapturedClipBase & {
       captureMode: 'imported_video';
       trigger?: never;
+      targetLock?: never;
       captureEvidence?: never;
       ballSpeed: {
         status: 'unavailable';
@@ -242,6 +303,36 @@ export type CameraReadinessState =
 interface CameraEventBase {
   captureId?: string;
   emittedAtIso: string;
+}
+
+/**
+ * Typed native contract for on-device-computable capture-envelope signals.
+ * Resolution/fps come from the configured camera format; brightness, blur
+ * and camera-motion proxies are computed over sampled preview frames using
+ * the SAME normalization the offline prober uses (grayscale, 320px-wide
+ * downscale) so `capture-envelope-thresholds-v0.1-provisional` applies.
+ *
+ * The Swift side of this contract is CONTRACT-ONLY and UNVERIFIED-ON-DEVICE
+ * (native/vision-core/Sources/CaptureQualitySignals.swift): no emitter is
+ * wired in this build, so no `capture_quality` event fires yet. A field the
+ * emitter cannot compute is null — the envelope checker reports that
+ * dimension NOT_MEASURED rather than guessing.
+ */
+export interface CaptureQualitySignalsV1 {
+  schemaVersion: 1;
+  /** Configured capture format, physical pixels. */
+  frameWidthPx: number | null;
+  frameHeightPx: number | null;
+  /** Configured (or measured over the sample window) capture frame rate. */
+  avgFrameRateFps: number | null;
+  /** Mean luma (0–255) over sampled normalized preview frames. */
+  brightnessMeanLuma: number | null;
+  /** Median Laplacian variance over sampled normalized preview frames. */
+  laplacianVarianceMedian: number | null;
+  /** Mean abs per-pixel luma diff between consecutive sampled frames. */
+  meanAbsFrameDiff: number | null;
+  /** Number of preview frames the proxies were computed over. */
+  sampledFrameCount: number;
 }
 
 export type CameraEvent =
@@ -282,6 +373,10 @@ export type CameraEvent =
       recognition: StrokeRecognition;
     })
   | (CameraEventBase & {
+      type: 'capture_quality';
+      signals: CaptureQualitySignalsV1;
+    })
+  | (CameraEventBase & {
       type: 'processing';
       state: 'preparing_clip';
     })
@@ -304,6 +399,16 @@ interface NativeVideoCapture {
   importVideo(): Promise<unknown>;
   readTextFile?(uri: string): Promise<string>;
   setCompletionStrategy?(strategy: string): Promise<string>;
+  startSessionCapture?(): Promise<unknown>;
+  stopSessionCapture?(sessionCaptureId: string): Promise<unknown>;
+  extractSessionEventClip?(request: {
+    sessionCaptureId: string;
+    startMs: number;
+    endMs: number;
+    peakMs: number | null;
+    confidence: number;
+    detectionModelVersion: string;
+  }): Promise<unknown>;
   cancel(): void;
   addListener(eventType: string): void;
   removeListeners(count: number): void;
@@ -317,6 +422,100 @@ export function cameraAvailable(): boolean {
     (Platform.OS === 'ios' || Platform.OS === 'android') &&
     typeof native?.capture === 'function'
   );
+}
+
+/** All three session-capture bridge methods must exist: continuous motion
+ * streaming without per-event clip extraction (or vice versa) is not a
+ * usable session capture, so partial builds honestly report unavailable. */
+export function sessionCaptureAvailable(): boolean {
+  return (
+    (Platform.OS === 'ios' || Platform.OS === 'android') &&
+    typeof native?.startSessionCapture === 'function' &&
+    typeof native?.stopSessionCapture === 'function' &&
+    typeof native?.extractSessionEventClip === 'function'
+  );
+}
+
+export interface SessionCaptureReceipt {
+  sessionCaptureId: string;
+}
+
+export interface SessionEventClipBounds {
+  /** Exact closed-event bounds on the session time axis (ms since the first
+   * streamed motion sample — the same axis those samples use). */
+  startMs: number;
+  endMs: number;
+  peakMs: number | null;
+  /** The frozen proposal's segmentation confidence, carried verbatim. */
+  confidence: number;
+  /** The JS session engine version that proposed the event bounds. */
+  detectionModelVersion: string;
+}
+
+export async function startSessionCapture(): Promise<SessionCaptureReceipt> {
+  if (!native?.startSessionCapture) {
+    stabilitySlo.record({
+      kind: 'camera_startup_failed',
+      reason: 'session_capture_unavailable',
+    });
+    throw new Error('Native session capture is not available on this device.');
+  }
+  let receipt: unknown;
+  try {
+    receipt = await native.startSessionCapture();
+  } catch (error) {
+    stabilitySlo.record({
+      kind: 'camera_startup_failed',
+      reason: 'native_session_start_error',
+    });
+    throw error;
+  }
+  if (
+    !isRecord(receipt) ||
+    typeof receipt.sessionCaptureId !== 'string' ||
+    receipt.sessionCaptureId.length === 0
+  ) {
+    stabilitySlo.record({
+      kind: 'camera_startup_failed',
+      reason: 'invalid_session_receipt',
+    });
+    throw new Error('The native camera returned an invalid session receipt.');
+  }
+  stabilitySlo.record({ kind: 'camera_startup_succeeded' });
+  return { sessionCaptureId: receipt.sessionCaptureId };
+}
+
+export async function stopSessionCapture(
+  sessionCaptureId: string,
+): Promise<void> {
+  if (!native?.stopSessionCapture) {
+    throw new Error('Native session capture is not available on this device.');
+  }
+  await native.stopSessionCapture(sessionCaptureId);
+}
+
+/** Requests a clip cut from the rolling session recording for one closed
+ * event, plus the pose sidecar sliced to the same window. The receipt is the
+ * SAME validated CapturedClip contract guided capture returns — a session
+ * event clip that cannot pass validation is rejected, never repaired. */
+export async function extractSessionEventClip(
+  sessionCaptureId: string,
+  bounds: SessionEventClipBounds,
+): Promise<CapturedClip> {
+  if (!native?.extractSessionEventClip) {
+    throw new Error(
+      'Native session clip extraction is not available on this device.',
+    );
+  }
+  const payload = await native.extractSessionEventClip({
+    sessionCaptureId,
+    startMs: bounds.startMs,
+    endMs: bounds.endMs,
+    peakMs: bounds.peakMs,
+    confidence: bounds.confidence,
+    detectionModelVersion: bounds.detectionModelVersion,
+  });
+  return assertCapturedClip(payload, 'automatic_pose_trigger');
 }
 
 export function videoImportAvailable(): boolean {
@@ -402,12 +601,15 @@ export function assertCapturedClip(
       (value.poseSequence !== undefined &&
         !isPoseSequenceRef(value.poseSequence)) ||
       (value.completion !== undefined &&
-        !isCompletionTelemetry(value.completion, value.trigger))
+        !isCompletionTelemetry(value.completion, value.trigger)) ||
+      (value.targetLock !== undefined &&
+        !isTargetLockTelemetry(value.targetLock, value.targetSeed))
     ) {
       throw invalidClip();
     }
   } else if (
     value.trigger !== undefined ||
+    value.targetLock !== undefined ||
     value.captureEvidence !== undefined ||
     value.preRollMs !== undefined ||
     value.postRollMs !== undefined ||
@@ -501,6 +703,115 @@ function isCompletionTelemetry(
     previousTMs = sample.tMs;
   }
   return true;
+}
+
+/**
+ * Target-lock telemetry validation. Cross-checks the clip's `targetSeed`
+ * so a fabricated or drifted record cannot pass: a locked record must carry
+ * the seed's exact torso and source, the distance must recompute from the
+ * recorded points, ambiguity-resolved sources require the ambiguity flag,
+ * a timeout lock requires a duration at least the timeout, and the v1 params
+ * must be exactly the shipped D-027 constants.
+ */
+function isTargetLockTelemetry(
+  value: unknown,
+  targetSeed: unknown,
+): value is TargetLockTelemetryV1 {
+  if (!isRecord(value)) return false;
+  if (
+    value.schemaVersion !== 1 ||
+    !isNonEmptyString(value.algorithmVersion) ||
+    value.coordinateSystem !== 'normalized_capture_space' ||
+    !isNormalizedPoint(value.tapPoint) ||
+    (value.lockOutcome !== 'locked' && value.lockOutcome !== 'no_lock') ||
+    typeof value.ambiguityEntered !== 'boolean'
+  ) {
+    return false;
+  }
+
+  const expectedParams = TARGET_LOCK_PARAMS_V1 as Record<string, number>;
+  const params = value.params;
+  if (!isRecord(params)) return false;
+  const paramKeys = Object.keys(expectedParams);
+  if (Object.keys(params).length !== paramKeys.length) return false;
+  for (const key of paramKeys) {
+    if (params[key] !== expectedParams[key]) return false;
+  }
+
+  if (
+    value.ambiguityDurationMs !== undefined &&
+    (!isNonNegativeInteger(value.ambiguityDurationMs) ||
+      value.ambiguityEntered !== true)
+  ) {
+    return false;
+  }
+  if (
+    value.ambiguityEntered === true &&
+    value.ambiguityDurationMs === undefined
+  ) {
+    return false;
+  }
+
+  if (value.lockOutcome === 'no_lock') {
+    return (
+      value.lockSource === undefined &&
+      value.lockTorso === undefined &&
+      value.tapToLockDistance === undefined &&
+      value.timeToLockMs === undefined &&
+      targetSeed === undefined
+    );
+  }
+
+  if (
+    !isTargetLockSource(value.lockSource) ||
+    !isNormalizedPoint(value.lockTorso) ||
+    !isNonNegativeFinite(value.tapToLockDistance) ||
+    !isNonNegativeInteger(value.timeToLockMs)
+  ) {
+    return false;
+  }
+  const recomputed = Math.hypot(
+    value.lockTorso.x - value.tapPoint.x,
+    value.lockTorso.y - value.tapPoint.y,
+  );
+  if (
+    Math.abs(value.tapToLockDistance - recomputed) >
+    TARGET_LOCK_DISTANCE_TOLERANCE
+  ) {
+    return false;
+  }
+  if (
+    (value.lockSource === 'gesture_confirmed' ||
+      value.lockSource === 'ambiguity_timeout') &&
+    value.ambiguityEntered !== true
+  ) {
+    return false;
+  }
+  if (
+    value.lockSource === 'ambiguity_timeout' &&
+    (value.ambiguityDurationMs === undefined ||
+      value.ambiguityDurationMs < TARGET_LOCK_PARAMS_V1.ambiguityTimeoutMs)
+  ) {
+    return false;
+  }
+  return (
+    isRecord(targetSeed) &&
+    targetSeed.source === value.lockSource &&
+    targetSeed.x === value.lockTorso.x &&
+    targetSeed.y === value.lockTorso.y
+  );
+}
+
+function isTargetLockSource(value: unknown): value is TargetLockSource {
+  return (
+    value === 'start_region_occupancy' ||
+    value === 'gesture_confirmed' ||
+    value === 'ambiguity_timeout'
+  );
+}
+
+function isNormalizedPoint(value: unknown): value is { x: number; y: number } {
+  return isRecord(value) && isUnitInterval(value.x) && isUnitInterval(value.y);
 }
 
 function isPoseSequenceRef(value: unknown): value is PoseSequenceSidecarRef {

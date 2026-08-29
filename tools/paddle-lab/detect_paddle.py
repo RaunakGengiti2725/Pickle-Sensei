@@ -40,6 +40,15 @@ Usage (one-shot, backward compatible):
       [--start-ms 0] [--end-ms 0=whole video] [--stride 1] [--floor 0.08] \
       [--roi x0,y0,x1,y1] [--legacy-decode] [--decode-size WxH]
 
+Crop mode (crop-recovery-v1, W12 winner): run inference on explicit crop
+rectangles instead of full frames. Detections are mapped back to full-frame
+pixels and tagged source="crop" + cropRect so the TS tracker can gate them
+(crop candidates only EXTEND tracks; they never start them):
+  .venv/bin/python detect_paddle.py --video clip.mp4 --crops crops.json \
+      --out crop-dets.json [--floor 0.08]
+  crops.json: {"crops": [{"tMs": 2502.5, "rects": [{"x0":..,"y0":..,"x1":..,"y1":..}, ...]}]}
+  Per-frame cross-rect NMS (IoU 0.55) unions the multi-scale crops.
+
 Serve mode (persistent warm worker; model loads ONCE, then serves many
 requests — kills the ~9-13s/invocation python+torch import + model load):
   .venv/bin/python detect_paddle.py --serve [--no-warmup]
@@ -62,6 +71,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import subprocess
 import sys
 import time
@@ -82,11 +92,11 @@ EXTRA_LABELS = {"sports ball"}
 DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
 
 
-def ffprobe_meta(video: str) -> tuple[int, int, float, float]:
+def ffprobe_meta(video: str) -> tuple[int, int, float, float, float]:
     out = subprocess.run(
         [
             "ffprobe", "-v", "error", "-select_streams", "v:0",
-            "-show_entries", "stream=width,height,avg_frame_rate,duration",
+            "-show_entries", "stream=width,height,avg_frame_rate,duration,start_time",
             "-of", "json", video,
         ],
         capture_output=True, text=True, check=True,
@@ -94,7 +104,29 @@ def ffprobe_meta(video: str) -> tuple[int, int, float, float]:
     stream = json.loads(out.stdout)["streams"][0]
     num, den = stream["avg_frame_rate"].split("/")
     fps = float(num) / float(den)
-    return int(stream["width"]), int(stream["height"]), fps, float(stream.get("duration", 0)) * 1000
+    try:
+        start_time_ms = float(stream.get("start_time", 0)) * 1000
+    except (TypeError, ValueError):
+        start_time_ms = 0.0
+    return (
+        int(stream["width"]), int(stream["height"]), fps,
+        float(stream.get("duration", 0)) * 1000, start_time_ms,
+    )
+
+
+def plan_window_seek(start_ms: float, fps: float, start_time_ms: float = 0.0) -> tuple[int, float]:
+    """Map a requested window start to absolute CFR frame indexing.
+
+    Frame k of a CFR stream sits at pts = start_time + k/fps. ffmpeg's CLI
+    adds the input's start_time to the `-ss` target, then emits the first
+    frame whose pts >= target — so the seek value is expressed relative to
+    stream start: frame index ceil((start - start_time) * fps), sought at
+    index/fps floored to ffmpeg's millisecond CLI precision so the seek lands
+    exactly on the frame's pts (never rounding up past it).
+    """
+    first_index = max(0, math.ceil((start_ms - start_time_ms) * fps / 1000.0 - 1e-6))
+    seek_sec = math.floor(first_index / fps * 1000.0) / 1000.0
+    return first_index, seek_sec
 
 
 def frame_iter(
@@ -107,6 +139,7 @@ def frame_iter(
     stride: int = 1,
     decode_size: tuple[int, int] | None = None,
     legacy: bool = False,
+    start_time_ms: float = 0.0,
 ):
     """Decode upright RGB frames via ffmpeg rawvideo pipe (applies rotation).
 
@@ -119,11 +152,13 @@ def frame_iter(
     the original behavior byte-for-byte: no -vf, every window frame piped at
     full resolution, stride applied Python-side.
     """
+    first_index, seek_sec = plan_window_seek(start_ms, fps, start_time_ms)
     args = ["ffmpeg", "-v", "error"]
     if start_ms > 0:
-        args += ["-ss", f"{start_ms / 1000:.3f}"]
+        args += ["-ss", f"{seek_sec:.3f}"]
     if end_ms > 0:
-        args += ["-to", f"{end_ms / 1000:.3f}"]
+        # -to is adjusted by the input start_time exactly like -ss.
+        args += ["-to", f"{max((end_ms - start_time_ms) / 1000, seek_sec + 0.001):.3f}"]
     args += ["-i", video]
     out_w, out_h = width, height
     if legacy:
@@ -136,9 +171,15 @@ def frame_iter(
             out_w, out_h = decode_size
             vf.append(f"scale={out_w}:{out_h}:flags=bilinear")
         if vf:
-            args += ["-vf", ",".join(vf), "-fps_mode", "vfr"]
+            # -vsync vfr rather than -fps_mode: same semantics, also on ffmpeg < 5.1
+            # (ffmpeg 4.4 rejects -fps_mode outright, which silently yielded zero
+            # frames here because the pipe closed before the first frame).
+            args += ["-vf", ",".join(vf), "-vsync", "vfr"]
     args += ["-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
-    proc = subprocess.Popen(args, stdout=subprocess.PIPE)
+    # stdin=DEVNULL: ffmpeg reads inherited stdin for interactive commands and
+    # would otherwise consume queued serve-mode request lines off the shared
+    # protocol stdin (losing the request and hanging its client).
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL)
     frame_bytes = out_w * out_h * 3
     index = 0
     assert proc.stdout is not None
@@ -152,10 +193,14 @@ def frame_iter(
         if not (legacy and source_index % stride != 0):
             # Constant-frame-rate assumption (our lab transcodes are CFR); the
             # timestamp model is recorded in the output for auditability.
-            t_ms = start_ms + source_index * 1000.0 / fps
+            # tMs is the ABSOLUTE frame pts under the CFR model —
+            # start_time + frame_index/fps: the first emitted frame is the
+            # first frame with pts >= start, not a frame at exactly start_ms.
+            t_ms = start_time_ms + (first_index + source_index) * 1000.0 / fps
             yield source_index, t_ms, np.frombuffer(chunk, dtype=np.uint8).reshape(out_h, out_w, 3)
         index += 1
-    proc.wait()
+    if proc.wait() != 0:
+        raise RuntimeError(f"ffmpeg decode failed (exit {proc.returncode}) for {video}")
 
 
 def load_model() -> tuple[object, object, float]:
@@ -211,7 +256,7 @@ def run_window(
     Output schema is identical to the pre-W2 script; box/score values on the
     default path are bit-equal to the legacy path (same decoded pixels, same
     model, batched instead of per-value GPU->CPU transfer)."""
-    width, height, fps, duration_ms = ffprobe_meta(video)
+    width, height, fps, duration_ms, start_time_ms = ffprobe_meta(video)
     frames_out = []
     infer_sec_total = 0.0
     wall_started = time.perf_counter()
@@ -231,6 +276,7 @@ def run_window(
     for _, t_ms, rgb in frame_iter(
         video, start_ms, end_ms, width, height, fps,
         stride=stride, decode_size=decode_size, legacy=legacy_decode,
+        start_time_ms=start_time_ms,
     ):
         dec_h, dec_w = rgb.shape[0], rgb.shape[1]
         crop_x0 = crop_y0 = 0
@@ -329,6 +375,176 @@ def run_window(
             "framesProcessed": frames_processed,
             "inferenceSecTotal": round(infer_sec_total, 3),
             "inferenceMsPerFrame": round(1000 * infer_sec_total / max(1, frames_processed), 1),
+            "wallSecTotal": round(wall_sec, 3),
+        },
+        "frames": frames_out,
+    }
+    Path(out).write_text(json.dumps(payload))
+    return payload
+
+
+def box_iou(a: list[float], b: list[float]) -> float:
+    ix0, iy0 = max(a[0], b[0]), max(a[1], b[1])
+    ix1, iy1 = min(a[2], b[2]), min(a[3], b[3])
+    inter = max(0.0, ix1 - ix0) * max(0.0, iy1 - iy0)
+    area_a = (a[2] - a[0]) * (a[3] - a[1])
+    area_b = (b[2] - b[0]) * (b[3] - b[1])
+    union = area_a + area_b - inter
+    return inter / union if union > 0 else 0.0
+
+
+def nms_union(entries: list[dict], iou_threshold: float = 0.55) -> list[dict]:
+    """Cross-scale NMS union (W12): keep the highest-score box of each
+    overlapping cluster across crop rects."""
+    kept: list[dict] = []
+    for entry in sorted(entries, key=lambda item: -item["score"]):
+        if all(box_iou(entry["box"], other["box"]) < iou_threshold for other in kept):
+            kept.append(entry)
+    return kept
+
+
+def decode_frames_at(video: str, frame_indices: list[int], width: int, height: int, fps: float):
+    """Decode exactly the requested source frames under absolute CFR indexing
+    (frame k at start_time + k/fps). Yields (frame_index, rgb).
+
+    Seek strategy: input `-ss` at the first wanted frame's exact pts (the
+    plan_window_seek arithmetic frame_iter already uses — floored to ffmpeg's
+    millisecond CLI precision so the seek never lands past the frame; the
+    naive `-ss <tMs>` one-frame-early defect from W12 does not apply because
+    the seek target is derived FROM the frame index, not from an annotation
+    timestamp). The select expression is rebased to post-seek output ordinals,
+    and `-frames:v` stops the decode right after the last wanted frame instead
+    of draining the rest of the clip."""
+    wanted = sorted(set(frame_indices))
+    if not wanted:
+        return
+    first_index = wanted[0]
+    seek_sec = math.floor(first_index / fps * 1000.0) / 1000.0
+    args = ["ffmpeg", "-v", "error"]
+    if first_index > 0:
+        args += ["-ss", f"{seek_sec:.3f}"]
+    select = "+".join(f"eq(n\\,{idx - first_index})" for idx in wanted)
+    args += [
+        "-i", video,
+        # -vsync vfr rather than -fps_mode: same semantics, also on ffmpeg < 5.1
+        "-vf", f"select={select}", "-vsync", "vfr",
+        "-frames:v", str(len(wanted)),
+        "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
+    ]
+    # stdin=DEVNULL: see decode path above — never let ffmpeg read the
+    # serve-mode protocol stdin.
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL)
+    frame_bytes = width * height * 3
+    assert proc.stdout is not None
+    position = 0
+    while position < len(wanted):
+        chunk = proc.stdout.read(frame_bytes)
+        if len(chunk) < frame_bytes:
+            break
+        yield wanted[position], np.frombuffer(chunk, dtype=np.uint8).reshape(height, width, 3)
+        position += 1
+    if proc.wait() != 0:
+        raise RuntimeError(f"ffmpeg decode failed (exit {proc.returncode}) for {video}")
+
+
+def run_crops(
+    processor,
+    model,
+    *,
+    video: str,
+    crops_path: str,
+    out: str,
+    floor: float = 0.08,
+    model_load_sec: float = 0.0,
+) -> dict:
+    """Crop-mode inference (crop-recovery-v1): detect on explicit rectangles,
+    map boxes back to full-frame pixels, tag every detection source="crop"
+    with its cropRect, and NMS-union across the rects of each frame."""
+    width, height, fps, duration_ms, _start_time_ms = ffprobe_meta(video)
+    plan = json.loads(Path(crops_path).read_text())["crops"]
+    by_frame: dict[int, dict] = {}
+    for entry in plan:
+        index = int(round(float(entry["tMs"]) * fps / 1000.0))
+        by_frame.setdefault(index, {"tMs": float(entry["tMs"]), "rects": []})
+        for rect in entry["rects"]:
+            if isinstance(rect, dict):
+                rect = [rect["x0"], rect["y0"], rect["x1"], rect["y1"]]
+            by_frame[index]["rects"].append([float(v) for v in rect])
+
+    frames_out = []
+    infer_sec_total = 0.0
+    crops_processed = 0
+    wall_started = time.perf_counter()
+    for frame_index, rgb in decode_frames_at(video, list(by_frame), width, height, fps):
+        spec = by_frame[frame_index]
+        detections: list[dict] = []
+        extras: list[dict] = []
+        for rect in spec["rects"]:
+            x0 = max(0, min(width - 32, int(rect[0])))
+            y0 = max(0, min(height - 32, int(rect[1])))
+            x1 = min(width, max(x0 + 32, int(rect[2])))
+            y1 = min(height, max(y0 + 32, int(rect[3])))
+            crop = rgb[y0:y1, x0:x1]
+            image = Image.fromarray(crop)
+            infer_started = time.perf_counter()
+            inputs = processor(images=image, return_tensors="pt").to(DEVICE)
+            with torch.no_grad():
+                outputs = model(**inputs)
+            result = processor.post_process_object_detection(
+                outputs, target_sizes=[(y1 - y0, x1 - x0)], threshold=floor
+            )[0]
+            infer_sec_total += time.perf_counter() - infer_started
+            crops_processed += 1
+            boxes_np = result["boxes"].detach().cpu().numpy()
+            scores_np = result["scores"].detach().cpu().numpy()
+            labels_np = result["labels"].detach().cpu().numpy()
+            for i in range(boxes_np.shape[0]):
+                name = model.config.id2label[int(labels_np[i])]
+                if name in PADDLE_PROXY_LABELS:
+                    bucket = detections
+                elif name in EXTRA_LABELS:
+                    bucket = extras
+                else:
+                    continue
+                bx = boxes_np[i].tolist()
+                bucket.append({
+                    "box": [round(bx[0] + x0, 1), round(bx[1] + y0, 1),
+                            round(bx[2] + x0, 1), round(bx[3] + y0, 1)],
+                    "score": round(float(scores_np[i]), 4),
+                    "label": name,
+                    "source": "crop",
+                    "cropRect": [x0, y0, x1, y1],
+                })
+        frames_out.append({
+            "tMs": round(spec["tMs"], 2),
+            "detections": nms_union(detections),
+            "extras": nms_union(extras),
+        })
+    frames_out.sort(key=lambda frame: frame["tMs"])
+
+    wall_sec = time.perf_counter() - wall_started
+    payload = {
+        "schemaVersion": 1,
+        "mode": "crops",
+        "cropRecoveryVersion": "crop-recovery-v1",
+        "detector": {
+            "modelId": MODEL_ID,
+            "version": DETECTOR_VERSION,
+            "license": "Apache-2.0 (code and weights)",
+            "device": DEVICE,
+            "proxyLabels": sorted(PADDLE_PROXY_LABELS),
+            "proxyNote": "COCO has no pickleball paddle class; these proxy classes are what the detector can actually claim.",
+            "scoreFloor": floor,
+        },
+        "video": {"path": video, "width": width, "height": height, "fps": fps,
+                  "durationMs": duration_ms},
+        "timestampModel": "constant_frame_rate_absolute_from_t0",
+        "timing": {
+            "modelLoadSec": round(model_load_sec, 3),
+            "framesProcessed": len(frames_out),
+            "cropsProcessed": crops_processed,
+            "inferenceSecTotal": round(infer_sec_total, 3),
+            "inferenceMsPerCrop": round(1000 * infer_sec_total / max(1, crops_processed), 1),
             "wallSecTotal": round(wall_sec, 3),
         },
         "frames": frames_out,
@@ -444,6 +660,11 @@ def main() -> None:
     )
     parser.add_argument("--no-warmup", action="store_true",
                         help="serve mode: skip the startup dummy inference")
+    parser.add_argument(
+        "--crops", default=None,
+        help="crop-recovery-v1: JSON file of per-frame crop rectangles; "
+        "detections come back full-frame-pixel, tagged source=crop + cropRect.",
+    )
     args = parser.parse_args()
 
     if args.serve:
@@ -452,6 +673,26 @@ def main() -> None:
 
     if not args.video or not args.out:
         parser.error("--video and --out are required (unless --serve)")
+
+    if args.crops:
+        processor, model, load_sec = load_model()
+        payload = run_crops(
+            processor,
+            model,
+            video=args.video,
+            crops_path=args.crops,
+            out=args.out,
+            floor=args.floor,
+            model_load_sec=load_sec,
+        )
+        print(
+            f"detect_paddle --crops: {payload['timing']['framesProcessed']} frames, "
+            f"{payload['timing']['cropsProcessed']} crops, "
+            f"{payload['timing']['inferenceMsPerCrop']}ms/crop inference ({DEVICE}), "
+            f"-> {args.out}"
+        )
+        return
+
     roi = parse_roi(args.roi)
     decode_size = parse_decode_size(args.decode_size)
     if args.legacy_decode and decode_size is not None:

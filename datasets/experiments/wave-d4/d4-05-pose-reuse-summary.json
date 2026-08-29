@@ -1,0 +1,39 @@
+{
+  "workstream": "D4-05 — Pose reuse contract",
+  "branch": "devin/wave-d4/d4-05-pose-reuse",
+  "base": "origin/devin/1787988068-wave-c-integration",
+  "date": "2026-08-29",
+  "audit": {
+    "recomputedBefore": [
+      "toLegacyPoseFrames(sequence): 7 independent materializations per analyzeVideo run — pre-pass dominantWristSpeeds, paddle-stage wristSeries, event-isolation dominantWristSpeeds, contact targetWrists flatMap, classifyStroke, buildStrokeSequence, buildBallTracks(playBand+jointSeries)",
+      "dominantWristSpeeds(sequence, strokeWindow): computed twice (pre-pass wristSpeedsPre + isolation wristSpeedsEarly) on identical inputs",
+      "wristSeries(sequence): recomputed inside runPaddleStage",
+      "targetWrists (visibility ≥ 0.25 flatMap): computed at contact stage from a fresh legacy projection",
+      "paddleSpeedSeries(observations): computed 3x (isolation, primary contact, per-event contact loop) on the same tracked observations; paddleCenters map computed 2x",
+      "torso centers: estimateContact (vision-geometry/offlineStroke) and classifyStroke each derive torso spans from frames internally — left in place; classifyStroke now receives cached frames, estimateContact keeps its own window-filtered projection because it lives in a separate package with its own contract (contract stated, not refactored)",
+      "smoothing: the 3-sample smoothing inside strokeEvents.ts proposer is intentionally NOT cached — strokeEvents.ts is verbatim-mirrored into analysis-pipeline with a byte-compare drift guard, so its internals stay self-contained"
+    ]
+  },
+  "design": {
+    "cache": "PoseDerivatives built once by buildPoseDerivatives(sequence, strokeWindow) in analyzeVideo after target selection + scene clamping (sequence frozen): { legacyFrames, wristSeries, dominantWristSpeeds, targetWrists }; paddle derivatives (paddleSpeedSeries + paddleCenters) computed once after paddle tracking",
+    "threading": "runPaddleStage takes targetWrists; runBallStage/buildBallTracks, classifyStroke, buildStrokeSequence accept optional precomputed legacyFrames (self-derive when absent, so all existing callers/tests unchanged); wristSeriesFromFrames added alongside wristSeries",
+    "purity": "pure refactor — no thresholds, denominators, ordering, or contracts changed; new timings key poseDerivativesMs added to run timings (wall-clock diagnostics, not analysis output)"
+  },
+  "identityEvidence": {
+    "parityTests": "packages/swing-lab/test/poseDerivatives.test.ts — 4 tests: JSON.stringify equality of cached vs self-derived outputs for wristSeriesFromFrames vs wristSeries, classifyStroke, buildStrokeSequence, buildBallTracks — all pass",
+    "existingSuites": "swing-lab vitest: 235 passed | 4 skipped (replay tests skip: run-dir pose.json fixtures not committed); analysis-pipeline vitest: 34 passed (incl. strokeEvents mirror drift guard); pnpm typecheck green across workspace",
+    "reportArtifactDiffs": "NOT RUNNABLE on Linux: analyzeVideo end-to-end requires pose.json from the Mac-only Apple Vision extractor; no canonical pose inputs are committed for any bundle. Held-out cases wm-dink-01 / afn-vic-rally1 untouched."
+  },
+  "timing": {
+    "label": "LINUX-CPU",
+    "hardware": "Intel Xeon Platinum 8559C, 8 vCPU, node v20.18.1",
+    "method": "micro-benchmark of the exact derivative projections analyzeVideo re-derived per run (7x toLegacyPoseFrames + 2x dominantWristSpeeds + wristSeries + targetWrists flatMap) vs the computed-once cache, on a 600-frame (~20s@30fps) synthetic sequence, 500 iterations after warm-up; bench script ephemeral, not committed",
+    "beforeMsPerRun": 2.519,
+    "afterMsPerRun": 1.003,
+    "deltaMsPerRun": 1.517,
+    "deltaPercent": 60.2,
+    "note": "absolute savings are small vs detector/ffmpeg stages; the win is the contract (one projection, one owner) plus removed redundant O(frames·landmarks) scans"
+  },
+  "macGatedStatement": "Pose extraction (Apple Vision) and full-pipeline report regeneration are Mac-gated; no Mac/iPhone timings were measured or claimed. The cache contract applies unchanged there: buildPoseDerivatives is pure CPU TypeScript over the canonical PoseSequence, so on-device behavior is byte-identical by the same parity argument proven in poseDerivatives.test.ts.",
+  "verdict": "GREEN"
+}

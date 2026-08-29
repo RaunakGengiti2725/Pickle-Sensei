@@ -1,0 +1,62 @@
+{
+  "workstream": "D4-09",
+  "title": "Database migration + seed audit",
+  "branch": "devin/wave-d4/d4-09-db-audit",
+  "base": "origin/devin/1787988068-wave-c-integration",
+  "date": "2026-08-29",
+  "environment": "LINUX-CPU (postgres:16-alpine test harness via docker-compose postgres_test)",
+  "findings": [
+    {
+      "id": "F1",
+      "area": "missing index on query path",
+      "severity": "medium",
+      "detail": "services/api/src/modules/training/routes.ts selects drill_checkpoint_map by (shot_type_id, checkpoint_definition_id) during every training-plan generation; the table's only index is the PK led by drill_id, forcing a full scan.",
+      "fix": "migration 0016: idx_drill_checkpoint_map_shot_checkpoint on (shot_type_id, checkpoint_definition_id)"
+    },
+    {
+      "id": "F2",
+      "area": "unindexed FK columns on deletion cascade paths",
+      "severity": "medium",
+      "detail": "final_hard_delete deletion task issues DELETE FROM app_user, cascading into shot/media_asset/analysis_job. Referencing FK columns without indexes (training_plan.source_shot_id/reassessment_shot_id, ml_dataset_item.source_shot_id/media_asset_id/feature_asset_id, session_summary.best_shot_id, weekly_report.best_shot_id, share_card.shot_id/session_id, shot.analysis_job_id/media_asset_id/feature_asset_id) cause per-row sequential scans during the cascade.",
+      "fix": "migration 0016: 12 partial WHERE-NOT-NULL FK indexes"
+    },
+    {
+      "id": "F3",
+      "area": "deletion-workflow worker query paths",
+      "severity": "low",
+      "detail": "media_purge (worker.ts) selects media_asset by owner_user_id regardless of deleted_at, but the only owner index is partial on deleted_at IS NULL; idp_revoke counts deletion_task rows by user_id, which has no index.",
+      "fix": "migration 0016: idx_media_asset_owner_object_key (partial, object_key IS NOT NULL) and idx_deletion_task_user"
+    },
+    {
+      "id": "F4",
+      "area": "consent-record schema completeness vs C10",
+      "severity": "info-plus-hardening",
+      "detail": "0015 consent_record satisfies C10: version (consent_version), timestamp (recorded_at + monotonic seq), withdrawal (append-only action='withdrawn' rows), audit trail (row-level UPDATE/DELETE trigger + audit_log entries, pseudonymous ledger survives account deletion). Gap: TRUNCATE bypasses row-level triggers, so the append-only guarantee could be bulk-erased.",
+      "fix": "migration 0016: statement-level BEFORE TRUNCATE trigger trg_consent_record_no_truncate"
+    },
+    {
+      "id": "F5",
+      "area": "seed data leaking into prod paths",
+      "severity": "medium",
+      "detail": "seed.ts scoring_model upsert used ON CONFLICT DO UPDATE SET config unconditionally: re-running the seed against a database where a version had been released (status='active' with full 0013 release evidence) would overwrite the released config JSON with the pre-release hypothesis. Other seeds (shot_type, checkpoints, flags DO NOTHING, offerings, achievements) are deterministic catalog data intended for prod per directive \u00a752 and are safe/idempotent; fixture drills are retired (active=false).",
+      "fix": "seed.ts: DO UPDATE ... WHERE scoring_model.status IN ('draft','validating'); released/retired models are skipped entirely (config, checkpoints, targets untouched). Regression test added."
+    },
+    {
+      "id": "F6",
+      "area": "irreversible migrations",
+      "severity": "info",
+      "detail": "Destructive migrations 0009 (deletes fixture-sourced shots, rebuilds progress_daily) and 0013 (quarantines evidence-less active models) each carry documented justification in their headers; runner (D-006) enforces checksums so applied files cannot be silently edited. No undocumented irreversible migration found. No fix needed."
+    }
+  ],
+  "changes": [
+    "packages/database/migrations/0016_audit_indexes_consent_hardening.sql (new migration: 14 indexes + consent TRUNCATE guard)",
+    "packages/database/src/seed.ts (released-model config protection)",
+    "packages/database/test/migrate.test.ts (3 new integration tests)"
+  ],
+  "verification": {
+    "packages_database": "pnpm typecheck green; vitest 7/7 green incl. 4 integration tests against postgres_test (LINUX-CPU)",
+    "services_api": "56/57 green serially; 1 failure preexisting on base branch: training.integration.test.ts streak test schedules completedAt=12:00 UTC today and fails before noon UTC ('Completion time cannot be in the future') — clock-dependent flake, unrelated to this change, reproduced identically on origin/devin/1787988068-wave-c-integration",
+    "services_media_worker": "8/8 green with --no-file-parallelism; parallel run has a preexisting shared-test-DB race (both test files DROP SCHEMA public on the same DATABASE_URL_TEST), also present on base"
+  },
+  "held_out_cases_touched": false
+}

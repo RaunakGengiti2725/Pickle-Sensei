@@ -1,0 +1,101 @@
+{
+  "startedAt": "2026-08-29T09:49:41.021Z",
+  "mode": "fake",
+  "node": "v20.18.1",
+  "commit": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+  "fakeCleanup": {
+    "orphans": [],
+    "pass": true
+  },
+  "phases": [
+    {
+      "phase": "fake-sequential",
+      "requests": 500,
+      "okCount": 500,
+      "workerFailures": 0,
+      "fallbacks": 0,
+      "wallMs": 385,
+      "rss": {
+        "worker": {
+          "samples": 50,
+          "firstKb": 41932,
+          "lastKb": 46340,
+          "minKb": 41932,
+          "maxKb": 46340,
+          "slopeKbPerRequest": 4.204581032412965
+        },
+        "client": {
+          "samples": 50,
+          "firstKb": 73560,
+          "lastKb": 74640,
+          "minKb": 73560,
+          "maxKb": 74640,
+          "slopeKbPerRequest": 2.000249699879952
+        }
+      },
+      "failures": []
+    },
+    {
+      "phase": "fake-concurrent",
+      "requests": 400,
+      "okCount": 400,
+      "workerFailures": 0,
+      "fallbacks": 0,
+      "wallMs": 38,
+      "rss": {
+        "worker": {
+          "samples": 25,
+          "firstKb": 41924,
+          "lastKb": 43600,
+          "minKb": 41924,
+          "maxKb": 43600,
+          "slopeKbPerRequest": 3.999807692307692
+        },
+        "client": {
+          "samples": 25,
+          "firstKb": 73096,
+          "lastKb": 73660,
+          "minKb": 73096,
+          "maxKb": 73660,
+          "slopeKbPerRequest": 1.8936538461538461
+        }
+      },
+      "failures": []
+    },
+    {
+      "phase": "fake-crash-restart",
+      "requests": 200,
+      "okCount": 196,
+      "workerFailures": 4,
+      "fallbacks": 4,
+      "restarts": 3,
+      "wallMs": 295,
+      "rss": {
+        "worker": null,
+        "client": null
+      },
+      "failures": [],
+      "notes": [
+        "spawns=4",
+        "every 50th request crashes the worker; each crashed window must fall back exactly once and the next window must ride a restarted worker"
+      ]
+    },
+    {
+      "phase": "fake-error-fallback",
+      "requests": 200,
+      "okCount": 192,
+      "workerFailures": 8,
+      "fallbacks": 8,
+      "wallMs": 41,
+      "rss": {
+        "worker": null,
+        "client": null
+      },
+      "failures": [],
+      "notes": [
+        "every 25th request answers ok=false; the worker must keep serving after each"
+      ]
+    }
+  ],
+  "finishedAt": "2026-08-29T09:49:42.313Z"
+}

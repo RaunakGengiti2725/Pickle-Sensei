@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 1,
+  "workstream": "f13-contact-dispute-adjudication",
+  "branch": "devin/wave-f/f13-contact-dispute-adjudication",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "baseCommit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "createdAtIso": "2026-08-29T11:35:00.000Z",
+  "mission": "Adjudicate the 4 preserved contact disputes from D2-05 using the D2-05 method (independent re-derivation + documented criteria), producing versioned append-only adjudication records that reference what they adjudicate, and resolve the camera-cut inconsistency finding.",
+  "inputs": {
+    "auditSummary": "datasets/experiments/wave-d2/d2-05-contact-audit-summary.json",
+    "auditSidecars": [
+      "datasets/paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v4-waveD2-contact-audit.json",
+      "datasets/paddle-bench/bundles/afn-sasebo-rally2/annotation/devin-visual-v4-waveD2-contact-audit.json"
+    ],
+    "priorLabelFiles": [
+      "datasets/paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v1.json",
+      "datasets/paddle-bench/bundles/afn-sasebo-rally2/annotation/devin-visual-v1.json"
+    ]
+  },
+  "provenance": {
+    "source": {
+      "recordingId": "rec-aba9629c681d",
+      "path": "datasets/corpus/media/dvids-967848-aba9629c681d.mp4",
+      "sha256": "aba9629c681d159e0560583865085b8bcceaaa850f9d81f5b26832a86fc90e3c",
+      "sha256VerifiedLocally": true,
+      "fps": 29.97,
+      "resolution": "1920x1080",
+      "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)"
+    },
+    "frameExtraction": "ffmpeg select=eq(n,IDX) absolute CFR indexing; source frames 808-840, 888-906, 985-1004 extracted to /tmp only; no media committed; media re-downloaded from the registered rights-cleared DVIDS source and hash-verified.",
+    "derivationTooling": "Connected-component green-pixel ball candidate detection ((G>150) AND (G>R+20) AND (G>B+60), scipy.ndimage.label, blobs >=8px, static scene blobs excluded) used to locate candidates across frames; every adjudication-critical frame confirmed by eye on the full frame or a 240px crop. Camera cut measured by mean absolute grayscale difference between adjacent source frames."
+  },
+  "adjudicationMethod": "Third independent pass, blind to preferring either side: ball positions re-derived per source frame, contact defined as ball-at-paddle adjacency or ball direction reversal across adjacent frames; verdicts compare BOTH the prior label and the D2-05 audit value against the re-derived track. Predictions never relabeled as observations; originals never rewritten.",
+  "adjudicationRecords": [
+    "datasets/paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v5-waveF-contact-adjudication.json",
+    "datasets/paddle-bench/bundles/afn-sasebo-rally2/annotation/devin-visual-v5-waveF-contact-adjudication.json"
+  ],
+  "verdicts": [
+    {
+      "adjudicationId": "ADJ-C1",
+      "bundle": "afn-sasebo-rally1",
+      "priorContactMs": 1117,
+      "auditContactMs": 1218,
+      "verdict": "dispute_upheld_no_contact_in_prior_window",
+      "auditReplacementAdopted": false,
+      "keyEvidence": "No ball within 600-700px of the target's paddle in either the prior bracket (1083-1150ms) or the audit window (1201-1235ms). Incoming fast ball first visible src814 (65,412), ~90px/frame rightward, reaches the paddle only at src824-826 ((830,576)@825 at paddle face, departing (740,546)@826) = clip 1468-1568ms across offsets 779-780, the span already covered by the undisputed 1484 event. The audit's 1218 reversal is not reproducible."
+    },
+    {
+      "adjudicationId": "ADJ-C2",
+      "bundle": "afn-sasebo-rally1",
+      "priorContactMs": 1717,
+      "auditContactMs": null,
+      "verdict": "dispute_upheld_no_contact_observed",
+      "auditReplacementAdopted": false,
+      "keyEvidence": "At prior time (src ~830.5-831.5) the struck ball is mid-return leftward ((341,477)@830 -> (106,479)@832, no paddle near, no direction change) and a SECOND concurrent ball is post-floor-bounce (bounce src827, y-max 797) rising toward the partner ((613,729)@830 -> (672,706)@833), first touched at the undisputed 1934 partner dig (src836-838; audit inbound (752,717) matches this track's (752,719)@837). New forensic mechanism: two distinct balls; the 1934 dig plays a different ball than the target's src824-826 contact."
+    },
+    {
+      "adjudicationId": "ADJ-C3",
+      "bundle": "afn-sasebo-rally1",
+      "priorContactMs": 3870,
+      "auditContactMs": null,
+      "verdict": "dispute_upheld_not_observable_camera_cut",
+      "auditReplacementAdopted": false,
+      "keyEvidence": "Hard cut measured between source frames 895/896: mean abs grayscale diff 54.15 vs baseline 1.71-3.07 over src888-906 (~18x spike); framing changes from close front-oblique to wide multi-court. Prior contact time 3870ms = clip n115.98, the cut boundary itself; no contact observable from either side."
+    },
+    {
+      "adjudicationId": "ADJ-C4",
+      "bundle": "afn-sasebo-rally2",
+      "priorContactMs": 2620,
+      "auditContactMs": null,
+      "verdict": "dispute_upheld_no_contact_observed",
+      "auditReplacementAdopted": false,
+      "keyEvidence": "Re-derived track src987-998 is a single smooth ballistic arc ((920,178)@987 -> (1237,219)@996 -> (1323,259)@998), x monotone, no direction change at prior time src ~995.5; ball visually above/behind the gray-shirt man with no paddle-ball adjacency. Prior note itself marks the contact as interpolated."
+    }
+  ],
+  "cameraCutResolution": {
+    "finding": "D2-05 flagged: 'registry describes rally1 as a single continuous shot, but a cut exists at clip ~3.85s'.",
+    "resolution": "CONFIRMED BY MEASUREMENT. datasets/corpus/recordings.json rec-21fb75446a03 (afn-sasebo-rally1, trim 26.0-30.4s of rec-6e06a3157947) declares 'Single continuous shot' with evidence 'declared', but a hard cut exists between source frames 895 and 896 (source 29.86-29.90s, inside the declared trim; clip ~3.85-3.90s): mean abs grayscale diff 54.15 vs 1.71-3.07 baseline over src888-906, with visually different camera framing on each side. The rally1 clip therefore contains TWO shots; its final ~0.5s (clip frames >= n116 at offset 780) is a different camera.",
+    "registryCorrectionRecommended": "Change rec-21fb75446a03 derivedFrom detail from 'Single continuous shot' to note the shot boundary at source frame 895/896 (~29.87s), and record evidence 'measured (mean-abs-frame-diff spike + visual confirmation, wave-f f13)'. recordings.json is integrator-owned and was intentionally NOT modified by this workstream.",
+    "downstreamImplication": "The rally1 3870 event (eventStart 3500, eventEnd 4300) spans the cut and cannot be certified from this clip; rally2 (trim 30.6-36.0s) lies entirely after the cut and is a single shot as declared."
+  },
+  "datasetScope": "Bundles afn-sasebo-rally1 and afn-sasebo-rally2 only (both derived from the single source recording dvids-967848; evaluation grouping by source session is therefore trivially satisfied). Held-out cases wm-dink-01 and afn-vic-rally1 and the fresh-candidates pool untouched.",
+  "results": {
+    "disputesAdjudicated": 4,
+    "disputesUpheld": 4,
+    "auditReplacementValuesAdopted": 0,
+    "priorLabelsRecommendedNotCertifiable": [
+      "afn-sasebo-rally1 contact 1117",
+      "afn-sasebo-rally1 contact 1717",
+      "afn-sasebo-rally1 contact 3870",
+      "afn-sasebo-rally2 contact 2620"
+    ],
+    "newForensicFindings": [
+      "Two concurrent balls in afn-sasebo-rally1 during 1100-1950ms: the ball dug by the partner at 1934 (slow arc, floor bounce at src827) is distinct from the ball the target struck at src824-826; this explains both the 1117 and 1717 phantom labels.",
+      "The D2-05 audit's replacement value 1218 for the 1117 dispute is not reproducible by a third pass and should not be adopted; the dispute resolves to no-contact-in-window, not to a shifted contact.",
+      "Camera cut localized to an exact source-frame boundary (895/896) with quantified evidence, upgrading the D2-05 'declared vs observed' inconsistency to a measured registry error."
+    ]
+  },
+  "constraints": {
+    "heldOutFilesTouched": 0,
+    "freshCandidatesTouched": 0,
+    "existingAnnotationFilesModified": 0,
+    "integratorOwnedDocsModified": 0,
+    "runsDirsModified": 0,
+    "mediaCommitted": 0,
+    "mediaDownloadedMB": "~65 (local only, gitignored path, rights-cleared PD-USGov source already registered in datasets/corpus/sources.json, sha256 re-verified)"
+  },
+  "honesty": {
+    "originalsUntouched": "Prior annotation files and D2-05 audit sidecars are byte-identical; adjudications are new append-only sidecar files that reference what they adjudicate.",
+    "predictionsVsObservations": "All evidence derives from direct frame re-derivation of the source media; no model predictions used; no interpolation reported as observation.",
+    "provenNegatives": "Three of four verdicts are proven negatives (no contact / not observable), reported as such rather than substituting fabricated contact times."
+  }
+}

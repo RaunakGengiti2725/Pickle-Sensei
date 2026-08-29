@@ -25,6 +25,40 @@ import { toLegacyPoseFrames } from "@pickle/swing-domain";
  */
 
 export const PADDLE_TRACKER_VERSION = "paddle-track-2";
+
+/** ownership-guard-v1 (wave-D3 red team, OFF by default): tightens the
+ *  ownership verdict in three measured wrong-owner families —
+ *  (A) NEAR-OWNERSHIP DEAD ZONE: the other player's wrist is strictly
+ *      closer to the winning track than the target's, but not decisively
+ *      (otherOwnershipFactor..1.0). The un-guarded selector confidently
+ *      claims the track for the target; the guard abstains as ambiguous.
+ *  (B) EVIDENCE-GAP HANDOFF: a paddle handoff into a stretch where the
+ *      receiving player's wrists are unmeasured (occlusion/pose dropout)
+ *      cannot flip-segment — flips need other-wrist data. The guard drops
+ *      sustained no-other-evidence runs whose observations are not in the
+ *      target's hand (> handAffinityRadius) instead of claiming them.
+ *  (C) UNVERIFIED OWNERSHIP: a multi-player scene where the winning track
+ *      has (almost) no other-wrist measurements at all — ownership was
+ *      never actually tested. The verdict stands but carries a risk flag.
+ */
+export interface PaddleSelectionOptions {
+  ownershipGuard?: boolean;
+}
+export const OWNERSHIP_GUARD_VERSION = "ownership-guard-v1";
+export const OWNERSHIP_GUARD_GATES = {
+  /** (B) minimum run length of no-other-evidence observations to drop
+   *  (mirrors TRACKER_GATES.sustainedFlipRunLength). */
+  minEvidenceGapRun: 3,
+  /** (C) other-evidence coverage below this is "unverified". */
+  minOtherEvidenceCoverage: 0.35,
+} as const;
+
+/** Provenance of a paddle detection/observation. Crop-sourced detections
+ *  (wrist-conditioned re-detect, crop-recovery-v1) may only EXTEND existing
+ *  tracks — never start them — so they never enter selection as raw
+ *  candidates. TRACKED_ESTIMATE marks bridge interpolations that must never
+ *  be presented as detections. Absent means full_frame. */
+export type PaddleDetectionSource = "full_frame" | "crop" | "tracked_estimate";
 export const PADDLE_CONFIDENCE_MODEL = "heuristic-v1 (uncalibrated)";
 
 export interface RawPaddleDetectionFile {
@@ -49,7 +83,12 @@ export interface RawPaddleDetectionFile {
   };
   frames: Array<{
     tMs: number;
-    detections: Array<{ box: [number, number, number, number]; score: number; label: string }>;
+    detections: Array<{
+      box: [number, number, number, number];
+      score: number;
+      label: string;
+      source?: PaddleDetectionSource;
+    }>;
     extras: Array<{ box: [number, number, number, number]; score: number; label: string }>;
   }>;
 }
@@ -70,6 +109,8 @@ export interface TrackedPaddleObservation {
   /** heuristic-v1 (uncalibrated) — see PADDLE_CONFIDENCE_MODEL. */
   confidence: number;
   nearWrist: boolean;
+  /** Detection provenance; absent means full_frame. */
+  source?: PaddleDetectionSource;
 }
 
 export interface PaddleTrackCandidate {
@@ -170,6 +211,7 @@ export function buildPaddleTracks(
       .map((detection) => ({
         score: detection.score,
         box: normalizeBox(detection.box, width, height),
+        source: detection.source,
       }))
       .filter(
         (candidate) =>
@@ -198,13 +240,17 @@ export function buildPaddleTracks(
         }
       }
       if (best && bestDistance <= TRACKER_GATES.matchRadius) {
-        appendObservation(best, frame.tMs, candidate.box, candidate.score);
+        appendObservation(best, frame.tMs, candidate.box, candidate.score, candidate.source);
         usedTracks.add(best.trackId);
       } else {
         unmatched.push(candidate);
       }
     }
     for (const candidate of unmatched) {
+      // Crop-sourced detections may only EXTEND tracks (matched above):
+      // an unmatched crop box never seeds a track, so it can never reach
+      // selection as a raw candidate no matter its score.
+      if (candidate.source === "crop") continue;
       if (candidate.score < TRACKER_GATES.startScore) continue;
       const track: ActiveTrack = {
         trackId: nextId++,
@@ -212,7 +258,7 @@ export function buildPaddleTracks(
         lastMs: frame.tMs,
         velocity: { x: 0, y: 0 },
       };
-      appendObservation(track, frame.tMs, candidate.box, candidate.score);
+      appendObservation(track, frame.tMs, candidate.box, candidate.score, candidate.source);
       tracks.push(track);
     }
   }
@@ -249,7 +295,14 @@ export function buildPaddleTracks(
 export function wristSeries(
   sequence: PoseSequence,
 ): Array<{ timestampMs: number; wrists: Array<{ x: number; y: number }> }> {
-  return toLegacyPoseFrames(sequence).map((frame) => ({
+  return wristSeriesFromFrames(toLegacyPoseFrames(sequence));
+}
+
+/** Same projection, from already-materialized legacy frames. */
+export function wristSeriesFromFrames(
+  frames: ReturnType<typeof toLegacyPoseFrames>,
+): Array<{ timestampMs: number; wrists: Array<{ x: number; y: number }> }> {
+  return frames.map((frame) => ({
     timestampMs: frame.timestampMs,
     wrists: frame.landmarks
       .filter((mark) => mark.name.endsWith("wrist") && mark.visibility >= 0.2)
@@ -276,50 +329,86 @@ export function wristSeries(
  * Merging concatenates MEASURED observations only; the gap stays a gap. No
  * position is invented, so provenance ("detected") is preserved.
  */
+export const MERGE_LINK_GATES = {
+  maxMergeGapMs: 500,
+  baseRadius: 0.05,
+  radiusPerSec: 0.45,
+  maxScaleRatio: 2.2,
+} as const;
+
+/** Constant-velocity tail of a tracklet (last observation + velocity over
+ *  its final up-to-3 observations). */
+export function trackletTail(candidate: PaddleTrackCandidate): {
+  last: TrackedPaddleObservation;
+  velocity: { x: number; y: number };
+} {
+  const observations = candidate.observations;
+  const last = observations[observations.length - 1]!;
+  const previous = observations[Math.max(0, observations.length - 3)]!;
+  const dtSec = Math.max(0.001, (last.timestampMs - previous.timestampMs) / 1000);
+  return {
+    last,
+    velocity: {
+      x: (last.center.x - previous.center.x) / dtSec,
+      y: (last.center.y - previous.center.y) / dtSec,
+    },
+  };
+}
+
+/** The geometric A→B link gate used by tracklet reconciliation: strict
+ *  temporal ordering inside maxMergeGapMs, B's start inside A's constant-
+ *  velocity corridor, compatible box scale. Shared with the merge-safety
+ *  classifier so "merge candidate pair" means exactly one thing. */
+export function trackletLinkGate(
+  a: PaddleTrackCandidate,
+  b: PaddleTrackCandidate,
+): {
+  linkable: boolean;
+  gapMs: number;
+  miss: number | null;
+  radius: number | null;
+  scaleRatio: number | null;
+} {
+  const { last, velocity } = trackletTail(a);
+  const first = b.observations[0]!;
+  const gapMs = first.timestampMs - last.timestampMs;
+  if (gapMs <= 0 || gapMs > MERGE_LINK_GATES.maxMergeGapMs) {
+    return { linkable: false, gapMs, miss: null, radius: null, scaleRatio: null };
+  }
+  const gapSec = gapMs / 1000;
+  const predicted = {
+    x: last.center.x + velocity.x * gapSec,
+    y: last.center.y + velocity.y * gapSec,
+  };
+  const miss = Math.hypot(first.center.x - predicted.x, first.center.y - predicted.y);
+  const radius = MERGE_LINK_GATES.baseRadius + MERGE_LINK_GATES.radiusPerSec * gapSec;
+  const scaleRatio =
+    Math.max(last.box.width, first.box.width) /
+    Math.max(1e-6, Math.min(last.box.width, first.box.width));
+  const linkable = miss <= radius && scaleRatio <= MERGE_LINK_GATES.maxScaleRatio;
+  return { linkable, gapMs, miss, radius, scaleRatio };
+}
+
 export function mergePaddleTracklets(
   candidates: readonly PaddleTrackCandidate[],
   window: { startMs: number; endMs: number },
 ): { merged: PaddleTrackCandidate[]; links: number } {
-  const GATES = { maxMergeGapMs: 500, baseRadius: 0.05, radiusPerSec: 0.45, maxScaleRatio: 2.2 };
   const sorted = [...candidates].sort(
     (a, b) => a.observations[0]!.timestampMs - b.observations[0]!.timestampMs,
   );
-  const tail = (candidate: PaddleTrackCandidate) => {
-    const observations = candidate.observations;
-    const last = observations[observations.length - 1]!;
-    const previous = observations[Math.max(0, observations.length - 3)]!;
-    const dtSec = Math.max(0.001, (last.timestampMs - previous.timestampMs) / 1000);
-    return {
-      last,
-      velocity: {
-        x: (last.center.x - previous.center.x) / dtSec,
-        y: (last.center.y - previous.center.y) / dtSec,
-      },
-    };
-  };
 
   // Best-first greedy chaining: every tracklet joins at most one successor.
   const links: Array<{ from: number; to: number; cost: number }> = [];
   for (const [indexA, a] of sorted.entries()) {
-    const { last, velocity } = tail(a);
     for (const [indexB, b] of sorted.entries()) {
       if (indexA === indexB) continue;
-      const first = b.observations[0]!;
-      const gapMs = first.timestampMs - last.timestampMs;
-      if (gapMs <= 0 || gapMs > GATES.maxMergeGapMs) continue;
-      const gapSec = gapMs / 1000;
-      const predicted = {
-        x: last.center.x + velocity.x * gapSec,
-        y: last.center.y + velocity.y * gapSec,
-      };
-      const miss = Math.hypot(first.center.x - predicted.x, first.center.y - predicted.y);
-      const radius = GATES.baseRadius + GATES.radiusPerSec * gapSec;
-      if (miss > radius) continue;
-      const scaleRatio =
-        Math.max(last.box.width, first.box.width) /
-        Math.max(1e-6, Math.min(last.box.width, first.box.width));
-      if (scaleRatio > GATES.maxScaleRatio) continue;
-      links.push({ from: indexA, to: indexB, cost: miss / radius + gapSec * 0.3 });
+      const gate = trackletLinkGate(a, b);
+      if (!gate.linkable) continue;
+      links.push({
+        from: indexA,
+        to: indexB,
+        cost: gate.miss! / gate.radius! + (gate.gapMs / 1000) * 0.3,
+      });
     }
   }
   links.sort((a, b) => a.cost - b.cost);
@@ -388,7 +477,10 @@ export function selectPrimaryPaddleTrack(
   window: { startMs: number; endMs: number },
   /** Wrists of NON-target players; a paddle nearer to them is not ours. */
   otherWrists: ReturnType<typeof wristSeries> = [],
+  options: PaddleSelectionOptions = {},
 ): PaddleTrackingOutcome {
+  const guard = options.ownershipGuard === true;
+  const sceneHasOtherPlayers = otherWrists.some((entry) => entry.wrists.length > 0);
   if (candidates.length === 0) {
     return { status: "untracked", reason: "no_tracks_formed", allTracks: [], association: null };
   }
@@ -432,6 +524,24 @@ export function selectPrimaryPaddleTrack(
       // Mixed but NOTHING decisively target-owned → keep the full list and
       // let the track-level ownership test below decide (a wholly-other
       // track is rejected with the same accounting as before).
+    }
+    let evidenceGapDropped = 0;
+    if (guard && sceneHasOtherPlayers) {
+      // (B) EVIDENCE-GAP HANDOFF: flip-segmentation is blind wherever the
+      // other player's wrists are unmeasured. Sustained runs with no
+      // other-wrist evidence whose observations are NOT in the target's
+      // hand are unverifiable — drop them rather than claim them.
+      const guarded: TrackedPaddleObservation[][] = [];
+      for (const segment of keptSegments) {
+        const { kept, dropped } = dropUnverifiableRuns(segment, wrists, otherWrists);
+        evidenceGapDropped += dropped.length;
+        for (const run of dropped) {
+          switchEvents.push({ atMs: run[0]!.timestampMs, kind: "PADDLE_ASSOCIATION_SWITCH" });
+        }
+        guarded.push(...kept);
+      }
+      keptSegments = guarded.filter((segment) => segment.length > 0);
+      if (keptSegments.length === 0) keptSegments = [[]];
     }
     const observations = keptSegments.flat();
     // Wrist proximity is judged over the stroke window (falling back to the
@@ -516,6 +626,8 @@ export function selectPrimaryPaddleTrack(
       meanOtherDistance,
       otherPlayers,
       handAffinity,
+      otherEvidenceCoverage: judged.length > 0 ? otherDistances.length / judged.length : 0,
+      evidenceGapDropped,
       // FROZEN selection OBJECTIVE (an affinity-dominant rescoring was tried
       // and measured WORSE: S4 recall 0.22 -> 0.04; see
       // datasets/experiments/EXP-2026-08-28-paddle-waterfall.json). Only the
@@ -557,6 +669,28 @@ export function selectPrimaryPaddleTrack(
   association.meanOtherWristDistance = best.meanOtherDistance;
   association.selectionMargin = runnerUp && runnerUp.score > 0 ? best.score / runnerUp.score : null;
 
+  // (A) NEAR-OWNERSHIP DEAD ZONE (ownership-guard-v1): the other player's
+  // wrist is strictly closer than the target's, yet the decisive test above
+  // did not reject (margin inside otherOwnershipFactor..1.0). Confidently
+  // claiming this track picks the wrong owner in exactly the measured
+  // partner-paddle-closer-than-own family — abstain as ambiguous instead.
+  if (
+    guard &&
+    best.meanOtherDistance !== null &&
+    best.candidate.meanWristDistance !== null &&
+    best.meanOtherDistance < best.candidate.meanWristDistance
+  ) {
+    risks.push(
+      "PADDLE_OWNERSHIP_AMBIGUOUS: other player's wrist closer than target's (non-decisive margin)",
+    );
+    return {
+      status: "untracked",
+      reason: "paddle_ownership_ambiguous_other_wrist_closer (abstaining rather than guessing)",
+      allTracks: scored.map((entry) => entry.candidate),
+      association,
+    };
+  }
+
   // Ambiguity: two comparable candidates near DIFFERENT hands → abstain.
   if (
     runnerUp &&
@@ -596,6 +730,26 @@ export function selectPrimaryPaddleTrack(
       allTracks: scored.map((entry) => entry.candidate),
       association,
     };
+  }
+
+  // (C) UNVERIFIED OWNERSHIP (ownership-guard-v1): a multi-player scene in
+  // which the winning track has (almost) no other-wrist measurements —
+  // the ownership test never actually ran. The verdict stands (a paddle in
+  // the target's hand is plausibly theirs) but carries an explicit risk so
+  // downstream consumers never read it as a verified-ownership claim.
+  if (
+    guard &&
+    sceneHasOtherPlayers &&
+    best.otherEvidenceCoverage < OWNERSHIP_GUARD_GATES.minOtherEvidenceCoverage
+  ) {
+    risks.push(
+      "PADDLE_OWNERSHIP_UNVERIFIED: other players present but (almost) no other-wrist evidence over the selected track",
+    );
+  }
+  if (guard && best.evidenceGapDropped > 0) {
+    risks.push(
+      "PADDLE_OWNERSHIP_EVIDENCE_GAP: dropped sustained out-of-hand runs with no other-wrist evidence",
+    );
   }
 
   // Final per-observation heuristic confidence + nearWrist flags.
@@ -658,8 +812,57 @@ export function selectPrimaryPaddleTrack(
   };
 }
 
+/** (B) helper for ownership-guard-v1: split a segment into maximal runs by
+ *  other-wrist-evidence presence; sustained no-evidence runs whose
+ *  observations are not in the target's hand are unverifiable → dropped. */
+function dropUnverifiableRuns(
+  segment: TrackedPaddleObservation[],
+  wrists: ReturnType<typeof wristSeries>,
+  otherWrists: ReturnType<typeof wristSeries>,
+): { kept: TrackedPaddleObservation[][]; dropped: TrackedPaddleObservation[][] } {
+  const kept: TrackedPaddleObservation[][] = [];
+  const dropped: TrackedPaddleObservation[][] = [];
+  let run: TrackedPaddleObservation[] = [];
+  let runHasEvidence: boolean | null = null;
+  const flush = () => {
+    if (run.length === 0) return;
+    if (runHasEvidence === false && run.length >= OWNERSHIP_GUARD_GATES.minEvidenceGapRun) {
+      const targetDistances = run.map((observation) => {
+        const nearest = nearestWrists(wrists, observation.timestampMs);
+        return nearest
+          ? Math.min(
+              ...nearest.map((wrist) =>
+                Math.hypot(wrist.x - observation.center.x, wrist.y - observation.center.y),
+              ),
+            )
+          : Infinity;
+      });
+      const meanTarget = mean(targetDistances.filter((distance) => Number.isFinite(distance)));
+      const inHand =
+        targetDistances.some((distance) => Number.isFinite(distance)) &&
+        meanTarget <= TRACKER_GATES.handAffinityRadius;
+      (inHand ? kept : dropped).push(run);
+    } else {
+      kept.push(run);
+    }
+    run = [];
+  };
+  for (const observation of segment) {
+    const hasEvidence = nearestWrists(otherWrists, observation.timestampMs) !== null;
+    if (runHasEvidence === null || hasEvidence === runHasEvidence) {
+      run.push(observation);
+    } else {
+      flush();
+      run = [observation];
+    }
+    runHasEvidence = hasEvidence;
+  }
+  flush();
+  return { kept, dropped };
+}
+
 /** A contiguous run of track observations with one wrist-ownership verdict. */
-export interface PaddleTrackSegment {
+interface PaddleTrackSegment {
   observations: TrackedPaddleObservation[];
   startMs: number;
   endMs: number;
@@ -805,6 +1008,7 @@ function appendObservation(
   timestampMs: number,
   box: NormalizedBox,
   score: number,
+  source?: PaddleDetectionSource,
 ): void {
   const center = boxCenter(box);
   const previous = track.observations[track.observations.length - 1];
@@ -828,6 +1032,7 @@ function appendObservation(
     trackId: track.trackId,
     confidence: score, // provisional; finalized during selection
     nearWrist: false,
+    ...(source ? { source } : {}),
   });
   track.lastMs = timestampMs;
 }

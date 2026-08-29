@@ -19,7 +19,7 @@ export interface ITokenVerifier {
   verify(token: string): Promise<Result<VerifiedIdentity>>;
 }
 
-export class OidcTokenVerifier implements ITokenVerifier {
+class OidcTokenVerifier implements ITokenVerifier {
   private jwks: ReturnType<typeof createRemoteJWKSet>;
   constructor(
     jwksUrl: string,
@@ -48,7 +48,7 @@ export class OidcTokenVerifier implements ITokenVerifier {
   }
 }
 
-export const DEV_ISSUER = "pickle-dev";
+const DEV_ISSUER = "pickle-dev";
 
 export class DevTokenVerifier implements ITokenVerifier {
   private secret: Uint8Array;

@@ -19,6 +19,7 @@ import {
   DEV_REPLAY_RALLY,
   LiveSessionFlow,
   NATIVE_CLIP_EXTRACTION_NOT_BUILT,
+  captureModePillLabel,
   createPendingStubAnalysisProvider,
   formatSessionClock,
   nativeSessionMotionFeedAvailability,
@@ -27,16 +28,28 @@ import {
   type SessionEventView,
   type TechniqueFamily,
 } from '../flow/session';
+import {
+  connectNativeSessionMotionFeed,
+  createNativeSessionAnalysisProvider,
+  createNativeSessionEventClipSource,
+  type SessionMotionFeedConnection,
+} from '../flow/sessionNative';
+import { startSessionCapture, stopSessionCapture } from '../camera/capture';
+import { getDb } from '../data/db';
+import { getApiSession } from '../account/apiSession';
+import { useAppStore } from '../state/appStore';
 import { makeUuid } from '../util/uuid';
 import type { RootStackParams } from '../navigation/params';
 
 /**
  * LIVE COURT — session mode UI (MOBBIN brief §3), driven by the canonical
  * SessionEventEngine through LiveSessionFlow. Honest states throughout:
- *  - the live camera stream is NOT built (Gap 1): sessions run as a clearly
- *    labeled replay of a recorded dev rally, never presented as live;
- *  - per-event analysis is NOT built (Gap 2): every event card carries its
- *    real segmentation evidence and an honest PENDING state — no fake scores.
+ *  - when the native session capture surface exists, sessions run LIVE:
+ *    continuous wrist-motion samples stream in and each closed event's clip
+ *    is cut from the rolling recording and analyzed (declared-null AUTO);
+ *  - without it (Gap 1 unavailable), sessions run as a clearly labeled
+ *    replay of a recorded dev rally, never presented as live, and every
+ *    event card keeps its honest PENDING state — no fake scores.
  */
 
 const FAMILY_COLOR: Record<TechniqueFamily, string> = {
@@ -312,14 +325,57 @@ export function LiveCourtScreen() {
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const flowRef = useRef<LiveSessionFlow | null>(null);
   const replayTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const motionFeed = useRef<SessionMotionFeedConnection | null>(null);
+  const sessionCaptureId = useRef<string | null>(null);
+  const [liveStartError, setLiveStartError] = useState<string | null>(null);
+  const profile = useAppStore(s => s.profile);
   const liveFeed = nativeSessionMotionFeedAvailability();
 
   useEffect(
     () => () => {
       if (replayTimer.current) clearInterval(replayTimer.current);
+      motionFeed.current?.disconnect();
+      const activeCapture = sessionCaptureId.current;
+      if (activeCapture) void stopSessionCapture(activeCapture).catch(() => {});
     },
     [],
   );
+
+  const startLiveSession = async () => {
+    setLiveStartError(null);
+    let captureId: string;
+    try {
+      captureId = (await startSessionCapture()).sessionCaptureId;
+    } catch (error) {
+      setLiveStartError(error instanceof Error ? error.message : String(error));
+      return;
+    }
+    sessionCaptureId.current = captureId;
+    const apiSession = getApiSession();
+    const flow = new LiveSessionFlow({
+      sessionId: makeUuid(),
+      source: 'live',
+      startedAtIso: new Date().toISOString(),
+      provider: createNativeSessionAnalysisProvider({
+        db: getDb(),
+        apiConfig: {
+          baseUrl: apiSession?.apiBaseUrl ?? '',
+          token: apiSession?.bearerToken ?? null,
+        },
+        appVersion: '0.1.0',
+        handedness: profile?.handedness ?? 'right',
+        cameraView: 'side',
+      }),
+      clipSource: createNativeSessionEventClipSource(captureId),
+      onUpdate: next => setSnapshot(next),
+    });
+    flowRef.current = flow;
+    setExpandedEventId(null);
+    setSnapshot(flow.snapshot());
+    motionFeed.current = connectNativeSessionMotionFeed(flow, {
+      sessionCaptureId: captureId,
+    });
+  };
 
   const startReplaySession = () => {
     if (replayTimer.current) clearInterval(replayTimer.current);
@@ -357,6 +413,11 @@ export function LiveCourtScreen() {
       clearInterval(replayTimer.current);
       replayTimer.current = null;
     }
+    motionFeed.current?.disconnect();
+    motionFeed.current = null;
+    const activeCapture = sessionCaptureId.current;
+    sessionCaptureId.current = null;
+    if (activeCapture) void stopSessionCapture(activeCapture).catch(() => {});
     const flow = flowRef.current;
     if (!flow) return;
     const final = flow.end();
@@ -373,7 +434,9 @@ export function LiveCourtScreen() {
         title="Live Court"
         onClose={() => navigation.goBack()}
         right={
-          snapshot ? <Pill label="REPLAY · DEV RALLY" tone="volt" /> : undefined
+          snapshot && captureModePillLabel(snapshot.source) ? (
+            <Pill label={captureModePillLabel(snapshot.source)!} tone="volt" />
+          ) : undefined
         }
       />
       {snapshot === null ? (
@@ -391,8 +454,10 @@ export function LiveCourtScreen() {
             ]}
           >
             The session engine splits continuous play into stroke events — E1,
-            E2, E3 — while recording never stops. Live camera streaming is not
-            built yet, so you can watch it run on a recorded rally.
+            E2, E3 — while recording never stops.{' '}
+            {liveFeed.available
+              ? 'This build streams live wrist motion and analyzes each event from the rolling recording.'
+              : 'Live camera streaming is not built in this build, so you can watch it run on a recorded rally.'}
           </Text>
           <SetupGraphic />
           <Card tone="dark" style={styles.setupCard}>
@@ -405,19 +470,40 @@ export function LiveCourtScreen() {
             <SetupRow
               icon="camera"
               label="LIVE WRIST-SPEED STREAM"
-              value="Not built in this build"
-              status="blocked"
+              value={
+                liveFeed.available
+                  ? 'Native session capture'
+                  : 'Not built in this build'
+              }
+              status={liveFeed.available ? 'ready' : 'blocked'}
             />
             <SetupRow
               icon="lock"
               label="PER-EVENT ANALYSIS"
-              value="Needs per-event clips"
-              status="blocked"
+              value={
+                liveFeed.available
+                  ? 'Clips cut from rolling recording'
+                  : 'Needs per-event clips'
+              }
+              status={liveFeed.available ? 'ready' : 'blocked'}
             />
           </Card>
+          {liveFeed.available ? (
+            <Button
+              label="Start live session"
+              variant="volt"
+              icon="play"
+              onPress={() => void startLiveSession()}
+            />
+          ) : null}
+          {liveStartError !== null ? (
+            <Text style={[type.caption, { color: color.warn }]}>
+              Could not start the native session capture: {liveStartError}
+            </Text>
+          ) : null}
           <Button
             label="Replay a recorded rally"
-            variant="volt"
+            variant={liveFeed.available ? 'dark' : 'volt'}
             icon="play"
             onPress={startReplaySession}
           />

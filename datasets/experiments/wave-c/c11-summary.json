@@ -1,0 +1,82 @@
+{
+  "workstream": "C11",
+  "title": "SILENT FAILURE RATE as third north star + calibration/selective-risk tooling",
+  "branch": "devin/wave-c/c11-silent-failure-metric",
+  "status": "GREEN (tooling) / measurement blocked on this box (canonical runs absent)",
+  "built": {
+    "silentFailureContract": {
+      "file": "packages/swing-lab/src/silentFailure.ts",
+      "version": "silent-failure-v1",
+      "definition": "a user-visible confident material claim (target identity, event, stroke L1, contact marker, phase render) that gold says is wrong; abstentions are NOT silent failures; unverifiable claims (no gold stroke label / no gold contact) count as neither",
+      "note": "written from the product definition; change only by re-versioning, never softening in place (usable-result-v1 pattern)"
+    },
+    "cascadeIntegration": {
+      "file": "packages/swing-lab/src/cascadeWaterfall.ts",
+      "prints": "SILENT FAILURES x/n ALL TRIALS and x/m ANSWERED TRIALS alongside strict survival and usable-result-v1, off the same per-case report artifacts; per-claim verdicts per case; persisted in the cascade JSON under silentFailure"
+    },
+    "calibrationModule": {
+      "file": "packages/swing-lab/src/calibration.ts",
+      "exports": [
+        "reliabilityBins",
+        "expectedCalibrationError",
+        "coverageRiskCurve",
+        "areaUnderRiskCoverage"
+      ]
+    },
+    "coverageRiskCli": {
+      "file": "packages/swing-lab/src/coverageRisk.ts",
+      "command": "pnpm lab:risk-curves",
+      "output": "datasets/experiments/wave-c/c11-coverage-risk.json"
+    }
+  },
+  "measured": {
+    "cascadeOnThisBox": {
+      "value": "n=0 (all counters 0/0)",
+      "provenance": "MEASURED on this Linux box by running pnpm lab:cascade — canonical run dirs (datasets/paddle-bench/runs/) are gitignored and absent, so the silent-failure code path prints honestly-empty denominators; NOT a cascade measurement",
+      "codePathVerified": "packages/swing-lab/test/silentFailure.test.ts — SYNTHETIC FIXTURE reports (clearly marked) exercise every claim outcome: correct, silent_failure, abstained, unverifiable"
+    },
+    "coverageRiskCurves": {
+      "provenance": "committed artifacts wave-b/W14-overlap/{ta-overlap,ownership-overlap,agreement}.json — the only committed wave-a/wave-b JSONs pairing per-case confidences with an independent correctness signal; correctness = 3-class agreement with the primary annotator (inter-annotator proxy, NOT gold, NOT model confidence)",
+      "taOverlap": {
+        "n": 12,
+        "disagreements": 2,
+        "ece10": 0.1208,
+        "aurc": 0.0765,
+        "keyPoints": "risk 0.000 at coverage 0.417 (threshold 0.90); risk 0.167 at full coverage — both disagreements sit at annotator confidence <= 0.85"
+      },
+      "ownershipOverlap": {
+        "n": 31,
+        "disagreements": 3,
+        "ece10": 0.0977,
+        "aurc": 0.0176,
+        "keyPoints": "risk 0.000 through coverage 0.613 (threshold 0.80); risk 0.097 at full coverage — all 3 disagreements at confidence <= 0.75"
+      },
+      "caveat": "n=12 and n=31 (clustered in 12 frames / 3 videos): curves are exact over these samples, not stable population estimates"
+    },
+    "gates": {
+      "typecheck": "pnpm typecheck (swing-lab) clean",
+      "tests": "pnpm vitest run (swing-lab): 13 files, 164 passed / 4 skipped (pre-existing skips), including new silentFailure.test.ts and calibration.test.ts"
+    }
+  },
+  "honestNegatives": [
+    "No real silent-failure numbers exist yet: canonical runs are absent on Linux, so SILENT FAILURES prints 0/0 here; the first real measurement requires pnpm lab:regen + lab:cascade on the macOS box.",
+    "No committed wave-a/wave-b artifact carries MODEL per-case confidences alongside gold; the coverage-risk curves use annotator self-reported confidence with agreement-with-primary as the correctness proxy. Model-confidence selective-risk curves remain future work once run dirs with selectionConfidence/contact confidence are regenerable here.",
+    "CONTACT_MARKER wrongness uses gold-relative error (66/132ms usable-result-v1 conventions); at runtime the product cannot compute this, so silent-failure-v1 is a bench metric, not a runtime gate.",
+    "Pre-existing no-console lint errors in other swing-lab CLI files (benchRegen, contactForensics, eventBoundsScout, eventWindowSlice, paddleSelectionForensics, waveaValidate) were left untouched (out of scope); all new files lint clean."
+  ],
+  "blocked": [
+    "Real cascade silent-failure measurement: BLOCKED on macOS-only pose extraction / absent canonical run dirs (pnpm lab:regen cannot run on this box).",
+    "Held-out cases (wm-dink-01, afn-vic-rally1) were not touched or iterated against."
+  ],
+  "filesChanged": [
+    "packages/swing-lab/src/silentFailure.ts (new)",
+    "packages/swing-lab/src/calibration.ts (new)",
+    "packages/swing-lab/src/coverageRisk.ts (new)",
+    "packages/swing-lab/src/cascadeWaterfall.ts (silent-failure section added; strict + usable untouched)",
+    "packages/swing-lab/test/silentFailure.test.ts (new, synthetic fixtures)",
+    "packages/swing-lab/test/calibration.test.ts (new)",
+    "packages/swing-lab/package.json + package.json (risk:curves / lab:risk-curves scripts)",
+    "eslint.config.mjs (coverageRisk.ts added to the existing CLI no-console allowlist)",
+    "datasets/experiments/wave-c/c11-coverage-risk.json (generated report)"
+  ]
+}

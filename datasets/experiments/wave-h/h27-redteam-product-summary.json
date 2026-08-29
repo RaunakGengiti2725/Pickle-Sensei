@@ -1,0 +1,199 @@
+{
+  "gate": "h27-redteam-product",
+  "wave": "H",
+  "title": "Permanent red team: product state, authorization, consent, queue, outage, resource exhaustion",
+  "baseline": {
+    "branch": "devin/1787988068-wave-c-integration",
+    "commit": "104ea0f",
+    "workBranch": "devin/wave-h/h27-redteam-product",
+    "waveGRoleSeparation": {
+      "source": "origin/devin/wave-g/g10-f23-roles",
+      "commit": "41ed6a1",
+      "note": "Migration 0018 is NOT in the RC baseline; it was applied into a throwaway schema only to attack it."
+    }
+  },
+  "method": {
+    "stack": "Real local stack: Fastify API built in-process against real PostgreSQL 16.15 (localhost:5433/pickle_test), real migrations + seed + published scoring release, real media-worker deletion pipeline, fake object store and in-memory queue where the local stack has no S3/SQS.",
+    "isolation": "Every new attack suite creates its own PostgreSQL schema, runs migrations, and drops the schema afterwards. No held-out case was touched (wm-dink-01, afn-vic-rally1 untouched).",
+    "scope": "New attacks only. Explicitly NOT re-counted as new: wave-D12/E19 Result and Try Again state work, wave-F f26 fabricated-provenance Result defects, wave-F f21 bounded scheduler red team, capture-envelope/OOD bypasses (f22/D3-07), previously reported consent-abuse cases, and external Mac/iPhone blockers.",
+    "unit": "One attack case = one distinct adversarial request sequence or SQL privilege probe. Frames are not counted as trials.",
+    "gates": "pnpm typecheck, pnpm test, pnpm lint, pnpm format:check all pass on this branch. DB-backed suites re-run with DATABASE_URL_TEST set. Mobile: npx tsc --noEmit + npm test."
+  },
+  "attack_ledger": {
+    "total_attack_cases": 85,
+    "breaks_found": 12,
+    "breaks_fixed_with_regressions": 8,
+    "breaks_unresolved": 4,
+    "by_category": [
+      {
+        "category": "auth/authorization abuse (IDOR, forged claims, cross-tenant writes)",
+        "cases": 21,
+        "breaks": 2,
+        "fixed": 2
+      },
+      {
+        "category": "malformed request/protocol (path ids, bodies, content types, oversize)",
+        "cases": 18,
+        "breaks": 2,
+        "fixed": 2
+      },
+      { "category": "stale Result / TRY AGAIN contamination (mobile)", "cases": 3, "breaks": 1, "fixed": 1 },
+      { "category": "session state integrity after finalize", "cases": 3, "breaks": 1, "fixed": 1 },
+      { "category": "session backlog abuse / resource exhaustion", "cases": 5, "breaks": 1, "fixed": 0 },
+      { "category": "consent tampering", "cases": 6, "breaks": 1, "fixed": 1 },
+      { "category": "queue duplication / redelivery", "cases": 4, "breaks": 1, "fixed": 1 },
+      { "category": "network failure injection (datastore + queue outage)", "cases": 5, "breaks": 1, "fixed": 1 },
+      {
+        "category": "DB privilege bypass vs wave-g role separation (0018)",
+        "cases": 17,
+        "breaks": 2,
+        "fixed": 0,
+        "detail": "10 probes DENIED by role separation (session_replication_role, UPDATE consent_record, sequence ALTER/setval, LOCK TABLE, SET ROLE x2, COPY TO PROGRAM, pg_read_file, CREATE EXTENSION); 7 ALLOWED (forged-pseudonym append, de-pseudonymizing join x2 incl. readonly role, readonly identity read, TEMP TABLE, app_user DELETE cascade, tombstone read)."
+      },
+      { "category": "permission failure sequences (privacy toggle, consent withdrawal)", "cases": 3, "breaks": 1, "fixed": 1 }
+    ]
+  },
+  "measured_results": [
+    {
+      "measurement": "session backlog abuse",
+      "counts": "500/500 open practice sessions accepted for one account, 0 rejections, 935-972 ms total (~1.9 ms/session). GET /v1/progress with that backlog: 200 in 9 ms. GET /v1/library/sessions?limit=100: 200 in 5 ms; limit=200 rejected with a typed 400.",
+      "conclusion": "No latency collapse, but no per-account cap and no application-level rate limiting exist."
+    },
+    {
+      "measurement": "payload amplification",
+      "counts": "shots:sync with 201 shots -> 400 validation.shots_sync (contract cap 200). One shot carrying 2000 duplicate 'contact' phase spans -> 200 accepted, 1 shot_phase row persisted (UNIQUE (shot_id, phase_key) dedupes). 2 MiB body -> 413 validation.payload_too_large."
+    },
+    {
+      "measurement": "datastore outage injection (API pointed at a dead port)",
+      "counts": "Before fix: 3/3 authenticated routes returned 500 api.internal_error kind=permanent retryable=false. After fix: 3/3 return 503 api.datastore_unavailable kind=retryable retryable=true; /v1/health still 200."
+    },
+    {
+      "measurement": "queue duplication",
+      "counts": "Redelivered and concurrent media.purge: master + derived objects deleted exactly once, later redeliveries report no object to delete. Duplicate final_hard_delete rows: before fix both rows stayed queued indefinitely; after fix both converge. Duplicate terminal tasks stay queued (correctly) while an object-store purge is genuinely outstanding."
+    },
+    {
+      "measurement": "test suite results after all fixes",
+      "counts": "services/api 107/107 passed (with DATABASE_URL_TEST); services/media-worker 29/29 passed; apps/mobile 41 suites / 400 tests passed; root pnpm test 593 passed + 4 skipped across 51 files in swing-lab plus all other workspaces green; typecheck, lint, format:check clean."
+    }
+  ],
+  "p0_findings": {
+    "fixed": [
+      {
+        "id": "h27-P0-1",
+        "title": "Cross-user analysis attachment: any authenticated user could bind an analysis to another user's session",
+        "root_cause": "POST /v1/analyses accepted body.sessionId without verifying the session belonged to the caller.",
+        "fix": "Ownership lookup on practice_session before association; unowned ids answer 404 session.not_found.",
+        "regression": "services/api/test/h27.redteam.integration.test.ts",
+        "severity_reason": "Privilege bypass / cross-tenant data write."
+      },
+      {
+        "id": "h27-P0-2",
+        "title": "Forged admin: any token carrying pickle_role=admin obtained full admin API access",
+        "root_cause": "requireAdmin trusted the token-derived role only; app_user has no role column, so nothing server-side constrained who may claim admin.",
+        "fix": "Server-configured ADMIN_AUTH_SUBJECTS allowlist; outside development a token claim alone can no longer grant admin, refusals log and return 403 auth.admin_not_authorized.",
+        "regression": "services/api/test/h27.redteam.integration.test.ts (admin routes refused, feature_flag write blocked)",
+        "residual_risk": "Production MUST set ADMIN_AUTH_SUBJECTS. With it unset in a non-development environment all admin access is refused (fail-closed); with the variable absent in development the legacy permissive behavior remains."
+      },
+      {
+        "id": "h27-P0-3",
+        "title": "Media upload completed and retained after the user disabled cloud video sync",
+        "root_cause": "Privacy setting was checked when the upload was initiated but not at completion, so an opt-out during upload left the asset stored.",
+        "fix": "Completion re-checks cloud_sync_enabled, marks the asset deleted, enqueues media.purge, audits media.discarded_cloud_sync_disabled, and returns 403 media.cloud_sync_disabled.",
+        "regression": "services/api/test/h27.redteam.integration.test.ts",
+        "severity_reason": "Consent/privacy violation on user video."
+      }
+    ],
+    "unresolved": []
+  },
+  "p1_findings": {
+    "fixed": [
+      {
+        "id": "h27-P1-1",
+        "title": "Finalized session summary went stale when a shot synced after finalize",
+        "fix": "Shared summary computation extracted to services/api/src/modules/sessions/summary.ts; a late shot refreshes an existing summary and practice_session.avg_score without reopening the session.",
+        "regression": "services/api/test/h27.redteam.integration.test.ts"
+      },
+      {
+        "id": "h27-P1-2",
+        "title": "Malformed path ids and malformed bodies produced 500 api.internal_error",
+        "fix": "preValidation rejects non-UUID path ids with 400 validation.path_id; request-level failures map onto typed 4xx (400/413/415/429) instead of 500.",
+        "regression": "13 path-id routes and 5 body/content-type cases in services/api/test/h27.redteam.integration.test.ts"
+      },
+      {
+        "id": "h27-P1-3",
+        "title": "TRY AGAIN handoff never expired: an abandoned declaration re-armed an unrelated later capture (measured with a 6-hour-old handoff)",
+        "fix": "30 s TTL plus clearTryAgainHandoff(); AnalyzeScreen clears a pending handoff when the entry point is not the camera.",
+        "regression": "apps/mobile/__tests__/h27.tryAgainStaleHandoff.test.ts"
+      },
+      {
+        "id": "h27-P1-4",
+        "title": "Duplicate final_hard_delete deletion tasks blocked each other forever, so account deletion never completed",
+        "fix": "Worker pending-work query excludes other final_hard_delete rows.",
+        "regression": "services/media-worker/test/h27.duplication.test.ts"
+      },
+      {
+        "id": "h27-P1-5",
+        "title": "Datastore outage was reported as a permanent, non-retryable failure, so clients would discard queued work",
+        "fix": "Connection-class failures (ECONN*, ETIMEDOUT, PG 08*, 57P0*, 53300/53400, pool timeouts) return 503 api.datastore_unavailable kind=retryable.",
+        "regression": "services/api/test/h27.outage.test.ts"
+      },
+      {
+        "id": "h27-P1-6",
+        "title": "Client-supplied consent decision timestamps could be dated arbitrarily far in the future",
+        "fix": "Decisions are accepted within 5 minutes of clock skew and rejected beyond it.",
+        "regression": "services/api/test/h27.redteam.integration.test.ts (future-dated rejected, +30 s accepted)"
+      }
+    ],
+    "unresolved": [
+      {
+        "id": "h27-P1-7",
+        "title": "No per-account resource cap and no application- or gateway-level rate limiting",
+        "evidence": "500 consecutive session creations accepted with zero rejections at ~1.9 ms each; no rate-limit middleware exists anywhere in services/api/src.",
+        "why_unresolved": "Choosing a cap or a rate-limit tier is a product/infrastructure policy decision (edge gateway vs application middleware) and inventing a limit here could break legitimate high-volume sync. Reported rather than silently patched.",
+        "impact": "An authenticated account can grow its own row count without bound; read latency did not degrade at the volumes measured."
+      },
+      {
+        "id": "h27-P1-8",
+        "title": "Wave-G role separation does not prevent re-identification of pseudonymous consent subjects",
+        "evidence": "Against migration 0018 in a throwaway schema, both the runtime role and the read-only role could join consent_record to consent_subject and read app_user identifiers (probes R6, R13, R14).",
+        "why_unresolved": "Migration 0018 lives on origin/devin/wave-g/g10-f23-roles, not on the RC baseline; the fix (restricting consent_subject to a dedicated role/schema) belongs to that workstream, and editing it from this branch would collide with wave-g.",
+        "note": "Role separation did hold against 10 other privilege probes, including all consent_record mutation, sequence tampering, SET ROLE escapes, COPY TO PROGRAM, and server file reads."
+      }
+    ]
+  },
+  "p2_findings": [
+    {
+      "id": "h27-P2-1",
+      "title": "API integration suites drop and recreate the shared public schema, so parallel suite files raced during migrations",
+      "status": "fixed",
+      "fix": "services/api/vitest.config.ts sets fileParallelism:false; the DB gate now passes 107/107 deterministically."
+    },
+    {
+      "id": "h27-P2-2",
+      "title": "Runtime DB role can append a consent record for an arbitrary pseudonym (probe R1)",
+      "status": "unresolved (architectural note for wave-g)",
+      "detail": "Subject binding is enforced in the API, not in the database; a compromised runtime role could attribute a grant to another subject. History remains append-only: UPDATE/DELETE on consent_record stayed denied."
+    },
+    {
+      "id": "h27-P2-3",
+      "title": "phases/checkpoints arrays in shots:sync are unbounded in the contract",
+      "status": "accepted risk",
+      "detail": "2000 duplicate phase spans were accepted but only 1 row persisted (DB uniqueness) and the 1 MiB body limit caps amplification, so no bound was added."
+    },
+    {
+      "id": "h27-P2-4",
+      "title": "Consent export v1 is unsigned when no signing key is configured",
+      "status": "disclosure",
+      "detail": "Observed with the local test configuration (consentExportSigningKey unset). If production requires signed exports this must be enforced by deployment configuration."
+    }
+  ],
+  "verdict": "FAIL",
+  "rationale": "All three P0 breaks found in this gate were reproduced on the real local stack, root-caused, fixed on this branch, and locked with regressions, and 6 of 8 P1 breaks are likewise fixed and covered. The gate still fails for broad release for two reasons that are not internally solvable here: (1) the P0-2 fix is only effective if the deployment sets ADMIN_AUTH_SUBJECTS — an unconfigured non-development deployment fails closed, but the RC as previously shipped would have granted admin to any token bearing a pickle_role=admin claim, so release must confirm the configuration; and (2) no per-account cap or rate limiting exists anywhere in the API (500/500 session creations accepted), which is a policy decision that must be made before broad exposure. The wave-g re-identification finding is additionally owed to that workstream. This gate converts to PASS once ADMIN_AUTH_SUBJECTS is provisioned in the release configuration and a rate-limit/quota decision is implemented at the edge or in the API.",
+  "limitations_and_external_blockers": [
+    "No iPhone, Mac, Swift, or Apple Vision execution was available: no on-device authorization, capture, or latency behavior was attacked or measured, and none is claimed.",
+    "No real S3/SQS: object storage and queue attacks used a fake object store and the in-memory queue, plus induced dispatch failures. Real SQS redelivery semantics and IAM policy were not attacked.",
+    "Malformed *video* media was not re-attacked: capture-envelope and OOD bypasses are already covered by wave-D3/f22 suites and re-running them would not be a new attack. Malformed media coverage here is protocol-level (bodies, content types, sizes, identifiers).",
+    "DB privilege probes ran as the local superuser-owned test cluster user for setup and then as the wave-g runtime/readonly roles; a hardened production cluster (network policy, pgbouncer, IAM auth) was not represented.",
+    "Counts are attack cases, not user sessions; no labels, coach reviews, or device measurements were produced or implied by this gate."
+  ]
+}

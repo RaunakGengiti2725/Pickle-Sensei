@@ -88,13 +88,20 @@ export interface LabRunReport {
   paddle: PaddleReportEntry | null;
   player?: PlayerStageReport | null;
   detectSpan?: {
-    mode: "full-window" | "event-gated";
+    mode: "full-window" | "event-gated" | "event-gated-tight";
     startMs: number;
     endMs: number;
     windowMs: number;
     spanMs: number;
     prePassEvents: number;
+    /** Present only in tight mode (--tight-window): the disjoint detector
+     * segments, their total coverage, and the dead time skipped vs the hull. */
+    segments?: Array<{ startMs: number; endMs: number }>;
+    coveredMs?: number;
+    savedMs?: number;
   } | null;
+  /** Present only when --two-pass ran (adaptive detector schedule). */
+  paddleSchedule?: import("./paddleSchedule.js").TwoPassSchedule | null;
   scene?: {
     detector: string;
     cutCount: number;
@@ -318,6 +325,14 @@ export function renderReport(report: LabRunReport): string {
       `detector span         ${span.mode} · ${span.spanMs}ms of ${span.windowMs}ms window ` +
         `(${Math.round((span.spanMs / Math.max(1, span.windowMs)) * 100)}%) · pre-pass events ${span.prePassEvents}`,
     );
+    if (report.paddleSchedule) {
+      const schedule = report.paddleSchedule;
+      rows.push(
+        `detector schedule     two-pass · sparse stride ${schedule.sparse.stride} (${schedule.planned.sparseFrames} frames) + ` +
+          `${schedule.denseRegions.length} dense region(s) (+${schedule.planned.denseOnlyFrames} frames) · ` +
+          `${schedule.planned.totalFrames}/${schedule.planned.fullScanFrames} of full scan`,
+      );
+    }
   }
   if (report.scene) {
     const scene = report.scene;

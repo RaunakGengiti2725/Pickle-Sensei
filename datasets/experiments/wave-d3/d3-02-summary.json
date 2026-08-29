@@ -1,0 +1,59 @@
+{
+  "workstream": "D3-02 — red-team EVENT isolation",
+  "branch": "devin/wave-d3/d3-02-rt-event",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "date": "2026-08-29",
+  "environment": "Linux (pose extraction unavailable; canonical runs absent — replay suites skip; all fixtures synthetic, clearly labeled)",
+  "method": "Fixture-driven adversarial probing of proposeStrokeEventsV2 / selectTargetEvent(V2) (packages/swing-lab/src/strokeEvents.ts) and SessionEventEngine (packages/analysis-pipeline/src/sessionEngine.ts) with synthetic gaussian speed-bump series: rapid consecutive strokes (400–1000ms peak gaps), practice+real swing, miss (full swing, no/orphaned contact), interrupted swing, walk-through wrist wobble, late-sample injection.",
+  "breaks": [
+    {
+      "id": "B1",
+      "title": "Rapid consecutive strokes glued into ONE event",
+      "status": "FIXED",
+      "detail": "Two comparable strokes with peaks 600–700ms apart were fused by the v2 fragment glue into a single event spanning both swings (e.g. gap=700: one event [1280,2440] with the second stroke's peak erased) — fabricated multi-swing bounds; downstream would analyze a two-stroke window as one. The streaming engine (frontier-incremental) emitted TWO events for the same series, silently diverging from the batch proposer.",
+      "fix": "GLUE_GATES distinct-stroke guard: a later fragment whose peak is ≥550ms from the previous fragment's peak AND ≥0.6× its peak speed is a distinct stroke — never glued. Applied identically in the canonical proposer and its byte-identical mirror.",
+      "coverageDelta": "Committed positive golds unchanged: all 19 pre-existing swing-lab suites (231 passed / 4 skipped) and 5 analysis-pipeline suites (34 passed) green before and after; the measured rally1 fragmentation shape (swing + weaker follow-through burst, peaks ≈480ms apart) is regression-pinned as still glued. Canonical rally replay suites skip on this host (data absent) — cascade numbers NOT re-measured, none claimed."
+    },
+    {
+      "id": "B2",
+      "title": "Orphaned contact estimate silently steered selection",
+      "status": "FIXED",
+      "detail": "selectTargetEvent with a contact estimate OUTSIDE every proposed event (±60ms) — the miss / wrong-contact case — fell through to prominence selection with no recorded signal; the return was indistinguishable from a clean prominence selection, so a contact claim from a miss could be attached downstream to an event it does not belong to (the code comment said 'callers should treat this as suspicious' but nothing was recorded).",
+      "fix": "Additive `contactOrphaned?: true` field on the selected variant of TargetEventSelection (set on prominence fall-through and on the V2 paddle_confirmation tie-break when the anchor is outside all events). No existing field or semantics changed — usable-result-v1 / silent-failure-v1 contracts untouched.",
+      "coverageDelta": "Zero: flag is additive; all pre-existing selection behavior byte-identical (full suites green)."
+    },
+    {
+      "id": "B3",
+      "title": "Walk-through wobble fabricated a 4.2s mega-event",
+      "status": "FIXED (residual noted)",
+      "detail": "Sustained locomotion wobble (0.45–0.75 u/s, no stroke) chained through the ≤350ms fragment glue into a single 4240ms 'event' [3200,7440] — far beyond the ±1200ms boundary-reach cap of any single movement.",
+      "fix": "Same GLUE_GATES guard as B1 breaks the chain: wobble fragments are comparably strong with far-apart peaks, so they stay separate (each ≤2400ms).",
+      "residualOpen": "Locomotion still yields low-confidence (~0.45) short proposals; selection abstains on them (MULTI_STROKE_AMBIGUOUS, no decisive prominence leader — regression-pinned). Suppressing them outright would be a blanket-abstention risk to positive gold coverage that cannot be measured on this host (canonical runs absent) — left OPEN deliberately."
+    },
+    {
+      "id": "B4",
+      "title": "KNOWN LIMIT: comparable strokes ≤500ms apart remain glued",
+      "status": "OPEN (honest)",
+      "detail": "Two comparable strokes with peaks ≤500ms apart are indistinguishable from the MEASURED rally1 single-movement fragmentation (fragments 167ms apart, peaks ≈480ms apart) using wrist-speed shape alone; lowering the 550ms guard would un-glue real fragmented single strokes. Regression-pinned as a documented limit; needs real rapid-exchange dev labels (34-event corpus) to move."
+    }
+  ],
+  "testedNoBreak": [
+    "Practice swing + real swing: comparable proposals abstain MULTI_STROKE_AMBIGUOUS without an anchor; a contact anchor inside the real swing selects it (never the practice swing).",
+    "Miss (full swing, no contact estimate): proposals carry no contact field; selection with null contact makes no contact claim.",
+    "Interrupted swing: micro-burst under minEventSpanMs (160ms) proposes nothing; a short burst gets bounds confined to the observed motion.",
+    "Single-frame wrist spike: smoothed away, no event.",
+    "Closed-event immutability: late samples behind the frontier dropped + counted (droppedLateSamples), closed bounds byte-identical after adversarial late spike injection, emitted proposals Object.frozen, rapid-stroke emissions non-overlapping."
+  ],
+  "regressionTests": "packages/swing-lab/test/rtEventIsolation.test.ts (15 tests, all synthetic-labeled)",
+  "filesTouched": [
+    "packages/swing-lab/src/strokeEvents.ts",
+    "packages/analysis-pipeline/src/sessionEngine.ts (byte-identical mirror section only)",
+    "packages/swing-lab/test/rtEventIsolation.test.ts",
+    "datasets/experiments/wave-d3/d3-02-summary.json"
+  ],
+  "gates": {
+    "typecheck": "pnpm typecheck green",
+    "tests": "swing-lab 19 files / 246 passed (4 skipped) · analysis-pipeline 5 files / 34 passed (replay suites skip: canonical run data absent on Linux host)",
+    "heldOut": "wm-dink-01 and afn-vic-rally1 untouched"
+  }
+}

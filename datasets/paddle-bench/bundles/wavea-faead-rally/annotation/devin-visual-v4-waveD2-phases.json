@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-faead-rally",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "createdAtIso": "2026-08-29T09:15:42.000Z",
+  "revision": 1,
+  "modality": "phases",
+  "clock": "RECORDING clock of datasets/corpus/media/dvids-944209-faead33a362c.mp4 (24 fps CFR, absolute frame index n; tMs=round(n*1000/24)). Media re-acquired from the registered DVIDS mediaUrl; sha256 verified equal to rec-faead33a362c (faead33a362c...9cbf).",
+  "method": "Wave D2 phase-only pass. Boundaries read from extracted absolute-CFR frames (ffmpeg drawtext %{n} before select=between(n,A,B), cropped sheets n327-350 stride 1; 1 frame = 41.7ms). Contact is the committed waveC eventLabel, not re-labeled. Unknown = not visible, never interpolated. Only the event with a committed contact label is phase-annotated; the 13417-13833 backhand has contactMs=null (occluded) and is out of scope for this pass.",
+  "eventPhases": [
+    {
+      "eventStartMs": 13875,
+      "contactMs": 14021,
+      "owner": "target",
+      "stroke": "high forehand volley punch above head",
+      "phases": {
+        "preparationStartMs": 13667,
+        "backswingStartMs": 13875,
+        "accelerationStartMs": 13958,
+        "contactMs": 14021,
+        "followThroughEndMs": 14250
+      },
+      "boundaries": [
+        {
+          "phase": "preparationStart",
+          "valueMs": 13667,
+          "frameIdx": 328,
+          "uncertaintyFrames": 4,
+          "basis": "observed",
+          "note": "paddle raise begins ~n328-329; this overlaps recovery from the preceding 13417-13833 backhand, so the onset boundary is soft (committed eventStart 13875 = n333)"
+        },
+        {
+          "phase": "backswingStart",
+          "valueMs": 13875,
+          "frameIdx": 333,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "overhead cock/ready n333-334, ball visibly above-right of his head at n334"
+        },
+        {
+          "phase": "accelerationStart",
+          "valueMs": 13958,
+          "frameIdx": 335,
+          "uncertaintyFrames": 1,
+          "basis": "observed",
+          "note": "forward punch onset n335 (equals the committed wave-a accelerationStart 13958)"
+        },
+        {
+          "phase": "contact",
+          "valueMs": 14021,
+          "frameIdx": 337,
+          "uncertaintyFrames": 1,
+          "basis": "committed_label_supported",
+          "note": "committed 14021 (waveC contact pass, window n336-337 = 14000-14042; the wave-a pass wrote 14042). My frames: ball just above the raised paddle n335, at/blurring the paddle n336-337, departing down-left n338-340. NOTE the two committed passes differ by half a frame (14021 vs 14042); I adopt the waveC contact-pass value and flag the duality."
+        },
+        {
+          "phase": "followThroughEnd",
+          "valueMs": 14250,
+          "frameIdx": 342,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "arm comes down-forward across the body n337-341, complete by n342 (wave-a wrote 14208 = n341, within my uncertainty); walking reset n344+"
+        }
+      ]
+    }
+  ],
+  "propertyCheck": "preparation(13667)<=backswing(13875)<=acceleration(13958)<=contact(14021)<=followThroughEnd(14250); acceleration<=contact holds here and in the committed wave-a phases (13958<=14042).",
+  "history": [{ "revision": 1, "savedAtIso": "2026-08-29T09:15:42.000Z" }]
+}

@@ -1,0 +1,122 @@
+{
+  "gate": "h26-redteam-perception",
+  "wave": "H",
+  "baseline": "devin/1787988068-wave-c-integration @ 104ea0f",
+  "branch": "devin/wave-h/h26-redteam-perception",
+  "date": "2026-08-29",
+  "method": "Fresh adversarial constructions built for this workstream (none reuse pinned fixtures): synthetic pose sequences driving playerTracker/paddleTracker identity+ownership, synthetic ball/pose series driving the offline contact estimator, and ffmpeg-generated clips driving the capture-envelope probe. Each attack is one grouped synthetic sequence (never frame-counted). All evidence is Tier-C synthetic and labeled as such; no Mac/iPhone canonical measurements are claimed (unavailable on this Linux box). Held-out cases wm-dink-01 and afn-vic-rally1 untouched. Confirmed breaks were root-caused, fixed where internally solvable with broad (non-overfit) logic, and pinned as permanent regressions.",
+  "attacks": {
+    "attempted": 8,
+    "succeeded_pre_fix": 4,
+    "defended_pre_fix": 3,
+    "known_gap_unfixed": 1,
+    "detail": [
+      {
+        "id": "A1b",
+        "class": "identity swap through occlusion",
+        "construction": "Target seeded at (0.5,0.5), fully occluded for a >100ms gap, a DIFFERENT person reappears at x=0.46 inside the association gate with no rival visible.",
+        "pre_fix": "SUCCEEDED (P0): single 87-frame track, no contests, no risks, high confidence — silent identity swap.",
+        "status": "FIXED",
+        "fix": "playerTracker now extrapolates pre-gap motion across loss gaps; resumes deviating beyond a speed-scaled tolerance are recorded as occlusionResumes, surface TARGET_OCCLUSION_RESUME_UNVERIFIED, and cap target confidence at 0.5.",
+        "regression": "packages/swing-lab/test/h26RedTeamPerception.test.ts",
+        "post_fix": "occlusionResumes>0, risk disclosed, confidence 0.5. Companion test pins that a same-person motion-consistent resume does NOT trigger the flag (no excess abstention)."
+      },
+      {
+        "id": "B1",
+        "class": "wrong athlete / foreign paddle",
+        "construction": "Distinct opponent standing ~0.10 torso-units from the target for the full clip; foreign paddle placed at the opponent's wrist.",
+        "pre_fix": "SUCCEEDED (P0): the opponent track was suppressed as a duplicate alias, erasing otherPlayersWrists evidence, so the foreign paddle could be attributed to the target.",
+        "status": "FIXED",
+        "fix": "Target identity now exposes only tight aliases (median coincident torso distance gate); duplicate-track suppression in otherPlayersWrists additionally requires the tight median-distance criterion, so loose coincident tracks stay in ownership evidence and raise TARGET_ALIAS_LOOSE.",
+        "regression": "packages/swing-lab/test/h26RedTeamPerception.test.ts",
+        "post_fix": "60 opponent-wrist evidence entries preserved; foreign paddle selection returns 'untracked'."
+      },
+      {
+        "id": "B2",
+        "class": "foreign paddle via cross-reach",
+        "construction": "Opponent torso clearly distinct at x=0.8 but their wrist reaches to (0.52,0.65) near the target for 11 frames.",
+        "pre_fix": "DEFENDED: reaching wrist stays in otherPlayersWrists for all reach frames.",
+        "status": "PINNED (regression keeps it defended)",
+        "regression": "packages/swing-lab/test/h26RedTeamPerception.test.ts"
+      },
+      {
+        "id": "C1",
+        "class": "fake contact",
+        "construction": "Completely static target; synthetic ball travels to the target wrist, reverses direction exactly there at t=990ms, and leaves. No paddle evidence.",
+        "pre_fix": "SUCCEEDED (P0): contact ESTIMATED at 990ms with confidence 0.93, ballConfirmed=true — fabricated high-confidence contact with zero athlete motion.",
+        "status": "FIXED",
+        "fix": "offlineStroke motion support no longer skips or over-credits near-zero motion series: an idle-motion floor (minWristPeakTorsoPerSec * torso) scales support so a static athlete cannot receive strong motion corroboration from ball reversal alone. CONTACT_ESTIMATOR_VERSION bumped to contact-evidence-4.4.",
+        "regression": "packages/vision-geometry/test/h26ContactRedTeam.test.ts",
+        "post_fix": "Estimator ABSTAINS: 'reliability-weighted mass 0.00 < 0.15'. Existing contact suites (offlineStroke.test.ts 26 tests, contactRedTeam.test.ts 7 tests) still pass, showing the fix is broad, not overfit to the attack."
+      },
+      {
+        "id": "F1",
+        "class": "crossing players / wrong-athlete tap",
+        "construction": "Two players cross paths and swap positions within the target-selection seed window around a tap.",
+        "pre_fix": "DEFENDED: TARGET_TAP_AMBIGUOUS fires, confidence <= 0.45.",
+        "status": "PINNED (regression keeps it defended)",
+        "regression": "packages/swing-lab/test/h26RedTeamPerception.test.ts"
+      },
+      {
+        "id": "D1",
+        "class": "false stroke family / downstream amplification",
+        "construction": "Foreign-paddle B1 output fed downstream to stroke-event proposal.",
+        "pre_fix": "SUCCEEDED only as amplification of B1 (same root cause: suppressed opponent evidence).",
+        "status": "FIXED by the B1 fix (foreign paddle now rejected as 'untracked', so no false stroke proposal from it).",
+        "regression": "covered by B1 regression"
+      },
+      {
+        "id": "E1",
+        "class": "capture-envelope bypass",
+        "construction": "ffmpeg concat of 4s good testsrc2 footage + 4s pitch-black at 1280x720/30fps.",
+        "pre_fix": "SUCCEEDED (P1, UNFIXED): every measured dimension reports SUPPORTED (brightness is a whole-clip mean ~64 luma; Laplacian median comes from the good half) despite half the clip being unusable. brightnessStdLuma ~63 shows the failure IS visible in existing measurements but unused.",
+        "status": "UNRESOLVED — pinned as a KNOWN GAP regression in the existing f22 convention. A correct fix requires per-window/segment envelope measurement plus labeled downstream evidence to set thresholds without falsely rejecting legitimate exposure variation; tuning a std threshold to this one construction would be synthetic overfitting.",
+        "regression": "packages/capture-envelope/test/h26EnvelopeRedTeam.test.ts"
+      },
+      {
+        "id": "G1",
+        "class": "false Auto Detect / OOD (survey)",
+        "construction": "Reviewed and re-ran the existing OOD/auto-detect adversarial suites (oodGateRedTeam, oodRealNegatives, strokeAutoResolution) rather than duplicating their constructions; the known open gaps there (2x-speed playback pass-through; real-negative pose-free pass-throughs) remain documented in those suites and are externally gated (pose extraction unavailable on Linux).",
+        "pre_fix": "DEFENDED / previously documented gaps unchanged.",
+        "status": "no new break found beyond already-documented gaps; fresh OOD clip construction beyond frame-statistics is blocked by Apple Vision pose unavailability on Linux."
+      }
+    ]
+  },
+  "findings": {
+    "P0": [
+      {
+        "id": "A1b-silent-occlusion-identity-swap",
+        "summary": "Different person silently stitched into target track across an occlusion gap with high confidence and no risk disclosure.",
+        "status": "FIXED (occlusion-resume motion check + risk + confidence cap), regression pinned."
+      },
+      {
+        "id": "B1-adjacent-opponent-erased-foreign-paddle-accepted",
+        "summary": "Loose duplicate-suppression erased a distinct adjacent player from ownership evidence, allowing their paddle to be attributed to the target (and amplifying into false stroke proposals, D1).",
+        "status": "FIXED (tight-alias gating in identity and otherPlayersWrists), regression pinned."
+      },
+      {
+        "id": "C1-fabricated-static-contact",
+        "summary": "Static athlete + ball reversing at their wrist produced ESTIMATED contact at confidence 0.93 with ballConfirmed=true and no paddle evidence.",
+        "status": "FIXED (idle-motion floor in motion support, contact-evidence-4.4), regression pinned; broader contact suites unchanged."
+      }
+    ],
+    "P1": [
+      {
+        "id": "E1-envelope-temporal-aggregation-bypass",
+        "summary": "Whole-clip aggregation masks a catastrophic temporal segment: 4s good + 4s pitch-black measures SUPPORTED on every dimension. Misleading 'supported capture' UX for partially unusable footage.",
+        "status": "UNRESOLVED — pinned as KNOWN GAP; broad fix requires per-window envelope measurement and labeled data to threshold it, which is not internally solvable this session without synthetic overfitting."
+      }
+    ],
+    "P2": []
+  },
+  "root_gates": {
+    "pnpm_typecheck": "PASS",
+    "pnpm_test": "PASS (52 files, 599 passed, 4 skipped in swing-lab alone; full workspace green)",
+    "pnpm_lint": "PASS",
+    "pnpm_format_check": "PASS",
+    "mobile": "not touched"
+  },
+  "held_out": "wm-dink-01 and afn-vic-rally1 untouched.",
+  "verdict": "FAIL",
+  "rationale": "Three fresh P0 perception breaks (silent occlusion identity swap, foreign-paddle acceptance via alias erasure, fabricated high-confidence contact from a static athlete) were found on the release candidate; all three are now fixed with pinned regressions on this branch, so the RC as amended defends every P0 attack attempted here. The gate verdict is FAIL for the unamended baseline because the P1 envelope temporal-aggregation bypass (E1) remains unresolved and the baseline without this branch still contains the three P0s. If Wave H integration adopts this branch, the residual known risk from this gate is E1 (P1) plus the previously documented OOD gaps that are externally blocked (pose extraction Mac-only)."
+}

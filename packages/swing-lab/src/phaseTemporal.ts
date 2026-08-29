@@ -82,6 +82,13 @@ export function segmentPhasesTemporal(input: {
   paddleSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
   wristSpeeds: ReadonlyArray<{ timestampMs: number; value: number }> | null;
 }): TemporalPhaseOutcome {
+  // Non-finite samples are not measurements. A single NaN/Infinity poisons
+  // the peak (Math.max) and every threshold derived from it, which lets a
+  // quiet window slip past the no-meaningful-swing gate and emit a garbage
+  // timeline (D3-05 red-team finding). Drop them before any gate runs; the
+  // remaining coverage/sample-count gates then judge only real observations.
+  const paddleSpeeds = finiteSamples(input.paddleSpeeds);
+  const wristSpeeds = finiteSamples(input.wristSpeeds);
   const windowLength = Math.max(1, input.window.endMs - input.window.startMs);
   const coverage = (series: ReadonlyArray<{ timestampMs: number }> | null): number => {
     if (!series || series.length < 2) return 0;
@@ -92,18 +99,18 @@ export function segmentPhasesTemporal(input: {
     if (inWindow.length < 2) return 0;
     return (inWindow[inWindow.length - 1]!.timestampMs - inWindow[0]!.timestampMs) / windowLength;
   };
-  const paddleCoverage = coverage(input.paddleSpeeds);
-  const wristCoverage = coverage(input.wristSpeeds);
+  const paddleCoverage = coverage(paddleSpeeds);
+  const wristCoverage = coverage(wristSpeeds);
   let source: "paddle" | "wrist";
   let series: ReadonlyArray<{ timestampMs: number; value: number }>;
   let confidence: number;
-  if (paddleCoverage >= 0.4 && input.paddleSpeeds) {
+  if (paddleCoverage >= 0.4 && paddleSpeeds) {
     source = "paddle";
-    series = input.paddleSpeeds;
+    series = paddleSpeeds;
     confidence = 0.6;
-  } else if (wristCoverage >= 0.5 && input.wristSpeeds) {
+  } else if (wristCoverage >= 0.5 && wristSpeeds) {
     source = "wrist";
-    series = input.wristSpeeds;
+    series = wristSpeeds;
     confidence = 0.4; // wrist is a proxy for the hitting system, not the paddle
   } else {
     return {
@@ -245,7 +252,7 @@ export const PHASE_TEMPORAL_V2_VERSION =
  * "exact contact not established" is embedded verbatim for honest UI labeling.
  */
 export const PHASE_TEMPORAL_V2_ANCHOR_FREE_VERSION =
-  "phase.paddle-temporal.v2.1 (event-local, anchor-free around measured motion peak; timeline from motion evidence — exact contact not established; heuristic, uncalibrated)";
+  "phase.paddle-temporal.v2.4 (event-local, anchor-free around measured UNIQUE motion peak; margin motion in a rest-separated burst belongs to a neighboring stroke; an apex within one sampling interval of the event boundary and motion-connected to the in-event peak is this event's apex at measurement resolution; timeline from motion evidence — exact contact not established; heuristic, uncalibrated)";
 
 /**
  * v2 principles (learned from v1's measured failure modes):
@@ -292,7 +299,7 @@ export function segmentPhasesTemporalV2(input: {
   const slice = (
     series: ReadonlyArray<{ timestampMs: number; value: number }> | null,
   ): Array<{ timestampMs: number; value: number }> =>
-    (series ?? []).filter(
+    (finiteSamples(series) ?? []).filter(
       (sample) =>
         sample.timestampMs >= input.event.startMs - pad &&
         sample.timestampMs <= input.event.endMs + pad,
@@ -377,7 +384,7 @@ function segmentPhasesAnchorFree(input: {
   const slice = (
     series: ReadonlyArray<{ timestampMs: number; value: number }> | null,
   ): Array<{ timestampMs: number; value: number }> =>
-    (series ?? [])
+    (finiteSamples(series) ?? [])
       .filter(
         (sample) =>
           sample.timestampMs >= input.event.startMs - pad &&
@@ -433,32 +440,119 @@ function segmentPhasesAnchorFree(input: {
       reason: `PHASE_NO_MOTION_EVIDENCE: in-event peak speed ${peakSample.value.toFixed(2)} below the anchor-free floor (0.5)`,
     };
   }
+  // v2.4 — measurement-resolution apex adoption. The event boundary is a
+  // human label quantized to the frame; the kinematic series is sampled at a
+  // finite interval. When the swing's measured excess over the in-event peak
+  // consists ENTIRELY of margin samples that are (a) motion-connected to the
+  // in-event peak (the series never drops below the boundary-walking accel
+  // threshold — 25% of the smaller of the two — between them) and (b) within
+  // ONE median inter-sample gap of the event boundary, the apex position is
+  // indistinguishable from "inside the event" at the resolution of the
+  // measurement: adopt the strongest such sample as the apex and let EVERY
+  // subsequent gate (prominence, ownership, rival, peak-agreement, two-sided
+  // evidence, ordering) judge the adopted apex. If ANY motion-connected
+  // margin sample above the in-event peak lies farther out than one sampling
+  // interval, the swing genuinely spills past the boundary and the ownership
+  // gate below still abstains (PHASE_PEAK_OUTSIDE_EVENT). Rest-separated
+  // margin motion is a neighboring stroke and is never adopted. The in-event
+  // evidence floor above was already applied to the IN-EVENT peak — adoption
+  // cannot rescue an event whose own window lacks motion evidence.
+  const gapsSorted = series
+    .slice(1)
+    .map((sample, index) => sample.timestampMs - series[index]!.timestampMs)
+    .sort((a, b) => a - b);
+  const medianGapMs = gapsSorted[Math.floor(gapsSorted.length / 2)]!;
+  const motionConnected = (
+    a: { timestampMs: number; value: number },
+    b: { timestampMs: number; value: number },
+  ): boolean => {
+    const floor = 0.25 * Math.min(a.value, b.value);
+    const lo = Math.min(a.timestampMs, b.timestampMs);
+    const hi = Math.max(a.timestampMs, b.timestampMs);
+    return !series.some((s) => s.timestampMs > lo && s.timestampMs < hi && s.value < floor);
+  };
+  const distOutsideMs = (sample: { timestampMs: number }): number =>
+    sample.timestampMs < input.event.startMs
+      ? input.event.startMs - sample.timestampMs
+      : sample.timestampMs > input.event.endMs
+        ? sample.timestampMs - input.event.endMs
+        : 0;
+  let apexSample = peakSample;
+  const connectedExcess = series.filter(
+    (sample) =>
+      distOutsideMs(sample) > 0 &&
+      sample.value > peakSample.value &&
+      motionConnected(sample, peakSample),
+  );
+  if (
+    connectedExcess.length > 0 &&
+    connectedExcess.every((sample) => distOutsideMs(sample) <= medianGapMs)
+  ) {
+    apexSample = connectedExcess.reduce((best, sample) =>
+      sample.value > best.value ? sample : best,
+    );
+  }
   const sortedValues = series.map((sample) => sample.value).sort((a, b) => a - b);
   const medianValue = sortedValues[Math.floor(sortedValues.length / 2)]!;
-  if (medianValue > 0 && peakSample.value < 2 * medianValue) {
+  if (medianValue > 0 && apexSample.value < 2 * medianValue) {
     return {
       status: "abstained",
-      reason: `PHASE_PEAK_NOT_PROMINENT: in-event peak ${peakSample.value.toFixed(2)} is not decisive vs the local median ${medianValue.toFixed(2)} (needs ≥ 2×) — no measurable swing apex without an anchor`,
+      reason: `PHASE_PEAK_NOT_PROMINENT: in-event peak ${apexSample.value.toFixed(2)} is not decisive vs the local median ${medianValue.toFixed(2)} (needs ≥ 2×) — no measurable swing apex without an anchor`,
     };
   }
-  const padMax = series.reduce((best, sample) => Math.max(best, sample.value), 0);
-  if (padMax > peakSample.value) {
+  // Margin samples in a DIFFERENT motion burst are a neighboring stroke, not
+  // this event's apex or a rival to it. "Different burst" means the series
+  // drops below the boundary-walking accel threshold (25% of the smaller of
+  // the two contesting peaks) somewhere between the two samples — the exact
+  // criterion the boundary walk itself uses for "the swing motion has ended".
+  // This applies ONLY to samples strictly outside the event: in-event samples
+  // always contest (periodic in-event motion — wheelchair propulsion — must
+  // still abstain), and a margin sample connected to the apex above the
+  // threshold is the same swing spilling past the event boundary.
+  const restSeparatedFromApex = (sample: { timestampMs: number; value: number }): boolean => {
+    const inMargin =
+      sample.timestampMs < input.event.startMs || sample.timestampMs > input.event.endMs;
+    if (!inMargin) return false;
+    const floor = 0.25 * Math.min(apexSample.value, sample.value);
+    const lo = Math.min(sample.timestampMs, apexSample.timestampMs);
+    const hi = Math.max(sample.timestampMs, apexSample.timestampMs);
+    return series.some((s) => s.timestampMs > lo && s.timestampMs < hi && s.value < floor);
+  };
+  const outsideContender = series.find(
+    (sample) => sample.value > apexSample.value && !restSeparatedFromApex(sample),
+  );
+  if (outsideContender) {
     return {
       status: "abstained",
       reason:
-        "PHASE_PEAK_OUTSIDE_EVENT: a stronger kinematic peak sits in the margin just outside the event — the event does not own its swing apex",
+        "PHASE_PEAK_OUTSIDE_EVENT: a stronger kinematic peak in the margin just outside the event is motion-connected to the in-event apex — the event does not own its swing apex",
+    };
+  }
+  // A swing has ONE decisive apex. Periodic motion (e.g. wheelchair
+  // propulsion strokes) produces several near-equal peaks; picking one of
+  // them as "the swing" would invent a timeline around an arbitrary push.
+  const rival = series.find(
+    (sample) =>
+      Math.abs(sample.timestampMs - apexSample.timestampMs) > 180 &&
+      sample.value >= 0.9 * apexSample.value &&
+      !restSeparatedFromApex(sample),
+  );
+  if (rival) {
+    return {
+      status: "abstained",
+      reason: `PHASE_PEAK_NOT_UNIQUE: rival peak ${rival.value.toFixed(2)} at ${Math.round(rival.timestampMs)}ms is within 10% of the apex ${apexSample.value.toFixed(2)} at ${Math.round(apexSample.timestampMs)}ms — periodic/multi-burst motion has no single swing apex`,
     };
   }
   if (
     input.event.peakMs !== undefined &&
-    Math.abs(peakSample.timestampMs - input.event.peakMs) > 250
+    Math.abs(apexSample.timestampMs - input.event.peakMs) > 250
   ) {
     return {
       status: "abstained",
-      reason: `PHASE_PEAK_MISMATCH: measured kinematic peak ${Math.round(peakSample.timestampMs)}ms disagrees with the event's own peak ${Math.round(input.event.peakMs)}ms by more than 250ms`,
+      reason: `PHASE_PEAK_MISMATCH: measured kinematic peak ${Math.round(apexSample.timestampMs)}ms disagrees with the event's own peak ${Math.round(input.event.peakMs)}ms by more than 250ms`,
     };
   }
-  const peakIndex = series.indexOf(peakSample);
+  const peakIndex = series.indexOf(apexSample);
   if (peakIndex < 2) {
     return {
       status: "abstained",
@@ -476,10 +570,10 @@ function segmentPhasesAnchorFree(input: {
 
   // Same threshold-walking recipe as the anchored path (25% / 10% / 15% of
   // peak with the sustained-neighbor check), around the measured peak.
-  const peakMs = peakSample.timestampMs;
-  const accelThreshold = 0.25 * peakSample.value;
-  const restThreshold = 0.1 * peakSample.value;
-  const recoverThreshold = 0.15 * peakSample.value;
+  const peakMs = apexSample.timestampMs;
+  const accelThreshold = 0.25 * apexSample.value;
+  const restThreshold = 0.1 * apexSample.value;
+  const recoverThreshold = 0.15 * apexSample.value;
   const sustained = (index: number, threshold: number, direction: -1 | 1): boolean => {
     const neighbor = series[index + direction];
     return neighbor !== undefined ? neighbor.value < threshold : true;
@@ -560,6 +654,16 @@ function segmentPhasesAnchorFree(input: {
       },
     },
   };
+}
+
+/** Non-finite samples (NaN/±Infinity timestamp or value) are not measurements. */
+function finiteSamples(
+  series: ReadonlyArray<{ timestampMs: number; value: number }> | null,
+): ReadonlyArray<{ timestampMs: number; value: number }> | null {
+  if (!series) return null;
+  return series.filter(
+    (sample) => Number.isFinite(sample.timestampMs) && Number.isFinite(sample.value),
+  );
 }
 
 function nearestIndex(series: ReadonlyArray<{ timestampMs: number }>, tMs: number): number {

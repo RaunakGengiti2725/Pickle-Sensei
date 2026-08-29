@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "afn-sasebo-rally2",
+  "annotatorId": "devin-visual-v3-waveD",
+  "createdAtIso": "2026-08-29T08:45:00.000Z",
+  "taxonomyVersion": "pickleball-taxonomy-v2",
+  "note": "Wave D D13 stroke-taxonomy pass: L1/L2/L3 labels for existing eventLabels windows that lacked stroke gold. Event bounds copied unchanged from prior passes; labels also appended to datasets/paddle-bench/stroke-gold.json. Append-only; no prior annotation file was modified.",
+  "strokeLabels": [
+    {
+      "eventStartMs": 2380,
+      "contactMs": 2620,
+      "eventEndMs": 3050,
+      "owner": "target",
+      "l1": "overhead_lob",
+      "l2": "overhead",
+      "l3": "unknown",
+      "reasoning": "The near gray-shirt target reaches to full extension above the head and strikes the ball at overhead contact with a forward-downward follow-through; overhead contact is visually clear, but the strike's pace and put-away character are not established well enough to separate a full smash from a controlled overhead, so exact technique is withheld.",
+      "annotatorId": "devin-visual-v3-waveD",
+      "createdAtIso": "2026-08-29T08:45:00.000Z"
+    },
+    {
+      "eventStartMs": 3600,
+      "contactMs": 3834,
+      "eventEndMs": 4233,
+      "owner": "target",
+      "l1": "overhead_lob",
+      "l2": "overhead",
+      "l3": "overhead_smash",
+      "reasoning": "The target turns and sets under a visibly descending lob, contacts at full overhead extension, and drives a forceful downward follow-through across the body; the descending-lob setup plus the aggressive downward strike identify an overhead smash.",
+      "annotatorId": "devin-visual-v3-waveD",
+      "createdAtIso": "2026-08-29T08:45:00.000Z"
+    }
+  ]
+}

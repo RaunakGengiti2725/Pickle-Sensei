@@ -1,0 +1,85 @@
+{
+  "workstream": "f22-rt-envelope-bypass",
+  "branch": "devin/wave-f/f22-rt-envelope-bypass",
+  "baseCommit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "date": "2026-08-29",
+  "mission": "Attack the capture-envelope checker: construct clips that are truly DEGRADED/UNSUPPORTED but pass, and good clips falsely rejected, via ffmpeg synthesis plus the real corpus. Every bypass = finding + regression fixture; fix only defensibly.",
+  "verdict": "ORANGE",
+  "thresholdsVersion": "capture-envelope-thresholds-v0.3-provisional",
+  "datasetScope": {
+    "syntheticClips": 13,
+    "realClips": ["wm-volley-02", "afn-sasebo-rally1"],
+    "heldOutExcluded": ["wm-dink-01", "afn-vic-rally1"],
+    "freshCandidates": "never opened (holdout-candidate material)",
+    "grouping": "each probe is an independent synthetic construction or an independent committed real recording; no random-frame splits"
+  },
+  "probes": 15,
+  "confirmedBypasses": 7,
+  "confirmedFalseRejects": 1,
+  "provenNegatives": 5,
+  "findings": {
+    "f22-B1-blur-masked-by-noise": {
+      "attack": "gblur sigma=12 (identical to the detected D3-07 blur case) + temporal grain noise=alls=24, crf 14",
+      "result": "laplacianVarianceMedian 173.8 > supported floor 100; motion_blur SUPPORTED, overall SUPPORTED",
+      "severity": "high: sensor noise / grain is common in real low-light captures and fully defeats the blur proxy"
+    },
+    "f22-B2-bimodal-exposure": {
+      "attack": "half frame lutyuv y=16, half y=235 (no usable pixels anywhere)",
+      "result": "brightnessMeanLuma 128.0 mid-band; brightness SUPPORTED, overall SUPPORTED",
+      "severity": "high: spatial mean cannot distinguish balanced clipping from correct exposure"
+    },
+    "f22-B3-strobing-exposure": {
+      "attack": "alternating near-black/near-white full frames",
+      "result": "brightness dimension SUPPORTED (temporal mean 126.0, brightnessStdLuma 109.0 measured but consumed by no dimension); overall caught only incidentally via motion_blur+camera_motion",
+      "severity": "medium: dimension-level bypass; brightnessStdLuma exists in measurements but has no threshold"
+    },
+    "f22-B4-upscale-lie": {
+      "attack": "true 426x240 content lanczos-upscaled to 1280x720",
+      "result": "resolution SUPPORTED (container metadata only), laplacian 608 (sampling normalizes to 320w, below true detail), overall SUPPORTED",
+      "severity": "high: resolution dimension is metadata-only and the 320w sampling contract makes upscaling invisible end to end"
+    },
+    "f22-B5-tiny-subject-structural": {
+      "attack": "64x36 moving subject (5% of frame height) on static textured 720p background, no pose pass",
+      "result": "player_pixel_height/player_visibility NOT_MEASURED never worsen overall; overall SUPPORTED",
+      "severity": "structural: overall=SUPPORTED asserts more than was measured; callers must treat notMeasured as caveats, and on Linux pose is always unmeasured (BLOCKED_EXTERNAL per E15)"
+    },
+    "f22-B6-rotation-tag-normalization-shift": {
+      "attack": "stream copy of 1280x720 clip with rotate=90 metadata tag (identical pixels)",
+      "result": "laplacianVarianceMedian shifts from 376.2 to 266.0 (ratio 0.707, ~29% drop) because sampling scales to 320w of the display-portrait frame; verdict-relevant measurement moved by metadata alone",
+      "severity": "medium: the laplacian-variance-320w normalization contract is orientation-sensitive; portrait and landscape captures of the same scene are scored on different scales"
+    },
+    "f22-B7-camera-motion-contrast-dependence": {
+      "attack": "identical +-40px/frame sinusoidal crop jitter applied to real footage (a10) and synthetic lower-contrast footage (a11)",
+      "result": "real: meanAbsFrameDiff 35.5 -> DEGRADED (barely above supported max 33); synthetic: 13.1 -> SUPPORTED. Same violent shake, opposite verdicts",
+      "severity": "medium: E15 widening of camera_motion to max 33 admits substantial global shake on lower-contrast content; the proxy conflates contrast with motion magnitude"
+    },
+    "f22-FR1-low-texture-false-reject": {
+      "attack": "razor-sharp flat-gray scene with a sharp white block translating 8px/frame, crf 12",
+      "result": "laplacianVarianceMedian 78.6 < 100; motion_blur DEGRADED though nothing is blurred",
+      "severity": "medium: laplacian variance is a texture statistic, not a blur statistic; clean low-texture scenes (plain indoor courts) will be falsely flagged"
+    }
+  },
+  "provenNegativeDetails": {
+    "a6-duplicate-pts": "setpts=floor(N/2)*2/30/TB duplicate-PTS retiming still lands frameIntervalCv 0.184 -> timing_stability DEGRADED (mp4 muxing separates the duplicated stamps); the delta<=0 filter in probeFrameIntervalCv could not be weaponized through a valid mp4",
+    "a7-three-frame-clip": "clips too short to measure timing (<3 intervals) are caught by frame_rate (1fps UNSUPPORTED); no reachable NOT_MEASURED timing bypass found at passing duration",
+    "a8-rotation-lie": "rotate=90 tag on 854x480 cannot inflate min(width,height); resolution stays DEGRADED at 480",
+    "real-clips-pass": "wm-volley-02 and afn-sasebo-rally1 (committed, non-held-out) measure fully SUPPORTED on all video dimensions; no false rejection of known-analyzable real footage",
+    "f4-real-rot180": "rotate=180 tag on wm-volley-02 changes laplacian by <0.01%; 180-degree metadata cannot skew measurements"
+  },
+  "fixes": {
+    "thresholdChanges": "none — f18 rules require labeled downstream evidence for any threshold change and none of these synthetic constructions carries downstream ground truth; softening or widening bands against synthetic attacks would be tuning without evidence",
+    "codeChanges": "none defensible: B1/B2/B3/B7 need new or revised proxies (noise-robust blur statistic, luma-histogram clipping fraction, brightnessStdLuma threshold, contrast-normalized motion statistic) whose bands must be learned from labeled corpus evidence; B4 (upscale detection) is a research problem; B5 is a caller-contract question (overall vs notMeasured), owned by the integrator; B6 requires re-versioning the laplacian-variance-320w normalization contract and its thresholds together",
+    "regressionFixtures": "packages/capture-envelope/test/redteamBypassF22.test.ts pins all 7 bypasses + 1 false reject as KNOWN GAP assertions (a fix flips the pin deliberately) and pins 3 proven negatives so detected attacks stay detected; synthetic-only, generated at test time, no committed media"
+  },
+  "artifacts": {
+    "attackHarness": "packages/capture-envelope/src/redteamF22.ts (rerunnable: pnpm --filter @pickle/capture-envelope exec tsx src/redteamF22.ts)",
+    "perProbeResults": "datasets/experiments/wave-f/f22-rt-envelope-bypass-attacks.json",
+    "regressionSuite": "packages/capture-envelope/test/redteamBypassF22.test.ts"
+  },
+  "gates": {
+    "test": "pnpm --filter @pickle/capture-envelope test: 33/33 passed (3 files)",
+    "typecheck": "pnpm --filter @pickle/capture-envelope typecheck: pass",
+    "lint": "pnpm lint (repo root): pass",
+    "formatCheck": "pnpm format:check (repo root): pass"
+  }
+}

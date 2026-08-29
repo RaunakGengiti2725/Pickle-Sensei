@@ -1,0 +1,34 @@
+{
+  "workstreamId": "h04-frozen-coach-gates",
+  "wave": "wave-g2",
+  "branch": "devin/wave-g2/h04-frozen-coach-gates",
+  "generatedAtIso": "2026-08-29T18:05:00.000Z",
+  "mission": "Freeze the coaching release gates BEFORE any coach data exists: a versioned frozen-criteria spec plus a machine-checkable gate script for technique-score / fault / drill validation; verify the production BLOCKED_ON_VALIDATION locks hold on every reachable code path with regression tests; run the score-stability perturbation harness NOW on the internal score formula using non-holdout replayable data.",
+  "method": {
+    "freeze": "Wrote datasets/coach-review/gates/coach-gates.v1.json (specId coach-gates-frozen-v1) while 0 coach reviews and 0 coaches exist, so no threshold can have been tuned to data. The file is never edited in place; changes are new versioned files, and the checker pins its SHA-256 and refuses a tampered spec.",
+    "checker": "packages/swing-lab/src/coachGates.ts (pnpm lab:coach-gates) evaluates every gate to PASS / FAIL / NOT_EVALUABLE from real repo evidence only (coaches.json registry, reviews/ dir, drill library, shared profiles). NOT_EVALUABLE blocks release exactly like FAIL. Held-out reviews, unprovisioned-coach reviews, and structurally invalid reviews count toward nothing.",
+    "lockVerification": "Gate L1 checks every TechniqueAnalysisProfile and SharedSideProfile stays BLOCKED_ON_VALIDATION / pending-expert-program / none / abstain-over-invent; L2 checks the coach registry is synthetic-free; L4 checks every drill entry is UNVALIDATED with empty validatedFaultMappings. Regression tests: packages/swing-lab/test/coachGates.test.ts (spec hash pin, tamper refusal, held-out exclusion, unprovisioned exclusion, all-surfaces RELEASE_BLOCKED today) and apps/mobile/__tests__/coachLockAudit.test.tsx (a scored analysis carrying a deterministic sm-v1 score and machine-ranked priorityFix renders NO drill, NO fault call-out, NO focus card on the stroke-result surface; abstained analyses render no score; score visibility requires resultKind=scored AND non-null score). Server drill prescriptions were verified to be DB-gated on coach_reviewed_at IS NOT NULL (services/api training routes), with 'reviewed_catalog_incomplete' refusal otherwise.",
+    "stabilityProbe": "packages/swing-lab/src/scoreStability.ts (pnpm lab:score-stability) replays the sm-v1 formula on the single real replayable non-held-out measurement set in-repo (afn-sasebo-rally1 full-pipeline run) under seeded measurement-space models of the five frozen S6 perturbations (compression, crop, brightness, camera motion, frame rate), 200 trials each. Report: datasets/experiments/wave-g2/h04-score-stability-report.json."
+  },
+  "deliverables": [
+    "datasets/coach-review/gates/coach-gates.v1.json — frozen versioned criteria (specId coach-gates-frozen-v1, SHA-256 pinned)",
+    "packages/swing-lab/src/coachGates.ts + pnpm lab:coach-gates — machine-checkable gate evaluator (report: datasets/coach-review/gates/coach-gates-latest-report.json)",
+    "packages/swing-lab/test/coachGates.test.ts — spec integrity, evidence-exclusion, and RELEASE_BLOCKED regression tests",
+    "apps/mobile/__tests__/coachLockAudit.test.tsx — user-surface leak tests (score/fault/drill cannot render without validation)",
+    "packages/swing-lab/src/scoreStability.ts + pnpm lab:score-stability — S6 formula-level stability probe",
+    "datasets/experiments/wave-g2/h04-score-stability-report.json — probe results",
+    "docs/COACH_GATES.md — freeze discipline and gate-set documentation"
+  ],
+  "stabilityFindingsToday": {
+    "asRecorded": "The real run's confidences (analysisConfidence 0.59) sit below the abstention floor: baseline and all 1000 perturbed trials abstain — the abstention gate works and no score is invented.",
+    "syntheticConfidenceRaisedVariant": "With real measurement values and confidences forced to 0.95 (labeled SYNTHETIC; probes the scored regime of the formula only): baseline score 7.5/10; across all five perturbation families median |Δ| 0.0–0.1, p95 |Δ| 0.1–0.2, zero band flips, zero abstention flips over 200 seeded trials each — within the frozen S6 reference thresholds at the formula level.",
+    "honestLimit": "These are modeled measurement-space perturbations over ONE clip's measurements. They satisfy NO video-level gate: S6 requires real re-encodes of the same physical stroke through the full pipeline, and formula smoothness does not bound pose-extraction instability."
+  },
+  "irreduciblyExternal": [
+    "Real qualified coaches: provisioning in coaches.json plus reviews in datasets/coach-review/reviews/ — every S/F/D gate is NOT_EVALUABLE until they exist (S1-S3, S5, S7, F1-F4, D1-D3 need coach labels; nothing in this environment can substitute).",
+    "Video-level perturbation and test-retest evidence (S4, S6): pose extraction is Mac/Apple-Vision-gated and re-capture pairs need a physical iPhone.",
+    "GATE B entirely: physical-iPhone real-user end-to-end validation.",
+    "Swift/Mac/iPhone toolchains were unavailable on this Linux box; no result from them is claimed."
+  ],
+  "verdict": "READY-EXTERNAL: the release bar for technique score, fault diagnosis, and drill recommendation is now frozen, versioned, hash-pinned, and machine-checkable before any coach data exists; the BLOCKED_ON_VALIDATION locks are verified by gates L1/L2/L4 (all PASS) and regression tests on the client surfaces and server drill path; every validation gate honestly reads NOT_EVALUABLE and all three surfaces read RELEASE_BLOCKED, which is the correct current state. Today's formula-level stability probe found no instability in the sm-v1 formula (and the real low-confidence run abstains everywhere), but this satisfies no video-level gate. Only real coach evidence and real device runs remain."
+}

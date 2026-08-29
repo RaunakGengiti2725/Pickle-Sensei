@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { sendFailure } from "../../lib/replies.js";
 import { audit, one } from "../../lib/db.js";
+import { sha256HexToBase64, uploadRequiredHeaders } from "./objectStore.js";
 
 /**
  * Media module (spec p. 38): presigned direct-to-S3 uploads, private storage,
@@ -12,7 +13,15 @@ import { audit, one } from "../../lib/db.js";
  */
 
 const MAX_UPLOAD_BYTES = 500 * 1024 * 1024; // strict video limit (spec p. 41)
-const ALLOWED_CONTENT_TYPES = new Set(["video/mp4", "video/quicktime", "image/jpeg", "image/webp"]);
+const MAX_THUMBNAIL_BYTES = 10 * 1024 * 1024;
+const ALLOWED_CONTENT_TYPES_BY_KIND: Record<string, Set<string>> = {
+  raw_video: new Set(["video/mp4", "video/quicktime"]),
+  thumbnail: new Set(["image/jpeg", "image/webp"]),
+};
+const MAX_BYTES_BY_KIND: Record<string, number> = {
+  raw_video: MAX_UPLOAD_BYTES,
+  thumbnail: MAX_THUMBNAIL_BYTES,
+};
 
 const UploadCreate = z.object({
   kind: z.enum(["raw_video", "thumbnail"]),
@@ -35,14 +44,24 @@ export function registerMediaRoutes(app: FastifyInstance, context: AppContext): 
         parsed.error.message,
       );
     const body = parsed.data;
-    if (!ALLOWED_CONTENT_TYPES.has(body.contentType)) {
+    if (!ALLOWED_CONTENT_TYPES_BY_KIND[body.kind]!.has(body.contentType)) {
       return sendFailure(
         reply,
         request,
         422,
         "corrupted_media",
         "media.unsupported_type",
-        `Content type ${body.contentType} not allowed.`,
+        `Content type ${body.contentType} not allowed for kind ${body.kind}.`,
+      );
+    }
+    if (body.bytes > MAX_BYTES_BY_KIND[body.kind]!) {
+      return sendFailure(
+        reply,
+        request,
+        422,
+        "corrupted_media",
+        "media.too_large",
+        `Declared size ${body.bytes} exceeds the ${body.kind} limit.`,
       );
     }
     const userId = request.user!.id;
@@ -88,14 +107,127 @@ export function registerMediaRoutes(app: FastifyInstance, context: AppContext): 
         body.sha256,
       ],
     );
-    const uploadUrl = await context.objectStore.presignUpload(objectKey, body.contentType, 900);
-    return { mediaAssetId: asset!.id, uploadUrl, expiresSeconds: 900 };
+    const constraints = {
+      contentType: body.contentType,
+      sizeBytes: body.bytes,
+      sha256Hex: body.sha256,
+    };
+    const uploadUrl = await context.objectStore.presignUpload(objectKey, 900, constraints);
+    return {
+      mediaAssetId: asset!.id,
+      uploadUrl,
+      expiresSeconds: 900,
+      // The signature covers these headers; a client that changes any of them
+      // (spoofed type, larger body, other bytes) is rejected by storage.
+      requiredHeaders: uploadRequiredHeaders(constraints),
+    };
   });
 
   app.post("/v1/media/:id/complete", { preHandler: app.authenticate }, async (request, reply) => {
     const { id } = request.params as { id: string };
+    const pending = await one<{
+      object_key: string;
+      size_bytes: string | number;
+      content_type: string;
+      sha256: string;
+    }>(
+      context.pool!,
+      "SELECT object_key, size_bytes, content_type, sha256 FROM media_asset WHERE id = $1 AND owner_user_id = $2 AND status = 'uploading' AND deleted_at IS NULL",
+      [id, request.user!.id],
+    );
+    if (!pending)
+      return sendFailure(
+        reply,
+        request,
+        404,
+        "permanent",
+        "media.not_found",
+        "Upload not found or already completed.",
+      );
+    // The privacy gate is re-evaluated here, not just at upload creation: if
+    // the user turned cloud sync off while the upload was in flight, the video
+    // must not be promoted to ready — it is dropped and purged instead.
+    const settings = await one<{ cloud_sync_enabled: boolean }>(
+      context.pool!,
+      "SELECT cloud_sync_enabled FROM user_setting WHERE user_id = $1",
+      [request.user!.id],
+    );
+    if (!settings?.cloud_sync_enabled) {
+      await context.pool!.query(
+        "UPDATE media_asset SET status = 'deleted', deleted_at = now() WHERE id = $1",
+        [id],
+      );
+      try {
+        await context.queue.enqueue("media.purge", { mediaAssetId: id });
+      } catch (error) {
+        // Asset is marked deleted; the worker sweep still purges the object.
+        request.log.error({ err: error }, "media.purge dispatch failed; sweep will purge");
+      }
+      await audit(context.pool!, {
+        actorUserId: request.user!.id,
+        action: "media.discarded_cloud_sync_disabled",
+        targetKind: "media_asset",
+        targetId: id,
+        requestId: request.id,
+      });
+      return sendFailure(
+        reply,
+        request,
+        403,
+        "permission_denied",
+        "media.cloud_sync_disabled",
+        "Cloud video sync is disabled in your privacy settings. The upload was discarded.",
+      );
+    }
+    if (context.objectStore) {
+      const head = await context.objectStore.headObject(pending.object_key);
+      if (!head) {
+        return sendFailure(
+          reply,
+          request,
+          422,
+          "corrupted_media",
+          "media.object_missing",
+          "No uploaded object was found for this asset.",
+        );
+      }
+      // The stored bytes must match everything that was declared and signed:
+      // size, content type, and content hash. Anything else is a spoofed
+      // upload and is purged rather than promoted to 'ready'.
+      const reject = async (code: string, message: string) => {
+        await context.pool!.query(
+          "UPDATE media_asset SET status = 'deleted', deleted_at = now() WHERE id = $1",
+          [id],
+        );
+        try {
+          await context.queue.enqueue("media.purge", { mediaAssetId: id });
+        } catch (error) {
+          // Asset is marked deleted; the worker sweep will purge the object.
+          request.log.error({ err: error }, "media.purge dispatch failed; sweep will purge");
+        }
+        return sendFailure(reply, request, 422, "corrupted_media", code, message);
+      };
+      if (head.sizeBytes > Number(pending.size_bytes) || head.sizeBytes > MAX_UPLOAD_BYTES) {
+        return reject(
+          "media.size_exceeded",
+          `Uploaded object is ${head.sizeBytes} bytes, larger than the declared/allowed size.`,
+        );
+      }
+      if (head.contentType !== null && head.contentType !== pending.content_type) {
+        return reject(
+          "media.content_type_mismatch",
+          "Stored object content type does not match the declared type.",
+        );
+      }
+      if (head.checksumSha256 !== sha256HexToBase64(pending.sha256)) {
+        return reject(
+          "media.checksum_mismatch",
+          "Stored object does not match the declared SHA-256 checksum.",
+        );
+      }
+    }
     const result = await context.pool!.query(
-      "UPDATE media_asset SET status = 'ready' WHERE id = $1 AND owner_user_id = $2 AND status = 'uploading'",
+      "UPDATE media_asset SET status = 'ready' WHERE id = $1 AND owner_user_id = $2 AND status = 'uploading' AND deleted_at IS NULL",
       [id, request.user!.id],
     );
     if (result.rowCount === 0)
@@ -107,7 +239,24 @@ export function registerMediaRoutes(app: FastifyInstance, context: AppContext): 
         "media.not_found",
         "Upload not found or already completed.",
       );
-    await context.queue.enqueue("media.process", { mediaAssetId: id });
+    try {
+      await context.queue.enqueue("media.process", { mediaAssetId: id });
+    } catch (error) {
+      // Dispatch failure mid-pipeline: revert so the client can retry complete.
+      request.log.error({ err: error }, "media.process dispatch failed");
+      await context.pool!.query(
+        "UPDATE media_asset SET status = 'uploading' WHERE id = $1 AND status = 'ready'",
+        [id],
+      );
+      return sendFailure(
+        reply,
+        request,
+        503,
+        "retryable",
+        "media.dispatch_failed",
+        "Could not queue media processing. Retry completing the upload.",
+      );
+    }
     return {
       mediaAsset: await one(
         context.pool!,
@@ -160,7 +309,13 @@ export function registerMediaRoutes(app: FastifyInstance, context: AppContext): 
     );
     if (result.rowCount === 0)
       return sendFailure(reply, request, 404, "permanent", "media.not_found", "Media not found.");
-    await context.queue.enqueue("media.purge", { mediaAssetId: id });
+    try {
+      await context.queue.enqueue("media.purge", { mediaAssetId: id });
+    } catch (error) {
+      // Deletion is already recorded (deleted_at set); the worker's deleted-media
+      // sweep guarantees the object is still purged even without this job.
+      request.log.error({ err: error }, "media.purge dispatch failed; sweep will purge");
+    }
     await audit(context.pool!, {
       actorUserId: request.user!.id,
       action: "media.delete_requested",

@@ -1,0 +1,388 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "afn-sasebo-rally1",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "createdAtIso": "2026-08-29T09:15:42.000Z",
+  "revision": 1,
+  "modality": "phases",
+  "clock": "case clip clock (clip.mp4, 30000/1001 fps CFR, absolute frame index n; tMs=round(n*1001/30))",
+  "method": "Wave D2 phase-only pass. Every stated boundary was read from extracted absolute-CFR frames (ffmpeg drawtext %{n} before select=between(n,A,B), full-frame sheets n0-131 stride 1 plus cropped zooms). Contact values are the committed labels (devin-visual-v1 / devin-visual-v2-waveC eventLabels), not re-labeled here; where my frames support or contradict them I say so in the note. Boundaries I could not see are null with basis=unknown, never interpolated. uncertaintyFrames is in clip frames (1 frame = 33.4ms).",
+  "eventPhases": [
+    {
+      "eventStartMs": 233,
+      "contactMs": 317,
+      "owner": "target",
+      "stroke": "backhand punch volley",
+      "phases": {
+        "preparationStartMs": null,
+        "backswingStartMs": null,
+        "accelerationStartMs": 267,
+        "contactMs": 317,
+        "followThroughEndMs": 400
+      },
+      "boundaries": [
+        {
+          "phase": "preparationStart",
+          "valueMs": null,
+          "frameIdx": null,
+          "basis": "unknown",
+          "note": "paddle already raised at clip start n0; true preparation onset precedes the clip (left-censored)"
+        },
+        {
+          "phase": "backswingStart",
+          "valueMs": null,
+          "frameIdx": null,
+          "basis": "unknown",
+          "note": "block volley; no distinct backswing visible n0-8"
+        },
+        {
+          "phase": "accelerationStart",
+          "valueMs": 267,
+          "frameIdx": 8,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "forward punch onset n7-8; subtle for a block"
+        },
+        {
+          "phase": "contact",
+          "valueMs": 317,
+          "frameIdx": 9,
+          "uncertaintyFrames": 1,
+          "basis": "committed_label_supported",
+          "note": "committed 317 (v1); my frames: ball adjacent to raised paddle n8, gone n9, departing right n10-12; window n8-10 (267-334)"
+        },
+        {
+          "phase": "followThroughEnd",
+          "valueMs": 400,
+          "frameIdx": 12,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "forward extension ends n12; paddle drifting down by n13-14"
+        }
+      ]
+    },
+    {
+      "eventStartMs": 1017,
+      "contactMs": 1117,
+      "owner": "target",
+      "stroke": "low backhand dink",
+      "phases": {
+        "preparationStartMs": 934,
+        "backswingStartMs": 934,
+        "accelerationStartMs": 1034,
+        "contactMs": 1117,
+        "followThroughEndMs": 1201
+      },
+      "boundaries": [
+        {
+          "phase": "preparationStart",
+          "valueMs": 934,
+          "frameIdx": 28,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "paddle turn-down from ready begins n28 (earlier than committed eventStart 1017 = n30.5)"
+        },
+        {
+          "phase": "backswingStart",
+          "valueMs": 934,
+          "frameIdx": 28,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "dink: turn-down and backswing are the same motion; no separate backswing"
+        },
+        {
+          "phase": "accelerationStart",
+          "valueMs": 1034,
+          "frameIdx": 31,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "forward downswing onset n31"
+        },
+        {
+          "phase": "contact",
+          "valueMs": 1117,
+          "frameIdx": 33,
+          "uncertaintyFrames": 2,
+          "basis": "committed_label_not_directly_confirmed",
+          "note": "committed 1117 (v1). In my crops the ball is not resolvable at the paddle n32-35 (CAUTION: her yellow grip butt reads as a ball-sized yellow blob near the hand in most frames); ball reappears high top-center by n37 consistent with a lifted dink. Phase boundaries here are pose-based and were visible."
+        },
+        {
+          "phase": "followThroughEnd",
+          "valueMs": 1201,
+          "frameIdx": 36,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "lift finishes n36; reset stance from n37"
+        }
+      ]
+    },
+    {
+      "eventStartMs": 1417,
+      "contactMs": 1484,
+      "owner": "target",
+      "stroke": "low backhand dig",
+      "phases": {
+        "preparationStartMs": 1368,
+        "backswingStartMs": 1401,
+        "accelerationStartMs": 1435,
+        "contactMs": 1484,
+        "followThroughEndMs": 1568
+      },
+      "boundaries": [
+        {
+          "phase": "preparationStart",
+          "valueMs": 1368,
+          "frameIdx": 41,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "reach-down toward low-left begins n41 (committed eventStart 1417 = n42.5)"
+        },
+        {
+          "phase": "backswingStart",
+          "valueMs": 1401,
+          "frameIdx": 42,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "paddle drawn low-left n42"
+        },
+        {
+          "phase": "accelerationStart",
+          "valueMs": 1435,
+          "frameIdx": 43,
+          "uncertaintyFrames": 1,
+          "basis": "observed",
+          "note": "forward push at ball n43; incoming ball visibly separate from paddle at n43 (greenish, mid-air low-left)"
+        },
+        {
+          "phase": "contact",
+          "valueMs": 1484,
+          "frameIdx": 44,
+          "uncertaintyFrames": 1,
+          "basis": "committed_label_supported",
+          "note": "committed 1484 (v1); my frames: ball adjacent to paddle at shin height n44, departing up-left n45; window n43-45 (1435-1501)"
+        },
+        {
+          "phase": "followThroughEnd",
+          "valueMs": 1568,
+          "frameIdx": 47,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "upward carry ends n47; recovery from n48"
+        }
+      ]
+    },
+    {
+      "eventStartMs": 1651,
+      "contactMs": 1717,
+      "owner": "target",
+      "stroke": "low backhand dig (v1 dig #3)",
+      "phases": {
+        "preparationStartMs": null,
+        "backswingStartMs": null,
+        "accelerationStartMs": null,
+        "contactMs": 1717,
+        "followThroughEndMs": null
+      },
+      "boundaries": [
+        {
+          "phase": "preparationStart",
+          "valueMs": null,
+          "frameIdx": null,
+          "basis": "unknown",
+          "note": "see event note"
+        },
+        {
+          "phase": "backswingStart",
+          "valueMs": null,
+          "frameIdx": null,
+          "basis": "unknown",
+          "note": "see event note"
+        },
+        {
+          "phase": "accelerationStart",
+          "valueMs": null,
+          "frameIdx": null,
+          "basis": "unknown",
+          "note": "see event note"
+        },
+        {
+          "phase": "contact",
+          "valueMs": 1717,
+          "frameIdx": 51,
+          "basis": "committed_label_not_directly_confirmed",
+          "note": "committed 1717 (v1)"
+        },
+        {
+          "phase": "followThroughEnd",
+          "valueMs": null,
+          "frameIdx": null,
+          "basis": "unknown",
+          "note": "see event note"
+        }
+      ],
+      "note": "FINDING: in my cropped pass (n48-56, 700x600 crop at the target) I could not see the ball near the target's paddle around n50-53, and her paddle shows only a small mid-height turn, no clear strike; the partner is simultaneously lunging low behind her, so the local motion is ambiguous. I do not assert the committed 1717 contact is wrong (ball may be occluded / outside my crop); I record the phase boundaries as unknown rather than guessed."
+    },
+    {
+      "eventStartMs": 1818,
+      "contactMs": 1934,
+      "owner": "other",
+      "stroke": "partner low dig (black shirt, pink-handle paddle)",
+      "phases": {
+        "preparationStartMs": 1735,
+        "backswingStartMs": null,
+        "accelerationStartMs": 1868,
+        "contactMs": 1934,
+        "followThroughEndMs": 2035
+      },
+      "boundaries": [
+        {
+          "phase": "preparationStart",
+          "valueMs": 1735,
+          "frameIdx": 52,
+          "uncertaintyFrames": 4,
+          "basis": "observed",
+          "note": "lunge is progressive from ~n49; I mark the committed-adjacent onset n52 with wide uncertainty (committed eventStart 1818 = n54.5)"
+        },
+        {
+          "phase": "backswingStart",
+          "valueMs": null,
+          "frameIdx": null,
+          "basis": "unknown",
+          "note": "emergency reach; no distinct backswing visible"
+        },
+        {
+          "phase": "accelerationStart",
+          "valueMs": 1868,
+          "frameIdx": 56,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "paddle drops toward floor n55-57"
+        },
+        {
+          "phase": "contact",
+          "valueMs": 1934,
+          "frameIdx": 58,
+          "uncertaintyFrames": 1,
+          "basis": "committed_label_supported",
+          "note": "committed 1934 (v1); my frames: ball low below partner's paddle n57, adjacent n58"
+        },
+        {
+          "phase": "followThroughEnd",
+          "valueMs": 2035,
+          "frameIdx": 61,
+          "uncertaintyFrames": 3,
+          "basis": "observed",
+          "note": "low swing-through settles n61-62 as she recovers upright"
+        }
+      ]
+    },
+    {
+      "eventStartMs": 2600,
+      "contactMs": 2900,
+      "owner": "target",
+      "stroke": "backhand volley",
+      "phases": {
+        "preparationStartMs": 2603,
+        "backswingStartMs": 2636,
+        "accelerationStartMs": 2769,
+        "contactMs": 2900,
+        "followThroughEndMs": 3069
+      },
+      "boundaries": [
+        {
+          "phase": "preparationStart",
+          "valueMs": 2603,
+          "frameIdx": 78,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "turn + paddle drop to backhand side begins n78 (matches committed 2600)"
+        },
+        {
+          "phase": "backswingStart",
+          "valueMs": 2636,
+          "frameIdx": 79,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "cross-body draw low-left n79-83"
+        },
+        {
+          "phase": "accelerationStart",
+          "valueMs": 2769,
+          "frameIdx": 83,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "upswing toward the ball starts n83-84 (committed accel 2830 = n84.8 is inside my uncertainty)"
+        },
+        {
+          "phase": "contact",
+          "valueMs": 2900,
+          "frameIdx": 87,
+          "uncertaintyFrames": 1,
+          "basis": "committed_label_adjacency_observed_earlier",
+          "note": "committed gold 2900 (v1, n86.9). FINDING: in my frames the incoming ball (from the right, n83-84) blurs onto the paddle face at n85 and is departing left by n86; observed adjacency window n84-86 (2803-2869), midpoint 2836 - about 2 frames EARLIER than gold 2900. Consistent with the Wave C/HANDOFF note that 2900 has no tracked support; I did not relabel contact (out of scope), I report the observation."
+        },
+        {
+          "phase": "followThroughEnd",
+          "valueMs": 3069,
+          "frameIdx": 92,
+          "uncertaintyFrames": 3,
+          "basis": "observed",
+          "note": "up-right extension complete by n91-92; n93-97 settling (committed 3200 = n95.9 sits in the settling tail)"
+        }
+      ]
+    },
+    {
+      "eventStartMs": 3500,
+      "contactMs": 3870,
+      "owner": "other",
+      "stroke": "partner swing behind target",
+      "phases": {
+        "preparationStartMs": null,
+        "backswingStartMs": null,
+        "accelerationStartMs": null,
+        "contactMs": 3870,
+        "followThroughEndMs": null
+      },
+      "boundaries": [
+        {
+          "phase": "preparationStart",
+          "valueMs": null,
+          "frameIdx": null,
+          "basis": "unknown",
+          "note": "see event note"
+        },
+        {
+          "phase": "backswingStart",
+          "valueMs": null,
+          "frameIdx": null,
+          "basis": "unknown",
+          "note": "see event note"
+        },
+        {
+          "phase": "accelerationStart",
+          "valueMs": null,
+          "frameIdx": null,
+          "basis": "unknown",
+          "note": "see event note"
+        },
+        {
+          "phase": "contact",
+          "valueMs": 3870,
+          "frameIdx": 116,
+          "basis": "committed_label_not_directly_confirmed",
+          "note": "committed 3870 (v1)"
+        },
+        {
+          "phase": "followThroughEnd",
+          "valueMs": null,
+          "frameIdx": null,
+          "basis": "unknown",
+          "note": "see event note"
+        }
+      ],
+      "note": "FINDING: the clip has a hard scene cut between n115 and n116 (close net view -> wide arena view). The committed contact 3870 = n116 lands exactly at/after the cut, and in the wide view the players are too small in my sheets to place phase boundaries. Phases left unknown rather than guessed."
+    }
+  ],
+  "propertyCheck": "phase order preparation<=backswing<=acceleration<=contact<=followThroughEnd holds for every non-null sequence above; acceleration<=contact holds in all of them and in the committed v1 phases (2830<=2900).",
+  "history": [{ "revision": 1, "savedAtIso": "2026-08-29T09:15:42.000Z" }]
+}

@@ -1,0 +1,79 @@
+{
+  "id": "e09-rt-contact-adversarial",
+  "wave": "E",
+  "date": "2026-08-29",
+  "baseCommit": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "branch": "devin/wave-e/e09-rt-contact-adversarial",
+  "mission": "Red-team contact localization with adversarial synthetic sequences driven through the real estimateContact code path; every confident-but-wrong contact is a finding.",
+  "dataScope": {
+    "kind": "synthetic_only",
+    "note": "All sequences are deterministic synthetic constructions (generateSwingSequence + adversarial fixture generator) with an exact constructed contact truth. No real labels touched; held-out cases wm-dink-01 and afn-vic-rally1 untouched. Synthetic results cannot satisfy release eligibility; they measure estimator failure modes only.",
+    "generator": "packages/evaluation/src/synthetic/adversarialContactFixtures.ts (producer synthetic.adversarial-contact-redteam / adversarial-contact-1)",
+    "grouping": "Each fixture is an independent synthetic sequence; no frame-level splits."
+  },
+  "configuration": {
+    "codePathUnderAttack": "packages/vision-geometry/src/offlineStroke.ts estimateContact",
+    "estimatorVersionBefore": "contact-evidence-4.1",
+    "estimatorVersionAfter": "contact-evidence-4.2",
+    "confidentWrongDefinition": "status=estimated AND |estimated-truth| > 150ms AND (confidence >= 0.6 OR a modality confirmed)"
+  },
+  "attackFamilies": [
+    "fast_swing (30fps pose-only; 24fps with ball)",
+    "occluded_ball (hidden through contact; bounce decoy; deflected re-entry; wide ±250ms occlusion)",
+    "edge_on_paddle (track lost early; reacquire jump; reacquire displacement spike)",
+    "missing_modality (no pose in window; ball+wrists only; sparse 12Hz ball)",
+    "degenerate_pose (identity-swap second swing; tiny torso)",
+    "paddle_identity (track switched to opponent paddle, in-reach and out-of-reach variants)"
+  ],
+  "findings": [
+    {
+      "id": "F1-occlusion-gap-edge-drag",
+      "severity": "fixed",
+      "measuredBefore": "occluded-ball-at-contact fixture: +115ms error at confidence 0.75 with ballConfirmed=true (estimator 4.1)",
+      "measuredAfter": "+20ms at confidence 0.55, ballConfirmed=false, limitingFactor ball_lost_at_contact (estimator 4.2)",
+      "rootCause": "A ball direction change and a proximity minimum measured at the first sample AFTER an occlusion gap were treated as events at that sample's time. The turn/closest-approach actually happened somewhere inside the gap, so the kernel anchored the contact at re-entry (late) and the surviving tethered ball mass confirmed it.",
+      "fix": "Gap censoring (gapCensorMs=150): direction changes whose in/out step spans a gap and proximity minima at gap-adjacent samples get the same censoring already applied to track edges (mass x0.3, sigma x1.5). This extends the existing boundary-censor rule; no threshold was weakened.",
+      "regressionTests": [
+        "contactRedTeam.test.ts: does not ball-confirm a late contact off the first post-occlusion sample (fails on 4.1)",
+        "contactRedTeam.test.ts: does not let a ball re-entering after an occlusion gap drag the contact late"
+      ]
+    },
+    {
+      "id": "F2-paddle-identity-switch-beyond-reach",
+      "severity": "fixed",
+      "measuredBefore": "opponent-paddle fixture (paddle track across the court): +600ms error at confidence ~0.76 with ballConfirmed=true AND paddleConfirmed=true (estimator 4.1; measured by running the committed regression test against the stashed 4.1 source)",
+      "measuredAfter": "0ms error at confidence 0.55, neither modality confirmed, limitingFactor paddle_track_beyond_reach (estimator 4.2)",
+      "rootCause": "estimateContact trusted input.paddleCenters unconditionally as the TARGET's paddle. A track that switched identity to the opponent's paddle supplied speed peaks, a target reference that fully gated the ball's turn at the OPPONENT's hit, a proximity minimum there, and paddle presence -> both modalities confirmed a contact 600ms late.",
+      "fix": "Reach tether (paddleReachFullTorso=1.2, paddleReachRejectTorso=2.0): a paddle is held in the hand, so centers farther than reject-reach (image-space, torso-normalized) from EVERY measured target wrist at that moment are excluded from target references, proximity, presence, and speed-peak mass (ramped). No wrist measured near the moment -> center kept (absence of measurement is not counter-evidence). Positive guard test keeps a genuine within-reach track fully trusted.",
+      "regressionTests": [
+        "contactRedTeam.test.ts: rejects a paddle track beyond reach of every measured target wrist (fails on 4.1)",
+        "contactRedTeam.test.ts: keeps trusting a genuine paddle track that stays within reach"
+      ]
+    },
+    {
+      "id": "F3-paddle-identity-switch-within-reach",
+      "severity": "open_residual",
+      "measured": "When the switched foreign paddle sits within ~0.9 torso (2D image space) of the target's idle off-hand wrist, estimator 4.2 still yields +590ms at confidence 0.76 with both modalities confirmed.",
+      "rootCause": "In a single 2D view the reach tether cannot distinguish a foreign paddle that overlaps the target's reach envelope; every tether/gate is satisfied by geometry alone. maxPeakDivergenceMs=700 (dev-measured) does not fire at 590ms.",
+      "whyNotFixed": "The only available lever is tightening dev-measured constants (e.g. maxPeakDivergenceMs 700 -> <590) against a synthetic attack, which would be tuning thresholds against synthetic data with unknown effect on real dev/held-out cases; not defensible on this machine (no real gold re-measurement possible). Upstream paddle-track identity association (analyzeVideo) is outside this workstream's ownership.",
+      "recommendation": "Track-identity continuity check upstream where the paddle association is made, or a multi-hypothesis reach prior once real dev data can be re-measured."
+    }
+  ],
+  "sweepResults": {
+    "fixtures": 10,
+    "afterFix": "0/10 confident-but-wrong; abstentions on edge-on-paddle-reacquire-jump and identity-swap-second-swing are honest multi-modal abstentions; max |error| among estimates = 20ms; every modality-confirmed estimate within 20ms of constructed truth.",
+    "committedSweepTest": "contactRedTeam.test.ts adversarial fixture sweep (asserts no confident-but-wrong on any fixture, confirmed estimates within 150ms, near-truth expectations within 120ms)"
+  },
+  "artifacts": {
+    "fixtures": "packages/evaluation/src/synthetic/adversarialContactFixtures.ts",
+    "tests": "packages/vision-geometry/test/contactRedTeam.test.ts (5 tests; 2 fail on estimator 4.1, all pass on 4.2)",
+    "estimatorChange": "packages/vision-geometry/src/offlineStroke.ts (contact-evidence-4.1 -> 4.2)"
+  },
+  "gates": {
+    "vision-geometry tests": "69/69 pass (64 pre-existing + 5 new red-team tests)",
+    "note": "typecheck/lint/format:check results recorded in the workstream report"
+  },
+  "verdict": "ORANGE",
+  "verdictReason": "2 confident-but-wrong contact failure modes found, root-caused, defensibly fixed with pre-fix-failing regression tests; 1 residual confident-but-wrong mode (in-reach paddle identity switch) remains open because the only fix available here would tune dev-measured constants against synthetic data."
+}

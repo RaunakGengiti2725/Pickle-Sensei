@@ -1,0 +1,96 @@
+{
+  "workstreamId": "g24-mac-harness",
+  "wave": "G",
+  "branch": "devin/wave-g/g24-mac-harness",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "mission": "Make the Mac/iPhone benchmark truly one command: audit tools/mac-bench for bit-rot at integration head, compile/schema-check and dry-run everything that does not need Apple hardware, profile the Linux-measurable pipeline pieces at head with counts, and commit an updated harness + runbook so hardware availability means immediate execution. Apple-execution-dependent paths stay BLOCKED_EXTERNAL.",
+  "method": [
+    "bash -n syntax audit of run-mac-bench.sh and exercised the Linux refusal path (expected exit 3)",
+    "package typecheck (tsc --noEmit) and full unit suite for @pickle/mac-bench at head",
+    "dry-ran every non-Apple path: compare CLI on fixture documents, assembleResults with synthetic samples, schema validation of mac-bench-results-v1",
+    "diffed the harness stage-harvest map against the CURRENT analyzeVideo timing vocabulary to find drift",
+    "wrote tools/mac-bench/src/profileLinuxPieces.ts and measured decode, frame extraction, file I/O, JSON parse/stringify, and real two-pass schedule planning (planTwoPassSchedule, paddle-two-pass-1) on Linux at head",
+    "committed RUNBOOK.md describing the exact one-command Mac procedure and the Linux-verified vs Mac-only boundary"
+  ],
+  "datasetScope": {
+    "clips": [
+      "datasets/paddle-bench/bundles/afn-sasebo-rally1/clip.mp4",
+      "datasets/paddle-bench/bundles/wm-volley-02/clip.mp4"
+    ],
+    "grouping": "committed dev event-window bundle clips only; profiling is per-clip, no cross-clip aggregation",
+    "jsonArtifacts": [
+      "datasets/cascade/cascade-1787996827490.json",
+      "datasets/paddle-bench/regen-manifest.json",
+      "tools/mac-bench/test/fixtures/mac-bench-results.fixture.json"
+    ],
+    "twoPassScheduleInput": "SYNTHETIC sparse tracks derived only from real clip metadata (fps, durationMs); measures scheduling mechanics, not detector accuracy — labeled synthetic in the artifact"
+  },
+  "holdoutStatement": "The held-out cases are excluded by name from all profiling inputs (the profiler hard-fails if a held-out ID appears in its clip list). Nothing in this workstream read, listed, executed, or tuned against held-out material.",
+  "configuration": {
+    "node": "v20.18.1",
+    "platform": "linux",
+    "profileCommand": "pnpm --filter @pickle/mac-bench profile:linux",
+    "iterations": {
+      "ffprobe/readFile": 5,
+      "fullDecode/frameExtract": 3,
+      "jsonParse/stringify": 20,
+      "schedulePlan": 200
+    }
+  },
+  "measuredResults": {
+    "linuxRefusal": { "exitCode": 3, "runs": 1 },
+    "macBenchUnitTests": { "passed": 38, "failed": 0, "files": 5 },
+    "compareCliDryRun": { "verdict": "OK", "runs": 1 },
+    "linuxProfileArtifact": "datasets/experiments/wave-g/g24-linux-profile.json",
+    "linuxProfileHighlights": {
+      "boundary": "LINUX-CPU-NOT-MAC — never a substitute for Mac results",
+      "afn-sasebo-rally1": {
+        "durationMs": 4404,
+        "fps": 29.97,
+        "fullDecodeMeanMs": 225.4,
+        "frameExtractJpegMeanMs": 728.14,
+        "extractedFrames": 132,
+        "ffprobeMeanMs": 51.52,
+        "readWholeFileMeanMs": 1.13,
+        "decodeIterations": 3
+      },
+      "wm-volley-02": {
+        "durationMs": 8000,
+        "fps": 25.0,
+        "fullDecodeMeanMs": 189.1,
+        "frameExtractJpegMeanMs": 502.45,
+        "extractedFrames": 200,
+        "ffprobeMeanMs": 42.94,
+        "readWholeFileMeanMs": 0.92,
+        "decodeIterations": 3
+      },
+      "jsonSerialization": "all three committed artifacts (1.8–3.6 KB) parse+stringify in <0.02 ms mean over 20 iterations — negligible against decode",
+      "twoPassScheduleMechanics": {
+        "afn-sasebo-rally1": {
+          "planMeanMs": 0.03,
+          "planned": { "fullScanFrames": 132, "sparseFrames": 44, "denseOnlyFrames": 34, "totalFrames": 78 },
+          "denseRegions": 3,
+          "detectorProcessInvocationsTwoPass": 4,
+          "detectorProcessInvocationsSinglePass": 1
+        },
+        "wm-volley-02": {
+          "planMeanMs": 0.02,
+          "planned": { "fullScanFrames": 201, "sparseFrames": 67, "denseOnlyFrames": 29, "totalFrames": 96 },
+          "denseRegions": 3,
+          "detectorProcessInvocationsTwoPass": 4,
+          "detectorProcessInvocationsSinglePass": 1
+        },
+        "inputProvenance": "SYNTHETIC sparse track derived from real clip metadata"
+      }
+    }
+  },
+  "findings": [
+    "BIT-ROT FOUND AND FIXED: the harness stage-harvest map (runCase.ts REPORT_TIMING_STAGES) lagged the current analyzeVideo timing vocabulary — poseDerivativesMs and the two-pass split timings (paddleDetectSparseMs, paddleDetectDenseMs) were emitted by the pipeline but silently dropped by the bench. A Mac run at head would have lost those stages. Now harvested, with regression tests.",
+    "BIT-ROT FOUND AND FIXED: a lab:cascade output with 0 gold events (canonical runs / gold absent) crashed result assembly at the very end of a bench run (schema requires goldEvents >= 1). Assembly now converts zero-gold cascade to cascade: null with an explicit cascadeUnmeasuredReason, preserving the latency evidence — missing evidence stays absent, never zero.",
+    "Everything else audited clean at head: shell syntax, Linux refusal (exit 3), 38/38 package tests, package tsc clean, compare CLI VERDICT: OK on fixtures, mac-bench-results-v1 schema validation.",
+    "Linux-measurable costs at head are small relative to the Mac-only stages: full-clip decode ~0.2 s and JPEG frame extraction ~0.5–0.7 s per dev clip, JSON serialization negligible; two-pass scheduling itself costs ~0.03 ms and plans 78/132 and 96/201 frames (2 clips) with 4 detector process invocations vs 1 single-pass — the frame-count saving is what the Mac run will actually feel.",
+    "Apple-execution-dependent items remain BLOCKED_EXTERNAL: Swift extractor build, Apple Vision pose extraction, real cold/warm Mac latency, lab:regen/lab:cascade with gold evidence, and all iPhone device numbers. No such numbers are reported anywhere in this workstream."
+  ],
+  "verdict": "PROVISIONAL_GREEN",
+  "rationale": "Everything Linux-checkable is verified at head with counts (38/38 package tests, refusal path, compare dry-run, schema validation, measured Linux profile with explicit N), and two real bit-rot defects that would have degraded or crashed a Mac run were fixed with tests. GREEN cannot be claimed because the one command itself has still never executed on Apple hardware — that execution, and every number it would produce, is BLOCKED_EXTERNAL."
+}

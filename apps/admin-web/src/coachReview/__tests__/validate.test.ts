@@ -22,6 +22,14 @@ function validReview(): CoachReview {
     coachId: "coach-01",
     coachCredentialRef: "cred-2026-001",
     reviewId: "wm-dink-01-E1.coach-01",
+    provenance: {
+      ...fixture!.provenance,
+      coachQualificationSnapshot: {
+        ...fixture!.provenance.coachQualificationSnapshot,
+        coachId: "coach-01",
+        credentialRef: "cred-2026-001",
+      },
+    },
   };
 }
 
@@ -66,7 +74,7 @@ describe("validateReview", () => {
     const review = validReview();
     const tampered: CoachReview = {
       ...review,
-      faults: [{ ...review.faults[0]!, evidence: { timestampsMs: [], region: null } }],
+      faults: [{ ...review.faults[0]!, evidence: { timestampsMs: [], frames: [], region: null } }],
     };
     expect(validateReview(tampered, context).join(" ")).toMatch(/timestampsMs requires ≥1/);
   });
@@ -79,7 +87,7 @@ describe("validateReview", () => {
         {
           ...review.faults[0]!,
           severity: 5 as never,
-          evidence: { timestampsMs: [100], region: { x: 2, y: 0, w: 0.5, h: 0.5 } },
+          evidence: { timestampsMs: [100], frames: [], region: { x: 2, y: 0, w: 0.5, h: 0.5 } },
         },
       ],
     };
@@ -92,6 +100,8 @@ describe("validateReview", () => {
     const review: CoachReview = {
       ...validReview(),
       overallQuality: null,
+      phaseEvaluations: [],
+      primaryFaultId: null,
       faults: [],
       rationale: "",
       cannotEvaluate: { reason: "camera angle hides the paddle entirely" },

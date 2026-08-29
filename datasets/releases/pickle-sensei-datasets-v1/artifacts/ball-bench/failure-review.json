@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "reviewedAtIso": "2026-08-28T11:40:00.000Z",
+  "reviewer": "devin-visual-v1 (manual still-frame review; approximate)",
+  "taxonomy": [
+    "BALL_TOO_SMALL",
+    "BALL_BLUR",
+    "BALL_OCCLUDED",
+    "BALL_BACKGROUND_FALSE_POSITIVE",
+    "BALL_TRACK_FRAGMENTED",
+    "BALL_EXITED_FRAME",
+    "BALL_REACQUISITION_FAILURE",
+    "BALL_BODY_OVERLAP",
+    "BALL_COLOR_CONFUSION",
+    "OTHER"
+  ],
+  "counts": {
+    "wm-volley-02": {
+      "misses": {
+        "BALL_REACQUISITION_FAILURE": 2
+      },
+      "notes": "Outgoing ball after contact left frame within 3 frames; no reacquisition mechanism exists yet."
+    },
+    "wm-dink-01": {
+      "notes": "Ball honestly UNTRACKED (paddle-alignment gate). Original background-drift FP preserved as BALL_FALSE_POSITIVE_BACKGROUND exhibit."
+    },
+    "afn-sasebo-rally1": {
+      "misses": {
+        "BALL_BODY_OVERLAP": 2,
+        "BALL_TRACK_FRAGMENTED": 2
+      },
+      "notes": "Ball crosses in front of the primary's WHITE shirt around her contact (2830-3030ms): low contrast fragments the candidate chain; selected track covers a later flight (3305-4073ms) instead. She also holds a spare ball in hand (BALL_COLOR_CONFUSION risk, not triggered)."
+    }
+  }
+}

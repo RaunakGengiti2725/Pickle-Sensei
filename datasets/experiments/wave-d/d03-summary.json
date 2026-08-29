@@ -1,0 +1,61 @@
+{
+  "workstream": "D03 — fragment merge safety",
+  "branch": "devin/wave-d/d03-fragment-merge",
+  "date": "2026-08-29",
+  "platform": "Linux (no Apple Vision pose, canonical run dirs absent)",
+  "mergeStatus": "STILL DISABLED — this workstream built the safety case machinery only; --merge-tracklets was not touched and remains research-only per D-042",
+  "whatWasBuilt": {
+    "classifier": "packages/swing-lab/src/paddleMergeSafety.ts (merge-safety-v1): classifyMergeCandidate / enumerateMergeCandidatePairs / sweepMergeCandidates. Five checks per candidate fragment pair — segment-level ownership agreement (joint tail/head segments, tracker's otherOwnershipFactor both ways), target compatibility (each whole fragment against the tracker's own selection gates: maxMeanWristDistance 0.22 + minHandAffinity 0.4), event locality (bridged gap must not overlap eventPeak ± 300ms — the rally2 30→145ms mechanism: merged fragments fabricate paddle speed inside the contact window), motion continuity (forward AND backward constant-velocity corridors at 0.6× the reconciliation radius + velocity-cosine ≥ 0), non-target contradiction (sustained other-owned run ≥ 3 inside either fragment — the rally1 695ms mechanism: merged other-player fragment feeding target-gated contact). Verdict: any FAIL → MERGE_UNSAFE; all five PASS → MERGE_SAFE; otherwise UNKNOWN. UNKNOWN blocks merge exactly like MERGE_UNSAFE — absent evidence never upgrades a pair.",
+    "provenance": "Every report enumerates bridgedFrames with per-frame provenance: fragment frames OBSERVED; gap frames PREDICTED (constant-velocity, never observed) unless a measured target wrist lies within the hand-affinity radius (0.13) of the predicted position, then TRACKED. Estimates are never observations.",
+    "sharedGate": "The reconciliation link gate was extracted (trackletLinkGate/trackletTail/MERGE_LINK_GATES in paddleTracker.ts) so 'merge candidate pair' means exactly the pairs mergePaddleTracklets would consider linkable. mergePaddleTracklets behavior unchanged — all 5 pre-existing paddleMerge tests pass untouched.",
+    "sweepCli": "pnpm --filter @pickle/swing-lab merge:safety (src/paddleMergeSafetySweep.ts) over committed raw detector artifacts."
+  },
+  "destructiveCaseEvidence": {
+    "source": "D-042 (docs/DECISIONS.md): rally2 contact 30→145ms and rally1 fabricated target-gated 695ms contact under --merge-tracklets. Committed artifacts used: datasets/experiments/wave-a/H-logs/baseline-rerun-afn-sasebo-rally{1,2}-dets.json (raw stride-1 detector reruns) + stroke windows/event peaks from datasets/experiments/wave-a/B-selection-forensics.json (rally1 window 168–3871 peak 3403; rally2 window 1302–3603 peak 2469).",
+    "unitTests": "packages/swing-lab/test/paddleMergeSafety.test.ts — 13 tests, all passing. For BOTH destructive cases: candidate pairs exist (link gate fires), mergePaddleTracklets forms links, and every candidate pair is classified MERGE_UNSAFE or UNKNOWN with MERGE_SAFE count asserted 0. Synthetic tests exercise each check individually including a MERGE_SAFE positive control, the rally1 shape (other player's wrist riding the second fragment → ownership FAIL) and the rally2 shape (gap bridging the event peak → eventLocality FAIL), plus provenance tests (gap frames PREDICTED without wrists, TRACKED with wrist support, never OBSERVED)."
+  },
+  "corpusSweep": {
+    "command": "pnpm --filter @pickle/swing-lab merge:safety",
+    "wristEvidence": "absent on this platform (pose is Apple-Vision-only) — ownership-dependent checks are honestly UNKNOWN in the sweep; verdicts below are driven by motion-continuity and event-locality failures, which need no pose",
+    "artifacts": [
+      {
+        "artifact": "wave-a/H-logs/baseline-rerun-afn-sasebo-rally1-dets.json",
+        "tracklets": 33,
+        "candidatePairs": 6,
+        "counts": { "MERGE_SAFE": 0, "MERGE_UNSAFE": 6, "UNKNOWN": 0 }
+      },
+      {
+        "artifact": "wave-a/H-logs/baseline-rerun-afn-sasebo-rally2-dets.json",
+        "tracklets": 33,
+        "candidatePairs": 3,
+        "counts": { "MERGE_SAFE": 0, "MERGE_UNSAFE": 3, "UNKNOWN": 0 }
+      },
+      {
+        "artifact": "wave-a/H-logs/baseline-rerun-wm-volley-02-dets.json",
+        "tracklets": 30,
+        "candidatePairs": 0,
+        "counts": { "MERGE_SAFE": 0, "MERGE_UNSAFE": 0, "UNKNOWN": 0 }
+      },
+      {
+        "artifact": "wave-a/P-runs/P-detector-fresh{1,2-warm,3-hfoffline}.json (afn-sasebo-rally2, 600ms window)",
+        "tracklets": "10 each",
+        "candidatePairs": 0,
+        "counts": { "MERGE_SAFE": 0, "MERGE_UNSAFE": 0, "UNKNOWN": 0 }
+      }
+    ],
+    "totals": { "candidatePairs": 9, "MERGE_SAFE": 0, "MERGE_UNSAFE": 9, "UNKNOWN": 0 },
+    "notableFailures": "rally2 pair 12→30 (gap 400ms) and 15→25 (gap 467ms) fail eventLocality — their gaps bridge the 2469ms event peak, exactly the fabricated-speed mechanism behind the 30→145ms degradation; rally1 pair 26→37 (gap 434ms) likewise bridges the 3403ms peak. All 9 pairs also fail the tightened bidirectional motion-continuity corridor.",
+    "excluded": "wave-b/W12-probe/probe-dets.json (no video/window metadata — not a RawPaddleDetectionFile) and gitignored runs/ dirs (absent by design)."
+  },
+  "honestNegatives": [
+    "The sweep carries zero wrist evidence, so ownership agreement, target compatibility and non-target contradiction were never exercised against real pose on real footage — only synthetically in unit tests. A Mac pass with canonical runs must repeat the sweep with real wrist series before any pair can ever be MERGE_SAFE in practice.",
+    "The 695ms/145ms numbers themselves were NOT reproduced here (they require the full cascade on canonical macOS runs); the classifier was validated against the committed detector artifacts and windows of those cases, not against regenerated cascade outputs.",
+    "MERGE_SAFE has never been observed on real data (9/9 real pairs UNSAFE); the positive control is synthetic. That is the intended bias — safety must be proven — but it means the classifier's permissive path is untested on footage."
+  ],
+  "remainingBlocked": "Merge promotion stays blocked on downstream cascade non-regression measured via pnpm lab:cascade against canonical runs (macOS-only: Apple Vision pose, gitignored runs/ dirs absent on Linux). The classifier is a necessary precondition, not a sufficient one — flipping --merge-tracklets additionally requires the cascade gate.",
+  "gates": {
+    "typecheck": "pnpm --filter @pickle/swing-lab typecheck clean",
+    "tests": "swing-lab 244 passed | 4 skipped (20 files) including 13 new paddleMergeSafety tests; pre-existing paddleMerge/paddleTracker suites pass unchanged",
+    "prettier": "all added/modified files formatted"
+  }
+}

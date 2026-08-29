@@ -121,6 +121,7 @@ describe.skipIf(!testUrl)("real training system (isolated PostgreSQL schema)", (
     await seed(pool);
     await publishTestScoringRelease(pool);
 
+    const adminSubject = `training|admin-${randomUUID()}`;
     const config: ApiConfig = {
       env: "test",
       port: 0,
@@ -132,14 +133,17 @@ describe.skipIf(!testUrl)("real training system (isolated PostgreSQL schema)", (
       oidcAudience: undefined,
       oidcJwksUrl: undefined,
       sqsQueueUrl: undefined,
+      consentExportSigningKey: undefined,
+      consentExportSigningKeyId: "consent-export-k1",
       appleIapConfigured: false,
       googlePlayConfigured: false,
+      adminAuthSubjects: [adminSubject],
     };
     app = buildApp(config);
     const minter = new DevTokenVerifier("test", secret);
     userToken = await minter.mint(`training|user-${randomUUID()}`);
     streakUserToken = await minter.mint(`training|streak-${randomUUID()}`);
-    adminToken = await minter.mint(`training|admin-${randomUUID()}`, "admin");
+    adminToken = await minter.mint(adminSubject, "admin");
     for (const token of [userToken, streakUserToken, adminToken]) {
       const response = await app.inject({
         method: "POST",

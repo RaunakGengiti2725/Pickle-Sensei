@@ -1,6 +1,7 @@
 import type { ShotAnalysis } from "@pickle/shared-types";
 import type { StrokeResolution } from "./capture.js";
 import type { ModelRunRecord } from "./provenance.js";
+import type { AnalysisRunProvenance } from "./runProvenance.js";
 
 /**
  * Versioned analysis record. A capture may accumulate many of these over its
@@ -66,6 +67,13 @@ export interface AnalysisRecord {
   modalities: ModalityAvailability;
   /** Every model execution that fed this record, with provenance. */
   modelRuns: ModelRunRecord[];
+  /**
+   * Complete run-level version snapshot (app, pipeline, providers, score,
+   * taxonomy, drill mapping, capture envelope, timestamp) — the record must
+   * remain explainable from storage alone. Operational metadata: never
+   * rendered in the user-facing mobile UI.
+   */
+  provenance: AnalysisRunProvenance;
   /**
    * The scored result in the shared product shape (versionVector included).
    * Null when the engine abstained before scoring.

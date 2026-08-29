@@ -1,7 +1,13 @@
 import { z } from "zod";
 import {
+  ANALYSIS_FEEDBACK_CATEGORIES,
+  ANALYSIS_FEEDBACK_RATINGS,
   CAMERA_VIEWS,
   CHECKPOINTS,
+  CONSENT_ACTIONS,
+  CONSENT_CAPTURE_MODES,
+  CONSENT_SCOPES,
+  CONSENT_SOURCES,
   FAULT_DIRECTIONS,
   PHASES,
   SHOT_TYPES,
@@ -336,3 +342,285 @@ export const PracticeStreakSchema = z.object({
   practicedToday: z.boolean(),
   lastPracticeDate: z.iso.date().nullable(),
 });
+
+/** "Was this analysis accurate?" — a failure-mining signal, never gold.
+ * Category is required exactly when the answer is `not_quite`; the server
+ * copies the version vector from the shot row and derives review
+ * eligibility from the consent ledger, so neither is accepted here. */
+export const AnalysisFeedbackRequest = z
+  .object({
+    rating: z.enum(ANALYSIS_FEEDBACK_RATINGS),
+    category: z.enum(ANALYSIS_FEEDBACK_CATEGORIES).nullable(),
+  })
+  .refine((body) => (body.rating === "not_quite") === (body.category !== null), {
+    message: "category is required exactly when rating is not_quite",
+  });
+export type AnalysisFeedbackRequestT = z.infer<typeof AnalysisFeedbackRequest>;
+
+export const AnalysisFeedbackResponse = z.object({
+  feedback: z.object({
+    id: z.uuid(),
+    analysisId: z.uuid(),
+    rating: z.enum(ANALYSIS_FEEDBACK_RATINGS),
+    category: z.enum(ANALYSIS_FEEDBACK_CATEGORIES).nullable(),
+    reviewEligible: z.boolean(),
+    createdAt: z.iso.datetime(),
+  }),
+});
+export type AnalysisFeedbackResponseT = z.infer<typeof AnalysisFeedbackResponse>;
+
+/** First-party consent ledger contracts (append-only; scopes independent).
+ * model_training is an explicit opt-in — no endpoint or default grants it. */
+export const ConsentGrantRequest = z.object({
+  scope: z.enum(CONSENT_SCOPES),
+  consentVersion: z.string().min(1).max(64),
+  source: z.enum(CONSENT_SOURCES),
+  device: z.string().min(1).max(160).nullable().optional(),
+  captureMode: z.enum(CONSENT_CAPTURE_MODES),
+  strokeIntent: z.string().min(1).max(60).nullable().optional(),
+  /**
+   * Client-minted identity of the consent decision, single-use. Clients that
+   * queue decisions offline must send it: without a decision identity a
+   * captured or re-delivered grant is indistinguishable from a new decision
+   * and can resurrect consent after a withdrawal.
+   */
+  decisionId: z.uuid().optional(),
+  /** When the user made the decision on the device; must not predate the
+   * scope's latest ledger action. */
+  decidedAtIso: z.iso.datetime().optional(),
+});
+export type ConsentGrantRequestT = z.infer<typeof ConsentGrantRequest>;
+
+export const ConsentWithdrawRequest = z.object({
+  scope: z.enum(CONSENT_SCOPES),
+  source: z.enum(CONSENT_SOURCES),
+  device: z.string().min(1).max(160).nullable().optional(),
+});
+export type ConsentWithdrawRequestT = z.infer<typeof ConsentWithdrawRequest>;
+
+export const ConsentRecordSchema = z.object({
+  id: z.uuid(),
+  subjectPseudonym: z.uuid(),
+  scope: z.enum(CONSENT_SCOPES),
+  action: z.enum(CONSENT_ACTIONS),
+  consentVersion: z.string(),
+  source: z.enum(CONSENT_SOURCES),
+  device: z.string().nullable(),
+  captureMode: z.enum(CONSENT_CAPTURE_MODES).nullable(),
+  strokeIntent: z.string().nullable(),
+  recordedAt: z.iso.datetime(),
+  seq: z.number().int().positive().optional(),
+});
+
+export const ConsentScopeStatusSchema = z.object({
+  scope: z.enum(CONSENT_SCOPES),
+  active: z.boolean(),
+  consentVersion: z.string().nullable(),
+  lastAction: z.enum(CONSENT_ACTIONS).nullable(),
+  lastActionAt: z.iso.datetime().nullable(),
+});
+
+export const ConsentStatusResponse = z.object({
+  subjectPseudonym: z.uuid().nullable(),
+  scopes: z.array(ConsentScopeStatusSchema),
+  records: z.array(ConsentRecordSchema),
+});
+export type ConsentStatusResponseT = z.infer<typeof ConsentStatusResponse>;
+
+/** Ledger export envelope: ConsentRecord contract shape (recordedAtIso, seq
+ * required) with integrity fields intake hosts verify before trusting it. */
+export const ConsentLedgerExportRecordSchema = z.object({
+  id: z.uuid(),
+  subjectPseudonym: z.uuid(),
+  scope: z.enum(CONSENT_SCOPES),
+  action: z.enum(CONSENT_ACTIONS),
+  consentVersion: z.string(),
+  source: z.enum(CONSENT_SOURCES),
+  device: z.string().nullable(),
+  captureMode: z.enum(CONSENT_CAPTURE_MODES).nullable(),
+  strokeIntent: z.string().nullable(),
+  recordedAtIso: z.iso.datetime(),
+  seq: z.number().int().positive(),
+});
+
+export const ConsentLedgerExportResponse = z.object({
+  exportVersion: z.literal("consent-ledger-export-v1"),
+  exportedAtIso: z.iso.datetime(),
+  subjectPseudonym: z.uuid(),
+  recordCount: z.number().int().nonnegative(),
+  maxSeq: z.number().int().positive().nullable(),
+  recordsSha256: z.string().regex(/^[0-9a-f]{64}$/),
+  records: z.array(ConsentLedgerExportRecordSchema),
+});
+export type ConsentLedgerExportResponseT = z.infer<typeof ConsentLedgerExportResponse>;
+
+/** Export envelope v2: v1 fields plus a keyed signature over the header, so
+ * a consumer holding the key detects tampering that recomputed the hash. */
+export const ConsentLedgerExportSignatureSchema = z.object({
+  alg: z.literal("HMAC-SHA256"),
+  keyId: z.string().min(1).max(64),
+  value: z.string().regex(/^[0-9a-f]{64}$/),
+});
+
+export const ConsentLedgerExportV2Response = ConsentLedgerExportResponse.extend({
+  exportVersion: z.literal("consent-ledger-export-v2"),
+  signature: ConsentLedgerExportSignatureSchema,
+});
+export type ConsentLedgerExportV2ResponseT = z.infer<typeof ConsentLedgerExportV2Response>;
+
+export const ConsentLedgerExportEnvelopeResponse = z.union([
+  ConsentLedgerExportResponse,
+  ConsentLedgerExportV2Response,
+]);
+
+/**
+ * Evaluation-trial upload (Wave G2 h07). The envelope is validated here; each
+ * trial record is additionally validated field-by-field on the server with
+ * `validateEvaluationTrial` from @pickle/shared-types — the single source of
+ * truth for the trial contract — so the deep shape is not duplicated in zod.
+ * Trials carry claims and abstentions only; correctness verdicts are never
+ * accepted from devices.
+ */
+export const EvaluationTrialEnvelopeSchema = z.object({
+  schemaVersion: z.literal("evaluation-trial-v1"),
+  trialId: z.uuid(),
+  capturedAtIso: z.iso.datetime(),
+  consent: z.object({
+    scope: z.literal("evaluation_telemetry"),
+    consentVersion: z.string().min(1).max(64),
+  }),
+});
+
+export const EvaluationTrialUploadRequest = z.object({
+  trials: z.array(EvaluationTrialEnvelopeSchema.loose()).min(1).max(50),
+});
+export type EvaluationTrialUploadRequestT = z.infer<typeof EvaluationTrialUploadRequest>;
+
+/**
+ * Production quality dashboard (Wave I i33). One admin-only aggregation over
+ * server-side stores: evaluation trials (claims + abstentions, never
+ * verdicts), practice sessions, analysis jobs, deletion tasks, shot ratings,
+ * and coach-review records. Aggregate counts only — never raw private media,
+ * user identifiers, or per-user rows. Metrics the server has no evidence
+ * store for are reported `not_evaluable` with a reason instead of a number.
+ */
+export const QualityRateSchema = z.object({
+  numerator: z.number().int().nonnegative(),
+  denominator: z.number().int().nonnegative(),
+  /** numerator/denominator; null when the denominator is zero. */
+  rate: z.number().min(0).max(1).nullable(),
+});
+export type QualityRateT = z.infer<typeof QualityRateSchema>;
+
+export const QualityDistributionEntrySchema = z.object({
+  key: z.string(),
+  count: z.number().int().nonnegative(),
+});
+export type QualityDistributionEntryT = z.infer<typeof QualityDistributionEntrySchema>;
+
+export const QualityLatencyPercentilesSchema = z.object({
+  measuredCount: z.number().int().nonnegative(),
+  p50Ms: z.number().nullable(),
+  p90Ms: z.number().nullable(),
+  p99Ms: z.number().nullable(),
+});
+export type QualityLatencyPercentilesT = z.infer<typeof QualityLatencyPercentilesSchema>;
+
+export const QualityNotEvaluableSchema = z.object({
+  status: z.literal("not_evaluable"),
+  reason: z.string(),
+});
+
+export const QualityCrashFreeSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("measured") }).extend(QualityRateSchema.shape),
+  QualityNotEvaluableSchema,
+]);
+export type QualityCrashFreeT = z.infer<typeof QualityCrashFreeSchema>;
+
+export const QualityDashboardResponse = z.object({
+  schemaVersion: z.literal("quality-dashboard-v1"),
+  generatedAtIso: z.iso.datetime(),
+  windowDays: z.number().int().positive(),
+  trials: z.object({
+    /** Consented evaluation trials received in the window. */
+    attempts: z.number().int().nonnegative(),
+    outcomeCounts: z.object({
+      scored: z.number().int().nonnegative(),
+      low_confidence: z.number().int().nonnegative(),
+      unavailable: z.number().int().nonnegative(),
+      quality_blocked: z.number().int().nonnegative(),
+    }),
+    /** Trials that reached a terminal user-visible outcome (scored or an
+     * explicit low-confidence presentation) over attempts. */
+    completion: QualityRateSchema,
+    /** Trials whose outcome was a scored, user-usable Result over attempts. */
+    usableResult: QualityRateSchema,
+    /** Result-surface abstentions (explicit abstain presentation or an
+     * abstained resultScore claim) over attempts. */
+    abstention: QualityRateSchema,
+    /** UNSUPPORTED envelope verdicts over trials with a measured envelope. */
+    envelopeRejection: QualityRateSchema,
+    /** Presented target locks over trials where the lock was measured
+     * (presented or abstained; not_measured excluded from the denominator). */
+    targetLockSuccess: QualityRateSchema,
+    /** Distribution of presented stroke labels (label strings only). */
+    strokeDistribution: z.array(QualityDistributionEntrySchema),
+    /** Device-measured wall-clock analysis latency percentiles. */
+    latency: QualityLatencyPercentilesSchema,
+    /** Distribution of reported model bundle versions ("unreported" bucket
+     * for trials that carried none). */
+    modelVersionDistribution: z.array(QualityDistributionEntrySchema),
+    /** Trials where the user tapped at least one disagreement flag. Flags
+     * are candidate signals routed to labeling, never verdicts. */
+    userReportedWrongTrialCount: z.number().int().nonnegative(),
+  }),
+  sessions: z.object({
+    started: z.number().int().nonnegative(),
+    completed: z.number().int().nonnegative(),
+    completion: QualityRateSchema,
+  }),
+  /** Server-side crash telemetry store does not exist; reported honestly. */
+  crashFree: QualityCrashFreeSchema,
+  backend: z.object({
+    analysisJobs: z.object({
+      requested: z.number().int().nonnegative(),
+      failed: z.number().int().nonnegative(),
+      failureRate: QualityRateSchema,
+    }),
+    deletionTasksFailed: z.number().int().nonnegative(),
+    /** api_failure analytics events are client/edge-emitted and have no
+     * server-side store to aggregate from. */
+    apiErrors: z.union([QualityNotEvaluableSchema, QualityRateSchema]),
+  }),
+  queues: z.object({
+    analysisQueued: z.number().int().nonnegative(),
+    analysisProcessing: z.number().int().nonnegative(),
+    oldestAnalysisQueuedAgeSeconds: z.number().nonnegative().nullable(),
+    deletionQueued: z.number().int().nonnegative(),
+    deletionProcessing: z.number().int().nonnegative(),
+  }),
+  review: z.object({
+    /** shot_rating rows marked not-helpful in the window. */
+    userReportedWrongShotRatings: z.number().int().nonnegative(),
+    /** User-flagged trials in the window with no coach_review row for the
+     * trial's queue item yet — candidates awaiting qualified review. */
+    coachReviewQueueDepth: z.number().int().nonnegative(),
+    /** Subset of the coach-review queue where a scored Result was presented
+     * at normal confidence — candidate silent failures pending labeling. */
+    silentFailureQueueDepth: z.number().int().nonnegative(),
+    coachReviewsRecorded: z.number().int().nonnegative(),
+  }),
+});
+export type QualityDashboardResponseT = z.infer<typeof QualityDashboardResponse>;
+
+export const EvaluationTrialUploadResponse = z.object({
+  acceptedTrialIds: z.array(z.uuid()),
+  rejected: z.array(
+    z.object({
+      trialId: z.string(),
+      code: z.string(),
+      message: z.string(),
+    }),
+  ),
+});
+export type EvaluationTrialUploadResponseT = z.infer<typeof EvaluationTrialUploadResponse>;

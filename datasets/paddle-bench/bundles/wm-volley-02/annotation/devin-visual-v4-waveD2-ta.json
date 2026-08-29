@@ -1,0 +1,342 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wm-volley-02",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "modality": "target_acquisition",
+  "createdAtIso": "2026-08-29T09:20:00.000Z",
+  "source": {
+    "path": "datasets/paddle-bench/bundles/wm-volley-02/clip.mp4",
+    "sha256": "8b77606225ba0e3543accc6195c7fb10a7d312f445a73a5e4a03ab68b8862c15",
+    "windowMs": { "from": 0, "to": 2000 },
+    "fps": 25,
+    "provenance": "pre-existing committed canonical bundle fixture; no media acquired by D2-11"
+  },
+  "coordinateConvention": "normalized full-frame xywh torso boxes",
+  "contestedConvention": "another visible person's torso center within START_REGION_RADIUS=0.17 of the target torso center",
+  "records": [
+    {
+      "frameIndex": 0,
+      "recordingTimeMs": 0,
+      "persons": [
+        {
+          "id": "target_near_white",
+          "torsoBox": { "x": 0.43, "y": 0.261, "width": 0.211, "height": 0.333 },
+          "occlusion": "none"
+        },
+        {
+          "id": "far_opponent_black",
+          "torsoBox": { "x": 0.91, "y": 0.269, "width": 0.071, "height": 0.184 },
+          "occlusion": "none"
+        },
+        {
+          "id": "left_official_navy",
+          "torsoBox": { "x": 0.0, "y": 0.351, "width": 0.06, "height": 0.246 },
+          "occlusion": "left_frame_crop"
+        },
+        {
+          "id": "spectator_blue",
+          "torsoBox": { "x": 0.059, "y": 0.284, "width": 0.067, "height": 0.174 },
+          "occlusion": "none"
+        },
+        {
+          "id": "spectator_black_cap",
+          "torsoBox": { "x": 0.123, "y": 0.296, "width": 0.054, "height": 0.16 },
+          "occlusion": "partial_by_rail"
+        },
+        {
+          "id": "spectator_white_cap",
+          "torsoBox": { "x": 0.166, "y": 0.3, "width": 0.053, "height": 0.151 },
+          "occlusion": "partial_by_rail"
+        },
+        {
+          "id": "spectator_red",
+          "torsoBox": { "x": 0.207, "y": 0.298, "width": 0.054, "height": 0.153 },
+          "occlusion": "partial_by_group"
+        },
+        {
+          "id": "spectator_blonde",
+          "torsoBox": { "x": 0.24, "y": 0.315, "width": 0.055, "height": 0.143 },
+          "occlusion": "partial_by_group"
+        },
+        {
+          "id": "spectator_center_black",
+          "torsoBox": { "x": 0.306, "y": 0.286, "width": 0.058, "height": 0.17 },
+          "occlusion": "partial_by_group"
+        },
+        {
+          "id": "spectator_center_red",
+          "torsoBox": { "x": 0.353, "y": 0.297, "width": 0.052, "height": 0.158 },
+          "occlusion": "partial_by_target"
+        },
+        {
+          "id": "spectator_behind_target",
+          "torsoBox": { "x": 0.452, "y": 0.265, "width": 0.058, "height": 0.139 },
+          "occlusion": "mostly_by_target"
+        },
+        {
+          "id": "gate_group_left",
+          "torsoBox": { "x": 0.765, "y": 0.303, "width": 0.046, "height": 0.143 },
+          "occlusion": "partial_by_fence"
+        },
+        {
+          "id": "gate_group_center",
+          "torsoBox": { "x": 0.808, "y": 0.308, "width": 0.044, "height": 0.141 },
+          "occlusion": "partial_by_fence"
+        },
+        {
+          "id": "gate_group_right",
+          "torsoBox": { "x": 0.846, "y": 0.304, "width": 0.045, "height": 0.145 },
+          "occlusion": "partial_by_fence"
+        }
+      ],
+      "targetPersonId": "target_near_white",
+      "startRegionContested": true,
+      "contestingPersonIds": ["spectator_behind_target"],
+      "targetOcclusion": "none",
+      "uncertainty": "background spectators are small and fence-obscured; severe target overlap limits the contester box"
+    },
+    {
+      "frameIndex": 12,
+      "recordingTimeMs": 480,
+      "persons": [
+        {
+          "id": "target_near_white",
+          "torsoBox": { "x": 0.421, "y": 0.279, "width": 0.214, "height": 0.329 },
+          "occlusion": "none"
+        },
+        {
+          "id": "far_opponent_black",
+          "torsoBox": { "x": 0.911, "y": 0.269, "width": 0.071, "height": 0.184 },
+          "occlusion": "none"
+        },
+        {
+          "id": "left_official_navy",
+          "torsoBox": { "x": 0.0, "y": 0.348, "width": 0.06, "height": 0.25 },
+          "occlusion": "left_frame_crop"
+        },
+        {
+          "id": "spectator_blue",
+          "torsoBox": { "x": 0.06, "y": 0.285, "width": 0.067, "height": 0.174 },
+          "occlusion": "none"
+        },
+        {
+          "id": "spectator_black_cap",
+          "torsoBox": { "x": 0.124, "y": 0.297, "width": 0.054, "height": 0.16 },
+          "occlusion": "partial_by_rail"
+        },
+        {
+          "id": "spectator_white_cap",
+          "torsoBox": { "x": 0.168, "y": 0.301, "width": 0.053, "height": 0.151 },
+          "occlusion": "partial_by_rail"
+        },
+        {
+          "id": "spectator_red",
+          "torsoBox": { "x": 0.209, "y": 0.299, "width": 0.054, "height": 0.153 },
+          "occlusion": "partial_by_group"
+        },
+        {
+          "id": "spectator_blonde",
+          "torsoBox": { "x": 0.242, "y": 0.316, "width": 0.055, "height": 0.143 },
+          "occlusion": "partial_by_group"
+        },
+        {
+          "id": "spectator_center_black",
+          "torsoBox": { "x": 0.308, "y": 0.286, "width": 0.058, "height": 0.17 },
+          "occlusion": "partial_by_group"
+        },
+        {
+          "id": "spectator_center_red",
+          "torsoBox": { "x": 0.355, "y": 0.298, "width": 0.052, "height": 0.158 },
+          "occlusion": "partial_by_target"
+        },
+        {
+          "id": "spectator_behind_target",
+          "torsoBox": { "x": 0.452, "y": 0.267, "width": 0.058, "height": 0.139 },
+          "occlusion": "mostly_by_target"
+        },
+        {
+          "id": "gate_group_left",
+          "torsoBox": { "x": 0.766, "y": 0.303, "width": 0.046, "height": 0.143 },
+          "occlusion": "partial_by_fence"
+        },
+        {
+          "id": "gate_group_center",
+          "torsoBox": { "x": 0.809, "y": 0.308, "width": 0.044, "height": 0.141 },
+          "occlusion": "partial_by_fence"
+        },
+        {
+          "id": "gate_group_right",
+          "torsoBox": { "x": 0.847, "y": 0.304, "width": 0.045, "height": 0.145 },
+          "occlusion": "partial_by_fence"
+        }
+      ],
+      "targetPersonId": "target_near_white",
+      "startRegionContested": true,
+      "contestingPersonIds": ["spectator_behind_target"],
+      "targetOcclusion": "none",
+      "uncertainty": "background spectators are small and fence-obscured; severe target overlap limits the contester box"
+    },
+    {
+      "frameIndex": 25,
+      "recordingTimeMs": 1000,
+      "persons": [
+        {
+          "id": "target_near_white",
+          "torsoBox": { "x": 0.442, "y": 0.283, "width": 0.202, "height": 0.326 },
+          "occlusion": "none"
+        },
+        {
+          "id": "far_opponent_black",
+          "torsoBox": { "x": 0.912, "y": 0.27, "width": 0.071, "height": 0.184 },
+          "occlusion": "none"
+        },
+        {
+          "id": "left_official_navy",
+          "torsoBox": { "x": 0.0, "y": 0.349, "width": 0.06, "height": 0.249 },
+          "occlusion": "left_frame_crop"
+        },
+        {
+          "id": "spectator_blue",
+          "torsoBox": { "x": 0.061, "y": 0.285, "width": 0.067, "height": 0.174 },
+          "occlusion": "none"
+        },
+        {
+          "id": "spectator_black_cap",
+          "torsoBox": { "x": 0.125, "y": 0.297, "width": 0.054, "height": 0.16 },
+          "occlusion": "partial_by_rail"
+        },
+        {
+          "id": "spectator_white_cap",
+          "torsoBox": { "x": 0.169, "y": 0.301, "width": 0.053, "height": 0.151 },
+          "occlusion": "partial_by_rail"
+        },
+        {
+          "id": "spectator_red",
+          "torsoBox": { "x": 0.21, "y": 0.299, "width": 0.054, "height": 0.153 },
+          "occlusion": "partial_by_group"
+        },
+        {
+          "id": "spectator_blonde",
+          "torsoBox": { "x": 0.243, "y": 0.316, "width": 0.055, "height": 0.143 },
+          "occlusion": "partial_by_group"
+        },
+        {
+          "id": "spectator_center_black",
+          "torsoBox": { "x": 0.309, "y": 0.286, "width": 0.058, "height": 0.17 },
+          "occlusion": "partial_by_group"
+        },
+        {
+          "id": "spectator_center_red",
+          "torsoBox": { "x": 0.357, "y": 0.298, "width": 0.052, "height": 0.158 },
+          "occlusion": "partial_by_target"
+        },
+        {
+          "id": "spectator_behind_target",
+          "torsoBox": { "x": 0.462, "y": 0.267, "width": 0.056, "height": 0.137 },
+          "occlusion": "mostly_by_target"
+        },
+        {
+          "id": "gate_group_left",
+          "torsoBox": { "x": 0.767, "y": 0.303, "width": 0.046, "height": 0.143 },
+          "occlusion": "partial_by_fence"
+        },
+        {
+          "id": "gate_group_center",
+          "torsoBox": { "x": 0.81, "y": 0.308, "width": 0.044, "height": 0.141 },
+          "occlusion": "partial_by_fence"
+        },
+        {
+          "id": "gate_group_right",
+          "torsoBox": { "x": 0.848, "y": 0.304, "width": 0.045, "height": 0.145 },
+          "occlusion": "partial_by_fence"
+        }
+      ],
+      "targetPersonId": "target_near_white",
+      "startRegionContested": true,
+      "contestingPersonIds": ["spectator_behind_target"],
+      "targetOcclusion": "none",
+      "uncertainty": "background spectators are small and fence-obscured; severe target overlap limits the contester box"
+    },
+    {
+      "frameIndex": 37,
+      "recordingTimeMs": 1480,
+      "persons": [
+        {
+          "id": "target_near_white",
+          "torsoBox": { "x": 0.436, "y": 0.282, "width": 0.205, "height": 0.328 },
+          "occlusion": "none"
+        },
+        {
+          "id": "far_opponent_black",
+          "torsoBox": { "x": 0.913, "y": 0.27, "width": 0.071, "height": 0.184 },
+          "occlusion": "none"
+        },
+        {
+          "id": "left_official_navy",
+          "torsoBox": { "x": 0.0, "y": 0.349, "width": 0.06, "height": 0.249 },
+          "occlusion": "left_frame_crop"
+        },
+        {
+          "id": "spectator_blue",
+          "torsoBox": { "x": 0.061, "y": 0.285, "width": 0.067, "height": 0.174 },
+          "occlusion": "none"
+        },
+        {
+          "id": "spectator_black_cap",
+          "torsoBox": { "x": 0.125, "y": 0.297, "width": 0.054, "height": 0.16 },
+          "occlusion": "partial_by_rail"
+        },
+        {
+          "id": "spectator_white_cap",
+          "torsoBox": { "x": 0.169, "y": 0.301, "width": 0.053, "height": 0.151 },
+          "occlusion": "partial_by_rail"
+        },
+        {
+          "id": "spectator_red",
+          "torsoBox": { "x": 0.21, "y": 0.299, "width": 0.054, "height": 0.153 },
+          "occlusion": "partial_by_group"
+        },
+        {
+          "id": "spectator_blonde",
+          "torsoBox": { "x": 0.243, "y": 0.316, "width": 0.055, "height": 0.143 },
+          "occlusion": "partial_by_group"
+        },
+        {
+          "id": "spectator_center_black",
+          "torsoBox": { "x": 0.309, "y": 0.286, "width": 0.058, "height": 0.17 },
+          "occlusion": "partial_by_group"
+        },
+        {
+          "id": "spectator_center_red",
+          "torsoBox": { "x": 0.357, "y": 0.298, "width": 0.052, "height": 0.158 },
+          "occlusion": "partial_by_target"
+        },
+        {
+          "id": "spectator_behind_target",
+          "torsoBox": { "x": 0.458, "y": 0.267, "width": 0.056, "height": 0.137 },
+          "occlusion": "mostly_by_target"
+        },
+        {
+          "id": "gate_group_left",
+          "torsoBox": { "x": 0.767, "y": 0.303, "width": 0.046, "height": 0.143 },
+          "occlusion": "partial_by_fence"
+        },
+        {
+          "id": "gate_group_center",
+          "torsoBox": { "x": 0.81, "y": 0.308, "width": 0.044, "height": 0.141 },
+          "occlusion": "partial_by_fence"
+        },
+        {
+          "id": "gate_group_right",
+          "torsoBox": { "x": 0.848, "y": 0.304, "width": 0.045, "height": 0.145 },
+          "occlusion": "partial_by_fence"
+        }
+      ],
+      "targetPersonId": "target_near_white",
+      "startRegionContested": true,
+      "contestingPersonIds": ["spectator_behind_target"],
+      "targetOcclusion": "none",
+      "uncertainty": "background spectators are small and fence-obscured; severe target overlap limits the contester box"
+    }
+  ]
+}

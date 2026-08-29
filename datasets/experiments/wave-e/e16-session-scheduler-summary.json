@@ -1,0 +1,82 @@
+{
+  "id": "e16-session-scheduler",
+  "branch": "devin/wave-e/e16-session-scheduler",
+  "codeCommit": "391e58816e25fbbe04cfabba59c89b63e39082c4",
+  "verdict": "GREEN",
+  "mission": "Progressive session-analysis scheduling: events closing while recording continues (E1 closes -> analyze while E2 records). Stress: rapid rallies, backlog, failed extraction, abstained events, interruption/recovery. Measure queue latency and correctness under load.",
+  "ownership": [
+    "packages/analysis-pipeline/src/sessionScheduler.ts (new production module)",
+    "packages/analysis-pipeline/src/index.ts (exports)",
+    "packages/analysis-pipeline/test/sessionScheduler.test.ts (new, 10 tests)",
+    "packages/swing-lab/src/sessionSchedulerSim.ts (new simulation CLI)",
+    "packages/swing-lab/package.json + root package.json (script wiring)",
+    "datasets/experiments/wave-e/e16-session-scheduler-sim.json (artifact)"
+  ],
+  "configuration": {
+    "scheduler": "session-scheduler-1 (bounded-concurrency FIFO over SessionEventEngine closures · retryable-failure revert-to-pending · suspend/resume + recoverPending)",
+    "engine": "real SessionEventEngine (D-029 adaptive completion, append-only frontier) — NOT mocked",
+    "simulatedSeam": "only the SessionAnalysisExecutor (analysis execution) is modeled; native clip extraction is unavailable on Linux",
+    "command": "pnpm lab:session-scheduler-sim",
+    "prng": "deterministic seeded PRNG; latencies are stream-time ms, not device time"
+  },
+  "datasetScope": "Fully synthetic wrist-speed streams (Gaussian bumps) driving the real engine; no gold labels, no held-out cases (wm-dink-01, afn-vic-rally1 untouched), no device numbers claimed.",
+  "scenarios": {
+    "steady-rally": {
+      "events": 20,
+      "outcomes": { "ready": 20 },
+      "maxQueueDepth": 1,
+      "queueWaitStreamMs": { "p50": 0, "p95": 0, "max": 0 },
+      "closeToTerminalStreamMs": { "p50": 1120, "p95": 1380 },
+      "progressiveOverlap": { "startedBeforeStreamEnd": 20, "finishedBeforeStreamEnd": 20 }
+    },
+    "rapid-rally-backlog": {
+      "events": 30,
+      "outcomes": { "ready": 30 },
+      "maxQueueDepth": 13,
+      "queueWaitStreamMs": { "p50": 25380, "p95": 41400, "max": 42820 },
+      "closeToTerminalStreamMs": { "p50": 28680, "p95": 45260 },
+      "note": "1 slot with 3-4s service on 1.3s stroke cadence saturates as expected; FIFO order preserved, no loss"
+    },
+    "rapid-rally-2slots": {
+      "events": 30,
+      "outcomes": { "ready": 30 },
+      "maxQueueDepth": 1,
+      "queueWaitStreamMs": { "p50": 0, "p95": 1360, "max": 1620 },
+      "closeToTerminalStreamMs": { "p50": 3740, "p95": 4880 },
+      "note": "2 slots eliminate the backlog on the same rapid rally (p95 wait 41400 -> 1360 ms)"
+    },
+    "flaky-extraction": {
+      "events": 24,
+      "outcomes": { "ready": 21, "retry_exhausted": 1, "failed_final": 2 },
+      "retries": 6,
+      "queueWaitStreamMs": { "p95": 140 },
+      "note": "failed extraction reverts events to pending (never fabricated ready/abstain); exhausted retries stay pending with retry_exhausted"
+    },
+    "abstain-mix": {
+      "events": 20,
+      "outcomes": { "ready": 12, "abstained": 8 },
+      "retries": 1,
+      "queueWaitStreamMs": { "p95": 340 }
+    },
+    "interruption-recovery": {
+      "events": 18,
+      "outcomes": { "ready": 16, "retry_exhausted": 2 },
+      "maxQueueDepth": 3,
+      "queueWaitStreamMs": { "p50": 1940, "p95": 5620 },
+      "recovery": { "readmitted": 2, "readyAfterRecovery": 18, "pendingAfterRecovery": 0 },
+      "note": "suspend() during 12-18s window queues closures without dispatch; resume() drains; recoverPending({readmitExhausted:true}) after simulated restart completes all 18"
+    }
+  },
+  "correctness": {
+    "allCorrect": true,
+    "checks": "per-scenario engine-state vs scheduler-terminal agreement, FIFO order, no duplicate dispatch, no event loss, ready-requires-analysis, terminal-states-immutable"
+  },
+  "gates": {
+    "pnpm format:check": "pass",
+    "pnpm typecheck": "pass (20 projects)",
+    "pnpm lint": "pass",
+    "pnpm test": "pass (all packages; analysis-pipeline 47/47 incl. 10 new scheduler tests)"
+  },
+  "artifacts": ["datasets/experiments/wave-e/e16-session-scheduler-sim.json"],
+  "honesty": "Stream is synthetic; scheduler and session engine are the real production implementations. Only the executor seam is modeled. No Mac/iPhone/device latency claimed; all latencies are scheduling latencies in stream-time ms."
+}

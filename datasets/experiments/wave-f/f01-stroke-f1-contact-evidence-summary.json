@@ -1,0 +1,43 @@
+{
+  "workstream": "f01-stroke-f1-contact-evidence",
+  "wave": "wave-f",
+  "baseCommit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "branch": "devin/wave-f/f01-stroke-f1-contact-evidence",
+  "mission": "Close E10-F1: a ball-less practice swing committed FOREHAND at the 0.8 confidence ceiling because reference_is_event_peak_not_contact never gated commitment and nothing in classifyStroke required ball/paddle-contact evidence.",
+  "change": {
+    "design": "Contact-evidence gate (stroke-heuristic-5 / lite stroke-heuristic-3.1): when the reference is only the isolated event's motion peak (contactMs missing) AND the contact point is not a plausible paddle observation (contactPointSource !== 'paddle'), the side commitment is treated as degraded-trust: the SIDE_MARGIN_DEGRADED_BAND (0.5 shoulder-widths) abstention band applies (limiting factor side_margin_within_no_contact_evidence_abstention_band) and confidence is capped at DEGRADED_CONFIDENCE_CAP (0.6) with limiting factor no_contact_evidence_confidence_capped. Full abstention was NOT chosen: the lite red-team suite pins that a genuine swing with an event-peak reference and no paddle track (mobile reality) must still commit a side, and the practice-shadow fixture is kinematically identical to that genuine swing — no measurement in the input can separate them, so the defensible fix is capped confidence plus an explicit evidence-absence flag, never full confidence.",
+    "files": [
+      "packages/swing-lab/src/strokeHeuristic.ts (STROKE_HEURISTIC_VERSION stroke-heuristic-4 -> stroke-heuristic-5)",
+      "packages/vision-geometry/src/strokeHeuristicLite.ts (STROKE_HEURISTIC_VERSION stroke-heuristic-3 -> stroke-heuristic-3.1, byte-equivalent gate semantics)",
+      "packages/swing-lab/test/strokeHeuristicAmbiguous.redteam.test.ts (F1 pin flipped per file protocol: pin deleted, fixture kept, assertion inverted; F5 pin updated to the measured capped behavior, root cause still open; umbrella pin now covers F2/F4/F5 with F1 removed)",
+      "packages/swing-lab/test/strokeHeuristic.test.ts (version pin 4 -> 5)"
+    ],
+    "thresholdProvenance": "No new thresholds introduced; reuses existing SIDE_MARGIN_DEGRADED_BAND=0.5 and DEGRADED_CONFIDENCE_CAP=0.6 (both dev-anchored, documented in-file). The gate only extends the existing degraded-trust semantics to a new provenance condition; no contract was weakened."
+  },
+  "e10F1Outcome": {
+    "before": { "label": "FOREHAND", "confidence": 0.8, "limitingFactors": ["reference_is_event_peak_not_contact"] },
+    "after": { "label": "FOREHAND", "confidence": 0.6, "limitingFactors": ["reference_is_event_peak_not_contact", "no_contact_evidence_confidence_capped"] },
+    "note": "Label unchanged by necessity (fixture kinematics identical to a genuine no-paddle swing the test suite requires to commit); the 0.8-ceiling confidently-wrong commitment is closed. E10-F5 (wheelchair rim push, same input shape) is also capped 0.8 -> 0.6 as a side effect; its root cause (no symmetric-motion discriminator) remains open and its pin was updated to say so."
+  },
+  "bench": {
+    "command": "pnpm --filter @pickle/swing-lab exec tsx src/strokeHeuristicBench.ts (also exercised via pnpm --filter @pickle/swing-lab test -> strokeHeuristicBench.test.ts)",
+    "datasetScope": "datasets/paddle-bench/stroke-gold.json over committed wave-a pose runs; 18/29 gold labels evaluable (afn-sasebo-rally1 x7, wm-volley-02 x2, afn-sasebo-rally2 x2 have no committed pose). Held-out cases wm-dink-01 and afn-vic-rally1 are excluded by STROKE_BENCH_POSE_CASES and were never touched. Grouped by corpus sessionKey and owner slice, never random-frame splits.",
+    "before": {
+      "overall": "n=18 | L1 9ok/0wrong/8abstain (goldUnknown 1) | L2 4ok/3wrong/4abstain (goldUnknown 7) | confidentlyWrong 3",
+      "confidentlyWrongRate": "3/18 evaluable = 0.167 (3/10 committed = 0.300)",
+      "wrongAt08Ceiling": 3
+    },
+    "after": {
+      "overall": "n=18 | L1 9ok/0wrong/8abstain (goldUnknown 1) | L2 4ok/3wrong/4abstain (goldUnknown 7) | confidentlyWrong 3",
+      "confidentlyWrongRate": "3/18 evaluable = 0.167 (3/10 committed = 0.300)",
+      "wrongAt08Ceiling": 2,
+      "delta": "Counts identical; the only event-peak-referenced bench row (wavea-faead-rally @13417, gold groundstroke/backhand -> FOREHAND) dropped from conf 0.80 to 0.60 and now carries no_contact_evidence_confidence_capped. The other two confidently-wrong rows (@13875, wheelchair @182400) use a measured contact reference and are correctly untouched by this gate. No correct commitment lost, no new abstention on the bench."
+    }
+  },
+  "tests": {
+    "swingLab": "pnpm --filter @pickle/swing-lab test: 536 passed | 4 skipped (before, commit 8588ddd) and 536 passed | 4 skipped (after)",
+    "visionGeometry": "pnpm --filter @pickle/vision-geometry test: 70 passed (after)",
+    "genuineStrokeGuards": "strokeHeuristic.test.ts, strokeHeuristic.redteam.test.ts (genuine seated/fast swings), strokeHeuristicV4Gates.test.ts, strokeHeuristicLite.test.ts (wrist-fallback commit >= 0.525), strokeHeuristicLite.redteam.test.ts (genuine no-paddle swing still commits) all green"
+  },
+  "verdict": "GREEN"
+}

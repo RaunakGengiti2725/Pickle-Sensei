@@ -74,6 +74,10 @@ export const BALL_OCCLUSION = {
   primaryScoreMargin: 1.3,
 } as const;
 
+/** Minimum net-displacement/path-length ratio for a chronic-boundary-rescued
+ * track: a rescue claims a clean sub-second flight, which is near-ballistic. */
+export const BALL_RESCUE_MIN_STRAIGHTNESS = 0.8;
+
 export interface BallCandidate {
   x: number;
   y: number;
@@ -145,6 +149,10 @@ export interface BallTrackCandidate {
   nearPaddleFraction: number;
   /** Net displacement / path length — balls travel, limbs oscillate. */
   straightness: number;
+  /** Fraction of steps moving in lockstep with many concurrent tracks —
+   * camera pans / global scene motion produce coherent velocity fields;
+   * a ball is a motion outlier. */
+  coherentMotionFraction: number;
   /** Fraction of observations within bodyRadius of a pose joint. Shirt and
    * limb motion blobs live on the body; a ball only grazes it. */
   bodyDwellFraction: number;
@@ -164,6 +172,7 @@ export interface BallAblation {
   stageB_trackedObsPerSec: number;
   stageC_tracks: number;
   stageC_trackedObsPerSec: number;
+  stageC_coherenceRejected: number;
 }
 
 export type BallState = "TRACKED" | "ENTERING_OCCLUSION" | "OCCLUDED" | "REACQUIRED" | "LOST";
@@ -221,11 +230,20 @@ export const BALL_GATES2 = {
   minMedianSpeedNormPerSec: 0.12,
   maxJerkyFraction: 0.34,
   jerkyTurnDeg: 70,
+  /** Turns are only meaningful between steps of real length: the angle
+   * between two near-zero displacements is centroid measurement noise
+   * (~a few px), not ball physics. */
+  jerkyMinStepNorm: 0.008,
   maxMedianAreaPx: 220,
   maxElongMedian: 3.5,
   /** Context */
   chronicCellThreshold: 0.55,
   maxChronicFraction: 0.6,
+  coherenceMinSpeedNormPerSec: 0.5,
+  coherenceAngleDeg: 25,
+  coherenceSpeedRatioMax: 1.55,
+  coherenceMinPeers: 4,
+  maxCoherentMotionFraction: 0.5,
   bandPadTop: 0.2,
   bandPadBottom: 0.06,
   minInBandFraction: 0.8,
@@ -252,6 +270,8 @@ export function buildBallTracks(
   pose: PoseSequence,
   window: { startMs: number; endMs: number },
   paddle: readonly TrackedPaddleObservation[] | null,
+  /** Precomputed toLegacyPoseFrames(pose); derived here when absent. */
+  legacyFrames?: ReturnType<typeof toLegacyPoseFrames> | null,
 ): {
   gated: BallTrackCandidate[];
   all: BallTrackCandidate[];
@@ -267,8 +287,9 @@ export function buildBallTracks(
     const cy = Math.min(grid - 1, Math.max(0, Math.floor(y * grid)));
     return chronic.cells[cy * grid + cx] ?? 0;
   };
-  const band = playBand(pose);
-  const joints = jointSeries(pose);
+  const frames = legacyFrames ?? toLegacyPoseFrames(pose);
+  const band = playBand(frames);
+  const joints = jointSeries(frames);
 
   // ── Association (stage B) ────────────────────────────────────────────────
   const active: ActiveBallTrack[] = [];
@@ -350,6 +371,9 @@ export function buildBallTracks(
   const associated = finished.filter(
     (track) => track.observations.length >= BALL_GATES2.minObservations,
   );
+  const coherence = computeCoherentMotionFractions(
+    finished.filter((track) => track.observations.length >= 3),
+  );
   // Short chains kept ONLY for occlusion reacquisition, with light sanity
   // gates (size + speed ceiling).
   const fragments = finished
@@ -357,7 +381,17 @@ export function buildBallTracks(
       (track) =>
         track.observations.length >= 3 && track.observations.length < BALL_GATES2.minObservations,
     )
-    .map((track) => describeTrack(track, window, paddle, band, chronicAt, joints))
+    .map((track) =>
+      describeTrack(
+        track,
+        window,
+        paddle,
+        band,
+        chronicAt,
+        joints,
+        coherence.get(track.trackId) ?? 0,
+      ),
+    )
     .filter(
       (candidate) =>
         candidate.maxSpeed <= BALL_GATES2.maxSpeedNormPerSec &&
@@ -366,17 +400,80 @@ export function buildBallTracks(
 
   // ── Physics + context gates (stage C) ───────────────────────────────────
   const allCandidates = associated.map((track) =>
-    describeTrack(track, window, paddle, band, chronicAt, joints),
+    describeTrack(
+      track,
+      window,
+      paddle,
+      band,
+      chronicAt,
+      joints,
+      coherence.get(track.trackId) ?? 0,
+    ),
   );
+  const passesStableGates = (candidate: BallTrackCandidate): boolean =>
+    candidate.maxSpeed <= BALL_GATES2.maxSpeedNormPerSec &&
+    candidate.medianSpeed >= BALL_GATES2.minMedianSpeedNormPerSec &&
+    candidate.jerkyFraction <= BALL_GATES2.maxJerkyFraction &&
+    candidate.chronicFraction <= BALL_GATES2.maxChronicFraction &&
+    candidate.inBandFraction >= BALL_GATES2.minInBandFraction &&
+    candidate.medianArea <= BALL_GATES2.maxMedianAreaPx;
   const gated = allCandidates.filter(
     (candidate) =>
-      candidate.maxSpeed <= BALL_GATES2.maxSpeedNormPerSec &&
-      candidate.medianSpeed >= BALL_GATES2.minMedianSpeedNormPerSec &&
-      candidate.jerkyFraction <= BALL_GATES2.maxJerkyFraction &&
-      candidate.chronicFraction <= BALL_GATES2.maxChronicFraction &&
-      candidate.inBandFraction >= BALL_GATES2.minInBandFraction &&
-      candidate.medianArea <= BALL_GATES2.maxMedianAreaPx,
+      passesStableGates(candidate) &&
+      candidate.coherentMotionFraction <= BALL_GATES2.maxCoherentMotionFraction,
   );
+  // ── Chronic-boundary rescue ─────────────────────────────────────────────
+  // The associator sometimes glues a genuine ball flight to a chronically
+  // active background blob at one end (crowd, net tape, waving limb). The
+  // contaminated boundary run then poisons the WHOLE track's jerky/chronic
+  // statistics and the true ball is rejected. Rescue is measurement-scoped:
+  // strip contiguous chronically-active runs from the track boundaries only
+  // (never interior points, never invented points) and re-gate the remainder.
+  // Tracks that already pass are never touched.
+  const trackById = new Map(associated.map((track) => [track.trackId, track]));
+  for (const candidate of allCandidates) {
+    if (
+      passesStableGates(candidate) &&
+      candidate.coherentMotionFraction <= BALL_GATES2.maxCoherentMotionFraction
+    ) {
+      continue;
+    }
+    const source = trackById.get(candidate.trackId);
+    if (!source) continue;
+    const trimmedObservations = trimChronicBoundaries(source.observations);
+    if (!trimmedObservations) continue;
+    const redescribed = describeTrack(
+      { ...source, observations: trimmedObservations },
+      window,
+      paddle,
+      band,
+      chronicAt,
+      joints,
+      coherence.get(candidate.trackId) ?? 0,
+    );
+    if (
+      passesStableGates(redescribed) &&
+      redescribed.coherentMotionFraction <= BALL_GATES2.maxCoherentMotionFraction &&
+      // A rescue must isolate a decisively clean flight; a remainder that is
+      // still substantially chronic was never a ball glued to background —
+      // it IS background, and marginal passes stay out.
+      redescribed.chronicFraction <= BALL_GATES2.maxChronicFraction / 3 &&
+      // A rescued track carries weaker provenance than a natively-passing
+      // one, so it must clear the primary-claim evidence bar on its own and
+      // look near-ballistic: over the sub-second span a rescue can cover, a
+      // real flight is close to straight, and anything meandering is a limb
+      // or background artifact wearing a trimmed disguise.
+      redescribed.observations.length >= BALL_OCCLUSION.minPrimaryObservations &&
+      redescribed.straightness >= BALL_RESCUE_MIN_STRAIGHTNESS
+    ) {
+      gated.push(redescribed);
+    }
+  }
+  const coherenceRejected = allCandidates.filter(
+    (candidate) =>
+      passesStableGates(candidate) &&
+      candidate.coherentMotionFraction > BALL_GATES2.maxCoherentMotionFraction,
+  ).length;
 
   const durationSec = Math.max(
     0.001,
@@ -391,6 +488,7 @@ export function buildBallTracks(
     stageC_tracks: gated.length,
     stageC_trackedObsPerSec:
       gated.reduce((total, track) => total + track.observations.length, 0) / durationSec,
+    stageC_coherenceRejected: coherenceRejected,
   };
   return { gated, all: allCandidates, fragments, ablation };
 }
@@ -725,6 +823,10 @@ export function selectPrimaryBallTrack(
   const eligible = gated.filter(
     (candidate) =>
       candidate.windowOverlapMs >= BALL_GATES2.minWindowOverlapMs &&
+      // A primary in-play claim needs real evidence mass, the same bar the
+      // body-occlusion fallback already demands: a five-blob streak is not
+      // a defensible primary no matter how clean it looks.
+      candidate.observations.length >= BALL_OCCLUSION.minPrimaryObservations &&
       candidate.medianSpeed >= BALL_GATES2.minPrimaryMedianSpeed &&
       candidate.bodyDwellFraction <= BALL_GATES2.maxBodyDwellFraction &&
       // When a paddle track exists, a primary ball claim must have actually
@@ -784,15 +886,23 @@ export function selectPrimaryBallTrack(
           ? 0.6
           : Math.max(0.2, Math.min(1, 1.2 - 3 * candidate.minPaddleDistance));
       const lengthFactor = Math.min(1, candidate.observations.length / 12);
-      const speedFactor = Math.min(1, candidate.medianSpeed / 0.8);
+      // Saturate at genuine in-play ball speed, not limb speed: limb and
+      // background artifacts top out well below a real transit, so the speed
+      // axis must keep separating candidates in that range.
+      const speedFactor = Math.min(1, candidate.medianSpeed / 1.2);
       // Balls TRAVEL and only touch the paddle momentarily; limb/paddle
-      // artifacts oscillate in place and live on the paddle.
-      const travelFactor = Math.max(0.15, candidate.straightness);
+      // artifacts oscillate in place and live on the paddle. Superlinear so
+      // meandering is punished harder than speed or duration can repay.
+      const travelFactor = Math.max(0.15, Math.pow(candidate.straightness, 1.5));
       const paddleDwellPenalty = 1 - 0.8 * candidate.nearPaddleFraction;
       return {
         candidate,
+        // A ball transit through a swing window is intrinsically brief
+        // (roughly half a second); overlap beyond that adds no ball evidence, while
+        // limb/background tracks accumulate it for free. Saturate early so
+        // duration cannot outvote trajectory quality.
         score:
-          Math.min(1.5, candidate.windowOverlapMs / 1000) *
+          Math.min(1, candidate.windowOverlapMs / 600) *
           lengthFactor *
           paddleAffinity *
           speedFactor *
@@ -914,6 +1024,83 @@ function appendBallObservation(
   track.lastMs = timestampMs;
 }
 
+/** Per-track fraction of steps whose velocity matches ≥coherenceMinPeers
+ * OTHER concurrent tracks (same frame timestamp, similar direction and
+ * speed). Camera pans move the whole scene in lockstep; a real ball is a
+ * velocity outlier against that field. */
+function computeCoherentMotionFractions(tracks: readonly ActiveBallTrack[]): Map<number, number> {
+  interface Step {
+    trackId: number;
+    key: number;
+    vx: number;
+    vy: number;
+    speed: number;
+  }
+  const stepsByTime = new Map<number, Step[]>();
+  const trackSteps = new Map<number, Step[]>();
+  for (const track of tracks) {
+    const own: Step[] = [];
+    for (let index = 1; index < track.observations.length; index += 1) {
+      const previous = track.observations[index - 1]!;
+      const current = track.observations[index]!;
+      const dtSec = (current.timestampMs - previous.timestampMs) / 1000;
+      if (dtSec <= 0 || dtSec > 0.15) continue;
+      const vx = (current.x - previous.x) / dtSec;
+      const vy = (current.y - previous.y) / dtSec;
+      const key = Math.round(current.timestampMs);
+      const step: Step = { trackId: track.trackId, key, vx, vy, speed: Math.hypot(vx, vy) };
+      own.push(step);
+      const bucket = stepsByTime.get(key);
+      if (bucket) bucket.push(step);
+      else stepsByTime.set(key, [step]);
+    }
+    trackSteps.set(track.trackId, own);
+  }
+  const cosLimit = Math.cos((BALL_GATES2.coherenceAngleDeg * Math.PI) / 180);
+  const fractions = new Map<number, number>();
+  for (const track of tracks) {
+    const own = trackSteps.get(track.trackId) ?? [];
+    let coherent = 0;
+    for (const step of own) {
+      if (step.speed < BALL_GATES2.coherenceMinSpeedNormPerSec) continue;
+      const peersInFrame = stepsByTime.get(step.key) ?? [];
+      let peers = 0;
+      for (const other of peersInFrame) {
+        if (other.trackId === step.trackId) continue;
+        if (other.speed < BALL_GATES2.coherenceMinSpeedNormPerSec) continue;
+        const ratio =
+          Math.max(other.speed, step.speed) / Math.max(1e-6, Math.min(other.speed, step.speed));
+        if (ratio > BALL_GATES2.coherenceSpeedRatioMax) continue;
+        const cos = (step.vx * other.vx + step.vy * other.vy) / (step.speed * other.speed);
+        if (cos < cosLimit) continue;
+        peers += 1;
+        if (peers >= BALL_GATES2.coherenceMinPeers) break;
+      }
+      if (peers >= BALL_GATES2.coherenceMinPeers) coherent += 1;
+    }
+    fractions.set(track.trackId, own.length === 0 ? 0 : coherent / own.length);
+  }
+  return fractions;
+}
+
+/** Strip contiguous chronically-active observation runs from the track
+ * boundaries (measured points only — interior points are never removed and
+ * nothing is invented). Returns the trimmed list, or null when nothing was
+ * trimmed or too few observations remain to describe a track. */
+function trimChronicBoundaries(
+  observations: ActiveBallTrack["observations"],
+): ActiveBallTrack["observations"] | null {
+  const isChronic = (observation: (typeof observations)[number]): boolean =>
+    observation.chronicActivity > BALL_GATES2.chronicCellThreshold;
+  let start = 0;
+  let end = observations.length;
+  while (start < end && isChronic(observations[start]!)) start += 1;
+  while (end > start && isChronic(observations[end - 1]!)) end -= 1;
+  if (start === 0 && end === observations.length) return null;
+  if (end - start < BALL_GATES2.minObservations) return null;
+  return observations.slice(start, end);
+}
+
 function describeTrack(
   track: ActiveBallTrack,
   window: { startMs: number; endMs: number },
@@ -921,6 +1108,7 @@ function describeTrack(
   band: { top: number; bottom: number },
   chronicAt: (x: number, y: number) => number,
   joints: JointSeries,
+  coherentMotionFraction = 0,
 ): BallTrackCandidate {
   const observations = track.observations;
   const speeds: number[] = [];
@@ -938,7 +1126,7 @@ function describeTrack(
       const v2 = { x: current.x - previous.x, y: current.y - previous.y };
       const m1 = Math.hypot(v1.x, v1.y);
       const m2 = Math.hypot(v2.x, v2.y);
-      if (m1 > 1e-6 && m2 > 1e-6) {
+      if (m1 > BALL_GATES2.jerkyMinStepNorm && m2 > BALL_GATES2.jerkyMinStepNorm) {
         turns += 1;
         const cos = Math.min(1, Math.max(-1, (v1.x * v2.x + v1.y * v2.y) / (m1 * m2)));
         if ((Math.acos(cos) * 180) / Math.PI > BALL_GATES2.jerkyTurnDeg) jerky += 1;
@@ -1077,6 +1265,7 @@ function describeTrack(
     minPaddleDistance,
     nearPaddleFraction: paddleComparisons > 0 ? nearPaddleCount / paddleComparisons : 0,
     straightness: pathLength > 1e-6 ? netDisplacement / pathLength : 0,
+    coherentMotionFraction,
     bodyDwellFraction: bodyDwellCount / observations.length,
     terminalVelocity,
     initialVelocity,
@@ -1156,8 +1345,8 @@ function distanceToBox(point: { x: number; y: number }, box: BodyBox): number {
 
 type JointSeries = Array<{ timestampMs: number; points: Array<{ x: number; y: number }> }>;
 
-function jointSeries(pose: PoseSequence): JointSeries {
-  return toLegacyPoseFrames(pose).map((frame) => ({
+function jointSeries(frames: ReturnType<typeof toLegacyPoseFrames>): JointSeries {
+  return frames.map((frame) => ({
     timestampMs: frame.timestampMs,
     points: frame.landmarks
       .filter((mark) => mark.visibility >= 0.25)
@@ -1182,10 +1371,10 @@ function nearestJoints(
 }
 
 /** Vertical play band from measured pose: above heads to below ankles. */
-function playBand(pose: PoseSequence): { top: number; bottom: number } {
+function playBand(frames: ReturnType<typeof toLegacyPoseFrames>): { top: number; bottom: number } {
   let minHead = 1;
   let maxAnkle = 0;
-  for (const frame of toLegacyPoseFrames(pose)) {
+  for (const frame of frames) {
     for (const mark of frame.landmarks) {
       if (mark.visibility < 0.3) continue;
       if (mark.name === "head") minHead = Math.min(minHead, mark.y);

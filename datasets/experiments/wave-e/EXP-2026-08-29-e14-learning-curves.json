@@ -1,0 +1,416 @@
+{
+  "experimentId": "EXP-2026-08-29-e14-learning-curves",
+  "curveVersion": "modality-learning-curve-v2-e14",
+  "extends": "datasets/experiments/wave-d4/EXP-2026-08-29-d4-02-modality-learning-curves.json",
+  "generatedAtIso": "2026-08-29T09:51:46.002Z",
+  "question": "With ALL gold added since D4-02 (D04 contact, D13 stroke, D2-06 ball, D2-07 event, D2-11 TA): per subsystem, is accuracy under- or over-fit (data-limited vs feature-limited vs domain-shifted), and which subsystem most needs more data vs better features?",
+  "method": "Joins committed labels to committed prediction artifacts only (latest lab:cascade rows for contact/event/stroke; latest committed ball-bench result; latest committed SHIPPED-variant ta-bench result). Group-aware bootstrap resamples SESSIONS (sessionKey), never frames. Curves stop where committed predictions run out; nothing is fabricated. Held-out cases (wm-dink-01, afn-vic-rally1) excluded from all curves; their committed rows quoted read-only.",
+  "environment": "LINUX-CPU artifact-join only — no pipeline stage was run; no cascade/bench number was re-measured on this box",
+  "predictionSources": {
+    "cascade": "datasets/cascade/cascade-1787971753680.json",
+    "ballBench": "datasets/ball-bench/results/ball-bench-1787971765368.json",
+    "taBench": "datasets/ta-bench/results/ta-bench-1787969692752.json"
+  },
+  "subsystems": [
+    {
+      "subsystem": "contact",
+      "labelSupply": {
+        "devUnits": 32,
+        "heldOutUnits": 3,
+        "devGroups": [
+          "afn-sasebo-2025-06",
+          "dvids-marne-2024",
+          "dvids-warriorgames-2026",
+          "wm-tournament-2014"
+        ],
+        "perGroup": {
+          "afn-sasebo-2025-06": 15,
+          "dvids-marne-2024": 14,
+          "dvids-warriorgames-2026": 1,
+          "wm-tournament-2014": 2
+        },
+        "definition": "unique labeled contact events (66 committed records deduped at 60ms → 35)",
+        "growthSinceD402": "D4-02 measured 28 dev unique contacts; D04 + D2-07 grew the committed record pool (D04 waveD contact sidecars, D2-07 event records with contactMs)"
+      },
+      "joined": {
+        "devUnits": 3,
+        "devGroups": [
+          "afn-sasebo-2025-06",
+          "wm-tournament-2014"
+        ],
+        "predictionSource": "datasets/cascade/cascade-1787971753680.json rows[].stages.CONTACT"
+      },
+      "curve": [
+        {
+          "groups": 1,
+          "resamples": 1000,
+          "meanUnits": 1.5,
+          "accuracy": {
+            "mean": 0.755,
+            "p5": 0.5,
+            "p95": 1
+          }
+        },
+        {
+          "groups": 2,
+          "resamples": 1,
+          "meanUnits": 3,
+          "accuracy": {
+            "mean": 0.667,
+            "p5": 0.667,
+            "p95": 0.667
+          }
+        }
+      ],
+      "curveStops": "curve stops at 2 session group(s) / 3 joined dev units — committed predictions do not cover the remaining 29 dev labels",
+      "domainShift": {
+        "devAccuracy": 0.667,
+        "heldOutAccuracy": 0,
+        "evidence": [
+          "wm-dink-01: FAIL — error 250ms (est 1510 vs gold 1260)",
+          "afn-vic-rally1: FAIL — error 245ms (est 435 vs gold 680)"
+        ]
+      },
+      "fit": {
+        "classification": "MEASUREMENT_LIMITED",
+        "reasoning": "Curve stops at 2 session group(s) / 3 joined units while the dev label supply is 32 units: committed prediction artifacts do not cover the newer labels, so data-limited vs model-limited cannot be separated at this n. The binding constraint is PREDICTION coverage (Mac regen over the grown label set), not label supply. Committed held-out rows additionally show a domain-shift signature (dev 0.667 vs held-out 0) — observation from committed artifacts only, never tuned against."
+      },
+      "dataVsFeatures": {
+        "call": "MORE_PREDICTIONS_FIRST (then more data on held-out-shaped slices)",
+        "reasoning": "Joined coverage is still the n=5 cascade gold; dev 2/3 vs held-out 0/2 (250/245ms misses) is a domain-shift signature on committed rows. The un-run measurement (Mac bench over the grown contact set) decides data- vs feature-limited; the held-out failure shape (edge-on/occluded contact) argues the next labels should target those slices, not more of the same."
+      }
+    },
+    {
+      "subsystem": "event",
+      "labelSupply": {
+        "devUnits": 41,
+        "heldOutUnits": 5,
+        "devGroups": [
+          "afn-sasebo-2025-06",
+          "dvids-marne-2024",
+          "dvids-warriorgames-2026",
+          "wm-tournament-2014"
+        ],
+        "perGroup": {
+          "afn-sasebo-2025-06": 20,
+          "dvids-marne-2024": 15,
+          "dvids-warriorgames-2026": 4,
+          "wm-tournament-2014": 2
+        },
+        "definition": "event gold records (34-label D4-02 gold + 12 D2-07 records: 7 events, 5 explicit non-events)",
+        "growthSinceD402": "34 → 46 records (D2-07 added 12 on 3 previously under-labeled bundles, incl. first explicit non-events)"
+      },
+      "joined": {
+        "devUnits": 3,
+        "devGroups": [
+          "afn-sasebo-2025-06",
+          "wm-tournament-2014"
+        ],
+        "predictionSource": "datasets/cascade/cascade-1787971753680.json rows[].stages.EVENT"
+      },
+      "curve": [
+        {
+          "groups": 1,
+          "resamples": 1000,
+          "meanUnits": 1.5,
+          "accuracy": {
+            "mean": 0.755,
+            "p5": 0.5,
+            "p95": 1
+          }
+        },
+        {
+          "groups": 2,
+          "resamples": 1,
+          "meanUnits": 3,
+          "accuracy": {
+            "mean": 0.667,
+            "p5": 0.667,
+            "p95": 0.667
+          }
+        }
+      ],
+      "curveStops": "curve stops at 2 session group(s) / 3 joined dev units — committed predictions do not cover the remaining 38 dev labels",
+      "domainShift": {
+        "devAccuracy": 0.667,
+        "heldOutAccuracy": 0.5,
+        "evidence": [
+          "wm-dink-01: FAIL — selected 1400–1960 vs gold 1050–1650 (overlap 42%)",
+          "afn-vic-rally1: pass — selected 100–1068 vs gold 450–1150 (overlap 88%, contact inside)"
+        ]
+      },
+      "fit": {
+        "classification": "MEASUREMENT_LIMITED",
+        "reasoning": "Curve stops at 2 session group(s) / 3 joined units while the dev label supply is 41 units: committed prediction artifacts do not cover the newer labels, so data-limited vs model-limited cannot be separated at this n. The binding constraint is PREDICTION coverage (Mac regen over the grown label set), not label supply."
+      },
+      "dataVsFeatures": {
+        "call": "MORE_PREDICTIONS_FIRST — label supply is NOT the bottleneck",
+        "reasoning": "41 dev event records exist; 3 have joined predictions. HANDOFF ranks EVENT bottleneck #1 and D2-07 added the first explicit non-events (false-positive probes) — a Mac regen/bench pass over this corpus is worth more than any further labeling."
+      }
+    },
+    {
+      "subsystem": "stroke",
+      "labelSupply": {
+        "devUnits": 29,
+        "heldOutUnits": 0,
+        "devGroups": [
+          "afn-sasebo-2025-06",
+          "dvids-marne-2024",
+          "dvids-warriorgames-2026",
+          "wm-tournament-2014"
+        ],
+        "perGroup": {
+          "dvids-marne-2024": 12,
+          "dvids-warriorgames-2026": 1,
+          "afn-sasebo-2025-06": 14,
+          "wm-tournament-2014": 2
+        },
+        "definition": "stroke-gold.json labels (pickleball-taxonomy-v2)",
+        "growthSinceD402": "22 → 29 labels (D13 added 7; every committed non-held-out dev bundle event now has a stroke label — 29/29 saturated; return/drop_reset/attack_counter/specialty families remain at ZERO gold, closable only with new footage)"
+      },
+      "joined": {
+        "devUnits": 3,
+        "devGroups": [
+          "afn-sasebo-2025-06",
+          "wm-tournament-2014"
+        ],
+        "predictionSource": "datasets/cascade/cascade-1787971753680.json rows[].stages.STROKE"
+      },
+      "curve": [
+        {
+          "groups": 1,
+          "resamples": 1000,
+          "meanUnits": 1.5,
+          "accuracy": {
+            "mean": 0.755,
+            "p5": 0.5,
+            "p95": 1
+          }
+        },
+        {
+          "groups": 2,
+          "resamples": 1,
+          "meanUnits": 3,
+          "accuracy": {
+            "mean": 0.667,
+            "p5": 0.667,
+            "p95": 0.667
+          }
+        }
+      ],
+      "curveStops": "curve stops at 2 session group(s) / 3 joined dev units — committed predictions do not cover the remaining 26 dev labels",
+      "domainShift": {
+        "devAccuracy": 0.667,
+        "heldOutAccuracy": 0.5,
+        "evidence": [
+          "wm-dink-01: pass — predicted BACKHAND vs gold BACKHAND_DINK",
+          "afn-vic-rally1: FAIL — predicted BACKHAND vs gold FOREHAND_DRIVE"
+        ]
+      },
+      "fit": {
+        "classification": "MEASUREMENT_LIMITED",
+        "reasoning": "Curve stops at 2 session group(s) / 3 joined units while the dev label supply is 29 units: committed prediction artifacts do not cover the newer labels, so data-limited vs model-limited cannot be separated at this n. The binding constraint is PREDICTION coverage (Mac regen over the grown label set), not label supply."
+      },
+      "dataVsFeatures": {
+        "call": "MORE_DATA (new footage) — dev-corpus labeling is saturated",
+        "reasoning": "D13 proved the dev corpus is exhausted (29/29 events labeled, 4 L1 families at zero). More labeling passes cannot help; only new footage grows this gold. The held-out confidently-wrong BACKHAND row is the failure more family coverage should fix."
+      }
+    },
+    {
+      "subsystem": "ball",
+      "labelSupply": {
+        "devUnits": 100,
+        "heldOutUnits": 3,
+        "devGroups": [
+          "afn-sasebo-2025-06",
+          "dvids-marne-2024",
+          "dvids-warriorgames-2026",
+          "wm-tournament-2014"
+        ],
+        "perGroup": {
+          "afn-sasebo-2025-06": 38,
+          "dvids-marne-2024": 35,
+          "dvids-warriorgames-2026": 9,
+          "wm-tournament-2014": 18
+        },
+        "definition": "committed ballFrames labels across all bundle annotation sidecars (incl. D2-06 waveD2 hard-slice labels and C04 occlusion-state labels)",
+        "growthSinceD402": "D2-06 added 43 labels on 4 bundles targeting hard slices (net crossings, paddle occlusion, multi-ball, fast blur, occlusion cycles); 2 of those 4 bundles are not even in ball-bench.json yet"
+      },
+      "joined": {
+        "devUnits": 12,
+        "devGroups": [
+          "afn-sasebo-2025-06",
+          "wm-tournament-2014"
+        ],
+        "predictionSource": "datasets/ball-bench/results/ball-bench-1787971765368.json per-case hit/miss/wrongLocation counts (Mac run, predates D2-06 labels)"
+      },
+      "curve": [
+        {
+          "groups": 1,
+          "resamples": 1000,
+          "meanUnits": 6,
+          "accuracy": {
+            "mean": 0.507,
+            "p5": 0.167,
+            "p95": 0.833
+          }
+        },
+        {
+          "groups": 2,
+          "resamples": 1,
+          "meanUnits": 12,
+          "accuracy": {
+            "mean": 0.5,
+            "p5": 0.5,
+            "p95": 0.5
+          }
+        }
+      ],
+      "curveStops": "curve stops at 2 session group(s) / 12 joined dev units — committed predictions do not cover the remaining 88 dev labels",
+      "domainShift": {
+        "devAccuracy": 0.5,
+        "heldOutAccuracy": 0.5,
+        "evidence": [
+          "afn-vic-rally1: pass — frame 1/2 (1 hits, 0 misses, 1 wrongLocation)",
+          "afn-vic-rally1: FAIL — frame 2/2 (1 hits, 0 misses, 1 wrongLocation)"
+        ]
+      },
+      "fit": {
+        "classification": "MEASUREMENT_LIMITED",
+        "reasoning": "Curve stops at 2 session group(s) / 12 joined units while the dev label supply is 100 units: committed prediction artifacts do not cover the newer labels, so data-limited vs model-limited cannot be separated at this n. The binding constraint is PREDICTION coverage (Mac regen over the grown label set), not label supply."
+      },
+      "dataVsFeatures": {
+        "call": "MORE_PREDICTIONS_FIRST — bench manifest and results lag the labels",
+        "reasoning": "100 dev ball labels exist but the latest committed bench result predates D2-06 and covers only the 3 original dev cases (12 visible-frame outcomes over 2 sessions). Wiring wavea-wgm-wheelchair + wavea-sasebo-volleys into ball-bench.json and one Mac bench run converts a 2-session curve into a 4-session one for free. The rally1 0/4 all-miss row suggests feature work (reacquisition) but at n too small to call."
+      }
+    },
+    {
+      "subsystem": "target_acquisition",
+      "labelSupply": {
+        "devUnits": 54,
+        "heldOutUnits": 5,
+        "devGroups": [
+          "afn-sasebo-2025-06",
+          "afn-sigonella-2025",
+          "dvids-marne-2024",
+          "dvids-warriorgames-2026",
+          "wm-tournament-2014"
+        ],
+        "perGroup": {
+          "dvids-warriorgames-2026": 15,
+          "afn-sigonella-2025": 4,
+          "afn-sasebo-2025-06": 7,
+          "dvids-marne-2024": 17,
+          "wm-tournament-2014": 11
+        },
+        "definition": "verified ta-bench cases (dev split); plus 12 D2-11 per-frame torso-box records in waveD2-ta sidecars (different unit — supply-only, never joined to lock outcomes)",
+        "growthSinceD402": "TA had NO curve in D4-02. Verified dev cases now 54 across 5 sessions (K wave 36→59 + D2-04/D2-11 passes); D2-11 added 12 per-frame contested/uncontested torso records on 3 bundles"
+      },
+      "joined": {
+        "devUnits": 54,
+        "devGroups": [
+          "afn-sasebo-2025-06",
+          "afn-sigonella-2025",
+          "dvids-marne-2024",
+          "dvids-warriorgames-2026",
+          "wm-tournament-2014"
+        ],
+        "predictionSource": "datasets/ta-bench/results/ta-bench-1787969692752.json (SHIPPED variant) per-case outcome+lockCorrect"
+      },
+      "curve": [
+        {
+          "groups": 1,
+          "resamples": 1000,
+          "meanUnits": 10.5,
+          "accuracy": {
+            "mean": 0.601,
+            "p5": 0.25,
+            "p95": 0.933
+          }
+        },
+        {
+          "groups": 2,
+          "resamples": 1000,
+          "meanUnits": 20.9,
+          "accuracy": {
+            "mean": 0.639,
+            "p5": 0.364,
+            "p95": 0.846
+          }
+        },
+        {
+          "groups": 3,
+          "resamples": 1000,
+          "meanUnits": 32.3,
+          "accuracy": {
+            "mean": 0.671,
+            "p5": 0.536,
+            "p95": 0.767
+          }
+        },
+        {
+          "groups": 4,
+          "resamples": 1000,
+          "meanUnits": 42.6,
+          "accuracy": {
+            "mean": 0.679,
+            "p5": 0.59,
+            "p95": 0.723
+          }
+        },
+        {
+          "groups": 5,
+          "resamples": 1,
+          "meanUnits": 54,
+          "accuracy": {
+            "mean": 0.685,
+            "p5": 0.685,
+            "p95": 0.685
+          }
+        }
+      ],
+      "curveStops": null,
+      "domainShift": null,
+      "fit": {
+        "classification": "MODEL_LIMITED",
+        "reasoning": "Accuracy plateaued at 0.685 with a tight group interval (0.13) — adding same-distribution labels is unlikely to move it; inspect failure slices."
+      },
+      "dataVsFeatures": {
+        "call": "BETTER_FEATURES — first subsystem with a full-supply measured curve, and it is slice-shaped, not n-shaped",
+        "reasoning": "All 54 verified dev cases have joined shipped predictions (the only subsystem at 100% join coverage). Shipped lock-correct is 37/54 = 0.685 with extreme session spread (warriorgames 14/15 = .93 vs sigonella 1/4 = .25, sasebo 3/7 = .43): the error mass is concentrated in contested/ambiguous sessions, and the committed candidate bench (acquire-v4-strict-gesture, same 54 cases) already measures .863 — feature/config work moves this metric 3x more than any plausible labeling effort. More verified cases in sigonella/sasebo-shaped scenes would still sharpen the slice estimate (n=4 and 7)."
+      }
+    }
+  ],
+  "ranking": [
+    {
+      "rank": 1,
+      "subsystem": "event",
+      "needs": "PREDICTIONS (Mac regen/bench over the 41-dev-record corpus), then features",
+      "why": "Bottleneck #1 per HANDOFF; 41 dev records incl. first explicit non-events vs 3 joined predictions — the largest supply-to-measurement gap of any subsystem, and the gate for everything downstream of it."
+    },
+    {
+      "rank": 2,
+      "subsystem": "contact",
+      "needs": "PREDICTIONS first; then held-out-shaped DATA (edge-on/occluded contact slices)",
+      "why": "Grown contact gold is unmeasured; committed rows already show a dev→held-out shift (0.667 vs 0.0), so after the Mac pass the next labels must be slice-targeted, not bulk."
+    },
+    {
+      "rank": 3,
+      "subsystem": "ball",
+      "needs": "PREDICTIONS + bench-manifest wiring (2 labeled bundles missing from ball-bench.json), then features (reacquisition)",
+      "why": "100 dev labels vs 12 joined frame outcomes; one manifest edit + one Mac run doubles curve sessions. rally1 0/4 all-miss hints at a reacquisition feature gap but n is too small to call."
+    },
+    {
+      "rank": 4,
+      "subsystem": "target_acquisition",
+      "needs": "FEATURES/config (candidate already measured at .863 vs shipped .685); secondary: verified cases in low-n contested sessions",
+      "why": "Only subsystem with a full-supply curve. The curve says the problem is slice-shaped (session spread .25–.93), and a committed candidate config already recovers most of the gap — that is a features verdict, not a data verdict."
+    },
+    {
+      "rank": 5,
+      "subsystem": "stroke",
+      "needs": "DATA (new footage for the 4 empty L1 families) — labeling of existing footage is saturated",
+      "why": "D13 saturated the dev corpus (29/29). No labeling pass can grow this gold; only new footage (or the Mac bench pass over the 29) moves it. Ranked last for THIS wave because its next step is externally gated (footage supply)."
+    }
+  ]
+}

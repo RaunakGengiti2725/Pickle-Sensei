@@ -273,6 +273,15 @@ export function SettingsScreen() {
         </Card>
 
         <SectionTitle title="Privacy" />
+        <Card style={styles.groupCard}>
+          <SettingRow
+            icon="shield"
+            label="Data & consent"
+            value="Model training off by default"
+            onPress={() => navigation.navigate('ConsentSettings')}
+            last
+          />
+        </Card>
         <View style={styles.privacyCard}>
           <View style={styles.privacyHeader}>
             <View style={styles.privacyIcon}>

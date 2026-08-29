@@ -1,0 +1,34 @@
+{
+  "workstreamId": "h09-zero-handholding",
+  "wave": "G2",
+  "mission": "Prepare the real-user zero-handholding usability test (versioned observation protocol + confusion-event instrumentation) and audit the mobile UX copy/flows against it on simulator-free surfaces, fixing concrete clarity defects with tests.",
+  "method": [
+    "Read docs/STATUS_BOARD.md and docs/HANDOFF_V4_DRAFT.md, then read the actual mobile flow surfaces (AnalyzeScreen, CaptureGuidancePanel, UncertaintyNote, TechniqueIntentPicker, tryAgainHandoff, runCaptureAnalysis, capture.ts) before writing any protocol claims.",
+    "Wrote a versioned protocol (zero-handholding-usability-v1) with tasks T1-T9 covering: open Stroke Analysis, choose technique/Auto Detect, place the phone, tap the starting location, understand readiness, walk out, swing, receive a Result, understand uncertainty, Try Again.",
+    "Built a shared instrumentation contract (apps/mobile/src/analysis/usabilityTelemetry.ts): a 13-step funnel recorder, frozen v1 confusion thresholds, deterministic pure derivation of machine confusion events, and a separate human observer-coded confusion vocabulary. Telemetry is observational only - it never gates or alters capture, readiness, or scoring.",
+    "Wired the funnel into AnalyzeScreen (open, intent selection, camera open, readiness states, ready, stroke captured, capture saved, analysis started, honest outcome shown, result opened, errors, abandonment, try-again rearm), reusing existing targetLock evidence for the start-location step rather than inventing new claims.",
+    "Audited copy against the protocol and fixed concrete defects with tests: added the previously missing explicit starting-location walkthrough step ('Tap where you will start... walk out to it'), humanized snake_case envelope dimension names in the quality-blocked reason, renamed a misleading 'locked' funnel detail to 'start_tapped' when no lock telemetry exists, and pinned readiness-copy coverage of every CameraReadinessState.",
+    "Added __tests__/usabilityTelemetry.test.ts (recorder, thresholds, confusion derivation, funnel summaries) and __tests__/zeroHandholdingCopyAudit.test.ts (readiness copy coverage/actionability, walkthrough steps, captureSavedDetail honesty against assertCapturedClip-validated clips)."
+  ],
+  "deliverables": [
+    "docs/USABILITY_ZERO_HANDHOLDING.md (protocol zero-handholding-usability-v1; zero sessions run - no user data exists or was fabricated)",
+    "apps/mobile/src/analysis/usabilityTelemetry.ts (funnel + confusion instrumentation, side-effect free, capture-safe)",
+    "apps/mobile/src/screens/AnalyzeScreen.tsx (funnel wiring, exported ANALYZE_STEPS with new starting-location step, exported READINESS_COPY typed over CameraReadinessState, captureSavedDetail)",
+    "apps/mobile/src/analysis/runCaptureAnalysis.ts (human-readable dimension names in the honest quality-blocked reason)",
+    "apps/mobile/__tests__/usabilityTelemetry.test.ts",
+    "apps/mobile/__tests__/zeroHandholdingCopyAudit.test.ts"
+  ],
+  "gates": {
+    "root": "pnpm typecheck, pnpm test, pnpm lint, pnpm format:check all pass on this branch",
+    "mobile": "npx tsc --noEmit passes; npm test passes (42 suites, 421 tests)",
+    "mobileLintNote": "apps/mobile's own `npm run lint` crashes on a preexisting eslint 8/9 version clash (fails on App.tsx before any of this branch's files); root `pnpm lint` covers the touched TS/TSX and passes."
+  },
+  "irreducibly_external": [
+    "Running the protocol itself: fresh real users on a physical iPhone (GATE B surface). No sessions have been run; funnel counts and confusion events in this branch are structure only, with zero recorded data.",
+    "Whether fresh users actually comprehend the copy (starting-location tap, readiness states, abstention explanations, withheld-score uncertainty) - only live think-aloud sessions can answer; the protocol lists these as live-user-only questions.",
+    "Native camera/readiness behavior on device (Apple Vision pose, target lock timing) - Mac/iPhone toolchain unavailable on Linux; nothing was fabricated.",
+    "GATE A remains fully external: no coach evidence exists; technique score, fault diagnosis, and drill recommendation stay BLOCKED_ON_VALIDATION. Usability results can never substitute for coach validation.",
+    "Held-out cases wm-dink-01 and afn-vic-rally1 were not touched."
+  ],
+  "verdict": "READY_FOR_LIVE_SESSIONS: the zero-handholding usability test is fully specified and instrumented, and the auditable copy defects found are fixed with tests. Only real users on a real device can produce the usability evidence itself."
+}

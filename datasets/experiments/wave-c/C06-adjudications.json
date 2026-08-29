@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "workstream": "C06",
+  "adjudicator": "devin-visual-adjudication-c06",
+  "adjudicatedAtIso": "2026-08-29T07:30:00Z",
+  "protocolStatement": "Adjudication of the 5 disagreements filed in datasets/experiments/wave-b/W14-overlap/agreement.json. Records here are APPEND-ONLY: W14 primary and secondary artifacts were not modified. Every adjudication below is from re-viewing the actual frames (rendered from provenance-verified source media: dhash-per-second fingerprints of downloaded sources matched datasets/corpus/fingerprints/<recordingId>.json for every recording used). TA frames were re-rendered at the frozen region coordinates; ownership frames were re-rendered at the frozen box coordinates from ownership-review/queue.json, in each case with a +-2..3 adjacent-frame temporal scrub (the context W14's single-frame protocol lacked).",
+  "adjudications": [
+    {
+      "id": "ADJ-C06-1",
+      "caseId": "ta-44c0c451500c-s1w0-p6",
+      "task": "target-acquisition",
+      "framesViewed": "rec-44c0c451500c, window s1w0, region center ~(0.1545,0.3256) normalized => ~(297,352) px at 1920x1080; full frame + 2x zoom crop of the region, plus start/mid/end scrub of the window",
+      "observed": "The region is occupied by a black-shirt staff member standing behind the barrier, visibly holding a phone up (filming). The foreground ARMY-shirt player and the center-court wheelchair athlete are clearly different people, outside the region. Both annotators' scene descriptions are accurate; W14's perceptionAgreement=FULL is confirmed.",
+      "resolution": "UPHOLD PRIMARY (verified), CONDITIONAL on reclassification as bystander_target",
+      "reasoning": "Under the bench's operational question -- 'did the lock land on the person the user aimed the start region at?' -- the lock is correct: the lime track follows the region occupant (the phone-filming staffer). W14's wrong-lock verdict presumed an unwritten 'valid gameplay target' definition. The definitional gap, not perception, caused the disagreement. The case MUST carry situationTag=bystander_target (rule now written in ml/annotations/ta-ownership-annotation-guide-v1.md sect.2) so product lock-accuracy metrics can be sliced; counting it as an ordinary correct-lock without the tag would flatter metrics.",
+      "finalLabel": { "taxonomy3Class": "correct-lock", "situationTag": "bystander_target" },
+      "originalsModified": false
+    },
+    {
+      "id": "ADJ-C06-2",
+      "caseId": "ta-960a1a200d6d-s8w0-p1",
+      "task": "target-acquisition",
+      "framesViewed": "rec-960a1a200d6d, window s8w0, region center ~(0.1201,0.3015) normalized => ~(231,326) px at 1920x1080; full frame + 2x zoom crop, plus window scrub",
+      "observed": "The region covers a spectator leaning on the barrier (tan cap, white shirt). The only live player in view -- the AIR FORCE wheelchair athlete at center court -- is outside the region. Both annotators described the identical scene; the split is purely definitional (same axis as ADJ-C06-1).",
+      "resolution": "UPHOLD PRIMARY (verified), CONDITIONAL on reclassification as bystander_target",
+      "reasoning": "Same operational-definition argument as ADJ-C06-1: the track locked the actual region occupant, which is what the TA bench measures. W14's reject (region_on_crowd_target_is_spectator) is the correct verdict ONLY under the unwritten gameplay-target definition. With the bystander_target rule now written, the case stays in the corpus as a tagged adversarial case rather than an untagged correct-lock or a reject.",
+      "finalLabel": { "taxonomy3Class": "correct-lock", "situationTag": "bystander_target" },
+      "originalsModified": false
+    },
+    {
+      "id": "ADJ-C06-3",
+      "caseId": "ownership afn-sasebo-rally2 @2204 box2 (red, 1342.7-1435.4 x 502.4-620.2)",
+      "task": "paddle-ownership",
+      "framesViewed": "afn-sasebo-rally2 (source afn-sasebo-indoor @30.6s offset, provenance-verified), frames 2137/2170/2204/2237/2270/2304 ms, full frame + zoom crop with the frozen box drawn",
+      "observed": "The target's light-purple paddle is visible and continuously attached to his right hand across all six adjacent frames; at 2204 it is heavily motion-blurred mid-rise. The frozen box clips the RIGHT edge of the blur and extends onto background; measured box-center offset from the visible blur mass center is ~0.04 normalized (box center ~x1388 vs blur core ~x1310 at 1920 wide).",
+      "resolution": "UPHOLD PRIMARY (target)",
+      "reasoning": "Object identity is not in doubt (both annotators agreed it is the target's rising paddle). The divergence was an unwritten center-offset acceptance threshold. Measured offset ~0.04 norm falls within the <=0.05 acceptance band now codified in the guide (sect.4). W14's AMBIGUOUS was a defensible call under no-written-rule conditions, not a perception error.",
+      "finalLabel": { "class4": "target" },
+      "originalsModified": false
+    },
+    {
+      "id": "ADJ-C06-4",
+      "caseId": "ownership afn-sasebo-rally2 @2604 box1 (lime, 1139.8-1264.0 x 387.2-448.2)",
+      "task": "paddle-ownership",
+      "framesViewed": "afn-sasebo-rally2, frames 2470/2537/2570/2604/2637/2670/2737/2804 ms, three zoom levels including a tight crop (1080-1330 x 340-500) with the frozen box drawn",
+      "observed": "At 2604 the box interior sits above the far-side blue barrier over a dark background; no persistent white object is resolvable inside it at any zoom. Adjacent frames show transient pale blur streaks sweeping through the area (consistent with a fast-moving paddle mid-swing crossing the box for <1 frame). The far red-shirt player's paddle -- W14's proposed owner -- is visibly at his WAIST in adjacent frames, not raised into the box. No hand/arm continuity to any candidate owner is establishable.",
+      "resolution": "UPHOLD PRIMARY (ambiguous)",
+      "reasoning": "The guide's evidence standard (sect.5): 'other' requires resolvable hand/arm continuity across at least one adjacent frame; a transient blur with no attachable owner stays 'ambiguous' and out of P/R denominators. W14's committed other_player_paddle at conf 0.6 is contradicted by the adjacent-frame position of the proposed owner's paddle.",
+      "finalLabel": { "class4": "ambiguous" },
+      "originalsModified": false
+    },
+    {
+      "id": "ADJ-C06-5",
+      "caseId": "ownership afn-sasebo-rally2 @3372 box1 (lime, dark paddle near target's feet)",
+      "task": "paddle-ownership",
+      "framesViewed": "afn-sasebo-rally2, frames 1303/1703/2204/2704/3204/3372/3505 ms, zoom crop (550-1150 x 450-1080)",
+      "observed": "A dark paddle lies flat on the floor beside the equipment bags near the net post. It is pixel-static across the entire 1303-3505 ms span (>=2.2 s), while every held paddle in the scene moves. In the single 3372 frame its floor position is depth-ambiguous against the target's hanging hand -- exactly the illusion W14 saw.",
+      "resolution": "UPHOLD PRIMARY (reject / static ground object, no owner)",
+      "reasoning": "Temporal evidence is decisive: a paddle static for >2 s at floor level while play continues is a ground object, not a held paddle. This was the only genuine perception disagreement of the five, and it is the documented failure mode of single-frame ownership review; the guide (sect.5-6) now mandates adjacent-frame scrub plus a static-object ledger.",
+      "finalLabel": { "class4": "reject", "subReason": "static_ground_object_no_owner" },
+      "originalsModified": false
+    }
+  ],
+  "closure": { "filed": 5, "adjudicated": 5, "open": 0 }
+}

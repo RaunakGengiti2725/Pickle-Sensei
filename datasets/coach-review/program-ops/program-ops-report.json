@@ -1,0 +1,333 @@
+{
+  "version": "coach-program-ops-v1",
+  "generatedAtIso": "2026-08-29T21:18:03.712Z",
+  "status": "AWAITING QUALIFIED COACHES — routing/tracking operational; zero counted reviews; all validation gates NOT_EVALUABLE; promotion impossible",
+  "routing": {
+    "context": {
+      "currentAnalysisVersions": {},
+      "currentFaultTaxonomyVersion": "fault-taxonomy-v0-draft",
+      "mappingsNeedingEvidence": [
+        "map.dink.contact_not_out_front.wall-dink-rally",
+        "map.dink.lifting_trajectory.dink-target-boxes",
+        "map.dink.paddle_drops_between.wall-dink-rally",
+        "map.drive.late_preparation.shadow-unit-turn",
+        "map.drive.no_unit_turn.shadow-unit-turn",
+        "map.drop.overpowered_arc.third-shot-drop-ladder",
+        "map.global.no_recovery_to_ready.skinny-singles",
+        "map.serve.inconsistent_drop_toss.serve-drop-consistency",
+        "map.volley.overswing_follow_through.volley-wall-ready",
+        "map.volley.paddle_below_net_ready.volley-wall-ready"
+      ]
+    },
+    "routedItems": [
+      {
+        "queueItemId": "afn-sasebo-rally1-E1",
+        "reasons": [
+          "hard_case",
+          "drill_mapping_evidence",
+          "baseline_coverage"
+        ],
+        "priority": 1,
+        "reasonDetails": [
+          "hard_case: low annotator confidence (0.65)",
+          "drill_mapping_evidence: 3 fault→drill mappings for family volley still need endorsement evidence",
+          "baseline_coverage: 0/2 fresh independent reviews on file"
+        ],
+        "countedReviews": 0,
+        "distinctCoaches": 0,
+        "freshReviews": 0,
+        "requiredAdditionalReviews": 2,
+        "heldOut": false
+      },
+      {
+        "queueItemId": "afn-sasebo-rally1-E3",
+        "reasons": [
+          "hard_case",
+          "drill_mapping_evidence",
+          "baseline_coverage"
+        ],
+        "priority": 1,
+        "reasonDetails": [
+          "hard_case: low annotator confidence (0.65)",
+          "drill_mapping_evidence: 3 fault→drill mappings for family volley still need endorsement evidence",
+          "baseline_coverage: 0/2 fresh independent reviews on file"
+        ],
+        "countedReviews": 0,
+        "distinctCoaches": 0,
+        "freshReviews": 0,
+        "requiredAdditionalReviews": 2,
+        "heldOut": false
+      },
+      {
+        "queueItemId": "afn-sasebo-rally1-E4",
+        "reasons": [
+          "hard_case",
+          "drill_mapping_evidence",
+          "baseline_coverage"
+        ],
+        "priority": 1,
+        "reasonDetails": [
+          "hard_case: low annotator confidence (0.65)",
+          "drill_mapping_evidence: 3 fault→drill mappings for family volley still need endorsement evidence",
+          "baseline_coverage: 0/2 fresh independent reviews on file"
+        ],
+        "countedReviews": 0,
+        "distinctCoaches": 0,
+        "freshReviews": 0,
+        "requiredAdditionalReviews": 2,
+        "heldOut": false
+      },
+      {
+        "queueItemId": "afn-sasebo-rally1-E5",
+        "reasons": [
+          "hard_case",
+          "drill_mapping_evidence",
+          "baseline_coverage"
+        ],
+        "priority": 1,
+        "reasonDetails": [
+          "hard_case: low annotator confidence (0.65)",
+          "drill_mapping_evidence: 3 fault→drill mappings for family volley still need endorsement evidence",
+          "baseline_coverage: 0/2 fresh independent reviews on file"
+        ],
+        "countedReviews": 0,
+        "distinctCoaches": 0,
+        "freshReviews": 0,
+        "requiredAdditionalReviews": 2,
+        "heldOut": false
+      },
+      {
+        "queueItemId": "afn-sasebo-rally1-E6",
+        "reasons": [
+          "hard_case",
+          "drill_mapping_evidence",
+          "baseline_coverage"
+        ],
+        "priority": 1,
+        "reasonDetails": [
+          "hard_case: low annotator confidence (0.65)",
+          "drill_mapping_evidence: 3 fault→drill mappings for family volley still need endorsement evidence",
+          "baseline_coverage: 0/2 fresh independent reviews on file"
+        ],
+        "countedReviews": 0,
+        "distinctCoaches": 0,
+        "freshReviews": 0,
+        "requiredAdditionalReviews": 2,
+        "heldOut": false
+      },
+      {
+        "queueItemId": "afn-sasebo-rally2-E1",
+        "reasons": [
+          "hard_case",
+          "drill_mapping_evidence",
+          "baseline_coverage"
+        ],
+        "priority": 1,
+        "reasonDetails": [
+          "hard_case: low annotator confidence (0.6)",
+          "drill_mapping_evidence: 1 fault→drill mappings for family overhead still need endorsement evidence",
+          "baseline_coverage: 0/2 fresh independent reviews on file"
+        ],
+        "countedReviews": 0,
+        "distinctCoaches": 0,
+        "freshReviews": 0,
+        "requiredAdditionalReviews": 2,
+        "heldOut": false
+      },
+      {
+        "queueItemId": "afn-sasebo-rally2-E2",
+        "reasons": [
+          "hard_case",
+          "drill_mapping_evidence",
+          "baseline_coverage"
+        ],
+        "priority": 1,
+        "reasonDetails": [
+          "hard_case: low annotator confidence (0.6)",
+          "drill_mapping_evidence: 1 fault→drill mappings for family overhead still need endorsement evidence",
+          "baseline_coverage: 0/2 fresh independent reviews on file"
+        ],
+        "countedReviews": 0,
+        "distinctCoaches": 0,
+        "freshReviews": 0,
+        "requiredAdditionalReviews": 2,
+        "heldOut": false
+      },
+      {
+        "queueItemId": "afn-vic-rally1-E1",
+        "reasons": [
+          "hard_case",
+          "baseline_coverage"
+        ],
+        "priority": 1,
+        "reasonDetails": [
+          "hard_case: low annotator confidence (0.6)",
+          "baseline_coverage: 0/2 fresh independent reviews on file"
+        ],
+        "countedReviews": 0,
+        "distinctCoaches": 0,
+        "freshReviews": 0,
+        "requiredAdditionalReviews": 2,
+        "heldOut": true
+      },
+      {
+        "queueItemId": "wm-dink-01-E1",
+        "reasons": [
+          "hard_case",
+          "baseline_coverage"
+        ],
+        "priority": 1,
+        "reasonDetails": [
+          "hard_case: not analyzable: rear tournament view; body partially cropped; labels are for paddle perception only",
+          "baseline_coverage: 0/2 fresh independent reviews on file"
+        ],
+        "countedReviews": 0,
+        "distinctCoaches": 0,
+        "freshReviews": 0,
+        "requiredAdditionalReviews": 2,
+        "heldOut": true
+      },
+      {
+        "queueItemId": "wm-volley-02-E1",
+        "reasons": [
+          "drill_mapping_evidence",
+          "baseline_coverage"
+        ],
+        "priority": 4,
+        "reasonDetails": [
+          "drill_mapping_evidence: 3 fault→drill mappings for family volley still need endorsement evidence",
+          "baseline_coverage: 0/2 fresh independent reviews on file"
+        ],
+        "countedReviews": 0,
+        "distinctCoaches": 0,
+        "freshReviews": 0,
+        "requiredAdditionalReviews": 2,
+        "heldOut": false
+      }
+    ]
+  },
+  "tracking": {
+    "reviewCounts": {
+      "totalCounted": 0,
+      "reviewFilesOnDisk": 0,
+      "invalidReviewFiles": 0,
+      "heldOutReviewsExcluded": 0,
+      "perCoach": [],
+      "perItemHistogram": {}
+    },
+    "multiCoachOverlap": {
+      "itemsWithMultipleCoaches": 0,
+      "distinctCoachPairs": 0,
+      "itemsAtTarget": 0
+    },
+    "agreement": {
+      "engineStatus": "AWAITING QUALIFIED COACHES — engine ready; N=0 real reviews",
+      "itemsWithMultipleReviews": 0,
+      "strokeIdentityPercentAgreement": null,
+      "primaryFaultPercentAgreement": null,
+      "surfacedDisagreements": 0
+    },
+    "taxonomy": {
+      "currentFaultTaxonomyVersion": "fault-taxonomy-v0-draft",
+      "reviewsOnCurrentTaxonomy": 0,
+      "reviewsOnSupersededTaxonomies": 0
+    },
+    "drillEvidence": {
+      "totalMappings": 10,
+      "coachValidatedMappings": 0,
+      "unvalidatedMappings": 10,
+      "totalEndorsements": 0,
+      "mappingsNeedingEvidence": [
+        "map.dink.contact_not_out_front.wall-dink-rally",
+        "map.dink.lifting_trajectory.dink-target-boxes",
+        "map.dink.paddle_drops_between.wall-dink-rally",
+        "map.drive.late_preparation.shadow-unit-turn",
+        "map.drive.no_unit_turn.shadow-unit-turn",
+        "map.drop.overpowered_arc.third-shot-drop-ladder",
+        "map.global.no_recovery_to_ready.skinny-singles",
+        "map.serve.inconsistent_drop_toss.serve-drop-consistency",
+        "map.volley.overswing_follow_through.volley-wall-ready",
+        "map.volley.paddle_below_net_ready.volley-wall-ready"
+      ]
+    }
+  },
+  "gates": {
+    "specId": "coach-gates-frozen-v1",
+    "overallVerdict": "RELEASE_BLOCKED",
+    "verdicts": [
+      {
+        "id": "L1",
+        "verdict": "PASS"
+      },
+      {
+        "id": "L2",
+        "verdict": "PASS"
+      },
+      {
+        "id": "L4",
+        "verdict": "PASS"
+      },
+      {
+        "id": "S1",
+        "verdict": "NOT_EVALUABLE"
+      },
+      {
+        "id": "S2",
+        "verdict": "NOT_EVALUABLE"
+      },
+      {
+        "id": "S3",
+        "verdict": "NOT_EVALUABLE"
+      },
+      {
+        "id": "S4",
+        "verdict": "NOT_EVALUABLE"
+      },
+      {
+        "id": "S5",
+        "verdict": "NOT_EVALUABLE"
+      },
+      {
+        "id": "S6",
+        "verdict": "NOT_EVALUABLE"
+      },
+      {
+        "id": "S7",
+        "verdict": "NOT_EVALUABLE"
+      },
+      {
+        "id": "F1",
+        "verdict": "NOT_EVALUABLE"
+      },
+      {
+        "id": "F2",
+        "verdict": "NOT_EVALUABLE"
+      },
+      {
+        "id": "F3",
+        "verdict": "NOT_EVALUABLE"
+      },
+      {
+        "id": "F4",
+        "verdict": "NOT_EVALUABLE"
+      },
+      {
+        "id": "D1",
+        "verdict": "NOT_EVALUABLE"
+      },
+      {
+        "id": "D2",
+        "verdict": "NOT_EVALUABLE"
+      },
+      {
+        "id": "D3",
+        "verdict": "NOT_EVALUABLE"
+      }
+    ]
+  },
+  "promotion": {
+    "canPromote": false,
+    "reason": "zero counted coach reviews — sports-science truth can only be promoted by real coach evidence; engineering work only adds review-queue items",
+    "violations": []
+  }
+}

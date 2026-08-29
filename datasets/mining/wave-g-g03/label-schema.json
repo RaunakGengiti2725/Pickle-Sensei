@@ -1,0 +1,49 @@
+{
+ "schemaVersion": 1,
+ "name": "wave-g-g03 multi-paddle scenario labels",
+ "tierPolicy": "All queue entries are machine-proposed Tier-C. A human review recording a decision below produces a Gold label; until then nothing in this queue is truth.",
+ "perCandidateLabels": {
+  "scenarioConfirmed": {
+   "type": "enum",
+   "values": [
+    "confirmed",
+    "rejected",
+    "uncertain",
+    "frame_unusable"
+   ],
+   "description": "Does the named scenario actually occur at this frame/interval?"
+  },
+  "paddleOwners": {
+   "type": "list",
+   "itemSchema": {
+    "point_or_box": "normalized point {x,y} or pixel box [x0,y0,x1,y1]",
+    "owner": [
+     "target",
+     "partner",
+     "opponent",
+     "ambiguous",
+     "not_a_paddle"
+    ]
+   },
+   "description": "Ownership of every paddle observation the reviewer can certify in the frame."
+  },
+  "identitySwapObserved": {
+   "type": "enum",
+   "values": [
+    "yes",
+    "no",
+    "cannot_tell"
+   ],
+   "description": "Only for occlusion_identity_swap candidates: did tracker/pose identity actually swap across the occlusion?"
+  },
+  "notes": {
+   "type": "string"
+  },
+  "reviewerId": {
+   "type": "string"
+  },
+  "reviewedAtIso": {
+   "type": "string"
+  }
+ }
+}

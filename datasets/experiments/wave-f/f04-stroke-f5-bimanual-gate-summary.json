@@ -1,0 +1,85 @@
+{
+  "id": "f04-stroke-f5-bimanual-gate",
+  "wave": "F",
+  "mission": "Close E10-F5: symmetric bimanual wheelchair rim propulsion was committed as FOREHAND at 0.8 because non-stroke gates only tested the single dominant wrist. Add a symmetric two-arm-motion discriminator that abstains with an explicit limiting factor, without falsely rejecting genuine two-handed strokes.",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "baseCommit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "branch": "devin/wave-f/f04-stroke-f5-bimanual-gate",
+  "datasetScope": {
+    "fixtures": [
+      "wheelchair-rim-push (existing synthetic adversarial fixture, packages/evaluation/src/synthetic/adversarialStrokeFixtures.ts)",
+      "two-handed-backhand (NEW synthetic control fixture added this workstream: both wrists ~0.05u apart on one grip, sweeping to a contact left of midline — a genuine stroke)"
+    ],
+    "note": "Synthetic fixtures only; no human release evidence claimed. Held-out cases wm-dink-01 and afn-vic-rally1 untouched; fresh-candidate pool untouched.",
+    "grouping": "Per-fixture synthetic evaluation; no random-frame splits."
+  },
+  "configuration": {
+    "gate": "symmetric bimanual motion (rim-propulsion signature) abstain gate, inserted after dominant-wrist info and before existing single-wrist non-stroke gates, in BOTH copies (swing-lab strokeHeuristic.ts v5 and vision-geometry strokeHeuristicLite.ts v3.1)",
+    "constants": {
+      "BIMANUAL_MIN_PAIRED_STEPS": 5,
+      "BIMANUAL_TRAVEL_RATIO": 0.7,
+      "BIMANUAL_SYNC_FRACTION": 0.7,
+      "BIMANUAL_STEP_MOTION_FLOOR": 0.01,
+      "BIMANUAL_WIDE_SEPARATION_SW": 0.9
+    },
+    "semantics": "Only frame steps where BOTH wrists are visible (>=0.25) in consecutive frames count. Gate fires only when: >=5 paired steps, dominant travel >= existing NON_SWING_TRAVEL_FLOOR, rival wrist travel >= 0.7x dominant, >=70% of moving steps vertically synchronized (same sign, magnitudes within 2x), AND mean inter-wrist separation >= 0.9 shoulder-widths (separate wheel rims, not a shared paddle grip). On fire: return UNKNOWN with limiting factor symmetric_bimanual_motion_rim_propulsion_signature plus a measured evidence line.",
+    "versions": {
+      "swing-lab": "stroke-heuristic-5 (uncalibrated)",
+      "vision-geometry lite": "stroke-heuristic-3.1 (uncalibrated)"
+    }
+  },
+  "metrics": {
+    "before": {
+      "source": "datasets/experiments/wave-e/e10-rt-stroke-ambiguous-summary.json E10-F5 (measured on base commit)",
+      "wheelchair-rim-push": "FOREHAND depth 2 confidence 0.80 (both copies)"
+    },
+    "after": {
+      "measuredAt": "working tree on top of base commit 8588ddd, via classifyStroke on both copies (contactMs=null, eventPeakMs=fixture peak, handedness=right)",
+      "wheelchair-rim-push": {
+        "both copies": {
+          "label": "UNKNOWN",
+          "leaf": "UNKNOWN",
+          "taxonomyDepth": 1,
+          "confidence": 0.2,
+          "limitingFactors": [
+            "reference_is_event_peak_not_contact",
+            "symmetric_bimanual_motion_rim_propulsion_signature"
+          ]
+        }
+      },
+      "two-handed-backhand (control, must NOT be rejected)": {
+        "both copies": {
+          "label": "BACKHAND",
+          "leaf": null,
+          "taxonomyDepth": 2,
+          "confidence": 0.8,
+          "bimanualLimitingFactorPresent": false
+        }
+      }
+    },
+    "pinFlip": "E10-F5 characterization pin in packages/swing-lab/test/strokeHeuristicAmbiguous.redteam.test.ts inverted from expected FOREHAND/0.8 to expected UNKNOWN + explicit limiting factor; equivalent coverage added to packages/vision-geometry/test/strokeHeuristicLite.redteam.test.ts. Umbrella open-findings test reduced from four to three open pins (F5 resolved)."
+  },
+  "gates": {
+    "pnpm typecheck": "pass (root)",
+    "pnpm lint": "pass (root eslint)",
+    "pnpm format:check": "pass (after prettier --write on the two touched src files)",
+    "tests": {
+      "@pickle/swing-lab": "47 files, 537 passed / 4 skipped",
+      "@pickle/vision-geometry": "8 files, 72 passed",
+      "@pickle/evaluation": "2 files, 15 passed"
+    }
+  },
+  "artifacts": [
+    "packages/swing-lab/src/strokeHeuristic.ts",
+    "packages/vision-geometry/src/strokeHeuristicLite.ts",
+    "packages/evaluation/src/synthetic/adversarialStrokeFixtures.ts",
+    "packages/swing-lab/test/strokeHeuristicAmbiguous.redteam.test.ts",
+    "packages/vision-geometry/test/strokeHeuristicLite.redteam.test.ts",
+    "packages/swing-lab/test/strokeHeuristic.test.ts"
+  ],
+  "limitations": [
+    "Synthetic fixtures only; no real wheelchair-player footage was available to validate the gate on human data.",
+    "Wide-separation floor (0.9 shoulder-widths) is uncalibrated; a two-handed stroke with unusually wide grip separation is not represented in fixtures.",
+    "No Mac/iPhone/Apple Vision or coach validation performed (BLOCKED_EXTERNAL for those channels)."
+  ]
+}

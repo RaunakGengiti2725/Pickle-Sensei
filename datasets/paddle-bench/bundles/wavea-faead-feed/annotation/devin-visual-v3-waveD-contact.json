@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-faead-feed",
+  "annotatorId": "devin-visual-v3-waveD",
+  "createdAtIso": "2026-08-29T10:05:00.000Z",
+  "revision": 1,
+  "stroke": "unsure",
+  "annotatedStrokeV3": null,
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": null,
+  "contactUncertainty": "exact",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.8,
+  "notes": "Wave D contact-only independent frame pass (ffmpeg absolute-CFR extraction from registered source, select+setpts, ts=round(n*1000*fps_den/fps_num)); prior Wave A/C passes not consulted during frame reads for repeat-pass events; held-out cases untouched. 24fps CFR; independent relabel of the first feed plus a NEW second feed event.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T10:05:00.000Z"
+    }
+  ],
+  "eventLabels": [
+    {
+      "eventStartMs": 33358,
+      "contactMs": 33438,
+      "eventEndMs": 34050,
+      "owner": "target",
+      "annotator": "devin-visual-v3-waveD",
+      "note": "informal forehand feed after paddle juggling; direct-observed (ball at paddle 33417, ON paddle face n000802 33417-33458ms bracket); contact window 33417-33458 (1 frame at 24fps), label 33438; waveC labeled 33438 (delta 0)"
+    },
+    {
+      "eventStartMs": 33625,
+      "contactMs": 33688,
+      "eventEndMs": 33875,
+      "owner": "target",
+      "annotator": "devin-visual-v3-waveD",
+      "note": "NEW second compact underhand feed by the same near player; direct-observed (ball just above paddle 33667, at paddle top n000809 33708ms, leftward-up departure 33750); contact window 33667-33708 (1 frame at 24fps), label 33688; repeat-pass agreed 33688 (delta 0)"
+    }
+  ]
+}

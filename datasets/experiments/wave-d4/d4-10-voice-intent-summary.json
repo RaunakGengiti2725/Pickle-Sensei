@@ -1,0 +1,41 @@
+{
+  "workstream": "d4-10-voice-intent",
+  "wave": "d4",
+  "branch": "devin/wave-d4/d4-10-voice-intent",
+  "base": "origin/devin/1787988068-wave-c-integration",
+  "date": "2026-08-29",
+  "environment": "LINUX-CPU (no pose extraction, no Mac/iPhone measurements; deterministic parsing contract only — no speech engine)",
+  "scope": "Voice/tap technique intent robustness: transcript-in → intent-out contract over the 61-technique taxonomy",
+  "audit": {
+    "capture_paths": [
+      "apps/mobile/src/flow/TechniqueIntentPicker.tsx (tap grid + typed/dictated text + AUTO chip → TechniqueIntent)",
+      "apps/mobile/src/screens/AnalyzeScreen.tsx (TechniqueIntent → declaredStroke slug + declaredCanonical)",
+      "apps/mobile/src/analysis/runCaptureAnalysis.ts (stroke: { declared, predicted: null } — declared/predicted separate records)",
+      "packages/analysis-pipeline/src/strokeAutoResolution.ts (declared-vs-predicted contract: declaration selects profile, never forces prediction; disagreement surfaced, never silently resolved)"
+    ],
+    "declared_prior_contract": "UNCHANGED and respected: voice resolution only produces declarations; predictedStroke remains a separate envelope field (StrokeIntentEnvelope). No thresholds/denominators/contracts weakened."
+  },
+  "implemented": {
+    "module": "packages/shared-types/src/voiceTechniqueIntent.ts (voice-intent-v1, new — additive)",
+    "contract": {
+      "resolver": "resolveVoiceTechniqueIntent(transcript): deterministic bounded keyword grammar; every output terminates in PICKLEBALL_TECHNIQUES (61 slugs) or explicit auto/unknown",
+      "statuses": ["leaf", "family", "side", "auto", "unknown (with rePrompt copy)"],
+      "leaf_rule": "leaf committed only when the transcript's own words fully specify exactly one taxonomy slug (all slug components mentioned + side spoken when the slug has one)",
+      "coarse_rule": "'forehand' → side-level candidate set; 'dink' → family-level candidate set; never an invented L3",
+      "unknown_rule": "no technique vocabulary → status unknown + re-prompt copy; picker shows the copy and keeps the tappable grid (existing design-system pattern)",
+      "projection": "projectVoiceResolution → SELECTABLE_TECHNIQUES_V1 (capture-selectable registry); taxonomy techniques with no selectable analog (lobs, counters, specialty) project to honest unknown, never rounded"
+    },
+    "wiring": "TechniqueIntentPicker now resolves typed/dictated text through voice-intent-v1 + projection (same IntentResolution shape as before; unknown hint now shows the resolver's re-prompt copy)"
+  },
+  "evidence": {
+    "shared_types_vitest": "24/24 passed (4 files) including new test/voiceTechniqueIntent.test.ts",
+    "mobile_jest_full_suite": "36 suites / 327 tests passed (was 30 suites / 214 per HANDOFF_V3; +voiceIntentCorpus.test.ts with 61 tests over a clearly-synthetic 56-phrase corpus: 32 leaf, 11 coarse, 6 auto, 7 unknown)",
+    "mobile_tsc_noEmit": "0 errors",
+    "pnpm_typecheck": "green (all workspace packages)",
+    "eslint_touched_files": "0 problems",
+    "prettier": "touched files formatted"
+  },
+  "corpus_note": "Phrase corpus is SYNTHETIC (hand-written transcripts in apps/mobile/__tests__/voiceIntentCorpus.test.ts). No speech-engine work; no real user speech; no Mobbin research performed (MCP unavailable).",
+  "held_out": "wm-dink-01 and afn-vic-rally1 untouched; no runs/ artifacts touched",
+  "verdict": "GREEN"
+}

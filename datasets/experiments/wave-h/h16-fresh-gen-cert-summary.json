@@ -1,0 +1,93 @@
+{
+  "id": "h16-fresh-gen-cert",
+  "wave": "wave-h",
+  "gate": "MANDATORY GATE 3 — fresh generalization certification",
+  "generatedAt": "2026-08-29T19:45:00Z",
+  "baseline": "devin/1787988068-wave-c-integration @ 104ea0f",
+  "branch": "devin/wave-h/h16-fresh-gen-cert",
+  "platform": "LINUX-CPU only. MediaPipe pose (tools/latency-bench/linux_pose_extract.py) + D-FINE COCO-proxy paddle detector (CPU). This is an OPERATIONAL PROBE of the pipeline, NOT the canonical Apple Vision / Mac cascade. No iPhone or Mac measurements exist in this workstream and none are claimed.",
+  "method": {
+    "inventory": "Enumerated every never-tuned-against item from datasets/pickleball/registry.json (freshCandidates + devPool). Cross-checked for labels/references anywhere in datasets/ and ml/ (none exist outside registry.json). Searched all remote branches and wave-g artifacts for 'g18' acquisitions: wave-g branches g16-gen-matrix, g17-worst-slice, g19-oracle-waterfall exist; NO g18 branch or artifact exists in the repo, so nothing additional to inventory.",
+    "stage1": "Pose-free mechanical gates on all 15 clips: frame analyzability + pre-analysis OOD gate + capture-envelope evaluator (h16-fresh-eval.ts -> h16-stage1-posefree-gates.json). Label-free.",
+    "stage2": "Full Linux-available swing-lab pipeline (analyzeVideo.ts: player tracking, event pre-pass, paddle detect/track, ball track, contact estimation, phase segmentation, stroke resolution) on all 15 clips using MediaPipe pose extracts (h16-aggregate.py -> h16-stage2-linux-probe.json). Label-free; grouped per uploader/session, clips never counted as frames.",
+    "labels": "ZERO labels created. The 12 fresh_candidate clips are label-blind holdout (policy: docs/HANDOFF_V4_DRAFT.md, wave-e e08 precedent) and were not tuned against. Annotation work-orders prepared in h16-annotation-pack.json."
+  },
+  "inventory": {
+    "freshLabelBlindCandidates": 12,
+    "freshCandidateSessions": 10,
+    "devLabelEligibleClips": 3,
+    "devPoolSessions": 3,
+    "waveG_g18_items": 0,
+    "heldOutCasesTouched": 0,
+    "note": "Held-out cases wm-dink-01 and afn-vic-rally1 were not viewed, labeled, tuned against, or regenerated."
+  },
+  "measuredResults": {
+    "clipsProcessed": 15,
+    "success_analyzed": 1,
+    "abstention": 14,
+    "silentFailure": 0,
+    "technicalFailure": 0,
+    "abstentionBreakdown": {
+      "capture_gate_not_analyzable": 11,
+      "no_distinct_stroke": 1,
+      "rejected_no_player_tracks": 2
+    },
+    "perSessionCountsArtifact": "datasets/experiments/wave-h/h16-stage2-linux-probe.json",
+    "poseFreGatesArtifact": "datasets/experiments/wave-h/h16-stage1-posefree-gates.json",
+    "onlyAnalyzedClip": "yt-o_NeuHjTEVE (dev_label_eligible, BT Pickleball session) — analyzed end-to-end AFTER the P1 detect-span fix; before the fix the same clip lost all paddle evidence to an inverted detector span.",
+    "accuracyOnFreshFootage": "NOT MEASURABLE — zero human labels exist on any fresh clip, so there is no ground-truth denominator. No accuracy numbers are claimed."
+  },
+  "zeroFreshEvidence": {
+    "strokeFamilies": [
+      "serve",
+      "return",
+      "groundstroke",
+      "drop_reset",
+      "dink",
+      "volley",
+      "attack_counter",
+      "overhead_lob",
+      "specialty"
+    ],
+    "strokeFamiliesNote": "All 9 supported stroke families (packages/shared-types/src/pickleballTaxonomy.ts) have ZERO labeled fresh evidence — no fresh clip has any stroke/event/contact/target label.",
+    "conditions": [
+      "doubles",
+      "crossing_players",
+      "adjacent_courts",
+      "occlusion",
+      "near_far_position",
+      "edge_on_paddle",
+      "motion_blur"
+    ],
+    "conditionsNote": "All 7 named conditions have ZERO labeled fresh evidence. Several fresh clips visibly contain doubles play per their titles, but without labels this is coverage of footage, not evidence of correct behavior."
+  },
+  "findings": {
+    "P0": [],
+    "P1": [
+      {
+        "id": "h16-p1-inverted-detect-span",
+        "status": "FIXED",
+        "severity": "P1 (excess abstention on supported capture; silent paddle-evidence loss)",
+        "description": "planDetectSpanHull (packages/swing-lab/src/detectSpanPlan.ts) produced an INVERTED span (startMs > endMs, spanMs negative) whenever the pose pre-pass event hull fell entirely outside the detected stroke window. The paddle detector then decoded zero frames and the pipeline silently continued with 'no_tracks_formed' / no_paddle_evidence. Observed on dev-pool clip yt-o_NeuHjTEVE (detectSpan startMs=36971 > endMs=35869, spanMs=-1103).",
+        "fix": "Fall back to the full stroke window when the clamped hull is empty/inverted (same behavior as zero pre-pass events). Regression tests added in packages/swing-lab/test/detectSpanPlan.test.ts (events before and after the window).",
+        "holdoutContamination": "None — discovered and verified exclusively on a dev_label_eligible clip; no label-blind fresh candidate was used to tune the fix.",
+        "verification": "Same clip re-run post-fix: detectSpan spanMs=2034 (full window), paddle tracked, outcome 'analyzed'."
+      }
+    ],
+    "P2": [
+      {
+        "id": "h16-p2-test-cpu-contention",
+        "status": "UNRESOLVED",
+        "description": "packages/capture-envelope test 'heavy synthetic motion blur is detected on motion_blur' times out (5s vitest limit) under heavy CPU contention; passes on an idle machine. Flaky-under-load only, not a product defect."
+      }
+    ]
+  },
+  "externallyBlocked": [
+    "Canonical accuracy on fresh footage requires human (Tier-A/B) labels; the 12-clip fresh pool is label-blind until an approved evaluation freeze — labeling now would destroy its holdout value.",
+    "Canonical Apple Vision / Mac cascade and iPhone on-device measurements are unavailable on Linux; the Linux MediaPipe probe cannot substitute for them.",
+    "Fresh footage supply remains thin (10 fresh sessions, mostly far-court broadcast-style video that honestly fails the capture gate); additional lawful near-court footage acquisition is an external task."
+  ],
+  "verdict": "FAIL",
+  "verdictRationale": "Fresh generalization can NOT honestly be called certified. What exists: 15 never-tuned-against clips across 13 sessions, full Linux-probe coverage (15/15), honest gate behavior (14 abstentions/rejections, 1 analyzed, 0 silent failures, 0 fabricated outputs). What is missing, quantified: (1) ZERO human-labeled fresh clips — every accuracy claim on fresh footage has an empty denominator; (2) all 9 stroke families and all 7 named conditions have zero labeled fresh evidence; (3) zero canonical-platform (Apple Vision/Mac/iPhone) runs on any fresh clip; (4) only 1 of 15 fresh clips even passes the capture gate on the Linux probe, so the current fresh pool cannot demonstrate supported-envelope success at any statistically meaningful session count. Minimum to certify: an approved label freeze, Tier-A/B labels on the fresh pool (or newly acquired supported-envelope fresh sessions), canonical-platform runs, and per-family/per-condition accuracy with real denominators.",
+  "labelsCreated": 0
+}

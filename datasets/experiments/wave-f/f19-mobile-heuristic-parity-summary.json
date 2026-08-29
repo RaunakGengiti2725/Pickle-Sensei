@@ -1,0 +1,51 @@
+{
+  "id": "f19-mobile-heuristic-parity",
+  "date": "2026-08-29",
+  "branch": "devin/wave-f/f19-mobile-heuristic-parity",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "mission": "Verify and restore stroke-heuristic parity between packages/swing-lab/src/strokeHeuristic.ts (stroke-heuristic-4 after e03) and the mobile port packages/vision-geometry/src/strokeHeuristicLite.ts (D-036 byte-equivalent-semantics contract).",
+  "findings": {
+    "driftConfirmed": true,
+    "liteVersionBefore": "stroke-heuristic-3 (uncalibrated)",
+    "liteVersionAfter": "stroke-heuristic-4 (uncalibrated)",
+    "missingV4GatesPorted": [
+      "MIN_WINDOW_SPEED_SAMPLES=3: non-swing speed gate fires only on >=3 MEASURED in-window samples; 1-2 samples record speed_window_sparsely_sampled_gate_not_applicable; empty window slice never fires",
+      "TORSO_COLLAPSE_MEDIAN_RATIO=0.6 / TORSO_MEDIAN_MIN_FRAMES=5: reference torso extent below 0.6x sequence median abstains (torso_extent_collapsed_vs_sequence_median), medianTorsoExtent() added",
+      "rivalMeasuredFrames in dominantWristInfo: rival wrist with 0 measured frames +/-200ms abstains (dominant_wrist_attribution_unverifiable_rival_unmeasured)"
+    ],
+    "intentionalLiteDifferencesPreserved": [
+      "HeuristicPaddleObservation.confidence is optional; missing confidence treated as below PADDLE_POINT_CONFIDENCE_FLOOR (documented mobile shape)",
+      "no legacyFrames precompute parameter (lab-only optimization; identical semantics when omitted)"
+    ]
+  },
+  "parityTest": {
+    "file": "packages/swing-lab/test/strokeHeuristicParity.test.ts",
+    "cases": 19,
+    "method": "identical fixtures run through both classifyStroke implementations; full prediction objects (label, leaf, depth, confidence, evidence strings, limitingFactors, provenance) asserted deeply equal, so one-sided drift fails CI",
+    "branchesCovered": [
+      "committed side call (synthetic swing, paddle+speeds)",
+      "wrist fallback / event-peak reference",
+      "no reference, no nearby pose frame",
+      "degenerate torso, v4 median torso collapse",
+      "v4 rival-wrist unmeasured",
+      "v3 no-swing-energy, v4 empty-window slice, v4 sparse window (<3 samples)",
+      "v3 measured stillness",
+      "paddle strong/degraded/implausible provenance",
+      "OVERHEAD corroborated, high-implausible-point non-OVERHEAD",
+      "ambidextrous abstention, left-handed side",
+      "identical classifier version strings"
+    ],
+    "result": "19/19 passed"
+  },
+  "gates": {
+    "pnpm --filter @pickle/vision-geometry test": "70 passed",
+    "pnpm --filter @pickle/swing-lab test": "555 passed, 4 skipped (includes 19 new parity tests)",
+    "pnpm typecheck": "pass (all packages)",
+    "pnpm lint": "pass",
+    "pnpm format:check": "pass",
+    "apps/mobile npx tsc --noEmit": "pass",
+    "apps/mobile npm test": "39 suites, 390 passed"
+  },
+  "datasetScope": "no dataset labels touched; synthetic hand-built pose fixtures + generateSwingSequence only; held-out cases untouched",
+  "verdict": "GREEN"
+}

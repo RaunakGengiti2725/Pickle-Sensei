@@ -1,0 +1,902 @@
+{
+  "benchVersion": "stroke-heuristic-recall-bench-v1",
+  "v6ClassifierVersion": "stroke-heuristic-6 (uncalibrated)",
+  "v5ClassifierVersion": "stroke-heuristic-5 (uncalibrated)",
+  "v5Provenance": "strokeHeuristicV5Frozen.ts — byte-for-byte git show d6f951f:packages/swing-lab/src/strokeHeuristic.ts (last pre-v6 commit) plus a provenance header",
+  "goldLabelsTotal": 29,
+  "evaluableLabels": 18,
+  "unevaluableCases": {
+    "afn-sasebo-rally1": 7,
+    "wm-volley-02": 2,
+    "afn-sasebo-rally2": 2
+  },
+  "holdoutStatement": "Held-out cases wm-dink-01 and afn-vic-rally1 were never read, listed, or evaluated: they have no rows in stroke-gold.json and no committed pose in runs-wave-a.",
+  "v6": {
+    "overall": {
+      "applicable": 17,
+      "l1Correct": 5,
+      "l1Wrong": 0,
+      "l1Abstained": 12,
+      "goldUnknown": 1,
+      "committed": 5,
+      "silentWrong": 2,
+      "overheadGold": 3,
+      "overheadPredicted": 1,
+      "overheadAbstained": 2,
+      "overheadCommittedWrongFamily": 0,
+      "overheadClaims": 1,
+      "overheadClaimsGoldOverhead": 1,
+      "overheadClaimsGoldOther": 0,
+      "overheadClaimsGoldUnknown": 0
+    },
+    "byGroup": {
+      "dvids-marne-2024": {
+        "applicable": 11,
+        "l1Correct": 4,
+        "l1Wrong": 0,
+        "l1Abstained": 7,
+        "goldUnknown": 1,
+        "committed": 4,
+        "silentWrong": 1,
+        "overheadGold": 3,
+        "overheadPredicted": 1,
+        "overheadAbstained": 2,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 1,
+        "overheadClaimsGoldOverhead": 1,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      },
+      "dvids-warriorgames-2026": {
+        "applicable": 1,
+        "l1Correct": 1,
+        "l1Wrong": 0,
+        "l1Abstained": 0,
+        "goldUnknown": 0,
+        "committed": 1,
+        "silentWrong": 1,
+        "overheadGold": 0,
+        "overheadPredicted": 0,
+        "overheadAbstained": 0,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 0,
+        "overheadClaimsGoldOverhead": 0,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      },
+      "afn-sasebo-2025-06": {
+        "applicable": 5,
+        "l1Correct": 0,
+        "l1Wrong": 0,
+        "l1Abstained": 5,
+        "goldUnknown": 0,
+        "committed": 0,
+        "silentWrong": 0,
+        "overheadGold": 0,
+        "overheadPredicted": 0,
+        "overheadAbstained": 0,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 0,
+        "overheadClaimsGoldOverhead": 0,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      }
+    },
+    "byOwner": {
+      "target": {
+        "applicable": 10,
+        "l1Correct": 3,
+        "l1Wrong": 0,
+        "l1Abstained": 7,
+        "goldUnknown": 1,
+        "committed": 3,
+        "silentWrong": 2,
+        "overheadGold": 1,
+        "overheadPredicted": 0,
+        "overheadAbstained": 1,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 0,
+        "overheadClaimsGoldOverhead": 0,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      },
+      "other": {
+        "applicable": 7,
+        "l1Correct": 2,
+        "l1Wrong": 0,
+        "l1Abstained": 5,
+        "goldUnknown": 0,
+        "committed": 2,
+        "silentWrong": 0,
+        "overheadGold": 2,
+        "overheadPredicted": 1,
+        "overheadAbstained": 1,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 1,
+        "overheadClaimsGoldOverhead": 1,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      }
+    },
+    "byGoldFamily": {
+      "serve": {
+        "applicable": 1,
+        "l1Correct": 1,
+        "l1Wrong": 0,
+        "l1Abstained": 0,
+        "goldUnknown": 0,
+        "committed": 1,
+        "silentWrong": 0,
+        "overheadGold": 0,
+        "overheadPredicted": 0,
+        "overheadAbstained": 0,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 0,
+        "overheadClaimsGoldOverhead": 0,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      },
+      "overhead_lob": {
+        "applicable": 3,
+        "l1Correct": 1,
+        "l1Wrong": 0,
+        "l1Abstained": 2,
+        "goldUnknown": 0,
+        "committed": 1,
+        "silentWrong": 0,
+        "overheadGold": 3,
+        "overheadPredicted": 1,
+        "overheadAbstained": 2,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 1,
+        "overheadClaimsGoldOverhead": 1,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      },
+      "unknown": {
+        "applicable": 0,
+        "l1Correct": 0,
+        "l1Wrong": 0,
+        "l1Abstained": 0,
+        "goldUnknown": 1,
+        "committed": 0,
+        "silentWrong": 0,
+        "overheadGold": 0,
+        "overheadPredicted": 0,
+        "overheadAbstained": 0,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 0,
+        "overheadClaimsGoldOverhead": 0,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      },
+      "groundstroke": {
+        "applicable": 2,
+        "l1Correct": 1,
+        "l1Wrong": 0,
+        "l1Abstained": 1,
+        "goldUnknown": 0,
+        "committed": 1,
+        "silentWrong": 1,
+        "overheadGold": 0,
+        "overheadPredicted": 0,
+        "overheadAbstained": 0,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 0,
+        "overheadClaimsGoldOverhead": 0,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      },
+      "volley": {
+        "applicable": 7,
+        "l1Correct": 0,
+        "l1Wrong": 0,
+        "l1Abstained": 7,
+        "goldUnknown": 0,
+        "committed": 0,
+        "silentWrong": 0,
+        "overheadGold": 0,
+        "overheadPredicted": 0,
+        "overheadAbstained": 0,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 0,
+        "overheadClaimsGoldOverhead": 0,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      },
+      "dink": {
+        "applicable": 4,
+        "l1Correct": 2,
+        "l1Wrong": 0,
+        "l1Abstained": 2,
+        "goldUnknown": 0,
+        "committed": 2,
+        "silentWrong": 1,
+        "overheadGold": 0,
+        "overheadPredicted": 0,
+        "overheadAbstained": 0,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 0,
+        "overheadClaimsGoldOverhead": 0,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      }
+    }
+  },
+  "v5": {
+    "overall": {
+      "applicable": 17,
+      "l1Correct": 6,
+      "l1Wrong": 0,
+      "l1Abstained": 11,
+      "goldUnknown": 1,
+      "committed": 6,
+      "silentWrong": 2,
+      "overheadGold": 3,
+      "overheadPredicted": 1,
+      "overheadAbstained": 2,
+      "overheadCommittedWrongFamily": 0,
+      "overheadClaims": 1,
+      "overheadClaimsGoldOverhead": 1,
+      "overheadClaimsGoldOther": 0,
+      "overheadClaimsGoldUnknown": 0
+    },
+    "byGroup": {
+      "dvids-marne-2024": {
+        "applicable": 11,
+        "l1Correct": 4,
+        "l1Wrong": 0,
+        "l1Abstained": 7,
+        "goldUnknown": 1,
+        "committed": 4,
+        "silentWrong": 1,
+        "overheadGold": 3,
+        "overheadPredicted": 1,
+        "overheadAbstained": 2,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 1,
+        "overheadClaimsGoldOverhead": 1,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      },
+      "dvids-warriorgames-2026": {
+        "applicable": 1,
+        "l1Correct": 1,
+        "l1Wrong": 0,
+        "l1Abstained": 0,
+        "goldUnknown": 0,
+        "committed": 1,
+        "silentWrong": 1,
+        "overheadGold": 0,
+        "overheadPredicted": 0,
+        "overheadAbstained": 0,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 0,
+        "overheadClaimsGoldOverhead": 0,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      },
+      "afn-sasebo-2025-06": {
+        "applicable": 5,
+        "l1Correct": 1,
+        "l1Wrong": 0,
+        "l1Abstained": 4,
+        "goldUnknown": 0,
+        "committed": 1,
+        "silentWrong": 0,
+        "overheadGold": 0,
+        "overheadPredicted": 0,
+        "overheadAbstained": 0,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 0,
+        "overheadClaimsGoldOverhead": 0,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      }
+    },
+    "byOwner": {
+      "target": {
+        "applicable": 10,
+        "l1Correct": 4,
+        "l1Wrong": 0,
+        "l1Abstained": 6,
+        "goldUnknown": 1,
+        "committed": 4,
+        "silentWrong": 2,
+        "overheadGold": 1,
+        "overheadPredicted": 0,
+        "overheadAbstained": 1,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 0,
+        "overheadClaimsGoldOverhead": 0,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      },
+      "other": {
+        "applicable": 7,
+        "l1Correct": 2,
+        "l1Wrong": 0,
+        "l1Abstained": 5,
+        "goldUnknown": 0,
+        "committed": 2,
+        "silentWrong": 0,
+        "overheadGold": 2,
+        "overheadPredicted": 1,
+        "overheadAbstained": 1,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 1,
+        "overheadClaimsGoldOverhead": 1,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      }
+    },
+    "byGoldFamily": {
+      "serve": {
+        "applicable": 1,
+        "l1Correct": 1,
+        "l1Wrong": 0,
+        "l1Abstained": 0,
+        "goldUnknown": 0,
+        "committed": 1,
+        "silentWrong": 0,
+        "overheadGold": 0,
+        "overheadPredicted": 0,
+        "overheadAbstained": 0,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 0,
+        "overheadClaimsGoldOverhead": 0,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      },
+      "overhead_lob": {
+        "applicable": 3,
+        "l1Correct": 1,
+        "l1Wrong": 0,
+        "l1Abstained": 2,
+        "goldUnknown": 0,
+        "committed": 1,
+        "silentWrong": 0,
+        "overheadGold": 3,
+        "overheadPredicted": 1,
+        "overheadAbstained": 2,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 1,
+        "overheadClaimsGoldOverhead": 1,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      },
+      "unknown": {
+        "applicable": 0,
+        "l1Correct": 0,
+        "l1Wrong": 0,
+        "l1Abstained": 0,
+        "goldUnknown": 1,
+        "committed": 0,
+        "silentWrong": 0,
+        "overheadGold": 0,
+        "overheadPredicted": 0,
+        "overheadAbstained": 0,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 0,
+        "overheadClaimsGoldOverhead": 0,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      },
+      "groundstroke": {
+        "applicable": 2,
+        "l1Correct": 1,
+        "l1Wrong": 0,
+        "l1Abstained": 1,
+        "goldUnknown": 0,
+        "committed": 1,
+        "silentWrong": 1,
+        "overheadGold": 0,
+        "overheadPredicted": 0,
+        "overheadAbstained": 0,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 0,
+        "overheadClaimsGoldOverhead": 0,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      },
+      "volley": {
+        "applicable": 7,
+        "l1Correct": 1,
+        "l1Wrong": 0,
+        "l1Abstained": 6,
+        "goldUnknown": 0,
+        "committed": 1,
+        "silentWrong": 0,
+        "overheadGold": 0,
+        "overheadPredicted": 0,
+        "overheadAbstained": 0,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 0,
+        "overheadClaimsGoldOverhead": 0,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      },
+      "dink": {
+        "applicable": 4,
+        "l1Correct": 2,
+        "l1Wrong": 0,
+        "l1Abstained": 2,
+        "goldUnknown": 0,
+        "committed": 2,
+        "silentWrong": 1,
+        "overheadGold": 0,
+        "overheadPredicted": 0,
+        "overheadAbstained": 0,
+        "overheadCommittedWrongFamily": 0,
+        "overheadClaims": 0,
+        "overheadClaimsGoldOverhead": 0,
+        "overheadClaimsGoldOther": 0,
+        "overheadClaimsGoldUnknown": 0
+      }
+    }
+  },
+  "changedRows": [
+    {
+      "caseId": "wavea-sasebo-volleys",
+      "group": "afn-sasebo-2025-06",
+      "owner": "target",
+      "eventStartMs": 52434,
+      "goldL1": "volley",
+      "goldL2": "backhand",
+      "v5Predicted": "BACKHAND",
+      "v6Predicted": "UNKNOWN",
+      "v5L1": "correct",
+      "v6L1": "abstained",
+      "v5L2": "correct",
+      "v6L2": "abstained",
+      "changed": true,
+      "v6LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "declared_wrist_too_sparsely_measured_under_handedness_contradiction"
+      ],
+      "v5LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "declared_handedness_unconfirmed_by_dominant_motion_wrist",
+        "bounce_not_observed_level3_uncommitted"
+      ]
+    }
+  ],
+  "rows": [
+    {
+      "caseId": "wavea-marne-serve",
+      "group": "dvids-marne-2024",
+      "owner": "target",
+      "eventStartMs": 34017,
+      "goldL1": "serve",
+      "goldL2": "forehand",
+      "v5Predicted": "FOREHAND",
+      "v6Predicted": "FOREHAND",
+      "v5L1": "correct",
+      "v6L1": "correct",
+      "v5L2": "correct",
+      "v6L2": "correct",
+      "changed": false,
+      "v6LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "bounce_not_observed_level3_uncommitted"
+      ],
+      "v5LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "bounce_not_observed_level3_uncommitted"
+      ]
+    },
+    {
+      "caseId": "wavea-marne-dig",
+      "group": "dvids-marne-2024",
+      "owner": "target",
+      "eventStartMs": 14042,
+      "goldL1": "overhead_lob",
+      "goldL2": "overhead",
+      "v5Predicted": "UNKNOWN",
+      "v6Predicted": "UNKNOWN",
+      "v5L1": "abstained",
+      "v6L1": "abstained",
+      "v5L2": "abstained",
+      "v6L2": "abstained",
+      "changed": false,
+      "v6LimitingFactors": [
+        "dominant_wrist_attribution_unverifiable_rival_unmeasured"
+      ],
+      "v5LimitingFactors": [
+        "dominant_wrist_attribution_unverifiable_rival_unmeasured"
+      ]
+    },
+    {
+      "caseId": "wavea-faead-feed",
+      "group": "dvids-marne-2024",
+      "owner": "target",
+      "eventStartMs": 33358,
+      "goldL1": "unknown",
+      "goldL2": "unknown",
+      "v5Predicted": "UNKNOWN",
+      "v6Predicted": "UNKNOWN",
+      "v5L1": "gold_unknown",
+      "v6L1": "gold_unknown",
+      "v5L2": "gold_unknown",
+      "v6L2": "gold_unknown",
+      "changed": false,
+      "v6LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "shoulder_separation_degenerate_side_decision_unreliable"
+      ],
+      "v5LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "shoulder_separation_degenerate_side_decision_unreliable"
+      ]
+    },
+    {
+      "caseId": "wavea-faead-rally",
+      "group": "dvids-marne-2024",
+      "owner": "target",
+      "eventStartMs": 13417,
+      "goldL1": "groundstroke",
+      "goldL2": "backhand",
+      "v5Predicted": "FOREHAND",
+      "v6Predicted": "FOREHAND",
+      "v5L1": "correct",
+      "v6L1": "correct",
+      "v5L2": "wrong",
+      "v6L2": "wrong",
+      "changed": false,
+      "v6LimitingFactors": [
+        "reference_is_event_peak_not_contact",
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "no_contact_evidence_confidence_capped",
+        "bounce_not_observed_level3_uncommitted"
+      ],
+      "v5LimitingFactors": [
+        "reference_is_event_peak_not_contact",
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "no_contact_evidence_confidence_capped",
+        "bounce_not_observed_level3_uncommitted"
+      ]
+    },
+    {
+      "caseId": "wavea-faead-rally",
+      "group": "dvids-marne-2024",
+      "owner": "target",
+      "eventStartMs": 13875,
+      "goldL1": "volley",
+      "goldL2": "forehand",
+      "v5Predicted": "UNKNOWN",
+      "v6Predicted": "UNKNOWN",
+      "v5L1": "abstained",
+      "v6L1": "abstained",
+      "v5L2": "abstained",
+      "v6L2": "abstained",
+      "changed": false,
+      "v6LimitingFactors": [
+        "no_swing_energy_in_window"
+      ],
+      "v5LimitingFactors": [
+        "no_swing_energy_in_window"
+      ]
+    },
+    {
+      "caseId": "wavea-944403-dink",
+      "group": "dvids-marne-2024",
+      "owner": "other",
+      "eventStartMs": 20125,
+      "goldL1": "dink",
+      "goldL2": "unknown",
+      "v5Predicted": "UNKNOWN",
+      "v6Predicted": "UNKNOWN",
+      "v5L1": "abstained",
+      "v6L1": "abstained",
+      "v5L2": "gold_unknown",
+      "v6L2": "gold_unknown",
+      "changed": false,
+      "v6LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "shoulder_separation_degenerate_side_decision_unreliable"
+      ],
+      "v5LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "shoulder_separation_degenerate_side_decision_unreliable"
+      ]
+    },
+    {
+      "caseId": "wavea-944403-dink",
+      "group": "dvids-marne-2024",
+      "owner": "other",
+      "eventStartMs": 20700,
+      "goldL1": "dink",
+      "goldL2": "unknown",
+      "v5Predicted": "UNKNOWN",
+      "v6Predicted": "UNKNOWN",
+      "v5L1": "abstained",
+      "v6L1": "abstained",
+      "v5L2": "gold_unknown",
+      "v6L2": "gold_unknown",
+      "changed": false,
+      "v6LimitingFactors": [
+        "no_contact_point_measurable"
+      ],
+      "v5LimitingFactors": [
+        "no_contact_point_measurable"
+      ]
+    },
+    {
+      "caseId": "wavea-944403-dink",
+      "group": "dvids-marne-2024",
+      "owner": "target",
+      "eventStartMs": 20950,
+      "goldL1": "groundstroke",
+      "goldL2": "forehand",
+      "v5Predicted": "UNKNOWN",
+      "v6Predicted": "UNKNOWN",
+      "v5L1": "abstained",
+      "v6L1": "abstained",
+      "v5L2": "abstained",
+      "v6L2": "abstained",
+      "changed": false,
+      "v6LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "wrist_low_visibility_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "declared_handedness_unconfirmed_by_dominant_motion_wrist",
+        "side_margin_within_degraded_abstention_band"
+      ],
+      "v5LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "wrist_low_visibility_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "declared_handedness_unconfirmed_by_dominant_motion_wrist",
+        "side_margin_within_degraded_abstention_band"
+      ]
+    },
+    {
+      "caseId": "wavea-944403-dink",
+      "group": "dvids-marne-2024",
+      "owner": "other",
+      "eventStartMs": 21500,
+      "goldL1": "dink",
+      "goldL2": "unknown",
+      "v5Predicted": "FOREHAND",
+      "v6Predicted": "FOREHAND",
+      "v5L1": "correct",
+      "v6L1": "correct",
+      "v5L2": "gold_unknown",
+      "v6L2": "gold_unknown",
+      "changed": false,
+      "v6LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "bounce_not_observed_level3_uncommitted"
+      ],
+      "v5LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "bounce_not_observed_level3_uncommitted"
+      ]
+    },
+    {
+      "caseId": "wavea-944403-dink",
+      "group": "dvids-marne-2024",
+      "owner": "other",
+      "eventStartMs": 22000,
+      "goldL1": "overhead_lob",
+      "goldL2": "unknown",
+      "v5Predicted": "UNKNOWN",
+      "v6Predicted": "UNKNOWN",
+      "v5L1": "abstained",
+      "v6L1": "abstained",
+      "v5L2": "gold_unknown",
+      "v6L2": "gold_unknown",
+      "changed": false,
+      "v6LimitingFactors": [
+        "torso_extent_collapsed_vs_sequence_median"
+      ],
+      "v5LimitingFactors": [
+        "torso_extent_collapsed_vs_sequence_median"
+      ]
+    },
+    {
+      "caseId": "wavea-944403-smash",
+      "group": "dvids-marne-2024",
+      "owner": "other",
+      "eventStartMs": 3617,
+      "goldL1": "overhead_lob",
+      "goldL2": "overhead",
+      "v5Predicted": "OVERHEAD",
+      "v6Predicted": "OVERHEAD",
+      "v5L1": "correct",
+      "v6L1": "correct",
+      "v5L2": "correct",
+      "v6L2": "correct",
+      "changed": false,
+      "v6LimitingFactors": [
+        "paddle_not_tracked_at_contact"
+      ],
+      "v5LimitingFactors": [
+        "paddle_not_tracked_at_contact"
+      ]
+    },
+    {
+      "caseId": "wavea-944403-smash",
+      "group": "dvids-marne-2024",
+      "owner": "target",
+      "eventStartMs": 4317,
+      "goldL1": "volley",
+      "goldL2": "backhand",
+      "v5Predicted": "UNKNOWN",
+      "v6Predicted": "UNKNOWN",
+      "v5L1": "abstained",
+      "v6L1": "abstained",
+      "v5L2": "abstained",
+      "v6L2": "abstained",
+      "changed": false,
+      "v6LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "shoulder_separation_degenerate_side_decision_unreliable"
+      ],
+      "v5LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "shoulder_separation_degenerate_side_decision_unreliable"
+      ]
+    },
+    {
+      "caseId": "wavea-wgm-wheelchair",
+      "group": "dvids-warriorgames-2026",
+      "owner": "target",
+      "eventStartMs": 182400,
+      "goldL1": "dink",
+      "goldL2": "backhand",
+      "v5Predicted": "FOREHAND",
+      "v6Predicted": "FOREHAND",
+      "v5L1": "correct",
+      "v6L1": "correct",
+      "v5L2": "wrong",
+      "v6L2": "wrong",
+      "changed": false,
+      "v6LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "bounce_not_observed_level3_uncommitted"
+      ],
+      "v5LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "bounce_not_observed_level3_uncommitted"
+      ]
+    },
+    {
+      "caseId": "wavea-sasebo-volleys",
+      "group": "afn-sasebo-2025-06",
+      "owner": "target",
+      "eventStartMs": 51900,
+      "goldL1": "volley",
+      "goldL2": "backhand",
+      "v5Predicted": "UNKNOWN",
+      "v6Predicted": "UNKNOWN",
+      "v5L1": "abstained",
+      "v6L1": "abstained",
+      "v5L2": "abstained",
+      "v6L2": "abstained",
+      "changed": false,
+      "v6LimitingFactors": [
+        "no_swing_energy_in_window"
+      ],
+      "v5LimitingFactors": [
+        "no_swing_energy_in_window"
+      ]
+    },
+    {
+      "caseId": "wavea-sasebo-volleys",
+      "group": "afn-sasebo-2025-06",
+      "owner": "other",
+      "eventStartMs": 52267,
+      "goldL1": "volley",
+      "goldL2": "unknown",
+      "v5Predicted": "UNKNOWN",
+      "v6Predicted": "UNKNOWN",
+      "v5L1": "abstained",
+      "v6L1": "abstained",
+      "v5L2": "gold_unknown",
+      "v6L2": "gold_unknown",
+      "changed": false,
+      "v6LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "contact_too_close_to_midline_for_confident_side"
+      ],
+      "v5LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "contact_too_close_to_midline_for_confident_side"
+      ]
+    },
+    {
+      "caseId": "wavea-sasebo-volleys",
+      "group": "afn-sasebo-2025-06",
+      "owner": "target",
+      "eventStartMs": 52434,
+      "goldL1": "volley",
+      "goldL2": "backhand",
+      "v5Predicted": "BACKHAND",
+      "v6Predicted": "UNKNOWN",
+      "v5L1": "correct",
+      "v6L1": "abstained",
+      "v5L2": "correct",
+      "v6L2": "abstained",
+      "changed": true,
+      "v6LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "declared_wrist_too_sparsely_measured_under_handedness_contradiction"
+      ],
+      "v5LimitingFactors": [
+        "paddle_not_tracked_at_contact",
+        "bounce_not_observed_volley_vs_groundstroke_unresolved",
+        "declared_handedness_unconfirmed_by_dominant_motion_wrist",
+        "bounce_not_observed_level3_uncommitted"
+      ]
+    },
+    {
+      "caseId": "wavea-sasebo-volleys",
+      "group": "afn-sasebo-2025-06",
+      "owner": "other",
+      "eventStartMs": 52867,
+      "goldL1": "volley",
+      "goldL2": "unknown",
+      "v5Predicted": "UNKNOWN",
+      "v6Predicted": "UNKNOWN",
+      "v5L1": "abstained",
+      "v6L1": "abstained",
+      "v5L2": "gold_unknown",
+      "v6L2": "gold_unknown",
+      "changed": false,
+      "v6LimitingFactors": [
+        "no_contact_point_measurable"
+      ],
+      "v5LimitingFactors": [
+        "no_contact_point_measurable"
+      ]
+    },
+    {
+      "caseId": "wavea-sasebo-volleys",
+      "group": "afn-sasebo-2025-06",
+      "owner": "target",
+      "eventStartMs": 52934,
+      "goldL1": "volley",
+      "goldL2": "backhand",
+      "v5Predicted": "UNKNOWN",
+      "v6Predicted": "UNKNOWN",
+      "v5L1": "abstained",
+      "v6L1": "abstained",
+      "v5L2": "abstained",
+      "v6L2": "abstained",
+      "changed": false,
+      "v6LimitingFactors": [
+        "no_swing_energy_in_window"
+      ],
+      "v5LimitingFactors": [
+        "no_swing_energy_in_window"
+      ]
+    }
+  ],
+  "disclosures": [
+    "Dev-tier committed gold only; pose exists for the 8 wave-a corpus windows, so gold on afn-sasebo-rally1/2 and wm-volley-02 is not evaluable on this machine.",
+    "paddle=null everywhere (no committed paddle track): contact points are wrist-derived for BOTH versions identically.",
+    "Every rate is reported as counts; slice Ns are small (gold overhead_lob is single digits) — treat differences as per-row facts, not statistics.",
+    "OVERHEAD-precision rows whose gold L1 is 'unknown' are indeterminate and reported in their own bucket, never counted as correct or wrong.",
+    "OTHER-owned rows use heuristic window-coverage attribution (same policy for both versions) and are also reported as a separate owner slice."
+  ]
+}

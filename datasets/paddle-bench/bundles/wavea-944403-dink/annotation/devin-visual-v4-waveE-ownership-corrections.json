@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "kind": "ownership-correction-set",
+  "captureBundle": "wavea-944403-dink",
+  "annotatorId": "devin-visual-v4-waveE-e05",
+  "createdAtIso": "2026-08-29T09:50:00.000Z",
+  "appendOnly": true,
+  "corrects": "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v2-waveC-ownership.json",
+  "basedOnAudit": "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+  "method": "Versioned append-only application of the D2-04 blind-audit adjudications. Original waveC labels are NEVER rewritten; each record references the adjudication it applies and the original value it supersedes (supersede-point) or the omission it fills (add-visible). Only auditor-upheld adjudications become corrections; resolved-to-waveC, downgraded, partial, and unresolved adjudications are recorded as no-change dispositions.",
+  "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"],
+  "corrections": [
+    {
+      "adjudicationId": "ADJ-D2",
+      "tMs": 21087.73,
+      "owner": "target",
+      "action": "supersede-point",
+      "originalPoint": { "x": 0.3021, "y": 0.5407 },
+      "point": { "x": 0.293, "y": 0.455 },
+      "note": "auditor-upheld coordinate correction: waveC y covered legs/net mesh; blade face at y0.435-0.475 (ADJ-D2 final [0.293,0.455])"
+    },
+    {
+      "adjudicationId": "ADJ-D4",
+      "tMs": 21337.98,
+      "owner": "target",
+      "action": "add-visible",
+      "point": { "x": 0.315, "y": 0.4 },
+      "note": "auditor-upheld visibility correction: target paddle visible edge-on; waveC 'occluded' contested (ADJ-D4 final [0.315,0.40] +/-0.03)"
+    },
+    {
+      "adjudicationId": "ADJ-D6",
+      "tMs": 22338.98,
+      "owner": "other",
+      "action": "add-visible",
+      "point": { "x": 0.645, "y": 0.512 },
+      "note": "auditor-upheld under-label: near-right light-blue paddle unambiguously visible (ADJ-D6 center (0.645,0.512))"
+    },
+    {
+      "adjudicationId": "ADJ-D7",
+      "tMs": 22589.23,
+      "owner": "other",
+      "action": "supersede-point",
+      "originalPoint": { "x": 0.3547, "y": 0.3843 },
+      "point": { "x": 0.295, "y": 0.385 },
+      "note": "auditor-upheld coordinate correction: waveC x covered forearm/background; blade at x0.28-0.31 (ADJ-D7 final [0.295,0.385])"
+    },
+    {
+      "adjudicationId": "ADJ-D8",
+      "tMs": 22589.23,
+      "owner": "other",
+      "action": "add-visible",
+      "point": { "x": 0.693, "y": 0.588 },
+      "note": "auditor-upheld under-label: near-right blue blade visible partially behind leg (ADJ-D8 final [0.693,0.588])"
+    }
+  ],
+  "noChangeDispositions": [
+    {
+      "adjudicationId": "ADJ-D1",
+      "tMs": 20003.32,
+      "disposition": "partial-no-correction",
+      "note": "presence agreed but certifiability contested; waveC conservative ambiguous-omission ruled defensible — gold unchanged"
+    },
+    {
+      "adjudicationId": "ADJ-D3",
+      "tMs": 21087.73,
+      "disposition": "unresolved-classification",
+      "note": "coordinates concordant within 0.006; certifiability threshold differs; retained as class disagreement — gold unchanged"
+    },
+    {
+      "adjudicationId": "ADJ-D5",
+      "tMs": 21838.48,
+      "disposition": "resolved-to-waveC",
+      "note": "auditor blind pass missed dark-on-dark edge-on blade; corrected observation agrees with waveC within 0.017 — gold unchanged"
+    }
+  ]
+}

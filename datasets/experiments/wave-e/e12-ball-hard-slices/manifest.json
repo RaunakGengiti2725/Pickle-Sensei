@@ -1,0 +1,76 @@
+{
+  "id": "e12-ball-hard-slices",
+  "workstream": "Wave E — ball tracking on D2-06 hard-slice gold",
+  "createdAtIso": "2026-08-29T09:00:00.000Z",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "goldDataset": "datasets/experiments/wave-d2/d2-06-ball-hard-slices-summary.json (43 labels, annotator devin-visual-v4-waveD2)",
+  "measurementBoundary": "LINUX-CPU pose-free proxy: real tracker code (buildBallTracks → selectPrimaryBallTrack) over Linux-regenerated motion candidates (tools/paddle-lab/ball_candidates.py, 3-frame differencing). No pose (Apple Vision is macOS-only) so the play-band and body-occlusion gates are inert; no paddle track so paddle gates are inert. This is NOT the canonical Mac cascade — those numbers remain BLOCKED_EXTERNAL.",
+  "candidateGeneration": {
+    "tool": "tools/paddle-lab/ball_candidates.py",
+    "media": {
+      "wm-volley-02": "datasets/paddle-bench/bundles/wm-volley-02/clip.mp4 (committed clip, 25fps)",
+      "afn-sasebo-rally2": "sasebo.webm re-fetched from Wikimedia Commons (rec-6e06a3157947, PD-USGov), 29.97fps, not committed",
+      "wavea-sasebo-volleys": "same sasebo.webm recording",
+      "wavea-wgm-wheelchair": "DOD_111781177.mp4 re-fetched from DVIDS (rec-960a1a200d6d, PD-USGov), 30fps, not committed"
+    }
+  },
+  "labels": { "annotatorId": "devin-visual-v4-waveD2" },
+  "cases": [
+    {
+      "id": "wm-volley-02",
+      "labels": "../../../paddle-bench/bundles/wm-volley-02/annotation/devin-visual-v4-waveD2-ball.json",
+      "candidates": "candidates/wm-volley-02.json",
+      "clockOffsetMs": 0,
+      "clock": "CLIP clock, 25fps (v1/waveC convention)",
+      "windows": [{ "startMs": 5200, "endMs": 7800, "note": "volley exchange around gold 6320-6640" }]
+    },
+    {
+      "id": "afn-sasebo-rally2",
+      "labels": "../../../paddle-bench/bundles/afn-sasebo-rally2/annotation/devin-visual-v4-waveD2-ball.json",
+      "candidates": "candidates/afn-sasebo-rally2.json",
+      "clockOffsetMs": 30630.6,
+      "clock": "CLIP clock via clip_n = source_n - 918 on rec-6e06a3157947 (29.97fps): offset = 918*1000/29.97 = 30630.6ms; D2-06 discloses ≤1-frame (33ms) residual alignment uncertainty",
+      "windows": [{ "startMs": 1200, "endMs": 4200, "note": "lob + occlusion cycle around gold 2336-3070" }]
+    },
+    {
+      "id": "wavea-wgm-wheelchair",
+      "labels": "../../../paddle-bench/bundles/wavea-wgm-wheelchair/annotation/devin-visual-v4-waveD2-ball.json",
+      "candidates": "candidates/wavea-wgm-wheelchair.json",
+      "clockOffsetMs": 0,
+      "clock": "RECORDING clock, 30fps (wave-a convention), rec-960a1a200d6d",
+      "windows": [{ "startMs": 181600, "endMs": 183600, "note": "bounce + hit + post-hit blur, gold 182333-182867; camera pans right→left from ~182933" }]
+    },
+    {
+      "id": "wavea-sasebo-volleys",
+      "labels": "../../../paddle-bench/bundles/wavea-sasebo-volleys/annotation/devin-visual-v4-waveD2-ball.json",
+      "candidates": "candidates/wavea-sasebo-volleys.json",
+      "clockOffsetMs": 0,
+      "clock": "RECORDING clock, 29.97fps (wave-a convention), rec-6e06a3157947",
+      "windows": [
+        { "startMs": 51100, "endMs": 52700, "note": "net crossings + far-paddle occlusion, gold 51718-52553" },
+        { "startMs": 52700, "endMs": 54300, "note": "fast volley + contact occlusion + toss, gold 53220-54088" },
+        { "startMs": 54200, "endMs": 55200, "note": "near-side crossing, gold 54455-54588" }
+      ]
+    }
+  ],
+  "slices": {
+    "netCrossing": [
+      { "case": "wavea-sasebo-volleys", "tMs": [51718, 51852, 54455] },
+      { "case": "wm-volley-02", "tMs": [6640] }
+    ],
+    "paddleOcclusion": [
+      { "case": "afn-sasebo-rally2", "tMs": [2536] },
+      { "case": "wavea-sasebo-volleys", "tMs": [51819, 53887] }
+    ],
+    "multiBallBackground": [
+      { "case": "afn-sasebo-rally2", "tMs": [2402] },
+      { "case": "wavea-sasebo-volleys", "tMs": [51919] }
+    ],
+    "fastBlur": [
+      { "case": "wavea-sasebo-volleys", "tMs": [53220] },
+      { "case": "wavea-wgm-wheelchair", "tMs": [182733, 182800, 182867] },
+      { "case": "afn-sasebo-rally2", "tMs": [2469, 3003] }
+    ],
+    "occlusionCycle": [{ "case": "afn-sasebo-rally2", "tMs": [2803, 2869, 2903, 3003] }]
+  }
+}

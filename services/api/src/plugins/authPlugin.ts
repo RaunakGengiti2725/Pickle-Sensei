@@ -124,6 +124,28 @@ export function registerAuth(
         "Admin role required.",
       );
     }
+    // Defence in depth: an `admin` token claim is a statement by the identity
+    // provider, not proof of authority. Outside development the subject must
+    // also appear in the server-side allowlist, so one mis-mapped (or
+    // user-editable) IdP claim cannot mint an administrator.
+    const allowlist = context.config.adminAuthSubjects ?? [];
+    const allowlistRequired = context.config.env !== "development";
+    if (allowlist.length > 0 || allowlistRequired) {
+      if (!allowlist.includes(request.user.authSubject)) {
+        request.log.warn(
+          { authSubject: request.user.authSubject },
+          "admin claim refused: subject not in ADMIN_AUTH_SUBJECTS",
+        );
+        return sendFailure(
+          reply,
+          request,
+          403,
+          "permission_denied",
+          "auth.admin_not_authorized",
+          "Admin role required.",
+        );
+      }
+    }
   });
 }
 

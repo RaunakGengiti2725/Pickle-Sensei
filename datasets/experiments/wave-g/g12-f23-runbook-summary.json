@@ -1,0 +1,51 @@
+{
+  "id": "g12-f23-runbook",
+  "wave": "wave-g",
+  "date": "2026-08-29",
+  "mission": "Deliver the deployment story for the g10/g11 consent DB role separation: IaC secrets/ECS wiring in the in-repo Terraform, an operations runbook (role provisioning, credential rotation, migration procedure, residual risk), and an honest STATUS_BOARD f23 update — internal preparation complete, only production credential application external.",
+  "baseBranch": "devin/wave-g/g11-f23-tests",
+  "branch": "devin/wave-g/g12-f23-runbook",
+  "method": "Terraform (infra/terraform): the data module now generates 4 per-role 32-char random passwords and 4 KMS-encrypted Secrets Manager secrets holding full connection URLs (<env>/db-url-app|worker|migrator|readonly), composed from the RDS endpoint; the compute module injects DATABASE_URL_APP into the api task and DATABASE_URL_WORKER into the media-worker task as ECS container secrets (matching the env vars services/api/src/config.ts and services/media-worker/src/main.ts already read from g10), and scopes the task-execution role to secretsmanager:GetSecretValue on exactly those two ARNs plus kms:Decrypt on the data key — the migrator and readonly secrets are not readable by service tasks. Migrations stay a deliberate operator step (never wired into task definitions). New docs/RUNBOOK_CONSENT_DB_ROLES.md covers the role model, IaC wiring, provisioning SQL for staging/production (mirroring init-roles.sql with Secrets Manager passwords), the g11-measured pgcrypto admin prerequisite, one-role-at-a-time rotation with terraform -replace + ALTER ROLE + forced ECS redeploy, the migrator-credential migration procedure, and an explicit residual-risk section. docs/DEPLOYMENT.md and docs/STATUS_BOARD.md (f23 row + open-findings note) updated to match.",
+  "datasetScope": "Not a dataset experiment: deployment/IaC/documentation workstream. No annotation data, no gold labels, no cascade metrics involved.",
+  "holdoutStatement": "Held-out cases wm-dink-01 and afn-vic-rally1 were not touched, read, listed, or referenced. This workstream involves no video/label data at all.",
+  "configuration": {
+    "terraform": "v1.9.8 (fmt + init -backend=false + validate on infra/terraform/envs/staging; no AWS credentials used or required)",
+    "node": "v20.18.1",
+    "filesChanged": [
+      "infra/terraform/modules/data/main.tf",
+      "infra/terraform/modules/compute/main.tf",
+      "infra/terraform/envs/staging/main.tf",
+      "docs/RUNBOOK_CONSENT_DB_ROLES.md",
+      "docs/DEPLOYMENT.md",
+      "docs/STATUS_BOARD.md"
+    ]
+  },
+  "measuredResults": {
+    "terraform": {
+      "validate": "Success! The configuration is valid. (envs/staging, terraform 1.9.8, init -backend=false)",
+      "fmtCheck": "clean after terraform fmt -recursive",
+      "plan": "NOT run — requires AWS credentials (external); validate is the strongest in-repo check",
+      "newSecrets": 4,
+      "newSecretNames": ["<env>/db-url-app", "<env>/db-url-worker", "<env>/db-url-migrator", "<env>/db-url-readonly"],
+      "ecsSecretInjections": 2,
+      "executionRoleSecretArnsScopedTo": 2
+    },
+    "gates": {
+      "typecheck": "pass (19/19 packages)",
+      "test": "pass (51 test files, 593 passed | 4 skipped)",
+      "lint": "pass (exit 0)",
+      "formatCheck": "pass",
+      "mobileTsc": "pass (0 errors)",
+      "mobileJest": "pass (40 suites, 397 tests)"
+    }
+  },
+  "findings": [
+    "The in-repo Terraform architecture permits real wiring, not just a plan: per-role connection-URL secrets in the data module, ECS container-secret injection in the compute module, and least-privilege execution-role scoping all validate with terraform validate — no placeholder IaC needed.",
+    "The AWS Terraform provider cannot create in-database Postgres roles; role provisioning is therefore a documented operator SQL step (runbook §3) using the Terraform-generated passwords, keeping Terraform state free of any in-database dependency.",
+    "Rotation never touches grants: privileges live on the NOLOGIN group roles, so ALTER ROLE … PASSWORD plus a forced ECS redeploy is the whole rotation; the runbook pins the ordering hazard (secret and database disagree between -replace and ALTER ROLE).",
+    "Migrations are deliberately excluded from ECS task wiring so a compromised runtime cannot replay DDL; the migrator secret is unreadable by the service execution role by construction.",
+    "Residual risk stated explicitly: the RDS master user (rds_superuser) and AWS account admins can bypass every in-database boundary; that cloud-superuser power cannot be removed from inside this repository — BLOCKED_EXTERNAL."
+  ],
+  "verdict": "PROVISIONAL_GREEN",
+  "verdictRationale": "Everything buildable in-repo is built and verified: Terraform wiring validates (terraform validate green), the runbook covers provisioning/rotation/migration/residual-risk end-to-end grounded in the g11 measured prerequisites, docs updated honestly, and all root + mobile gates pass on the branch. PROVISIONAL rather than GREEN because terraform plan/apply and the actual role provisioning require production/staging AWS credentials that do not exist in this repo — only that credential application is external, and the cloud-superuser bypass remains BLOCKED_EXTERNAL regardless."
+}

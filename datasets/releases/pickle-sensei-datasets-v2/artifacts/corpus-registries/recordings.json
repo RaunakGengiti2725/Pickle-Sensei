@@ -1,0 +1,572 @@
+[
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-024decaeb66e",
+    "sourceId": "src-commons-Pro_Pickleball_Tour_AFN_VIC_957519_.webm",
+    "path": "datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+    "sha256": "024decaeb66e7eacd2b4d98673aa3adc02d00af591afcc5ccc851a679836a05c",
+    "probe": {
+      "durationMs": 3103,
+      "fps": 29.97,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 2326635
+    },
+    "sessionKey": "afn-vic-2025",
+    "registeredAtIso": "2026-08-28T22:04:41.112Z",
+    "derivedFrom": [
+      {
+        "parentRecordingId": "rec-274544640cc6",
+        "relation": "time_crop",
+        "detail": "Derived from afn-provic (22-28s). Rear view, large near player (gray shirt) with bright pink/blue paddle, indoor gym (Vicenza, Italy), opponents across net, ball visible in flight. FINAL HELD-OUT TEST tier: selected from two stills; no threshold iteration against it permitted.",
+        "evidence": "declared"
+      }
+    ],
+    "notes": "legacy id: afn-vic-rally1"
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-0c19a6f0251d",
+    "sourceId": "src-commons-Pickleball_Japan_Federation_Visits_Sasebo_967848_.webm",
+    "path": "datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+    "sha256": "0c19a6f0251d78c859d4855edc6fda1253b674fc29ea235b0f676706aa00eafc",
+    "probe": {
+      "durationMs": 5405,
+      "fps": 29.97,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 3562007
+    },
+    "sessionKey": "afn-sasebo-2025-06",
+    "registeredAtIso": "2026-08-28T22:04:41.075Z",
+    "derivedFrom": [
+      {
+        "parentRecordingId": "rec-6e06a3157947",
+        "relation": "time_crop",
+        "detail": "Derived from afn-sasebo-indoor (30.6-36.0s). Single continuous shot: rear view of net player lunging; ball visible above net; multiple background players.",
+        "evidence": "declared"
+      }
+    ],
+    "notes": "legacy id: afn-sasebo-rally2"
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-1c1286ce675e",
+    "sourceId": "src-dvids-1011822",
+    "path": "datasets/corpus/media/dvids-1011822-1c1286ce675e.mp4",
+    "sha256": "1c1286ce675e92574e2c358d699460325c8dbe915beef03f7e12e022f969acf7",
+    "probe": {
+      "durationMs": 8080,
+      "fps": 50,
+      "width": 1080,
+      "height": 1920,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 10136963
+    },
+    "sessionKey": "dvids-warriorgames-2026",
+    "registeredAtIso": "2026-08-28T22:05:42.490Z",
+    "derivedFrom": []
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-208ca8beea6d",
+    "sourceId": "src-dvids-956784",
+    "path": "datasets/corpus/media/dvids-956784-208ca8beea6d.mp4",
+    "sha256": "208ca8beea6dcbd7a4e7f2fbc77eb7ff6884bda78d28decf42e4ee9be3333285",
+    "probe": {
+      "durationMs": 60060,
+      "fps": 29.97,
+      "width": 1280,
+      "height": 720,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 26311275
+    },
+    "sessionKey": "afn-sigonella-2025",
+    "registeredAtIso": "2026-08-28T22:09:34.328Z",
+    "derivedFrom": [
+      {
+        "parentRecordingId": "rec-5bf0e6a85afb",
+        "relation": "unknown_overlap",
+        "detail": "phash overlap: 60s aligned at offset 0s, mean hamming 0.48",
+        "evidence": "detected"
+      }
+    ]
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-21fb75446a03",
+    "sourceId": "src-commons-Pickleball_Japan_Federation_Visits_Sasebo_967848_.webm",
+    "path": "datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+    "sha256": "21fb75446a038ed5fb268b4287b7b6b2831d3712cbb05fedb21b97e440ad2daf",
+    "probe": {
+      "durationMs": 4404,
+      "fps": 29.97,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 3428062
+    },
+    "sessionKey": "afn-sasebo-2025-06",
+    "registeredAtIso": "2026-08-28T22:04:41.031Z",
+    "derivedFrom": [
+      {
+        "parentRecordingId": "rec-6e06a3157947",
+        "relation": "time_crop",
+        "detail": "Derived from afn-sasebo-indoor (26.0-30.4s). Single continuous shot: white-shirt woman, front-oblique view, forehand stroke with gray paddle; ball visibly in flight near contact; second player behind.",
+        "evidence": "declared"
+      }
+    ],
+    "notes": "legacy id: afn-sasebo-rally1"
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-274544640cc6",
+    "sourceId": "src-commons-Pro_Pickleball_Tour_AFN_VIC_957519_.webm",
+    "path": "datasets/paddle-bench/videos/afn-provic.mp4",
+    "sha256": "274544640cc6483e3ce0a677c49054e59658d84a90c72637a753a1fdfe2f1611",
+    "probe": {
+      "durationMs": 59860,
+      "fps": 29.97,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 44767429
+    },
+    "sessionKey": "afn-vic-2025",
+    "registeredAtIso": "2026-08-28T22:04:40.431Z",
+    "derivedFrom": [],
+    "notes": "legacy id: afn-provic"
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-44c0c451500c",
+    "sourceId": "src-dvids-1011773",
+    "path": "datasets/paddle-bench/videos/dvids-warriorgames-broll.mp4",
+    "sha256": "44c0c451500c8b033224ce0d3330ca5f23e68233fad8751a65530d8e852aa023",
+    "probe": {
+      "durationMs": 109459,
+      "fps": 119.88,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 136996159
+    },
+    "sessionKey": "dvids-warriorgames-2026",
+    "registeredAtIso": "2026-08-28T22:04:40.883Z",
+    "derivedFrom": [],
+    "notes": "legacy id: dvids-warriorgames-broll"
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-5bf0e6a85afb",
+    "sourceId": "src-commons-InFocus-_Pro_Pickleball_Tour_956784_.webm",
+    "path": "datasets/paddle-bench/videos/afn-infocus-pro.mp4",
+    "sha256": "5bf0e6a85afbed6960024c2e6b89d6c5d265b936c3cb453609b0db9a93a6581e",
+    "probe": {
+      "durationMs": 60060,
+      "fps": 29.97,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 33653105
+    },
+    "sessionKey": "afn-sigonella-2025",
+    "registeredAtIso": "2026-08-28T22:04:40.376Z",
+    "derivedFrom": [],
+    "notes": "legacy id: afn-infocus-pro"
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-6e06a3157947",
+    "sourceId": "src-commons-Pickleball_Japan_Federation_Visits_Sasebo_967848_.webm",
+    "path": "datasets/paddle-bench/videos/afn-sasebo-indoor.mp4",
+    "sha256": "6e06a315794722c6331464526d7c6850d13449a86c5c170f614d49ce11302955",
+    "probe": {
+      "durationMs": 60027,
+      "fps": 29.97,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 37782592
+    },
+    "sessionKey": "afn-sasebo-2025-06",
+    "registeredAtIso": "2026-08-28T22:04:40.317Z",
+    "derivedFrom": [],
+    "notes": "legacy id: afn-sasebo-indoor"
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-72cd8795bdc2",
+    "sourceId": "src-dvids-957519",
+    "path": "datasets/corpus/media/dvids-957519-72cd8795bdc2.mp4",
+    "sha256": "72cd8795bdc2be6860a16ffa7245d4b889ea4c2482c3001812b883ed9e0486f6",
+    "probe": {
+      "durationMs": 59860,
+      "fps": 29.97,
+      "width": 1280,
+      "height": 720,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 33586036
+    },
+    "sessionKey": "afn-vic-2025",
+    "registeredAtIso": "2026-08-28T22:09:40.123Z",
+    "derivedFrom": [
+      {
+        "parentRecordingId": "rec-274544640cc6",
+        "relation": "unknown_overlap",
+        "detail": "phash overlap: 60s aligned at offset 0s, mean hamming 0.55",
+        "evidence": "detected"
+      }
+    ]
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-75c28e175c47",
+    "sourceId": "src-dvids-986421",
+    "path": "datasets/corpus/media/dvids-986421-75c28e175c47.mp4",
+    "sha256": "75c28e175c47c8dcd4e7aa353660a3dd668c97deb3aafe99d2df580e3a25e6c6",
+    "probe": {
+      "durationMs": 15015,
+      "fps": 29.97,
+      "width": 1280,
+      "height": 720,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 6101378
+    },
+    "sessionKey": "dvids-986421",
+    "registeredAtIso": "2026-08-28T22:09:50.414Z",
+    "derivedFrom": []
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-7d396a6d6566",
+    "sourceId": "src-commons-Pickleball_game.webm",
+    "path": "datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+    "sha256": "7d396a6d65669fc3b7fc3c33988e257be08f830e93ca20c51f38171fca0959a7",
+    "probe": {
+      "durationMs": 8000,
+      "fps": 25,
+      "width": 1100,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 3645009
+    },
+    "sessionKey": "wm-tournament-2014",
+    "registeredAtIso": "2026-08-28T22:04:40.920Z",
+    "derivedFrom": [
+      {
+        "parentRecordingId": "rec-b6f280b2900c",
+        "relation": "spatial_crop",
+        "detail": "8s crop (1100x1080 @ x=560) of 38-46s: near yellow-cap player dinking at the kitchen line, rear view.",
+        "evidence": "declared"
+      }
+    ],
+    "notes": "legacy id: wm-dink-nearplayer"
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-8b77606225ba",
+    "sourceId": "src-commons-Pickleball_game.webm",
+    "path": "datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+    "sha256": "8b77606225ba0e3543accc6195c7fb10a7d312f445a73a5e4a03ab68b8862c15",
+    "probe": {
+      "durationMs": 8000,
+      "fps": 25,
+      "width": 1000,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 3033242
+    },
+    "sessionKey": "wm-tournament-2014",
+    "registeredAtIso": "2026-08-28T22:04:40.954Z",
+    "derivedFrom": [
+      {
+        "parentRecordingId": "rec-b6f280b2900c",
+        "relation": "spatial_crop",
+        "detail": "8s crop (1000x1080 @ x=0) of 88-96s: near white-shirt player volley exchange, rear-side view; ball visibly meets paddle at ~6.7s.",
+        "evidence": "declared"
+      }
+    ],
+    "notes": "legacy id: wm-volley-nearplayer"
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-912aeaa8c30c",
+    "sourceId": "src-dvids-1008415",
+    "path": "datasets/corpus/media/dvids-1008415-912aeaa8c30c.mp4",
+    "sha256": "912aeaa8c30ce981f322999ddbff05fbaa373e2c8f17ff49a57cc266cb7d0cfa",
+    "probe": {
+      "durationMs": 14982,
+      "fps": 29.97,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 8628060
+    },
+    "sessionKey": "dvids-1008415",
+    "registeredAtIso": "2026-08-28T22:05:39.412Z",
+    "derivedFrom": []
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-916657917f2b",
+    "sourceId": "src-dvids-944403",
+    "path": "datasets/corpus/media/dvids-944403-916657917f2b.mp4",
+    "sha256": "916657917f2be72f67717b35bdc0f163915c48a1126731c25f0ae1364121ad13",
+    "probe": {
+      "durationMs": 95912,
+      "fps": 59.94,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 119256938
+    },
+    "sessionKey": "dvids-marne-2024",
+    "registeredAtIso": "2026-08-28T22:09:28.979Z",
+    "derivedFrom": []
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-960a1a200d6d",
+    "sourceId": "src-dvids-1011384",
+    "path": "datasets/paddle-bench/videos/dvids-warriorgames-match.mp4",
+    "sha256": "960a1a200d6d757b831a1255f1e34d08fe223a8422c25a4e87cfb91e93d0c121",
+    "probe": {
+      "durationMs": 307500,
+      "fps": 30,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 288826087
+    },
+    "sessionKey": "dvids-warriorgames-2026",
+    "registeredAtIso": "2026-08-28T22:04:40.755Z",
+    "derivedFrom": [],
+    "notes": "legacy id: dvids-warriorgames-match"
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-96ae65019c30",
+    "sourceId": "src-dvids-944593",
+    "path": "datasets/paddle-bench/videos/dvids-marne-outdoor.mp4",
+    "sha256": "96ae65019c30317c177191c1941225442df8d30c67b554765c13e973870fd394",
+    "probe": {
+      "durationMs": 67568,
+      "fps": 59.94,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 84024570
+    },
+    "sessionKey": "dvids-marne-2024",
+    "registeredAtIso": "2026-08-28T22:04:40.528Z",
+    "derivedFrom": [],
+    "notes": "legacy id: dvids-marne-outdoor"
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-aaead01533ed",
+    "sourceId": "src-dvids-1019785",
+    "path": "datasets/corpus/media/dvids-1019785-aaead01533ed.mp4",
+    "sha256": "aaead01533ed771bfdc13408292fe6f074c391b674593d2b22f5e504f44afac7",
+    "probe": {
+      "durationMs": 1140083,
+      "fps": 24,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 1011205998
+    },
+    "sessionKey": "dvids-espn-oneyearout-2026",
+    "registeredAtIso": "2026-08-28T22:07:54.364Z",
+    "derivedFrom": []
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-aba9629c681d",
+    "sourceId": "src-dvids-967848",
+    "path": "datasets/corpus/media/dvids-967848-aba9629c681d.mp4",
+    "sha256": "aba9629c681d159e0560583865085b8bcceaaa850f9d81f5b26832a86fc90e3c",
+    "probe": {
+      "durationMs": 60027,
+      "fps": 29.97,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 61154058
+    },
+    "sessionKey": "afn-sasebo-2025-06",
+    "registeredAtIso": "2026-08-28T22:09:47.474Z",
+    "derivedFrom": [
+      {
+        "parentRecordingId": "rec-0c19a6f0251d",
+        "relation": "unknown_overlap",
+        "detail": "phash overlap: 5s aligned at offset -30s, mean hamming 5.2",
+        "evidence": "detected"
+      }
+    ]
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-ac6c9d7b5055",
+    "sourceId": "src-commons-Pickleball_game.webm",
+    "path": "datasets/paddle-bench/videos/wm-farplayer-return.mp4",
+    "sha256": "ac6c9d7b50558a0cb02dd3253841a9a3a68b3c7d8b602f6ee30142f7c07d3d8f",
+    "probe": {
+      "durationMs": 8000,
+      "fps": 25,
+      "width": 900,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 3043250
+    },
+    "sessionKey": "wm-tournament-2014",
+    "registeredAtIso": "2026-08-28T22:04:40.989Z",
+    "derivedFrom": [
+      {
+        "parentRecordingId": "rec-b6f280b2900c",
+        "relation": "spatial_crop",
+        "detail": "8s crop (900x1080 @ x=700) of 88-96s: far players facing camera; a foreground player walks in mid-clip. FAILURE-MODE EXHIBIT: primary subject ambiguous.",
+        "evidence": "declared"
+      }
+    ],
+    "notes": "legacy id: wm-farplayer-return"
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-afd0b6bad5d0",
+    "sourceId": "src-dvids-943757",
+    "path": "datasets/corpus/media/dvids-943757-afd0b6bad5d0.mp4",
+    "sha256": "afd0b6bad5d06b0135456336f663f0932cd6e63859b2be1a3d7cc4d231c38b0a",
+    "probe": {
+      "durationMs": 107792,
+      "fps": 24,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 110698232
+    },
+    "sessionKey": "dvids-943757",
+    "registeredAtIso": "2026-08-28T22:09:09.752Z",
+    "derivedFrom": []
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-b6f280b2900c",
+    "sourceId": "src-commons-Pickleball_game.webm",
+    "path": "datasets/paddle-bench/videos/wm-pickleball-game.mp4",
+    "sha256": "b6f280b2900c9f338daa7d5e6b4ac82a8ba4b8ff74d1c7762e3e0905ee946b62",
+    "probe": {
+      "durationMs": 237240,
+      "fps": 25,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 209559368
+    },
+    "sessionKey": "wm-tournament-2014",
+    "registeredAtIso": "2026-08-28T22:04:40.239Z",
+    "derivedFrom": [],
+    "notes": "legacy id: wm-pickleball-game"
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-c1b5580db415",
+    "sourceId": "src-dvids-906546",
+    "path": "datasets/corpus/media/dvids-906546-c1b5580db415.mp4",
+    "sha256": "c1b5580db415826c36d2f52a57ce5b7e000663ea6e5851e8b3adfb0779eed94c",
+    "probe": {
+      "durationMs": 704971,
+      "fps": 29.97,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 697836553
+    },
+    "sessionKey": "dvids-906546",
+    "registeredAtIso": "2026-08-28T22:08:58.537Z",
+    "derivedFrom": []
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-d230484fbaa5",
+    "sourceId": "src-dvids-1007845",
+    "path": "datasets/corpus/media/dvids-1007845-d230484fbaa5.mp4",
+    "sha256": "d230484fbaa5afa63d2302f0d29ca0dd04a5eff0b80e658bd66ed84e6fe63527",
+    "probe": {
+      "durationMs": 122089,
+      "fps": 29.97,
+      "width": 3840,
+      "height": 2160,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 141179165
+    },
+    "sessionKey": "dvids-1007845",
+    "registeredAtIso": "2026-08-28T22:05:36.322Z",
+    "derivedFrom": []
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-d613b17cfef1",
+    "sourceId": "src-dvids-1019773",
+    "path": "datasets/corpus/media/dvids-1019773-d613b17cfef1.mp4",
+    "sha256": "d613b17cfef1de51d6e2bcb6dbd5122e533c7c8040d17f2d1aaf5b3114392b10",
+    "probe": {
+      "durationMs": 562583,
+      "fps": 24,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 440189444
+    },
+    "sessionKey": "dvids-espn-oneyearout-2026",
+    "registeredAtIso": "2026-08-28T22:06:21.322Z",
+    "derivedFrom": []
+  },
+  {
+    "schemaVersion": 1,
+    "recordingId": "rec-faead33a362c",
+    "sourceId": "src-dvids-944209",
+    "path": "datasets/corpus/media/dvids-944209-faead33a362c.mp4",
+    "sha256": "faead33a362caba7ce422d052e49290522b96bd514993a0070a802c7c3679cbf",
+    "probe": {
+      "durationMs": 98000,
+      "fps": 24,
+      "width": 1920,
+      "height": 1080,
+      "videoCodec": "h264",
+      "container": "mov",
+      "bytes": 48898163
+    },
+    "sessionKey": "dvids-marne-2024",
+    "registeredAtIso": "2026-08-28T22:09:16.065Z",
+    "derivedFrom": []
+  }
+]

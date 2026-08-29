@@ -1,0 +1,97 @@
+{
+  "workstreamId": "e06-cascade-replay",
+  "wave": "E",
+  "title": "Strict full-cascade Linux replay on the integrated branch vs historical Mac baseline",
+  "branch": "devin/wave-e/e06-cascade-replay",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "commit": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+  "generatedAtIso": "2026-08-29T09:55:00Z",
+  "environment": "Linux Ubuntu, Node 20.18.1, pnpm 9.15.9, ffmpeg 4.4.2 (LINUX-CPU; no Apple Vision pose, no Mac)",
+  "verdict": "BLOCKED_EXTERNAL",
+  "whatWasRun": {
+    "command": "pnpm lab:cascade (packages/swing-lab/src/cascadeWaterfall.ts) at commit 8fc388e",
+    "artifact": "datasets/cascade/cascade-1787996827490.json",
+    "measuredOutcome": "harness executed cleanly (exit 0) but found n=0 gold target events: every stage 0/0 unconditional and conditional, strict survival 0/0, usable 0/0, silent-failure 0/0. No per-stage delta vs baseline is computable from this run."
+  },
+  "historicalBaseline": {
+    "artifact": "datasets/cascade/cascade-1787971753680.json (recorded Mac run, 2026-08-29T02:49:13.679Z)",
+    "unconditionalPass": {
+      "TARGET": 5,
+      "EVENT": 3,
+      "PADDLE": 5,
+      "BALL": 5,
+      "CONTACT": 2,
+      "PHASE": 4,
+      "STROKE": 3
+    },
+    "conditionalSurvival": {
+      "TARGET": 5,
+      "EVENT": 3,
+      "PADDLE": 3,
+      "BALL": 3,
+      "CONTACT": 2,
+      "PHASE": 2,
+      "STROKE": 2
+    },
+    "strictSurvival": "2/5",
+    "usableResult": "2/5",
+    "note": "matches the program baseline exactly (target 5/5, event 3/5, paddle 5/5, ball 5/5, contact 2/5, phase 4/5, stroke 3/5 unconditional; strict 2/5; usable 2/5). Per HANDOFF_V4_DRAFT and d06 scope notes this is a recorded Mac cascade, not a Linux measurement."
+  },
+  "perStageDeltas": "NOT COMPUTABLE — the Linux replay processed 0 of 5 gold cases (see forensics). Reporting 0/0 as a regression from 5/5 would be dishonest; the correct reading is that the cascade's INPUT ARTIFACTS do not exist on this host, so the integrated branch's cascade behavior on the gold cases is unmeasured here.",
+  "regressionForensics": {
+    "rootCause": "cascadeWaterfall.ts reads runs/<case>/report.json per bench case (datasets/paddle-bench/paddle-bench.json) and skips any case whose report is missing. datasets/paddle-bench/runs/ is gitignored (.gitignore line 17) and has never been committed (git log --all -- datasets/paddle-bench/runs is empty), so all 5 canonical run dirs exist only on the original Mac.",
+    "perCase": [
+      {
+        "caseId": "wm-dink-01",
+        "labels": "present (bundles annotation)",
+        "runDirReport": "absent",
+        "heldOut": true,
+        "note": "held-out; existence check only, contents never viewed"
+      },
+      {
+        "caseId": "wm-volley-02",
+        "labels": "present",
+        "runDirReport": "absent",
+        "heldOut": false
+      },
+      {
+        "caseId": "afn-sasebo-rally1",
+        "labels": "present",
+        "runDirReport": "absent",
+        "heldOut": false
+      },
+      {
+        "caseId": "afn-sasebo-rally2",
+        "labels": "present",
+        "runDirReport": "absent",
+        "heldOut": false,
+        "note": "no clip.mp4 in bundles either — video unrecoverable on this host"
+      },
+      {
+        "caseId": "afn-vic-rally1",
+        "labels": "present",
+        "runDirReport": "absent",
+        "heldOut": true,
+        "note": "held-out; existence check only, contents never viewed"
+      }
+    ],
+    "whyNotRegenerable": [
+      "pnpm lab:regen --exec requires runs/<case>/report.json + people.json to derive the tap manifest, and the manifest's video/outDir paths are absolute Mac paths (/Users/raunakgengiti/...) — inputs absent on Linux.",
+      "Pose extraction (people.json) is Apple Vision / macOS-only (documented in d4-01 measurementBoundary, d2-09 DATA_CARD, d3-02 environment) — the TARGET stage and everything downstream cannot be produced on Linux CPU.",
+      "Videos: only 3/5 bundle clips are committed (wm-dink-01, wm-volley-02, afn-sasebo-rally1); afn-sasebo-rally2 and afn-vic-rally1 clips are absent.",
+      "2/5 cases (wm-dink-01, afn-vic-rally1) are held-out and UNTOUCHABLE — regeneration would violate the program rules even on a Mac from this workstream."
+    ],
+    "regressionVerdict": "PROVEN EXTERNAL BLOCKER, not a code regression: the integrated branch's cascade harness itself runs cleanly and its stage criteria are unchanged (read-only review of cascadeWaterfall.ts vs the criteria recorded in the baseline artifact: same STAGES, thresholds 0.5 coverage / 50% overlap / 0.3 paddle coverage / 66ms contact / L1-side stroke, same usable-result-v1 and silent-failure-v1.1 contracts)."
+  },
+  "honestyNotes": [
+    "The n=0 Linux run artifact datasets/cascade/cascade-1787996827490.json is committed as evidence of the attempt; it is a Linux harness execution, NOT a canonical pose-cascade measurement, and must never be compared numerically against Mac runs.",
+    "datasets/cascade/DATA_CARD.md (d2-09-owned) counts 10 cascade files; it now undercounts by 1 — not updated from this workstream (append-only boundary), flagged for the integrator.",
+    "Held-out cases wm-dink-01 and afn-vic-rally1 were not viewed, labeled, tuned against, or regenerated; only file-existence checks were performed.",
+    "No production code, docs, migrations, or runs/ artifacts were modified."
+  ],
+  "unblockPath": "Re-run pnpm lab:cascade on the canonical Mac (with datasets/paddle-bench/runs/ present) at the integrated-branch commit, or commit sanitized canonical run artifacts (report.json + people.json) for the 3 non-held-out cases so a Linux replay becomes possible.",
+  "gates": {
+    "formatCheck": "pnpm format:check clean on new files",
+    "packagesTouched": "none (read-only on production code)"
+  }
+}

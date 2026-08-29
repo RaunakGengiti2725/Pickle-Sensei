@@ -1,0 +1,284 @@
+{
+  "workstream": "D04",
+  "title": "Scale contact gold beyond C05",
+  "annotatorId": "devin-visual-v3-waveD",
+  "createdAtIso": "2026-08-29T10:20:00.000Z",
+  "branch": "devin/wave-d/d04-contact-gold-scale",
+  "methodology": "ffmpeg absolute-CFR frame extraction from the registered public sources (DVIDS 944403/944209/944593/1011384, Wikimedia AFN Sasebo webm; sha256 of DVIDS downloads verified against datasets/corpus/recordings.json). Timestamps computed as round(n*1000*fps_den/fps_num) from decoded CFR frame index n. Every label visually verified on frame sheets plus zoomed crops; repeat-pass (second independent extraction/read) on 5 events before reconciliation. Prior Wave A/C values consulted only AFTER my frame reads, for discrepancy reporting.",
+  "heldOut": {
+    "cases": ["wm-dink-01", "afn-vic-rally1"],
+    "touched": false,
+    "note": "Held-out bundles were not opened, extracted, or annotated."
+  },
+  "beforeMatrix": {
+    "note": "Contact observations existing before Wave D (Wave A event labels + Wave C C05 contact pass), per bundle. C05 total: 20 observations / 28 unique contact events across all passes.",
+    "perBundleContactObservations": {
+      "wavea-944403-dink": {
+        "waveA": 5,
+        "waveC": 4
+      },
+      "wavea-944403-smash": {
+        "waveA": 2,
+        "waveC": 2
+      },
+      "wavea-faead-feed": {
+        "waveA": 1,
+        "waveC": 1
+      },
+      "wavea-faead-rally": {
+        "waveA": 2,
+        "waveC": 1,
+        "note": "one wave-a event had contactMs=null (occluded)"
+      },
+      "wavea-marne-dig": {
+        "waveA": 1,
+        "waveC": 1
+      },
+      "wavea-marne-serve": {
+        "waveA": 1,
+        "waveC": 1
+      },
+      "wavea-sasebo-volleys": {
+        "waveA": 5,
+        "waveC": 0
+      },
+      "wavea-wgm-wheelchair": {
+        "waveA": 1,
+        "waveC": 1
+      },
+      "wm-volley-02": {
+        "waveA": 0,
+        "waveC": 2
+      },
+      "afn-sasebo-rally1": {
+        "waveA": 0,
+        "waveC": 0
+      },
+      "afn-sasebo-rally2": {
+        "waveA": 0,
+        "waveC": 0
+      },
+      "wm-dink-01": "HELD OUT",
+      "afn-vic-rally1": "HELD OUT"
+    },
+    "hardSliceCoverageBefore": {
+      "dink": "covered (944403-dink, wgm)",
+      "drive": "1 (944403-dink 21121)",
+      "volley": "covered (sasebo wave-a only, wm-volley-02, faead-rally)",
+      "serve": "1 (marne-serve)",
+      "return": "0",
+      "compact/feed": "1 (faead-feed)",
+      "body-overlap": "1 (944403-smash 4379 block)",
+      "missing-ball/paddle": "0 contact labels",
+      "edge-on": "0 explicit",
+      "far-camera-small-figure": "low (sasebo/dink far players)"
+    }
+  },
+  "results": {
+    "newWaveDContactObservations": 15,
+    "bundlesTouched": 8,
+    "sidecars": [
+      "datasets/paddle-bench/bundles/wavea-sasebo-volleys/annotation/devin-visual-v3-waveD-contact.json",
+      "datasets/paddle-bench/bundles/wavea-marne-dig/annotation/devin-visual-v3-waveD-contact.json",
+      "datasets/paddle-bench/bundles/wavea-marne-serve/annotation/devin-visual-v3-waveD-contact.json",
+      "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v3-waveD-contact.json",
+      "datasets/paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v3-waveD-contact.json",
+      "datasets/paddle-bench/bundles/wavea-wgm-wheelchair/annotation/devin-visual-v3-waveD-contact.json",
+      "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v3-waveD-contact.json",
+      "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v3-waveD-contact.json"
+    ],
+    "labels": [
+      {
+        "bundle": "wavea-sasebo-volleys",
+        "contactMs": 52019,
+        "owner": "target",
+        "class": "direct-observed",
+        "kind": "backhand punch volley",
+        "newUniqueEvent": false
+      },
+      {
+        "bundle": "wavea-sasebo-volleys",
+        "contactMs": 52352,
+        "owner": "other",
+        "class": "direct-observed",
+        "kind": "far-player counter-volley (far camera, small figure)",
+        "newUniqueEvent": false
+      },
+      {
+        "bundle": "wavea-sasebo-volleys",
+        "contactMs": 52502,
+        "owner": "target",
+        "class": "direct-observed",
+        "kind": "low backhand flick volley",
+        "newUniqueEvent": true,
+        "note": "no matching wave-a contact; conflicts with wave-a 52683"
+      },
+      {
+        "bundle": "wavea-marne-dig",
+        "contactMs": 13630,
+        "owner": "other",
+        "class": "direct-observed",
+        "kind": "far-court low forehand lift/lob (far camera)",
+        "newUniqueEvent": true
+      },
+      {
+        "bundle": "wavea-marne-serve",
+        "contactMs": 34718,
+        "owner": "target",
+        "class": "direct-observed",
+        "kind": "drop serve",
+        "newUniqueEvent": false
+      },
+      {
+        "bundle": "wavea-944403-dink",
+        "contactMs": 20821,
+        "owner": "other",
+        "class": "direct-observed",
+        "kind": "far-player dink (far camera)",
+        "newUniqueEvent": false
+      },
+      {
+        "bundle": "wavea-944403-dink",
+        "contactMs": 21113,
+        "owner": "target",
+        "class": "direct-observed",
+        "kind": "forehand drive (partial net occlusion)",
+        "newUniqueEvent": false
+      },
+      {
+        "bundle": "wavea-944403-dink",
+        "contactMs": 22130,
+        "owner": "other",
+        "class": "direct-observed",
+        "kind": "scramble pickup, paddle between legs (body overlap)",
+        "newUniqueEvent": false
+      },
+      {
+        "bundle": "wavea-944403-smash",
+        "contactMs": 3954,
+        "owner": "other",
+        "class": "direct-observed",
+        "kind": "standing overhead smash",
+        "newUniqueEvent": false
+      },
+      {
+        "bundle": "wavea-944403-smash",
+        "contactMs": 4371,
+        "owner": "target",
+        "class": "ball-direction-inferred",
+        "kind": "chest-left backhand block (body overlap)",
+        "newUniqueEvent": false
+      },
+      {
+        "bundle": "wavea-wgm-wheelchair",
+        "contactMs": 182567,
+        "owner": "target",
+        "class": "direct-observed",
+        "kind": "wheelchair backhand dink",
+        "newUniqueEvent": false
+      },
+      {
+        "bundle": "wavea-faead-feed",
+        "contactMs": 33438,
+        "owner": "target",
+        "class": "direct-observed",
+        "kind": "informal feed (compact underhand)",
+        "newUniqueEvent": false
+      },
+      {
+        "bundle": "wavea-faead-feed",
+        "contactMs": 33688,
+        "owner": "target",
+        "class": "direct-observed",
+        "kind": "second compact underhand feed",
+        "newUniqueEvent": true
+      },
+      {
+        "bundle": "wavea-faead-rally",
+        "contactMs": 13333,
+        "owner": "target",
+        "class": "direct-observed",
+        "kind": "low forehand off bounce",
+        "newUniqueEvent": true,
+        "note": "fills wave-a null-contact event 13417-13833; my ball-at-paddle read precedes their event start by 84ms"
+      },
+      {
+        "bundle": "wavea-faead-rally",
+        "contactMs": 14021,
+        "owner": "target",
+        "class": "direct-observed",
+        "kind": "high forehand volley",
+        "newUniqueEvent": false
+      }
+    ],
+    "observabilityClassCounts": {
+      "direct-observed": 14,
+      "ball-direction-inferred": 1
+    },
+    "newUniqueEvents": 4,
+    "independentRelabelsOfExistingEvents": 11,
+    "afterCounts": {
+      "totalContactObservationsAllPasses": "41 (post-Wave-C) + 15 (Wave D) = 56",
+      "uniqueContactEvents": "28 + 4 new = 32"
+    }
+  },
+  "doubleAnnotation": {
+    "protocol": "Same-annotator repeat pass with fresh ffmpeg extraction (different windows/crops), read before consulting first-pass values; NOT a second human/model, so this is repeat-pass reliability, not a truly blind inter-annotator study.",
+    "events": [
+      {
+        "bundle": "wavea-marne-serve",
+        "contactMs": 34718,
+        "pass1": 34718,
+        "pass2": 34718,
+        "deltaMs": 0
+      },
+      {
+        "bundle": "wavea-marne-dig",
+        "contactMs": 13630,
+        "pass1": 13630,
+        "pass2": 13622,
+        "deltaMs": 8
+      },
+      {
+        "bundle": "wavea-faead-feed",
+        "contactMs": 33688,
+        "pass1": 33688,
+        "pass2": 33688,
+        "deltaMs": 0
+      },
+      {
+        "bundle": "wavea-faead-rally",
+        "contactMs": 13333,
+        "pass1": 13333,
+        "pass2": 13333,
+        "deltaMs": 0
+      },
+      {
+        "bundle": "wavea-944403-smash",
+        "contactMs": 3954,
+        "pass1": 3954,
+        "pass2": 3962,
+        "deltaMs": 8
+      }
+    ],
+    "agreement": "5/5 within 1 frame; max delta 8ms"
+  },
+  "honestNegatives": [
+    "DISPUTED wave-a label: wavea-944403-dink event 21500-21958 contact 21604 \u2014 frames 21238-21705 show the ball descending untouched past the far player and bouncing on the near court ~21590-21620 with no paddle within reach; no Wave D contact written for it.",
+    "sasebo exchange 52586-53100: figures too small to resolve; wave-a labels 52683/52967/53067 could not be confirmed; my 52502 read conflicts with wave-a 52683 \u2014 left as recorded discrepancy.",
+    "marne-serve window 34950-36653: no rally after the serve is visible (camera tight on server); no return label possible.",
+    "marne-dig 12180-12310: two balls visible (adjacent-court interference); the near player's apparent overhead could not be disambiguated \u2014 not labeled.",
+    "944403-dink scan 22300-23400: no additional defensible contact found.",
+    "wgm-wheelchair 182700-183300: apparent ball-near-paddle at ~182800 is a trajectory apex, not a contact; no reversal.",
+    "afn-sasebo-rally1/rally2 committed clips not reviewed this pass (rally1 carries a waveC ball pass; kept out of scope) \u2014 coverage gap remains for return-of-serve and edge-on slices.",
+    "Return-of-serve slice remains at 0 labels: no dev footage reviewed contains an observable return.",
+    "Timestamp discrepancies vs prior passes recorded, not averaged: serve +25ms vs waveC, dink 20821 +17ms, others sub-frame."
+  ],
+  "blocked": [
+    "Cascade/pose evaluation of new labels impossible on Linux (Apple Vision + runs/ absent); labels are annotation-only until a macOS regen.",
+    "Committed bundle clips are gitignored/absent for most bundles; frame extraction used hash-verified public source downloads outside the repo."
+  ],
+  "environment": {
+    "mobbin": "MOBBIN MCP UNAVAILABLE IN THIS ENVIRONMENT"
+  }
+}

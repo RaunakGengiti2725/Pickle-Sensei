@@ -18,7 +18,10 @@
       ],
       "@pickle/swing-domain": ["../../packages/swing-domain/src/index.ts"],
       "@pickle/model-registry": ["../../packages/model-registry/src/index.ts"],
-      "@pickle/evaluation": ["../../packages/evaluation/src/index.ts"]
+      "@pickle/evaluation": ["../../packages/evaluation/src/index.ts"],
+      "@pickle/capture-envelope": [
+        "../../packages/capture-envelope/src/core.ts"
+      ]
     },
     "allowImportingTsExtensions": false,
     "noUncheckedIndexedAccess": true

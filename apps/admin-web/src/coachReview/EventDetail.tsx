@@ -3,6 +3,7 @@ import type { CoachReviewData } from "./data";
 import type { QueueItem } from "./types";
 import { labBox, mono } from "./CoachReviewLab";
 import { ReviewForm } from "./ReviewForm";
+import { AssignmentPanel, ReviewsPanel } from "./ReviewsPanel";
 
 /** Context shown around the labeled event (matches the queue's replayCommand). */
 const PAD_MS = 800;
@@ -206,6 +207,8 @@ export function EventDetail({
           <code>{item.replayCommand}</code>
         </p>
       </section>
+      <AssignmentPanel data={data} item={item} onSaved={onPersisted} />
+      <ReviewsPanel data={data} item={item} />
       <ReviewForm
         data={data}
         item={item}

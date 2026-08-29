@@ -1,0 +1,765 @@
+{
+  "generatedAtIso": "2026-08-29T09:49:37.603Z",
+  "caveat": "confidences are annotator self-reports; correctness is agreement with the primary annotator (proxy). Model-confidence curves require canonical run dirs, absent on this box.",
+  "datasets": [
+    {
+      "name": "W14 TA blind overlap (n=12 verdicts)",
+      "provenance": "committed artifact wave-b/W14-overlap/ta-overlap.json; correct = 3-class agreement with primary annotator (agreement.json) — inter-annotator proxy, not gold",
+      "n": 12,
+      "calibration": {
+        "n": 12,
+        "nBins": 10,
+        "minSamples": 10,
+        "ece": 0.12083333333333336,
+        "flagged": false,
+        "flags": []
+      },
+      "aurc": 0.07646103896103897,
+      "reliabilityBins": [
+        {
+          "lower": 0.5,
+          "upper": 0.6,
+          "count": 1,
+          "meanConfidence": 0.55,
+          "accuracy": 1
+        },
+        {
+          "lower": 0.7,
+          "upper": 0.8,
+          "count": 2,
+          "meanConfidence": 0.725,
+          "accuracy": 0.5
+        },
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "count": 4,
+          "meanConfidence": 0.8250000000000001,
+          "accuracy": 0.75
+        },
+        {
+          "lower": 0.9,
+          "upper": 1,
+          "count": 5,
+          "meanConfidence": 0.95,
+          "accuracy": 1
+        }
+      ],
+      "coverageRiskCurve": [
+        {
+          "threshold": 0.98,
+          "coverage": 0.08333333333333333,
+          "risk": 0,
+          "nAnswered": 1,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.97,
+          "coverage": 0.16666666666666666,
+          "risk": 0,
+          "nAnswered": 2,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.95,
+          "coverage": 0.3333333333333333,
+          "risk": 0,
+          "nAnswered": 4,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.9,
+          "coverage": 0.4166666666666667,
+          "risk": 0,
+          "nAnswered": 5,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.85,
+          "coverage": 0.5833333333333334,
+          "risk": 0.14285714285714285,
+          "nAnswered": 7,
+          "nWrongAnswered": 1
+        },
+        {
+          "threshold": 0.8,
+          "coverage": 0.75,
+          "risk": 0.1111111111111111,
+          "nAnswered": 9,
+          "nWrongAnswered": 1
+        },
+        {
+          "threshold": 0.75,
+          "coverage": 0.8333333333333334,
+          "risk": 0.2,
+          "nAnswered": 10,
+          "nWrongAnswered": 2
+        },
+        {
+          "threshold": 0.7,
+          "coverage": 0.9166666666666666,
+          "risk": 0.18181818181818182,
+          "nAnswered": 11,
+          "nWrongAnswered": 2
+        },
+        {
+          "threshold": 0.55,
+          "coverage": 1,
+          "risk": 0.16666666666666666,
+          "nAnswered": 12,
+          "nWrongAnswered": 2
+        }
+      ]
+    },
+    {
+      "name": "W14 ownership blind overlap (n=31 boxes)",
+      "provenance": "committed artifact wave-b/W14-overlap/ownership-overlap.json; correct = 3-class agreement with primary annotator (agreement.json) — inter-annotator proxy, not gold",
+      "n": 31,
+      "calibration": {
+        "n": 31,
+        "nBins": 10,
+        "minSamples": 10,
+        "ece": 0.09774193548387092,
+        "flagged": false,
+        "flags": []
+      },
+      "aurc": 0.017596952865530858,
+      "reliabilityBins": [
+        {
+          "lower": 0.5,
+          "upper": 0.6,
+          "count": 2,
+          "meanConfidence": 0.5,
+          "accuracy": 0.5
+        },
+        {
+          "lower": 0.6,
+          "upper": 0.7,
+          "count": 3,
+          "meanConfidence": 0.6166666666666667,
+          "accuracy": 0.6666666666666666
+        },
+        {
+          "lower": 0.7,
+          "upper": 0.8,
+          "count": 7,
+          "meanConfidence": 0.7214285714285714,
+          "accuracy": 0.8571428571428571
+        },
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "count": 6,
+          "meanConfidence": 0.8250000000000001,
+          "accuracy": 1
+        },
+        {
+          "lower": 0.9,
+          "upper": 1,
+          "count": 13,
+          "meanConfidence": 0.9323076923076924,
+          "accuracy": 1
+        }
+      ],
+      "coverageRiskCurve": [
+        {
+          "threshold": 0.97,
+          "coverage": 0.03225806451612903,
+          "risk": 0,
+          "nAnswered": 1,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.95,
+          "coverage": 0.25806451612903225,
+          "risk": 0,
+          "nAnswered": 8,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.9,
+          "coverage": 0.41935483870967744,
+          "risk": 0,
+          "nAnswered": 13,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.85,
+          "coverage": 0.5161290322580645,
+          "risk": 0,
+          "nAnswered": 16,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.8,
+          "coverage": 0.6129032258064516,
+          "risk": 0,
+          "nAnswered": 19,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.75,
+          "coverage": 0.7096774193548387,
+          "risk": 0.045454545454545456,
+          "nAnswered": 22,
+          "nWrongAnswered": 1
+        },
+        {
+          "threshold": 0.7,
+          "coverage": 0.8387096774193549,
+          "risk": 0.038461538461538464,
+          "nAnswered": 26,
+          "nWrongAnswered": 1
+        },
+        {
+          "threshold": 0.65,
+          "coverage": 0.8709677419354839,
+          "risk": 0.037037037037037035,
+          "nAnswered": 27,
+          "nWrongAnswered": 1
+        },
+        {
+          "threshold": 0.6,
+          "coverage": 0.9354838709677419,
+          "risk": 0.06896551724137931,
+          "nAnswered": 29,
+          "nWrongAnswered": 2
+        },
+        {
+          "threshold": 0.5,
+          "coverage": 1,
+          "risk": 0.0967741935483871,
+          "nAnswered": 31,
+          "nWrongAnswered": 3
+        }
+      ]
+    },
+    {
+      "name": "D2-04 ownership audit pooled (n=80 slots, 3 bundles)",
+      "provenance": "committed D2-04 audit sidecars bundles/*/annotation/devin-visual-v4-waveD2-ownership-audit.json; correct = 3-class agreement with the committed waveC ownership labels — inter-annotator proxy, not gold; POOLED across bundles — samples cluster by bundle/video, not i.i.d.",
+      "n": 80,
+      "calibration": {
+        "n": 80,
+        "nBins": 10,
+        "minSamples": 10,
+        "ece": 0.10937499999999992,
+        "flagged": false,
+        "flags": []
+      },
+      "aurc": 0.12453559686820621,
+      "reliabilityBins": [
+        {
+          "lower": 0.3,
+          "upper": 0.4,
+          "count": 1,
+          "meanConfidence": 0.35,
+          "accuracy": 1
+        },
+        {
+          "lower": 0.4,
+          "upper": 0.5,
+          "count": 4,
+          "meanConfidence": 0.41250000000000003,
+          "accuracy": 0.75
+        },
+        {
+          "lower": 0.5,
+          "upper": 0.6,
+          "count": 7,
+          "meanConfidence": 0.5071428571428571,
+          "accuracy": 0.5714285714285714
+        },
+        {
+          "lower": 0.6,
+          "upper": 0.7,
+          "count": 10,
+          "meanConfidence": 0.5999999999999999,
+          "accuracy": 0.7
+        },
+        {
+          "lower": 0.7,
+          "upper": 0.8,
+          "count": 13,
+          "meanConfidence": 0.7153846153846154,
+          "accuracy": 0.9230769230769231
+        },
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "count": 17,
+          "meanConfidence": 0.8411764705882352,
+          "accuracy": 0.8823529411764706
+        },
+        {
+          "lower": 0.9,
+          "upper": 1,
+          "count": 28,
+          "meanConfidence": 0.9249999999999996,
+          "accuracy": 0.8571428571428571
+        }
+      ],
+      "coverageRiskCurve": [
+        {
+          "threshold": 0.95,
+          "coverage": 0.175,
+          "risk": 0.07142857142857142,
+          "nAnswered": 14,
+          "nWrongAnswered": 1
+        },
+        {
+          "threshold": 0.9,
+          "coverage": 0.35,
+          "risk": 0.14285714285714285,
+          "nAnswered": 28,
+          "nWrongAnswered": 4
+        },
+        {
+          "threshold": 0.85,
+          "coverage": 0.525,
+          "risk": 0.14285714285714285,
+          "nAnswered": 42,
+          "nWrongAnswered": 6
+        },
+        {
+          "threshold": 0.8,
+          "coverage": 0.5625,
+          "risk": 0.13333333333333333,
+          "nAnswered": 45,
+          "nWrongAnswered": 6
+        },
+        {
+          "threshold": 0.75,
+          "coverage": 0.6125,
+          "risk": 0.14285714285714285,
+          "nAnswered": 49,
+          "nWrongAnswered": 7
+        },
+        {
+          "threshold": 0.7,
+          "coverage": 0.725,
+          "risk": 0.1206896551724138,
+          "nAnswered": 58,
+          "nWrongAnswered": 7
+        },
+        {
+          "threshold": 0.6,
+          "coverage": 0.85,
+          "risk": 0.14705882352941177,
+          "nAnswered": 68,
+          "nWrongAnswered": 10
+        },
+        {
+          "threshold": 0.55,
+          "coverage": 0.8625,
+          "risk": 0.14492753623188406,
+          "nAnswered": 69,
+          "nWrongAnswered": 10
+        },
+        {
+          "threshold": 0.5,
+          "coverage": 0.9375,
+          "risk": 0.17333333333333334,
+          "nAnswered": 75,
+          "nWrongAnswered": 13
+        },
+        {
+          "threshold": 0.45,
+          "coverage": 0.95,
+          "risk": 0.17105263157894737,
+          "nAnswered": 76,
+          "nWrongAnswered": 13
+        },
+        {
+          "threshold": 0.4,
+          "coverage": 0.9875,
+          "risk": 0.17721518987341772,
+          "nAnswered": 79,
+          "nWrongAnswered": 14
+        },
+        {
+          "threshold": 0.35,
+          "coverage": 1,
+          "risk": 0.175,
+          "nAnswered": 80,
+          "nWrongAnswered": 14
+        }
+      ]
+    },
+    {
+      "name": "D2-04 ownership audit — wavea-944403-dink (n=44 slots)",
+      "provenance": "committed D2-04 audit sidecars bundles/*/annotation/devin-visual-v4-waveD2-ownership-audit.json; correct = 3-class agreement with the committed waveC ownership labels — inter-annotator proxy, not gold; single bundle wavea-944403-dink",
+      "n": 44,
+      "calibration": {
+        "n": 44,
+        "nBins": 10,
+        "minSamples": 10,
+        "ece": 0.1193181818181818,
+        "flagged": false,
+        "flags": []
+      },
+      "aurc": 0.13787186969248558,
+      "reliabilityBins": [
+        {
+          "lower": 0.3,
+          "upper": 0.4,
+          "count": 1,
+          "meanConfidence": 0.35,
+          "accuracy": 1
+        },
+        {
+          "lower": 0.4,
+          "upper": 0.5,
+          "count": 1,
+          "meanConfidence": 0.4,
+          "accuracy": 1
+        },
+        {
+          "lower": 0.5,
+          "upper": 0.6,
+          "count": 2,
+          "meanConfidence": 0.5,
+          "accuracy": 1
+        },
+        {
+          "lower": 0.6,
+          "upper": 0.7,
+          "count": 3,
+          "meanConfidence": 0.6,
+          "accuracy": 0.6666666666666666
+        },
+        {
+          "lower": 0.7,
+          "upper": 0.8,
+          "count": 4,
+          "meanConfidence": 0.7375,
+          "accuracy": 0.75
+        },
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "count": 14,
+          "meanConfidence": 0.8392857142857143,
+          "accuracy": 0.9285714285714286
+        },
+        {
+          "lower": 0.9,
+          "upper": 1,
+          "count": 19,
+          "meanConfidence": 0.9210526315789472,
+          "accuracy": 0.8421052631578947
+        }
+      ],
+      "coverageRiskCurve": [
+        {
+          "threshold": 0.95,
+          "coverage": 0.18181818181818182,
+          "risk": 0.125,
+          "nAnswered": 8,
+          "nWrongAnswered": 1
+        },
+        {
+          "threshold": 0.9,
+          "coverage": 0.4318181818181818,
+          "risk": 0.15789473684210525,
+          "nAnswered": 19,
+          "nWrongAnswered": 3
+        },
+        {
+          "threshold": 0.85,
+          "coverage": 0.6818181818181818,
+          "risk": 0.13333333333333333,
+          "nAnswered": 30,
+          "nWrongAnswered": 4
+        },
+        {
+          "threshold": 0.8,
+          "coverage": 0.75,
+          "risk": 0.12121212121212122,
+          "nAnswered": 33,
+          "nWrongAnswered": 4
+        },
+        {
+          "threshold": 0.75,
+          "coverage": 0.8181818181818182,
+          "risk": 0.1388888888888889,
+          "nAnswered": 36,
+          "nWrongAnswered": 5
+        },
+        {
+          "threshold": 0.7,
+          "coverage": 0.8409090909090909,
+          "risk": 0.13513513513513514,
+          "nAnswered": 37,
+          "nWrongAnswered": 5
+        },
+        {
+          "threshold": 0.6,
+          "coverage": 0.9090909090909091,
+          "risk": 0.15,
+          "nAnswered": 40,
+          "nWrongAnswered": 6
+        },
+        {
+          "threshold": 0.5,
+          "coverage": 0.9545454545454546,
+          "risk": 0.14285714285714285,
+          "nAnswered": 42,
+          "nWrongAnswered": 6
+        },
+        {
+          "threshold": 0.4,
+          "coverage": 0.9772727272727273,
+          "risk": 0.13953488372093023,
+          "nAnswered": 43,
+          "nWrongAnswered": 6
+        },
+        {
+          "threshold": 0.35,
+          "coverage": 1,
+          "risk": 0.13636363636363635,
+          "nAnswered": 44,
+          "nWrongAnswered": 6
+        }
+      ]
+    },
+    {
+      "name": "D2-04 ownership audit — wavea-944403-smash (n=16 slots)",
+      "provenance": "committed D2-04 audit sidecars bundles/*/annotation/devin-visual-v4-waveD2-ownership-audit.json; correct = 3-class agreement with the committed waveC ownership labels — inter-annotator proxy, not gold; single bundle wavea-944403-smash",
+      "n": 16,
+      "calibration": {
+        "n": 16,
+        "nBins": 10,
+        "minSamples": 10,
+        "ece": 0.24375000000000002,
+        "flagged": false,
+        "flags": []
+      },
+      "aurc": 0.26945684523809527,
+      "reliabilityBins": [
+        {
+          "lower": 0.4,
+          "upper": 0.5,
+          "count": 1,
+          "meanConfidence": 0.4,
+          "accuracy": 0
+        },
+        {
+          "lower": 0.5,
+          "upper": 0.6,
+          "count": 3,
+          "meanConfidence": 0.5,
+          "accuracy": 0.3333333333333333
+        },
+        {
+          "lower": 0.6,
+          "upper": 0.7,
+          "count": 5,
+          "meanConfidence": 0.6,
+          "accuracy": 0.8
+        },
+        {
+          "lower": 0.7,
+          "upper": 0.8,
+          "count": 2,
+          "meanConfidence": 0.725,
+          "accuracy": 1
+        },
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "count": 2,
+          "meanConfidence": 0.85,
+          "accuracy": 0.5
+        },
+        {
+          "lower": 0.9,
+          "upper": 1,
+          "count": 3,
+          "meanConfidence": 0.9166666666666666,
+          "accuracy": 0.6666666666666666
+        }
+      ],
+      "coverageRiskCurve": [
+        {
+          "threshold": 0.95,
+          "coverage": 0.0625,
+          "risk": 0,
+          "nAnswered": 1,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.9,
+          "coverage": 0.1875,
+          "risk": 0.3333333333333333,
+          "nAnswered": 3,
+          "nWrongAnswered": 1
+        },
+        {
+          "threshold": 0.85,
+          "coverage": 0.3125,
+          "risk": 0.4,
+          "nAnswered": 5,
+          "nWrongAnswered": 2
+        },
+        {
+          "threshold": 0.75,
+          "coverage": 0.375,
+          "risk": 0.3333333333333333,
+          "nAnswered": 6,
+          "nWrongAnswered": 2
+        },
+        {
+          "threshold": 0.7,
+          "coverage": 0.4375,
+          "risk": 0.2857142857142857,
+          "nAnswered": 7,
+          "nWrongAnswered": 2
+        },
+        {
+          "threshold": 0.6,
+          "coverage": 0.75,
+          "risk": 0.25,
+          "nAnswered": 12,
+          "nWrongAnswered": 3
+        },
+        {
+          "threshold": 0.5,
+          "coverage": 0.9375,
+          "risk": 0.3333333333333333,
+          "nAnswered": 15,
+          "nWrongAnswered": 5
+        },
+        {
+          "threshold": 0.4,
+          "coverage": 1,
+          "risk": 0.375,
+          "nAnswered": 16,
+          "nWrongAnswered": 6
+        }
+      ]
+    },
+    {
+      "name": "D2-04 ownership audit — wavea-faead-rally (n=20 slots)",
+      "provenance": "committed D2-04 audit sidecars bundles/*/annotation/devin-visual-v4-waveD2-ownership-audit.json; correct = 3-class agreement with the committed waveC ownership labels — inter-annotator proxy, not gold; single bundle wavea-faead-rally",
+      "n": 20,
+      "calibration": {
+        "n": 20,
+        "nBins": 10,
+        "minSamples": 10,
+        "ece": 0.2,
+        "flagged": false,
+        "flags": []
+      },
+      "aurc": 0.020947389920880632,
+      "reliabilityBins": [
+        {
+          "lower": 0.4,
+          "upper": 0.5,
+          "count": 2,
+          "meanConfidence": 0.42500000000000004,
+          "accuracy": 1
+        },
+        {
+          "lower": 0.5,
+          "upper": 0.6,
+          "count": 2,
+          "meanConfidence": 0.525,
+          "accuracy": 0.5
+        },
+        {
+          "lower": 0.6,
+          "upper": 0.7,
+          "count": 2,
+          "meanConfidence": 0.6,
+          "accuracy": 0.5
+        },
+        {
+          "lower": 0.7,
+          "upper": 0.8,
+          "count": 7,
+          "meanConfidence": 0.7000000000000001,
+          "accuracy": 1
+        },
+        {
+          "lower": 0.8,
+          "upper": 0.9,
+          "count": 1,
+          "meanConfidence": 0.85,
+          "accuracy": 1
+        },
+        {
+          "lower": 0.9,
+          "upper": 1,
+          "count": 6,
+          "meanConfidence": 0.9416666666666665,
+          "accuracy": 1
+        }
+      ],
+      "coverageRiskCurve": [
+        {
+          "threshold": 0.95,
+          "coverage": 0.25,
+          "risk": 0,
+          "nAnswered": 5,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.9,
+          "coverage": 0.3,
+          "risk": 0,
+          "nAnswered": 6,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.85,
+          "coverage": 0.35,
+          "risk": 0,
+          "nAnswered": 7,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.7,
+          "coverage": 0.7,
+          "risk": 0,
+          "nAnswered": 14,
+          "nWrongAnswered": 0
+        },
+        {
+          "threshold": 0.6,
+          "coverage": 0.8,
+          "risk": 0.0625,
+          "nAnswered": 16,
+          "nWrongAnswered": 1
+        },
+        {
+          "threshold": 0.55,
+          "coverage": 0.85,
+          "risk": 0.058823529411764705,
+          "nAnswered": 17,
+          "nWrongAnswered": 1
+        },
+        {
+          "threshold": 0.5,
+          "coverage": 0.9,
+          "risk": 0.1111111111111111,
+          "nAnswered": 18,
+          "nWrongAnswered": 2
+        },
+        {
+          "threshold": 0.45,
+          "coverage": 0.95,
+          "risk": 0.10526315789473684,
+          "nAnswered": 19,
+          "nWrongAnswered": 2
+        },
+        {
+          "threshold": 0.4,
+          "coverage": 1,
+          "risk": 0.1,
+          "nAnswered": 20,
+          "nWrongAnswered": 2
+        }
+      ]
+    }
+  ]
+}

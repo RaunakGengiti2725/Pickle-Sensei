@@ -7,14 +7,21 @@ import {
   PriorityCoachingRanker,
   Sm1TechniqueScorer,
 } from "@pickle/scoring";
-import { unavailable, type StrokeIdentity } from "@pickle/swing-domain";
+import {
+  CAPTURE_ENVELOPE_VERSION_NOT_MEASURED,
+  explainAnalysisRun,
+  unavailable,
+  type StrokeIdentity,
+} from "@pickle/swing-domain";
 import { GeometricPhaseSegmenter, GeometryBiomechanicsExtractor } from "@pickle/vision-geometry";
 import type { ITechniqueScorer } from "@pickle/vision-contracts";
 import {
   analyzeCapture,
   FUSION_ENGINE_VERSION,
+  STROKE_TAXONOMY_VERSION,
   type CaptureAnalysisInput,
   type FusionProviders,
+  type IHierarchicalStrokeClassifier,
 } from "../src/index.js";
 
 const TRIGGER_MODEL = {
@@ -256,6 +263,92 @@ describe("analyzeCapture fusion engine", () => {
       shotType: "forehand_drive",
       confidence: 0.95,
     });
+  });
+
+  it("records complete run provenance on the scored path", async () => {
+    const input = captureInput();
+    const result = await analyzeCapture(providers(), input, {
+      ...options(),
+      captureEnvelopeThresholdsVersion: "capture-envelope-thresholds-1",
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const record = result.value;
+
+    expect(record.provenance.appVersion).toBe("0.1.0");
+    expect(record.provenance.pipelineVersion).toBe(FUSION_ENGINE_VERSION);
+    expect(record.provenance.scoreVersion).toBe("sm-v1");
+    expect(record.provenance.taxonomyVersion).toBe(STROKE_TAXONOMY_VERSION);
+    // forehand_drive resolves a real profile; whatever drill mapping version
+    // that profile declares is what gets recorded — never empty.
+    expect(record.provenance.drillMappingVersion.length).toBeGreaterThan(0);
+    expect(record.provenance.captureEnvelopeVersion).toBe("capture-envelope-thresholds-1");
+    expect(record.provenance.recordedAtIso).toBe(record.createdAtIso);
+    // Input producers AND every executed provider are in the snapshot.
+    const providerIds = record.provenance.providerVersions.map((m) => m.providerId);
+    expect(providerIds).toEqual(
+      expect.arrayContaining([
+        input.pose.producedBy.providerId,
+        "trigger.temporal-heuristic",
+        "phase.geometry",
+        "scorer.sm-v1",
+      ]),
+    );
+    for (const run of record.modelRuns) {
+      expect(providerIds).toContain(run.model.providerId);
+    }
+    // The stored record explains itself with no external lookup.
+    const explained = explainAnalysisRun(JSON.parse(JSON.stringify(record)));
+    expect(explained.ok).toBe(true);
+  });
+
+  it("records complete run provenance on the partial AUTO path (no envelope measured)", async () => {
+    const autoClassifier: IHierarchicalStrokeClassifier = {
+      descriptor: {
+        providerId: "classifier.hier-test",
+        modelVersion: "hier-test-1",
+        runtime: "deterministic",
+        executionTarget: "on_device",
+        artifactHash: null,
+        inputSchemaVersion: 1,
+        outputSchemaVersion: 1,
+      },
+      classify: async () =>
+        ok({
+          taxonomyVersion: "pickleball-stroke-taxonomy-v3",
+          classifierVersion: "stroke-heuristic-1 (uncalibrated)",
+          label: "FOREHAND",
+          taxonomyDepth: 2 as const,
+          leaf: null,
+          confidence: 0.6,
+          evidence: ["stub evidence"],
+          limitingFactors: ["bounce_not_observed_level3_uncommitted"],
+        }),
+    };
+    const result = await analyzeCapture(
+      providers({ autoStrokeClassifier: autoClassifier }),
+      captureInput({ declared: null, predicted: null }),
+      options(),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const record = result.value;
+
+    expect(record.result).toBeNull();
+    expect(record.provenance.pipelineVersion).toBe(FUSION_ENGINE_VERSION);
+    expect(record.provenance.scoreVersion).toBe("sm-v1");
+    expect(record.provenance.captureEnvelopeVersion).toBe(CAPTURE_ENVELOPE_VERSION_NOT_MEASURED);
+    expect(record.provenance.recordedAtIso).toBe(record.createdAtIso);
+    const providerIds = record.provenance.providerVersions.map((m) => m.providerId);
+    expect(providerIds).toContain("classifier.hier-test");
+    for (const run of record.modelRuns) {
+      expect(providerIds).toContain(run.model.providerId);
+    }
+    const explained = explainAnalysisRun(JSON.parse(JSON.stringify(record)));
+    expect(explained.ok).toBe(true);
+    if (!explained.ok) return;
+    expect(explained.value.scored).toBe(false);
+    expect(explained.value.overallScore).toBeNull();
   });
 
   it("is deterministic for identical inputs and options", async () => {

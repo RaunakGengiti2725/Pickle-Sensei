@@ -1,0 +1,67 @@
+{
+  "workstream": "f18-envelope-thresholds-v02",
+  "wave": "wave-f",
+  "branch": "devin/wave-f/f18-envelope-thresholds-v02",
+  "baseCommit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "date": "2026-08-29",
+  "mission": "E15 was a scientific negative on corpus-correlation validation of the capture-envelope thresholds. Design the next discriminating experiment: define what evidence would validate or refute each threshold, gather what is gatherable, and either derive evidence-backed versioned thresholds or prove the corpus is still insufficient with a quantified gap.",
+  "verdict": "SCIENTIFIC_NEGATIVE",
+  "headline": "Predictive validation of the bands is still impossible (0 labeled units in any boundary bin; downstream reruns need Apple Vision — BLOCKED_EXTERNAL), so no new band values are derivable and v0.3 stands unchanged. The runnable half of the experiment (controlled ffmpeg degradation ladders, ground truth by construction, 288 measurements over the 9 E15 downstream-good units) VALIDATED construct validity for resolution/frame_rate/brightness/motion_blur (9/9 units exact or strictly monotone each) and causally REFUTED it for camera_motion: injected pans of 1-2 px @320w are indistinguishable from subject motion in 8/9 units, and 2/9 zero-camera-motion controls already exceed the supported edge 33.",
+  "experimentDesign": {
+    "criteria": "packages/capture-envelope/src/f18ValidationCriteria.ts (f18-envelope-validation-criteria-v1): per dimension, the falsifiable claim, the construct-validity test (proxy tracks the physical quantity; runnable on Linux with ffmpeg-injected degradations whose ground truth is known by construction), and the predictive-validity test (band placement predicts downstream failure; needs Mac pose reruns or labeled clips spanning the boundary), each with explicit validating/refuting outcomes and corpus requirements.",
+    "whyThisDiscriminates": "E15 could only correlate verdicts with a corpus whose failures were 51/57 content-driven. F18 separates the two failure modes of a threshold — wrong proxy vs wrong placement — and tests the first causally without any labels, holdout contact, or fresh-candidate use."
+  },
+  "datasetScope": {
+    "sourceUnits": "exactly the 9 E15 downstream-good units: 7 corpus scenes from 2 DVIDS recordings (media re-derived from recorded acquisition mediaUrl, SHA-256 verified: afd0b6bad5d0..., d230484fbaa5...) + 1 committed bundle clip (wm-volley-02); 3 independent sessions",
+    "heldOutExcluded": "wm-dink-01 and afn-vic-rally1 never opened, measured, or degraded",
+    "freshCandidates": "not used (label-blind holdout-candidate pool; f11 not landed on the integration branch)",
+    "grouping": "every row carries sessionKey (3 independent sessions); no random-frame splits",
+    "variantsMeasured": 288
+  },
+  "configuration": {
+    "harness": "packages/capture-envelope/src/f18DegradationLadder.ts (pnpm --filter @pickle/capture-envelope eval:f18); each unit re-encoded once (libx264 crf18) as a shared control so codec effects cancel; ladders: short-side scale {720,640,480,360,240}, fps {24,20,15,12,10,8}, eq brightness {±0.1,±0.2,±0.3}, gblur sigma@320w {0.5,1,2,4}, sinusoidal crop-path pan 1.5 Hz amplitude@320w {0,1,2,4,8,16}",
+    "analysis": "packages/capture-envelope/src/f18Analysis.ts (pnpm --filter @pickle/capture-envelope eval:f18-analyze)",
+    "tooling": "ffmpeg 4.4.2-0ubuntu0.22.04.1, Node 20, thresholds capture-envelope-thresholds-v0.3-provisional"
+  },
+  "results": {
+    "constructValidity": {
+      "resolution": "VALIDATED: measured short side equals the encoded target exactly in 45/45 variant measurements; band status flips exactly at the written 719/479 edges.",
+      "frame_rate": "VALIDATED: measured avg fps equals the target exactly in 54/54 variant measurements; band flips exactly at 23.x/14.x.",
+      "brightness": "VALIDATED: mean luma strictly monotone in the injected shift for 9/9 units; edge crossings where arithmetic predicts.",
+      "motion_blur": "VALIDATED (ordering): Laplacian variance strictly decreasing in sigma for 9/9 units. Caveat: every unit leaves the supported band by sigma@320w=2 and 5/9 by sigma=1 — the supported edge 100 is reachable by very mild blur, so its placement is aggressive and remains unvalidated predictively.",
+      "camera_motion": "REFUTED: the proxy is monotone in injected pan amplitude for 9/9 units (it does respond to camera motion) but cannot separate camera from subject motion: at 1 and 2 px @320w injected pan, 8/9 units measure below the subject-motion-only control maximum (38.46); at 8 px still 4/9; only 16 px fully separates (min 39.77 > 38.46). 2/9 zero-camera-motion downstream-good controls (35.94, 38.46) already exceed the v0.3 supported edge 33 and are misclassified DEGRADED. The same physical pan (8 px) maps to SUPPORTED on a calm scene (s0: 31.7) and UNSUPPORTED-adjacent on a busy one — the verdict is a property of scene content, not camera stability.",
+      "timing_stability": "NOT RUN: ffmpeg 4.4.2 offers no decodability-preserving controlled PTS-jitter injection (no setts bsf); refuting/validating needs real VFR captures.",
+      "pose_dimensions": "BLOCKED_EXTERNAL: player_pixel_height and player_visibility cannot even be measured on Linux (Apple Vision required)."
+    },
+    "measurementFragility": "The camera_motion measurement is extraction-path sensitive: the same two scenes measured 32.7/31.9 in E15 (windowed -ss/-t on the original) but 35.9/38.5 after the window is re-encoded and margin-cropped (the zero-pan control path). Bands calibrated at p100 on one path misclassify on the other; any future band derivation must pin the measurement path.",
+    "thresholdDecision": "No band changed. Construct-validated dimensions have no downstream outcomes to re-place their edges against; camera_motion's failure is in the proxy, not the numbers, so re-tuning bands cannot fix it (replace with a background-registered global-motion estimate, e.g. block-matching/phase-correlation against tracked-subject masks). v0.3-provisional stands; refutation recorded in thresholds.ts provenance comment and f18ValidationCriteria.ts."
+  },
+  "quantifiedCorpusGap": {
+    "labeledGoodUnits": 9,
+    "independentGoodSessions": 3,
+    "ruleOfThree95UpperBoundOnMissedFlagRate": { "unitLevel": 0.2831, "sessionLevel": 0.6316 },
+    "neededForCalibration": "≥29 downstream-good units for a ≤10% 95% upper bound (≥59 for ≤5%), ideally from ≥10 independent sessions",
+    "boundaryBins": "0 labeled units exist in ANY degraded/unsupported bin of any dimension (all labeled-good units: short side ≥720, fps ≥24, luma inside the supported band, Laplacian ≥100, interval CV ≈ 0). Placing each boundary predictively needs ≥10 labeled units per bin, ≥5 sessions per bin: ≈150 labeled clip-scenes concentrated in low-fps (8-23), low-light (luma <60), sub-720p, blurred, and genuinely handheld footage — none of which the usable-rights corpus contains.",
+    "cheapestUnblock": "One Mac session running pose extraction + mining over the ~270 f18 ladder variants (regenerable via eval:f18) would convert every construct ladder into a predictive dose-response curve without any new footage or labels."
+  },
+  "gates": {
+    "formatCheck": "pnpm format:check clean on touched files",
+    "typecheck": "pnpm --filter @pickle/capture-envelope typecheck clean",
+    "tests": "pnpm --filter @pickle/capture-envelope test: 29 passed (6 new in test/f18Analysis.test.ts)",
+    "lint": "pnpm lint clean"
+  },
+  "artifacts": [
+    "datasets/experiments/wave-f/f18-degradation-ladders.json (288 rows, raw measurements + band statuses)",
+    "datasets/experiments/wave-f/f18-analysis.json (monotonicity, band flips, separability, gap arithmetic)",
+    "packages/capture-envelope/src/f18ValidationCriteria.ts",
+    "packages/capture-envelope/src/f18DegradationLadder.ts",
+    "packages/capture-envelope/src/f18Analysis.ts",
+    "packages/capture-envelope/test/f18Analysis.test.ts"
+  ],
+  "limitations": [
+    "Construct validation says the probes measure what they claim, not that the band edges predict downstream failure — that half remains open and is exactly the quantified gap above.",
+    "Degradations are synthetic ffmpeg approximations of real capture pathology (real low light adds sensor noise, real handheld motion includes rolling shutter and parallax); dose-response shapes may differ on real degraded footage.",
+    "Camera-motion injection uses a fixed 1.5 Hz sinusoid; other shake spectra were not tested.",
+    "9 units / 3 sessions is the entire downstream-good population available; per-unit results are reported, no distributional claims beyond min/max."
+  ]
+}

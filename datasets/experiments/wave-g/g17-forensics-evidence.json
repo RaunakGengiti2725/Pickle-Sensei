@@ -1,0 +1,2429 @@
+{
+  "id": "g17-worst-slice-forensics",
+  "generatedBy": "datasets/experiments/wave-g/g17-forensics.ts",
+  "criteria": {
+    "hitRadius": 0.05,
+    "matchToleranceMs": 40,
+    "poseFreeProxy": true,
+    "paddleTrack": null
+  },
+  "slice": "BALL OBSERVED bucket, D2-06 hard-slice gold (LINUX-CPU pose-free proxy)",
+  "observed": {
+    "n": 35,
+    "hits": 9,
+    "failures": 26
+  },
+  "stageHistogram": {
+    "SELECTION_LOSS": 5,
+    "GATE_REJECT": 19,
+    "ASSOCIATION_DROP": 2
+  },
+  "failures": [
+    {
+      "case": "afn-sasebo-rally2",
+      "tMs": 2336,
+      "gold": {
+        "x": 0.4955,
+        "y": 0.1617
+      },
+      "slices": [],
+      "window": {
+        "startMs": 1200,
+        "endMs": 4200,
+        "note": "lob + occlusion cycle around gold 2336-3070"
+      },
+      "outcome": "miss",
+      "nearestEmitted": {
+        "t": 3070,
+        "deltaMs": 734,
+        "x": 0.692,
+        "y": 0.305,
+        "distanceToGold": 0.243,
+        "withinTolerance": false
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 2336,
+          "distance": 0,
+          "areaPx": 82,
+          "score": 5075,
+          "x": 0.495,
+          "y": 0.162
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "gated",
+        "gatedIn": true,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 2336,
+          "distance": 0
+        },
+        "goldAlignedCount": 1,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 112,
+          "observations": 44,
+          "firstMs": 667,
+          "lastMs": 2536,
+          "medianSpeed": 0.516,
+          "maxSpeed": 1.817,
+          "jerkyFraction": 0.229,
+          "chronicFraction": 0.386,
+          "straightness": 0.398,
+          "coherentMotionFraction": 0,
+          "medianArea": 57,
+          "windowOverlapMs": 1336
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": true,
+          "chronicFraction": true,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 269,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 269,
+          "observations": 26,
+          "firstMs": 3070,
+          "lastMs": 4071,
+          "medianSpeed": 0.809,
+          "maxSpeed": 1.482,
+          "jerkyFraction": 0,
+          "chronicFraction": 0,
+          "straightness": 0.901,
+          "coherentMotionFraction": 0,
+          "medianArea": 103,
+          "windowOverlapMs": 567
+        }
+      },
+      "stage": "SELECTION_LOSS"
+    },
+    {
+      "case": "afn-sasebo-rally2",
+      "tMs": 2469,
+      "gold": {
+        "x": 0.583,
+        "y": 0.094
+      },
+      "slices": [
+        "fastBlur"
+      ],
+      "window": {
+        "startMs": 1200,
+        "endMs": 4200,
+        "note": "lob + occlusion cycle around gold 2336-3070"
+      },
+      "outcome": "miss",
+      "nearestEmitted": {
+        "t": 3070,
+        "deltaMs": 601,
+        "x": 0.692,
+        "y": 0.305,
+        "distanceToGold": 0.237,
+        "withinTolerance": false
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 2469,
+          "distance": 0.01,
+          "areaPx": 483,
+          "score": 22381,
+          "x": 0.593,
+          "y": 0.095
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "gated",
+        "gatedIn": true,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 2469,
+          "distance": 0.01
+        },
+        "goldAlignedCount": 1,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 4,
+          "observations": 70,
+          "firstMs": 33,
+          "lastMs": 2469,
+          "medianSpeed": 0.705,
+          "maxSpeed": 2.344,
+          "jerkyFraction": 0.052,
+          "chronicFraction": 0.3,
+          "straightness": 0.309,
+          "coherentMotionFraction": 0.029,
+          "medianArea": 104,
+          "windowOverlapMs": 1269
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": true,
+          "chronicFraction": true,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 269,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 269,
+          "observations": 26,
+          "firstMs": 3070,
+          "lastMs": 4071,
+          "medianSpeed": 0.809,
+          "maxSpeed": 1.482,
+          "jerkyFraction": 0,
+          "chronicFraction": 0,
+          "straightness": 0.901,
+          "coherentMotionFraction": 0,
+          "medianArea": 103,
+          "windowOverlapMs": 567
+        }
+      },
+      "stage": "SELECTION_LOSS"
+    },
+    {
+      "case": "afn-sasebo-rally2",
+      "tMs": 2569,
+      "gold": {
+        "x": 0.6215,
+        "y": 0.1926
+      },
+      "slices": [],
+      "window": {
+        "startMs": 1200,
+        "endMs": 4200,
+        "note": "lob + occlusion cycle around gold 2336-3070"
+      },
+      "outcome": "miss",
+      "nearestEmitted": {
+        "t": 3070,
+        "deltaMs": 501,
+        "x": 0.692,
+        "y": 0.305,
+        "distanceToGold": 0.132,
+        "withinTolerance": false
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 2569,
+          "distance": 0.003,
+          "areaPx": 96,
+          "score": 5310,
+          "x": 0.624,
+          "y": 0.191
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "gated",
+        "gatedIn": true,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 2536,
+          "distance": 0.043
+        },
+        "goldAlignedCount": 1,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 228,
+          "observations": 23,
+          "firstMs": 1869,
+          "lastMs": 2970,
+          "medianSpeed": 0.707,
+          "maxSpeed": 2.97,
+          "jerkyFraction": 0.333,
+          "chronicFraction": 0.348,
+          "straightness": 0.566,
+          "coherentMotionFraction": 0.091,
+          "medianArea": 78,
+          "windowOverlapMs": 1101
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": true,
+          "chronicFraction": true,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 269,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 269,
+          "observations": 26,
+          "firstMs": 3070,
+          "lastMs": 4071,
+          "medianSpeed": 0.809,
+          "maxSpeed": 1.482,
+          "jerkyFraction": 0,
+          "chronicFraction": 0,
+          "straightness": 0.901,
+          "coherentMotionFraction": 0,
+          "medianArea": 103,
+          "windowOverlapMs": 567
+        }
+      },
+      "stage": "SELECTION_LOSS"
+    },
+    {
+      "case": "afn-sasebo-rally2",
+      "tMs": 2602,
+      "gold": {
+        "x": 0.6382,
+        "y": 0.2049
+      },
+      "slices": [],
+      "window": {
+        "startMs": 1200,
+        "endMs": 4200,
+        "note": "lob + occlusion cycle around gold 2336-3070"
+      },
+      "outcome": "miss",
+      "nearestEmitted": {
+        "t": 3070,
+        "deltaMs": 468,
+        "x": 0.692,
+        "y": 0.305,
+        "distanceToGold": 0.113,
+        "withinTolerance": false
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 2603,
+          "distance": 0.007,
+          "areaPx": 65,
+          "score": 3631,
+          "x": 0.645,
+          "y": 0.202
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 2603,
+          "distance": 0.007
+        },
+        "goldAlignedCount": 6,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 281,
+          "observations": 27,
+          "firstMs": 2336,
+          "lastMs": 3337,
+          "medianSpeed": 0.391,
+          "maxSpeed": 1.233,
+          "jerkyFraction": 0.467,
+          "chronicFraction": 0.63,
+          "straightness": 0.309,
+          "coherentMotionFraction": 0.038,
+          "medianArea": 113,
+          "windowOverlapMs": 1001
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": false,
+          "chronicFraction": false,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 269,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 269,
+          "observations": 26,
+          "firstMs": 3070,
+          "lastMs": 4071,
+          "medianSpeed": 0.809,
+          "maxSpeed": 1.482,
+          "jerkyFraction": 0,
+          "chronicFraction": 0,
+          "straightness": 0.901,
+          "coherentMotionFraction": 0,
+          "medianArea": 103,
+          "windowOverlapMs": 567
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "afn-sasebo-rally2",
+      "tMs": 2636,
+      "gold": {
+        "x": 0.665,
+        "y": 0.2192
+      },
+      "slices": [],
+      "window": {
+        "startMs": 1200,
+        "endMs": 4200,
+        "note": "lob + occlusion cycle around gold 2336-3070"
+      },
+      "outcome": "miss",
+      "nearestEmitted": {
+        "t": 3070,
+        "deltaMs": 434,
+        "x": 0.692,
+        "y": 0.305,
+        "distanceToGold": 0.09,
+        "withinTolerance": false
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 2636,
+          "distance": 0.002,
+          "areaPx": 44,
+          "score": 2423,
+          "x": 0.667,
+          "y": 0.219
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 2636,
+          "distance": 0.002
+        },
+        "goldAlignedCount": 6,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 281,
+          "observations": 27,
+          "firstMs": 2336,
+          "lastMs": 3337,
+          "medianSpeed": 0.391,
+          "maxSpeed": 1.233,
+          "jerkyFraction": 0.467,
+          "chronicFraction": 0.63,
+          "straightness": 0.309,
+          "coherentMotionFraction": 0.038,
+          "medianArea": 113,
+          "windowOverlapMs": 1001
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": false,
+          "chronicFraction": false,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 269,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 269,
+          "observations": 26,
+          "firstMs": 3070,
+          "lastMs": 4071,
+          "medianSpeed": 0.809,
+          "maxSpeed": 1.482,
+          "jerkyFraction": 0,
+          "chronicFraction": 0,
+          "straightness": 0.901,
+          "coherentMotionFraction": 0,
+          "medianArea": 103,
+          "windowOverlapMs": 567
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "afn-sasebo-rally2",
+      "tMs": 2669,
+      "gold": {
+        "x": 0.6892,
+        "y": 0.2438
+      },
+      "slices": [],
+      "window": {
+        "startMs": 1200,
+        "endMs": 4200,
+        "note": "lob + occlusion cycle around gold 2336-3070"
+      },
+      "outcome": "miss",
+      "nearestEmitted": {
+        "t": 3070,
+        "deltaMs": 401,
+        "x": 0.692,
+        "y": 0.305,
+        "distanceToGold": 0.061,
+        "withinTolerance": false
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 2669,
+          "distance": 0.005,
+          "areaPx": 30,
+          "score": 1346,
+          "x": 0.69,
+          "y": 0.239
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 2669,
+          "distance": 0.005
+        },
+        "goldAlignedCount": 6,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 281,
+          "observations": 27,
+          "firstMs": 2336,
+          "lastMs": 3337,
+          "medianSpeed": 0.391,
+          "maxSpeed": 1.233,
+          "jerkyFraction": 0.467,
+          "chronicFraction": 0.63,
+          "straightness": 0.309,
+          "coherentMotionFraction": 0.038,
+          "medianArea": 113,
+          "windowOverlapMs": 1001
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": false,
+          "chronicFraction": false,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 269,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 269,
+          "observations": 26,
+          "firstMs": 3070,
+          "lastMs": 4071,
+          "medianSpeed": 0.809,
+          "maxSpeed": 1.482,
+          "jerkyFraction": 0,
+          "chronicFraction": 0,
+          "straightness": 0.901,
+          "coherentMotionFraction": 0,
+          "medianArea": 103,
+          "windowOverlapMs": 567
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "afn-sasebo-rally2",
+      "tMs": 2736,
+      "gold": {
+        "x": 0.7354,
+        "y": 0.2944
+      },
+      "slices": [],
+      "window": {
+        "startMs": 1200,
+        "endMs": 4200,
+        "note": "lob + occlusion cycle around gold 2336-3070"
+      },
+      "outcome": "miss",
+      "nearestEmitted": {
+        "t": 3070,
+        "deltaMs": 334,
+        "x": 0.692,
+        "y": 0.305,
+        "distanceToGold": 0.044,
+        "withinTolerance": false
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 2769,
+          "distance": 0.047,
+          "areaPx": 97,
+          "score": 4935,
+          "x": 0.767,
+          "y": 0.329
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 2769,
+          "distance": 0.047
+        },
+        "goldAlignedCount": 6,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 281,
+          "observations": 27,
+          "firstMs": 2336,
+          "lastMs": 3337,
+          "medianSpeed": 0.391,
+          "maxSpeed": 1.233,
+          "jerkyFraction": 0.467,
+          "chronicFraction": 0.63,
+          "straightness": 0.309,
+          "coherentMotionFraction": 0.038,
+          "medianArea": 113,
+          "windowOverlapMs": 1001
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": false,
+          "chronicFraction": false,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 269,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 269,
+          "observations": 26,
+          "firstMs": 3070,
+          "lastMs": 4071,
+          "medianSpeed": 0.809,
+          "maxSpeed": 1.482,
+          "jerkyFraction": 0,
+          "chronicFraction": 0,
+          "straightness": 0.901,
+          "coherentMotionFraction": 0,
+          "medianArea": 103,
+          "windowOverlapMs": 567
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "afn-sasebo-rally2",
+      "tMs": 2803,
+      "gold": {
+        "x": 0.7865,
+        "y": 0.3642
+      },
+      "slices": [
+        "occlusionCycle"
+      ],
+      "window": {
+        "startMs": 1200,
+        "endMs": 4200,
+        "note": "lob + occlusion cycle around gold 2336-3070"
+      },
+      "outcome": "miss",
+      "nearestEmitted": {
+        "t": 3070,
+        "deltaMs": 267,
+        "x": 0.692,
+        "y": 0.305,
+        "distanceToGold": 0.112,
+        "withinTolerance": false
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 2803,
+          "distance": 0.002,
+          "areaPx": 139,
+          "score": 6129,
+          "x": 0.789,
+          "y": 0.364
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 2803,
+          "distance": 0.002
+        },
+        "goldAlignedCount": 6,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 281,
+          "observations": 27,
+          "firstMs": 2336,
+          "lastMs": 3337,
+          "medianSpeed": 0.391,
+          "maxSpeed": 1.233,
+          "jerkyFraction": 0.467,
+          "chronicFraction": 0.63,
+          "straightness": 0.309,
+          "coherentMotionFraction": 0.038,
+          "medianArea": 113,
+          "windowOverlapMs": 1001
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": false,
+          "chronicFraction": false,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 269,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 269,
+          "observations": 26,
+          "firstMs": 3070,
+          "lastMs": 4071,
+          "medianSpeed": 0.809,
+          "maxSpeed": 1.482,
+          "jerkyFraction": 0,
+          "chronicFraction": 0,
+          "straightness": 0.901,
+          "coherentMotionFraction": 0,
+          "medianArea": 103,
+          "windowOverlapMs": 567
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "wavea-wgm-wheelchair",
+      "tMs": 182333,
+      "gold": {
+        "x": 0.3547,
+        "y": 0.7472
+      },
+      "slices": [],
+      "window": {
+        "startMs": 181600,
+        "endMs": 183600,
+        "note": "bounce + hit + post-hit blur, gold 182333-182867; camera pans right→left from ~182933"
+      },
+      "outcome": "miss",
+      "nearestEmitted": {
+        "t": 182633,
+        "deltaMs": 300,
+        "x": 0.469,
+        "y": 0.76,
+        "distanceToGold": 0.115,
+        "withinTolerance": false
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 182333,
+          "distance": 0.004,
+          "areaPx": 338,
+          "score": 36451,
+          "x": 0.355,
+          "y": 0.744
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "gated",
+        "gatedIn": true,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 182300,
+          "distance": 0.034
+        },
+        "goldAlignedCount": 1,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 45,
+          "observations": 61,
+          "firstMs": 180100,
+          "lastMs": 182300,
+          "medianSpeed": 0.139,
+          "maxSpeed": 2,
+          "jerkyFraction": 0.188,
+          "chronicFraction": 0.131,
+          "straightness": 0.671,
+          "coherentMotionFraction": 0,
+          "medianArea": 30,
+          "windowOverlapMs": 700
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": true,
+          "chronicFraction": true,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": false,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 319,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 319,
+          "observations": 13,
+          "firstMs": 182633,
+          "lastMs": 183267,
+          "medianSpeed": 1.5,
+          "maxSpeed": 1.884,
+          "jerkyFraction": 0.333,
+          "chronicFraction": 0,
+          "straightness": 0.673,
+          "coherentMotionFraction": 0.5,
+          "medianArea": 52,
+          "windowOverlapMs": 633
+        }
+      },
+      "stage": "SELECTION_LOSS"
+    },
+    {
+      "case": "wavea-wgm-wheelchair",
+      "tMs": 182467,
+      "gold": {
+        "x": 0.3497,
+        "y": 0.6102
+      },
+      "slices": [],
+      "window": {
+        "startMs": 181600,
+        "endMs": 183600,
+        "note": "bounce + hit + post-hit blur, gold 182333-182867; camera pans right→left from ~182933"
+      },
+      "outcome": "miss",
+      "nearestEmitted": {
+        "t": 182633,
+        "deltaMs": 166,
+        "x": 0.469,
+        "y": 0.76,
+        "distanceToGold": 0.192,
+        "withinTolerance": false
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 182467,
+          "distance": 0.004,
+          "areaPx": 195,
+          "score": 8588,
+          "x": 0.349,
+          "y": 0.607
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 182467,
+          "distance": 0.004
+        },
+        "goldAlignedCount": 7,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 285,
+          "observations": 18,
+          "firstMs": 182300,
+          "lastMs": 182900,
+          "medianSpeed": 0.889,
+          "maxSpeed": 3.289,
+          "jerkyFraction": 0.4,
+          "chronicFraction": 0.167,
+          "straightness": 0.396,
+          "coherentMotionFraction": 0.059,
+          "medianArea": 101,
+          "windowOverlapMs": 600
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": false,
+          "chronicFraction": true,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 319,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 319,
+          "observations": 13,
+          "firstMs": 182633,
+          "lastMs": 183267,
+          "medianSpeed": 1.5,
+          "maxSpeed": 1.884,
+          "jerkyFraction": 0.333,
+          "chronicFraction": 0,
+          "straightness": 0.673,
+          "coherentMotionFraction": 0.5,
+          "medianArea": 52,
+          "windowOverlapMs": 633
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "wavea-wgm-wheelchair",
+      "tMs": 182533,
+      "gold": {
+        "x": 0.3448,
+        "y": 0.5657
+      },
+      "slices": [],
+      "window": {
+        "startMs": 181600,
+        "endMs": 183600,
+        "note": "bounce + hit + post-hit blur, gold 182333-182867; camera pans right→left from ~182933"
+      },
+      "outcome": "miss",
+      "nearestEmitted": {
+        "t": 182633,
+        "deltaMs": 100,
+        "x": 0.469,
+        "y": 0.76,
+        "distanceToGold": 0.231,
+        "withinTolerance": false
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 182533,
+          "distance": 0.004,
+          "areaPx": 77,
+          "score": 2221,
+          "x": 0.344,
+          "y": 0.569
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 182533,
+          "distance": 0.004
+        },
+        "goldAlignedCount": 7,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 285,
+          "observations": 18,
+          "firstMs": 182300,
+          "lastMs": 182900,
+          "medianSpeed": 0.889,
+          "maxSpeed": 3.289,
+          "jerkyFraction": 0.4,
+          "chronicFraction": 0.167,
+          "straightness": 0.396,
+          "coherentMotionFraction": 0.059,
+          "medianArea": 101,
+          "windowOverlapMs": 600
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": false,
+          "chronicFraction": true,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 319,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 319,
+          "observations": 13,
+          "firstMs": 182633,
+          "lastMs": 183267,
+          "medianSpeed": 1.5,
+          "maxSpeed": 1.884,
+          "jerkyFraction": 0.333,
+          "chronicFraction": 0,
+          "straightness": 0.673,
+          "coherentMotionFraction": 0.5,
+          "medianArea": 52,
+          "windowOverlapMs": 633
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "wavea-wgm-wheelchair",
+      "tMs": 182567,
+      "gold": {
+        "x": 0.3445,
+        "y": 0.5495
+      },
+      "slices": [],
+      "window": {
+        "startMs": 181600,
+        "endMs": 183600,
+        "note": "bounce + hit + post-hit blur, gold 182333-182867; camera pans right→left from ~182933"
+      },
+      "outcome": "miss",
+      "nearestEmitted": {
+        "t": 182633,
+        "deltaMs": 66,
+        "x": 0.469,
+        "y": 0.76,
+        "distanceToGold": 0.245,
+        "withinTolerance": false
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 182533,
+          "distance": 0.013,
+          "areaPx": 26,
+          "score": 908,
+          "x": 0.348,
+          "y": 0.562
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 182533,
+          "distance": 0.02
+        },
+        "goldAlignedCount": 7,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 285,
+          "observations": 18,
+          "firstMs": 182300,
+          "lastMs": 182900,
+          "medianSpeed": 0.889,
+          "maxSpeed": 3.289,
+          "jerkyFraction": 0.4,
+          "chronicFraction": 0.167,
+          "straightness": 0.396,
+          "coherentMotionFraction": 0.059,
+          "medianArea": 101,
+          "windowOverlapMs": 600
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": false,
+          "chronicFraction": true,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 319,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 319,
+          "observations": 13,
+          "firstMs": 182633,
+          "lastMs": 183267,
+          "medianSpeed": 1.5,
+          "maxSpeed": 1.884,
+          "jerkyFraction": 0.333,
+          "chronicFraction": 0,
+          "straightness": 0.673,
+          "coherentMotionFraction": 0.5,
+          "medianArea": 52,
+          "windowOverlapMs": 633
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "wavea-wgm-wheelchair",
+      "tMs": 182600,
+      "gold": {
+        "x": 0.3424,
+        "y": 0.5384
+      },
+      "slices": [],
+      "window": {
+        "startMs": 181600,
+        "endMs": 183600,
+        "note": "bounce + hit + post-hit blur, gold 182333-182867; camera pans right→left from ~182933"
+      },
+      "outcome": "wrongLocation",
+      "nearestEmitted": {
+        "t": 182633,
+        "deltaMs": 33,
+        "x": 0.469,
+        "y": 0.76,
+        "distanceToGold": 0.255,
+        "withinTolerance": true
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 182600,
+          "distance": 0.044,
+          "areaPx": 66,
+          "score": 3362,
+          "x": 0.301,
+          "y": 0.523
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 182600,
+          "distance": 0.044
+        },
+        "goldAlignedCount": 7,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 285,
+          "observations": 18,
+          "firstMs": 182300,
+          "lastMs": 182900,
+          "medianSpeed": 0.889,
+          "maxSpeed": 3.289,
+          "jerkyFraction": 0.4,
+          "chronicFraction": 0.167,
+          "straightness": 0.396,
+          "coherentMotionFraction": 0.059,
+          "medianArea": 101,
+          "windowOverlapMs": 600
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": false,
+          "chronicFraction": true,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 319,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 319,
+          "observations": 13,
+          "firstMs": 182633,
+          "lastMs": 183267,
+          "medianSpeed": 1.5,
+          "maxSpeed": 1.884,
+          "jerkyFraction": 0.333,
+          "chronicFraction": 0,
+          "straightness": 0.673,
+          "coherentMotionFraction": 0.5,
+          "medianArea": 52,
+          "windowOverlapMs": 633
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "wavea-wgm-wheelchair",
+      "tMs": 182667,
+      "gold": {
+        "x": 0.3393,
+        "y": 0.5361
+      },
+      "slices": [],
+      "window": {
+        "startMs": 181600,
+        "endMs": 183600,
+        "note": "bounce + hit + post-hit blur, gold 182333-182867; camera pans right→left from ~182933"
+      },
+      "outcome": "wrongLocation",
+      "nearestEmitted": {
+        "t": 182700,
+        "deltaMs": 33,
+        "x": 0.492,
+        "y": 0.736,
+        "distanceToGold": 0.252,
+        "withinTolerance": true
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 182667,
+          "distance": 0.008,
+          "areaPx": 34,
+          "score": 1572,
+          "x": 0.347,
+          "y": 0.537
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 182700,
+          "distance": 0.026
+        },
+        "goldAlignedCount": 7,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 285,
+          "observations": 18,
+          "firstMs": 182300,
+          "lastMs": 182900,
+          "medianSpeed": 0.889,
+          "maxSpeed": 3.289,
+          "jerkyFraction": 0.4,
+          "chronicFraction": 0.167,
+          "straightness": 0.396,
+          "coherentMotionFraction": 0.059,
+          "medianArea": 101,
+          "windowOverlapMs": 600
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": false,
+          "chronicFraction": true,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 319,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 319,
+          "observations": 13,
+          "firstMs": 182633,
+          "lastMs": 183267,
+          "medianSpeed": 1.5,
+          "maxSpeed": 1.884,
+          "jerkyFraction": 0.333,
+          "chronicFraction": 0,
+          "straightness": 0.673,
+          "coherentMotionFraction": 0.5,
+          "medianArea": 52,
+          "windowOverlapMs": 633
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "wavea-wgm-wheelchair",
+      "tMs": 182733,
+      "gold": {
+        "x": 0.3906,
+        "y": 0.5255
+      },
+      "slices": [
+        "fastBlur"
+      ],
+      "window": {
+        "startMs": 181600,
+        "endMs": 183600,
+        "note": "bounce + hit + post-hit blur, gold 182333-182867; camera pans right→left from ~182933"
+      },
+      "outcome": "wrongLocation",
+      "nearestEmitted": {
+        "t": 182700,
+        "deltaMs": 33,
+        "x": 0.492,
+        "y": 0.736,
+        "distanceToGold": 0.234,
+        "withinTolerance": true
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 182700,
+          "distance": 0.021,
+          "areaPx": 27,
+          "score": 1248,
+          "x": 0.401,
+          "y": 0.544
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "gated",
+        "gatedIn": true,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 182767,
+          "distance": 0.043
+        },
+        "goldAlignedCount": 1,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 263,
+          "observations": 23,
+          "firstMs": 182100,
+          "lastMs": 182900,
+          "medianSpeed": 0.597,
+          "maxSpeed": 1.757,
+          "jerkyFraction": 0.182,
+          "chronicFraction": 0.087,
+          "straightness": 0.478,
+          "coherentMotionFraction": 0,
+          "medianArea": 40,
+          "windowOverlapMs": 800
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": true,
+          "chronicFraction": true,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 319,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 319,
+          "observations": 13,
+          "firstMs": 182633,
+          "lastMs": 183267,
+          "medianSpeed": 1.5,
+          "maxSpeed": 1.884,
+          "jerkyFraction": 0.333,
+          "chronicFraction": 0,
+          "straightness": 0.673,
+          "coherentMotionFraction": 0.5,
+          "medianArea": 52,
+          "windowOverlapMs": 633
+        }
+      },
+      "stage": "SELECTION_LOSS"
+    },
+    {
+      "case": "wavea-wgm-wheelchair",
+      "tMs": 182800,
+      "gold": {
+        "x": 0.6458,
+        "y": 0.4664
+      },
+      "slices": [
+        "fastBlur"
+      ],
+      "window": {
+        "startMs": 181600,
+        "endMs": 183600,
+        "note": "bounce + hit + post-hit blur, gold 182333-182867; camera pans right→left from ~182933"
+      },
+      "outcome": "wrongLocation",
+      "nearestEmitted": {
+        "t": 182800,
+        "deltaMs": 0,
+        "x": 0.498,
+        "y": 0.705,
+        "distanceToGold": 0.28,
+        "withinTolerance": true
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 182800,
+          "distance": 0.002,
+          "areaPx": 525,
+          "score": 25720,
+          "x": 0.644,
+          "y": 0.468
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": null,
+      "primary": {
+        "trackId": 319,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 319,
+          "observations": 13,
+          "firstMs": 182633,
+          "lastMs": 183267,
+          "medianSpeed": 1.5,
+          "maxSpeed": 1.884,
+          "jerkyFraction": 0.333,
+          "chronicFraction": 0,
+          "straightness": 0.673,
+          "coherentMotionFraction": 0.5,
+          "medianArea": 52,
+          "windowOverlapMs": 633
+        }
+      },
+      "stage": "ASSOCIATION_DROP"
+    },
+    {
+      "case": "wavea-wgm-wheelchair",
+      "tMs": 182867,
+      "gold": {
+        "x": 0.9349,
+        "y": 0.4201
+      },
+      "slices": [
+        "fastBlur"
+      ],
+      "window": {
+        "startMs": 181600,
+        "endMs": 183600,
+        "note": "bounce + hit + post-hit blur, gold 182333-182867; camera pans right→left from ~182933"
+      },
+      "outcome": "wrongLocation",
+      "nearestEmitted": {
+        "t": 182900,
+        "deltaMs": 33,
+        "x": 0.53,
+        "y": 0.678,
+        "distanceToGold": 0.48,
+        "withinTolerance": true
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 182867,
+          "distance": 0.005,
+          "areaPx": 301,
+          "score": 13688,
+          "x": 0.933,
+          "y": 0.416
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": null,
+      "primary": {
+        "trackId": 319,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 319,
+          "observations": 13,
+          "firstMs": 182633,
+          "lastMs": 183267,
+          "medianSpeed": 1.5,
+          "maxSpeed": 1.884,
+          "jerkyFraction": 0.333,
+          "chronicFraction": 0,
+          "straightness": 0.673,
+          "coherentMotionFraction": 0.5,
+          "medianArea": 52,
+          "windowOverlapMs": 633
+        }
+      },
+      "stage": "ASSOCIATION_DROP"
+    },
+    {
+      "case": "wavea-sasebo-volleys",
+      "tMs": 51919,
+      "gold": {
+        "x": 0.3503,
+        "y": 0.5593
+      },
+      "slices": [
+        "multiBallBackground"
+      ],
+      "window": {
+        "startMs": 51100,
+        "endMs": 52700,
+        "note": "net crossings + far-paddle occlusion, gold 51718-52553"
+      },
+      "outcome": "miss",
+      "nearestEmitted": {
+        "t": 51852,
+        "deltaMs": 67,
+        "x": 0.355,
+        "y": 0.59,
+        "distanceToGold": 0.031,
+        "withinTolerance": false
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 51952,
+          "distance": 0.01,
+          "areaPx": 490,
+          "score": 30698,
+          "x": 0.359,
+          "y": 0.556
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 51952,
+          "distance": 0.01
+        },
+        "goldAlignedCount": 2,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 212,
+          "observations": 41,
+          "firstMs": 51785,
+          "lastMs": 53353,
+          "medianSpeed": 0.276,
+          "maxSpeed": 1.72,
+          "jerkyFraction": 0.412,
+          "chronicFraction": 0.561,
+          "straightness": 0.212,
+          "coherentMotionFraction": 0,
+          "medianArea": 61,
+          "windowOverlapMs": 915
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": false,
+          "chronicFraction": true,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": false,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 110,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 110,
+          "observations": 34,
+          "firstMs": 50984,
+          "lastMs": 52419,
+          "medianSpeed": 0.336,
+          "maxSpeed": 1.655,
+          "jerkyFraction": 0.091,
+          "chronicFraction": 0.538,
+          "straightness": 0.44,
+          "coherentMotionFraction": 0,
+          "medianArea": 50,
+          "windowOverlapMs": 752
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "wavea-sasebo-volleys",
+      "tMs": 52053,
+      "gold": {
+        "x": 0.3536,
+        "y": 0.4694
+      },
+      "slices": [],
+      "window": {
+        "startMs": 51100,
+        "endMs": 52700,
+        "note": "net crossings + far-paddle occlusion, gold 51718-52553"
+      },
+      "outcome": "miss",
+      "nearestEmitted": {
+        "t": 52185,
+        "deltaMs": 132,
+        "x": 0.214,
+        "y": 0.48,
+        "distanceToGold": 0.14,
+        "withinTolerance": false
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 52052,
+          "distance": 0.006,
+          "areaPx": 186,
+          "score": 10961,
+          "x": 0.359,
+          "y": 0.472
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 52052,
+          "distance": 0.006
+        },
+        "goldAlignedCount": 2,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 126,
+          "observations": 29,
+          "firstMs": 51118,
+          "lastMs": 52185,
+          "medianSpeed": 0.224,
+          "maxSpeed": 1.789,
+          "jerkyFraction": 0.5,
+          "chronicFraction": 0.897,
+          "straightness": 0.434,
+          "coherentMotionFraction": 0,
+          "medianArea": 132,
+          "windowOverlapMs": 1068
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": false,
+          "chronicFraction": false,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": false,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 110,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 110,
+          "observations": 34,
+          "firstMs": 50984,
+          "lastMs": 52419,
+          "medianSpeed": 0.336,
+          "maxSpeed": 1.655,
+          "jerkyFraction": 0.091,
+          "chronicFraction": 0.538,
+          "straightness": 0.44,
+          "coherentMotionFraction": 0,
+          "medianArea": 50,
+          "windowOverlapMs": 752
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "wavea-sasebo-volleys",
+      "tMs": 52553,
+      "gold": {
+        "x": 0.3728,
+        "y": 0.5502
+      },
+      "slices": [],
+      "window": {
+        "startMs": 51100,
+        "endMs": 52700,
+        "note": "net crossings + far-paddle occlusion, gold 51718-52553"
+      },
+      "outcome": "miss",
+      "nearestEmitted": {
+        "t": 52419,
+        "deltaMs": 134,
+        "x": 0.225,
+        "y": 0.424,
+        "distanceToGold": 0.194,
+        "withinTolerance": false
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 52553,
+          "distance": 0.007,
+          "areaPx": 225,
+          "score": 18525,
+          "x": 0.377,
+          "y": 0.544
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 52553,
+          "distance": 0.007
+        },
+        "goldAlignedCount": 1,
+        "wouldWinSelectionIfGated": true,
+        "summary": {
+          "trackId": 275,
+          "observations": 38,
+          "firstMs": 52319,
+          "lastMs": 53854,
+          "medianSpeed": 0.307,
+          "maxSpeed": 3.574,
+          "jerkyFraction": 0.143,
+          "chronicFraction": 0.868,
+          "straightness": 0.65,
+          "coherentMotionFraction": 0,
+          "medianArea": 54,
+          "windowOverlapMs": 381
+        },
+        "gateScorecard": {
+          "maxSpeed": false,
+          "minMedianSpeed": true,
+          "jerkyFraction": true,
+          "chronicFraction": false,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 110,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 110,
+          "observations": 34,
+          "firstMs": 50984,
+          "lastMs": 52419,
+          "medianSpeed": 0.336,
+          "maxSpeed": 1.655,
+          "jerkyFraction": 0.091,
+          "chronicFraction": 0.538,
+          "straightness": 0.44,
+          "coherentMotionFraction": 0,
+          "medianArea": 50,
+          "windowOverlapMs": 752
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "wavea-sasebo-volleys",
+      "tMs": 53220,
+      "gold": {
+        "x": 0.2858,
+        "y": 0.566
+      },
+      "slices": [
+        "fastBlur"
+      ],
+      "window": {
+        "startMs": 52700,
+        "endMs": 54300,
+        "note": "fast volley + contact occlusion + toss, gold 53220-54088"
+      },
+      "outcome": "miss",
+      "nearestEmitted": {
+        "t": 53687,
+        "deltaMs": 467,
+        "x": 0.203,
+        "y": 0.532,
+        "distanceToGold": 0.09,
+        "withinTolerance": false
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 53220,
+          "distance": 0.003,
+          "areaPx": 140,
+          "score": 11163,
+          "x": 0.285,
+          "y": 0.569
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 53220,
+          "distance": 0.003
+        },
+        "goldAlignedCount": 2,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 246,
+          "observations": 51,
+          "firstMs": 52052,
+          "lastMs": 53820,
+          "medianSpeed": 0.528,
+          "maxSpeed": 1.229,
+          "jerkyFraction": 0.069,
+          "chronicFraction": 0.627,
+          "straightness": 0.209,
+          "coherentMotionFraction": 0,
+          "medianArea": 127,
+          "windowOverlapMs": 1120
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": true,
+          "chronicFraction": false,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 423,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 423,
+          "observations": 22,
+          "firstMs": 53687,
+          "lastMs": 54421,
+          "medianSpeed": 0.362,
+          "maxSpeed": 0.971,
+          "jerkyFraction": 0.154,
+          "chronicFraction": 0.364,
+          "straightness": 0.513,
+          "coherentMotionFraction": 0,
+          "medianArea": 34,
+          "windowOverlapMs": 613
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "wavea-sasebo-volleys",
+      "tMs": 53988,
+      "gold": {
+        "x": 0.2747,
+        "y": 0.5347
+      },
+      "slices": [],
+      "window": {
+        "startMs": 52700,
+        "endMs": 54300,
+        "note": "fast volley + contact occlusion + toss, gold 53220-54088"
+      },
+      "outcome": "wrongLocation",
+      "nearestEmitted": {
+        "t": 53987,
+        "deltaMs": 1,
+        "x": 0.143,
+        "y": 0.566,
+        "distanceToGold": 0.135,
+        "withinTolerance": true
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 53987,
+          "distance": 0.005,
+          "areaPx": 31,
+          "score": 1905,
+          "x": 0.273,
+          "y": 0.53
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 53987,
+          "distance": 0.005
+        },
+        "goldAlignedCount": 4,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 443,
+          "observations": 31,
+          "firstMs": 53820,
+          "lastMs": 54955,
+          "medianSpeed": 0.222,
+          "maxSpeed": 1.967,
+          "jerkyFraction": 0.333,
+          "chronicFraction": 0.71,
+          "straightness": 0.464,
+          "coherentMotionFraction": 0,
+          "medianArea": 35,
+          "windowOverlapMs": 480
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": true,
+          "chronicFraction": false,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": false,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 423,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 423,
+          "observations": 22,
+          "firstMs": 53687,
+          "lastMs": 54421,
+          "medianSpeed": 0.362,
+          "maxSpeed": 0.971,
+          "jerkyFraction": 0.154,
+          "chronicFraction": 0.364,
+          "straightness": 0.513,
+          "coherentMotionFraction": 0,
+          "medianArea": 34,
+          "windowOverlapMs": 613
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "wavea-sasebo-volleys",
+      "tMs": 54021,
+      "gold": {
+        "x": 0.2795,
+        "y": 0.5234
+      },
+      "slices": [],
+      "window": {
+        "startMs": 52700,
+        "endMs": 54300,
+        "note": "fast volley + contact occlusion + toss, gold 53220-54088"
+      },
+      "outcome": "wrongLocation",
+      "nearestEmitted": {
+        "t": 54021,
+        "deltaMs": 0,
+        "x": 0.144,
+        "y": 0.542,
+        "distanceToGold": 0.136,
+        "withinTolerance": true
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 54021,
+          "distance": 0.003,
+          "areaPx": 160,
+          "score": 10226,
+          "x": 0.281,
+          "y": 0.526
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 54021,
+          "distance": 0.003
+        },
+        "goldAlignedCount": 7,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 453,
+          "observations": 26,
+          "firstMs": 53854,
+          "lastMs": 54855,
+          "medianSpeed": 0.544,
+          "maxSpeed": 2.266,
+          "jerkyFraction": 0.118,
+          "chronicFraction": 0.769,
+          "straightness": 0.456,
+          "coherentMotionFraction": 0.04,
+          "medianArea": 91,
+          "windowOverlapMs": 446
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": true,
+          "chronicFraction": false,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 423,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 423,
+          "observations": 22,
+          "firstMs": 53687,
+          "lastMs": 54421,
+          "medianSpeed": 0.362,
+          "maxSpeed": 0.971,
+          "jerkyFraction": 0.154,
+          "chronicFraction": 0.364,
+          "straightness": 0.513,
+          "coherentMotionFraction": 0,
+          "medianArea": 34,
+          "windowOverlapMs": 613
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "wavea-sasebo-volleys",
+      "tMs": 54054,
+      "gold": {
+        "x": 0.2861,
+        "y": 0.5185
+      },
+      "slices": [],
+      "window": {
+        "startMs": 52700,
+        "endMs": 54300,
+        "note": "fast volley + contact occlusion + toss, gold 53220-54088"
+      },
+      "outcome": "wrongLocation",
+      "nearestEmitted": {
+        "t": 54054,
+        "deltaMs": 0,
+        "x": 0.143,
+        "y": 0.526,
+        "distanceToGold": 0.143,
+        "withinTolerance": true
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 54054,
+          "distance": 0.001,
+          "areaPx": 91,
+          "score": 6674,
+          "x": 0.285,
+          "y": 0.519
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 54054,
+          "distance": 0.001
+        },
+        "goldAlignedCount": 7,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 453,
+          "observations": 26,
+          "firstMs": 53854,
+          "lastMs": 54855,
+          "medianSpeed": 0.544,
+          "maxSpeed": 2.266,
+          "jerkyFraction": 0.118,
+          "chronicFraction": 0.769,
+          "straightness": 0.456,
+          "coherentMotionFraction": 0.04,
+          "medianArea": 91,
+          "windowOverlapMs": 446
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": true,
+          "chronicFraction": false,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 423,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 423,
+          "observations": 22,
+          "firstMs": 53687,
+          "lastMs": 54421,
+          "medianSpeed": 0.362,
+          "maxSpeed": 0.971,
+          "jerkyFraction": 0.154,
+          "chronicFraction": 0.364,
+          "straightness": 0.513,
+          "coherentMotionFraction": 0,
+          "medianArea": 34,
+          "windowOverlapMs": 613
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "wavea-sasebo-volleys",
+      "tMs": 54088,
+      "gold": {
+        "x": 0.2934,
+        "y": 0.5136
+      },
+      "slices": [],
+      "window": {
+        "startMs": 52700,
+        "endMs": 54300,
+        "note": "fast volley + contact occlusion + toss, gold 53220-54088"
+      },
+      "outcome": "wrongLocation",
+      "nearestEmitted": {
+        "t": 54087,
+        "deltaMs": 1,
+        "x": 0.142,
+        "y": 0.509,
+        "distanceToGold": 0.151,
+        "withinTolerance": true
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 54054,
+          "distance": 0.006,
+          "areaPx": 78,
+          "score": 2875,
+          "x": 0.299,
+          "y": 0.516
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 54054,
+          "distance": 0.006
+        },
+        "goldAlignedCount": 4,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 443,
+          "observations": 31,
+          "firstMs": 53820,
+          "lastMs": 54955,
+          "medianSpeed": 0.222,
+          "maxSpeed": 1.967,
+          "jerkyFraction": 0.333,
+          "chronicFraction": 0.71,
+          "straightness": 0.464,
+          "coherentMotionFraction": 0,
+          "medianArea": 35,
+          "windowOverlapMs": 480
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": true,
+          "chronicFraction": false,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": false,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 423,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 423,
+          "observations": 22,
+          "firstMs": 53687,
+          "lastMs": 54421,
+          "medianSpeed": 0.362,
+          "maxSpeed": 0.971,
+          "jerkyFraction": 0.154,
+          "chronicFraction": 0.364,
+          "straightness": 0.513,
+          "coherentMotionFraction": 0,
+          "medianArea": 34,
+          "windowOverlapMs": 613
+        }
+      },
+      "stage": "GATE_REJECT"
+    },
+    {
+      "case": "wavea-sasebo-volleys",
+      "tMs": 54455,
+      "gold": {
+        "x": 0.3688,
+        "y": 0.6704
+      },
+      "slices": [
+        "netCrossing"
+      ],
+      "window": {
+        "startMs": 54200,
+        "endMs": 55200,
+        "note": "near-side crossing, gold 54455-54588"
+      },
+      "outcome": "wrongLocation",
+      "nearestEmitted": {
+        "t": 54421,
+        "deltaMs": 34,
+        "x": 0.131,
+        "y": 0.392,
+        "distanceToGold": 0.367,
+        "withinTolerance": true
+      },
+      "rawEvidence": {
+        "candidatesWithinTolerance": 120,
+        "best": {
+          "tMs": 54454,
+          "distance": 0.002,
+          "areaPx": 229,
+          "score": 19913,
+          "x": 0.371,
+          "y": 0.67
+        },
+        "detectionPresentAtGold": true
+      },
+      "carrierTrack": {
+        "pool": "all",
+        "gatedIn": false,
+        "isPrimary": false,
+        "goldAlignedObservation": {
+          "tMs": 54454,
+          "distance": 0.002
+        },
+        "goldAlignedCount": 7,
+        "wouldWinSelectionIfGated": false,
+        "summary": {
+          "trackId": 453,
+          "observations": 26,
+          "firstMs": 53854,
+          "lastMs": 54855,
+          "medianSpeed": 0.544,
+          "maxSpeed": 2.266,
+          "jerkyFraction": 0.118,
+          "chronicFraction": 0.769,
+          "straightness": 0.456,
+          "coherentMotionFraction": 0.04,
+          "medianArea": 91,
+          "windowOverlapMs": 655
+        },
+        "gateScorecard": {
+          "maxSpeed": true,
+          "minMedianSpeed": true,
+          "jerkyFraction": true,
+          "chronicFraction": false,
+          "inBandFraction": true,
+          "medianArea": true,
+          "coherence": true
+        },
+        "eligibilityScorecard": {
+          "windowOverlap": true,
+          "minObservations": true,
+          "minPrimaryMedianSpeed": true,
+          "bodyDwell": true,
+          "paddleProximity": true
+        }
+      },
+      "primary": {
+        "trackId": 526,
+        "selection": "paddle_aligned",
+        "summary": {
+          "trackId": 526,
+          "observations": 15,
+          "firstMs": 54388,
+          "lastMs": 54955,
+          "medianSpeed": 0.366,
+          "maxSpeed": 1.742,
+          "jerkyFraction": 0,
+          "chronicFraction": 0.467,
+          "straightness": 0.773,
+          "coherentMotionFraction": 0,
+          "medianArea": 39,
+          "windowOverlapMs": 567
+        }
+      },
+      "stage": "GATE_REJECT"
+    }
+  ]
+}

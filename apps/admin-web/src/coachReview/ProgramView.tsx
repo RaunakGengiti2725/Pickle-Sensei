@@ -1,6 +1,116 @@
 import React, { useEffect, useState } from "react";
-import type { CoachReviewData } from "./data";
+import { submitMappingProposal, type CoachReviewData, type SubmitResult } from "./data";
+import { mappingProposalIdFor } from "./records";
 import { labBox, mono } from "./CoachReviewLab";
+
+/** Drill mapping editor: coach-endorsed fault→drill mapping PROPOSALS.
+ * Proposals never mutate the curated drill library — they are the evidence
+ * trail from which validatedFaultMappings can later be filled by hand. */
+function DrillMappingEditor({ data }: { data: CoachReviewData }) {
+  const activeCoaches = data.registry.coaches.filter((coach) => coach.status === "active");
+  const allFaults = data.taxonomy.families.flatMap((family) => family.faults);
+  const [coachId, setCoachId] = useState("");
+  const [drillId, setDrillId] = useState(data.drills.drills[0]?.id ?? "");
+  const [faultId, setFaultId] = useState(allFaults[0]?.id ?? "");
+  const [evidence, setEvidence] = useState("");
+  const [rationale, setRationale] = useState("");
+  const [result, setResult] = useState<SubmitResult | null>(null);
+  const coach = activeCoaches.find((entry) => entry.coachId === coachId);
+
+  return (
+    <section style={labBox}>
+      <h2>Drill mapping editor — {data.mappingProposals.length} proposal(s) on file</h2>
+      <p style={{ color: "#42505f", fontSize: 13, maxWidth: 760 }}>
+        A proposal records a provisioned coach's evidence that a drill addresses a fault (against{" "}
+        <code style={mono}>{data.drills.version}</code> /{" "}
+        <code style={mono}>{data.taxonomy.version}</code>). It is append-only input for curation —
+        the library's <code style={mono}>validatedFaultMappings</code> stay EMPTY until proposals
+        are reviewed and the library is re-versioned.
+      </p>
+      {data.mappingProposals.length > 0 && (
+        <ul style={{ ...mono, fontSize: 12 }}>
+          {data.mappingProposals.map((proposal) => (
+            <li key={proposal.proposalId}>
+              {proposal.drillId} ← {proposal.faultId} · by {proposal.coachId} · evidence:{" "}
+              {proposal.evidence.join(", ")}
+            </li>
+          ))}
+        </ul>
+      )}
+      {activeCoaches.length === 0 ? (
+        <p style={{ color: "#92400e", fontSize: 13, maxWidth: 720 }}>
+          No coach identity provisioned — mappings require a real coach to endorse them, so this
+          editor stays disabled and the library stays UNVALIDATED.
+        </p>
+      ) : (
+        <div style={{ fontSize: 13 }}>
+          <select value={coachId} onChange={(e) => setCoachId(e.target.value)}>
+            <option value="">— proposing coach —</option>
+            {activeCoaches.map((entry) => (
+              <option key={entry.coachId} value={entry.coachId}>
+                {entry.coachId}
+              </option>
+            ))}
+          </select>{" "}
+          <select value={drillId} onChange={(e) => setDrillId(e.target.value)}>
+            {data.drills.drills.map((drill) => (
+              <option key={drill.id} value={drill.id}>
+                {drill.name} · {drill.id}
+              </option>
+            ))}
+          </select>{" "}
+          <select value={faultId} onChange={(e) => setFaultId(e.target.value)}>
+            {allFaults.map((fault) => (
+              <option key={fault.id} value={fault.id}>
+                {fault.id}
+              </option>
+            ))}
+          </select>
+          <div style={{ margin: "6px 0" }}>
+            <input
+              placeholder="evidence refs, comma-separated (e.g. reviewIds; ≥1 required)"
+              value={evidence}
+              onChange={(e) => setEvidence(e.target.value)}
+              style={{ width: 420 }}
+            />
+          </div>
+          <textarea
+            placeholder="why this drill addresses this fault (≥20 chars, required)"
+            value={rationale}
+            onChange={(e) => setRationale(e.target.value)}
+            style={{ width: "100%", maxWidth: 760, minHeight: 40 }}
+          />
+          <div>
+            <button
+              disabled={!coach}
+              onClick={() => {
+                submitMappingProposal({
+                  schemaVersion: 1,
+                  proposalId: mappingProposalIdFor(drillId, faultId, coachId),
+                  drillId,
+                  faultId,
+                  coachId,
+                  coachCredentialRef: coach?.credentialRef ?? "",
+                  evidence: evidence
+                    .split(",")
+                    .map((token) => token.trim())
+                    .filter((token) => token !== ""),
+                  rationale,
+                  createdAtIso: new Date().toISOString(),
+                })
+                  .then(setResult)
+                  .catch((e) => setResult({ ok: false, status: 0, message: String(e) }));
+              }}
+            >
+              Submit mapping proposal (append-only)
+            </button>
+          </div>
+          {result && <p style={{ color: result.ok ? "#15803d" : "#b91c1c" }}>{result.message}</p>}
+        </div>
+      )}
+    </section>
+  );
+}
 
 /** Program reference: schema, fault-taxonomy draft, drill library, onboarding. */
 export function ProgramView({ data }: { data: CoachReviewData }) {
@@ -154,6 +264,8 @@ export function ProgramView({ data }: { data: CoachReviewData }) {
           </tbody>
         </table>
       </section>
+
+      <DrillMappingEditor data={data} />
 
       <section style={labBox}>
         <h2>Coach onboarding (docs/COACHING.md)</h2>

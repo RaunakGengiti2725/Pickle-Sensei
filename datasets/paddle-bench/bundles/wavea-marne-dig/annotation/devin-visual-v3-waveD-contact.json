@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-marne-dig",
+  "annotatorId": "devin-visual-v3-waveD",
+  "createdAtIso": "2026-08-29T10:05:00.000Z",
+  "revision": 1,
+  "stroke": "unsure",
+  "annotatedStrokeV3": null,
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": null,
+  "contactUncertainty": "exact",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.7,
+  "notes": "Wave D contact-only independent frame pass (ffmpeg absolute-CFR extraction from registered source, select+setpts, ts=round(n*1000*fps_den/fps_num)); prior Wave A/C passes not consulted during frame reads for repeat-pass events; held-out cases untouched. 59.94fps CFR; new far-court event preceding the existing 14188 dig; existing 14188 event not re-annotated.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T10:05:00.000Z"
+    }
+  ],
+  "eventLabels": [
+    {
+      "eventStartMs": 13564,
+      "contactMs": 13630,
+      "eventEndMs": 13747,
+      "owner": "other",
+      "annotator": "devin-visual-v3-waveD",
+      "note": "far-court red player low forehand lift/lob (deep lob that produces the 14188 target dig); far-camera small figure; direct-observed (ball at low paddle n000816-n000817 13614-13630ms, rising by 13647); contact window 13614-13647 (2 frames at 59.94fps), label 13630; repeat-pass estimate 13622 (delta 8ms, sub-frame)"
+    }
+  ]
+}

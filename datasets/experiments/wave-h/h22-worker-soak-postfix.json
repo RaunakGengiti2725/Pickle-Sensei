@@ -1,0 +1,184 @@
+{
+  "startedAt": "2026-08-29T20:52:47.691Z",
+  "mode": "both",
+  "node": "v20.18.1",
+  "commit": "104ea0f6383f5573ddc9393401700c7ecc163436",
+  "fakeCleanup": {
+    "orphans": [],
+    "pass": true
+  },
+  "realCleanup": {
+    "orphans": [],
+    "pass": true
+  },
+  "phases": [
+    {
+      "phase": "fake-sequential",
+      "requests": 500,
+      "okCount": 500,
+      "workerFailures": 0,
+      "fallbacks": 0,
+      "wallMs": 49,
+      "rss": {
+        "worker": {
+          "samples": 50,
+          "firstKb": 41900,
+          "lastKb": 45272,
+          "minKb": 41900,
+          "maxKb": 45272,
+          "slopeKbPerRequest": 3.7986842737094846
+        },
+        "client": {
+          "samples": 50,
+          "firstKb": 69964,
+          "lastKb": 71488,
+          "minKb": 69964,
+          "maxKb": 71488,
+          "slopeKbPerRequest": 3.437771908763506
+        }
+      },
+      "failures": []
+    },
+    {
+      "phase": "fake-concurrent",
+      "requests": 400,
+      "okCount": 400,
+      "workerFailures": 0,
+      "fallbacks": 0,
+      "wallMs": 31,
+      "rss": {
+        "worker": {
+          "samples": 25,
+          "firstKb": 41904,
+          "lastKb": 43584,
+          "minKb": 41904,
+          "maxKb": 43584,
+          "slopeKbPerRequest": 3.998076923076923
+        },
+        "client": {
+          "samples": 25,
+          "firstKb": 71624,
+          "lastKb": 72056,
+          "minKb": 71624,
+          "maxKb": 72056,
+          "slopeKbPerRequest": 1.323653846153846
+        }
+      },
+      "failures": []
+    },
+    {
+      "phase": "fake-crash-restart",
+      "requests": 200,
+      "okCount": 196,
+      "workerFailures": 4,
+      "fallbacks": 4,
+      "restarts": 3,
+      "wallMs": 235,
+      "rss": {
+        "worker": null,
+        "client": null
+      },
+      "failures": [],
+      "notes": [
+        "spawns=4",
+        "every 50th request crashes the worker; each crashed window must fall back exactly once and the next window must ride a restarted worker"
+      ]
+    },
+    {
+      "phase": "fake-error-fallback",
+      "requests": 200,
+      "okCount": 192,
+      "workerFailures": 8,
+      "fallbacks": 8,
+      "wallMs": 29,
+      "rss": {
+        "worker": null,
+        "client": null
+      },
+      "failures": [],
+      "notes": [
+        "every 25th request answers ok=false; the worker must keep serving after each"
+      ]
+    },
+    {
+      "phase": "real-sequential",
+      "requests": 100,
+      "okCount": 100,
+      "workerFailures": 0,
+      "fallbacks": 0,
+      "wallMs": 82617,
+      "rss": {
+        "worker": {
+          "samples": 21,
+          "firstKb": 730740,
+          "lastKb": 700212,
+          "minKb": 699780,
+          "maxKb": 738172,
+          "slopeKbPerRequest": -147.70662157793967
+        },
+        "client": {
+          "samples": 21,
+          "firstKb": 73328,
+          "lastKb": 64004,
+          "minKb": 63436,
+          "maxKb": 73328,
+          "slopeKbPerRequest": -30.001412338065986
+        }
+      },
+      "failures": [],
+      "notes": [
+        "ready: modelLoadSec=0.464 warmupSec=0.178 device=cpu",
+        "repeat requests of the same shape are byte-compared (timing-stripped) against the first response",
+        "rssSamples=[{\"request\":1,\"atMs\":3867,\"workerRssKb\":730740,\"clientRssKb\":73328},{\"request\":5,\"atMs\":7636,\"workerRssKb\":700388,\"clientRssKb\":67080},{\"request\":10,\"atMs\":12328,\"workerRssKb\":725968,\"clientRssKb\":63940},{\"request\":15,\"atMs\":16251,\"workerRssKb\":724300,\"clientRssKb\":63588},{\"request\":20,\"atMs\":19912,\"workerRssKb\":738172,\"clientRssKb\":63576},{\"request\":25,\"atMs\":23798,\"workerRssKb\":700232,\"clientRssKb\":63436},{\"request\":30,\"atMs\":27498,\"workerRssKb\":731956,\"clientRssKb\":64200},{\"request\":35,\"atMs\":31357,\"workerRssKb\":700588,\"clientRssKb\":64192},{\"request\":40,\"atMs\":34968,\"workerRssKb\":700520,\"clientRssKb\":63912},{\"request\":45,\"atMs\":38655,\"workerRssKb\":699876,\"clientRssKb\":63832},{\"request\":50,\"atMs\":42405,\"workerRssKb\":700084,\"clientRssKb\":63552},{\"request\":55,\"atMs\":46216,\"workerRssKb\":699964,\"clientRssKb\":63548},{\"request\":60,\"atMs\":49837,\"workerRssKb\":700004,\"clientRssKb\":64076},{\"request\":65,\"atMs\":54307,\"workerRssKb\":700016,\"clientRssKb\":64060},{\"request\":70,\"atMs\":58458,\"workerRssKb\":699780,\"clientRssKb\":64056},{\"request\":75,\"atMs\":63163,\"workerRssKb\":700240,\"clientRssKb\":63780},{\"request\":80,\"atMs\":67004,\"workerRssKb\":726036,\"clientRssKb\":63776},{\"request\":85,\"atMs\":71348,\"workerRssKb\":737928,\"clientRssKb\":63496},{\"request\":90,\"atMs\":75199,\"workerRssKb\":706672,\"clientRssKb\":64288},{\"request\":95,\"atMs\":79026,\"workerRssKb\":700236,\"clientRssKb\":64016},{\"request\":100,\"atMs\":82617,\"workerRssKb\":700212,\"clientRssKb\":64004}]"
+      ]
+    },
+    {
+      "phase": "real-concurrent",
+      "requests": 40,
+      "okCount": 40,
+      "workerFailures": 0,
+      "fallbacks": 0,
+      "wallMs": 47962,
+      "rss": {
+        "worker": {
+          "samples": 10,
+          "firstKb": 637048,
+          "lastKb": 646152,
+          "minKb": 636924,
+          "maxKb": 658624,
+          "slopeKbPerRequest": 230.97575757575757
+        },
+        "client": {
+          "samples": 10,
+          "firstKb": 64168,
+          "lastKb": 63560,
+          "minKb": 63560,
+          "maxKb": 64168,
+          "slopeKbPerRequest": -23.03030303030303
+        }
+      },
+      "failures": [],
+      "notes": [
+        "rssSamples=[{\"request\":4,\"atMs\":5783,\"workerRssKb\":637048,\"clientRssKb\":64168},{\"request\":8,\"atMs\":9162,\"workerRssKb\":637028,\"clientRssKb\":64168},{\"request\":12,\"atMs\":12397,\"workerRssKb\":637036,\"clientRssKb\":64168},{\"request\":16,\"atMs\":15734,\"workerRssKb\":656536,\"clientRssKb\":64168},{\"request\":20,\"atMs\":19145,\"workerRssKb\":636924,\"clientRssKb\":64168},{\"request\":24,\"atMs\":28493,\"workerRssKb\":656532,\"clientRssKb\":63560},{\"request\":28,\"atMs\":31917,\"workerRssKb\":637084,\"clientRssKb\":63560},{\"request\":32,\"atMs\":35840,\"workerRssKb\":658624,\"clientRssKb\":63560},{\"request\":36,\"atMs\":39271,\"workerRssKb\":637216,\"clientRssKb\":63560},{\"request\":40,\"atMs\":47962,\"workerRssKb\":646152,\"clientRssKb\":63560}]"
+      ]
+    },
+    {
+      "phase": "real-crash-restart",
+      "requests": 3,
+      "okCount": 2,
+      "workerFailures": 0,
+      "fallbacks": 1,
+      "restarts": 1,
+      "wallMs": 12705,
+      "rss": {
+        "worker": null,
+        "client": null
+      },
+      "failures": [],
+      "notes": [
+        "spawns=2 restarts=1 firstPid=31479 secondPid=31550"
+      ]
+    }
+  ],
+  "finishedAt": "2026-08-29T20:55:12.354Z"
+}

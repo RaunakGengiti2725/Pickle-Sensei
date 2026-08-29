@@ -1,0 +1,44 @@
+{
+  "workstream": "f28-decisions-backlog",
+  "branch": "devin/wave-f/f28-decisions-backlog",
+  "base": "origin/devin/1787988068-wave-c-integration (8588ddd7a6d04890c354f2e5ffc433ad903454dc)",
+  "date": "2026-08-29",
+  "mission": "DECISIONS.md ends at D-043; waves C/D/D2/D3/D4/E shipped behavior changes with no decision records. Produce complete DRAFT entries D-044+ as an integrator-appendable artifact (DECISIONS.md itself is integrator-owned and untouched).",
+  "deliverable": "datasets/experiments/wave-f/f28-decisions-draft.md",
+  "draftEntries": {
+    "count": 16,
+    "range": "D-044 through D-059",
+    "index": {
+      "D-044": "detector timestamp alignment fix (C01)",
+      "D-045": "warm paddle worker DEFAULT ON, bit-equal, supervised fallback (C07/D09/e18)",
+      "D-046": "edge-on crop recovery flagged OFF with FP-family admission gates (C02)",
+      "D-047": "paddle-ball prep concurrency default; two-pass OFF behind flag (C08)",
+      "D-048": "consent architecture: append-only pseudonymous ledger, analyze/train split, consent-ledger-export-v1 (C10/e21)",
+      "D-049": "capture-envelope provisional thresholds; e15 SCIENTIFIC_NEGATIVE preserved; v0.3 recalibration (C12/e15)",
+      "D-050": "OOD policy: real rights-cleared negatives + derived probes; frame-analyzability-3 / pre-analysis-gate-1 (C15/D08/e11)",
+      "D-051": "stroke-heuristic-4 absence-of-measurement gates; E10-F3 resolved (e03/e10)",
+      "D-052": "phases v2.3 rest-separated margin exemption; anchor-free 8/18 to 12/18 (e04/d3-05)",
+      "D-053": "session-scheduler-1 bounded-concurrency FIFO with honest failure semantics (e16)",
+      "D-054": "voice technique intent v1 to v2, strictly fewer silent accepts (d4-10/e20)",
+      "D-055": "acquisition policy: lawful-only, quarantine-by-default, label-blind fresh-candidate pool (C16/D2-01..03/e22)",
+      "D-056": "denominator retirement via evidence-pack reconciliation (e25/d4-12)",
+      "D-057": "blind audits + adjudication-as-appended-records protocol (C06/D2-04/D2-05/D2-09/e05/e24)",
+      "D-058": "pose-derivative cache, byte-equal (d4-05)",
+      "D-059": "red-team findings pinned as regression tests; fresh-holdout tuning guard (D3 wave/e08/e10)"
+    }
+  },
+  "method": "Every claim cross-referenced to committed artifacts read on this branch: docs/DECISIONS.md (D-001..D-043), docs/STATUS_BOARD.md (Wave C + D-E addenda), and the per-workstream summary JSONs under datasets/experiments/wave-c|wave-d|wave-d2|wave-d3|wave-d4|wave-e/. Concrete numbers in each entry (bit-equal pair counts, coverage deltas, confusion matrices, recounted denominators) are quoted from those artifacts, not re-measured here.",
+  "constraintsHonored": {
+    "decisionsMdUntouched": true,
+    "statusBoardUntouched": true,
+    "handoffDocsUntouched": true,
+    "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"],
+    "freshCandidatesUntouched": true,
+    "filesAdded": [
+      "datasets/experiments/wave-f/f28-decisions-draft.md",
+      "datasets/experiments/wave-f/f28-decisions-backlog-summary.json"
+    ],
+    "filesModified": []
+  },
+  "verdict": "GREEN"
+}

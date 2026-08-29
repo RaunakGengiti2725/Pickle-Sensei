@@ -1,0 +1,2123 @@
+{
+  "experiment": "g02-f09-oracle",
+  "estimatorVersion": "contact-evidence-4.3",
+  "commit": "104ea0f6383f5573ddc9393401700c7ecc163436",
+  "evaluatedAtIso": "2026-08-29T17:40:01.524Z",
+  "heldOut": "wm-dink-01 and afn-vic-rally1 never read",
+  "ownershipAccuracy": {
+    "method": "incumbent_wrist_ratio (frame-level S3 analog), ownershipBench v1, corrections applied, dev groups only",
+    "dualFrames": 39,
+    "framesWithPose": 18,
+    "poseSubset": {
+      "scoredFrames": 18,
+      "correct": 13,
+      "abstained": 1,
+      "accuracy": 0.722,
+      "accuracyWhenAnswering": 0.765,
+      "byGroup": {
+        "dvids-944403": {
+          "n": 14,
+          "correct": 9,
+          "abstained": 1,
+          "accuracy": 0.643,
+          "smallN": false
+        },
+        "dvids-faead": {
+          "n": 3,
+          "correct": 3,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        },
+        "dvids-marne-2024": {
+          "n": 1,
+          "correct": 1,
+          "abstained": 0,
+          "accuracy": 1,
+          "smallN": true
+        }
+      }
+    },
+    "allFrames": {
+      "scoredFrames": 39,
+      "correct": 13,
+      "abstained": 22,
+      "accuracy": 0.333
+    },
+    "oracleStatement": "Oracle ownership on these frames is the gold label itself: 100% correct by construction, not a measurement."
+  },
+  "adversarialFixtures": {
+    "fixtures": 12,
+    "foreignPaddleFixtures": 2,
+    "totals": {
+      "current": {
+        "n": 12,
+        "estimated": 10,
+        "abstained": 2,
+        "confidentWrong": 1,
+        "modalityConfirmedWrong": 1
+      },
+      "oracle": {
+        "n": 12,
+        "estimated": 9,
+        "abstained": 3,
+        "confidentWrong": 0,
+        "modalityConfirmedWrong": 0
+      }
+    },
+    "rows": [
+      {
+        "id": "fast-30fps-pose-only",
+        "source": "committed_generator",
+        "paddleOwnershipTruth": "none",
+        "trueContactMs": 950,
+        "current": {
+          "status": "estimated",
+          "estimatedContactMs": 935,
+          "errorMs": 15,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_ball_evidence",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 933,
+              "weight": 0.5
+            }
+          ]
+        },
+        "oracle": {
+          "status": "estimated",
+          "estimatedContactMs": 935,
+          "errorMs": 15,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_ball_evidence",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 933,
+              "weight": 0.5
+            }
+          ]
+        }
+      },
+      {
+        "id": "fast-24fps-with-ball",
+        "source": "committed_generator",
+        "paddleOwnershipTruth": "none",
+        "trueContactMs": 970,
+        "current": {
+          "status": "estimated",
+          "estimatedContactMs": 965,
+          "errorMs": 5,
+          "confidence": 0.95,
+          "ballConfirmed": true,
+          "paddleConfirmed": false,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 958,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 964,
+              "weight": 0.606
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 964,
+              "weight": 0.394
+            }
+          ]
+        },
+        "oracle": {
+          "status": "estimated",
+          "estimatedContactMs": 965,
+          "errorMs": 5,
+          "confidence": 0.95,
+          "ballConfirmed": true,
+          "paddleConfirmed": false,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 958,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 964,
+              "weight": 0.606
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 964,
+              "weight": 0.394
+            }
+          ]
+        }
+      },
+      {
+        "id": "occluded-ball-at-contact",
+        "source": "committed_generator",
+        "paddleOwnershipTruth": "none",
+        "trueContactMs": 1100,
+        "current": {
+          "status": "estimated",
+          "estimatedContactMs": 1105,
+          "errorMs": 5,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_lost_at_contact",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 1100,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 920,
+              "weight": 0.091
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 1250,
+              "weight": 0.052
+            }
+          ]
+        },
+        "oracle": {
+          "status": "estimated",
+          "estimatedContactMs": 1105,
+          "errorMs": 5,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_lost_at_contact",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 1100,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 920,
+              "weight": 0.091
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 1250,
+              "weight": 0.052
+            }
+          ]
+        }
+      },
+      {
+        "id": "occluded-ball-bounce-decoy",
+        "source": "committed_generator",
+        "paddleOwnershipTruth": "none",
+        "trueContactMs": 1100,
+        "current": {
+          "status": "estimated",
+          "estimatedContactMs": 1100,
+          "errorMs": 0,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_lost_at_contact",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 1100,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 1340,
+              "weight": 0.182
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 1380,
+              "weight": 0.064
+            }
+          ]
+        },
+        "oracle": {
+          "status": "estimated",
+          "estimatedContactMs": 1100,
+          "errorMs": 0,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_lost_at_contact",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 1100,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 1340,
+              "weight": 0.182
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 1380,
+              "weight": 0.064
+            }
+          ]
+        }
+      },
+      {
+        "id": "edge-on-paddle-reacquire-jump",
+        "source": "committed_generator",
+        "paddleOwnershipTruth": "target",
+        "trueContactMs": 1100,
+        "current": {
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~1095ms and ~625ms (45% as strong, 470ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        },
+        "oracle": {
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~1095ms and ~625ms (45% as strong, 470ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        }
+      },
+      {
+        "id": "edge-on-paddle-lost-early",
+        "source": "committed_generator",
+        "paddleOwnershipTruth": "target",
+        "trueContactMs": 1100,
+        "current": {
+          "status": "estimated",
+          "estimatedContactMs": 1090,
+          "errorMs": 10,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_evidence_weak",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 1100,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 1020,
+              "weight": 0.057
+            }
+          ]
+        },
+        "oracle": {
+          "status": "estimated",
+          "estimatedContactMs": 1090,
+          "errorMs": 10,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_evidence_weak",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 1100,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 1020,
+              "weight": 0.057
+            }
+          ]
+        }
+      },
+      {
+        "id": "no-pose-in-window",
+        "source": "committed_generator",
+        "paddleOwnershipTruth": "target",
+        "trueContactMs": 1100,
+        "current": {
+          "status": "estimated",
+          "estimatedContactMs": 1110,
+          "errorMs": 10,
+          "confidence": 0.891,
+          "ballConfirmed": true,
+          "paddleConfirmed": true,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [],
+          "supportingEvidence": [
+            {
+              "signal": "paddle_speed_peak",
+              "timestampMs": 1092,
+              "weight": 0.6
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 1100,
+              "weight": 0.643
+            },
+            {
+              "signal": "ball_paddle_proximity",
+              "timestampMs": 1190,
+              "weight": 0.357
+            }
+          ]
+        },
+        "oracle": {
+          "status": "estimated",
+          "estimatedContactMs": 1110,
+          "errorMs": 10,
+          "confidence": 0.891,
+          "ballConfirmed": true,
+          "paddleConfirmed": true,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [],
+          "supportingEvidence": [
+            {
+              "signal": "paddle_speed_peak",
+              "timestampMs": 1092,
+              "weight": 0.6
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 1100,
+              "weight": 0.643
+            },
+            {
+              "signal": "ball_paddle_proximity",
+              "timestampMs": 1190,
+              "weight": 0.357
+            }
+          ]
+        }
+      },
+      {
+        "id": "ball-plus-wrists-only",
+        "source": "committed_generator",
+        "paddleOwnershipTruth": "none",
+        "trueContactMs": 1100,
+        "current": {
+          "status": "estimated",
+          "estimatedContactMs": 1100,
+          "errorMs": 0,
+          "confidence": 0.93,
+          "ballConfirmed": true,
+          "paddleConfirmed": false,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 1100,
+              "weight": 0.69
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 1100,
+              "weight": 0.31
+            }
+          ]
+        },
+        "oracle": {
+          "status": "estimated",
+          "estimatedContactMs": 1100,
+          "errorMs": 0,
+          "confidence": 0.93,
+          "ballConfirmed": true,
+          "paddleConfirmed": false,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 1100,
+              "weight": 0.69
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 1100,
+              "weight": 0.31
+            }
+          ]
+        }
+      },
+      {
+        "id": "identity-swap-second-swing",
+        "source": "committed_generator",
+        "paddleOwnershipTruth": "none",
+        "trueContactMs": 1100,
+        "current": {
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~1100ms and ~1750ms (52% as strong, 650ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "implausible_motion_peak_rejected",
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        },
+        "oracle": {
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~1100ms and ~1750ms (52% as strong, 650ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "implausible_motion_peak_rejected",
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        }
+      },
+      {
+        "id": "degenerate-torso-tiny-player",
+        "source": "committed_generator",
+        "paddleOwnershipTruth": "none",
+        "trueContactMs": 1100,
+        "current": {
+          "status": "estimated",
+          "estimatedContactMs": 1100,
+          "errorMs": 0,
+          "confidence": 0.927,
+          "ballConfirmed": true,
+          "paddleConfirmed": false,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 1100,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 1100,
+              "weight": 0.559
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 1100,
+              "weight": 0.441
+            }
+          ]
+        },
+        "oracle": {
+          "status": "estimated",
+          "estimatedContactMs": 1100,
+          "errorMs": 0,
+          "confidence": 0.927,
+          "ballConfirmed": true,
+          "paddleConfirmed": false,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 1100,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 1100,
+              "weight": 0.559
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 1100,
+              "weight": 0.441
+            }
+          ]
+        }
+      },
+      {
+        "id": "foreign-paddle-beyond-reach (e09 F2)",
+        "source": "reconstructed_redteam",
+        "paddleOwnershipTruth": "foreign",
+        "trueContactMs": 1100,
+        "current": {
+          "status": "estimated",
+          "estimatedContactMs": 1100,
+          "errorMs": 0,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [
+            "paddle_track_beyond_reach",
+            "ball_turns_rejected_far_from_target",
+            "ball_lost_at_contact",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 1100,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 1390,
+              "weight": 0.058
+            }
+          ]
+        },
+        "oracle": {
+          "status": "estimated",
+          "estimatedContactMs": 1100,
+          "errorMs": 0,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_turns_rejected_far_from_target",
+            "ball_lost_at_contact",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 1100,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 1390,
+              "weight": 0.051
+            }
+          ]
+        }
+      },
+      {
+        "id": "foreign-paddle-within-reach (F3 residual)",
+        "source": "reconstructed_redteam",
+        "paddleOwnershipTruth": "foreign",
+        "trueContactMs": 1100,
+        "current": {
+          "status": "estimated",
+          "estimatedContactMs": 1690,
+          "errorMs": 590,
+          "confidence": 0.778,
+          "ballConfirmed": true,
+          "paddleConfirmed": true,
+          "confidentWrong": true,
+          "modalityConfirmedWrong": true,
+          "reason": null,
+          "limitingFactors": [],
+          "supportingEvidence": [
+            {
+              "signal": "paddle_speed_peak",
+              "timestampMs": 1605,
+              "weight": 0.465
+            },
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 1100,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 1690,
+              "weight": 0.204
+            },
+            {
+              "signal": "ball_paddle_proximity",
+              "timestampMs": 1690,
+              "weight": 0.396
+            }
+          ]
+        },
+        "oracle": {
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "confidentWrong": false,
+          "modalityConfirmedWrong": false,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~1715ms and ~1100ms (98% as strong, 615ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        }
+      }
+    ]
+  },
+  "committedGold": {
+    "goldEvents": 15,
+    "condition": {
+      "pose": "committed runs-wave-a people.json (auto target policy) — e02/f16 replay condition",
+      "ball": "ORACLE ball (gold annotation frames, conf 0.9)",
+      "paddle": {
+        "current_no_paddle": "no paddle modality (no committed paddle track exists on Linux)",
+        "oracle_ownership": "gold TARGET paddle points (committed ownership annotations, corrections applied) as paddleCenters (+speeds where >=2 in-window points)",
+        "wrong_ownership": "gold OTHER paddle points fed as the 'target' paddle — a perfect ownership FAILURE, quantifying downstream sensitivity"
+      },
+      "toleranceMs": {
+        "strict": 66,
+        "acceptable": 132
+      },
+      "grouping": "bundle/session (no random-frame splits)"
+    },
+    "metrics": {
+      "current_no_paddle": {
+        "events": 15,
+        "estimated": 11,
+        "abstained": 4,
+        "strictHits": 4,
+        "acceptableHits": 8,
+        "wrongMarkers": 3,
+        "confidentWrongMarkers": 0,
+        "medianErrorMs": 103,
+        "p90ErrorMs": 148
+      },
+      "oracle_ownership": {
+        "events": 15,
+        "estimated": 10,
+        "abstained": 5,
+        "strictHits": 3,
+        "acceptableHits": 7,
+        "wrongMarkers": 3,
+        "confidentWrongMarkers": 0,
+        "medianErrorMs": 106,
+        "p90ErrorMs": 149
+      },
+      "wrong_ownership": {
+        "events": 15,
+        "estimated": 10,
+        "abstained": 5,
+        "strictHits": 3,
+        "acceptableHits": 7,
+        "wrongMarkers": 3,
+        "confidentWrongMarkers": 0,
+        "medianErrorMs": 106,
+        "p90ErrorMs": 149
+      }
+    },
+    "metricsTargetOnly": {
+      "current_no_paddle": {
+        "events": 10,
+        "estimated": 7,
+        "abstained": 3,
+        "strictHits": 4,
+        "acceptableHits": 6,
+        "wrongMarkers": 1,
+        "confidentWrongMarkers": 0,
+        "medianErrorMs": 27,
+        "p90ErrorMs": 128
+      },
+      "oracle_ownership": {
+        "events": 10,
+        "estimated": 6,
+        "abstained": 4,
+        "strictHits": 3,
+        "acceptableHits": 5,
+        "wrongMarkers": 1,
+        "confidentWrongMarkers": 0,
+        "medianErrorMs": 65,
+        "p90ErrorMs": 131
+      },
+      "wrong_ownership": {
+        "events": 10,
+        "estimated": 6,
+        "abstained": 4,
+        "strictHits": 3,
+        "acceptableHits": 5,
+        "wrongMarkers": 1,
+        "confidentWrongMarkers": 0,
+        "medianErrorMs": 65,
+        "p90ErrorMs": 131
+      }
+    },
+    "paddlePointAvailability": {
+      "oracle_ownership": {
+        "eventsWithAnyPaddlePoint": 5,
+        "eventsWithZero": 10
+      },
+      "wrong_ownership": {
+        "eventsWithAnyPaddlePoint": 7,
+        "eventsWithZero": 8
+      }
+    },
+    "rows": {
+      "current_no_paddle": [
+        {
+          "bundle": "wavea-944403-dink",
+          "session": "dvids-944403",
+          "goldContactMs": 20821,
+          "owner": "other",
+          "family": "dink",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 20935,
+          "errorMs": 114,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_never_near_target",
+            "ball_evidence_weak",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 20938,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 21104,
+              "weight": 0.044
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-944403-dink",
+          "session": "dvids-944403",
+          "goldContactMs": 21113,
+          "owner": "target",
+          "family": "drive",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 21095,
+          "errorMs": 18,
+          "confidence": 0.782,
+          "ballConfirmed": true,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 20938,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 21104,
+              "weight": 0.351
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 21104,
+              "weight": 0.091
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-944403-dink",
+          "session": "dvids-944403",
+          "goldContactMs": 22130,
+          "owner": "other",
+          "family": "unknown",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 21975,
+          "errorMs": 155,
+          "confidence": 0.535,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_ball_evidence",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 21955,
+              "weight": 0.445
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-944403-smash",
+          "session": "dvids-944403",
+          "goldContactMs": 3954,
+          "owner": "other",
+          "family": "overhead",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 4030,
+          "errorMs": 76,
+          "confidence": 0.47,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_ball_evidence",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 3987,
+              "weight": 0.369
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-944403-smash",
+          "session": "dvids-944403",
+          "goldContactMs": 4371,
+          "owner": "target",
+          "family": "overhead",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 4375,
+          "errorMs": 4,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_lost_at_contact",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 4404,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 4638,
+              "weight": 0.001
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 4571,
+              "weight": 0.007
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-faead-feed",
+          "session": "dvids-faead",
+          "goldContactMs": 33438,
+          "owner": "target",
+          "family": "unknown",
+          "paddlePointsInWindow": 0,
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~33440ms and ~33810ms (84% as strong, 370ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        },
+        {
+          "bundle": "wavea-faead-feed",
+          "session": "dvids-faead",
+          "goldContactMs": 33688,
+          "owner": "target",
+          "family": "unknown",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 33805,
+          "errorMs": 117,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_evidence_weak",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 33750,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 33875,
+              "weight": 0.102
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 33417,
+              "weight": 0.068
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-faead-rally",
+          "session": "dvids-faead",
+          "goldContactMs": 13333,
+          "owner": "target",
+          "family": "unknown",
+          "paddlePointsInWindow": 0,
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~13615ms and ~13180ms (59% as strong, 435ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        },
+        {
+          "bundle": "wavea-faead-rally",
+          "session": "dvids-faead",
+          "goldContactMs": 14021,
+          "owner": "target",
+          "family": "volley",
+          "paddlePointsInWindow": 0,
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~14285ms and ~13700ms (92% as strong, 585ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        },
+        {
+          "bundle": "wavea-marne-dig",
+          "session": "dvids-marne",
+          "goldContactMs": 13630,
+          "owner": "other",
+          "family": "unknown",
+          "paddlePointsInWindow": 0,
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~13525ms and ~13890ms (69% as strong, 365ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        },
+        {
+          "bundle": "wavea-marne-serve",
+          "session": "dvids-marne",
+          "goldContactMs": 34718,
+          "owner": "target",
+          "family": "serve",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 34745,
+          "errorMs": 27,
+          "confidence": 0.488,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_ball_evidence",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 34818,
+              "weight": 0.5
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-sasebo-volleys",
+          "session": "dvids-sasebo",
+          "goldContactMs": 52019,
+          "owner": "target",
+          "family": "volley",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 51875,
+          "errorMs": 144,
+          "confidence": 0.683,
+          "ballConfirmed": true,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 51985,
+              "weight": 0.416
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 52053,
+              "weight": 0.084
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 51852,
+              "weight": 0.281
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-sasebo-volleys",
+          "session": "dvids-sasebo",
+          "goldContactMs": 52352,
+          "owner": "other",
+          "family": "volley",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 52500,
+          "errorMs": 148,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_evidence_weak",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 52586,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 52053,
+              "weight": 0.015
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 52553,
+              "weight": 0.067
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-sasebo-volleys",
+          "session": "dvids-sasebo",
+          "goldContactMs": 52502,
+          "owner": "target",
+          "family": "unknown",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 52505,
+          "errorMs": 3,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_ball_evidence",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 52586,
+              "weight": 0.5
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-wgm-wheelchair",
+          "session": "dvids-wgm",
+          "goldContactMs": 182567,
+          "owner": "target",
+          "family": "dink",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 182670,
+          "errorMs": 103,
+          "confidence": 0.86,
+          "ballConfirmed": true,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 183233,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 182667,
+              "weight": 0.658
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 182667,
+              "weight": 0.342
+            }
+          ]
+        }
+      ],
+      "oracle_ownership": [
+        {
+          "bundle": "wavea-944403-dink",
+          "session": "dvids-944403",
+          "goldContactMs": 20821,
+          "owner": "other",
+          "family": "dink",
+          "paddlePointsInWindow": 4,
+          "status": "estimated",
+          "estimatedContactMs": 20930,
+          "errorMs": 109,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_turns_rejected_far_from_target",
+            "ball_never_near_target_paddle",
+            "no_ball_evidence",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 20938,
+              "weight": 0.5
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-944403-dink",
+          "session": "dvids-944403",
+          "goldContactMs": 21113,
+          "owner": "target",
+          "family": "drive",
+          "paddlePointsInWindow": 5,
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~20945ms and ~21350ms (65% as strong, 405ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "ball_turns_rejected_far_from_target",
+            "ball_never_near_target_paddle",
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        },
+        {
+          "bundle": "wavea-944403-dink",
+          "session": "dvids-944403",
+          "goldContactMs": 22130,
+          "owner": "other",
+          "family": "unknown",
+          "paddlePointsInWindow": 3,
+          "status": "estimated",
+          "estimatedContactMs": 21975,
+          "errorMs": 155,
+          "confidence": 0.535,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_ball_evidence",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 21955,
+              "weight": 0.445
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-944403-smash",
+          "session": "dvids-944403",
+          "goldContactMs": 3954,
+          "owner": "other",
+          "family": "overhead",
+          "paddlePointsInWindow": 2,
+          "status": "estimated",
+          "estimatedContactMs": 4030,
+          "errorMs": 76,
+          "confidence": 0.47,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_ball_evidence",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 3987,
+              "weight": 0.369
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-944403-smash",
+          "session": "dvids-944403",
+          "goldContactMs": 4371,
+          "owner": "target",
+          "family": "overhead",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 4375,
+          "errorMs": 4,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_lost_at_contact",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 4404,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 4638,
+              "weight": 0.001
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 4571,
+              "weight": 0.007
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-faead-feed",
+          "session": "dvids-faead",
+          "goldContactMs": 33438,
+          "owner": "target",
+          "family": "unknown",
+          "paddlePointsInWindow": 0,
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~33440ms and ~33810ms (84% as strong, 370ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        },
+        {
+          "bundle": "wavea-faead-feed",
+          "session": "dvids-faead",
+          "goldContactMs": 33688,
+          "owner": "target",
+          "family": "unknown",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 33805,
+          "errorMs": 117,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_evidence_weak",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 33750,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 33875,
+              "weight": 0.102
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 33417,
+              "weight": 0.068
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-faead-rally",
+          "session": "dvids-faead",
+          "goldContactMs": 13333,
+          "owner": "target",
+          "family": "unknown",
+          "paddlePointsInWindow": 1,
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~13610ms and ~13180ms (60% as strong, 430ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "ball_never_near_target_paddle",
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        },
+        {
+          "bundle": "wavea-faead-rally",
+          "session": "dvids-faead",
+          "goldContactMs": 14021,
+          "owner": "target",
+          "family": "volley",
+          "paddlePointsInWindow": 0,
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~14285ms and ~13700ms (92% as strong, 585ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        },
+        {
+          "bundle": "wavea-marne-dig",
+          "session": "dvids-marne",
+          "goldContactMs": 13630,
+          "owner": "other",
+          "family": "unknown",
+          "paddlePointsInWindow": 0,
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~13525ms and ~13890ms (69% as strong, 365ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        },
+        {
+          "bundle": "wavea-marne-serve",
+          "session": "dvids-marne",
+          "goldContactMs": 34718,
+          "owner": "target",
+          "family": "serve",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 34745,
+          "errorMs": 27,
+          "confidence": 0.488,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_ball_evidence",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 34818,
+              "weight": 0.5
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-sasebo-volleys",
+          "session": "dvids-sasebo",
+          "goldContactMs": 52019,
+          "owner": "target",
+          "family": "volley",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 51875,
+          "errorMs": 144,
+          "confidence": 0.683,
+          "ballConfirmed": true,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 51985,
+              "weight": 0.416
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 52053,
+              "weight": 0.084
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 51852,
+              "weight": 0.281
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-sasebo-volleys",
+          "session": "dvids-sasebo",
+          "goldContactMs": 52352,
+          "owner": "other",
+          "family": "volley",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 52500,
+          "errorMs": 148,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_evidence_weak",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 52586,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 52053,
+              "weight": 0.015
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 52553,
+              "weight": 0.067
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-sasebo-volleys",
+          "session": "dvids-sasebo",
+          "goldContactMs": 52502,
+          "owner": "target",
+          "family": "unknown",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 52505,
+          "errorMs": 3,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_ball_evidence",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 52586,
+              "weight": 0.5
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-wgm-wheelchair",
+          "session": "dvids-wgm",
+          "goldContactMs": 182567,
+          "owner": "target",
+          "family": "dink",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 182670,
+          "errorMs": 103,
+          "confidence": 0.86,
+          "ballConfirmed": true,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 183233,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 182667,
+              "weight": 0.658
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 182667,
+              "weight": 0.342
+            }
+          ]
+        }
+      ],
+      "wrong_ownership": [
+        {
+          "bundle": "wavea-944403-dink",
+          "session": "dvids-944403",
+          "goldContactMs": 20821,
+          "owner": "other",
+          "family": "dink",
+          "paddlePointsInWindow": 8,
+          "status": "estimated",
+          "estimatedContactMs": 20930,
+          "errorMs": 109,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "paddle_track_beyond_reach",
+            "ball_turns_rejected_far_from_target",
+            "ball_never_near_target_paddle",
+            "no_ball_evidence",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 20938,
+              "weight": 0.5
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-944403-dink",
+          "session": "dvids-944403",
+          "goldContactMs": 21113,
+          "owner": "target",
+          "family": "drive",
+          "paddlePointsInWindow": 10,
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~20945ms and ~21350ms (65% as strong, 405ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "paddle_track_beyond_reach",
+            "ball_turns_rejected_far_from_target",
+            "ball_never_near_target_paddle",
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        },
+        {
+          "bundle": "wavea-944403-dink",
+          "session": "dvids-944403",
+          "goldContactMs": 22130,
+          "owner": "other",
+          "family": "unknown",
+          "paddlePointsInWindow": 9,
+          "status": "estimated",
+          "estimatedContactMs": 21975,
+          "errorMs": 155,
+          "confidence": 0.535,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "paddle_track_beyond_reach",
+            "no_ball_evidence",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 21955,
+              "weight": 0.445
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-944403-smash",
+          "session": "dvids-944403",
+          "goldContactMs": 3954,
+          "owner": "other",
+          "family": "overhead",
+          "paddlePointsInWindow": 7,
+          "status": "estimated",
+          "estimatedContactMs": 4030,
+          "errorMs": 76,
+          "confidence": 0.47,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "paddle_track_beyond_reach",
+            "no_ball_evidence",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 3987,
+              "weight": 0.369
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-944403-smash",
+          "session": "dvids-944403",
+          "goldContactMs": 4371,
+          "owner": "target",
+          "family": "overhead",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 4375,
+          "errorMs": 4,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_lost_at_contact",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 4404,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 4638,
+              "weight": 0.001
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 4571,
+              "weight": 0.007
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-faead-feed",
+          "session": "dvids-faead",
+          "goldContactMs": 33438,
+          "owner": "target",
+          "family": "unknown",
+          "paddlePointsInWindow": 0,
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~33440ms and ~33810ms (84% as strong, 370ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        },
+        {
+          "bundle": "wavea-faead-feed",
+          "session": "dvids-faead",
+          "goldContactMs": 33688,
+          "owner": "target",
+          "family": "unknown",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 33805,
+          "errorMs": 117,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_evidence_weak",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 33750,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 33875,
+              "weight": 0.102
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 33417,
+              "weight": 0.068
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-faead-rally",
+          "session": "dvids-faead",
+          "goldContactMs": 13333,
+          "owner": "target",
+          "family": "unknown",
+          "paddlePointsInWindow": 2,
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~13615ms and ~13180ms (59% as strong, 435ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "paddle_track_beyond_reach",
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        },
+        {
+          "bundle": "wavea-faead-rally",
+          "session": "dvids-faead",
+          "goldContactMs": 14021,
+          "owner": "target",
+          "family": "volley",
+          "paddlePointsInWindow": 6,
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~14285ms and ~13700ms (92% as strong, 585ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "paddle_track_beyond_reach",
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        },
+        {
+          "bundle": "wavea-marne-dig",
+          "session": "dvids-marne",
+          "goldContactMs": 13630,
+          "owner": "other",
+          "family": "unknown",
+          "paddlePointsInWindow": 2,
+          "status": "abstained",
+          "estimatedContactMs": null,
+          "errorMs": null,
+          "confidence": null,
+          "ballConfirmed": null,
+          "paddleConfirmed": null,
+          "reason": "Contact evidence is multi-modal: comparable clusters at ~13525ms and ~13890ms (69% as strong, 365ms apart); no single moment is defensible.",
+          "limitingFactors": [
+            "paddle_track_beyond_reach",
+            "contact_evidence_multimodal"
+          ],
+          "supportingEvidence": []
+        },
+        {
+          "bundle": "wavea-marne-serve",
+          "session": "dvids-marne",
+          "goldContactMs": 34718,
+          "owner": "target",
+          "family": "serve",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 34745,
+          "errorMs": 27,
+          "confidence": 0.488,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_ball_evidence",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 34818,
+              "weight": 0.5
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-sasebo-volleys",
+          "session": "dvids-sasebo",
+          "goldContactMs": 52019,
+          "owner": "target",
+          "family": "volley",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 51875,
+          "errorMs": 144,
+          "confidence": 0.683,
+          "ballConfirmed": true,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 51985,
+              "weight": 0.416
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 52053,
+              "weight": 0.084
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 51852,
+              "weight": 0.281
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-sasebo-volleys",
+          "session": "dvids-sasebo",
+          "goldContactMs": 52352,
+          "owner": "other",
+          "family": "volley",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 52500,
+          "errorMs": 148,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "ball_evidence_weak",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 52586,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 52053,
+              "weight": 0.015
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 52553,
+              "weight": 0.067
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-sasebo-volleys",
+          "session": "dvids-sasebo",
+          "goldContactMs": 52502,
+          "owner": "target",
+          "family": "unknown",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 52505,
+          "errorMs": 3,
+          "confidence": 0.55,
+          "ballConfirmed": false,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_ball_evidence",
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 52586,
+              "weight": 0.5
+            }
+          ]
+        },
+        {
+          "bundle": "wavea-wgm-wheelchair",
+          "session": "dvids-wgm",
+          "goldContactMs": 182567,
+          "owner": "target",
+          "family": "dink",
+          "paddlePointsInWindow": 0,
+          "status": "estimated",
+          "estimatedContactMs": 182670,
+          "errorMs": 103,
+          "confidence": 0.86,
+          "ballConfirmed": true,
+          "paddleConfirmed": false,
+          "reason": null,
+          "limitingFactors": [
+            "no_paddle_evidence"
+          ],
+          "supportingEvidence": [
+            {
+              "signal": "wrist_speed_peak",
+              "timestampMs": 183233,
+              "weight": 0.5
+            },
+            {
+              "signal": "ball_direction_change",
+              "timestampMs": 182667,
+              "weight": 0.658
+            },
+            {
+              "signal": "ball_wrist_proximity",
+              "timestampMs": 182667,
+              "weight": 0.342
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

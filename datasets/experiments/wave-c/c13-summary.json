@@ -1,0 +1,39 @@
+{
+  "id": "c13-capture-guidance-ui",
+  "wave": "C",
+  "date": "2026-08-29",
+  "mandate": "Capture Quality Assistant (pre-Ready guidance) + uncertainty microcopy for Result surfaces",
+  "built": {
+    "capture_envelope": {
+      "files": [
+        "apps/mobile/src/camera/captureEnvelope.ts",
+        "apps/mobile/src/camera/CaptureGuidancePanel.tsx"
+      ],
+      "contract": "EnvelopeVerdict is NOT exported by @pickle/shared-types on main (verified: only UNSUPPORTED_DEVICE screen state exists in packages/shared-types/src/states.ts). Defined a minimal local typed interface with capture-envelope-checker semantics: SUPPORTED/DEGRADED/UNSUPPORTED per dimension over {subject_visibility, subject_distance, stability, lighting}; dimensions are Partial so an unmeasured dimension is honestly absent, never fabricated. Additive-mergeable when a shared contract lands.",
+      "ready_gate": "readyGate() blocks Ready ONLY on UNSUPPORTED dimensions; DEGRADED shows guidance without blocking.",
+      "live_source": "envelopeFromReadinessEvent() maps the existing native readiness CameraEvent (state, jointCoverage, stableForMs) to the envelope. Lighting has NO live signal in this build, so the mapper never emits a lighting read; the 'Too dark' copy exists in the dimension vocabulary for a future native envelope checker but cannot be shown from readiness events.",
+      "wiring": "AnalyzeScreen working phase (camera source only) renders CaptureGuidancePanel from the latest readiness event, before Ready; envelope clears on stroke_detected."
+    },
+    "uncertainty_microcopy": {
+      "files": ["apps/mobile/src/components/UncertaintyNote.tsx"],
+      "copy_keys": ["contact", "stroke_identity", "phase_timing", "technique_score"],
+      "contact_line": "We couldn\u2019t confidently locate contact on this attempt, so no contact marker is shown.",
+      "gating": "uncertaintyNotes() is a read-only consumer of the EXISTING gates (contactMarkerPresentation, phaseTimelinePresentation, strokeIntent.resolutionBasis, overallScore); no existing Result evidence-gating logic was modified. Each note renders only when the corresponding gate already withheld the element. StrokeResult renders the block additively on non-abstained results only (the abstention ledger already covers abstained results)."
+    }
+  },
+  "measured": {
+    "mobile_tsc": "0 errors (npx tsc --noEmit, exit 0)",
+    "mobile_jest": "32 suites / 230 tests passed (was 30 suites / 214 per HANDOFF_V3; +2 suites, +16 tests from this workstream)",
+    "eslint": "clean on all touched files"
+  },
+  "honest_negatives": [
+    "Mobbin MCP is not available in this environment; NO new Mobbin research was performed. Copy and layout conventions were taken from the W8 Mobbin-researched Stroke Result surface already in the repo.",
+    "Lighting guidance ('Too dark') is defined but unreachable from the current native readiness events \u2014 no live lighting measurement exists; wiring it requires a native envelope checker.",
+    "The Ready gate is presentational: native still owns actual trigger arming. readyGate() mirrors the native readiness states (UNSUPPORTED dimensions correspond 1:1 to non-ready native states), so the surface never claims Ready when native would not.",
+    "Not verified on-device: pose extraction is macOS/iOS-only and no phone hardware exists here; verification is jest + tsc only."
+  ],
+  "blocked": [
+    "On-device UX validation (hardware absent; Apple Vision macOS-only).",
+    "Native lighting/thermal/battery envelope dimensions (CameraSetupState names them, but no live events emit them)."
+  ]
+}

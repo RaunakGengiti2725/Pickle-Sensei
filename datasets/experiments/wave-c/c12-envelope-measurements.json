@@ -1,0 +1,272 @@
+{
+  "experiment": "C12 capture-envelope measurements on committed paddle-bench bundle clips",
+  "generatedBy": "packages/capture-envelope/src/evalBundles.ts",
+  "date": "2026-08-29",
+  "thresholdsVersion": "capture-envelope-thresholds-v0.1-provisional",
+  "provisionalNote": "All thresholds are PROVISIONAL starting hypotheses; verdict columns show what the v0.1 constants say about real measured values, not a validated envelope.",
+  "method": {
+    "tooling": "ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers",
+    "videoStats": "ffprobe stream width/height/avg_frame_rate/duration",
+    "sampling": "ffmpeg fps=4, scale=320:-2, format=gray, rawvideo",
+    "motionBlurProxy": "median per-frame variance of 4-neighbor Laplacian on sampled frames",
+    "cameraMotionProxy": "mean absolute per-pixel luma diff between consecutive sampled frames",
+    "poseDimensions": "player_pixel_height and player_visibility are NOT measured here (pose extraction is macOS-only); reported NOT_MEASURED, never fabricated"
+  },
+  "bundleCount": 13,
+  "clipCount": 3,
+  "missingClips": [
+    "afn-sasebo-rally2",
+    "afn-vic-rally1",
+    "wavea-944403-dink",
+    "wavea-944403-smash",
+    "wavea-faead-feed",
+    "wavea-faead-rally",
+    "wavea-marne-dig",
+    "wavea-marne-serve",
+    "wavea-sasebo-volleys",
+    "wavea-wgm-wheelchair"
+  ],
+  "missingClipsNote": "These bundles have annotations only; their clips are not committed (corpus media is gitignored/re-derivable) so no envelope was measured for them.",
+  "perClip": [
+    {
+      "caseId": "afn-sasebo-rally1",
+      "clip": "datasets/paddle-bench/bundles/afn-sasebo-rally1/clip.mp4",
+      "measurements": {
+        "frameWidthPx": 1920,
+        "frameHeightPx": 1080,
+        "avgFrameRateFps": 29.97,
+        "brightnessMeanLuma": 104.13,
+        "brightnessStdLuma": 0.82,
+        "laplacianVarianceMedian": 2306.03,
+        "meanAbsFrameDiff": 8.967,
+        "clipDurationMs": 4404,
+        "playerPixelHeightFraction": null,
+        "playerMeanJointVisibility": null
+      },
+      "verdict": {
+        "thresholdsVersion": "capture-envelope-thresholds-v0.1-provisional",
+        "provisional": true,
+        "dimensions": [
+          {
+            "dimension": "resolution",
+            "status": "SUPPORTED",
+            "measured": 1080,
+            "unit": "px (short side)",
+            "thresholdId": "resolution-short-side-v0.1"
+          },
+          {
+            "dimension": "frame_rate",
+            "status": "SUPPORTED",
+            "measured": 29.97,
+            "unit": "fps",
+            "thresholdId": "frame-rate-avg-v0.1"
+          },
+          {
+            "dimension": "brightness",
+            "status": "SUPPORTED",
+            "measured": 104.13,
+            "unit": "luma 0-255",
+            "thresholdId": "brightness-mean-luma-v0.1"
+          },
+          {
+            "dimension": "motion_blur",
+            "status": "SUPPORTED",
+            "measured": 2306.03,
+            "unit": "laplacian variance @320w",
+            "thresholdId": "laplacian-variance-320w-median-v0.1"
+          },
+          {
+            "dimension": "camera_motion",
+            "status": "DEGRADED",
+            "measured": 8.967,
+            "unit": "mean abs luma diff @320w",
+            "thresholdId": "global-frame-diff-320w-v0.1"
+          },
+          {
+            "dimension": "clip_duration",
+            "status": "SUPPORTED",
+            "measured": 4404,
+            "unit": "ms",
+            "thresholdId": "clip-duration-v0.1"
+          },
+          {
+            "dimension": "player_pixel_height",
+            "status": "NOT_MEASURED",
+            "measured": null,
+            "unit": "fraction of frame height",
+            "thresholdId": "player-pixel-height-fraction-v0.1"
+          },
+          {
+            "dimension": "player_visibility",
+            "status": "NOT_MEASURED",
+            "measured": null,
+            "unit": "mean visibility 0-1",
+            "thresholdId": "player-mean-joint-visibility-v0.1"
+          }
+        ],
+        "overall": "DEGRADED",
+        "notMeasured": ["player_pixel_height", "player_visibility"]
+      }
+    },
+    {
+      "caseId": "wm-dink-01",
+      "clip": "datasets/paddle-bench/bundles/wm-dink-01/clip.mp4",
+      "measurements": {
+        "frameWidthPx": 1100,
+        "frameHeightPx": 1080,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 129.3,
+        "brightnessStdLuma": 0.7,
+        "laplacianVarianceMedian": 1977.18,
+        "meanAbsFrameDiff": 10.073,
+        "clipDurationMs": 8000,
+        "playerPixelHeightFraction": null,
+        "playerMeanJointVisibility": null
+      },
+      "verdict": {
+        "thresholdsVersion": "capture-envelope-thresholds-v0.1-provisional",
+        "provisional": true,
+        "dimensions": [
+          {
+            "dimension": "resolution",
+            "status": "SUPPORTED",
+            "measured": 1080,
+            "unit": "px (short side)",
+            "thresholdId": "resolution-short-side-v0.1"
+          },
+          {
+            "dimension": "frame_rate",
+            "status": "DEGRADED",
+            "measured": 25,
+            "unit": "fps",
+            "thresholdId": "frame-rate-avg-v0.1"
+          },
+          {
+            "dimension": "brightness",
+            "status": "SUPPORTED",
+            "measured": 129.3,
+            "unit": "luma 0-255",
+            "thresholdId": "brightness-mean-luma-v0.1"
+          },
+          {
+            "dimension": "motion_blur",
+            "status": "SUPPORTED",
+            "measured": 1977.18,
+            "unit": "laplacian variance @320w",
+            "thresholdId": "laplacian-variance-320w-median-v0.1"
+          },
+          {
+            "dimension": "camera_motion",
+            "status": "DEGRADED",
+            "measured": 10.073,
+            "unit": "mean abs luma diff @320w",
+            "thresholdId": "global-frame-diff-320w-v0.1"
+          },
+          {
+            "dimension": "clip_duration",
+            "status": "SUPPORTED",
+            "measured": 8000,
+            "unit": "ms",
+            "thresholdId": "clip-duration-v0.1"
+          },
+          {
+            "dimension": "player_pixel_height",
+            "status": "NOT_MEASURED",
+            "measured": null,
+            "unit": "fraction of frame height",
+            "thresholdId": "player-pixel-height-fraction-v0.1"
+          },
+          {
+            "dimension": "player_visibility",
+            "status": "NOT_MEASURED",
+            "measured": null,
+            "unit": "mean visibility 0-1",
+            "thresholdId": "player-mean-joint-visibility-v0.1"
+          }
+        ],
+        "overall": "DEGRADED",
+        "notMeasured": ["player_pixel_height", "player_visibility"]
+      }
+    },
+    {
+      "caseId": "wm-volley-02",
+      "clip": "datasets/paddle-bench/bundles/wm-volley-02/clip.mp4",
+      "measurements": {
+        "frameWidthPx": 1000,
+        "frameHeightPx": 1080,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 105.09,
+        "brightnessStdLuma": 2.06,
+        "laplacianVarianceMedian": 1968.61,
+        "meanAbsFrameDiff": 7.843,
+        "clipDurationMs": 8000,
+        "playerPixelHeightFraction": null,
+        "playerMeanJointVisibility": null
+      },
+      "verdict": {
+        "thresholdsVersion": "capture-envelope-thresholds-v0.1-provisional",
+        "provisional": true,
+        "dimensions": [
+          {
+            "dimension": "resolution",
+            "status": "SUPPORTED",
+            "measured": 1000,
+            "unit": "px (short side)",
+            "thresholdId": "resolution-short-side-v0.1"
+          },
+          {
+            "dimension": "frame_rate",
+            "status": "DEGRADED",
+            "measured": 25,
+            "unit": "fps",
+            "thresholdId": "frame-rate-avg-v0.1"
+          },
+          {
+            "dimension": "brightness",
+            "status": "SUPPORTED",
+            "measured": 105.09,
+            "unit": "luma 0-255",
+            "thresholdId": "brightness-mean-luma-v0.1"
+          },
+          {
+            "dimension": "motion_blur",
+            "status": "SUPPORTED",
+            "measured": 1968.61,
+            "unit": "laplacian variance @320w",
+            "thresholdId": "laplacian-variance-320w-median-v0.1"
+          },
+          {
+            "dimension": "camera_motion",
+            "status": "DEGRADED",
+            "measured": 7.843,
+            "unit": "mean abs luma diff @320w",
+            "thresholdId": "global-frame-diff-320w-v0.1"
+          },
+          {
+            "dimension": "clip_duration",
+            "status": "SUPPORTED",
+            "measured": 8000,
+            "unit": "ms",
+            "thresholdId": "clip-duration-v0.1"
+          },
+          {
+            "dimension": "player_pixel_height",
+            "status": "NOT_MEASURED",
+            "measured": null,
+            "unit": "fraction of frame height",
+            "thresholdId": "player-pixel-height-fraction-v0.1"
+          },
+          {
+            "dimension": "player_visibility",
+            "status": "NOT_MEASURED",
+            "measured": null,
+            "unit": "mean visibility 0-1",
+            "thresholdId": "player-mean-joint-visibility-v0.1"
+          }
+        ],
+        "overall": "DEGRADED",
+        "notMeasured": ["player_pixel_height", "player_visibility"]
+      }
+    }
+  ]
+}

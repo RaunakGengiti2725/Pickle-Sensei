@@ -1,0 +1,150 @@
+{
+  "artifact": "p0-p1-remaining-register",
+  "registerVersion": "v1",
+  "workstream": "h25-release-cert",
+  "generatedAt": "2026-08-29",
+  "baseline": "104ea0f6383f5573ddc9393401700c7ecc163436 (devin/1787988068-wave-c-integration head)",
+  "method": "Fetched every origin branch matching devin/wave-g/*, devin/wave-g2/*, devin/wave-h/* and extracted every committed datasets/experiments/wave-g*|wave-h/*summary*.json (35 summary files from 33 branches; g11 and g12 also carry copies of upstream f23 summaries). Classified each open item against the wave-h triage taxonomy. 'fixedOnBranch' means the fix exists ONLY on the named unmerged branch and is NOT in the RC baseline; nothing here is fixed at the RC SHA unless stated.",
+  "waveHSummariesNote": "At collection time (2026-08-29 ~18:20 UTC, after a re-fetch that picked up g12/g18/h07) NO other devin/wave-h/* branches were present on origin; wave-h peers had not yet pushed summaries. This register consumes all 24 wave-g + 9 wave-g2 workstream summaries. If further wave-h branches appear after this snapshot, the register must be regenerated before GO.",
+  "sourceArtifacts": {
+    "wave-g": ["g01-paddle-identity", "g02-f09-oracle", "g03-f09-mining", "g04-f09-synchrony", "g05-f09-posterior", "g06-f22-dossiers", "g08-f22-evidence", "g09-f22-surfaces", "g10-f23-roles", "g11-f23-tests", "g12-f23-runbook", "g13-h6-mining", "g14-h6-invariants", "g15-h6-recall", "g16-gen-matrix", "g17-worst-slice", "g18-fresh-footage", "g19-oracle-waterfall", "g20-selective-risk", "g21-session-e2e", "g22-tryagain-audit", "g24-mac-harness", "g25-pr-audit", "g26-classifier-dedup"],
+    "wave-g2": ["h01-coach-provisioning", "h02-review-schema", "h03-agreement-stats", "h04-frozen-coach-gates", "h05-drill-library", "h06-device-harness", "h07-distribution-telemetry", "h08-capture-contract", "h09-zero-handholding"]
+  },
+  "p0": [
+    {
+      "id": "P0-1",
+      "title": "TARGET never abstains — every wrong lock is a silent high-confidence failure",
+      "source": "g16-gen-matrix",
+      "evidence": "54/54 locked, 17 errors, 0 abstentions; worst sessions afn-sigonella-2025 1/4 correct (3 silent), afn-sasebo-2025-06 3/7 (4 silent); contested_region 23/36 with 13 silent.",
+      "status": "UNRESOLVED at RC. acquire-v4 (bench: correct .863, contested wrong .167) is the measured remedy but is gated on live tap captures + one-shot locked_test (D-027 pattern) — not promotable internally.",
+      "releaseImpact": "Silent wrong-target drives every downstream stage confidently wrong for the wrong player. Mitigated only by the claim gate (no accuracy claims) and canary monitoring; must be an explicit accepted-risk D-number for any GO."
+    },
+    {
+      "id": "P0-2",
+      "title": "Session end left ready analyses unreachable (state chips with no route to content)",
+      "source": "g21-session-e2e",
+      "evidence": "LiveSummaryScreen rendered READY chips with no navigation to the analysis; after end() the user had no path to results — core-flow dead end.",
+      "status": "FIXED on branch devin/wave-g/g21-session-e2e (ready rows navigate to Result by real analysisId; pinned failing-then-fixed test). NOT in RC baseline — requires merge.",
+      "releaseImpact": "Blocker if released unmerged: session flow silently loses user results."
+    },
+    {
+      "id": "P0-3",
+      "title": "Stale live-window evidence stamped into a new clip's EnvelopeVerdict (evidence fabrication across attempts)",
+      "source": "g22-tryagain-audit (G22-1)",
+      "evidence": "AnalyzeScreen.run() did not reset lastReadiness/lastQuality; a second attempt with no live events inherited the previous attempt's measurements as its own stored verdict.",
+      "status": "FIXED on branch devin/wave-g/g22-tryagain-audit with regression test (analyzeScreenRearmSignals). NOT in RC baseline — requires merge.",
+      "releaseImpact": "Fabricated capture evidence attributed to the wrong clip is a data-integrity/truthfulness blocker."
+    },
+    {
+      "id": "P0-4",
+      "title": "stroke-heuristic-6 flips confident FOREHAND↔BACKHAND under tiny perturbations (confident wrong stroke)",
+      "source": "g14-h6-invariants",
+      "evidence": "8/594 evaluations flipped a confident committed side to the OPPOSITE confident side under sigma=0.002-0.01u noise or 10-15fps decimation (noise-decided dominant-wrist argmax on near-tied travels).",
+      "status": "FIXED on branch devin/wave-g/g14-h6-invariants as stroke-heuristic-7 (abstains on the unstable configuration; post-fix 0/594 dangerous flips). RC baseline is v6 — requires merge + parity re-verification of both classifier copies (or of the g26 deduped single copy).",
+      "releaseImpact": "Measurement-noise-decided confident wrong stroke is exactly the 'confident wrong stroke' P0 class."
+    }
+  ],
+  "p1": [
+    {
+      "id": "P1-1",
+      "title": "Capture-envelope overall verdict is non-monotone: strictly worse capture can improve DEGRADED→SUPPORTED",
+      "source": "g09-f22-surfaces (confirmed violation, 2 counts, pinned); corroborated by g06 (B5/B6 bypasses pass all gates), e15/f18 (thresholds never validated)",
+      "status": "UNRESOLVED. Root cause is the content-dependent camera_motion frame-diff proxy; fix requires a background-registered motion estimate, not band re-tuning. Also open from g06: brightnessStdLuma computed but never evaluated (B3) and overall verdict equates 'all pass' with 'all measured pass' (B5) — two locally fixable defects.",
+      "releaseImpact": "Misleading capture verdicts gate what the user trusts; NOT_MEASURED-never-worsens (structural A5) plus pose-gated axes invisible pre-pose compounds it."
+    },
+    {
+      "id": "P1-2",
+      "title": "Noise can manufacture stroke commits from baseline abstentions",
+      "source": "g14-h6-invariants",
+      "status": "OPEN (9/594 post-fix perturbed evaluations turn abstention into a committed label, e.g. no_swing_energy_in_window → FOREHAND 0.80 under sigma=0.005 noise). Perturbation-manufactured, not baseline behavior, but shows commitment floors are noise-permeable.",
+      "releaseImpact": "Bounds confidence in stroke commitment floors under real capture noise."
+    },
+    {
+      "id": "P1-3",
+      "title": "Stroke is the riskiest answering stage and v6 gates are recall-negative on evaluable gold",
+      "source": "g20-selective-risk (2/5 committed labels wrong, risk 0.4), g15-h6-recall (v6 costs 1 true volley commit, buys 0 silent-wrong reduction on gold), g16 (afn-sasebo-2025-06 now zero-coverage 0/5), g13 (sparse gate net −1 correct on dev; F20-F2 gate inert 0/118), f15 (4 of 9 L1 families at zero gold)",
+      "status": "UNRESOLVED — label starvation is the binding constraint; 11/29 gold labels unevaluable on Linux (no pose).",
+      "releaseImpact": "Excess abstention on supported captures + residual wrong commits; acceptable only under the no-claims release posture with canary monitoring."
+    },
+    {
+      "id": "P1-4",
+      "title": "BALL worst slices: fastBlur zero-success and ghost-flight gate rejections",
+      "source": "g16 (fastBlur 0/6 with 3 wrong-location; 2 e12 abstention violations persist on afn-sasebo-rally2), g17 (19/26 failures are ghost flights rejected by jerky/chronic gates; coupled gate+selection change needed; N too small to tune safely)",
+      "status": "UNRESOLVED (research direction named; tuning against the locked eval is forbidden).",
+      "releaseImpact": "Wrong ball locations on fast/blurred captures feed contact errors."
+    },
+    {
+      "id": "P1-5",
+      "title": "CONTACT frontier: wrong markers on volleys and 3/11 estimated wrong",
+      "source": "g16 (volley family 0/3 acceptable, 2 wrong markers >132ms; dvids-sasebo 1/3), g19 (perfect contact oracle recovers 3/6 failed Results — the largest single-stage recovery), g20 (mid-confidence band 0.55-0.683 dominated: both wrong markers live there)",
+      "status": "UNRESOLVED at RC. g20's measured selective-risk gates (e.g. ownership margin ≥ 0.575, contact mid-band) are candidate mitigations but small-n (wrong counts 2-4) and session-concentrated — need more sessions before threshold changes.",
+      "releaseImpact": "Wrong contact markers are user-visible; volley slice worst."
+    },
+    {
+      "id": "P1-6",
+      "title": "Ownership emits no confidence in production; F09 foreign-paddle family only synthetically defended",
+      "source": "g20 (binary veto; derived margin separates 4/4 wrong picks below 0.717), g01/g02/g05 (F09 fix works on synthetic scenes; real-data wins unmeasurable — labels too sparse, no dense Linux paddle tracks; flags stay OFF), g04 (synchrony route SCIENTIFIC_NEGATIVE)",
+      "status": "UNRESOLVED / externally gated (dense real paddle tracks = Mac). g16: ownership answers nothing on the clean bucket (0/10) while answering harder ones — evidence gates inverted vs human difficulty.",
+      "releaseImpact": "All 4 wrong ownership picks concentrated in one session (dvids-944403) — cross-session stability unknown."
+    },
+    {
+      "id": "P1-7",
+      "title": "LiveSummaryScreen does not subscribe to late analysis outcomes",
+      "source": "g21-session-e2e (documented limitation, not fixed)",
+      "status": "OPEN — an already-mounted summary can show stale state until re-render; registry stays consistent.",
+      "releaseImpact": "Misleading UX (stale READY/PENDING chips) in a core flow; low data risk."
+    },
+    {
+      "id": "P1-8",
+      "title": "Least-privilege DB roles (migration 0018) not in RC; consent enforcement is trigger-only at RC",
+      "source": "g10-f23-roles / g11-f23-tests (PROVISIONAL_GREEN on their branches: 63/63 destructive attempts denied from real logins; migration chain runs as non-superuser with pgcrypto pre-created)",
+      "status": "FIXED on branches devin/wave-g/g10-f23-roles + g11-f23-tests; NOT in RC. Trigger-level immutability (0015-0017) IS in RC, so this is defense-in-depth, not a hole.",
+      "releaseImpact": "Merge before Stage 1; changes deploy prerequisites (admin-created pgcrypto, migration-owner role) — see RELEASE_PLAN_V1 §4."
+    },
+    {
+      "id": "P1-9",
+      "title": "Duplicated stroke classifier copies invite silent drift",
+      "source": "g25-pr-audit (F1 residual-medium), g26-classifier-dedup (dedup implemented: mobile consumes vision-geometry re-export)",
+      "status": "FIXED on branch devin/wave-g/g26-classifier-dedup; NOT in RC. g25 also fixed stale header comments and added held-out-consistency pinning test (F2) on its branch.",
+      "releaseImpact": "Forward-looking maintenance risk; merge order matters vs P0-4 (stroke-heuristic-7 lands cleanest after dedup)."
+    },
+    {
+      "id": "P1-10",
+      "title": "Mac-bench harness bit-rot (stages silently dropped; zero-gold crash)",
+      "source": "g24-mac-harness",
+      "status": "FIXED on branch devin/wave-g/g24-mac-harness (poseDerivativesMs/two-pass timings harvested; zero-gold cascade → null with explicit reason). NOT in RC.",
+      "releaseImpact": "Without it the mandatory Stage-0 Mac re-measure would silently lose evidence — merge before executing the re-measure list."
+    },
+    {
+      "id": "P1-12",
+      "title": "Pose-free OOD gate passes non-play footage (face close-ups, talking heads) with zero reasons",
+      "source": "g18-fresh-footage (12/12 fresh windows passed incl. >=2 face-only and >=4 non-play; confirms e11's disclosed limitation on genuinely new footage)",
+      "status": "UNRESOLVED — rejection requires pose-conditioned checks (macOS) or content-level signals that do not exist yet. Also: envelope thresholds classify all 6 fresh clips SUPPORTED, but e15/f18 could not validate the thresholds, so this is classification-only evidence.",
+      "releaseImpact": "Non-play footage can enter analysis without an OOD rejection on Linux-measurable signals; downstream honest abstention is the only backstop until pose-gated checks run."
+    },
+    {
+      "id": "P1-11",
+      "title": "Abstention reasons are not robust diagnostics under degradation",
+      "source": "g14 (134/594 post-fix abstentions change reason under noise/dropout/framerate)",
+      "status": "OPEN — labels stay honest (still abstain); only the reason string is unstable.",
+      "releaseImpact": "Weakens support/debug value of abstention telemetry; not user-facing."
+    }
+  ],
+  "p2": [
+    { "id": "P2-1", "title": "Envelope FR1 false-reject construction and B3/B7 partial bypasses (g06); blind axes documented (g09)", "status": "OPEN" },
+    { "id": "P2-2", "title": "EVENT-oracle net-negative finding (g19): gold event windows too narrow for phase segmentation — label-contract issue, plus faead-rally#1 missing gold contactMs", "status": "OPEN (label coverage work)" },
+    { "id": "P2-3", "title": "OVERHEAD recall 1/3 predates v6 (g15); F20-F2 gate unexercised on dev pose (g13)", "status": "OPEN (needs Mac pose + labels)" },
+    { "id": "P2-4", "title": "Zero-handholding usability copy defects", "status": "FIXED on branch devin/wave-g2/h09-zero-handholding; live-session evidence external" }
+  ],
+  "blockedExternal": [
+    "Real qualified-coach reviews: N=0; h01/h02/h03/h04/h05 infrastructure READY, gates frozen+hash-pinned, all coach surfaces RELEASE_BLOCKED until real evidence exists (correct current state).",
+    "Physical iPhone + Mac device evidence: h06 GATE B harness Linux-validated and ready; every device latency/threshold measurement blocked on hardware.",
+    "Mac re-measure list (HANDOFF_V4_DRAFT §4): cascade n=5, E2E latency with warm worker, C09 Swift build+test, mobile suite on Mac, adaptive-completion and acquire-v4 live captures.",
+    "f22 human bypass labels: g08 pipeline terminates in explicit BLOCKED_EXTERNAL on the empty label file; all 36 candidates Tier-C, structurally excluded from gate metrics.",
+    "Multi-person pose for cross-player analysis on Linux (g04): structurally unavailable without Apple Vision."
+  ],
+  "mergeQueueForReleaseCandidateV2": {
+    "note": "Fixes that exist only on wave-g branches and must merge (with root gates + parity re-verification) before any GO: order suggested to minimize conflicts.",
+    "order": ["g26-classifier-dedup", "g14-h6-invariants (stroke-heuristic-7)", "g21-session-e2e", "g22-tryagain-audit", "g25-pr-audit", "g24-mac-harness", "g10-f23-roles + g11-f23-tests + g12-f23-runbook (ops runbook/Terraform wiring)", "g09 pinned monotonicity tests (fix itself still open)", "wave-g2 h01-h09 (infra/gates, no product behavior change)"]
+  }
+}

@@ -1,0 +1,1332 @@
+{
+  "version": "label-queue-v3",
+  "workstream": "wave-e/e23-active-learning-queue",
+  "extendsQueue": "datasets/experiments/wave-d2/label-queue-v2.json (D2-10 bucket-level; this queue is item-level and complements, not replaces, it)",
+  "annotatorConvention": "labels must be appended in NEW sidecar files (append-only rule); adjudication records must reference what they adjudicate; this queue only directs effort",
+  "heldOutExcluded": [
+    "wm-dink-01",
+    "afn-vic-rally1"
+  ],
+  "splitPolicy": "only dev/val items are eligible; locked_test and shadow are never queued; every item carries sessionKey for group-level evaluation",
+  "scoringFormula": "score = Σ signalWeight over the item's signals (miner uncertainty contributes weight × minerUncertainty); items deduped by (target, window, modality-set); ties by id ascending",
+  "determinism": "all inputs committed; weight constants carry quoted provenance; no RNG or wall-clock in ranking",
+  "pipelineAttempt": "pnpm lab:cascade executed on this Linux box: 0/0 gold events (canonical pose runs are macOS-only and absent here — honest boundary, no numbers fabricated); uncertainty signals therefore come from the latest COMMITTED cascade run (cascade-1787971753680.json) and the committed video-mining-4 corpus outputs",
+  "perSessionCap": 10,
+  "signalWeights": {
+    "ownership_audit_disagreement": {
+      "weight": 1,
+      "provenance": {
+        "source": "datasets/experiments/wave-d2/d2-04-ownership-audit-summary.json",
+        "metric": "bundles.wavea-944403-smash.cohenKappa",
+        "value": "0.2066 (3-class visibility) — measured annotator disagreement is the strongest committed evidence of label ambiguity; 17 adjudications filed"
+      }
+    },
+    "cascade_stage_failure": {
+      "weight": 0.9,
+      "provenance": {
+        "source": "datasets/cascade/ (latest committed run)",
+        "metric": "rows[].stages[].pass on development cases",
+        "value": "stages the integrated pipeline failed or abstained on — direct model uncertainty/error loci on dev gold"
+      }
+    },
+    "hard_slice": {
+      "weight": 0.8,
+      "provenance": {
+        "source": "datasets/experiments/wave-b/W12-summary.json; datasets/experiments/wave-d2/d2-06-ball-hard-slices-summary.json",
+        "metric": "measured miss windows / hard-slice coverage",
+        "value": "rally2 edge-on carry recovered 1/4, overhead-blur 4/7 @IoU.30 (W12); occlusion/net-crossing/multi-ball slices enumerated with exact timestamps (D2-06)"
+      }
+    },
+    "ood_boundary": {
+      "weight": 0.8,
+      "provenance": {
+        "source": "datasets/experiments/wave-d/d08-ood-measurements.json",
+        "metric": "measurements[].gateOk === true with poseFreeDetectable === false",
+        "value": "OOD negatives the pose-free pre-analysis gate PASSES — the exact clips on the gate decision boundary; pose-conditioned rejection is unverified (macOS-only)"
+      }
+    },
+    "miner_uncertainty": {
+      "weight": 0.7,
+      "provenance": {
+        "source": "datasets/corpus/events/*.jsonl",
+        "metric": "uncertainty (video-mining-4)",
+        "value": "miner-declared per-event uncertainty over the Tier-C corpus with named reasons (crowding, small player, track loss)"
+      }
+    },
+    "failure_mine": {
+      "weight": 0.5,
+      "provenance": {
+        "source": "datasets/corpus/failure-queue.json",
+        "metric": "items[].kind ∈ {TRACK_FRAGMENTATION, CROWDED_SCENE}",
+        "value": "W13 failure-mine scenes where tracking demonstrably degrades (identity churn / ownership contamination risk)"
+      }
+    }
+  },
+  "candidateCount": 69,
+  "items": [
+    {
+      "rank": 1,
+      "id": "cascade/afn-sasebo-rally1/event",
+      "kind": "window",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "bundleId": "afn-sasebo-rally1",
+      "recordingId": "rec-6e06a3157947",
+      "modalities": [
+        "events"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": null,
+      "score": 1.8,
+      "signals": [
+        {
+          "type": "cascade_stage_failure",
+          "weight": 0.9,
+          "provenance": {
+            "source": "datasets/cascade/cascade-1787971753680.json",
+            "metric": "rows[caseId=afn-sasebo-rally1].stages.EVENT",
+            "value": "targetEvent status ambiguous"
+          }
+        },
+        {
+          "type": "cascade_stage_failure",
+          "weight": 0.9,
+          "provenance": {
+            "source": "datasets/cascade/cascade-1787971753680.json",
+            "metric": "rows[caseId=afn-sasebo-rally1].stages.PHASE",
+            "value": "status abstained"
+          }
+        }
+      ],
+      "instruction": "Add events labels around the failed EVENT stage of afn-sasebo-rally1 (new append-only sidecar): the pipeline's failure detail is \"targetEvent status ambiguous\".",
+      "rationale": "Latest committed integrated-pipeline run fails EVENT on dev case afn-sasebo-rally1 — direct model-error locus. ALSO: Latest committed integrated-pipeline run fails PHASE on dev case afn-sasebo-rally1 — direct model-error locus."
+    },
+    {
+      "rank": 2,
+      "id": "disagreement/wavea-944403-dink/t20003.32/far-center",
+      "kind": "frame",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "bundleId": "wavea-944403-dink",
+      "recordingId": "rec-916657917f2b",
+      "modalities": [
+        "ownership"
+      ],
+      "tMs": 20003.32,
+      "frameIdx": 1199,
+      "windowMs": null,
+      "score": 1,
+      "signals": [
+        {
+          "type": "ownership_audit_disagreement",
+          "weight": 1,
+          "provenance": {
+            "source": "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+            "metric": "frames[tMs=20003.32, role=far-center]",
+            "value": "class disagreement; adjudicated (ADJ-D1)"
+          }
+        }
+      ],
+      "instruction": "Third-annotator pass on frame 1199 (tMs 20003.32), role \"far-center\": annotate paddle visibility class + blade-center point in a NEW append-only sidecar; if it resolves the D2-04 dispute, file an adjudication record referencing both prior annotations.",
+      "rationale": "D2-04 blind audit disagreed with waveC here (class disagreement; adjudicated (ADJ-D1)) — measured annotator ambiguity, the highest-value relabel target."
+    },
+    {
+      "rank": 3,
+      "id": "disagreement/wavea-944403-dink/t21087.73/far-center",
+      "kind": "frame",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "bundleId": "wavea-944403-dink",
+      "recordingId": "rec-916657917f2b",
+      "modalities": [
+        "ownership"
+      ],
+      "tMs": 21087.73,
+      "frameIdx": 1264,
+      "windowMs": null,
+      "score": 1,
+      "signals": [
+        {
+          "type": "ownership_audit_disagreement",
+          "weight": 1,
+          "provenance": {
+            "source": "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+            "metric": "frames[tMs=21087.73, role=far-center]",
+            "value": "class disagreement; adjudicated (ADJ-D3)"
+          }
+        }
+      ],
+      "instruction": "Third-annotator pass on frame 1264 (tMs 21087.73), role \"far-center\": annotate paddle visibility class + blade-center point in a NEW append-only sidecar; if it resolves the D2-04 dispute, file an adjudication record referencing both prior annotations.",
+      "rationale": "D2-04 blind audit disagreed with waveC here (class disagreement; adjudicated (ADJ-D3)) — measured annotator ambiguity, the highest-value relabel target."
+    },
+    {
+      "rank": 4,
+      "id": "disagreement/wavea-944403-dink/t21087.73/near-left-target",
+      "kind": "frame",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "bundleId": "wavea-944403-dink",
+      "recordingId": "rec-916657917f2b",
+      "modalities": [
+        "ownership"
+      ],
+      "tMs": 21087.73,
+      "frameIdx": 1264,
+      "windowMs": null,
+      "score": 1,
+      "signals": [
+        {
+          "type": "ownership_audit_disagreement",
+          "weight": 1,
+          "provenance": {
+            "source": "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+            "metric": "frames[tMs=21087.73, role=near-left-target]",
+            "value": "coordinate delta 0.0967 > 0.05; adjudicated (ADJ-D2)"
+          }
+        }
+      ],
+      "instruction": "Third-annotator pass on frame 1264 (tMs 21087.73), role \"near-left-target\": annotate paddle visibility class + blade-center point in a NEW append-only sidecar; if it resolves the D2-04 dispute, file an adjudication record referencing both prior annotations.",
+      "rationale": "D2-04 blind audit disagreed with waveC here (coordinate delta 0.0967 > 0.05; adjudicated (ADJ-D2)) — measured annotator ambiguity, the highest-value relabel target."
+    },
+    {
+      "rank": 5,
+      "id": "disagreement/wavea-944403-dink/t21337.98/near-left-target",
+      "kind": "frame",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "bundleId": "wavea-944403-dink",
+      "recordingId": "rec-916657917f2b",
+      "modalities": [
+        "ownership"
+      ],
+      "tMs": 21337.98,
+      "frameIdx": 1279,
+      "windowMs": null,
+      "score": 1,
+      "signals": [
+        {
+          "type": "ownership_audit_disagreement",
+          "weight": 1,
+          "provenance": {
+            "source": "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+            "metric": "frames[tMs=21337.98, role=near-left-target]",
+            "value": "class disagreement; adjudicated (ADJ-D4)"
+          }
+        }
+      ],
+      "instruction": "Third-annotator pass on frame 1279 (tMs 21337.98), role \"near-left-target\": annotate paddle visibility class + blade-center point in a NEW append-only sidecar; if it resolves the D2-04 dispute, file an adjudication record referencing both prior annotations.",
+      "rationale": "D2-04 blind audit disagreed with waveC here (class disagreement; adjudicated (ADJ-D4)) — measured annotator ambiguity, the highest-value relabel target."
+    },
+    {
+      "rank": 6,
+      "id": "disagreement/wavea-944403-dink/t21838.48/far-left",
+      "kind": "frame",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "bundleId": "wavea-944403-dink",
+      "recordingId": "rec-916657917f2b",
+      "modalities": [
+        "ownership"
+      ],
+      "tMs": 21838.48,
+      "frameIdx": 1309,
+      "windowMs": null,
+      "score": 1,
+      "signals": [
+        {
+          "type": "ownership_audit_disagreement",
+          "weight": 1,
+          "provenance": {
+            "source": "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+            "metric": "frames[tMs=21838.48, role=far-left]",
+            "value": "class disagreement; adjudicated (ADJ-D5)"
+          }
+        }
+      ],
+      "instruction": "Third-annotator pass on frame 1309 (tMs 21838.48), role \"far-left\": annotate paddle visibility class + blade-center point in a NEW append-only sidecar; if it resolves the D2-04 dispute, file an adjudication record referencing both prior annotations.",
+      "rationale": "D2-04 blind audit disagreed with waveC here (class disagreement; adjudicated (ADJ-D5)) — measured annotator ambiguity, the highest-value relabel target."
+    },
+    {
+      "rank": 7,
+      "id": "disagreement/wavea-944403-dink/t22338.98/near-right",
+      "kind": "frame",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "bundleId": "wavea-944403-dink",
+      "recordingId": "rec-916657917f2b",
+      "modalities": [
+        "ownership"
+      ],
+      "tMs": 22338.98,
+      "frameIdx": 1339,
+      "windowMs": null,
+      "score": 1,
+      "signals": [
+        {
+          "type": "ownership_audit_disagreement",
+          "weight": 1,
+          "provenance": {
+            "source": "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+            "metric": "frames[tMs=22338.98, role=near-right]",
+            "value": "class disagreement; adjudicated (ADJ-D6)"
+          }
+        }
+      ],
+      "instruction": "Third-annotator pass on frame 1339 (tMs 22338.98), role \"near-right\": annotate paddle visibility class + blade-center point in a NEW append-only sidecar; if it resolves the D2-04 dispute, file an adjudication record referencing both prior annotations.",
+      "rationale": "D2-04 blind audit disagreed with waveC here (class disagreement; adjudicated (ADJ-D6)) — measured annotator ambiguity, the highest-value relabel target."
+    },
+    {
+      "rank": 8,
+      "id": "disagreement/wavea-944403-dink/t22589.23/far-left",
+      "kind": "frame",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "bundleId": "wavea-944403-dink",
+      "recordingId": "rec-916657917f2b",
+      "modalities": [
+        "ownership"
+      ],
+      "tMs": 22589.23,
+      "frameIdx": 1354,
+      "windowMs": null,
+      "score": 1,
+      "signals": [
+        {
+          "type": "ownership_audit_disagreement",
+          "weight": 1,
+          "provenance": {
+            "source": "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+            "metric": "frames[tMs=22589.23, role=far-left]",
+            "value": "coordinate delta 0.0618 > 0.05; adjudicated (ADJ-D7)"
+          }
+        }
+      ],
+      "instruction": "Third-annotator pass on frame 1354 (tMs 22589.23), role \"far-left\": annotate paddle visibility class + blade-center point in a NEW append-only sidecar; if it resolves the D2-04 dispute, file an adjudication record referencing both prior annotations.",
+      "rationale": "D2-04 blind audit disagreed with waveC here (coordinate delta 0.0618 > 0.05; adjudicated (ADJ-D7)) — measured annotator ambiguity, the highest-value relabel target."
+    },
+    {
+      "rank": 9,
+      "id": "disagreement/wavea-944403-dink/t22589.23/near-right",
+      "kind": "frame",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "bundleId": "wavea-944403-dink",
+      "recordingId": "rec-916657917f2b",
+      "modalities": [
+        "ownership"
+      ],
+      "tMs": 22589.23,
+      "frameIdx": 1354,
+      "windowMs": null,
+      "score": 1,
+      "signals": [
+        {
+          "type": "ownership_audit_disagreement",
+          "weight": 1,
+          "provenance": {
+            "source": "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+            "metric": "frames[tMs=22589.23, role=near-right]",
+            "value": "class disagreement; adjudicated (ADJ-D8)"
+          }
+        }
+      ],
+      "instruction": "Third-annotator pass on frame 1354 (tMs 22589.23), role \"near-right\": annotate paddle visibility class + blade-center point in a NEW append-only sidecar; if it resolves the D2-04 dispute, file an adjudication record referencing both prior annotations.",
+      "rationale": "D2-04 blind audit disagreed with waveC here (class disagreement; adjudicated (ADJ-D8)) — measured annotator ambiguity, the highest-value relabel target."
+    },
+    {
+      "rank": 10,
+      "id": "disagreement/wavea-944403-smash/t2902.9/far-red-2",
+      "kind": "frame",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "bundleId": "wavea-944403-smash",
+      "recordingId": "rec-916657917f2b",
+      "modalities": [
+        "ownership"
+      ],
+      "tMs": 2902.9,
+      "frameIdx": 174,
+      "windowMs": null,
+      "score": 1,
+      "signals": [
+        {
+          "type": "ownership_audit_disagreement",
+          "weight": 1,
+          "provenance": {
+            "source": "datasets/paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+            "metric": "frames[tMs=2902.9, role=far-red-2]",
+            "value": "class disagreement; adjudicated (ADJ-S1)"
+          }
+        }
+      ],
+      "instruction": "Third-annotator pass on frame 174 (tMs 2902.9), role \"far-red-2\": annotate paddle visibility class + blade-center point in a NEW append-only sidecar; if it resolves the D2-04 dispute, file an adjudication record referencing both prior annotations.",
+      "rationale": "D2-04 blind audit disagreed with waveC here (class disagreement; adjudicated (ADJ-S1)) — measured annotator ambiguity, the highest-value relabel target."
+    },
+    {
+      "rank": 11,
+      "id": "disagreement/wavea-944403-smash/t3703.7/far-red-smasher",
+      "kind": "frame",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "bundleId": "wavea-944403-smash",
+      "recordingId": "rec-916657917f2b",
+      "modalities": [
+        "ownership"
+      ],
+      "tMs": 3703.7,
+      "frameIdx": 222,
+      "windowMs": null,
+      "score": 1,
+      "signals": [
+        {
+          "type": "ownership_audit_disagreement",
+          "weight": 1,
+          "provenance": {
+            "source": "datasets/paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+            "metric": "frames[tMs=3703.7, role=far-red-smasher]",
+            "value": "class disagreement; adjudicated (ADJ-S2)"
+          }
+        }
+      ],
+      "instruction": "Third-annotator pass on frame 222 (tMs 3703.7), role \"far-red-smasher\": annotate paddle visibility class + blade-center point in a NEW append-only sidecar; if it resolves the D2-04 dispute, file an adjudication record referencing both prior annotations.",
+      "rationale": "D2-04 blind audit disagreed with waveC here (class disagreement; adjudicated (ADJ-S2)) — measured annotator ambiguity, the highest-value relabel target."
+    },
+    {
+      "rank": 12,
+      "id": "cascade/afn-sasebo-rally1/contact",
+      "kind": "window",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "bundleId": "afn-sasebo-rally1",
+      "recordingId": "rec-6e06a3157947",
+      "modalities": [
+        "contact"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": null,
+      "score": 0.9,
+      "signals": [
+        {
+          "type": "cascade_stage_failure",
+          "weight": 0.9,
+          "provenance": {
+            "source": "datasets/cascade/cascade-1787971753680.json",
+            "metric": "rows[caseId=afn-sasebo-rally1].stages.CONTACT",
+            "value": "status abstained"
+          }
+        }
+      ],
+      "instruction": "Add contact labels around the failed CONTACT stage of afn-sasebo-rally1 (new append-only sidecar): the pipeline's failure detail is \"status abstained\".",
+      "rationale": "Latest committed integrated-pipeline run fails CONTACT on dev case afn-sasebo-rally1 — direct model-error locus."
+    },
+    {
+      "rank": 13,
+      "id": "cascade/afn-sasebo-rally1/stroke",
+      "kind": "window",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "bundleId": "afn-sasebo-rally1",
+      "recordingId": "rec-6e06a3157947",
+      "modalities": [
+        "stroke"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": null,
+      "score": 0.9,
+      "signals": [
+        {
+          "type": "cascade_stage_failure",
+          "weight": 0.9,
+          "provenance": {
+            "source": "datasets/cascade/cascade-1787971753680.json",
+            "metric": "rows[caseId=afn-sasebo-rally1].stages.STROKE",
+            "value": "predicted none vs gold BACKHAND_VOLLEY"
+          }
+        }
+      ],
+      "instruction": "Add stroke labels around the failed STROKE stage of afn-sasebo-rally1 (new append-only sidecar): the pipeline's failure detail is \"predicted none vs gold BACKHAND_VOLLEY\".",
+      "rationale": "Latest committed integrated-pipeline run fails STROKE on dev case afn-sasebo-rally1 — direct model-error locus."
+    },
+    {
+      "rank": 14,
+      "id": "hard-slice/afn-sasebo-rally2/edge-on-carry-2903-3103",
+      "kind": "window",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "bundleId": "afn-sasebo-rally2",
+      "recordingId": "rec-6e06a3157947",
+      "modalities": [
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 2903,
+        "end": 3103
+      },
+      "score": 0.8,
+      "signals": [
+        {
+          "type": "hard_slice",
+          "weight": 0.8,
+          "provenance": {
+            "source": "datasets/experiments/wave-b/W12-summary.json",
+            "metric": "rally2_missB_edgeon_carry",
+            "value": "recovered 1/4 — the edge-on gray blade at the hip (i87-89, ~25-55px wide) gets ZERO full-frame boxes"
+          }
+        }
+      ],
+      "instruction": "Densify ownership labels frame-by-frame inside afn-sasebo-rally2 2903-3103ms (new append-only sidecar; abstain with visibility=uncertain rather than guess).",
+      "rationale": "Committed artifact names this window as a measured hard slice: recovered 1/4 — the edge-on gray blade at the hip (i87-89, ~25-55px wide) gets ZERO full-frame boxes."
+    },
+    {
+      "rank": 15,
+      "id": "hard-slice/afn-sasebo-rally2/multi-ball-2402",
+      "kind": "window",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "bundleId": "afn-sasebo-rally2",
+      "recordingId": "rec-6e06a3157947",
+      "modalities": [
+        "ball"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 2302,
+        "end": 2502
+      },
+      "score": 0.8,
+      "signals": [
+        {
+          "type": "hard_slice",
+          "weight": 0.8,
+          "provenance": {
+            "source": "datasets/experiments/wave-d2/d2-06-ball-hard-slices-summary.json",
+            "metric": "hardSliceCoverage.multiBallBackground",
+            "value": "2402 abstention (two indistinguishable green blobs → uncertain, no point); window = quoted timestamp ±100ms"
+          }
+        }
+      ],
+      "instruction": "Densify ball labels frame-by-frame inside afn-sasebo-rally2 2302-2502ms (new append-only sidecar; abstain with visibility=uncertain rather than guess).",
+      "rationale": "Committed artifact names this window as a measured hard slice: 2402 abstention (two indistinguishable green blobs → uncertain, no point); window = quoted timestamp ±100ms."
+    },
+    {
+      "rank": 16,
+      "id": "hard-slice/afn-sasebo-rally2/overhead-blur-2502-2703",
+      "kind": "window",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "bundleId": "afn-sasebo-rally2",
+      "recordingId": "rec-6e06a3157947",
+      "modalities": [
+        "ownership",
+        "contact"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 2502,
+        "end": 2703
+      },
+      "score": 0.8,
+      "signals": [
+        {
+          "type": "hard_slice",
+          "weight": 0.8,
+          "provenance": {
+            "source": "datasets/experiments/wave-b/W12-summary.json",
+            "metric": "rally2_missA_overhead_blur",
+            "value": "recovered@IoU.30 4/7 — deep-cock/pre-contact blur at 2536/2569/2603 (zero paddle boxes at any floor down to 0.03)"
+          }
+        }
+      ],
+      "instruction": "Densify ownership+contact labels frame-by-frame inside afn-sasebo-rally2 2502-2703ms (new append-only sidecar; abstain with visibility=uncertain rather than guess).",
+      "rationale": "Committed artifact names this window as a measured hard slice: recovered@IoU.30 4/7 — deep-cock/pre-contact blur at 2536/2569/2603 (zero paddle boxes at any floor down to 0.03)."
+    },
+    {
+      "rank": 17,
+      "id": "hard-slice/wavea-sasebo-volleys/net-crossing-51718-51852",
+      "kind": "window",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "bundleId": "wavea-sasebo-volleys",
+      "recordingId": "rec-6e06a3157947",
+      "modalities": [
+        "ball"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 51718,
+        "end": 51852
+      },
+      "score": 0.8,
+      "signals": [
+        {
+          "type": "hard_slice",
+          "weight": 0.8,
+          "provenance": {
+            "source": "datasets/experiments/wave-d2/d2-06-ball-hard-slices-summary.json",
+            "metric": "hardSliceCoverage.netCrossing",
+            "value": "through-mesh, tape-band partial overlap, cleared tape (51718-51852)"
+          }
+        }
+      ],
+      "instruction": "Densify ball labels frame-by-frame inside wavea-sasebo-volleys 51718-51852ms (new append-only sidecar; abstain with visibility=uncertain rather than guess).",
+      "rationale": "Committed artifact names this window as a measured hard slice: through-mesh, tape-band partial overlap, cleared tape (51718-51852)."
+    },
+    {
+      "rank": 18,
+      "id": "hard-slice/wavea-sasebo-volleys/paddle-occlusion-53887",
+      "kind": "window",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "bundleId": "wavea-sasebo-volleys",
+      "recordingId": "rec-6e06a3157947",
+      "modalities": [
+        "ball",
+        "contact"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 53787,
+        "end": 53987
+      },
+      "score": 0.8,
+      "signals": [
+        {
+          "type": "hard_slice",
+          "weight": 0.8,
+          "provenance": {
+            "source": "datasets/experiments/wave-d2/d2-06-ball-hard-slices-summary.json",
+            "metric": "hardSliceCoverage.paddleOcclusion",
+            "value": "53887 (ball overlapping paddle face at contact); window = quoted timestamp ±100ms"
+          }
+        }
+      ],
+      "instruction": "Densify ball+contact labels frame-by-frame inside wavea-sasebo-volleys 53787-53987ms (new append-only sidecar; abstain with visibility=uncertain rather than guess).",
+      "rationale": "Committed artifact names this window as a measured hard slice: 53887 (ball overlapping paddle face at contact); window = quoted timestamp ±100ms."
+    },
+    {
+      "rank": 19,
+      "id": "ood-boundary/commons-ronpaul-crowd",
+      "kind": "clip",
+      "sessionKey": "ood/crowd_non_sport",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": null,
+      "modalities": [
+        "events"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 0,
+        "end": 30000
+      },
+      "score": 0.8,
+      "signals": [
+        {
+          "type": "ood_boundary",
+          "weight": 0.8,
+          "provenance": {
+            "source": "datasets/experiments/wave-d/d08-ood-measurements.json",
+            "metric": "measurements[id=commons-ronpaul-crowd]",
+            "value": "gateOk=true, poseFreeDetectable=false (category crowd_non_sport) — pose-free gate cannot reject this negative"
+          }
+        }
+      ],
+      "instruction": "Annotate datasets/ood/negatives/commons-ronpaul-crowd.mp4 as a verified OOD negative per datasets/ood/registry.json policy (NO stroke/contact/ownership labels): record why it is not analyzable pickleball, to serve as a gate-boundary regression case for the pose-conditioned second stage.",
+      "rationale": "This OOD negative passes the pose-free pre-analysis gate — it sits exactly on the gate's decision boundary."
+    },
+    {
+      "rank": 20,
+      "id": "ood-boundary/ia-ProfileJ26-interview",
+      "kind": "clip",
+      "sessionKey": "ood/interview_talking_head",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": null,
+      "modalities": [
+        "events"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 0,
+        "end": 30031
+      },
+      "score": 0.8,
+      "signals": [
+        {
+          "type": "ood_boundary",
+          "weight": 0.8,
+          "provenance": {
+            "source": "datasets/experiments/wave-d/d08-ood-measurements.json",
+            "metric": "measurements[id=ia-ProfileJ26-interview]",
+            "value": "gateOk=true, poseFreeDetectable=false (category interview_talking_head) — pose-free gate cannot reject this negative"
+          }
+        }
+      ],
+      "instruction": "Annotate datasets/ood/negatives/ia-ProfileJ26-interview.mp4 as a verified OOD negative per datasets/ood/registry.json policy (NO stroke/contact/ownership labels): record why it is not analyzable pickleball, to serve as a gate-boundary regression case for the pose-conditioned second stage.",
+      "rationale": "This OOD negative passes the pose-free pre-analysis gate — it sits exactly on the gate's decision boundary."
+    },
+    {
+      "rank": 21,
+      "id": "ood-boundary/yt-2wV0Gs9r384-tabletennis",
+      "kind": "clip",
+      "sessionKey": "ood/other_racket_sport_table_tennis",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": null,
+      "modalities": [
+        "events"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 0,
+        "end": 30030
+      },
+      "score": 0.8,
+      "signals": [
+        {
+          "type": "ood_boundary",
+          "weight": 0.8,
+          "provenance": {
+            "source": "datasets/experiments/wave-d/d08-ood-measurements.json",
+            "metric": "measurements[id=yt-2wV0Gs9r384-tabletennis]",
+            "value": "gateOk=true, poseFreeDetectable=false (category other_racket_sport_table_tennis) — pose-free gate cannot reject this negative"
+          }
+        }
+      ],
+      "instruction": "Annotate datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4 as a verified OOD negative per datasets/ood/registry.json policy (NO stroke/contact/ownership labels): record why it is not analyzable pickleball, to serve as a gate-boundary regression case for the pose-conditioned second stage.",
+      "rationale": "This OOD negative passes the pose-free pre-analysis gate — it sits exactly on the gate's decision boundary."
+    },
+    {
+      "rank": 22,
+      "id": "ood-boundary/yt-BCJGL5E9huM-tabletennis",
+      "kind": "clip",
+      "sessionKey": "ood/other_racket_sport_table_tennis",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": null,
+      "modalities": [
+        "events"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 0,
+        "end": 14000
+      },
+      "score": 0.8,
+      "signals": [
+        {
+          "type": "ood_boundary",
+          "weight": 0.8,
+          "provenance": {
+            "source": "datasets/experiments/wave-d/d08-ood-measurements.json",
+            "metric": "measurements[id=yt-BCJGL5E9huM-tabletennis]",
+            "value": "gateOk=true, poseFreeDetectable=false (category other_racket_sport_table_tennis) — pose-free gate cannot reject this negative"
+          }
+        }
+      ],
+      "instruction": "Annotate datasets/ood/negatives/yt-BCJGL5E9huM-tabletennis.mp4 as a verified OOD negative per datasets/ood/registry.json policy (NO stroke/contact/ownership labels): record why it is not analyzable pickleball, to serve as a gate-boundary regression case for the pose-conditioned second stage.",
+      "rationale": "This OOD negative passes the pose-free pre-analysis gate — it sits exactly on the gate's decision boundary."
+    },
+    {
+      "rank": 23,
+      "id": "miner/evt-44c0c451500c-s0w1-p1-11019",
+      "kind": "window",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-44c0c451500c",
+      "modalities": [
+        "events",
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 10802,
+        "end": 11078
+      },
+      "score": 0.63,
+      "signals": [
+        {
+          "type": "miner_uncertainty",
+          "weight": 0.63,
+          "provenance": {
+            "source": "datasets/corpus/events/rec-44c0c451500c.jsonl",
+            "metric": "eventId=evt-44c0c451500c-s0w1-p1-11019 uncertainty",
+            "value": "0.9 — reasons: low prominence (is this a stroke at all?); 9 people in scene (ownership/contamination risk); target track has loss periods"
+          }
+        }
+      ],
+      "instruction": "Verify/label the mined candidate event evt-44c0c451500c-s0w1-p1-11019 (rec-44c0c451500c 10802-11078ms): confirm or reject as a real stroke event, set bounds + owner in a new append-only record.",
+      "rationale": "Miner-declared uncertainty 0.9 with named risk reasons — highest-uncertainty unlabeled corpus items."
+    },
+    {
+      "rank": 24,
+      "id": "miner/evt-44c0c451500c-s0w1-p4-15090",
+      "kind": "window",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-44c0c451500c",
+      "modalities": [
+        "events",
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 15073,
+        "end": 15324
+      },
+      "score": 0.63,
+      "signals": [
+        {
+          "type": "miner_uncertainty",
+          "weight": 0.63,
+          "provenance": {
+            "source": "datasets/corpus/events/rec-44c0c451500c.jsonl",
+            "metric": "eventId=evt-44c0c451500c-s0w1-p4-15090 uncertainty",
+            "value": "0.9 — reasons: 9 people in scene (ownership/contamination risk); small player (far court / small paddle+ball); target track has loss periods"
+          }
+        }
+      ],
+      "instruction": "Verify/label the mined candidate event evt-44c0c451500c-s0w1-p4-15090 (rec-44c0c451500c 15073-15324ms): confirm or reject as a real stroke event, set bounds + owner in a new append-only record.",
+      "rationale": "Miner-declared uncertainty 0.9 with named risk reasons — highest-uncertainty unlabeled corpus items."
+    },
+    {
+      "rank": 25,
+      "id": "miner/evt-44c0c451500c-s1w3-p8-50325",
+      "kind": "window",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-44c0c451500c",
+      "modalities": [
+        "events",
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 49833,
+        "end": 50409
+      },
+      "score": 0.63,
+      "signals": [
+        {
+          "type": "miner_uncertainty",
+          "weight": 0.63,
+          "provenance": {
+            "source": "datasets/corpus/events/rec-44c0c451500c.jsonl",
+            "metric": "eventId=evt-44c0c451500c-s1w3-p8-50325 uncertainty",
+            "value": "0.9 — reasons: low prominence (is this a stroke at all?); 11 people in scene (ownership/contamination risk); target track has loss periods"
+          }
+        }
+      ],
+      "instruction": "Verify/label the mined candidate event evt-44c0c451500c-s1w3-p8-50325 (rec-44c0c451500c 49833-50409ms): confirm or reject as a real stroke event, set bounds + owner in a new append-only record.",
+      "rationale": "Miner-declared uncertainty 0.9 with named risk reasons — highest-uncertainty unlabeled corpus items."
+    },
+    {
+      "rank": 26,
+      "id": "miner/evt-44c0c451500c-s1w3-p8-51577",
+      "kind": "window",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-44c0c451500c",
+      "modalities": [
+        "events",
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 51401,
+        "end": 52227
+      },
+      "score": 0.63,
+      "signals": [
+        {
+          "type": "miner_uncertainty",
+          "weight": 0.63,
+          "provenance": {
+            "source": "datasets/corpus/events/rec-44c0c451500c.jsonl",
+            "metric": "eventId=evt-44c0c451500c-s1w3-p8-51577 uncertainty",
+            "value": "0.9 — reasons: low prominence (is this a stroke at all?); 11 people in scene (ownership/contamination risk); target track has loss periods"
+          }
+        }
+      ],
+      "instruction": "Verify/label the mined candidate event evt-44c0c451500c-s1w3-p8-51577 (rec-44c0c451500c 51401-52227ms): confirm or reject as a real stroke event, set bounds + owner in a new append-only record.",
+      "rationale": "Miner-declared uncertainty 0.9 with named risk reasons — highest-uncertainty unlabeled corpus items."
+    },
+    {
+      "rank": 27,
+      "id": "miner/evt-44c0c451500c-s2w0-p1-59868",
+      "kind": "window",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-44c0c451500c",
+      "modalities": [
+        "events",
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 59776,
+        "end": 60002
+      },
+      "score": 0.63,
+      "signals": [
+        {
+          "type": "miner_uncertainty",
+          "weight": 0.63,
+          "provenance": {
+            "source": "datasets/corpus/events/rec-44c0c451500c.jsonl",
+            "metric": "eventId=evt-44c0c451500c-s2w0-p1-59868 uncertainty",
+            "value": "0.9 — reasons: low prominence (is this a stroke at all?); 9 people in scene (ownership/contamination risk); target track has loss periods"
+          }
+        }
+      ],
+      "instruction": "Verify/label the mined candidate event evt-44c0c451500c-s2w0-p1-59868 (rec-44c0c451500c 59776-60002ms): confirm or reject as a real stroke event, set bounds + owner in a new append-only record.",
+      "rationale": "Miner-declared uncertainty 0.9 with named risk reasons — highest-uncertainty unlabeled corpus items."
+    },
+    {
+      "rank": 28,
+      "id": "miner/evt-44c0c451500c-s2w0-p1-60953",
+      "kind": "window",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-44c0c451500c",
+      "modalities": [
+        "events",
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 60511,
+        "end": 61053
+      },
+      "score": 0.63,
+      "signals": [
+        {
+          "type": "miner_uncertainty",
+          "weight": 0.63,
+          "provenance": {
+            "source": "datasets/corpus/events/rec-44c0c451500c.jsonl",
+            "metric": "eventId=evt-44c0c451500c-s2w0-p1-60953 uncertainty",
+            "value": "0.9 — reasons: low prominence (is this a stroke at all?); 9 people in scene (ownership/contamination risk); target track has loss periods"
+          }
+        }
+      ],
+      "instruction": "Verify/label the mined candidate event evt-44c0c451500c-s2w0-p1-60953 (rec-44c0c451500c 60511-61053ms): confirm or reject as a real stroke event, set bounds + owner in a new append-only record.",
+      "rationale": "Miner-declared uncertainty 0.9 with named risk reasons — highest-uncertainty unlabeled corpus items."
+    },
+    {
+      "rank": 29,
+      "id": "miner/evt-44c0c451500c-s2w0-p1-62921",
+      "kind": "window",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-44c0c451500c",
+      "modalities": [
+        "events",
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 62204,
+        "end": 62946
+      },
+      "score": 0.63,
+      "signals": [
+        {
+          "type": "miner_uncertainty",
+          "weight": 0.63,
+          "provenance": {
+            "source": "datasets/corpus/events/rec-44c0c451500c.jsonl",
+            "metric": "eventId=evt-44c0c451500c-s2w0-p1-62921 uncertainty",
+            "value": "0.9 — reasons: low prominence (is this a stroke at all?); 9 people in scene (ownership/contamination risk); target track has loss periods"
+          }
+        }
+      ],
+      "instruction": "Verify/label the mined candidate event evt-44c0c451500c-s2w0-p1-62921 (rec-44c0c451500c 62204-62946ms): confirm or reject as a real stroke event, set bounds + owner in a new append-only record.",
+      "rationale": "Miner-declared uncertainty 0.9 with named risk reasons — highest-uncertainty unlabeled corpus items."
+    },
+    {
+      "rank": 30,
+      "id": "miner/evt-5bf0e6a85afb-s1w0-p1-45279",
+      "kind": "window",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-5bf0e6a85afb",
+      "modalities": [
+        "events",
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 45178,
+        "end": 45479
+      },
+      "score": 0.63,
+      "signals": [
+        {
+          "type": "miner_uncertainty",
+          "weight": 0.63,
+          "provenance": {
+            "source": "datasets/corpus/events/rec-5bf0e6a85afb.jsonl",
+            "metric": "eventId=evt-5bf0e6a85afb-s1w0-p1-45279 uncertainty",
+            "value": "0.9 — reasons: low prominence (is this a stroke at all?); 5 people in scene (ownership/contamination risk); target track has loss periods"
+          }
+        }
+      ],
+      "instruction": "Verify/label the mined candidate event evt-5bf0e6a85afb-s1w0-p1-45279 (rec-5bf0e6a85afb 45178-45479ms): confirm or reject as a real stroke event, set bounds + owner in a new append-only record.",
+      "rationale": "Miner-declared uncertainty 0.9 with named risk reasons — highest-uncertainty unlabeled corpus items."
+    },
+    {
+      "rank": 31,
+      "id": "miner/evt-5bf0e6a85afb-s1w0-p1-46547",
+      "kind": "window",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-5bf0e6a85afb",
+      "modalities": [
+        "events",
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 46079,
+        "end": 47014
+      },
+      "score": 0.63,
+      "signals": [
+        {
+          "type": "miner_uncertainty",
+          "weight": 0.63,
+          "provenance": {
+            "source": "datasets/corpus/events/rec-5bf0e6a85afb.jsonl",
+            "metric": "eventId=evt-5bf0e6a85afb-s1w0-p1-46547 uncertainty",
+            "value": "0.9 — reasons: low prominence (is this a stroke at all?); 5 people in scene (ownership/contamination risk); target track has loss periods"
+          }
+        }
+      ],
+      "instruction": "Verify/label the mined candidate event evt-5bf0e6a85afb-s1w0-p1-46547 (rec-5bf0e6a85afb 46079-47014ms): confirm or reject as a real stroke event, set bounds + owner in a new append-only record.",
+      "rationale": "Miner-declared uncertainty 0.9 with named risk reasons — highest-uncertainty unlabeled corpus items."
+    },
+    {
+      "rank": 32,
+      "id": "miner/evt-5bf0e6a85afb-s1w0-p1-47714",
+      "kind": "window",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-5bf0e6a85afb",
+      "modalities": [
+        "events",
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 47080,
+        "end": 48615
+      },
+      "score": 0.63,
+      "signals": [
+        {
+          "type": "miner_uncertainty",
+          "weight": 0.63,
+          "provenance": {
+            "source": "datasets/corpus/events/rec-5bf0e6a85afb.jsonl",
+            "metric": "eventId=evt-5bf0e6a85afb-s1w0-p1-47714 uncertainty",
+            "value": "0.9 — reasons: low prominence (is this a stroke at all?); 5 people in scene (ownership/contamination risk); target track has loss periods"
+          }
+        }
+      ],
+      "instruction": "Verify/label the mined candidate event evt-5bf0e6a85afb-s1w0-p1-47714 (rec-5bf0e6a85afb 47080-48615ms): confirm or reject as a real stroke event, set bounds + owner in a new append-only record.",
+      "rationale": "Miner-declared uncertainty 0.9 with named risk reasons — highest-uncertainty unlabeled corpus items."
+    },
+    {
+      "rank": 33,
+      "id": "miner/evt-5bf0e6a85afb-s1w0-p1-49650",
+      "kind": "window",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-5bf0e6a85afb",
+      "modalities": [
+        "events",
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 49416,
+        "end": 50651
+      },
+      "score": 0.63,
+      "signals": [
+        {
+          "type": "miner_uncertainty",
+          "weight": 0.63,
+          "provenance": {
+            "source": "datasets/corpus/events/rec-5bf0e6a85afb.jsonl",
+            "metric": "eventId=evt-5bf0e6a85afb-s1w0-p1-49650 uncertainty",
+            "value": "0.9 — reasons: low prominence (is this a stroke at all?); 5 people in scene (ownership/contamination risk); target track has loss periods"
+          }
+        }
+      ],
+      "instruction": "Verify/label the mined candidate event evt-5bf0e6a85afb-s1w0-p1-49650 (rec-5bf0e6a85afb 49416-50651ms): confirm or reject as a real stroke event, set bounds + owner in a new append-only record.",
+      "rationale": "Miner-declared uncertainty 0.9 with named risk reasons — highest-uncertainty unlabeled corpus items."
+    },
+    {
+      "rank": 34,
+      "id": "miner/evt-5bf0e6a85afb-s1w0-p2-45012",
+      "kind": "window",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-5bf0e6a85afb",
+      "modalities": [
+        "events",
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 44645,
+        "end": 45145
+      },
+      "score": 0.63,
+      "signals": [
+        {
+          "type": "miner_uncertainty",
+          "weight": 0.63,
+          "provenance": {
+            "source": "datasets/corpus/events/rec-5bf0e6a85afb.jsonl",
+            "metric": "eventId=evt-5bf0e6a85afb-s1w0-p2-45012 uncertainty",
+            "value": "0.9 — reasons: low prominence (is this a stroke at all?); 5 people in scene (ownership/contamination risk); target track has loss periods"
+          }
+        }
+      ],
+      "instruction": "Verify/label the mined candidate event evt-5bf0e6a85afb-s1w0-p2-45012 (rec-5bf0e6a85afb 44645-45145ms): confirm or reject as a real stroke event, set bounds + owner in a new append-only record.",
+      "rationale": "Miner-declared uncertainty 0.9 with named risk reasons — highest-uncertainty unlabeled corpus items."
+    },
+    {
+      "rank": 35,
+      "id": "failure-mine/rec-44c0c451500c/scene0/track_fragmentation",
+      "kind": "scene",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-44c0c451500c",
+      "modalities": [
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 0,
+        "end": 18443
+      },
+      "score": 0.5,
+      "signals": [
+        {
+          "type": "failure_mine",
+          "weight": 0.5,
+          "provenance": {
+            "source": "datasets/corpus/failure-queue.json",
+            "metric": "items[rec-44c0c451500c scene 0].TRACK_FRAGMENTATION",
+            "value": "20 tracks, 14 short (<30% coverage) — identity churn"
+          }
+        }
+      ],
+      "instruction": "Spot-label player identity/paddle ownership at 3-5 evenly spaced frames inside rec-44c0c451500c scene 0 (0-18443ms) to give the tracker verifiable anchors through the TRACK_FRAGMENTATION region.",
+      "rationale": "Failure-mine evidence: 20 tracks, 14 short (<30% coverage) — identity churn."
+    },
+    {
+      "rank": 36,
+      "id": "failure-mine/rec-44c0c451500c/scene1/track_fragmentation",
+      "kind": "scene",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-44c0c451500c",
+      "modalities": [
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 18443,
+        "end": 54488
+      },
+      "score": 0.5,
+      "signals": [
+        {
+          "type": "failure_mine",
+          "weight": 0.5,
+          "provenance": {
+            "source": "datasets/corpus/failure-queue.json",
+            "metric": "items[rec-44c0c451500c scene 1].TRACK_FRAGMENTATION",
+            "value": "56 tracks, 54 short (<30% coverage) — identity churn"
+          }
+        }
+      ],
+      "instruction": "Spot-label player identity/paddle ownership at 3-5 evenly spaced frames inside rec-44c0c451500c scene 1 (18443-54488ms) to give the tracker verifiable anchors through the TRACK_FRAGMENTATION region.",
+      "rationale": "Failure-mine evidence: 56 tracks, 54 short (<30% coverage) — identity churn."
+    },
+    {
+      "rank": 37,
+      "id": "failure-mine/rec-44c0c451500c/scene4/track_fragmentation",
+      "kind": "scene",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-44c0c451500c",
+      "modalities": [
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 71430,
+        "end": 109459
+      },
+      "score": 0.5,
+      "signals": [
+        {
+          "type": "failure_mine",
+          "weight": 0.5,
+          "provenance": {
+            "source": "datasets/corpus/failure-queue.json",
+            "metric": "items[rec-44c0c451500c scene 4].TRACK_FRAGMENTATION",
+            "value": "95 tracks, 93 short (<30% coverage) — identity churn"
+          }
+        }
+      ],
+      "instruction": "Spot-label player identity/paddle ownership at 3-5 evenly spaced frames inside rec-44c0c451500c scene 4 (71430-109459ms) to give the tracker verifiable anchors through the TRACK_FRAGMENTATION region.",
+      "rationale": "Failure-mine evidence: 95 tracks, 93 short (<30% coverage) — identity churn."
+    },
+    {
+      "rank": 38,
+      "id": "failure-mine/rec-5bf0e6a85afb/scene1/track_fragmentation",
+      "kind": "scene",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-5bf0e6a85afb",
+      "modalities": [
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 500,
+        "end": 43310
+      },
+      "score": 0.5,
+      "signals": [
+        {
+          "type": "failure_mine",
+          "weight": 0.5,
+          "provenance": {
+            "source": "datasets/corpus/failure-queue.json",
+            "metric": "items[rec-5bf0e6a85afb scene 1].TRACK_FRAGMENTATION",
+            "value": "46 tracks, 45 short (<30% coverage) — identity churn"
+          }
+        }
+      ],
+      "instruction": "Spot-label player identity/paddle ownership at 3-5 evenly spaced frames inside rec-5bf0e6a85afb scene 1 (500-43310ms) to give the tracker verifiable anchors through the TRACK_FRAGMENTATION region.",
+      "rationale": "Failure-mine evidence: 46 tracks, 45 short (<30% coverage) — identity churn."
+    },
+    {
+      "rank": 39,
+      "id": "failure-mine/rec-5bf0e6a85afb/scene3/track_fragmentation",
+      "kind": "scene",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-5bf0e6a85afb",
+      "modalities": [
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 51051,
+        "end": 59560
+      },
+      "score": 0.5,
+      "signals": [
+        {
+          "type": "failure_mine",
+          "weight": 0.5,
+          "provenance": {
+            "source": "datasets/corpus/failure-queue.json",
+            "metric": "items[rec-5bf0e6a85afb scene 3].TRACK_FRAGMENTATION",
+            "value": "23 tracks, 15 short (<30% coverage) — identity churn"
+          }
+        }
+      ],
+      "instruction": "Spot-label player identity/paddle ownership at 3-5 evenly spaced frames inside rec-5bf0e6a85afb scene 3 (51051-59560ms) to give the tracker verifiable anchors through the TRACK_FRAGMENTATION region.",
+      "rationale": "Failure-mine evidence: 23 tracks, 15 short (<30% coverage) — identity churn."
+    },
+    {
+      "rank": 40,
+      "id": "failure-mine/rec-6e06a3157947/scene0/track_fragmentation",
+      "kind": "scene",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "bundleId": null,
+      "recordingId": "rec-6e06a3157947",
+      "modalities": [
+        "ownership"
+      ],
+      "tMs": null,
+      "frameIdx": null,
+      "windowMs": {
+        "start": 0,
+        "end": 13146
+      },
+      "score": 0.5,
+      "signals": [
+        {
+          "type": "failure_mine",
+          "weight": 0.5,
+          "provenance": {
+            "source": "datasets/corpus/failure-queue.json",
+            "metric": "items[rec-6e06a3157947 scene 0].TRACK_FRAGMENTATION",
+            "value": "23 tracks, 15 short (<30% coverage) — identity churn"
+          }
+        }
+      ],
+      "instruction": "Spot-label player identity/paddle ownership at 3-5 evenly spaced frames inside rec-6e06a3157947 scene 0 (0-13146ms) to give the tracker verifiable anchors through the TRACK_FRAGMENTATION region.",
+      "rationale": "Failure-mine evidence: 23 tracks, 15 short (<30% coverage) — identity churn."
+    }
+  ]
+}

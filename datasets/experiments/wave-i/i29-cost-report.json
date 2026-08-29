@@ -1,0 +1,361 @@
+{
+  "workstream": "i29-cost-per-analysis",
+  "generatedFrom": {
+    "profile": "datasets/experiments/wave-g/g24-linux-profile.json",
+    "profileGeneratedAtIso": "2026-08-29T17:37:31.775Z",
+    "profileProvenance": {
+      "gitCommit": "104ea0f6383f5573ddc9393401700c7ecc163436",
+      "gitBranch": "devin/wave-g/g24-mac-harness"
+    },
+    "profileBoundary": "LINUX-CPU-NOT-MAC. Profiles only the Linux-measurable pieces (ffprobe/ffmpeg decode, frame extraction, file I/O, JSON serialization, two-pass schedule mechanics). No Apple Vision, no Swift extractor, no D-FINE detector, no lab:regen/lab:cascade. NOT a substitute for the Mac results document."
+  },
+  "honestyLabel": "ALL DOLLAR FIGURES ARE ESTIMATES. Quantities marked measured come from real Linux CPU benchmark runs in the profile above; rates are public list-price estimates or explicit assumptions (see rateCard provenance per component). No invoices, production traffic, device measurements, GPU measurements, or real coach payroll data exist in this repo.",
+  "notMeasured": {
+    "device_compute": "NOT_MEASURED: no physical-device (iPhone/Android) measurements exist; on-device compute is priced at zero marginal operator cost and its quantity is left at 0 rather than invented.",
+    "server_gpu": "NOT_MEASURED: no GPU exists on the Linux benchmark box and no server-side GPU inference is deployed; quantity left at 0.",
+    "coach_review": "ASSUMPTION-ONLY: no real coach review sessions have occurred; minutes-per-event and the $/hour rate are explicit assumptions, not observations."
+  },
+  "measuredInputs": {
+    "mediaCpuMsPerVideoMinute": {
+      "value": 8511.990156675749,
+      "source": "ffprobe + full decode + JPEG frame extraction wall time, scaled to 60s per clip"
+    },
+    "clipBytesPerVideoMinute": {
+      "value": 34726578.480926424,
+      "source": "real clip file sizes scaled to 60s per clip"
+    },
+    "schedulePlanCpuMsPerClip": {
+      "value": 0.025,
+      "source": "two-pass schedule planning wall time (synthetic sparse track over real clip metadata)"
+    },
+    "jsonArtifactCpuMsPerAnalysis": {
+      "value": 0.04,
+      "source": "JSON parse + stringify + round-trip write of real committed artifacts"
+    }
+  },
+  "assumptions": {
+    "strokeAnalysesPerVideoMinute": 6,
+    "videoMinutesPerGameSession": 12,
+    "retentionMonths": 1,
+    "coachMinutesPerReviewedEvent": 3,
+    "uploadedFractionOfClipBytes": 1
+  },
+  "rateCard": {
+    "device_compute": {
+      "usdPerUnit": 0,
+      "provenance": "not_applicable",
+      "source": "On-device compute runs on user hardware; zero marginal operator cost."
+    },
+    "server_cpu": {
+      "usdPerUnit": 1.1111111111111112e-8,
+      "provenance": "public_list_price_estimate",
+      "source": "≈$0.04/vCPU-hour public cloud on-demand list price, converted to per-ms."
+    },
+    "server_gpu": {
+      "usdPerUnit": 1.4722222222222222e-7,
+      "provenance": "public_list_price_estimate",
+      "source": "≈$0.53/GPU-hour (T4-class inference GPU) public list price, converted to per-ms."
+    },
+    "storage": {
+      "usdPerUnit": 2.1420419216156005e-11,
+      "provenance": "public_list_price_estimate",
+      "source": "≈$0.023/GB-month object storage list price, converted to per-byte-month."
+    },
+    "bandwidth": {
+      "usdPerUnit": 8.381903171539306e-11,
+      "provenance": "public_list_price_estimate",
+      "source": "≈$0.09/GB internet egress list price, converted to per-byte."
+    },
+    "media_processing": {
+      "usdPerUnit": 1.1111111111111112e-8,
+      "provenance": "public_list_price_estimate",
+      "source": "Same ≈$0.04/vCPU-hour rate as server_cpu; separated for attribution."
+    },
+    "coach_review": {
+      "usdPerUnit": 1,
+      "provenance": "assumption",
+      "source": "ASSUMPTION: $60/hour blended coach compensation; no real payroll data."
+    }
+  },
+  "estimates": {
+    "perVideoMinute": {
+      "components": [
+        {
+          "component": "device_compute",
+          "unit": "device-cpu-ms",
+          "quantity": 0,
+          "usdPerUnit": 0,
+          "provenance": "not_applicable",
+          "microUsd": 0
+        },
+        {
+          "component": "server_cpu",
+          "unit": "server-cpu-ms",
+          "quantity": 0.39,
+          "usdPerUnit": 1.1111111111111112e-8,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 0
+        },
+        {
+          "component": "server_gpu",
+          "unit": "server-gpu-ms",
+          "quantity": 0,
+          "usdPerUnit": 1.4722222222222222e-7,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 0
+        },
+        {
+          "component": "storage",
+          "unit": "byte-months",
+          "quantity": 34726578.480926424,
+          "usdPerUnit": 2.1420419216156005e-11,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 744
+        },
+        {
+          "component": "bandwidth",
+          "unit": "bytes-transferred",
+          "quantity": 34726578.480926424,
+          "usdPerUnit": 8.381903171539306e-11,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 2911
+        },
+        {
+          "component": "media_processing",
+          "unit": "server-cpu-ms",
+          "quantity": 8511.990156675749,
+          "usdPerUnit": 1.1111111111111112e-8,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 95
+        },
+        {
+          "component": "coach_review",
+          "unit": "coach-review-minutes",
+          "quantity": 0,
+          "usdPerUnit": 1,
+          "provenance": "assumption",
+          "microUsd": 0
+        }
+      ],
+      "totalMicroUsd": 3750,
+      "totalUsdFormatted": "$0.003750"
+    },
+    "perStrokeAnalysis": {
+      "components": [
+        {
+          "component": "device_compute",
+          "unit": "device-cpu-ms",
+          "quantity": 0,
+          "usdPerUnit": 0,
+          "provenance": "not_applicable",
+          "microUsd": 0
+        },
+        {
+          "component": "server_cpu",
+          "unit": "server-cpu-ms",
+          "quantity": 0.065,
+          "usdPerUnit": 1.1111111111111112e-8,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 0
+        },
+        {
+          "component": "server_gpu",
+          "unit": "server-gpu-ms",
+          "quantity": 0,
+          "usdPerUnit": 1.4722222222222222e-7,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 0
+        },
+        {
+          "component": "storage",
+          "unit": "byte-months",
+          "quantity": 5787763.080154404,
+          "usdPerUnit": 2.1420419216156005e-11,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 124
+        },
+        {
+          "component": "bandwidth",
+          "unit": "bytes-transferred",
+          "quantity": 5787763.080154404,
+          "usdPerUnit": 8.381903171539306e-11,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 485
+        },
+        {
+          "component": "media_processing",
+          "unit": "server-cpu-ms",
+          "quantity": 1418.6650261126247,
+          "usdPerUnit": 1.1111111111111112e-8,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 16
+        },
+        {
+          "component": "coach_review",
+          "unit": "coach-review-minutes",
+          "quantity": 0,
+          "usdPerUnit": 1,
+          "provenance": "assumption",
+          "microUsd": 0
+        }
+      ],
+      "totalMicroUsd": 625,
+      "totalUsdFormatted": "$0.000625"
+    },
+    "perGameSession": {
+      "components": [
+        {
+          "component": "device_compute",
+          "unit": "device-cpu-ms",
+          "quantity": 0,
+          "usdPerUnit": 0,
+          "provenance": "not_applicable",
+          "microUsd": 0
+        },
+        {
+          "component": "server_cpu",
+          "unit": "server-cpu-ms",
+          "quantity": 4.68,
+          "usdPerUnit": 1.1111111111111112e-8,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 0
+        },
+        {
+          "component": "server_gpu",
+          "unit": "server-gpu-ms",
+          "quantity": 0,
+          "usdPerUnit": 1.4722222222222222e-7,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 0
+        },
+        {
+          "component": "storage",
+          "unit": "byte-months",
+          "quantity": 416718941.7711171,
+          "usdPerUnit": 2.1420419216156005e-11,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 8926
+        },
+        {
+          "component": "bandwidth",
+          "unit": "bytes-transferred",
+          "quantity": 416718941.7711171,
+          "usdPerUnit": 8.381903171539306e-11,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 34929
+        },
+        {
+          "component": "media_processing",
+          "unit": "server-cpu-ms",
+          "quantity": 102143.881880109,
+          "usdPerUnit": 1.1111111111111112e-8,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 1135
+        },
+        {
+          "component": "coach_review",
+          "unit": "coach-review-minutes",
+          "quantity": 0,
+          "usdPerUnit": 1,
+          "provenance": "assumption",
+          "microUsd": 0
+        }
+      ],
+      "totalMicroUsd": 44990,
+      "totalUsdFormatted": "$0.044990"
+    },
+    "perCoachReviewedEvent": {
+      "components": [
+        {
+          "component": "device_compute",
+          "unit": "device-cpu-ms",
+          "quantity": 0,
+          "usdPerUnit": 0,
+          "provenance": "not_applicable",
+          "microUsd": 0
+        },
+        {
+          "component": "server_cpu",
+          "unit": "server-cpu-ms",
+          "quantity": 0.065,
+          "usdPerUnit": 1.1111111111111112e-8,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 0
+        },
+        {
+          "component": "server_gpu",
+          "unit": "server-gpu-ms",
+          "quantity": 0,
+          "usdPerUnit": 1.4722222222222222e-7,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 0
+        },
+        {
+          "component": "storage",
+          "unit": "byte-months",
+          "quantity": 5787763.080154404,
+          "usdPerUnit": 2.1420419216156005e-11,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 124
+        },
+        {
+          "component": "bandwidth",
+          "unit": "bytes-transferred",
+          "quantity": 5787763.080154404,
+          "usdPerUnit": 8.381903171539306e-11,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 485
+        },
+        {
+          "component": "media_processing",
+          "unit": "server-cpu-ms",
+          "quantity": 1418.6650261126247,
+          "usdPerUnit": 1.1111111111111112e-8,
+          "provenance": "public_list_price_estimate",
+          "microUsd": 16
+        },
+        {
+          "component": "coach_review",
+          "unit": "coach-review-minutes",
+          "quantity": 3,
+          "usdPerUnit": 1,
+          "provenance": "assumption",
+          "microUsd": 3000000
+        }
+      ],
+      "totalMicroUsd": 3000625,
+      "totalUsdFormatted": "$3.000625"
+    }
+  },
+  "optimizationSuggestions": [
+    {
+      "id": "coach-review-routing-not-thresholds",
+      "targetComponent": "coach_review",
+      "suggestion": "Reduce coach minutes per reviewed event with better queue tooling (pre-loaded context, keyboard-driven review) — never by loosening which events require review.",
+      "preservesCoreCorrectness": true,
+      "rationale": "Review scope and escalation thresholds are correctness policy and are explicitly out of bounds for cost work."
+    },
+    {
+      "id": "bandwidth-upload-original-bitrate",
+      "targetComponent": "bandwidth",
+      "suggestion": "Skip server re-download of clips already analyzed on-device; transfer only the evidence record unless coach review needs the video.",
+      "preservesCoreCorrectness": true,
+      "rationale": "Avoids redundant transfer of bytes the pipeline never reads; analysis inputs are unchanged."
+    },
+    {
+      "id": "storage-lifecycle-tiering",
+      "targetComponent": "storage",
+      "suggestion": "Move consented raw clips older than the review window to an infrequent-access storage tier.",
+      "preservesCoreCorrectness": true,
+      "rationale": "Storage tier changes retrieval latency and price, not analysis inputs or outputs."
+    },
+    {
+      "id": "media-extract-planned-frames-only",
+      "targetComponent": "media_processing",
+      "suggestion": "Extract only the frames the two-pass schedule actually plans (sparse + dense regions) instead of all frames.",
+      "preservesCoreCorrectness": true,
+      "rationale": "The analysis already consumes only planned frames; skipping unplanned extraction changes no analyzed pixel."
+    }
+  ],
+  "optimizationPolicy": "Suggestions come from a closed catalog in which every entry preserves core analysis correctness by construction; cost work never loosens accuracy, thresholds, gates, or coach-review scope."
+}

@@ -64,6 +64,9 @@ export interface StrokeEventProposal {
   prominence: number;
   source: "paddle" | "wrist";
   confidence: number;
+  /** Present when the peak was under the absolute speed floor and was
+   * admitted by the prominence-gated low-amplitude tier (compact strokes). */
+  lowAmplitude?: true;
 }
 
 export type TargetEventSelection =
@@ -71,6 +74,11 @@ export type TargetEventSelection =
       status: "selected";
       event: StrokeEventProposal;
       via: "contact" | "prominence" | "paddle_confirmation";
+      /** Present when a non-null contact estimate fell OUTSIDE every proposed
+       * event (±60ms): selection proceeded on prominence/paddle evidence alone
+       * and the contact estimate does NOT belong to the selected event —
+       * downstream must never anchor fine analysis of this event on it. */
+      contactOrphaned?: true;
     }
   | { status: "ambiguous"; reason: string; leaders: string[] }
   | { status: "none"; reason: string };
@@ -83,6 +91,38 @@ const EVENT_GATES = {
   maxBoundaryReachMs: 1200,
   minEventSpanMs: 160,
   ambiguityProminenceRatio: 1.3,
+} as const;
+
+/** Low-amplitude tier (wrist source only): compact strokes — punch volleys,
+ * short smashes — move the wrist far less than full swings in normalized
+ * image units (measured gold compact strokes peak at 0.31–0.46, under the
+ * 0.5 floor). A sub-floor peak is admitted only when it is decisively
+ * distinct from its own local baseline: minProminence 4 is the SAME
+ * boundary the miner already treats as "is this a stroke at all?"
+ * (mineVideo.ts) — below it nothing is admitted here. Measured on the dev
+ * event bench, this tier admits exactly the missed compact stroke and adds
+ * zero proposals inside explicitly labeled non-event spans and zero
+ * unmatched proposals. Tier-2 proposals never alter
+ * tier-1 output: they are added only where no tier-1 event exists and
+ * carry `lowAmplitude` + a confidence penalty so downstream consumers see
+ * the weaker evidence. */
+const LOW_AMPLITUDE_GATES = {
+  minPeakSpeed: 0.3,
+  minProminence: 4,
+  confidencePenalty: 0.15,
+} as const;
+
+/** v2 fragment-glue gates: gluing exists to reunite ONE movement (swing +
+ * follow-through burst split by a brief dip), never to fuse two distinct
+ * strokes. Two fragments whose peaks are far apart AND comparably strong are
+ * two hitting motions; gluing them would fabricate a multi-swing event.
+ * The measured rally1 fragmentation (400ms + 234ms fragments 167ms apart,
+ * peaks ≈480ms apart) stays glued; synthetic rapid consecutive strokes with
+ * peaks ≥550ms apart stay distinct. */
+const GLUE_GATES = {
+  maxGapMs: 350,
+  distinctPeakSeparationMs: 550,
+  distinctPeakRatio: 0.6,
 } as const;
 
 export function proposeStrokeEvents(input: {
@@ -153,8 +193,7 @@ export function proposeStrokeEvents(input: {
     }
   }
 
-  const events: StrokeEventProposal[] = [];
-  for (const peakIndex of merged) {
+  const buildEvent = (peakIndex: number): StrokeEventProposal | null => {
     const peakValue = smoothed[peakIndex]!.value;
     const boundary = peakValue * EVENT_GATES.boundaryFraction;
     const peakMs = smoothed[peakIndex]!.timestampMs;
@@ -176,7 +215,7 @@ export function proposeStrokeEvents(input: {
     }
     const startMs = smoothed[startIndex]!.timestampMs;
     const endMs = smoothed[endIndex]!.timestampMs;
-    if (endMs - startMs < EVENT_GATES.minEventSpanMs) continue;
+    if (endMs - startMs < EVENT_GATES.minEventSpanMs) return null;
     // Local baseline: median outside the event, within ±1.5s context.
     const context = smoothed.filter(
       (sample) =>
@@ -187,7 +226,7 @@ export function proposeStrokeEvents(input: {
     const contextValues = context.map((sample) => sample.value).sort((a, b) => a - b);
     const baseline = contextValues[Math.floor(contextValues.length / 2)] ?? 0.05;
     const prominence = peakValue / Math.max(0.05, baseline);
-    events.push({
+    return {
       eventId: "", // assigned after time-ordering below
       startMs,
       peakMs,
@@ -196,7 +235,13 @@ export function proposeStrokeEvents(input: {
       prominence,
       source,
       confidence: Math.max(0.2, Math.min(0.9, 0.4 + (prominence - 1) * 0.12)),
-    });
+    };
+  };
+
+  const events: StrokeEventProposal[] = [];
+  for (const peakIndex of merged) {
+    const event = buildEvent(peakIndex);
+    if (event) events.push(event);
   }
   events.sort((a, b) => a.startMs - b.startMs);
   // Merge time-overlapping proposals (can occur across shallow valleys).
@@ -208,6 +253,40 @@ export function proposeStrokeEvents(input: {
     } else {
       distinct.push(event);
     }
+  }
+  // Low-amplitude tier (wrist only): admit sub-floor peaks that are
+  // decisively prominent, and only where tier-1 proposed nothing — the
+  // tier-1 output above is never altered (see LOW_AMPLITUDE_GATES).
+  if (source === "wrist") {
+    const lowThreshold = Math.max(
+      LOW_AMPLITUDE_GATES.minPeakSpeed,
+      globalPeak * EVENT_GATES.minPeakFractionOfMax,
+    );
+    const lowEvents: StrokeEventProposal[] = [];
+    for (let index = 1; index < smoothed.length - 1; index += 1) {
+      const value = smoothed[index]!.value;
+      if (value < lowThreshold || value >= threshold) continue;
+      if (value < smoothed[index - 1]!.value || value <= smoothed[index + 1]!.value) continue;
+      const event = buildEvent(index);
+      if (!event || event.prominence < LOW_AMPLITUDE_GATES.minProminence) continue;
+      if (
+        distinct.some(
+          (existing) => event.startMs <= existing.endMs && event.endMs >= existing.startMs,
+        )
+      ) {
+        continue;
+      }
+      event.lowAmplitude = true;
+      event.confidence = Math.max(0.15, event.confidence - LOW_AMPLITUDE_GATES.confidencePenalty);
+      const previous = lowEvents[lowEvents.length - 1];
+      if (previous && event.startMs <= previous.endMs) {
+        if (event.peakSpeed > previous.peakSpeed) lowEvents[lowEvents.length - 1] = event;
+      } else {
+        lowEvents.push(event);
+      }
+    }
+    distinct.push(...lowEvents);
+    distinct.sort((a, b) => a.startMs - b.startMs);
   }
   distinct.forEach((event, index) => {
     event.eventId = `E${index + 1}`;
@@ -270,7 +349,13 @@ export function proposeStrokeEventsV2(input: {
   const glued: StrokeEventProposal[] = [];
   for (const event of body.events) {
     const previous = glued[glued.length - 1];
-    if (previous && event.startMs - previous.endMs <= 350) {
+    // A later fragment that is BOTH far from the previous peak and comparably
+    // strong is a distinct stroke — never glued (GLUE_GATES).
+    const distinctStroke =
+      previous !== undefined &&
+      event.peakMs - previous.peakMs >= GLUE_GATES.distinctPeakSeparationMs &&
+      event.peakSpeed >= GLUE_GATES.distinctPeakRatio * previous.peakSpeed;
+    if (previous && !distinctStroke && event.startMs - previous.endMs <= GLUE_GATES.maxGapMs) {
       previous.endMs = event.endMs;
       if (event.peakSpeed > previous.peakSpeed) {
         previous.peakMs = event.peakMs;
@@ -380,9 +465,11 @@ export function proposeStrokeEventsV2(input: {
     const paddleConfirmed = decisive;
     // Refine the interior peak toward the paddle peak (contact vicinity) —
     // boundaries stay body-defined so the movement identity cannot shift.
+    // The peak stays interior: paddle samples come from an ±80ms halo
+    // around the event, so an unclamped refinement could leave the span.
     const refinedPeakMs =
       paddleConfirmed && paddlePeakMs !== null && Math.abs(paddlePeakMs - event.peakMs) <= 250
-        ? paddlePeakMs
+        ? Math.min(Math.max(paddlePeakMs, event.startMs), event.endMs)
         : event.peakMs;
     const confidence = Math.max(
       0.15,
@@ -417,7 +504,15 @@ export function selectTargetEventV2(
   const leaders = events.filter((event) => base.leaders.includes(event.eventId));
   const confirmed = leaders.filter((event) => event.paddleConfirmed);
   if (confirmed.length === 1) {
-    return { status: "selected", event: confirmed[0]!, via: "paddle_confirmation" };
+    const orphaned =
+      contactMs !== null &&
+      !events.some((event) => contactMs >= event.startMs - 60 && contactMs <= event.endMs + 60);
+    return {
+      status: "selected",
+      event: confirmed[0]!,
+      via: "paddle_confirmation",
+      ...(orphaned ? { contactOrphaned: true as const } : {}),
+    };
   }
   return base;
 }
@@ -429,6 +524,7 @@ export function selectTargetEvent(
   if (events.length === 0) {
     return { status: "none", reason: "no stroke events proposed" };
   }
+  let contactOrphaned = false;
   if (contactMs !== null) {
     const containing = events.filter(
       (event) => contactMs >= event.startMs - 60 && contactMs <= event.endMs + 60,
@@ -443,11 +539,13 @@ export function selectTargetEvent(
         leaders: containing.map((event) => event.eventId),
       };
     }
-    // Contact outside all events: fall through to prominence with a flag —
-    // callers should treat this as suspicious.
+    // Contact outside all events: fall through to prominence, RECORDED via
+    // contactOrphaned — the estimate does not belong to whatever is selected.
+    contactOrphaned = true;
   }
+  const orphanFlag = contactOrphaned ? { contactOrphaned: true as const } : {};
   if (events.length === 1) {
-    return { status: "selected", event: events[0]!, via: "prominence" };
+    return { status: "selected", event: events[0]!, via: "prominence", ...orphanFlag };
   }
   const byProminence = [...events].sort((a, b) => b.prominence - a.prominence);
   const ratio = byProminence[0]!.prominence / Math.max(1e-6, byProminence[1]!.prominence);
@@ -458,7 +556,7 @@ export function selectTargetEvent(
       leaders: [byProminence[0]!.eventId, byProminence[1]!.eventId],
     };
   }
-  return { status: "selected", event: byProminence[0]!, via: "prominence" };
+  return { status: "selected", event: byProminence[0]!, via: "prominence", ...orphanFlag };
 }
 // === END VERBATIM MIRROR: packages/swing-lab/src/strokeEvents.ts ===
 
@@ -804,18 +902,46 @@ export class SessionEventEngine {
   }
 
   /** Per-event analysis lifecycle. The PROPOSAL is frozen; only the analysis
-   * slot and state may move (pending → processing → ready|abstained). */
+   * slot and state may move (pending → processing → ready|abstained, with an
+   * honest processing → pending revert when analysis could not start).
+   * `ready` and `abstained` are TERMINAL: a second outcome signal for the
+   * same event is a caller bug and throws instead of rewriting history.
+   * `ready` requires a real AnalysisRecord — an event can never be counted
+   * as analyzed without one. */
   markEvent(
     eventId: string,
-    state: Exclude<SessionEventState, "pending">,
+    state: SessionEventState,
     outcome?: { analysis?: AnalysisRecord | null; abstainReason?: string | null },
   ): SessionStrokeEvent {
     const event = this.events.find((entry) => entry.eventId === eventId);
     if (!event) throw new Error(`unknown session event '${eventId}'`);
+    if (event.state === "ready" || event.state === "abstained") {
+      throw new Error(
+        `session event '${eventId}' is already terminal ('${event.state}') — ` +
+          `per-event outcomes are append-only and cannot be rewritten (got '${state}')`,
+      );
+    }
+    if (state === "pending" && event.state !== "processing") {
+      throw new Error(
+        `session event '${eventId}' cannot revert to 'pending' from '${event.state}'`,
+      );
+    }
+    if (state === "ready" && !outcome?.analysis) {
+      throw new Error(
+        `session event '${eventId}' cannot be marked 'ready' without an AnalysisRecord — ` +
+          `an unanalyzed event must stay pending/processing or abstain`,
+      );
+    }
     event.state = state;
     if (outcome?.analysis !== undefined) event.analysis = outcome.analysis;
     if (outcome?.abstainReason !== undefined) event.abstainReason = outcome.abstainReason;
     return event;
+  }
+
+  /** Read-only per-event state lookup (for callers that must not risk a
+   * terminal-overwrite throw before deciding whether to record an outcome). */
+  eventState(eventId: string): SessionEventState | null {
+    return this.events.find((entry) => entry.eventId === eventId)?.state ?? null;
   }
 
   private lastSampleMs(): number | null {

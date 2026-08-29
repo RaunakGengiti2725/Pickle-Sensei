@@ -6,6 +6,7 @@ import {
 } from '@pickle/shared-types';
 import type { ShotAnalysis } from '@pickle/shared-types';
 import type { StrokeResultEvidenceRecord } from '../components/strokeResultModel';
+import { stabilitySlo } from '../analysis/stabilityTelemetry';
 
 /**
  * TRY AGAIN loop (MOBBIN brief §2): from a Stroke Result, one tap re-arms
@@ -30,27 +31,65 @@ export interface TryAgainHandoff {
   auto: boolean;
 }
 
+/**
+ * A re-arm is the continuation of one tap, so it is only valid for as long as
+ * that navigation takes. An armed handoff whose navigation never landed (the
+ * app was backgrounded, the user went elsewhere) must expire instead of
+ * seeding a later, unrelated capture with a declaration the player never made
+ * for it.
+ */
+export const TRY_AGAIN_HANDOFF_TTL_MS = 30_000;
+
 let pendingHandoff: TryAgainHandoff | null = null;
+let pendingArmedAtMs = 0;
 
 export function armTryAgain(handoff: TryAgainHandoff): void {
   pendingHandoff = handoff;
+  pendingArmedAtMs = Date.now();
 }
 
-/** Single-shot: the first consumer takes it; later calls see null. */
+function expired(): boolean {
+  return Date.now() - pendingArmedAtMs > TRY_AGAIN_HANDOFF_TTL_MS;
+}
+
+/** Single-shot and time-bounded: the first prompt consumer takes it, a late
+ * one gets nothing. Either way the handoff is cleared. */
 export function consumeTryAgainHandoff(): TryAgainHandoff | null {
-  const handoff = pendingHandoff;
-  pendingHandoff = null;
+  const handoff = expired() ? null : pendingHandoff;
+  if (handoff !== null) {
+    stabilitySlo.record({ kind: 'try_again_rearmed' });
+  } else if (pendingHandoff !== null) {
+    // A handoff WAS armed but its navigation never landed inside the TTL:
+    // the re-arm the user asked for did not happen.
+    stabilitySlo.record({
+      kind: 'try_again_failed',
+      reason: 'handoff_expired',
+    });
+  }
+  clearTryAgainHandoff();
   return handoff;
+}
+
+/** Drops any armed handoff — used when capture starts from another entry
+ * point, so nothing stale can survive into the next re-arm window. */
+export function clearTryAgainHandoff(): void {
+  pendingHandoff = null;
+  pendingArmedAtMs = 0;
 }
 
 /** Test hook — inspect without consuming. */
 export function peekTryAgainHandoff(): TryAgainHandoff | null {
-  return pendingHandoff;
+  return expired() ? null : pendingHandoff;
 }
 
-const SELECTABLE_CANONICALS = new Set(
-  SELECTABLE_TECHNIQUES_V1.map(technique => technique.canonical),
-);
+/** True when the registry maps this canonical to this exact legacy slug —
+ * a canonical belonging to a different technique never seeds a re-arm. */
+function canonicalMatchesSlug(canonical: string, slug: ShotTypeSlug): boolean {
+  return SELECTABLE_TECHNIQUES_V1.some(
+    technique =>
+      technique.canonical === canonical && technique.legacySlug === slug,
+  );
+}
 
 /**
  * Derive the re-arm intent from what the ORIGINAL run actually recorded.
@@ -70,7 +109,7 @@ export function tryAgainFromResult(
       const canonical =
         intent.resolutionBasis === 'declared' &&
         intent.resolvedProfileId !== null &&
-        SELECTABLE_CANONICALS.has(intent.resolvedProfileId)
+        canonicalMatchesSlug(intent.resolvedProfileId, intent.declaredStroke)
           ? intent.resolvedProfileId
           : null;
       return {

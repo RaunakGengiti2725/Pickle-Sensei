@@ -1,0 +1,1300 @@
+{
+  "generatedAtIso": "2026-08-29T09:53:32.659Z",
+  "contract": {
+    "version": "silent-failure-v1.1",
+    "definition": "a user-visible confident material claim (target identity, event, stroke L1, contact marker, phase render) that gold says is wrong; abstentions are NOT silent failures",
+    "claims": {
+      "targetIdentity": "lock presented but strict TARGET criterion fails (coverage < 0.5); no lock = abstention",
+      "event": "event selected but strict EVENT criterion fails; no selection = abstention",
+      "strokeL1": "non-null label whose L1 side contradicts gold; null/missing label = abstention",
+      "contactMarker": "estimated with |err| > 132ms vs gold, OR 66 < |err| <= 132ms without ball/paddle confirmation; abstained = abstention",
+      "phaseRender": "segmented timeline with impossible boundary ordering (followThroughEnd <= contact); not segmented = abstention"
+    },
+    "aggregation": "trial is ANSWERED if >=1 claim answered and gold-verifiable; trial is a SILENT FAILURE if >=1 answered claim is wrong; report silent failures over ALL trials and over ANSWERED trials",
+    "disputedGold": "a claim whose gold value is under a filed dispute is excluded-and-disclosed (excluded_disputed_gold): counted neither correct nor silent failure, disclosed in the per-claim detail",
+    "nonFiniteGuard": "non-finite values (NaN/Infinity) in gold or estimates make the claim unverifiable-with-disclosure, never a confident verdict"
+  },
+  "provenance": "retrospective evaluation over committed datasets/cascade/cascade-*.json rows (macOS-produced); development split only; held-out rows excluded and never parsed; contact 66<err<=132ms is unverifiable_retro (rows lack ball/paddle confirmation); n=3 development cases — counts, not stable rates",
+  "runs": [
+    {
+      "file": "cascade-1787960997164.json",
+      "generatedAtIso": "2026-08-28T23:49:57.162Z",
+      "developmentTrials": 3,
+      "heldOutRowsExcluded": 2,
+      "answeredTrials": 3,
+      "silentFailureTrials": 2,
+      "perClaim": {
+        "TARGET_IDENTITY": {
+          "correct": 3,
+          "silent_failure": 0,
+          "abstained": 0,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "EVENT": {
+          "correct": 2,
+          "silent_failure": 1,
+          "abstained": 0,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "STROKE_L1": {
+          "correct": 1,
+          "silent_failure": 2,
+          "abstained": 0,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "CONTACT_MARKER": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "PHASE_RENDER": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        }
+      },
+      "trials": [
+        {
+          "caseId": "wm-volley-02",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 1.00 · conf 0.84"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 6600–6840 vs gold 6300–7100 (overlap 30%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "correct",
+              "detail": "error 66ms (est 6614 vs gold 6680)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "correct",
+              "detail": "predicted FOREHAND vs gold FOREHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "answered": true,
+          "silentFailure": true,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.88 · conf 0.55"
+            },
+            "EVENT": {
+              "status": "silent_failure",
+              "detail": "selected 1001–2169 vs gold 2600–3600 (overlap 0%)"
+            },
+            "CONTACT_MARKER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "PHASE_RENDER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "STROKE_L1": {
+              "status": "silent_failure",
+              "detail": "predicted FOREHAND vs gold BACKHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally2",
+          "answered": true,
+          "silentFailure": true,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.95 · conf 0.63"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 2604–3038 vs gold 2380–3050 (overlap 65%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "correct",
+              "detail": "error 62ms (est 2682 vs gold 2620)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "silent_failure",
+              "detail": "predicted BACKHAND vs gold OVERHEAD"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "file": "cascade-1787963165545.json",
+      "generatedAtIso": "2026-08-29T00:26:05.544Z",
+      "developmentTrials": 3,
+      "heldOutRowsExcluded": 2,
+      "answeredTrials": 3,
+      "silentFailureTrials": 1,
+      "perClaim": {
+        "TARGET_IDENTITY": {
+          "correct": 3,
+          "silent_failure": 0,
+          "abstained": 0,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "EVENT": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "STROKE_L1": {
+          "correct": 1,
+          "silent_failure": 1,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "CONTACT_MARKER": {
+          "correct": 1,
+          "silent_failure": 1,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "PHASE_RENDER": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        }
+      },
+      "trials": [
+        {
+          "caseId": "wm-volley-02",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 1.00 · conf 0.95"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 5600–6840 vs gold 6300–7100 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "correct",
+              "detail": "error 43ms (est 6637 vs gold 6680)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "correct",
+              "detail": "predicted FOREHAND vs gold FOREHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.88 · conf 0.55"
+            },
+            "EVENT": {
+              "status": "abstained",
+              "detail": "targetEvent status ambiguous"
+            },
+            "CONTACT_MARKER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "PHASE_RENDER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "STROKE_L1": {
+              "status": "abstained",
+              "detail": "predicted none vs gold BACKHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally2",
+          "answered": true,
+          "silentFailure": true,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.95 · conf 0.55"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 2236–2836 vs gold 2380–3050 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "silent_failure",
+              "detail": "error 274ms (est 2346 vs gold 2620)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "silent_failure",
+              "detail": "predicted BACKHAND vs gold OVERHEAD"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "file": "cascade-1787963173891.json",
+      "generatedAtIso": "2026-08-29T00:26:13.890Z",
+      "developmentTrials": 3,
+      "heldOutRowsExcluded": 2,
+      "answeredTrials": 3,
+      "silentFailureTrials": 1,
+      "perClaim": {
+        "TARGET_IDENTITY": {
+          "correct": 3,
+          "silent_failure": 0,
+          "abstained": 0,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "EVENT": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "STROKE_L1": {
+          "correct": 1,
+          "silent_failure": 1,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "CONTACT_MARKER": {
+          "correct": 1,
+          "silent_failure": 1,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "PHASE_RENDER": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        }
+      },
+      "trials": [
+        {
+          "caseId": "wm-volley-02",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 1.00 · conf 0.95"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 5600–6840 vs gold 6300–7100 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "correct",
+              "detail": "error 43ms (est 6637 vs gold 6680)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "correct",
+              "detail": "predicted FOREHAND vs gold FOREHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.88 · conf 0.55"
+            },
+            "EVENT": {
+              "status": "abstained",
+              "detail": "targetEvent status ambiguous"
+            },
+            "CONTACT_MARKER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "PHASE_RENDER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "STROKE_L1": {
+              "status": "abstained",
+              "detail": "predicted none vs gold BACKHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally2",
+          "answered": true,
+          "silentFailure": true,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.95 · conf 0.55"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 2236–2836 vs gold 2380–3050 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "silent_failure",
+              "detail": "error 274ms (est 2346 vs gold 2620)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "silent_failure",
+              "detail": "predicted BACKHAND vs gold OVERHEAD"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "file": "cascade-1787965901691.json",
+      "generatedAtIso": "2026-08-29T01:11:41.682Z",
+      "developmentTrials": 3,
+      "heldOutRowsExcluded": 2,
+      "answeredTrials": 3,
+      "silentFailureTrials": 1,
+      "perClaim": {
+        "TARGET_IDENTITY": {
+          "correct": 3,
+          "silent_failure": 0,
+          "abstained": 0,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "EVENT": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "STROKE_L1": {
+          "correct": 1,
+          "silent_failure": 1,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "CONTACT_MARKER": {
+          "correct": 1,
+          "silent_failure": 1,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "PHASE_RENDER": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        }
+      },
+      "trials": [
+        {
+          "caseId": "wm-volley-02",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 1.00 · conf 0.95"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 5600–6840 vs gold 6300–7100 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "correct",
+              "detail": "error 43ms (est 6637 vs gold 6680)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "correct",
+              "detail": "predicted FOREHAND vs gold FOREHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.88 · conf 0.55"
+            },
+            "EVENT": {
+              "status": "abstained",
+              "detail": "targetEvent status ambiguous"
+            },
+            "CONTACT_MARKER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "PHASE_RENDER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "STROKE_L1": {
+              "status": "abstained",
+              "detail": "predicted none vs gold BACKHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally2",
+          "answered": true,
+          "silentFailure": true,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.95 · conf 0.55"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 2236–2836 vs gold 2380–3050 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "silent_failure",
+              "detail": "error 274ms (est 2346 vs gold 2620)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "silent_failure",
+              "detail": "predicted BACKHAND vs gold OVERHEAD"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "file": "cascade-1787966875746.json",
+      "generatedAtIso": "2026-08-29T01:27:55.745Z",
+      "developmentTrials": 3,
+      "heldOutRowsExcluded": 2,
+      "answeredTrials": 3,
+      "silentFailureTrials": 1,
+      "perClaim": {
+        "TARGET_IDENTITY": {
+          "correct": 3,
+          "silent_failure": 0,
+          "abstained": 0,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "EVENT": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "STROKE_L1": {
+          "correct": 1,
+          "silent_failure": 1,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "CONTACT_MARKER": {
+          "correct": 1,
+          "silent_failure": 1,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "PHASE_RENDER": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        }
+      },
+      "trials": [
+        {
+          "caseId": "wm-volley-02",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 1.00 · conf 0.95"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 5600–6840 vs gold 6300–7100 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "correct",
+              "detail": "error 43ms (est 6637 vs gold 6680)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "correct",
+              "detail": "predicted FOREHAND vs gold FOREHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.88 · conf 0.55"
+            },
+            "EVENT": {
+              "status": "abstained",
+              "detail": "targetEvent status ambiguous"
+            },
+            "CONTACT_MARKER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "PHASE_RENDER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "STROKE_L1": {
+              "status": "abstained",
+              "detail": "predicted none vs gold BACKHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally2",
+          "answered": true,
+          "silentFailure": true,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.95 · conf 0.97"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 2236–2836 vs gold 2380–3050 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "silent_failure",
+              "detail": "error 274ms (est 2346 vs gold 2620)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "silent_failure",
+              "detail": "predicted BACKHAND vs gold OVERHEAD"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "file": "cascade-1787967090683.json",
+      "generatedAtIso": "2026-08-29T01:31:30.682Z",
+      "developmentTrials": 3,
+      "heldOutRowsExcluded": 2,
+      "answeredTrials": 3,
+      "silentFailureTrials": 1,
+      "perClaim": {
+        "TARGET_IDENTITY": {
+          "correct": 3,
+          "silent_failure": 0,
+          "abstained": 0,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "EVENT": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "STROKE_L1": {
+          "correct": 1,
+          "silent_failure": 1,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "CONTACT_MARKER": {
+          "correct": 1,
+          "silent_failure": 1,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "PHASE_RENDER": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        }
+      },
+      "trials": [
+        {
+          "caseId": "wm-volley-02",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 1.00 · conf 0.95"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 5600–6840 vs gold 6300–7100 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "correct",
+              "detail": "error 43ms (est 6637 vs gold 6680)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "correct",
+              "detail": "predicted FOREHAND vs gold FOREHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.88 · conf 0.55"
+            },
+            "EVENT": {
+              "status": "abstained",
+              "detail": "targetEvent status ambiguous"
+            },
+            "CONTACT_MARKER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "PHASE_RENDER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "STROKE_L1": {
+              "status": "abstained",
+              "detail": "predicted none vs gold BACKHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally2",
+          "answered": true,
+          "silentFailure": true,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.95 · conf 0.97"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 2236–2836 vs gold 2380–3050 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "silent_failure",
+              "detail": "error 274ms (est 2346 vs gold 2620)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "silent_failure",
+              "detail": "predicted BACKHAND vs gold OVERHEAD"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "file": "cascade-1787968886850.json",
+      "generatedAtIso": "2026-08-29T02:01:26.850Z",
+      "developmentTrials": 3,
+      "heldOutRowsExcluded": 2,
+      "answeredTrials": 3,
+      "silentFailureTrials": 1,
+      "perClaim": {
+        "TARGET_IDENTITY": {
+          "correct": 3,
+          "silent_failure": 0,
+          "abstained": 0,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "EVENT": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "STROKE_L1": {
+          "correct": 1,
+          "silent_failure": 1,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "CONTACT_MARKER": {
+          "correct": 1,
+          "silent_failure": 1,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "PHASE_RENDER": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        }
+      },
+      "trials": [
+        {
+          "caseId": "wm-volley-02",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 1.00 · conf 0.95"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 5600–6840 vs gold 6300–7100 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "correct",
+              "detail": "error 43ms (est 6637 vs gold 6680)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "correct",
+              "detail": "predicted FOREHAND vs gold FOREHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.88 · conf 0.55"
+            },
+            "EVENT": {
+              "status": "abstained",
+              "detail": "targetEvent status ambiguous"
+            },
+            "CONTACT_MARKER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "PHASE_RENDER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "STROKE_L1": {
+              "status": "abstained",
+              "detail": "predicted none vs gold BACKHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally2",
+          "answered": true,
+          "silentFailure": true,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.95 · conf 0.97"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 2236–2836 vs gold 2380–3050 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "silent_failure",
+              "detail": "error 274ms (est 2346 vs gold 2620)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "silent_failure",
+              "detail": "predicted BACKHAND vs gold OVERHEAD"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "file": "cascade-1787971517129.json",
+      "generatedAtIso": "2026-08-29T02:45:17.128Z",
+      "developmentTrials": 3,
+      "heldOutRowsExcluded": 2,
+      "answeredTrials": 3,
+      "silentFailureTrials": 0,
+      "perClaim": {
+        "TARGET_IDENTITY": {
+          "correct": 3,
+          "silent_failure": 0,
+          "abstained": 0,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "EVENT": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "STROKE_L1": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "CONTACT_MARKER": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "PHASE_RENDER": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        }
+      },
+      "trials": [
+        {
+          "caseId": "wm-volley-02",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 1.00 · conf 0.97"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 5600–6840 vs gold 6300–7100 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "correct",
+              "detail": "error 30ms (est 6650 vs gold 6680)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "correct",
+              "detail": "predicted FOREHAND vs gold FOREHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.88 · conf 0.97"
+            },
+            "EVENT": {
+              "status": "abstained",
+              "detail": "targetEvent status ambiguous"
+            },
+            "CONTACT_MARKER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "PHASE_RENDER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "STROKE_L1": {
+              "status": "abstained",
+              "detail": "predicted none vs gold BACKHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally2",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.95 · conf 0.97"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 2236–2836 vs gold 2380–3050 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "correct",
+              "detail": "error 30ms (est 2650 vs gold 2620)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "correct",
+              "detail": "predicted OVERHEAD vs gold OVERHEAD"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "file": "cascade-1787971618835.json",
+      "generatedAtIso": "2026-08-29T02:46:58.834Z",
+      "developmentTrials": 3,
+      "heldOutRowsExcluded": 2,
+      "answeredTrials": 3,
+      "silentFailureTrials": 0,
+      "perClaim": {
+        "TARGET_IDENTITY": {
+          "correct": 3,
+          "silent_failure": 0,
+          "abstained": 0,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "EVENT": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "STROKE_L1": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "CONTACT_MARKER": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "PHASE_RENDER": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        }
+      },
+      "trials": [
+        {
+          "caseId": "wm-volley-02",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 1.00 · conf 0.97"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 5600–6840 vs gold 6300–7100 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "correct",
+              "detail": "error 30ms (est 6650 vs gold 6680)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "correct",
+              "detail": "predicted FOREHAND vs gold FOREHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.88 · conf 0.97"
+            },
+            "EVENT": {
+              "status": "abstained",
+              "detail": "targetEvent status ambiguous"
+            },
+            "CONTACT_MARKER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "PHASE_RENDER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "STROKE_L1": {
+              "status": "abstained",
+              "detail": "predicted none vs gold BACKHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally2",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.95 · conf 0.97"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 2236–2836 vs gold 2380–3050 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "correct",
+              "detail": "error 30ms (est 2650 vs gold 2620)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "correct",
+              "detail": "predicted OVERHEAD vs gold OVERHEAD"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "file": "cascade-1787971753680.json",
+      "generatedAtIso": "2026-08-29T02:49:13.679Z",
+      "developmentTrials": 3,
+      "heldOutRowsExcluded": 2,
+      "answeredTrials": 3,
+      "silentFailureTrials": 0,
+      "perClaim": {
+        "TARGET_IDENTITY": {
+          "correct": 3,
+          "silent_failure": 0,
+          "abstained": 0,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "EVENT": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "STROKE_L1": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "CONTACT_MARKER": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        },
+        "PHASE_RENDER": {
+          "correct": 2,
+          "silent_failure": 0,
+          "abstained": 1,
+          "unverifiable_retro": 0,
+          "not_recorded": 0
+        }
+      },
+      "trials": [
+        {
+          "caseId": "wm-volley-02",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 1.00 · conf 0.97"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 5600–6840 vs gold 6300–7100 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "correct",
+              "detail": "error 30ms (est 6650 vs gold 6680)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "correct",
+              "detail": "predicted FOREHAND vs gold FOREHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.88 · conf 0.97"
+            },
+            "EVENT": {
+              "status": "abstained",
+              "detail": "targetEvent status ambiguous"
+            },
+            "CONTACT_MARKER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "PHASE_RENDER": {
+              "status": "abstained",
+              "detail": "status abstained"
+            },
+            "STROKE_L1": {
+              "status": "abstained",
+              "detail": "predicted none vs gold BACKHAND_VOLLEY"
+            }
+          }
+        },
+        {
+          "caseId": "afn-sasebo-rally2",
+          "answered": true,
+          "silentFailure": false,
+          "claims": {
+            "TARGET_IDENTITY": {
+              "status": "correct",
+              "detail": "policy user_tapped_person · coverage 0.95 · conf 0.97"
+            },
+            "EVENT": {
+              "status": "correct",
+              "detail": "selected 2236–2836 vs gold 2380–3050 (overlap 68%, contact inside)"
+            },
+            "CONTACT_MARKER": {
+              "status": "correct",
+              "detail": "error 30ms (est 2650 vs gold 2620)"
+            },
+            "PHASE_RENDER": {
+              "status": "correct",
+              "detail": "segmented, ordering valid"
+            },
+            "STROKE_L1": {
+              "status": "correct",
+              "detail": "predicted OVERHEAD vs gold OVERHEAD"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

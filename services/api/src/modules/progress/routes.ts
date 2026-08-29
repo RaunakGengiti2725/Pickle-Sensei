@@ -69,7 +69,14 @@ export function registerProgressRoutes(app: FastifyInstance, context: AppContext
       localToday?.today ?? new Date().toISOString().slice(0, 10),
     );
 
-    const series = await many(
+    const series = await many<{
+      day: string;
+      shot_type: string;
+      scoring_model_version: string;
+      shot_count: number;
+      avg_score: string;
+      best_score: string;
+    }>(
       context.pool!,
       `WITH user_zone AS (
          SELECT timezone FROM app_user WHERE id = $1
@@ -95,6 +102,48 @@ export function registerProgressRoutes(app: FastifyInstance, context: AppContext
        ORDER BY day ASC`,
       [userId, q.from ?? null, q.to ?? null, q.shotType ?? null],
     );
+
+    // Version boundaries are rendered, never hidden: a progress line may only
+    // continue across versions with an explicit calibration declaration.
+    const comparabilityRows = await many<{
+      slug: string;
+      from_version: string;
+      to_version: string;
+    }>(
+      context.pool!,
+      `SELECT st.slug, c.from_version, c.to_version
+       FROM scoring_version_comparability c JOIN shot_type st ON st.id = c.shot_type_id`,
+      [],
+    );
+    const comparablePairs = new Set(
+      comparabilityRows.flatMap((r) => [
+        `${r.slug}:${r.from_version}:${r.to_version}`,
+        `${r.slug}:${r.to_version}:${r.from_version}`,
+      ]),
+    );
+    const versionTransitions: Array<{
+      shotType: string;
+      day: string;
+      fromVersion: string;
+      toVersion: string;
+      comparable: boolean;
+    }> = [];
+    const lastVersionByType = new Map<string, string>();
+    for (const point of series) {
+      const previous = lastVersionByType.get(point.shot_type);
+      if (previous !== undefined && previous !== point.scoring_model_version) {
+        versionTransitions.push({
+          shotType: point.shot_type,
+          day: point.day,
+          fromVersion: previous,
+          toVersion: point.scoring_model_version,
+          comparable: comparablePairs.has(
+            `${point.shot_type}:${previous}:${point.scoring_model_version}`,
+          ),
+        });
+      }
+      lastVersionByType.set(point.shot_type, point.scoring_model_version);
+    }
 
     // Improving / needs-attention: per-checkpoint first-half vs second-half of
     // the last 30 days, within a single scoring model version.
@@ -137,7 +186,7 @@ export function registerProgressRoutes(app: FastifyInstance, context: AppContext
           needsAttention.push({ checkpoint: t.slug, avg: Math.round(second * 10) / 10 });
       }
     }
-    return { series, improving, needsAttention, streak };
+    return { series, versionTransitions, improving, needsAttention, streak };
   });
 
   app.get(

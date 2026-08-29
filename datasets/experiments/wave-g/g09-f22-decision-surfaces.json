@@ -1,0 +1,4759 @@
+{
+  "workstream": "g09-f22-surfaces",
+  "experiment": "Property/counterfactual sweep of the capture-envelope decision surfaces: analytic evaluator trajectories + 3^9 severity lattice + parameterized ffmpeg degradation sweeps through the real measurement pipeline",
+  "generatedBy": "packages/capture-envelope/src/sweepSurfacesG09.ts",
+  "date": "2026-08-29T17:39:25.369Z",
+  "commit": "104ea0f6383f5573ddc9393401700c7ecc163436",
+  "thresholdsVersion": "capture-envelope-thresholds-v0.3-provisional",
+  "method": {
+    "tooling": "ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers",
+    "bases": "1 synthetic scene (frozen testsrc2 background + moving textured player patches) + 2 committed non-held-out real corpus clips (wm-volley-02, afn-sasebo-rally1), each re-encoded once (libx264 crf18) as shared control",
+    "holdout": "wm-dink-01 and afn-vic-rally1 never opened, read, or referenced by any sweep",
+    "monotonicityRule": "along each axis every step is strictly-worse capture than the previous; any measured dimension or overall verdict IMPROVEMENT between adjacent steps is a violation",
+    "noTuning": "no thresholds changed; this maps the surface without moving it"
+  },
+  "analytic": [
+    {
+      "dimension": "resolution",
+      "direction": "shrinking short side",
+      "statuses": [
+        "SUPPORTED",
+        "SUPPORTED",
+        "DEGRADED",
+        "DEGRADED",
+        "UNSUPPORTED",
+        "UNSUPPORTED",
+        "UNSUPPORTED"
+      ],
+      "comparisons": 6,
+      "violations": []
+    },
+    {
+      "dimension": "frame_rate",
+      "direction": "dropping fps",
+      "statuses": [
+        "SUPPORTED",
+        "SUPPORTED",
+        "SUPPORTED",
+        "DEGRADED",
+        "DEGRADED",
+        "UNSUPPORTED",
+        "UNSUPPORTED",
+        "UNSUPPORTED"
+      ],
+      "comparisons": 7,
+      "violations": []
+    },
+    {
+      "dimension": "brightness",
+      "direction": "darkening",
+      "statuses": [
+        "SUPPORTED",
+        "SUPPORTED",
+        "DEGRADED",
+        "DEGRADED",
+        "UNSUPPORTED",
+        "UNSUPPORTED",
+        "UNSUPPORTED"
+      ],
+      "comparisons": 6,
+      "violations": []
+    },
+    {
+      "dimension": "brightness",
+      "direction": "blowing out",
+      "statuses": [
+        "SUPPORTED",
+        "SUPPORTED",
+        "DEGRADED",
+        "DEGRADED",
+        "UNSUPPORTED",
+        "UNSUPPORTED",
+        "UNSUPPORTED"
+      ],
+      "comparisons": 6,
+      "violations": []
+    },
+    {
+      "dimension": "motion_blur",
+      "direction": "increasing blur (falling laplacian variance)",
+      "statuses": [
+        "SUPPORTED",
+        "SUPPORTED",
+        "DEGRADED",
+        "DEGRADED",
+        "UNSUPPORTED",
+        "UNSUPPORTED",
+        "UNSUPPORTED"
+      ],
+      "comparisons": 6,
+      "violations": []
+    },
+    {
+      "dimension": "camera_motion",
+      "direction": "increasing global motion",
+      "statuses": [
+        "SUPPORTED",
+        "SUPPORTED",
+        "DEGRADED",
+        "DEGRADED",
+        "UNSUPPORTED",
+        "UNSUPPORTED",
+        "UNSUPPORTED"
+      ],
+      "comparisons": 6,
+      "violations": []
+    },
+    {
+      "dimension": "timing_stability",
+      "direction": "increasing interval jitter",
+      "statuses": [
+        "SUPPORTED",
+        "SUPPORTED",
+        "DEGRADED",
+        "DEGRADED",
+        "UNSUPPORTED",
+        "UNSUPPORTED",
+        "UNSUPPORTED"
+      ],
+      "comparisons": 6,
+      "violations": []
+    },
+    {
+      "dimension": "clip_duration",
+      "direction": "shortening clip",
+      "statuses": [
+        "SUPPORTED",
+        "SUPPORTED",
+        "DEGRADED",
+        "DEGRADED",
+        "UNSUPPORTED",
+        "UNSUPPORTED"
+      ],
+      "comparisons": 5,
+      "violations": []
+    },
+    {
+      "dimension": "clip_duration",
+      "direction": "overlong clip",
+      "statuses": [
+        "SUPPORTED",
+        "SUPPORTED",
+        "DEGRADED",
+        "DEGRADED",
+        "UNSUPPORTED",
+        "UNSUPPORTED"
+      ],
+      "comparisons": 5,
+      "violations": []
+    },
+    {
+      "dimension": "player_pixel_height",
+      "direction": "shrinking player",
+      "statuses": [
+        "SUPPORTED",
+        "SUPPORTED",
+        "DEGRADED",
+        "DEGRADED",
+        "UNSUPPORTED",
+        "UNSUPPORTED",
+        "UNSUPPORTED"
+      ],
+      "comparisons": 6,
+      "violations": []
+    },
+    {
+      "dimension": "player_visibility",
+      "direction": "losing joint visibility",
+      "statuses": [
+        "SUPPORTED",
+        "SUPPORTED",
+        "DEGRADED",
+        "DEGRADED",
+        "UNSUPPORTED",
+        "UNSUPPORTED",
+        "UNSUPPORTED"
+      ],
+      "comparisons": 6,
+      "violations": []
+    }
+  ],
+  "lattice": {
+    "vectors": 19683,
+    "successorComparisons": 118098,
+    "overallMonotonicityViolations": 0,
+    "overallEqualsMaxSeverityViolations": 0,
+    "notMeasuredUpgradeCount": 198,
+    "notMeasuredUpgradeChecked": 198
+  },
+  "videoRows": [
+    {
+      "base": "synthetic-scene",
+      "axis": "brightness-darken",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.86278862847222,
+        "laplacianVarianceMedian": 467.2074079827901,
+        "meanAbsFrameDiff": 2.960334490740741,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "brightness-darken",
+      "param": -0.1,
+      "label": "eq=-0.1",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 94.74376085069446,
+        "laplacianVarianceMedian": 463.59360899884746,
+        "meanAbsFrameDiff": 2.886491898148148,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "brightness-darken",
+      "param": -0.2,
+      "label": "eq=-0.2",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 69.55324761284723,
+        "laplacianVarianceMedian": 377.7269952752274,
+        "meanAbsFrameDiff": 2.5963217592592587,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "brightness-darken",
+      "param": -0.3,
+      "label": "eq=-0.3",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 48.05865234374998,
+        "laplacianVarianceMedian": 286.0030033013451,
+        "meanAbsFrameDiff": 2.087334490740741,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "DEGRADED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "brightness-darken",
+      "param": -0.45,
+      "label": "eq=-0.45",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 24.778325737847222,
+        "laplacianVarianceMedian": 130.09469201043296,
+        "meanAbsFrameDiff": 1.1899444444444442,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "UNSUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "brightness-blowout",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.86278862847222,
+        "laplacianVarianceMedian": 467.2074079827901,
+        "meanAbsFrameDiff": 2.960334490740741,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "brightness-blowout",
+      "param": 0.1,
+      "label": "eq=+0.1",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 156.8267491319444,
+        "laplacianVarianceMedian": 464.33832065295957,
+        "meanAbsFrameDiff": 2.8850358796296303,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "brightness-blowout",
+      "param": 0.2,
+      "label": "eq=+0.2",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 181.22237196180555,
+        "laplacianVarianceMedian": 418.19727694091716,
+        "meanAbsFrameDiff": 2.680011574074074,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "brightness-blowout",
+      "param": 0.3,
+      "label": "eq=+0.3",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 204.36828667534726,
+        "laplacianVarianceMedian": 332.6182586642937,
+        "meanAbsFrameDiff": 2.363123842592593,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "DEGRADED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "brightness-blowout",
+      "param": 0.45,
+      "label": "eq=+0.45",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 227.4751443142361,
+        "laplacianVarianceMedian": 192.29421320860286,
+        "meanAbsFrameDiff": 1.5884814814814816,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "UNSUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "blur-sigma",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.86278862847222,
+        "laplacianVarianceMedian": 467.2074079827901,
+        "meanAbsFrameDiff": 2.960334490740741,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "blur-sigma",
+      "param": 0.5,
+      "label": "gblur@320w=0.5",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.6697048611111,
+        "laplacianVarianceMedian": 212.99152940810208,
+        "meanAbsFrameDiff": 2.821449074074074,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "blur-sigma",
+      "param": 1,
+      "label": "gblur@320w=1",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 126.94388237847221,
+        "laplacianVarianceMedian": 76.57573369956208,
+        "meanAbsFrameDiff": 2.633298611111111,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "DEGRADED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "blur-sigma",
+      "param": 2,
+      "label": "gblur@320w=2",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.44901150173612,
+        "laplacianVarianceMedian": 16.95736608408123,
+        "meanAbsFrameDiff": 2.1984247685185188,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "UNSUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "blur-sigma",
+      "param": 4,
+      "label": "gblur@320w=4",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.2454058159722,
+        "laplacianVarianceMedian": 3.401762163706651,
+        "meanAbsFrameDiff": 1.6509074074074073,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "UNSUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "blur-sigma",
+      "param": 8,
+      "label": "gblur@320w=8",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.2278884548611,
+        "laplacianVarianceMedian": 1.5858845158564434,
+        "meanAbsFrameDiff": 1.1517268518518518,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "UNSUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "resolution",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.86278862847222,
+        "laplacianVarianceMedian": 467.2074079827901,
+        "meanAbsFrameDiff": 2.960334490740741,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "resolution",
+      "param": 720,
+      "label": "short=720",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.86058159722222,
+        "laplacianVarianceMedian": 467.69336219253125,
+        "meanAbsFrameDiff": 2.9599340277777775,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "resolution",
+      "param": 640,
+      "label": "short=640",
+      "measured": {
+        "shortSidePx": 640,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.85369357638889,
+        "laplacianVarianceMedian": 468.9031189480735,
+        "meanAbsFrameDiff": 2.9612326388888888,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "DEGRADED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "resolution",
+      "param": 480,
+      "label": "short=480",
+      "measured": {
+        "shortSidePx": 480,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.88784939236112,
+        "laplacianVarianceMedian": 465.55435874105444,
+        "meanAbsFrameDiff": 2.958307870370371,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "DEGRADED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "resolution",
+      "param": 360,
+      "label": "short=360",
+      "measured": {
+        "shortSidePx": 360,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.84978515625001,
+        "laplacianVarianceMedian": 455.5984798866672,
+        "meanAbsFrameDiff": 2.956695601851852,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "UNSUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "resolution",
+      "param": 240,
+      "label": "short=240",
+      "measured": {
+        "shortSidePx": 240,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.88592339409723,
+        "laplacianVarianceMedian": 408.46763680236165,
+        "meanAbsFrameDiff": 2.948482638888889,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "UNSUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "fps",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.86278862847222,
+        "laplacianVarianceMedian": 467.2074079827901,
+        "meanAbsFrameDiff": 2.960334490740741,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "fps",
+      "param": 24,
+      "label": "fps=24",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 24,
+        "brightnessMeanLuma": 127.88129774305555,
+        "laplacianVarianceMedian": 469.07312390694256,
+        "meanAbsFrameDiff": 2.806666666666666,
+        "frameIntervalCv": 0.000011343130714706958,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "fps",
+      "param": 20,
+      "label": "fps=20",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 20,
+        "brightnessMeanLuma": 127.86396050347223,
+        "laplacianVarianceMedian": 464.9878472480492,
+        "meanAbsFrameDiff": 2.9587118055555552,
+        "frameIntervalCv": 3.2230916597056955e-15,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "DEGRADED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "fps",
+      "param": 15,
+      "label": "fps=15",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 15,
+        "brightnessMeanLuma": 127.88423936631945,
+        "laplacianVarianceMedian": 466.48474073893965,
+        "meanAbsFrameDiff": 2.723422453703704,
+        "frameIntervalCv": 0.000007100461640791557,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "DEGRADED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "fps",
+      "param": 12,
+      "label": "fps=12",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 12,
+        "brightnessMeanLuma": 127.86694661458333,
+        "laplacianVarianceMedian": 466.4786967827784,
+        "meanAbsFrameDiff": 2.959511574074074,
+        "frameIntervalCv": 0.000005686226949186092,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "UNSUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "fps",
+      "param": 10,
+      "label": "fps=10",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 10,
+        "brightnessMeanLuma": 127.88664822048612,
+        "laplacianVarianceMedian": 462.9500414270502,
+        "meanAbsFrameDiff": 2.886052083333333,
+        "frameIntervalCv": 1.3911551602944003e-15,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "UNSUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "fps",
+      "param": 8,
+      "label": "fps=8",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 8,
+        "brightnessMeanLuma": 127.90203125000002,
+        "laplacianVarianceMedian": 465.8270823280627,
+        "meanAbsFrameDiff": 2.6743067129629625,
+        "frameIntervalCv": 0,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "UNSUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "camera-tilt",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.86278862847222,
+        "laplacianVarianceMedian": 467.2074079827901,
+        "meanAbsFrameDiff": 2.960334490740741,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "camera-tilt",
+      "param": 2,
+      "label": "tilt=2deg",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 125.69298394097223,
+        "laplacianVarianceMedian": 525.5881271818233,
+        "meanAbsFrameDiff": 2.9535868055555556,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "camera-tilt",
+      "param": 5,
+      "label": "tilt=5deg",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 122.26956163194444,
+        "laplacianVarianceMedian": 556.2183477642494,
+        "meanAbsFrameDiff": 2.957603009259259,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "camera-tilt",
+      "param": 10,
+      "label": "tilt=10deg",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 116.90987413194443,
+        "laplacianVarianceMedian": 574.9364566087304,
+        "meanAbsFrameDiff": 2.9549375000000007,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "camera-tilt",
+      "param": 20,
+      "label": "tilt=20deg",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 108.37240342881944,
+        "laplacianVarianceMedian": 662.7031761804288,
+        "meanAbsFrameDiff": 2.928038194444444,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "camera-tilt",
+      "param": 45,
+      "label": "tilt=45deg",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 93.55110894097224,
+        "laplacianVarianceMedian": 785.0374269844992,
+        "meanAbsFrameDiff": 1.4119259259259258,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "crop",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.86278862847222,
+        "laplacianVarianceMedian": 467.2074079827901,
+        "meanAbsFrameDiff": 2.960334490740741,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "crop",
+      "param": 0.9,
+      "label": "keep=0.9",
+      "measured": {
+        "shortSidePx": 648,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 128.38886067708336,
+        "laplacianVarianceMedian": 477.75394555444245,
+        "meanAbsFrameDiff": 3.6688969907407407,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "DEGRADED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "crop",
+      "param": 0.75,
+      "label": "keep=0.75",
+      "measured": {
+        "shortSidePx": 540,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 128.27669813368055,
+        "laplacianVarianceMedian": 489.84700665192344,
+        "meanAbsFrameDiff": 4.025945601851852,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "DEGRADED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "crop",
+      "param": 0.5,
+      "label": "keep=0.5",
+      "measured": {
+        "shortSidePx": 360,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 129.19526475694448,
+        "laplacianVarianceMedian": 356.58006534609314,
+        "meanAbsFrameDiff": 0.4399085648148148,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "UNSUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "crop",
+      "param": 0.35,
+      "label": "keep=0.35",
+      "measured": {
+        "shortSidePx": 250,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.77882724719099,
+        "laplacianVarianceMedian": 298.0933491845944,
+        "meanAbsFrameDiff": 0,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "UNSUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "occlusion",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.86278862847222,
+        "laplacianVarianceMedian": 467.2074079827901,
+        "meanAbsFrameDiff": 2.960334490740741,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "occlusion",
+      "param": 0.1,
+      "label": "occlude=0.1",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 115.19372395833332,
+        "laplacianVarianceMedian": 513.0326315021207,
+        "meanAbsFrameDiff": 2.9599340277777775,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "occlusion",
+      "param": 0.25,
+      "label": "occlude=0.25",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 95.81751953124999,
+        "laplacianVarianceMedian": 547.9254835973791,
+        "meanAbsFrameDiff": 2.854560185185185,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "occlusion",
+      "param": 0.5,
+      "label": "occlude=0.5",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 64.32631184895834,
+        "laplacianVarianceMedian": 348.4601809345572,
+        "meanAbsFrameDiff": 0.9848969907407406,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "occlusion",
+      "param": 0.75,
+      "label": "occlude=0.75",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 32.15402452256945,
+        "laplacianVarianceMedian": 399.5952773941713,
+        "meanAbsFrameDiff": 0.000982638888888889,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "UNSUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "brightness-darken",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 105.1954189057984,
+        "laplacianVarianceMedian": 1941.9146498438008,
+        "meanAbsFrameDiff": 7.776589595375721,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "brightness-darken",
+      "param": -0.1,
+      "label": "eq=-0.1",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 72.62032943460983,
+        "laplacianVarianceMedian": 1860.7878015842584,
+        "meanAbsFrameDiff": 7.247389812138729,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "brightness-darken",
+      "param": -0.2,
+      "label": "eq=-0.2",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 47.83344811235549,
+        "laplacianVarianceMedian": 1596.4511946004006,
+        "meanAbsFrameDiff": 5.9349373018832745,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "DEGRADED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "brightness-darken",
+      "param": -0.3,
+      "label": "eq=-0.3",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 29.12595257180275,
+        "laplacianVarianceMedian": 1181.876476409108,
+        "meanAbsFrameDiff": 4.3314358801044195,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "UNSUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "brightness-darken",
+      "param": -0.45,
+      "label": "eq=-0.45",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 9.97111604723627,
+        "laplacianVarianceMedian": 557.6518559920498,
+        "meanAbsFrameDiff": 2.03696391944807,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "UNSUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "brightness-blowout",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 105.1954189057984,
+        "laplacianVarianceMedian": 1941.9146498438008,
+        "meanAbsFrameDiff": 7.776589595375721,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "brightness-blowout",
+      "param": 0.1,
+      "label": "eq=+0.1",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 133.11219715272762,
+        "laplacianVarianceMedian": 1802.999883800338,
+        "meanAbsFrameDiff": 7.500122948909191,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "brightness-blowout",
+      "param": 0.2,
+      "label": "eq=+0.2",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 160.30023510883308,
+        "laplacianVarianceMedian": 1642.2945542679563,
+        "meanAbsFrameDiff": 7.137742984337127,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "brightness-blowout",
+      "param": 0.3,
+      "label": "eq=+0.3",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 188.09362496613082,
+        "laplacianVarianceMedian": 1427.478893219375,
+        "meanAbsFrameDiff": 6.612784064422899,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "brightness-blowout",
+      "param": 0.45,
+      "label": "eq=+0.45",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 221.0890317354588,
+        "laplacianVarianceMedian": 940.8298205825895,
+        "meanAbsFrameDiff": 5.151537152713034,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "UNSUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "blur-sigma",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 105.1954189057984,
+        "laplacianVarianceMedian": 1941.9146498438008,
+        "meanAbsFrameDiff": 7.776589595375721,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "blur-sigma",
+      "param": 0.5,
+      "label": "gblur@320w=0.5",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 104.73555449557442,
+        "laplacianVarianceMedian": 808.030177625045,
+        "meanAbsFrameDiff": 7.151084106377027,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "blur-sigma",
+      "param": 1,
+      "label": "gblur@320w=1",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 104.74014744400291,
+        "laplacianVarianceMedian": 243.56590342203378,
+        "meanAbsFrameDiff": 6.509116574212194,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "blur-sigma",
+      "param": 2,
+      "label": "gblur@320w=2",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 104.73322993813223,
+        "laplacianVarianceMedian": 43.80104928439655,
+        "meanAbsFrameDiff": 5.651543562371806,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "DEGRADED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "blur-sigma",
+      "param": 4,
+      "label": "gblur@320w=4",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 104.73948022037574,
+        "laplacianVarianceMedian": 7.597909672070674,
+        "meanAbsFrameDiff": 4.583551941543912,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "UNSUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "blur-sigma",
+      "param": 8,
+      "label": "gblur@320w=8",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 104.82384393063582,
+        "laplacianVarianceMedian": 2.825100111747073,
+        "meanAbsFrameDiff": 3.345489056964386,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "UNSUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "resolution",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 105.1954189057984,
+        "laplacianVarianceMedian": 1941.9146498438008,
+        "meanAbsFrameDiff": 7.776589595375721,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "resolution",
+      "param": 720,
+      "label": "short=720",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 105.29221092621026,
+        "laplacianVarianceMedian": 1890.3447483653126,
+        "meanAbsFrameDiff": 7.690520114674623,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "resolution",
+      "param": 640,
+      "label": "short=640",
+      "measured": {
+        "shortSidePx": 640,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 105.30708685196893,
+        "laplacianVarianceMedian": 1847.581319400676,
+        "meanAbsFrameDiff": 7.681944865280626,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "DEGRADED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "resolution",
+      "param": 480,
+      "label": "short=480",
+      "measured": {
+        "shortSidePx": 480,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 105.30634511605852,
+        "laplacianVarianceMedian": 1753.6569008679749,
+        "meanAbsFrameDiff": 7.685053258437442,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "DEGRADED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "resolution",
+      "param": 360,
+      "label": "short=360",
+      "measured": {
+        "shortSidePx": 360,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 105.34381245457847,
+        "laplacianVarianceMedian": 1514.331435846366,
+        "meanAbsFrameDiff": 7.683601662134284,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "UNSUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "resolution",
+      "param": 240,
+      "label": "short=240",
+      "measured": {
+        "shortSidePx": 240,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 105.28106371929192,
+        "laplacianVarianceMedian": 749.6761626905775,
+        "meanAbsFrameDiff": 7.499980479675555,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "UNSUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "fps",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 105.1954189057984,
+        "laplacianVarianceMedian": 1941.9146498438008,
+        "meanAbsFrameDiff": 7.776589595375721,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "fps",
+      "param": 24,
+      "label": "fps=24",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 24,
+        "brightnessMeanLuma": 105.29206839324421,
+        "laplacianVarianceMedian": 1915.9821983052443,
+        "meanAbsFrameDiff": 7.71054447137796,
+        "frameIntervalCv": 0.000011328430387728055,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "fps",
+      "param": 20,
+      "label": "fps=20",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 20,
+        "brightnessMeanLuma": 105.30967248464597,
+        "laplacianVarianceMedian": 1913.7162620224244,
+        "meanAbsFrameDiff": 7.719340271303374,
+        "frameIntervalCv": 5.528594406457362e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "DEGRADED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "fps",
+      "param": 15,
+      "label": "fps=15",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 15,
+        "brightnessMeanLuma": 105.31552593253254,
+        "laplacianVarianceMedian": 1917.198308978243,
+        "meanAbsFrameDiff": 7.656432383926907,
+        "frameIntervalCv": 0.000007085783149222607,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "DEGRADED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "fps",
+      "param": 12,
+      "label": "fps=12",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 12,
+        "brightnessMeanLuma": 105.30391528179192,
+        "laplacianVarianceMedian": 1915.579065600372,
+        "meanAbsFrameDiff": 7.703829188420658,
+        "frameIntervalCv": 0.000005671564644467767,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "UNSUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "fps",
+      "param": 10,
+      "label": "fps=10",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 10,
+        "brightnessMeanLuma": 105.25348316699781,
+        "laplacianVarianceMedian": 1909.4261305359814,
+        "meanAbsFrameDiff": 7.677241049785569,
+        "frameIntervalCv": 3.2230916597056955e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "UNSUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "fps",
+      "param": 8,
+      "label": "fps=8",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 8,
+        "brightnessMeanLuma": 105.30849440028904,
+        "laplacianVarianceMedian": 1918.7677567751825,
+        "meanAbsFrameDiff": 7.511804260674994,
+        "frameIntervalCv": 0,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "UNSUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "camera-tilt",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 105.1954189057984,
+        "laplacianVarianceMedian": 1941.9146498438008,
+        "meanAbsFrameDiff": 7.776589595375721,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "camera-tilt",
+      "param": 2,
+      "label": "tilt=2deg",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 103.12558396179554,
+        "laplacianVarianceMedian": 1857.6788212410268,
+        "meanAbsFrameDiff": 7.616167198862576,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "camera-tilt",
+      "param": 5,
+      "label": "tilt=5deg",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 100.32082477194727,
+        "laplacianVarianceMedian": 1870.5294480514863,
+        "meanAbsFrameDiff": 7.58326525498788,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "camera-tilt",
+      "param": 10,
+      "label": "tilt=10deg",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 96.12529522669799,
+        "laplacianVarianceMedian": 1888.3872628109063,
+        "meanAbsFrameDiff": 7.535644112437068,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "camera-tilt",
+      "param": 20,
+      "label": "tilt=20deg",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 89.6373351697977,
+        "laplacianVarianceMedian": 2017.4011239913207,
+        "meanAbsFrameDiff": 7.444859745012119,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "camera-tilt",
+      "param": 45,
+      "label": "tilt=45deg",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 81.67829801526372,
+        "laplacianVarianceMedian": 2320.065581876993,
+        "meanAbsFrameDiff": 7.36538376375163,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "crop",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 105.1954189057984,
+        "laplacianVarianceMedian": 1941.9146498438008,
+        "meanAbsFrameDiff": 7.776589595375721,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "crop",
+      "param": 0.9,
+      "label": "keep=0.9",
+      "measured": {
+        "shortSidePx": 900,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 101.85458899701949,
+        "laplacianVarianceMedian": 1899.2226744655186,
+        "meanAbsFrameDiff": 9.055443257038968,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "crop",
+      "param": 0.75,
+      "label": "keep=0.75",
+      "measured": {
+        "shortSidePx": 750,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 98.10500587066474,
+        "laplacianVarianceMedian": 1675.4002657880542,
+        "meanAbsFrameDiff": 11.464955773354466,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "crop",
+      "param": 0.5,
+      "label": "keep=0.5",
+      "measured": {
+        "shortSidePx": 500,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 92.40240302113442,
+        "laplacianVarianceMedian": 649.2798443536665,
+        "meanAbsFrameDiff": 17.697953279414506,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "DEGRADED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "crop",
+      "param": 0.35,
+      "label": "keep=0.35",
+      "measured": {
+        "shortSidePx": 350,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 95.35698806674493,
+        "laplacianVarianceMedian": 263.57418900828446,
+        "meanAbsFrameDiff": 25.761366073093416,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "UNSUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "occlusion",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 105.1954189057984,
+        "laplacianVarianceMedian": 1941.9146498438008,
+        "meanAbsFrameDiff": 7.776589595375721,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "occlusion",
+      "param": 0.1,
+      "label": "occlude=0.1",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 95.42165739026372,
+        "laplacianVarianceMedian": 1693.7887944725394,
+        "meanAbsFrameDiff": 4.969816042793213,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "occlusion",
+      "param": 0.25,
+      "label": "occlude=0.25",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 82.47371607433166,
+        "laplacianVarianceMedian": 1403.3184057202902,
+        "meanAbsFrameDiff": 3.396574328733918,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "occlusion",
+      "param": 0.5,
+      "label": "occlude=0.5",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 56.46748329118496,
+        "laplacianVarianceMedian": 731.9610367733142,
+        "meanAbsFrameDiff": 1.717581111318292,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "DEGRADED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "wm-volley-02",
+      "axis": "occlusion",
+      "param": 0.75,
+      "label": "occlude=0.75",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 30.424736102330208,
+        "laplacianVarianceMedian": 380.3867975227708,
+        "meanAbsFrameDiff": 0.5768634626142086,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "UNSUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "brightness-darken",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 104.23954668209878,
+        "laplacianVarianceMedian": 2290.8272247864506,
+        "meanAbsFrameDiff": 8.908708129084967,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "brightness-darken",
+      "param": -0.1,
+      "label": "eq=-0.1",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 72.42103587962964,
+        "laplacianVarianceMedian": 2220.3592275791634,
+        "meanAbsFrameDiff": 8.045172589869281,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "brightness-darken",
+      "param": -0.2,
+      "label": "eq=-0.2",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 48.37254533179013,
+        "laplacianVarianceMedian": 1881.8242757214678,
+        "meanAbsFrameDiff": 6.326360294117646,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "DEGRADED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "brightness-darken",
+      "param": -0.3,
+      "label": "eq=-0.3",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 29.621012731481486,
+        "laplacianVarianceMedian": 1438.3552956797848,
+        "meanAbsFrameDiff": 4.455562704248367,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "UNSUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "brightness-darken",
+      "param": -0.45,
+      "label": "eq=-0.45",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 9.299631558641973,
+        "laplacianVarianceMedian": 696.0963482442887,
+        "meanAbsFrameDiff": 1.9182741013071896,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "UNSUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "brightness-blowout",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 104.23954668209878,
+        "laplacianVarianceMedian": 2290.8272247864506,
+        "meanAbsFrameDiff": 8.908708129084967,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "brightness-blowout",
+      "param": 0.1,
+      "label": "eq=+0.1",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 133.19496431327158,
+        "laplacianVarianceMedian": 2206.8746964217826,
+        "meanAbsFrameDiff": 8.84093852124183,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "brightness-blowout",
+      "param": 0.2,
+      "label": "eq=+0.2",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 161.05358603395064,
+        "laplacianVarianceMedian": 1982.9570305798052,
+        "meanAbsFrameDiff": 8.64362132352941,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "brightness-blowout",
+      "param": 0.3,
+      "label": "eq=+0.3",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 188.9579832175926,
+        "laplacianVarianceMedian": 1614.00797149043,
+        "meanAbsFrameDiff": 8.163398692810455,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "brightness-blowout",
+      "param": 0.45,
+      "label": "eq=+0.45",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 220.42334972993822,
+        "laplacianVarianceMedian": 926.7920547565625,
+        "meanAbsFrameDiff": 6.356652369281046,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "UNSUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "blur-sigma",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 104.23954668209878,
+        "laplacianVarianceMedian": 2290.8272247864506,
+        "meanAbsFrameDiff": 8.908708129084967,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "blur-sigma",
+      "param": 0.5,
+      "label": "gblur@320w=0.5",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 103.74779031635802,
+        "laplacianVarianceMedian": 928.9877023954764,
+        "meanAbsFrameDiff": 8.204107434640525,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "blur-sigma",
+      "param": 1,
+      "label": "gblur@320w=1",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 103.73161072530866,
+        "laplacianVarianceMedian": 273.31310015178167,
+        "meanAbsFrameDiff": 7.453132148692811,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "blur-sigma",
+      "param": 2,
+      "label": "gblur@320w=2",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 103.71581500771603,
+        "laplacianVarianceMedian": 46.88430807949677,
+        "meanAbsFrameDiff": 6.409638480392156,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "DEGRADED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "blur-sigma",
+      "param": 4,
+      "label": "gblur@320w=4",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 103.6770447530864,
+        "laplacianVarianceMedian": 7.670346626197764,
+        "meanAbsFrameDiff": 5.141170343137255,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "UNSUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "blur-sigma",
+      "param": 8,
+      "label": "gblur@320w=8",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 103.56301311728393,
+        "laplacianVarianceMedian": 2.742290659426626,
+        "meanAbsFrameDiff": 3.786388888888889,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "UNSUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "resolution",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 104.23954668209878,
+        "laplacianVarianceMedian": 2290.8272247864506,
+        "meanAbsFrameDiff": 8.908708129084967,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "resolution",
+      "param": 720,
+      "label": "short=720",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 104.29016396604939,
+        "laplacianVarianceMedian": 2268.499591512714,
+        "meanAbsFrameDiff": 8.832407066993465,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "resolution",
+      "param": 640,
+      "label": "short=640",
+      "measured": {
+        "shortSidePx": 640,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 104.35543209876542,
+        "laplacianVarianceMedian": 2268.150100176597,
+        "meanAbsFrameDiff": 8.83014705882353,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "DEGRADED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "resolution",
+      "param": 480,
+      "label": "short=480",
+      "measured": {
+        "shortSidePx": 480,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 104.446696566358,
+        "laplacianVarianceMedian": 2250.364883204481,
+        "meanAbsFrameDiff": 8.818381331699346,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "DEGRADED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "resolution",
+      "param": 360,
+      "label": "short=360",
+      "measured": {
+        "shortSidePx": 360,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 104.51823109567901,
+        "laplacianVarianceMedian": 2169.301103051518,
+        "meanAbsFrameDiff": 8.803157679738561,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "UNSUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "resolution",
+      "param": 240,
+      "label": "short=240",
+      "measured": {
+        "shortSidePx": 240,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 104.33944926697532,
+        "laplacianVarianceMedian": 1942.3922412562533,
+        "meanAbsFrameDiff": 8.789638480392156,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "UNSUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "fps",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 104.23954668209878,
+        "laplacianVarianceMedian": 2290.8272247864506,
+        "meanAbsFrameDiff": 8.908708129084967,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "fps",
+      "param": 24,
+      "label": "fps=24",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 24,
+        "brightnessMeanLuma": 104.2064554398148,
+        "laplacianVarianceMedian": 2285.035593344206,
+        "meanAbsFrameDiff": 8.972727736928103,
+        "frameIntervalCv": 0.00001131370849768504,
+        "clipDurationMs": 4417
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "fps",
+      "param": 20,
+      "label": "fps=20",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 20,
+        "brightnessMeanLuma": 104.30341145833333,
+        "laplacianVarianceMedian": 2275.9449873166486,
+        "meanAbsFrameDiff": 8.869832516339871,
+        "frameIntervalCv": 3.572804339541114e-15,
+        "clipDurationMs": 4400
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "DEGRADED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "fps",
+      "param": 15,
+      "label": "fps=15",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 15,
+        "brightnessMeanLuma": 104.31276620370369,
+        "laplacianVarianceMedian": 2278.3829167453305,
+        "meanAbsFrameDiff": 8.798712214052287,
+        "frameIntervalCv": 0.000007097795852988316,
+        "clipDurationMs": 4400
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "DEGRADED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "fps",
+      "param": 12,
+      "label": "fps=12",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 12,
+        "brightnessMeanLuma": 104.32024209104937,
+        "laplacianVarianceMedian": 2278.140122889883,
+        "meanAbsFrameDiff": 8.874767156862747,
+        "frameIntervalCv": 0.000005629067009607782,
+        "clipDurationMs": 4417
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "UNSUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "fps",
+      "param": 10,
+      "label": "fps=10",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 10,
+        "brightnessMeanLuma": 104.21327353395064,
+        "laplacianVarianceMedian": 2282.4573249414557,
+        "meanAbsFrameDiff": 8.955477941176472,
+        "frameIntervalCv": 1.7373356971152888e-15,
+        "clipDurationMs": 4400
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "UNSUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "fps",
+      "param": 8,
+      "label": "fps=8",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 8,
+        "brightnessMeanLuma": 104.23739679783951,
+        "laplacianVarianceMedian": 2286.3000768026577,
+        "meanAbsFrameDiff": 8.994426062091504,
+        "frameIntervalCv": 0,
+        "clipDurationMs": 4375
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "UNSUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "camera-tilt",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 104.23954668209878,
+        "laplacianVarianceMedian": 2290.8272247864506,
+        "meanAbsFrameDiff": 8.908708129084967,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "camera-tilt",
+      "param": 2,
+      "label": "tilt=2deg",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 101.93987654320988,
+        "laplacianVarianceMedian": 2300.458476752079,
+        "meanAbsFrameDiff": 8.755316584967321,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "camera-tilt",
+      "param": 5,
+      "label": "tilt=5deg",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 98.9656606867284,
+        "laplacianVarianceMedian": 2285.8036544027354,
+        "meanAbsFrameDiff": 8.655419730392158,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "camera-tilt",
+      "param": 10,
+      "label": "tilt=10deg",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 94.26623842592592,
+        "laplacianVarianceMedian": 2293.21110121989,
+        "meanAbsFrameDiff": 8.480380923202615,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "camera-tilt",
+      "param": 20,
+      "label": "tilt=20deg",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 85.59206307870369,
+        "laplacianVarianceMedian": 2258.883184738641,
+        "meanAbsFrameDiff": 8.204320874183008,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "camera-tilt",
+      "param": 45,
+      "label": "tilt=45deg",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 75.21202835648148,
+        "laplacianVarianceMedian": 2820.6329888681694,
+        "meanAbsFrameDiff": 7.30076899509804,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "crop",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 104.23954668209878,
+        "laplacianVarianceMedian": 2290.8272247864506,
+        "meanAbsFrameDiff": 8.908708129084967,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "crop",
+      "param": 0.9,
+      "label": "keep=0.9",
+      "measured": {
+        "shortSidePx": 972,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 104.54120370370372,
+        "laplacianVarianceMedian": 2125.590971481308,
+        "meanAbsFrameDiff": 9.963296568627452,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "crop",
+      "param": 0.75,
+      "label": "keep=0.75",
+      "measured": {
+        "shortSidePx": 810,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 101.63215374228395,
+        "laplacianVarianceMedian": 1582.4724306118383,
+        "meanAbsFrameDiff": 11.818096405228758,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "crop",
+      "param": 0.5,
+      "label": "keep=0.5",
+      "measured": {
+        "shortSidePx": 540,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 89.00769965277779,
+        "laplacianVarianceMedian": 1114.9470179922027,
+        "meanAbsFrameDiff": 18.505676062091506,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "DEGRADED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "crop",
+      "param": 0.35,
+      "label": "keep=0.35",
+      "measured": {
+        "shortSidePx": 378,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 88.59452546296298,
+        "laplacianVarianceMedian": 796.5266577719582,
+        "meanAbsFrameDiff": 25.52627859477124,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "UNSUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "occlusion",
+      "param": null,
+      "label": "control",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 104.23954668209878,
+        "laplacianVarianceMedian": 2290.8272247864506,
+        "meanAbsFrameDiff": 8.908708129084967,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "occlusion",
+      "param": 0.1,
+      "label": "occlude=0.1",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 95.53466820987654,
+        "laplacianVarianceMedian": 2037.281764261832,
+        "meanAbsFrameDiff": 6.298069852941176,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "occlusion",
+      "param": 0.25,
+      "label": "occlude=0.25",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 82.35482542438271,
+        "laplacianVarianceMedian": 1864.521415347235,
+        "meanAbsFrameDiff": 4.402927900326798,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "occlusion",
+      "param": 0.5,
+      "label": "occlude=0.5",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 55.301581790123464,
+        "laplacianVarianceMedian": 1584.9365645401026,
+        "meanAbsFrameDiff": 2.751856617647059,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "DEGRADED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "occlusion",
+      "param": 0.75,
+      "label": "occlude=0.75",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 26.91579378858025,
+        "laplacianVarianceMedian": 781.2327741317936,
+        "meanAbsFrameDiff": 1.1549244281045752,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "UNSUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "player-scale",
+      "param": 0.5,
+      "label": "heightFrac=0.5",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.88011935763888,
+        "laplacianVarianceMedian": 492.954422328066,
+        "meanAbsFrameDiff": 5.323667824074074,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "player-scale",
+      "param": 0.35,
+      "label": "heightFrac=0.35",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.86278862847222,
+        "laplacianVarianceMedian": 467.2074079827901,
+        "meanAbsFrameDiff": 2.960334490740741,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "player-scale",
+      "param": 0.25,
+      "label": "heightFrac=0.25",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.78954969618057,
+        "laplacianVarianceMedian": 427.9083828992399,
+        "meanAbsFrameDiff": 1.5535324074074073,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "player-scale",
+      "param": 0.15,
+      "label": "heightFrac=0.15",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.71223198784722,
+        "laplacianVarianceMedian": 404.0624358960117,
+        "meanAbsFrameDiff": 0.5639050925925927,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "player-scale",
+      "param": 0.08,
+      "label": "heightFrac=0.08",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.67420572916666,
+        "laplacianVarianceMedian": 382.95254938924063,
+        "meanAbsFrameDiff": 0.15884953703703703,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "player-scale",
+      "param": 0.04,
+      "label": "heightFrac=0.04",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.69109700520832,
+        "laplacianVarianceMedian": 367.1590543700247,
+        "meanAbsFrameDiff": 0.041469907407407414,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "body-visibility",
+      "param": 1,
+      "label": "visibleFrac=1",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.86278862847222,
+        "laplacianVarianceMedian": 467.2074079827901,
+        "meanAbsFrameDiff": 2.960334490740741,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "body-visibility",
+      "param": 0.75,
+      "label": "visibleFrac=0.75",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.78071940104165,
+        "laplacianVarianceMedian": 449.89850755172506,
+        "meanAbsFrameDiff": 2.252886574074074,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "body-visibility",
+      "param": 0.5,
+      "label": "visibleFrac=0.5",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.70421440972223,
+        "laplacianVarianceMedian": 429.5106727697309,
+        "meanAbsFrameDiff": 1.582116898148148,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "body-visibility",
+      "param": 0.25,
+      "label": "visibleFrac=0.25",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.60807400173611,
+        "laplacianVarianceMedian": 400.3175765957985,
+        "meanAbsFrameDiff": 0.9025497685185185,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "paddle-visibility",
+      "param": 1,
+      "label": "paddle",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.86278862847222,
+        "laplacianVarianceMedian": 467.2074079827901,
+        "meanAbsFrameDiff": 2.960334490740741,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "paddle-visibility",
+      "param": 0,
+      "label": "no-paddle",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.73238172743055,
+        "laplacianVarianceMedian": 460.54671262557144,
+        "meanAbsFrameDiff": 2.7876319444444433,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "player-count",
+      "param": 1,
+      "label": "players=1",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.86278862847222,
+        "laplacianVarianceMedian": 467.2074079827901,
+        "meanAbsFrameDiff": 2.960334490740741,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "player-count",
+      "param": 2,
+      "label": "players=2",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.83387044270835,
+        "laplacianVarianceMedian": 593.16500787274,
+        "meanAbsFrameDiff": 7.023750000000001,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "player-count",
+      "param": 3,
+      "label": "players=3",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.25183702256945,
+        "laplacianVarianceMedian": 700.5873101835308,
+        "meanAbsFrameDiff": 10.672204861111112,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "player-count",
+      "param": 4,
+      "label": "players=4",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.27575195312502,
+        "laplacianVarianceMedian": 806.9894902414773,
+        "meanAbsFrameDiff": 14.220589120370372,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "shake-plus-blur",
+      "param": null,
+      "label": "shaken-control",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 104.06067515432099,
+        "laplacianVarianceMedian": 2066.986932903704,
+        "meanAbsFrameDiff": 35.435745506535945,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "DEGRADED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "shake-plus-blur",
+      "param": 1,
+      "label": "shake-plus-blur=1",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 103.56927565586419,
+        "laplacianVarianceMedian": 249.80547236347257,
+        "meanAbsFrameDiff": 30.001111111111108,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "shake-plus-blur",
+      "param": 2,
+      "label": "shake-plus-blur=2",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 103.52307773919753,
+        "laplacianVarianceMedian": 44.41160532470854,
+        "meanAbsFrameDiff": 26.106109068627458,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "DEGRADED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "shake-plus-blur",
+      "param": 3,
+      "label": "shake-plus-blur=3",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 103.49984953703705,
+        "laplacianVarianceMedian": 15.494267660257698,
+        "meanAbsFrameDiff": 23.442321282679735,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "UNSUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "shake-plus-darken",
+      "param": null,
+      "label": "shaken-control",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 104.06067515432099,
+        "laplacianVarianceMedian": 2066.986932903704,
+        "meanAbsFrameDiff": 35.435745506535945,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "DEGRADED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "shake-plus-darken",
+      "param": 1,
+      "label": "shake-plus-darken=1",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 60.047829861111104,
+        "laplacianVarianceMedian": 1813.0728064589302,
+        "meanAbsFrameDiff": 30.670315563725488,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "shake-plus-darken",
+      "param": 2,
+      "label": "shake-plus-darken=2",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 30.125174575617287,
+        "laplacianVarianceMedian": 1265.992483786307,
+        "meanAbsFrameDiff": 21.109092116013077,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "UNSUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "afn-sasebo-rally1",
+      "axis": "shake-plus-darken",
+      "param": 3,
+      "label": "shake-plus-darken=3",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 9.842539544753087,
+        "laplacianVarianceMedian": 631.5620622748471,
+        "meanAbsFrameDiff": 11.282577614379083,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "UNSUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "shake-plus-blur",
+      "param": null,
+      "label": "shaken-control",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 129.27591905381945,
+        "laplacianVarianceMedian": 447.1914886283963,
+        "meanAbsFrameDiff": 15.265655092592594,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "shake-plus-blur",
+      "param": 1,
+      "label": "shake-plus-blur=1",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 128.41693359375,
+        "laplacianVarianceMedian": 74.32104920862463,
+        "meanAbsFrameDiff": 14.226361111111112,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "DEGRADED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "shake-plus-blur",
+      "param": 2,
+      "label": "shake-plus-blur=2",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 128.8600531684028,
+        "laplacianVarianceMedian": 17.284872495185425,
+        "meanAbsFrameDiff": 13.213483796296298,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "UNSUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "shake-plus-blur",
+      "param": 3,
+      "label": "shake-plus-blur=3",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 128.6882280815972,
+        "laplacianVarianceMedian": 6.7533162102058215,
+        "meanAbsFrameDiff": 12.52504050925926,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "UNSUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "shake-plus-darken",
+      "param": null,
+      "label": "shaken-control",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 129.27591905381945,
+        "laplacianVarianceMedian": 447.1914886283963,
+        "meanAbsFrameDiff": 15.265655092592594,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "shake-plus-darken",
+      "param": 1,
+      "label": "shake-plus-darken=1",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 83.82885091145833,
+        "laplacianVarianceMedian": 387.7876832492358,
+        "meanAbsFrameDiff": 13.968415509259263,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "shake-plus-darken",
+      "param": 2,
+      "label": "shake-plus-darken=2",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 49.51614040798611,
+        "laplacianVarianceMedian": 254.04489142202607,
+        "meanAbsFrameDiff": 10.771349537037036,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "DEGRADED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED"
+    },
+    {
+      "base": "synthetic-scene",
+      "axis": "shake-plus-darken",
+      "param": 3,
+      "label": "shake-plus-darken=3",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 25.49869900173611,
+        "laplacianVarianceMedian": 118.18841988286853,
+        "meanAbsFrameDiff": 6.403951388888889,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "UNSUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED"
+    }
+  ],
+  "videoViolations": [
+    {
+      "kind": "dimension",
+      "base": "afn-sasebo-rally1",
+      "axis": "shake-plus-blur",
+      "dimension": "camera_motion",
+      "fromLabel": "shaken-control",
+      "toLabel": "shake-plus-blur=1",
+      "from": "DEGRADED",
+      "to": "SUPPORTED",
+      "fromMeasured": 35.435745506535945,
+      "toMeasured": 30.001111111111108
+    },
+    {
+      "kind": "overall",
+      "base": "afn-sasebo-rally1",
+      "axis": "shake-plus-blur",
+      "dimension": null,
+      "fromLabel": "shaken-control",
+      "toLabel": "shake-plus-blur=1",
+      "from": "DEGRADED",
+      "to": "SUPPORTED",
+      "fromMeasured": null,
+      "toMeasured": null
+    },
+    {
+      "kind": "dimension",
+      "base": "afn-sasebo-rally1",
+      "axis": "shake-plus-darken",
+      "dimension": "camera_motion",
+      "fromLabel": "shaken-control",
+      "toLabel": "shake-plus-darken=1",
+      "from": "DEGRADED",
+      "to": "SUPPORTED",
+      "fromMeasured": 35.435745506535945,
+      "toMeasured": 30.670315563725488
+    },
+    {
+      "kind": "overall",
+      "base": "afn-sasebo-rally1",
+      "axis": "shake-plus-darken",
+      "dimension": null,
+      "fromLabel": "shaken-control",
+      "toLabel": "shake-plus-darken=1",
+      "from": "DEGRADED",
+      "to": "SUPPORTED",
+      "fromMeasured": null,
+      "toMeasured": null
+    }
+  ],
+  "counts": {
+    "analyticComparisons": 65,
+    "analyticViolations": 0,
+    "videoRows": 167,
+    "videoAdjacentStepPairs": 135,
+    "videoViolations": 4,
+    "videoDimensionViolations": 2,
+    "videoOverallViolations": 2
+  }
+}

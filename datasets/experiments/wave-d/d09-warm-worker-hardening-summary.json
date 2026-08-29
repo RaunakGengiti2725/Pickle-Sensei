@@ -1,0 +1,114 @@
+{
+  "workstream": "D09 — Warm worker + concurrency hardening and Linux-CPU measurement",
+  "branch": "devin/wave-d/d09-warm-worker-hardening",
+  "base": "origin/devin/1787988068-wave-c-integration",
+  "environmentLabel": "LINUX-CPU NOT-MAC",
+  "environment": {
+    "os": "Linux (Ubuntu, CPU-only)",
+    "torch": "2.13.0+cpu",
+    "transformers": "5.16.1",
+    "model": "D-FINE medium COCO, device=cpu",
+    "clipsUsed": ["wm-volley-02", "afn-sasebo-rally1"],
+    "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"]
+  },
+  "whatWasBuilt": {
+    "workerHardening": [
+      "PaddleServeWorker: stdin 'error' listener kills the worker instead of leaving requests hanging when the pipe breaks (EPIPE) while the process stays alive",
+      "PaddleServeWorker.detect: write path guarded — destroyed/unwritable stdin rejects the pending request with PaddleWorkerError instead of throwing synchronously or hanging",
+      "New PaddleWorkerSupervisor (bounded restarts, default maxRestarts=2): a crashed worker is respawned on the next detect so subsequent requests are served warm; restart budget exhaustion rejects cleanly",
+      "startPaddleWorker now returns the supervisor; analyzeVideo.ts updated to the supervisor type (worker-first with one-shot fallback behavior unchanged, --no-paddle-worker opt-out unchanged, --two-pass still OFF by default)"
+    ],
+    "regressionTestsAdded": [
+      "concurrent responses matched by id even when the worker replies out of order",
+      "stdin closed while process alive -> request rejects with PaddleWorkerError (was: test-observed hang until timeout before the stdin error listener fix)",
+      "supervisor restarts a crashed worker and serves subsequent requests (spawns=2, restarts=1)",
+      "supervisor restart budget exhaustion rejects",
+      "dispose with in-flight requests rejects them and leaves no process"
+    ]
+  },
+  "stressResults": {
+    "provenance": "real worker (tools/paddle-lab/detect_paddle.py --serve) driven via packages/swing-lab/src/paddleWorker.ts from a tsx harness; committed bundle clips only",
+    "sequentialReuse": {
+      "requests": 12,
+      "shapes": "6 request shapes x2 (stride 1, stride 3, dense sub-window on both clips)",
+      "workerStartupMs": 2663,
+      "rssKbAfterReady": 656744,
+      "rssKbAfterEachRequest": [
+        659912, 690032, 678428, 663984, 661240, 661208, 678120, 704816, 711840, 692404, 670076,
+        697964
+      ],
+      "memoryGrowthAssessment": "RSS fluctuates 660-712 MB band across 12 requests with no monotonic growth; max observed +55 MB over post-ready baseline, non-cumulative"
+    },
+    "crashMidRequest": "worker SIGKILLed mid-flight; detectPaddleWindow fallback produced output timing-stripped-identical to the sequential reference; supervisor respawned a worker that served the next request (verified restarted PID differs, output identical to reference)",
+    "concurrentRequests": "two simultaneous detects on different clips both completed, matched by id, outputs identical to sequential references",
+    "cleanShutdown": "dispose() left zero orphan detect_paddle.py --serve processes (verified via process listing after disposal)"
+  },
+  "latencyResults": {
+    "label": "LINUX-CPU NOT-MAC",
+    "provenance": "wall-clock via Date.now() around real detect_paddle.py / ball_candidates.py invocations; 3 runs per clip per mode (plus 5 extra warm runs on wm-volley-02); one-shot includes python+model startup per call, warm uses a single pre-started worker; warm-worker one-time startup 2663-2700 ms not included in per-request numbers",
+    "wmVolley02": {
+      "windowMs": "paddle 5300-8000 stride 1; ball 3400-9900",
+      "ballOnlyMedianMs": 883,
+      "oneShotSequentialTotalMs": { "runs": [11286, 11213, 11258], "median": 11258 },
+      "oneShotConcurrentTotalMs": { "runs": [10668, 10595, 10673], "median": 10668 },
+      "warmSequentialTotalMs": { "runs": [8302, 9098, 8273], "median": 8302 },
+      "warmConcurrentTotalMs": { "runs": [8016, 8590, 9816], "median": 8590 },
+      "warmExtendedRuns": {
+        "note": "initial 3-run warm concurrent median lost to sequential by 288 ms with overlapping spread (one 9816 ms outlier), so 5 more alternating runs were collected",
+        "sequentialMs": [8141, 8728, 8025, 8181, 8324],
+        "sequentialMedianMs": 8181,
+        "concurrentMs": [7933, 7935, 7932, 7894, 8498],
+        "concurrentMedianMs": 7933
+      }
+    },
+    "afnSaseboRally1": {
+      "windowMs": "paddle 2100-4100 stride 1; ball window per harness",
+      "ballOnlyMedianMs": 1535,
+      "oneShotSequentialTotalMs": { "runs": [11409, 11148, 11194], "median": 11194 },
+      "oneShotConcurrentTotalMs": { "runs": [9794, 9805, 9945], "median": 9805 },
+      "warmSequentialTotalMs": { "runs": [8342, 8771, 8680], "median": 8680 },
+      "warmConcurrentTotalMs": { "runs": [8215, 8067, 8199], "median": 8199 }
+    },
+    "conclusions": [
+      "Warm worker beats one-shot by ~2.5-3.0 s per prep on this box (python+torch+model startup amortized): e.g. rally1 one-shot seq median 11194 ms vs warm seq median 8680 ms",
+      "Concurrent (C08 flag behavior) beats sequential on median in all four mode combinations on both clips; the win is bounded by ball-prep time (0.9-1.5 s) minus CPU contention: os-volley -590 ms, os-rally1 -1389 ms, warm-rally1 -481 ms, warm-volley -248 ms (extended runs)",
+      "Because concurrency wins on median in every tested combination, no adaptive scheduler was added; the existing C08 flag behavior is kept as-is",
+      "HONEST NEGATIVE: the warm+concurrent win on wm-volley-02 is small (~250 ms) and one initial run inverted (9816 ms concurrent vs 8273 ms sequential) — under heavier CPU contention than this idle 8-thread box the concurrency benefit could vanish; numbers are LINUX-CPU NOT-MAC and say nothing about on-device iOS latency"
+    ]
+  },
+  "byteEquality": {
+    "method": "sha256 over JSON with the top-level 'timing' block removed (timing carries wall-clock/model-load values and differs by design); full-file hashes also recorded",
+    "results": [
+      "wm-volley-02 paddle outputs: 12 latency-harness files (one-shot/warm x seq/conc x 3 runs) + 10 extended warm runs all timing-stripped-identical (full files differ only in timing block)",
+      "afn-sasebo-rally1 paddle outputs: 12 files, same result",
+      "ball outputs: 15 files per clip (ball-only + all mode combos), all timing-stripped-identical",
+      "stride 3 and dense-window requests: worker outputs byte-equal to fresh one-shot invocations of detect_paddle.py with identical params (after normalizing the video.path field, which records the caller-provided path string — relative vs absolute invocation artifact, not a detection difference)",
+      "crash-fallback output, post-restart worker output, and concurrent-request outputs all identical to sequential references"
+    ],
+    "verdict": "byte-equal detection content across every tested mode combination; only the timing block differs between files"
+  },
+  "defectsFoundAndFixed": [
+    {
+      "defect": "worker stdin closing (EPIPE) while the process stays alive left the pending request hanging until the request timeout",
+      "fix": "stdin 'error' listener kills the worker (rejecting all pending requests immediately); write path also rejects when stdin is destroyed/unwritable",
+      "regressionTest": "packages/swing-lab/test/paddleWorker.test.ts: 'rejects (not crashes) when the worker's stdin closes while it stays alive'"
+    },
+    {
+      "defect": "a crashed worker was never restarted — every later paddle window silently paid the one-shot fallback cost for the rest of the run",
+      "fix": "PaddleWorkerSupervisor with bounded restarts (default 2) wraps the worker; analyzeVideo.ts uses it via startPaddleWorker",
+      "regressionTest": "supervisor restart + restart-budget tests in paddleWorker.test.ts"
+    }
+  ],
+  "checks": {
+    "typecheck": "pnpm --filter @pickle/swing-lab typecheck: PASS",
+    "tests": "pnpm --filter @pickle/swing-lab test: 19 files passed, 238 passed / 4 skipped"
+  },
+  "blocked": [
+    "Mac/iOS on-device latency for the warm worker remains unmeasured (Apple Vision + device access unavailable on Linux) — all numbers here are LINUX-CPU NOT-MAC",
+    "Full cascade impact unverifiable on Linux: canonical run dirs are gitignored/absent and pose extraction is macOS-only; no cascade numbers are claimed"
+  ],
+  "notes": [
+    "MOBBIN MCP UNAVAILABLE IN THIS ENVIRONMENT (not needed for this workstream)",
+    "held-out clips (wm-dink-01, afn-vic-rally1) were not used or iterated against"
+  ]
+}

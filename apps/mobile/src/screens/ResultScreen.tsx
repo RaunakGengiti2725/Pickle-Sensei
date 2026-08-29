@@ -42,6 +42,8 @@ import {
   loadStrokeResultEvidence,
   type StrokeResultEvidence,
 } from '../components/strokeResultData';
+import { techniqueScoreSectionVisible } from '../components/strokeResultModel';
+import { AnalysisFeedbackPrompt } from '../components/AnalysisFeedbackPrompt';
 import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
 
 /**
@@ -132,11 +134,23 @@ export function ResultScreen() {
   const analysis = evidence?.analysis ?? evidence?.record?.result ?? null;
 
   useEffect(() => {
-    if (!analysis) return;
+    let cancelled = false;
     setSyncEvidence('checking');
+    if (!analysis) {
+      return () => {
+        cancelled = true;
+      };
+    }
     hasShotSyncReceipt(getDb(), analysis.id)
-      .then(accepted => setSyncEvidence(accepted ? 'synced' : 'pending'))
-      .catch(() => setSyncEvidence('unknown'));
+      .then(accepted => {
+        if (!cancelled) setSyncEvidence(accepted ? 'synced' : 'pending');
+      })
+      .catch(() => {
+        if (!cancelled) setSyncEvidence('unknown');
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [analysis]);
 
   const openMedia = async (media: InstructionalMedia) => {
@@ -272,6 +286,7 @@ export function ResultScreen() {
         showsVerticalScrollIndicator={false}
       >
         <StrokeResult
+          key={route.params.analysisId}
           analysis={analysis}
           record={record}
           clip={evidence.clip}
@@ -283,7 +298,7 @@ export function ResultScreen() {
           onTryAgain={tryAgain}
           onDone={() => navigation.popToTop()}
         >
-          {analysis && analysis.resultKind === 'scored' ? (
+          {techniqueScoreSectionVisible(analysis) ? (
             <>
               <SectionTitle title="Technique score" />
               <Card tone="dark" style={styles.resultStage}>
@@ -656,6 +671,10 @@ export function ResultScreen() {
                 />
               </View>
             </Card>
+          ) : null}
+
+          {syncEvidence === 'synced' ? (
+            <AnalysisFeedbackPrompt analysisId={route.params.analysisId} />
           ) : null}
         </StrokeResult>
       </ScrollView>

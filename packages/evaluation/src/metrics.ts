@@ -169,6 +169,10 @@ export interface CalibrationCase {
 
 export interface CalibrationReport {
   expectedCalibrationError: number;
+  /** Sample count backing the ECE — always disclose alongside the number. */
+  n: number;
+  /** Non-empty when the ECE should not be quoted bare (tiny n, degenerate distribution). */
+  warnings: string[];
   bins: Array<{
     lower: number;
     upper: number;
@@ -178,11 +182,19 @@ export interface CalibrationReport {
   }>;
 }
 
+/** Minimum sample count below which the ECE is flagged as unstable. */
+export const CALIBRATION_MIN_SAMPLES = 10;
+
 /** Standard equal-width-bin ECE with a reliability table. */
 export function calibrationReport(
   cases: readonly CalibrationCase[],
   binCount = 10,
 ): CalibrationReport {
+  for (const item of cases) {
+    if (!Number.isFinite(item.confidence) || item.confidence < 0 || item.confidence > 1) {
+      throw new Error(`confidence must be finite in [0,1], got ${item.confidence}`);
+    }
+  }
   const bins = Array.from({ length: binCount }, (_, index) => ({
     lower: index / binCount,
     upper: (index + 1) / binCount,
@@ -212,5 +224,18 @@ export function calibrationReport(
       empiricalAccuracy,
     };
   });
-  return { expectedCalibrationError: ece, bins: reported };
+  const warnings: string[] = [];
+  if (cases.length === 0) {
+    warnings.push("no samples — ECE is vacuously 0, not evidence of calibration");
+  } else if (cases.length < CALIBRATION_MIN_SAMPLES) {
+    warnings.push(
+      `insufficient n: ${cases.length} < floor ${CALIBRATION_MIN_SAMPLES} — ECE is not a stable estimate`,
+    );
+  }
+  if (cases.length > 0 && new Set(cases.map((item) => item.confidence)).size === 1) {
+    warnings.push(
+      "degenerate confidence distribution: all samples share one confidence — ECE is a single-bin |accuracy − confidence|",
+    );
+  }
+  return { expectedCalibrationError: ece, n: cases.length, warnings, bins: reported };
 }

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "kind": "ownership-correction-set",
+  "captureBundle": "wavea-faead-rally",
+  "annotatorId": "devin-visual-v4-waveE-e05",
+  "createdAtIso": "2026-08-29T09:50:00.000Z",
+  "appendOnly": true,
+  "corrects": "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v2-waveC-ownership.json",
+  "basedOnAudit": "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+  "method": "Versioned append-only application of the D2-04 blind-audit adjudications. Original waveC labels are NEVER rewritten. No adjudication in this bundle was auditor-upheld, so this set contains zero corrections; every adjudication is recorded as a no-change disposition.",
+  "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"],
+  "corrections": [],
+  "noChangeDispositions": [
+    {
+      "adjudicationId": "ADJ-R1",
+      "tMs": 12833.33,
+      "disposition": "resolved-to-waveC",
+      "note": "audit blind point was a different object (shirt-side patch), retracted; waveC (0.425,0.432) adopted — gold unchanged"
+    },
+    {
+      "adjudicationId": "ADJ-R2",
+      "tMs": 13333.33,
+      "disposition": "downgraded-to-ambiguous",
+      "note": "dark blob not certifiable as paddle; no certifiable disagreement with waveC omission — gold unchanged"
+    },
+    {
+      "adjudicationId": "ADJ-R3",
+      "tMs": 14166.67,
+      "disposition": "resolved-to-waveC",
+      "note": "blade boundary not certifiable (grip-butt only); audit downgraded to ambiguous — gold unchanged"
+    }
+  ]
+}

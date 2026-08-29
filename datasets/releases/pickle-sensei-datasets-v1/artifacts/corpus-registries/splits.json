@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "policyVersion": "splits-v1",
+  "proportions": {
+    "dev": 0.5,
+    "val": 0.2,
+    "locked_test": 0.15,
+    "shadow": 0.15
+  },
+  "pinned": {
+    "afn-sasebo-2025-06": {
+      "split": "dev",
+      "reason": "rally1/rally2 used for identity/occlusion/event debugging across runs"
+    },
+    "afn-sigonella-2025": {
+      "split": "dev",
+      "reason": "inspected during acquisition (clinic/interview footage)"
+    },
+    "afn-vic-2025": {
+      "split": "locked_test",
+      "reason": "held-out discipline from v0.1: selected from stills, single evaluation after freezing, no threshold iteration"
+    },
+    "dvids-marne-2024": {
+      "split": "dev",
+      "reason": "mined; candidate list inspected and published in HANDOFF"
+    },
+    "dvids-warriorgames-2026": {
+      "split": "dev",
+      "reason": "mined; candidate list inspected"
+    },
+    "dvids-warriorgames-2026-broll": {
+      "split": "val",
+      "reason": "registered with human-written description — possibly viewed; conservative: eligible for decisions, NOT for locked_test/shadow"
+    },
+    "wm-tournament-2014": {
+      "split": "dev",
+      "reason": "volley-02 is a dev case; the same recording also holds held-out CASE wm-dink-01 (v0.1 KNOWN LIMITATION — session-level split impossible for this recording; future wm sessions must separate)"
+    }
+  },
+  "assigned": {
+    "afn-sasebo-2025-06": {
+      "split": "dev",
+      "method": "pinned",
+      "assignedAtIso": "2026-08-28T22:04:40.318Z"
+    },
+    "afn-sigonella-2025": {
+      "split": "dev",
+      "method": "pinned",
+      "assignedAtIso": "2026-08-28T22:04:40.376Z"
+    },
+    "afn-vic-2025": {
+      "split": "locked_test",
+      "method": "pinned",
+      "assignedAtIso": "2026-08-28T22:04:40.432Z"
+    },
+    "dvids-1007845": {
+      "split": "dev",
+      "method": "deterministic",
+      "assignedAtIso": "2026-08-28T22:05:36.322Z"
+    },
+    "dvids-1008415": {
+      "split": "dev",
+      "method": "deterministic",
+      "assignedAtIso": "2026-08-28T22:05:39.412Z"
+    },
+    "dvids-906546": {
+      "split": "shadow",
+      "method": "deterministic",
+      "assignedAtIso": "2026-08-28T22:08:58.538Z"
+    },
+    "dvids-943757": {
+      "split": "dev",
+      "method": "deterministic",
+      "assignedAtIso": "2026-08-28T22:09:09.753Z"
+    },
+    "dvids-956784": {
+      "split": "dev",
+      "method": "deterministic",
+      "assignedAtIso": "2026-08-28T22:09:34.329Z"
+    },
+    "dvids-957519": {
+      "split": "dev",
+      "method": "deterministic",
+      "assignedAtIso": "2026-08-28T22:09:40.123Z"
+    },
+    "dvids-967848": {
+      "split": "val",
+      "method": "deterministic",
+      "assignedAtIso": "2026-08-28T22:09:47.475Z"
+    },
+    "dvids-986421": {
+      "split": "dev",
+      "method": "deterministic",
+      "assignedAtIso": "2026-08-28T22:09:50.415Z"
+    },
+    "dvids-espn-oneyearout-2026": {
+      "split": "shadow",
+      "method": "deterministic",
+      "assignedAtIso": "2026-08-28T22:12:09.136Z"
+    },
+    "dvids-marne-2024": {
+      "split": "dev",
+      "method": "pinned",
+      "assignedAtIso": "2026-08-28T22:04:40.529Z"
+    },
+    "dvids-warriorgames-2026": {
+      "split": "dev",
+      "method": "pinned",
+      "assignedAtIso": "2026-08-28T22:04:40.756Z"
+    },
+    "wm-tournament-2014": {
+      "split": "dev",
+      "method": "pinned",
+      "assignedAtIso": "2026-08-28T22:04:40.240Z"
+    }
+  }
+}

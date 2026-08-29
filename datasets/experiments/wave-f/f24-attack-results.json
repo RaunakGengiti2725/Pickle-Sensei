@@ -1,0 +1,615 @@
+{
+  "schemaVersion": 1,
+  "workstream": "wave-f/f24-rt-data-provenance",
+  "fixtures": "datasets/experiments/wave-f/f24-attack-fixtures.json",
+  "baselines": {
+    "e24": {
+      "issueCounts": {
+        "stale_assignment_explained": 3,
+        "schema_violation": 14,
+        "held_out_baseline_drift": 1
+      },
+      "seconds": 0.5
+    },
+    "f24": {
+      "issueCounts": {
+        "stale_assignment_explained": 3,
+        "schema_violation": 14,
+        "held_out_baseline_drift": 1
+      },
+      "seconds": 0.5
+    }
+  },
+  "results": [
+    {
+      "attack": "A01-label-edit-stroke-gold",
+      "audit": "e24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": false,
+      "matchingNewIssues": [],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A02-label-delete-stroke-gold",
+      "audit": "e24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": false,
+      "matchingNewIssues": [],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A03-annotation-silent-rewrite",
+      "audit": "e24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": false,
+      "matchingNewIssues": [],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A04-held-out-stroke-gold-caseid",
+      "audit": "e24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": false,
+      "matchingNewIssues": [],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A05-held-out-event-bounds-qa",
+      "audit": "e24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": false,
+      "matchingNewIssues": [],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A06-held-out-annotation-file",
+      "audit": "e24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "held_out_violation",
+          "where": "paddle-bench/bundles/wm-dink-01/annotation/f24-attacker.json",
+          "detail": "non-baseline annotation added to a held-out bundle"
+        }
+      ],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A07-held-out-ta-bench",
+      "audit": "e24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "held_out_violation",
+          "where": "ta-bench cases",
+          "detail": "gold/label collection contains held-out case wm-dink-01"
+        }
+      ],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A08-ghost-media-fresh-candidate",
+      "audit": "e24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "count_drift",
+          "where": "freshCandidates[f24-attack-ghost]",
+          "detail": "registered media file missing on disk"
+        }
+      ],
+      "otherNewIssues": [
+        {
+          "severity": "count_drift",
+          "where": "fresh-candidates dir",
+          "detail": "on disk ['va-6N3Yc184a_c.mp4', 'va-O1dLhGGPErc.mp4', 'voa-6108955.mp4', 'voa-6115790.mp4', 'yt-6r4fOxRuKmM.mp4', 'yt-94KNxpNTyCw.mp4', 'yt-9ru97zKV8mk.mp4', 'yt-I5wYCXCL4dY.mp4', 'yt-Y7DOO0j_1P4.mp4', 'yt-eK-iPN2XAJQ.mp4', 'yt-hktiyFnghIw.mp4', 'yt-iuVdtmGoTbo.mp4', 'yt-n-QrBfQVK_w.mp4', 'yt-o_NeuHjTEVE.mp4', 'yt-tJuJ4MQdYy0.mp4'] vs registered ['f24-ghost.mp4', 'va-6N3Yc184a_c.mp4', 'va-O1dLhGGPErc.mp4', 'voa-6108955.mp4', 'voa-6115790.mp4', 'yt-6r4fOxRuKmM.mp4', 'yt-94KNxpNTyCw.mp4', 'yt-9ru97zKV8mk.mp4', 'yt-I5wYCXCL4dY.mp4', 'yt-Y7DOO0j_1P4.mp4', 'yt-eK-iPN2XAJQ.mp4', 'yt-hktiyFnghIw.mp4', 'yt-iuVdtmGoTbo.mp4', 'yt-n-QrBfQVK_w.mp4', 'yt-o_NeuHjTEVE.mp4', 'yt-tJuJ4MQdYy0.mp4']"
+        }
+      ],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A09-sha-mismatch-registry",
+      "audit": "e24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "integrity",
+          "where": "freshCandidates[yt-tJuJ4MQdYy0]",
+          "detail": "sha256 mismatch between registry and on-disk media"
+        }
+      ],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A10-sha-mismatch-media-bytes",
+      "audit": "e24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "integrity",
+          "where": "ood/items[yt--wE27MoX2AM-tennis]",
+          "detail": "sha256 mismatch between registry and on-disk media"
+        }
+      ],
+      "otherNewIssues": [],
+      "auditSeconds": 0.4
+    },
+    {
+      "attack": "A11-dangling-bundle-ref",
+      "audit": "e24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "sidecar_inconsistency",
+          "where": "paddle-bench/stroke-gold.json[f24-attack-dangling]",
+          "detail": "references unknown bundle f24-ghost-bundle"
+        }
+      ],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A12-dangling-caseid-ref",
+      "audit": "e24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": false,
+      "matchingNewIssues": [],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A13-corpus-unknown-source",
+      "audit": "e24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "integrity",
+          "where": "corpus/recordings[rec-f24-attack]",
+          "detail": "unknown sourceId src-f24-ghost"
+        }
+      ],
+      "otherNewIssues": [
+        {
+          "severity": "role_violation",
+          "where": "corpus/splits.json",
+          "detail": "session f24-attack has recordings but no split assignment"
+        },
+        {
+          "severity": "count_drift",
+          "where": "releases/pickle-real-v0.3 corpus.recordings",
+          "detail": "manifest 26 vs recount 27 (manifest is immutable snapshot; drift = corpus moved after freeze, not a registry error)"
+        },
+        {
+          "severity": "count_drift",
+          "where": "releases/pickle-real-v0.3 corpus.rootRecordings",
+          "detail": "manifest 17 vs recount 18 (manifest is immutable snapshot; drift = corpus moved after freeze, not a registry error)"
+        },
+        {
+          "severity": "count_drift",
+          "where": "releases/pickle-real-v0.3 corpus.sessions",
+          "detail": "manifest 12 vs recount 13 (manifest is immutable snapshot; drift = corpus moved after freeze, not a registry error)"
+        }
+      ],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A14-release-manifest-tamper",
+      "audit": "e24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "integrity",
+          "where": "releases/pickle-real-v0.3",
+          "detail": "manifest.sha256 does not match manifest.json"
+        }
+      ],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A15-duplicate-registry-id",
+      "audit": "e24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "duplicate_id",
+          "where": "pickleball/registry ids (all sections)",
+          "detail": "duplicate id yt-tJuJ4MQdYy0"
+        }
+      ],
+      "otherNewIssues": [
+        {
+          "severity": "count_drift",
+          "where": "freshCandidates.totalBytes",
+          "detail": "registered 521329782 != actual 552372971"
+        },
+        {
+          "severity": "count_drift",
+          "where": "fresh-candidates dir",
+          "detail": "on disk ['va-6N3Yc184a_c.mp4', 'va-O1dLhGGPErc.mp4', 'voa-6108955.mp4', 'voa-6115790.mp4', 'yt-6r4fOxRuKmM.mp4', 'yt-94KNxpNTyCw.mp4', 'yt-9ru97zKV8mk.mp4', 'yt-I5wYCXCL4dY.mp4', 'yt-Y7DOO0j_1P4.mp4', 'yt-eK-iPN2XAJQ.mp4', 'yt-hktiyFnghIw.mp4', 'yt-iuVdtmGoTbo.mp4', 'yt-n-QrBfQVK_w.mp4', 'yt-o_NeuHjTEVE.mp4', 'yt-tJuJ4MQdYy0.mp4'] vs registered ['va-6N3Yc184a_c.mp4', 'va-O1dLhGGPErc.mp4', 'voa-6108955.mp4', 'voa-6115790.mp4', 'yt-6r4fOxRuKmM.mp4', 'yt-94KNxpNTyCw.mp4', 'yt-9ru97zKV8mk.mp4', 'yt-I5wYCXCL4dY.mp4', 'yt-Y7DOO0j_1P4.mp4', 'yt-eK-iPN2XAJQ.mp4', 'yt-hktiyFnghIw.mp4', 'yt-iuVdtmGoTbo.mp4', 'yt-n-QrBfQVK_w.mp4', 'yt-o_NeuHjTEVE.mp4', 'yt-tJuJ4MQdYy0.mp4', 'yt-tJuJ4MQdYy0.mp4']"
+        },
+        {
+          "severity": "duplicate_media",
+          "where": "pickleball/freshCandidates[yt-tJuJ4MQdYy0] + pickleball/freshCandidates[yt-tJuJ4MQdYy0]",
+          "detail": "identical sha256 34942348e22f4d43\u2026"
+        }
+      ],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A01-label-edit-stroke-gold",
+      "audit": "f24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "append_only_violation",
+          "where": "stroke-gold labels (datasets/paddle-bench/stroke-gold.json)",
+          "detail": "ledgered record 4c35f773cf9b3c6c\u2026 no longer present (0/1 copies) \u2014 an existing label was edited or deleted in place"
+        }
+      ],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A02-label-delete-stroke-gold",
+      "audit": "f24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "append_only_violation",
+          "where": "stroke-gold labels (datasets/paddle-bench/stroke-gold.json)",
+          "detail": "ledgered record a4a59066239abe7b\u2026 no longer present (0/1 copies) \u2014 an existing label was edited or deleted in place"
+        }
+      ],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A03-annotation-silent-rewrite",
+      "audit": "f24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "append_only_violation",
+          "where": "datasets/paddle-bench/bundles/wavea-marne-serve/annotation/devin-visual-v2-wave-a.json",
+          "detail": "annotation bytes changed without a strictly increased revision (ledgered rev 1, current rev 1) \u2014 silent label rewrite"
+        }
+      ],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A04-held-out-stroke-gold-caseid",
+      "audit": "f24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "held_out_violation",
+          "where": "stroke-gold labels (datasets/paddle-bench/stroke-gold.json)",
+          "detail": "unledgered addition references held-out case wm-dink-01: {\"annotatorId\": \"f24-attacker\", \"caseId\": \"wm-dink-01\", \"contactMs\": 1260, \"createdAtIso\": \"2026-08-29T00:00:00.000Z\", \"eventEndMs\": 1650, \"eventStartMs\": 1000, \"l1\": \"dink\", \"l2\": \"forehand\", \"l3\": \""
+        }
+      ],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A05-held-out-event-bounds-qa",
+      "audit": "f24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "held_out_violation",
+          "where": "event-bounds-qa-wave-c events (datasets/paddle-bench/event-bounds-qa-wave-c.json)",
+          "detail": "unledgered addition references held-out case wm-dink-01: {\"bounds\": [7000, 7210, 7500], \"bundle\": \"wm-dink-01\", \"evidence\": \"ATTACK FIXTURE \\u2014 new held-out label attempt\", \"idx\": 99, \"verdict\": \"PASS_VERIFIED\"}"
+        }
+      ],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A06-held-out-annotation-file",
+      "audit": "f24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "held_out_violation",
+          "where": "paddle-bench/bundles/wm-dink-01/annotation/f24-attacker.json",
+          "detail": "non-baseline annotation added to a held-out bundle"
+        }
+      ],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A07-held-out-ta-bench",
+      "audit": "f24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "held_out_violation",
+          "where": "ta-bench cases",
+          "detail": "gold/label collection contains held-out case wm-dink-01"
+        },
+        {
+          "severity": "held_out_violation",
+          "where": "ta-bench cases (datasets/ta-bench/cases.json)",
+          "detail": "unledgered addition references held-out case wm-dink-01: {\"caseId\": \"f24-attack-wm-dink-01\", \"note\": \"ATTACK FIXTURE\", \"sourceBundle\": \"wm-dink-01\"}"
+        }
+      ],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A08-ghost-media-fresh-candidate",
+      "audit": "f24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "count_drift",
+          "where": "freshCandidates[f24-attack-ghost]",
+          "detail": "registered media file missing on disk"
+        }
+      ],
+      "otherNewIssues": [
+        {
+          "severity": "count_drift",
+          "where": "fresh-candidates dir",
+          "detail": "on disk ['va-6N3Yc184a_c.mp4', 'va-O1dLhGGPErc.mp4', 'voa-6108955.mp4', 'voa-6115790.mp4', 'yt-6r4fOxRuKmM.mp4', 'yt-94KNxpNTyCw.mp4', 'yt-9ru97zKV8mk.mp4', 'yt-I5wYCXCL4dY.mp4', 'yt-Y7DOO0j_1P4.mp4', 'yt-eK-iPN2XAJQ.mp4', 'yt-hktiyFnghIw.mp4', 'yt-iuVdtmGoTbo.mp4', 'yt-n-QrBfQVK_w.mp4', 'yt-o_NeuHjTEVE.mp4', 'yt-tJuJ4MQdYy0.mp4'] vs registered ['f24-ghost.mp4', 'va-6N3Yc184a_c.mp4', 'va-O1dLhGGPErc.mp4', 'voa-6108955.mp4', 'voa-6115790.mp4', 'yt-6r4fOxRuKmM.mp4', 'yt-94KNxpNTyCw.mp4', 'yt-9ru97zKV8mk.mp4', 'yt-I5wYCXCL4dY.mp4', 'yt-Y7DOO0j_1P4.mp4', 'yt-eK-iPN2XAJQ.mp4', 'yt-hktiyFnghIw.mp4', 'yt-iuVdtmGoTbo.mp4', 'yt-n-QrBfQVK_w.mp4', 'yt-o_NeuHjTEVE.mp4', 'yt-tJuJ4MQdYy0.mp4']"
+        }
+      ],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A09-sha-mismatch-registry",
+      "audit": "f24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "integrity",
+          "where": "freshCandidates[yt-tJuJ4MQdYy0]",
+          "detail": "sha256 mismatch between registry and on-disk media"
+        }
+      ],
+      "otherNewIssues": [
+        {
+          "severity": "append_only_violation",
+          "where": "pickleball registry freshCandidates (datasets/pickleball/registry.json)",
+          "detail": "ledgered record b388481f96ae0d9c\u2026 no longer present (0/1 copies) \u2014 an existing label was edited or deleted in place"
+        }
+      ],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A10-sha-mismatch-media-bytes",
+      "audit": "f24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "integrity",
+          "where": "ood/items[yt--wE27MoX2AM-tennis]",
+          "detail": "sha256 mismatch between registry and on-disk media"
+        }
+      ],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A11-dangling-bundle-ref",
+      "audit": "f24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "sidecar_inconsistency",
+          "where": "paddle-bench/stroke-gold.json[f24-attack-dangling]",
+          "detail": "references unknown bundle f24-ghost-bundle"
+        }
+      ],
+      "otherNewIssues": [
+        {
+          "severity": "dangling_reference",
+          "where": "paddle-bench/stroke-gold.json",
+          "detail": "label caseId f24-ghost-bundle is not an existing bundle dir"
+        }
+      ],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A12-dangling-caseid-ref",
+      "audit": "f24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "dangling_reference",
+          "where": "paddle-bench/stroke-gold.json",
+          "detail": "label caseId f24-ghost-case is not an existing bundle dir"
+        }
+      ],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A13-corpus-unknown-source",
+      "audit": "f24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "integrity",
+          "where": "corpus/recordings[rec-f24-attack]",
+          "detail": "unknown sourceId src-f24-ghost"
+        }
+      ],
+      "otherNewIssues": [
+        {
+          "severity": "role_violation",
+          "where": "corpus/splits.json",
+          "detail": "session f24-attack has recordings but no split assignment"
+        },
+        {
+          "severity": "count_drift",
+          "where": "releases/pickle-real-v0.3 corpus.recordings",
+          "detail": "manifest 26 vs recount 27 (manifest is immutable snapshot; drift = corpus moved after freeze, not a registry error)"
+        },
+        {
+          "severity": "count_drift",
+          "where": "releases/pickle-real-v0.3 corpus.rootRecordings",
+          "detail": "manifest 17 vs recount 18 (manifest is immutable snapshot; drift = corpus moved after freeze, not a registry error)"
+        },
+        {
+          "severity": "count_drift",
+          "where": "releases/pickle-real-v0.3 corpus.sessions",
+          "detail": "manifest 12 vs recount 13 (manifest is immutable snapshot; drift = corpus moved after freeze, not a registry error)"
+        }
+      ],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A14-release-manifest-tamper",
+      "audit": "f24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "integrity",
+          "where": "releases/pickle-real-v0.3",
+          "detail": "manifest.sha256 does not match manifest.json"
+        }
+      ],
+      "otherNewIssues": [],
+      "auditSeconds": 0.5
+    },
+    {
+      "attack": "A15-duplicate-registry-id",
+      "audit": "f24",
+      "crashed": false,
+      "stderrTail": "",
+      "detected": true,
+      "matchingNewIssues": [
+        {
+          "severity": "duplicate_id",
+          "where": "pickleball/registry ids (all sections)",
+          "detail": "duplicate id yt-tJuJ4MQdYy0"
+        }
+      ],
+      "otherNewIssues": [
+        {
+          "severity": "count_drift",
+          "where": "freshCandidates.totalBytes",
+          "detail": "registered 521329782 != actual 552372971"
+        },
+        {
+          "severity": "count_drift",
+          "where": "fresh-candidates dir",
+          "detail": "on disk ['va-6N3Yc184a_c.mp4', 'va-O1dLhGGPErc.mp4', 'voa-6108955.mp4', 'voa-6115790.mp4', 'yt-6r4fOxRuKmM.mp4', 'yt-94KNxpNTyCw.mp4', 'yt-9ru97zKV8mk.mp4', 'yt-I5wYCXCL4dY.mp4', 'yt-Y7DOO0j_1P4.mp4', 'yt-eK-iPN2XAJQ.mp4', 'yt-hktiyFnghIw.mp4', 'yt-iuVdtmGoTbo.mp4', 'yt-n-QrBfQVK_w.mp4', 'yt-o_NeuHjTEVE.mp4', 'yt-tJuJ4MQdYy0.mp4'] vs registered ['va-6N3Yc184a_c.mp4', 'va-O1dLhGGPErc.mp4', 'voa-6108955.mp4', 'voa-6115790.mp4', 'yt-6r4fOxRuKmM.mp4', 'yt-94KNxpNTyCw.mp4', 'yt-9ru97zKV8mk.mp4', 'yt-I5wYCXCL4dY.mp4', 'yt-Y7DOO0j_1P4.mp4', 'yt-eK-iPN2XAJQ.mp4', 'yt-hktiyFnghIw.mp4', 'yt-iuVdtmGoTbo.mp4', 'yt-n-QrBfQVK_w.mp4', 'yt-o_NeuHjTEVE.mp4', 'yt-tJuJ4MQdYy0.mp4', 'yt-tJuJ4MQdYy0.mp4']"
+        },
+        {
+          "severity": "duplicate_media",
+          "where": "pickleball/freshCandidates[yt-tJuJ4MQdYy0] + pickleball/freshCandidates[yt-tJuJ4MQdYy0]",
+          "detail": "identical sha256 34942348e22f4d43\u2026"
+        }
+      ],
+      "auditSeconds": 0.5
+    }
+  ],
+  "summary": {
+    "e24": {
+      "caught": [
+        "A06-held-out-annotation-file",
+        "A07-held-out-ta-bench",
+        "A08-ghost-media-fresh-candidate",
+        "A09-sha-mismatch-registry",
+        "A10-sha-mismatch-media-bytes",
+        "A11-dangling-bundle-ref",
+        "A13-corpus-unknown-source",
+        "A14-release-manifest-tamper",
+        "A15-duplicate-registry-id"
+      ],
+      "missed": [
+        "A01-label-edit-stroke-gold",
+        "A02-label-delete-stroke-gold",
+        "A03-annotation-silent-rewrite",
+        "A04-held-out-stroke-gold-caseid",
+        "A05-held-out-event-bounds-qa",
+        "A12-dangling-caseid-ref"
+      ]
+    },
+    "f24": {
+      "caught": [
+        "A01-label-edit-stroke-gold",
+        "A02-label-delete-stroke-gold",
+        "A03-annotation-silent-rewrite",
+        "A04-held-out-stroke-gold-caseid",
+        "A05-held-out-event-bounds-qa",
+        "A06-held-out-annotation-file",
+        "A07-held-out-ta-bench",
+        "A08-ghost-media-fresh-candidate",
+        "A09-sha-mismatch-registry",
+        "A10-sha-mismatch-media-bytes",
+        "A11-dangling-bundle-ref",
+        "A12-dangling-caseid-ref",
+        "A13-corpus-unknown-source",
+        "A14-release-manifest-tamper",
+        "A15-duplicate-registry-id"
+      ],
+      "missed": []
+    }
+  }
+}

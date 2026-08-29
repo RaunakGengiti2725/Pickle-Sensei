@@ -1,0 +1,371 @@
+{
+  "platform": "LINUX-CPU (MediaPipe pose probe \u2014 NOT Apple Vision canonical)",
+  "labelsCreated": 0,
+  "clipCount": 15,
+  "perSession": {
+    "U.S. Dept. of Veterans Affairs (official YouTube channel)": {
+      "clips": 2,
+      "success": 0,
+      "abstention": 2,
+      "silent_failure": 0,
+      "technical_failure": 0
+    },
+    "UC83z_qzETSgcemFzZdtmFvw": {
+      "clips": 2,
+      "success": 0,
+      "abstention": 2,
+      "silent_failure": 0,
+      "technical_failure": 0
+    },
+    "UCCCCsr1yhR9G_6MyJcuisxA": {
+      "clips": 1,
+      "success": 0,
+      "abstention": 1,
+      "silent_failure": 0,
+      "technical_failure": 0
+    },
+    "UCFR0jUjwRW0A2V-Jr0ajBdQ": {
+      "clips": 1,
+      "success": 0,
+      "abstention": 1,
+      "silent_failure": 0,
+      "technical_failure": 0
+    },
+    "UCQn04yJl81xKf7qvJ_V4DGg": {
+      "clips": 1,
+      "success": 0,
+      "abstention": 1,
+      "silent_failure": 0,
+      "technical_failure": 0
+    },
+    "UCSUhWFY9_gvq3C4eBLWjppg": {
+      "clips": 1,
+      "success": 1,
+      "abstention": 0,
+      "silent_failure": 0,
+      "technical_failure": 0
+    },
+    "UCZPhq0QqV1DWsN1D8E6jfCA": {
+      "clips": 1,
+      "success": 0,
+      "abstention": 1,
+      "silent_failure": 0,
+      "technical_failure": 0
+    },
+    "UCc-3aqtNBIyB7eJwW1etyMA": {
+      "clips": 1,
+      "success": 0,
+      "abstention": 1,
+      "silent_failure": 0,
+      "technical_failure": 0
+    },
+    "UCoRUrqRSyLdZrph7rDF8lHw": {
+      "clips": 1,
+      "success": 0,
+      "abstention": 1,
+      "silent_failure": 0,
+      "technical_failure": 0
+    },
+    "UCqnYQvrNoCCUpYQdVdatP-g": {
+      "clips": 1,
+      "success": 0,
+      "abstention": 1,
+      "silent_failure": 0,
+      "technical_failure": 0
+    },
+    "UCyZVHLo8WdO5AQNN9hXoWWw": {
+      "clips": 1,
+      "success": 0,
+      "abstention": 1,
+      "silent_failure": 0,
+      "technical_failure": 0
+    },
+    "Voice of America (VOA News)": {
+      "clips": 2,
+      "success": 0,
+      "abstention": 2,
+      "silent_failure": 0,
+      "technical_failure": 0
+    }
+  },
+  "rows": [
+    {
+      "id": "yt-tJuJ4MQdYy0",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UCoRUrqRSyLdZrph7rDF8lHw",
+      "uploader": "Craig vs Pickleball",
+      "outcome": "abstention",
+      "outcomeKind": "not_analyzable",
+      "detail": "capture quality gate failed: body_not_fully_visible \u2014 perception artifacts written; no score permitted",
+      "captureAnalyzable": false,
+      "captureReasons": [
+        "body_not_fully_visible"
+      ],
+      "paddleStatus": "tracked",
+      "ballStatus": "untracked",
+      "detectSpanMs": 900,
+      "contactStatus": "estimated",
+      "contactConfidence": 0.5208680740365779
+    },
+    {
+      "id": "yt-I5wYCXCL4dY",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UCQn04yJl81xKf7qvJ_V4DGg",
+      "uploader": "Chasing Pickleballs",
+      "outcome": "abstention",
+      "outcomeKind": "not_analyzable",
+      "detail": "capture quality gate failed: body_not_fully_visible, player_too_small_in_frame \u2014 perception artifacts written; no score permitted",
+      "captureAnalyzable": false,
+      "captureReasons": [
+        "body_not_fully_visible",
+        "player_too_small_in_frame"
+      ],
+      "paddleStatus": "tracked",
+      "ballStatus": "tracked",
+      "detectSpanMs": 4300,
+      "contactStatus": "estimated",
+      "contactConfidence": 0.548361124312567
+    },
+    {
+      "id": "yt-hktiyFnghIw",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UC83z_qzETSgcemFzZdtmFvw",
+      "uploader": "pickleball4you",
+      "outcome": "abstention",
+      "outcomeKind": "not_analyzable",
+      "detail": "capture quality gate failed: body_not_fully_visible \u2014 perception artifacts written; no score permitted",
+      "captureAnalyzable": false,
+      "captureReasons": [
+        "body_not_fully_visible"
+      ],
+      "paddleStatus": "tracked",
+      "ballStatus": "untracked",
+      "detectSpanMs": 5304,
+      "contactStatus": "abstained",
+      "contactConfidence": null
+    },
+    {
+      "id": "yt-Y7DOO0j_1P4",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UC83z_qzETSgcemFzZdtmFvw",
+      "uploader": "pickleball4you",
+      "outcome": "abstention",
+      "outcomeKind": "not_analyzable",
+      "detail": "capture quality gate failed: body_not_fully_visible \u2014 perception artifacts written; no score permitted",
+      "captureAnalyzable": false,
+      "captureReasons": [
+        "body_not_fully_visible"
+      ],
+      "paddleStatus": "untracked",
+      "ballStatus": "tracked",
+      "detectSpanMs": 1901,
+      "contactStatus": "abstained",
+      "contactConfidence": null
+    },
+    {
+      "id": "yt-iuVdtmGoTbo",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UCCCCsr1yhR9G_6MyJcuisxA",
+      "uploader": "Sigal Pickleball",
+      "outcome": "abstention",
+      "outcomeKind": "not_analyzable",
+      "detail": "capture quality gate failed: body_not_fully_visible \u2014 perception artifacts written; no score permitted",
+      "captureAnalyzable": false,
+      "captureReasons": [
+        "body_not_fully_visible"
+      ],
+      "paddleStatus": "tracked",
+      "ballStatus": "untracked",
+      "detectSpanMs": 1700,
+      "contactStatus": "estimated",
+      "contactConfidence": 0.6106017273352748
+    },
+    {
+      "id": "yt-eK-iPN2XAJQ",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UCZPhq0QqV1DWsN1D8E6jfCA",
+      "uploader": "Sandy Austin",
+      "outcome": "abstention",
+      "outcomeKind": "not_analyzable",
+      "detail": "capture quality gate failed: body_not_fully_visible \u2014 perception artifacts written; no score permitted",
+      "captureAnalyzable": false,
+      "captureReasons": [
+        "body_not_fully_visible"
+      ],
+      "paddleStatus": "tracked",
+      "ballStatus": "untracked",
+      "detectSpanMs": 1934,
+      "contactStatus": "abstained",
+      "contactConfidence": null
+    },
+    {
+      "id": "voa-6108955",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "Voice of America (VOA News)",
+      "uploader": "Voice of America (VOA News)",
+      "outcome": "abstention",
+      "outcomeKind": "abstained",
+      "detail": "offline_trigger.no_distinct_stroke: Wrist motion has no distinct stroke peak; the video looks like idle movement.",
+      "captureAnalyzable": true,
+      "captureReasons": [],
+      "paddleStatus": null,
+      "ballStatus": null,
+      "detectSpanMs": null,
+      "contactStatus": null,
+      "contactConfidence": null
+    },
+    {
+      "id": "voa-6115790",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "Voice of America (VOA News)",
+      "uploader": "Voice of America (VOA News)",
+      "outcome": "abstention",
+      "outcomeKind": "not_analyzable",
+      "detail": "capture quality gate failed: body_not_fully_visible \u2014 perception artifacts written; no score permitted",
+      "captureAnalyzable": false,
+      "captureReasons": [
+        "body_not_fully_visible"
+      ],
+      "paddleStatus": "untracked",
+      "ballStatus": "tracked",
+      "detectSpanMs": 933,
+      "contactStatus": "estimated",
+      "contactConfidence": 0.7249312073649942
+    },
+    {
+      "id": "yt-n-QrBfQVK_w",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UCyZVHLo8WdO5AQNN9hXoWWw",
+      "uploader": "Vernonchan.com",
+      "outcome": "abstention",
+      "outcomeKind": "not_analyzable",
+      "detail": "capture quality gate failed: body_not_fully_visible \u2014 perception artifacts written; no score permitted",
+      "captureAnalyzable": false,
+      "captureReasons": [
+        "body_not_fully_visible"
+      ],
+      "paddleStatus": "tracked",
+      "ballStatus": "tracked",
+      "detectSpanMs": 1933,
+      "contactStatus": "estimated",
+      "contactConfidence": 0.6428096306620122
+    },
+    {
+      "id": "yt-9ru97zKV8mk",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UCc-3aqtNBIyB7eJwW1etyMA",
+      "uploader": "Jake John",
+      "outcome": "abstention",
+      "outcomeKind": "not_analyzable",
+      "detail": "capture quality gate failed: body_not_fully_visible \u2014 perception artifacts written; no score permitted",
+      "captureAnalyzable": false,
+      "captureReasons": [
+        "body_not_fully_visible"
+      ],
+      "paddleStatus": "tracked",
+      "ballStatus": "tracked",
+      "detectSpanMs": 2867,
+      "contactStatus": "abstained",
+      "contactConfidence": null
+    },
+    {
+      "id": "yt-6r4fOxRuKmM",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UCFR0jUjwRW0A2V-Jr0ajBdQ",
+      "uploader": "Ishan R",
+      "outcome": "abstention",
+      "outcomeKind": "not_analyzable",
+      "detail": "capture quality gate failed: body_not_fully_visible \u2014 perception artifacts written; no score permitted",
+      "captureAnalyzable": false,
+      "captureReasons": [
+        "body_not_fully_visible"
+      ],
+      "paddleStatus": "tracked",
+      "ballStatus": "tracked",
+      "detectSpanMs": 1650,
+      "contactStatus": "abstained",
+      "contactConfidence": null
+    },
+    {
+      "id": "va-O1dLhGGPErc",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "U.S. Dept. of Veterans Affairs (official YouTube channel)",
+      "uploader": "U.S. Dept. of Veterans Affairs (official YouTube channel)",
+      "outcome": "abstention",
+      "outcomeKind": "rejected",
+      "detail": "player selection failed: player.no_tracks \u2014 No player tracks were formed.",
+      "captureAnalyzable": null,
+      "captureReasons": null,
+      "paddleStatus": null,
+      "ballStatus": null,
+      "detectSpanMs": null,
+      "contactStatus": null,
+      "contactConfidence": null
+    },
+    {
+      "id": "yt-o_NeuHjTEVE",
+      "role": "dev_label_eligible",
+      "labelBlind": false,
+      "session": "UCSUhWFY9_gvq3C4eBLWjppg",
+      "uploader": "BT Pickleball",
+      "outcome": "success",
+      "outcomeKind": "analyzed",
+      "detail": null,
+      "captureAnalyzable": true,
+      "captureReasons": [],
+      "paddleStatus": "tracked",
+      "ballStatus": "tracked",
+      "detectSpanMs": 2034,
+      "contactStatus": "abstained",
+      "contactConfidence": null
+    },
+    {
+      "id": "yt-94KNxpNTyCw",
+      "role": "dev_label_eligible",
+      "labelBlind": false,
+      "session": "UCqnYQvrNoCCUpYQdVdatP-g",
+      "uploader": "MR. PICKLEBALL",
+      "outcome": "abstention",
+      "outcomeKind": "not_analyzable",
+      "detail": "capture quality gate failed: body_not_fully_visible \u2014 perception artifacts written; no score permitted",
+      "captureAnalyzable": false,
+      "captureReasons": [
+        "body_not_fully_visible"
+      ],
+      "paddleStatus": "tracked",
+      "ballStatus": "untracked",
+      "detectSpanMs": 2100,
+      "contactStatus": "abstained",
+      "contactConfidence": null
+    },
+    {
+      "id": "va-6N3Yc184a_c",
+      "role": "dev_label_eligible",
+      "labelBlind": false,
+      "session": "U.S. Dept. of Veterans Affairs (official YouTube channel)",
+      "uploader": "U.S. Dept. of Veterans Affairs (official YouTube channel)",
+      "outcome": "abstention",
+      "outcomeKind": "rejected",
+      "detail": "player selection failed: player.no_tracks \u2014 No player tracks were formed.",
+      "captureAnalyzable": null,
+      "captureReasons": null,
+      "paddleStatus": null,
+      "ballStatus": null,
+      "detectSpanMs": null,
+      "contactStatus": null,
+      "contactConfidence": null
+    }
+  ]
+}

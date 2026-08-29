@@ -1,0 +1,10 @@
+{
+  "engineVersion": "coach-agreement-v1",
+  "generatedAtIso": "2026-08-29T17:40:58.868Z",
+  "reviewersPerItem": 2,
+  "activeCoaches": 0,
+  "feasible": false,
+  "reason": "need >=2 active coaches for independent review; registry has 0",
+  "note": "Deterministic blind-assignment PLAN derived from queue.json + coaches.json. It becomes real assignments only when an admin applies it through the portal (datasets/coach-review/assignments.json); it never invents coaches.",
+  "plan": []
+}

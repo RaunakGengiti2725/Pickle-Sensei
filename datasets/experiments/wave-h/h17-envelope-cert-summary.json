@@ -1,0 +1,603 @@
+{
+  "gate": "GATE 5 (any-video safety): SUPPORTED/DEGRADED/UNSUPPORTED capture-envelope classification end-to-end",
+  "workstream": "wave-h/h17-envelope-cert",
+  "branch": "devin/wave-h/h17-envelope-cert",
+  "baseline": "devin/1787988068-wave-c-integration @ 104ea0f",
+  "measuredAt": "2026-08-29T18:04:16.102Z",
+  "environment": "Linux CPU; ffmpeg decode; pose extraction unavailable (Apple Vision is macOS/iOS-only) so pose-conditioned signals are notEvaluated by construction",
+  "versions": {
+    "captureEnvelopeThresholds": "capture-envelope-thresholds-v0.3-provisional",
+    "frameAnalyzability": "frame-analyzability-3",
+    "preAnalysisGate": "pre-analysis-gate-1"
+  },
+  "method": "Generated real synthetic test media with ffmpeg for all 10 requested categories (plus 2 committed REAL rights-cleared OOD negatives: tennis, badminton). Each probe clip was run through the two production-facing pose-free safety layers exactly as their production callers compose them: (1) capture-envelope measureClip -> evaluateCaptureEnvelope (the verdict apps/mobile runCaptureAnalysis blocks on when overall=UNSUPPORTED, and the verdict packages/first-party-intake blocks on at intake); (2) pre-analysis OOD gate extractFrameStats -> evaluateFrameAnalyzability -> preAnalysisGate with pose=null/poseQuality=null. Downstream behavior was verified by direct code-path audit of apps/mobile/src/analysis/runCaptureAnalysis.ts (UNSUPPORTED envelope -> quality_blocked BEFORE inference, no permit, nothing recorded; imported videos -> 'unavailable', never analyzed; corrupt/missing/hash-mismatched pose sidecar -> 'unavailable'), packages/analysis-pipeline/src/analyzeCapture.ts (empty pose -> typed low_confidence failure; AUTO with no leaf resolution -> result:null, analysisConfidence 0, abstention presentation), and packages/first-party-intake/src/intake.ts (measureClip throw or UNSUPPORTED -> REJECTED). Pose-conditioned signals (player scale, joint visibility, person presence) CANNOT run on Linux (Apple Vision is macOS/iOS-only); they are reported notEvaluated by the gate itself, never assumed to pass. Each generated clip is one trial (one source each); frames were never counted as trials. Held-out cases wm-dink-01 and afn-vic-rally1 untouched.",
+  "counts": {
+    "probesTotal": 14,
+    "syntheticFfmpegClips": 12,
+    "realCommittedOodNegatives": 2,
+    "categoriesRequested": 10,
+    "categoriesCovered": 10,
+    "envelopeUnsupported": 5,
+    "envelopeDegraded": 3,
+    "envelopeSupported": 4,
+    "envelopeMeasurementThrew": 2,
+    "preAnalysisGateRejected": 9,
+    "preAnalysisGatePassed": 5,
+    "confidentAnalysisOfUnsupportedInput": 0
+  },
+  "perCategoryResults": {
+    "black_input": "FAIL-CLOSED: envelope UNSUPPORTED (brightness, motion_blur); gate rejects (still_image_video, solid_color_frames, letterbox_dominant, static_border_frame). Mobile: quality_blocked before inference.",
+    "corrupt_input": "FAIL-CLOSED (2 probes: truncated mp4, garbage bytes): measureClip throws (ffprobe failure) -> first-party intake REJECTED via catch; gate rejects (undecodable_media). Mobile: raw video imports are never analyzed at all ('unavailable': no recorded pose sequence); corrupt pose sidecars fail hash/parse checks.",
+    "tiny_player": "Pose-free layers cannot measure player scale (playerPixelHeightFraction requires pose; Apple Vision unavailable on Linux). This synthetic probe was rejected anyway (motion_blur UNSUPPORTED + still_image_video) but that is an artifact of the synthetic construction, NOT evidence of tiny-player detection. On-device the pose-required player_pixel_height dimension and preAnalysisGate person_implausible_scale mapping exist in code; not measured here. BLOCKED_EXTERNAL aspect.",
+    "cropped_limbs": "Same external limit: joint-visibility dimension (player_visibility) requires pose. Synthetic probe rejected by gate (still_image_video) as a construction artifact only. Code path exists (player_too_close_or_cropped -> person_implausible_scale); not measurable on Linux. BLOCKED_EXTERNAL aspect.",
+    "paddle_offscreen": "No paddle detector is installed in the mobile pipeline (paddle: unavailable('paddle_detector_not_installed')), so paddle visibility cannot gate capture; analysis honestly records paddle evidence as unavailable rather than fabricating contact. Synthetic probe DEGRADED (motion_blur) + gate-rejected as construction artifact. BLOCKED_EXTERNAL aspect for real-footage measurement.",
+    "dark_scene": "FAIL-CLOSED where envelope is measured: UNSUPPORTED (brightness, mean luma ~13 < 40). Mobile guided capture: readyGate blocks Ready and runCaptureAnalysis returns quality_blocked. Frame gate alone passes it (dark-but-moving content is not OOD) \u2014 by design, brightness is the envelope's dimension.",
+    "extreme_backlight": "DEGRADED (brightness high band), proceeds with recorded envelope + guidance per design. True bimodal-backlight (bright bg + dark subject averaging into the supported band) remains a KNOWN F22 category-D bypass; no threshold invented to mask it.",
+    "severe_blur": "FAIL-CLOSED: envelope UNSUPPORTED (motion_blur, laplacian variance ~14 < 30). Known F22 residual: grain/noise overlays can mask blur (bypass preserved, not re-fixed here).",
+    "multiple_players": "Pose-free layers cannot distinguish player count (envelope SUPPORTED on this synthetic probe; gate rejection was a construction artifact). Multi-person disambiguation relies on the target-seed identity path and pose-conditioned checks; not measurable on Linux. BLOCKED_EXTERNAL aspect.",
+    "camera_obstruction": "FAIL-CLOSED: dominant occluder drives envelope UNSUPPORTED (brightness) and gate rejection (letterbox_dominant static border). Partial/low-coverage obstructions are not specifically detected by pose-free signals; pose visibility dims would catch them on-device (unmeasured).",
+    "non_pickleball_ood": "MIXED, honestly reported: synthetic SMPTE bars gate-rejected (still_image_video). Both REAL sport negatives (tennis, badminton) PASS the pose-free frame gate and are envelope-SUPPORTED \u2014 the pose-free layers cannot detect sport content, matching the wave-E e11 measurement. Downstream safety for these rests on (a) mobile never analyzing imported/raw video, (b) the AUTO classifier abstention ladder, (c) pose-conditioned gates \u2014 (b) and (c) require a device and are BLOCKED_EXTERNAL here. No fabricated on-device claim is made."
+  },
+  "findings": {
+    "p0": [],
+    "p1": [
+      {
+        "id": "H17-P1-1",
+        "status": "unresolved (root-caused; internal fix not defensible without labeled evidence)",
+        "finding": "Session per-event analysis (apps/mobile/src/flow/sessionNative.ts createNativeSessionAnalysisProvider) never passes captureEnvelope to runCaptureAnalysis, so the UNSUPPORTED-envelope quality gate is silently skipped for every Session-mode clip. Guided single-capture passes attemptCaptureEnvelope; Session mode does not. A dark/blurred/low-res session capture reaches inference guarded only by the pose-sequence requirement and the classifier abstention ladder.",
+        "rootCause": "The envelope contract treats captureEnvelope:null as 'not measured -> proceed as before'; the session provider was wired before the envelope existed and was never updated.",
+        "whyNotFixedHere": "Blindly wiring attemptCaptureEnvelope(clip, null, null) into the session path would apply the clip_duration UNSUPPORTED band (<1s) to per-event clips whose legitimate event spans start at 160ms (sessionEngine EVENT_GATES.minEventSpanMs), creating measured false-reject risk (excess abstention on supported capture \u2014 itself a P1). Selectively excluding dimensions would be inventing thresholds without labeled session-clip evidence, which this certification is forbidden to do (F22 precedent). Needs: labeled session-clip duration/quality distribution from a device, then either a session-specific envelope profile or dimension subset with evidence."
+      }
+    ],
+    "p2": [
+      {
+        "id": "H17-P2-1",
+        "status": "unresolved (documented)",
+        "finding": "preAnalysisGate/evaluateFrameAnalyzability (the pose-free OOD gate) is exported but has NO production caller \u2014 it runs only in lab evaluation tools. Today this is not a live hole because mobile never analyzes raw video (imports are refused before inference), but any future server-side or import-analysis path must wire it in before accepting raw video."
+      },
+      {
+        "id": "H17-P2-2",
+        "status": "unresolved (known F22 category-D limits, preserved)",
+        "finding": "Confirmed still-open envelope bypass classes from F22 remain: bimodal/backlit exposure averaging into supported bands (this run: extreme_backlight only DEGRADED), grain-masked blur, upscale lie, rotation-tag normalization. No thresholds were invented to mask them."
+      }
+    ]
+  },
+  "fixes": {
+    "codeChanges": [
+      "packages/swing-lab/src/h17EnvelopeCert.ts \u2014 reusable Gate-5 certification harness (measurement only, no behavior change)",
+      "packages/swing-lab/test/h17EnvelopeCert.test.ts \u2014 regression tests locking fail-closed behavior for the Linux-measurable unsupported categories (black, corrupt/undecodable, dark, severe blur, dominant obstruction)",
+      "packages/swing-lab/package.json \u2014 added @pickle/capture-envelope workspace dependency"
+    ],
+    "noThresholdChanges": true,
+    "noProductionBehaviorChanges": true
+  },
+  "verdict": "PASS",
+  "rationale": "For every category the pose-free layers can measure on Linux, unsupported input failed closed with concise typed guidance, and 0 of 14 probes produced (or could reach) a confident technique analysis: UNSUPPORTED envelopes are blocked before inference in the mobile path (quality_blocked, no permit, nothing recorded) and REJECTED at first-party intake; corrupt media throws/never yields SUPPORTED; raw/imported video is never analyzed at all; empty pose sequences and unresolved AUTO runs return typed abstentions with analysisConfidence 0. No P0 found. PASS is scoped: pose-conditioned dimensions (tiny player, cropped limbs, multiple players, real-OOD person content) were NOT evaluated here \u2014 Apple Vision requires macOS/iOS hardware that is unavailable, the gate itself reports them notEvaluated, and their on-device certification remains BLOCKED_EXTERNAL. One P1 gap (Session-mode envelope skip) is root-caused and disclosed, not internally fixable without labeled device evidence; it is mitigated but not eliminated by the pose-sequence requirement and abstention ladder.",
+  "heldOutCasesTouched": [],
+  "rawMeasurements": [
+    {
+      "id": "black",
+      "category": "black_input",
+      "path": "/home/ubuntu/h17-media/black.mp4",
+      "envelope": {
+        "overall": "UNSUPPORTED",
+        "unsupportedDimensions": [
+          "brightness",
+          "motion_blur"
+        ],
+        "degradedDimensions": [],
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ],
+        "measurements": {
+          "frameWidthPx": 1280,
+          "frameHeightPx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 0.9888888888888886,
+          "brightnessStdLuma": 3.3306690738754696e-16,
+          "laplacianVarianceMedian": 0.011235955056179775,
+          "meanAbsFrameDiff": 0,
+          "frameIntervalCv": 1.416568422953804e-05,
+          "clipDurationMs": 5000,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        }
+      },
+      "envelopeError": null,
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "still_image_video",
+        "solid_color_frames",
+        "letterbox_dominant",
+        "static_border_frame"
+      ],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.still_image_video",
+      "gateMessage": "Capture is not analyzable: still_image_video, solid_color_frames, letterbox_dominant, static_border_frame.",
+      "notEvaluated": []
+    },
+    {
+      "id": "corrupt-truncated",
+      "category": "corrupt_input",
+      "path": "/home/ubuntu/h17-media/corrupt_truncated.mp4",
+      "envelope": null,
+      "envelopeError": "ffprobe failed (1): [mov,mp4,m4a,3gp,3g2,mj2 @ 0x56289e5f2100] moov atom not found\n/home/ubuntu/h17-media/corrupt_truncated.mp4: Invalid data found when processing input\n",
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "single_frame_clip",
+        "undecodable_media"
+      ],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.single_frame_clip",
+      "gateMessage": "Capture is not analyzable: single_frame_clip, undecodable_media.",
+      "notEvaluated": []
+    },
+    {
+      "id": "corrupt-garbage",
+      "category": "corrupt_input",
+      "path": "/home/ubuntu/h17-media/corrupt_garbage.mp4",
+      "envelope": null,
+      "envelopeError": "ffprobe failed (1): [mov,mp4,m4a,3gp,3g2,mj2 @ 0x5617baf08100] moov atom not found\n/home/ubuntu/h17-media/corrupt_garbage.mp4: Invalid data found when processing input\n",
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "single_frame_clip",
+        "undecodable_media"
+      ],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.single_frame_clip",
+      "gateMessage": "Capture is not analyzable: single_frame_clip, undecodable_media.",
+      "notEvaluated": []
+    },
+    {
+      "id": "tiny-player",
+      "category": "tiny_player",
+      "path": "/home/ubuntu/h17-media/tiny_player.mp4",
+      "envelope": {
+        "overall": "UNSUPPORTED",
+        "unsupportedDimensions": [
+          "motion_blur"
+        ],
+        "degradedDimensions": [],
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ],
+        "measurements": {
+          "frameWidthPx": 1280,
+          "frameHeightPx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 76.02967013888886,
+          "brightnessStdLuma": 2.842170943040401e-14,
+          "laplacianVarianceMedian": 10.370115186205922,
+          "meanAbsFrameDiff": 0,
+          "frameIntervalCv": 1.416568422953804e-05,
+          "clipDurationMs": 5000,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        }
+      },
+      "envelopeError": null,
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "still_image_video",
+        "solid_color_frames"
+      ],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.still_image_video",
+      "gateMessage": "Capture is not analyzable: still_image_video, solid_color_frames.",
+      "notEvaluated": []
+    },
+    {
+      "id": "cropped-limbs",
+      "category": "cropped_limbs",
+      "path": "/home/ubuntu/h17-media/cropped_limbs.mp4",
+      "envelope": {
+        "overall": "DEGRADED",
+        "unsupportedDimensions": [],
+        "degradedDimensions": [
+          "motion_blur"
+        ],
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ],
+        "measurements": {
+          "frameWidthPx": 1280,
+          "frameHeightPx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 81.42829861111112,
+          "brightnessStdLuma": 0,
+          "laplacianVarianceMedian": 91.0756836972652,
+          "meanAbsFrameDiff": 0,
+          "frameIntervalCv": 1.416568422953804e-05,
+          "clipDurationMs": 5000,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        }
+      },
+      "envelopeError": null,
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "still_image_video"
+      ],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.still_image_video",
+      "gateMessage": "Capture is not analyzable: still_image_video.",
+      "notEvaluated": []
+    },
+    {
+      "id": "paddle-offscreen",
+      "category": "paddle_offscreen",
+      "path": "/home/ubuntu/h17-media/paddle_offscreen.mp4",
+      "envelope": {
+        "overall": "DEGRADED",
+        "unsupportedDimensions": [],
+        "degradedDimensions": [
+          "motion_blur"
+        ],
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ],
+        "measurements": {
+          "frameWidthPx": 1280,
+          "frameHeightPx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 79.9089409722222,
+          "brightnessStdLuma": 2.842170943040401e-14,
+          "laplacianVarianceMedian": 88.17016465267473,
+          "meanAbsFrameDiff": 0,
+          "frameIntervalCv": 1.416568422953804e-05,
+          "clipDurationMs": 5000,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        }
+      },
+      "envelopeError": null,
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "still_image_video"
+      ],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.still_image_video",
+      "gateMessage": "Capture is not analyzable: still_image_video.",
+      "notEvaluated": []
+    },
+    {
+      "id": "dark-scene",
+      "category": "dark_scene",
+      "path": "/home/ubuntu/h17-media/dark_scene.mp4",
+      "envelope": {
+        "overall": "UNSUPPORTED",
+        "unsupportedDimensions": [
+          "brightness"
+        ],
+        "degradedDimensions": [],
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ],
+        "measurements": {
+          "frameWidthPx": 1280,
+          "frameHeightPx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 28.637967881944444,
+          "brightnessStdLuma": 0.6630618702358777,
+          "laplacianVarianceMedian": 138.09228092597618,
+          "meanAbsFrameDiff": 1.9688386330409358,
+          "frameIntervalCv": 1.416568422953804e-05,
+          "clipDurationMs": 5000,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        }
+      },
+      "envelopeError": null,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "gateMessage": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "id": "extreme-backlight",
+      "category": "extreme_backlight",
+      "path": "/home/ubuntu/h17-media/extreme_backlight.mp4",
+      "envelope": {
+        "overall": "DEGRADED",
+        "unsupportedDimensions": [],
+        "degradedDimensions": [
+          "brightness"
+        ],
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ],
+        "measurements": {
+          "frameWidthPx": 1280,
+          "frameHeightPx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 210.30614496527778,
+          "brightnessStdLuma": 0.26728830360540423,
+          "laplacianVarianceMedian": 397.1940872370718,
+          "meanAbsFrameDiff": 2.535295138888889,
+          "frameIntervalCv": 1.416568422953804e-05,
+          "clipDurationMs": 5000,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        }
+      },
+      "envelopeError": null,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "gateMessage": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "id": "severe-blur",
+      "category": "severe_blur",
+      "path": "/home/ubuntu/h17-media/severe_blur.mp4",
+      "envelope": {
+        "overall": "UNSUPPORTED",
+        "unsupportedDimensions": [
+          "motion_blur"
+        ],
+        "degradedDimensions": [],
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ],
+        "measurements": {
+          "frameWidthPx": 1280,
+          "frameHeightPx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 127.33674305555556,
+          "brightnessStdLuma": 0.5159678350005557,
+          "laplacianVarianceMedian": 1.3616166065922504,
+          "meanAbsFrameDiff": 2.6176882309941516,
+          "frameIntervalCv": 1.416568422953804e-05,
+          "clipDurationMs": 5000,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        }
+      },
+      "envelopeError": null,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "gateMessage": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "id": "multiple-players",
+      "category": "multiple_players",
+      "path": "/home/ubuntu/h17-media/multiple_players.mp4",
+      "envelope": {
+        "overall": "SUPPORTED",
+        "unsupportedDimensions": [],
+        "degradedDimensions": [],
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ],
+        "measurements": {
+          "frameWidthPx": 1280,
+          "frameHeightPx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 86.49260763888891,
+          "brightnessStdLuma": 1.5135065777201526e-05,
+          "laplacianVarianceMedian": 131.05275245565684,
+          "meanAbsFrameDiff": 1.2792397660818713e-05,
+          "frameIntervalCv": 1.416568422953804e-05,
+          "clipDurationMs": 5000,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        }
+      },
+      "envelopeError": null,
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "still_image_video"
+      ],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.still_image_video",
+      "gateMessage": "Capture is not analyzable: still_image_video.",
+      "notEvaluated": []
+    },
+    {
+      "id": "camera-obstruction",
+      "category": "camera_obstruction",
+      "path": "/home/ubuntu/h17-media/camera_obstruction.mp4",
+      "envelope": {
+        "overall": "UNSUPPORTED",
+        "unsupportedDimensions": [
+          "brightness"
+        ],
+        "degradedDimensions": [],
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ],
+        "measurements": {
+          "frameWidthPx": 1280,
+          "frameHeightPx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 22.05455555555556,
+          "brightnessStdLuma": 0.230142084576296,
+          "laplacianVarianceMedian": 185.624938166914,
+          "meanAbsFrameDiff": 0.46516995614035084,
+          "frameIntervalCv": 1.416568422953804e-05,
+          "clipDurationMs": 5000,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        }
+      },
+      "envelopeError": null,
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "letterbox_dominant"
+      ],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.letterbox_dominant",
+      "gateMessage": "Capture is not analyzable: letterbox_dominant.",
+      "notEvaluated": []
+    },
+    {
+      "id": "ood-smpte",
+      "category": "non_pickleball_ood",
+      "path": "/home/ubuntu/h17-media/ood_smpte.mp4",
+      "envelope": {
+        "overall": "SUPPORTED",
+        "unsupportedDimensions": [],
+        "degradedDimensions": [],
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ],
+        "measurements": {
+          "frameWidthPx": 1280,
+          "frameHeightPx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 93.59658854166669,
+          "brightnessStdLuma": 2.2966591244768635e-05,
+          "laplacianVarianceMedian": 325.51020865080085,
+          "meanAbsFrameDiff": 1.2792397660818715e-05,
+          "frameIntervalCv": 1.416568422953804e-05,
+          "clipDurationMs": 5000,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        }
+      },
+      "envelopeError": null,
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "still_image_video"
+      ],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.still_image_video",
+      "gateMessage": "Capture is not analyzable: still_image_video.",
+      "notEvaluated": []
+    },
+    {
+      "id": "ood-real-tennis",
+      "category": "non_pickleball_ood",
+      "path": "datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4",
+      "envelope": {
+        "overall": "SUPPORTED",
+        "unsupportedDimensions": [],
+        "degradedDimensions": [],
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ],
+        "measurements": {
+          "frameWidthPx": 1920,
+          "frameHeightPx": 1080,
+          "avgFrameRateFps": 29.97002997002997,
+          "brightnessMeanLuma": 106.65567681827824,
+          "brightnessStdLuma": 9.215031883933527,
+          "laplacianVarianceMedian": 2739.0732961447056,
+          "meanAbsFrameDiff": 6.794631810897435,
+          "frameIntervalCv": 1.4128007615309666e-05,
+          "clipDurationMs": 32766,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        }
+      },
+      "envelopeError": null,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "gateMessage": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    },
+    {
+      "id": "ood-real-badminton",
+      "category": "non_pickleball_ood",
+      "path": "datasets/ood/negatives/yt-Iw55LinAF0U-badminton.mp4",
+      "envelope": {
+        "overall": "SUPPORTED",
+        "unsupportedDimensions": [],
+        "degradedDimensions": [],
+        "notMeasured": [
+          "player_pixel_height",
+          "player_visibility"
+        ],
+        "measurements": {
+          "frameWidthPx": 1280,
+          "frameHeightPx": 720,
+          "avgFrameRateFps": 30,
+          "brightnessMeanLuma": 98.0705995370371,
+          "brightnessStdLuma": 4.08634748585226,
+          "laplacianVarianceMedian": 1921.1277841722276,
+          "meanAbsFrameDiff": 2.110454744397759,
+          "frameIntervalCv": 1.4146063293572033e-05,
+          "clipDurationMs": 30000,
+          "playerPixelHeightFraction": null,
+          "playerMeanJointVisibility": null
+        }
+      },
+      "envelopeError": null,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "gateMessage": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "playback_speed",
+        "pose_presence",
+        "pose_capture_quality"
+      ]
+    }
+  ]
+}

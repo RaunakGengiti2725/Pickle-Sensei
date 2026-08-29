@@ -1,0 +1,940 @@
+{
+  "schemaVersion": 1,
+  "workstream": "wave-d2/d2-09-registry-datacards",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "generatedAtIso": "2026-08-29T09:27:32.268897+00:00",
+  "heldOutCasesUntouched": [
+    "afn-vic-rally1",
+    "wm-dink-01"
+  ],
+  "issues": [
+    {
+      "severity": "dead_url",
+      "where": "sources[roboflow-pickleball-detection-1oqlw-px8fm]",
+      "detail": "HTTP 403 (GET range 0-0) for https://universe.roboflow.com/senior-lab-b5ptu/pickleball-detection-1oqlw-px8fm"
+    },
+    {
+      "severity": "dead_url",
+      "where": "sources[roboflow-pickleball-pen-ball-tracking-v3]",
+      "detail": "HTTP 403 (GET range 0-0) for https://universe.roboflow.com/dustins-workspace-huvdc/pickleball-pen-ball-tracking/dataset/3"
+    },
+    {
+      "severity": "stale_assignment_explained",
+      "where": "corpus/splits.json",
+      "detail": "assigned session dvids-956784 has no recordings \u2014 session was merged away by dedup (see dedup-report.json MERGED SESSIONS); stale entry retained, not removed here because deterministic split reuse semantics are owned by the data engine"
+    },
+    {
+      "severity": "stale_assignment_explained",
+      "where": "corpus/splits.json",
+      "detail": "assigned session dvids-957519 has no recordings \u2014 session was merged away by dedup (see dedup-report.json MERGED SESSIONS); stale entry retained, not removed here because deterministic split reuse semantics are owned by the data engine"
+    },
+    {
+      "severity": "stale_assignment_explained",
+      "where": "corpus/splits.json",
+      "detail": "assigned session dvids-967848 has no recordings \u2014 session was merged away by dedup (see dedup-report.json MERGED SESSIONS); stale entry retained, not removed here because deterministic split reuse semantics are owned by the data engine"
+    }
+  ],
+  "registry": {
+    "schemaVersion": 2,
+    "counts": {
+      "sources": 2,
+      "evaluatedButExcluded": 6,
+      "officialSearchChecks": 1,
+      "freshCandidates": 6,
+      "quarantinedUnknownRights": 13
+    },
+    "freshCandidateMediaVerification": {
+      "items": [
+        {
+          "id": "yt-tJuJ4MQdYy0",
+          "path": "datasets/pickleball/fresh-candidates/yt-tJuJ4MQdYy0.mp4",
+          "fileExists": true,
+          "bytesActual": 31043189,
+          "bytesRegistered": 31043189,
+          "bytesMatch": true,
+          "sha256Actual": "34942348e22f4d43fa4ce10d1451fb085cfb42164770994c9042dd6b91b9eb8d",
+          "sha256Registered": "34942348e22f4d43fa4ce10d1451fb085cfb42164770994c9042dd6b91b9eb8d",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-I5wYCXCL4dY",
+          "path": "datasets/pickleball/fresh-candidates/yt-I5wYCXCL4dY.mp4",
+          "fileExists": true,
+          "bytesActual": 48532209,
+          "bytesRegistered": 48532209,
+          "bytesMatch": true,
+          "sha256Actual": "c0a327452feb7ec4bf3bc805cebbef695dee7a11f8a42a3cc74f404218b0b3c7",
+          "sha256Registered": "c0a327452feb7ec4bf3bc805cebbef695dee7a11f8a42a3cc74f404218b0b3c7",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-hktiyFnghIw",
+          "path": "datasets/pickleball/fresh-candidates/yt-hktiyFnghIw.mp4",
+          "fileExists": true,
+          "bytesActual": 24656295,
+          "bytesRegistered": 24656295,
+          "bytesMatch": true,
+          "sha256Actual": "f24520258593d7d11effd4b8655d108b42f1878aff0281f2fe60ae7af4715a88",
+          "sha256Registered": "f24520258593d7d11effd4b8655d108b42f1878aff0281f2fe60ae7af4715a88",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-Y7DOO0j_1P4",
+          "path": "datasets/pickleball/fresh-candidates/yt-Y7DOO0j_1P4.mp4",
+          "fileExists": true,
+          "bytesActual": 25365777,
+          "bytesRegistered": 25365777,
+          "bytesMatch": true,
+          "sha256Actual": "33949eb30efdf59b65389cf5b3dcbadefd77a855ff654a1a63ee896d32f6a6e5",
+          "sha256Registered": "33949eb30efdf59b65389cf5b3dcbadefd77a855ff654a1a63ee896d32f6a6e5",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-iuVdtmGoTbo",
+          "path": "datasets/pickleball/fresh-candidates/yt-iuVdtmGoTbo.mp4",
+          "fileExists": true,
+          "bytesActual": 23799127,
+          "bytesRegistered": 23799127,
+          "bytesMatch": true,
+          "sha256Actual": "c1a5391109fb32581419cf082c97839de3b638afd58fc8ac558035947ba12c0d",
+          "sha256Registered": "c1a5391109fb32581419cf082c97839de3b638afd58fc8ac558035947ba12c0d",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-eK-iPN2XAJQ",
+          "path": "datasets/pickleball/fresh-candidates/yt-eK-iPN2XAJQ.mp4",
+          "fileExists": true,
+          "bytesActual": 27683931,
+          "bytesRegistered": 27683931,
+          "bytesMatch": true,
+          "sha256Actual": "fca94767321a0c6f302db8b34b1b64c798b840613baa493d29feb3eb4c941468",
+          "sha256Registered": "fca94767321a0c6f302db8b34b1b64c798b840613baa493d29feb3eb4c941468",
+          "sha256Match": true
+        }
+      ],
+      "totalBytesRegistered": 181080528,
+      "totalBytesActual": 181080528,
+      "totalBytesMatch": true
+    },
+    "urlChecks": [
+      {
+        "where": "sources[roboflow-pickleball-detection-1oqlw-px8fm]",
+        "url": "https://universe.roboflow.com/senior-lab-b5ptu/pickleball-detection-1oqlw-px8fm",
+        "httpStatus": 403,
+        "method": "GET range 0-0",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "sources[roboflow-pickleball-detection-1oqlw-px8fm].licenseUrl",
+        "url": "https://creativecommons.org/licenses/by/4.0/",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "sources[roboflow-pickleball-pen-ball-tracking-v3]",
+        "url": "https://universe.roboflow.com/dustins-workspace-huvdc/pickleball-pen-ball-tracking/dataset/3",
+        "httpStatus": 403,
+        "method": "GET range 0-0",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "sources[roboflow-pickleball-pen-ball-tracking-v3].licenseUrl",
+        "url": "https://opensource.org/license/mit",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "evaluatedButExcluded[actionatlas-v1-pickleball-subset]",
+        "url": "https://huggingface.co/datasets/mrsalehi/ActionAtlas-v1.0",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "evaluatedButExcluded[actionatlas-v1-pickleball-subset]",
+        "url": "https://github.com/mrsalehi/action-atlas",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "evaluatedButExcluded[actionatlas-v1-pickleball-subset]",
+        "url": "https://proceedings.neurips.cc/paper_files/paper/2024/hash/f8643596721dbac71d67f89497323efe-Abstract-Datasets_and_Benchmarks_Track.html",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "evaluatedButExcluded[actionatlas-v1-pickleball-subset]",
+        "url": "https://datasets-server.huggingface.co/filter?dataset=mrsalehi%2FActionAtlas-v1.0&config=default&split=test&where=%22domain%22%20%3D%20%27Pickleball%27&offset=0&length=100",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "evaluatedButExcluded[university-of-rochester-pickleball-analytics]",
+        "url": "https://www.hajim.rochester.edu/senior-design-day/pickleball-analytics/",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "evaluatedButExcluded[ball-tracking-pickleball-github]",
+        "url": "https://github.com/shivam-d11/Ball-Tracking-PickleBall",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "evaluatedButExcluded[pklmart-competitive-pickleball-extracts]",
+        "url": "https://www.kaggle.com/datasets/cakesofspan/pklmarts-competitive-pickleball-extracts",
+        "httpStatus": 200,
+        "method": "GET range 0-0",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "evaluatedButExcluded[figshare-womens-singles-pickleball-notational-analysis]",
+        "url": "https://figshare.com/articles/dataset/Technical_and_Tactical_Performance_in_Women_s_Singles_Pickleball_A_Notational_Analysis_of_Key_Match_Indicators_data_files_for_SPSS_and_Theme_/28124738",
+        "httpStatus": 202,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "evaluatedButExcluded[scientific-reports-mctn-pickleball-dataset-claim]",
+        "url": "https://www.nature.com/articles/s41598-025-33985-6",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "officialSearchChecks[Hugging Face public datasets API]",
+        "url": "https://huggingface.co/api/datasets?search=pickleball&limit=100",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "freshCandidates[yt-tJuJ4MQdYy0]",
+        "url": "https://www.youtube.com/watch?v=tJuJ4MQdYy0",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "freshCandidates[yt-I5wYCXCL4dY]",
+        "url": "https://www.youtube.com/watch?v=I5wYCXCL4dY",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "freshCandidates[yt-hktiyFnghIw]",
+        "url": "https://www.youtube.com/watch?v=hktiyFnghIw",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "freshCandidates[yt-Y7DOO0j_1P4]",
+        "url": "https://www.youtube.com/watch?v=Y7DOO0j_1P4",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "freshCandidates[yt-iuVdtmGoTbo]",
+        "url": "https://www.youtube.com/watch?v=iuVdtmGoTbo",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "freshCandidates[yt-eK-iPN2XAJQ]",
+        "url": "https://www.youtube.com/watch?v=eK-iPN2XAJQ",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "quarantinedUnknownRights[ia-epcga-virtual-pickleball-session-pt1]",
+        "url": "https://archive.org/details/epcga-EP_Parks_Rec_Virtual_Pickleball_Session_Pt._1",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "quarantinedUnknownRights[ia-pickleball-finals-09-05-2016]",
+        "url": "https://archive.org/details/Pickleball_Finals_09.05.2016",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "quarantinedUnknownRights[ia-cica-pickleball-at-north-park]",
+        "url": "https://archive.org/details/cica-PICKLEBALL_AT_NORTH_PARK",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "quarantinedUnknownRights[ia-cctv17vt-south-burlington-council]",
+        "url": "https://archive.org/details/cctv17vt-South_Burlington_City_Council_-_7_15_2024",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "quarantinedUnknownRights[ia-cotfl-senior-games-2024-pickleball]",
+        "url": "https://archive.org/details/cotfl-Senior_Games_2024_-_Pickleball_Competition",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "quarantinedUnknownRights[ia-elsca-app-pickleball-tournament]",
+        "url": "https://archive.org/details/elsca-APP_PickleBall_Tournament",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "quarantinedUnknownRights[ia-cctv17vt-szymanski-park-pickleball]",
+        "url": "https://archive.org/details/cctv17vt-Szymanski_Park_Pickleball",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "quarantinedUnknownRights[ia-qctvmn-pickleball-with-police]",
+        "url": "https://archive.org/details/qctvmn-Pickleball_With_Police_Ramsey_MN_QCTV",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "quarantinedUnknownRights[ia-whhisc-third-shot-drop-tips]",
+        "url": "https://archive.org/details/whhisc-WHHI_NEWS_Sarah_Mitten_-_Pickleball_3rd_Shot_Drop_Tips_Island_Rec_Center_WHHITV",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "quarantinedUnknownRights[ia-waters-johns-v-bright-patriquin-oc-cup]",
+        "url": "https://archive.org/details/waters-johns-v-bright-patriquin-at-the-select-medical-orange-county-cup-you-tube",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "quarantinedUnknownRights[ia-utah-black-diamonds-vs-chicago-slice-mlp]",
+        "url": "https://archive.org/details/utah-black-diamonds-vs-chicago-slice-at-the-mlp-chicago",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "quarantinedUnknownRights[ia-shock-vs-5s-mlp-mid-season]",
+        "url": "https://archive.org/details/shock-vs-5s-at-the-edward-jones-mlp-mid-season-tournament",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "quarantinedUnknownRights[ia-screen-recording-pickleball-christmas]",
+        "url": "https://archive.org/details/screen-recording-12-22-2025-06-24-01-1",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      }
+    ]
+  },
+  "ood": {
+    "present": true,
+    "schemaVersion": 1,
+    "counts": {
+      "items": 9,
+      "quarantinedUnknownRights": 3,
+      "searchLog": 4
+    },
+    "mediaVerification": {
+      "items": [
+        {
+          "id": "yt--wE27MoX2AM-tennis",
+          "path": "datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4",
+          "fileExists": true,
+          "bytesActual": 21899905,
+          "bytesRegistered": 21899905,
+          "bytesMatch": true,
+          "sha256Actual": "a583fcacf429c3f3377ee257ad770b617ba5c0b5f7fdd59eea212f69f925778a",
+          "sha256Registered": "a583fcacf429c3f3377ee257ad770b617ba5c0b5f7fdd59eea212f69f925778a",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-RpPe0h9cD5E-tennis",
+          "path": "datasets/ood/negatives/yt-RpPe0h9cD5E-tennis.mp4",
+          "fileExists": true,
+          "bytesActual": 16212911,
+          "bytesRegistered": 16212911,
+          "bytesMatch": true,
+          "sha256Actual": "f36c96cf572a46bfd9e2325b31d50592fffc67b8090c27c29523b3e3ed51e0fd",
+          "sha256Registered": "f36c96cf572a46bfd9e2325b31d50592fffc67b8090c27c29523b3e3ed51e0fd",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-Iw55LinAF0U-badminton",
+          "path": "datasets/ood/negatives/yt-Iw55LinAF0U-badminton.mp4",
+          "fileExists": true,
+          "bytesActual": 5523328,
+          "bytesRegistered": 5523328,
+          "bytesMatch": true,
+          "sha256Actual": "2e6c562a761bf65afcd5d3ef0b15ed1d237f0350e972a066726cc66a5351ac27",
+          "sha256Registered": "2e6c562a761bf65afcd5d3ef0b15ed1d237f0350e972a066726cc66a5351ac27",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-2wV0Gs9r384-tabletennis",
+          "path": "datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4",
+          "fileExists": true,
+          "bytesActual": 12150777,
+          "bytesRegistered": 12150777,
+          "bytesMatch": true,
+          "sha256Actual": "b2cf44b2dd505091c011dcbb167b219919296de071ca4d919a715e1af902f21e",
+          "sha256Registered": "b2cf44b2dd505091c011dcbb167b219919296de071ca4d919a715e1af902f21e",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-BCJGL5E9huM-tabletennis",
+          "path": "datasets/ood/negatives/yt-BCJGL5E9huM-tabletennis.mp4",
+          "fileExists": true,
+          "bytesActual": 945451,
+          "bytesRegistered": 945451,
+          "bytesMatch": true,
+          "sha256Actual": "dbc0e3869643cc27d571bb785f54563de52a3ed8f7377184bbba764b693b3e2f",
+          "sha256Registered": "dbc0e3869643cc27d571bb785f54563de52a3ed8f7377184bbba764b693b3e2f",
+          "sha256Match": true
+        },
+        {
+          "id": "yt-zWQs7kTKcEY-emptycourt",
+          "path": "datasets/ood/negatives/yt-zWQs7kTKcEY-emptycourt.mp4",
+          "fileExists": true,
+          "bytesActual": 9838060,
+          "bytesRegistered": 9838060,
+          "bytesMatch": true,
+          "sha256Actual": "3b8e042325e3fef2f96ab35f9128a0040289ec49b6ee422dad00d5fa2715dc27",
+          "sha256Registered": "3b8e042325e3fef2f96ab35f9128a0040289ec49b6ee422dad00d5fa2715dc27",
+          "sha256Match": true
+        },
+        {
+          "id": "commons-ronpaul-crowd",
+          "path": "datasets/ood/negatives/commons-ronpaul-crowd.mp4",
+          "fileExists": true,
+          "bytesActual": 3914648,
+          "bytesRegistered": 3914648,
+          "bytesMatch": true,
+          "sha256Actual": "acf5d2dd7ea36c343f7d84ca79a9a2df91f712570b5e6d2cdfd31e0ec42d6e8f",
+          "sha256Registered": "acf5d2dd7ea36c343f7d84ca79a9a2df91f712570b5e6d2cdfd31e0ec42d6e8f",
+          "sha256Match": true
+        },
+        {
+          "id": "ia-ProfileJ26-interview",
+          "path": "datasets/ood/negatives/ia-ProfileJ26-interview.mp4",
+          "fileExists": true,
+          "bytesActual": 1548017,
+          "bytesRegistered": 1548017,
+          "bytesMatch": true,
+          "sha256Actual": "0fe651a49ef6f55129a9aa98ea42b6003bd464e63552526200984e35decfc70a",
+          "sha256Registered": "0fe651a49ef6f55129a9aa98ea42b6003bd464e63552526200984e35decfc70a",
+          "sha256Match": true
+        },
+        {
+          "id": "ia-HanfordS1957-titlecard",
+          "path": "datasets/ood/negatives/ia-HanfordS1957-titlecard.mp4",
+          "fileExists": true,
+          "bytesActual": 812425,
+          "bytesRegistered": 812425,
+          "bytesMatch": true,
+          "sha256Actual": "d29bf312395ed2281164f695bcc467747dcd736f83a28ccb28d4f6bdf45ff965",
+          "sha256Registered": "d29bf312395ed2281164f695bcc467747dcd736f83a28ccb28d4f6bdf45ff965",
+          "sha256Match": true
+        }
+      ],
+      "totalBytesRegistered": 72845522,
+      "totalBytesActual": 72845522,
+      "totalBytesMatch": true
+    },
+    "urlChecks": [
+      {
+        "where": "ood/items[yt--wE27MoX2AM-tennis]",
+        "url": "https://www.youtube.com/watch?v=-wE27MoX2AM",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "ood/items[yt-RpPe0h9cD5E-tennis]",
+        "url": "https://www.youtube.com/watch?v=RpPe0h9cD5E",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "ood/items[yt-Iw55LinAF0U-badminton]",
+        "url": "https://www.youtube.com/watch?v=Iw55LinAF0U",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "ood/items[yt-2wV0Gs9r384-tabletennis]",
+        "url": "https://www.youtube.com/watch?v=2wV0Gs9r384",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "ood/items[yt-BCJGL5E9huM-tabletennis]",
+        "url": "https://www.youtube.com/watch?v=BCJGL5E9huM",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "ood/items[yt-zWQs7kTKcEY-emptycourt]",
+        "url": "https://www.youtube.com/watch?v=zWQs7kTKcEY",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "ood/items[commons-ronpaul-crowd]",
+        "url": "https://commons.wikimedia.org/wiki/File:Ron_Paul_Leaving_Independence_Mall_(Enthusiastic_Crowd!).webm",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "ood/items[ia-ProfileJ26-interview]",
+        "url": "https://archive.org/details/ProfileJ26",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "ood/items[ia-HanfordS1957-titlecard]",
+        "url": "https://archive.org/details/HanfordS1957",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "ood/quarantined[yt-dTCcy2kDyvM]",
+        "url": "https://www.youtube.com/watch?v=dTCcy2kDyvM",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "ood/quarantined[yt-90sqbuAo7Uw]",
+        "url": "https://www.youtube.com/watch?v=90sqbuAo7Uw",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      },
+      {
+        "where": "ood/quarantined[yt-7JidyzpDH6U]",
+        "url": "https://www.youtube.com/watch?v=7JidyzpDH6U",
+        "httpStatus": 200,
+        "method": "HEAD",
+        "checkedAt": "2026-08-29T09:27:32.268897+00:00"
+      }
+    ]
+  },
+  "paddleBench": {
+    "registryVideoCount": 13,
+    "eventBoundsQaWaveC": {
+      "events": 34,
+      "corrections": 1
+    },
+    "eventBoundsWaveA": {
+      "cases": 8,
+      "rejectedCandidates": 9
+    },
+    "strokeGoldLabels": 29,
+    "paddleBenchCases": 5,
+    "paddleBenchExcludedCases": 1,
+    "resultFiles": 14,
+    "videosDirGitignored": true,
+    "videosOnDisk": [],
+    "bundleCount": 13,
+    "bundles": {
+      "afn-sasebo-rally1": {
+        "annotationFiles": [
+          "devin-visual-v1.json",
+          "devin-visual-v2-waveC.json"
+        ],
+        "hasClip": true,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v1.json": 42,
+          "devin-visual-v2-waveC.json": 4
+        }
+      },
+      "afn-sasebo-rally2": {
+        "annotationFiles": [
+          "devin-visual-v1.json",
+          "devin-visual-v3-waveD.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v1.json": 23,
+          "devin-visual-v3-waveD.json": 0
+        }
+      },
+      "afn-vic-rally1": {
+        "annotationFiles": [
+          "devin-visual-v1.json"
+        ],
+        "hasClip": false,
+        "heldOut": true,
+        "labelAtomsPerFile": {
+          "devin-visual-v1.json": 24
+        }
+      },
+      "wavea-944403-dink": {
+        "annotationFiles": [
+          "devin-visual-v2-wave-a.json",
+          "devin-visual-v2-waveC-contact.json",
+          "devin-visual-v2-waveC-ownership.json",
+          "devin-visual-v2-waveC.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v2-wave-a.json": 0,
+          "devin-visual-v2-waveC-contact.json": 0,
+          "devin-visual-v2-waveC-ownership.json": 39,
+          "devin-visual-v2-waveC.json": 7
+        }
+      },
+      "wavea-944403-smash": {
+        "annotationFiles": [
+          "devin-visual-v2-wave-a.json",
+          "devin-visual-v2-waveC-contact.json",
+          "devin-visual-v2-waveC-ownership.json",
+          "devin-visual-v2-waveC.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v2-wave-a.json": 0,
+          "devin-visual-v2-waveC-contact.json": 0,
+          "devin-visual-v2-waveC-ownership.json": 12,
+          "devin-visual-v2-waveC.json": 9
+        }
+      },
+      "wavea-faead-feed": {
+        "annotationFiles": [
+          "devin-visual-v2-wave-a.json",
+          "devin-visual-v2-waveC-contact.json",
+          "devin-visual-v2-waveC-ownership.json",
+          "devin-visual-v2-waveC.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v2-wave-a.json": 0,
+          "devin-visual-v2-waveC-contact.json": 0,
+          "devin-visual-v2-waveC-ownership.json": 4,
+          "devin-visual-v2-waveC.json": 5
+        }
+      },
+      "wavea-faead-rally": {
+        "annotationFiles": [
+          "devin-visual-v2-wave-a.json",
+          "devin-visual-v2-waveC-contact.json",
+          "devin-visual-v2-waveC-ownership.json",
+          "devin-visual-v2-waveC.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v2-wave-a.json": 0,
+          "devin-visual-v2-waveC-contact.json": 0,
+          "devin-visual-v2-waveC-ownership.json": 11,
+          "devin-visual-v2-waveC.json": 9
+        }
+      },
+      "wavea-marne-dig": {
+        "annotationFiles": [
+          "devin-visual-v2-wave-a.json",
+          "devin-visual-v2-waveC-contact.json",
+          "devin-visual-v2-waveC-ownership.json",
+          "devin-visual-v2-waveC.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v2-wave-a.json": 0,
+          "devin-visual-v2-waveC-contact.json": 0,
+          "devin-visual-v2-waveC-ownership.json": 13,
+          "devin-visual-v2-waveC.json": 5
+        }
+      },
+      "wavea-marne-serve": {
+        "annotationFiles": [
+          "devin-visual-v2-wave-a.json",
+          "devin-visual-v2-waveC.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v2-wave-a.json": 0,
+          "devin-visual-v2-waveC.json": 0
+        }
+      },
+      "wavea-sasebo-volleys": {
+        "annotationFiles": [
+          "devin-visual-v2-wave-a.json",
+          "devin-visual-v3-waveD.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v2-wave-a.json": 0,
+          "devin-visual-v3-waveD.json": 0
+        }
+      },
+      "wavea-wgm-wheelchair": {
+        "annotationFiles": [
+          "devin-visual-v2-wave-a.json",
+          "devin-visual-v2-waveC.json"
+        ],
+        "hasClip": false,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v2-wave-a.json": 0,
+          "devin-visual-v2-waveC.json": 0
+        }
+      },
+      "wm-dink-01": {
+        "annotationFiles": [
+          "devin-visual-v1.json"
+        ],
+        "hasClip": true,
+        "heldOut": true,
+        "labelAtomsPerFile": {
+          "devin-visual-v1.json": 51
+        }
+      },
+      "wm-volley-02": {
+        "annotationFiles": [
+          "devin-visual-v1.json",
+          "devin-visual-v2-waveC-contact.json",
+          "devin-visual-v2-waveC.json"
+        ],
+        "hasClip": true,
+        "heldOut": false,
+        "labelAtomsPerFile": {
+          "devin-visual-v1.json": 43,
+          "devin-visual-v2-waveC-contact.json": 0,
+          "devin-visual-v2-waveC.json": 3
+        }
+      }
+    },
+    "notes": "videos/ is gitignored by design (media stays local); README documents this. Held-out bundles were not viewed; only file listings and JSON structure counted.",
+    "unusedCheck": []
+  },
+  "ballBench": {
+    "topLevelKeys": [
+      "schemaVersion",
+      "provenance",
+      "note",
+      "cameraType",
+      "cases",
+      "coverageGaps",
+      "splitNote"
+    ],
+    "caseCount": [
+      "cases",
+      10
+    ],
+    "failureDirs": [
+      "BALL_BODY_OVERLAP-afn-sasebo-rally1",
+      "BALL_FALSE_POSITIVE_BACKGROUND-wm-dink-01",
+      "PADDLE_WRONG_RACKET_LIKE_OBJECT-afn-sasebo-rally1",
+      "PLAYER_ASSOCIATION_FAILURE-wm-far-03",
+      "SCENE_CUT_UNDETECTED-afn-vic-rally1"
+    ],
+    "resultFiles": 11
+  },
+  "corpus": {
+    "sources": 20,
+    "recordings": 26,
+    "rootRecordings": 17,
+    "sessions": 12,
+    "splitAssignments": {
+      "afn-sasebo-2025-06": "dev",
+      "afn-sigonella-2025": "dev",
+      "afn-vic-2025": "locked_test",
+      "dvids-1007845": "dev",
+      "dvids-1008415": "dev",
+      "dvids-906546": "shadow",
+      "dvids-943757": "dev",
+      "dvids-956784": "dev",
+      "dvids-957519": "dev",
+      "dvids-967848": "val",
+      "dvids-986421": "dev",
+      "dvids-espn-oneyearout-2026": "shadow",
+      "dvids-marne-2024": "dev",
+      "dvids-warriorgames-2026": "dev",
+      "wm-tournament-2014": "dev"
+    },
+    "splitCounts": {
+      "dev": 11,
+      "locked_test": 1,
+      "shadow": 2,
+      "val": 1
+    },
+    "unassignedSessions": [],
+    "orphanAssignments": [
+      "dvids-956784",
+      "dvids-957519",
+      "dvids-967848"
+    ],
+    "undeclaredDuplicateFindings": 5,
+    "dedupFindingsTotal": 7,
+    "recordingsMediaMissingOnDisk": 26,
+    "recordingsMediaNote": "media is gitignored by design; paths verified as declared only",
+    "minedEventCandidateFiles": 13,
+    "minedEventCandidateFilesEmpty": 3,
+    "minedEventCandidates": 199,
+    "minedEventCandidateTiers": {
+      "C": 199
+    },
+    "fingerprintFiles": 26
+  },
+  "releases": {
+    "pickle-real-v0.1": {
+      "files": [
+        "manifest.json",
+        "manifest.sha256",
+        "training-justification.json"
+      ],
+      "manifestCounts": {
+        "uniqueSources": 5,
+        "registeredFiles": 10,
+        "sessions": 4,
+        "annotatedCases": 5,
+        "targetEvents": 5,
+        "annotators": 1,
+        "expertCoaches": 0
+      },
+      "immutable": true,
+      "manifestSha256Match": true
+    },
+    "pickle-real-v0.2": {
+      "files": [
+        "manifest.json",
+        "manifest.sha256"
+      ],
+      "manifestCounts": {
+        "uniqueSources": 8,
+        "registeredFiles": 13,
+        "sessions": 7,
+        "annotatedCases": 5,
+        "targetEvents": 5,
+        "annotators": 1,
+        "expertCoaches": 0
+      },
+      "immutable": true,
+      "manifestSha256Match": true
+    },
+    "pickle-real-v0.3": {
+      "files": [
+        "annotations",
+        "manifest.json",
+        "manifest.sha256"
+      ],
+      "manifestCounts": {
+        "uniqueSources": 8,
+        "registeredFiles": 13,
+        "sessions": 7,
+        "annotatedCases": 5,
+        "targetEvents": 5,
+        "annotators": 1,
+        "expertCoaches": 0
+      },
+      "immutable": true,
+      "manifestSha256Match": true
+    }
+  },
+  "misc": {
+    "taBenchCases": 301,
+    "taBenchResultFiles": 35,
+    "coachReviewQueue": 5,
+    "coaches": 0,
+    "faultTaxonomy": {
+      "families": 9,
+      "faults": 46
+    },
+    "drills": 2,
+    "cascadeRunFiles": 10,
+    "completionBenchFiles": 8,
+    "mining": {
+      "dvids-marne-outdoor": {
+        "mining.json": {
+          "candidates": 8
+        },
+        "scenes.json": {
+          "cuts": 6,
+          "scores": 4049,
+          "segments": 7
+        },
+        "extract-meta.json": [
+          "framesSeen",
+          "framesWithPose",
+          "poseMisses",
+          "poseModelVersion",
+          "trajectoryCount",
+          "video",
+          "wallTimeMs"
+        ]
+      },
+      "dvids-warriorgames-match": {
+        "mining.json": {
+          "candidates": 6
+        },
+        "scenes.json": {
+          "cuts": 9,
+          "scores": 9224,
+          "segments": 10
+        },
+        "extract-meta.json": [
+          "framesSeen",
+          "framesWithPose",
+          "poseMisses",
+          "poseModelVersion",
+          "trajectoryCount",
+          "video",
+          "wallTimeMs"
+        ]
+      }
+    },
+    "experimentSummaries": {
+      "wave-a": 34,
+      "wave-b": 33,
+      "wave-c": 21,
+      "wave-d": 16,
+      "wave-d2": 6,
+      "wave-d3": 1,
+      "wave-d4": 4
+    }
+  },
+  "issueCounts": {
+    "dead_url": 2,
+    "stale_assignment_explained": 3
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "afn-sasebo-rally2",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "createdAtIso": "2026-08-29T10:20:00.000Z",
+  "revision": 1,
+  "kind": "contact-audit",
+  "method": "Blind second pass: frames re-extracted with ffmpeg select=eq(n,IDX) (absolute CFR index) from source recording dvids-967848 (datasets/corpus/media/dvids-967848-aba9629c681d.mp4, sha256 aba9629c681d159e0560583865085b8bcceaaa850f9d81f5b26832a86fc90e3c, 29.97fps). Clip frame n maps to source frame n+917 (registry declares rally2 = indoor 30.6-36.0s; 30.6*29.97=917.1). Contact re-derived from direct frame inspection without reading prior contact values; prior event times were used only to locate which events to audit. Audit contact = midpoint of the smallest visually defensible source-frame window. Prior values compared only after the blind pass.",
+  "auditRecords": [
+    {
+      "priorContactMs": 2620,
+      "priorAnnotator": "devin-visual-v1",
+      "priorUncertainty": "plus_minus_2",
+      "auditContactMs": null,
+      "auditWindowClipFrames": null,
+      "auditWindowMs": null,
+      "auditUncertainty": null,
+      "observability": "no_contact_observed",
+      "frameDelta": null,
+      "windowsOverlap": false,
+      "disputed": true,
+      "note": "DISPUTE (no contact observed). Pixel-track of the ball across source frames 987-1002 (clip n70-n85): the ball descends in a smooth ballistic path with no direction change ((951,171)@987 -> (1237,217)@996 -> (1517,389)@1002), passing above/behind the near gray-shirt man while he reaches overhead (paddle raised 988-993) and does not deflect. At the prior contact time (clip n78.5 = source ~996) the ball is mid-flight behind him. The prior note itself says the contact was interpolated from ball transit. No contact is visible in this span. Prior value not edited; filed as finding."
+    },
+    {
+      "priorContactMs": 3834,
+      "priorAnnotator": "devin-visual-v2-wave-a",
+      "priorUncertainty": "plus_minus_1",
+      "auditContactMs": 3851,
+      "auditWindowClipFrames": [114.9, 115.9],
+      "auditWindowMs": [3834, 3868],
+      "auditUncertainty": "plus_minus_1",
+      "observability": "direct",
+      "frameDelta": 0.5,
+      "windowsOverlap": true,
+      "disputed": false,
+      "note": "Overhead smash: ball (motion-blurred green streak) adjacent to the raised paddle at source frames 1032-1033, follow-through from 1034. Window source 1032-1033 (clip 3834-3868ms), midpoint 3851ms. Overlaps prior bracket 3800/3867. A second ball on a background court crosses left-down through the same frames and was excluded."
+    }
+  ],
+  "notes": "Wave D2 multi-annotator contact audit (blind second pass). Existing annotation files untouched; this sidecar is append-only. Local frame extraction only; no media committed."
+}

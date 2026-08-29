@@ -1,0 +1,58 @@
+{
+  "engineVersion": "coach-agreement-v1",
+  "generatedAtIso": "2026-08-29T17:40:58.868Z",
+  "provenance": "production",
+  "banner": "N=0 REAL COACH REVIEWS — no agreement exists; every metric below is null. Technique score / fault diagnosis / drill recommendation remain BLOCKED_ON_VALIDATION.",
+  "realReviewCount": 0,
+  "coachCount": 0,
+  "itemsWithMultipleReviews": 0,
+  "rejectedInputs": [],
+  "status": "AWAITING QUALIFIED COACHES — engine ready; N=0 real reviews",
+  "strokeIdentity": {
+    "pairwiseCohen": [],
+    "fleiss": {
+      "items": 0,
+      "ratersPerItem": null,
+      "kappa": null
+    },
+    "excludedFromFleiss": 0,
+    "percentAgreementItems": null
+  },
+  "primaryFault": {
+    "pairwiseCohen": [],
+    "fleiss": {
+      "items": 0,
+      "ratersPerItem": null,
+      "kappa": null
+    },
+    "excludedFromFleiss": 0,
+    "percentAgreementItems": null
+  },
+  "severity": {
+    "pairwiseWeightedKappa": [],
+    "note": "linear-weighted kappa over primary-fault severity, compared only when both coaches named the same primary fault"
+  },
+  "techniqueRating": {
+    "icc2_1": {
+      "items": 0,
+      "raters": 0,
+      "icc": null
+    },
+    "iccNote": "no complete items×raters rating matrix yet",
+    "pairwiseSpearman": [],
+    "pairwiseExactAgreement": [],
+    "pairwiseMeanAbsDiff": [],
+    "calibration": []
+  },
+  "drillSelection": {
+    "pairwiseJaccard": [],
+    "freeTextOnlySuggestions": 0,
+    "note": "Jaccard over suggested drill-id sets; free-text-only suggestions are counted but not matched (taxonomy grows from coach language)"
+  },
+  "cannotEvaluate": {
+    "perCoach": [],
+    "splitItems": 0
+  },
+  "disagreements": [],
+  "disagreementPolicy": "Disagreement is DATA: every divergence is listed here with per-coach verdicts and is never auto-collapsed into a consensus label. Resolution happens only through recorded adjudication (docs/COACHING.md §6), preserved separately from the original reviews."
+}

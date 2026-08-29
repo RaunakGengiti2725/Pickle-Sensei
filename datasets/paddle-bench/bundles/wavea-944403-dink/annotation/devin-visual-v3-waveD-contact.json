@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-944403-dink",
+  "annotatorId": "devin-visual-v3-waveD",
+  "createdAtIso": "2026-08-29T10:05:00.000Z",
+  "revision": 1,
+  "stroke": "forehand_drive",
+  "annotatedStrokeV3": "FOREHAND_DRIVE",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": null,
+  "contactUncertainty": "exact",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.7,
+  "notes": "Wave D contact-only independent frame pass (ffmpeg absolute-CFR extraction from registered source, select+setpts, ts=round(n*1000*fps_den/fps_num)); prior Wave A/C passes not consulted during frame reads for repeat-pass events; held-out cases untouched. 59.94fps CFR; independent relabels of three events; wave-a event 21500-21958 (contact 21604) DISPUTED: frames 21505-21705 show the ball descending untouched past the far player and bouncing on the near court ~21590-21620 with no paddle within reach (near-right player's paddle at his right hip, ball left of his body); no contact label written for that event.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T10:05:00.000Z"
+    }
+  ],
+  "eventLabels": [
+    {
+      "eventStartMs": 20700,
+      "contactMs": 20821,
+      "eventEndMs": 20950,
+      "owner": "other",
+      "annotator": "devin-visual-v3-waveD",
+      "note": "far-left player dink return (small figure, far camera); direct-observed adjacency (ball above-left of raised paddle 20804, at paddle face n001248 20821ms, leftward-down departure 20837); contact window 20804-20837, label 20821 +-1 frame; waveC labeled 20804 (delta 17ms, 1 frame)"
+    },
+    {
+      "eventStartMs": 20950,
+      "contactMs": 21113,
+      "eventEndMs": 21500,
+      "owner": "target",
+      "annotator": "devin-visual-v3-waveD",
+      "note": "near-left target forehand drive; direct-observed with one ambiguous overlap frame (apparent ball-paddle overlap at 21038 read as transit, ball at paddle 21104-21121, leftward-down departure 21138); contact window 21088-21138, label 21113 +-2 frames; waveC labeled 21121 (delta 8ms, sub-frame)"
+    },
+    {
+      "eventStartMs": 22000,
+      "contactMs": 22130,
+      "eventEndMs": 22333,
+      "owner": "other",
+      "annotator": "devin-visual-v3-waveD",
+      "note": "near-right scramble pickup off the bounced ball, low blue paddle between legs (body overlap); direct-observed (ball ON paddle n001327 22122ms, departure by 22139); contact window 22122-22139 (1 frame at 59.94fps), label 22130; waveC labeled 22131 (delta 1ms)"
+    }
+  ]
+}

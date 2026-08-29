@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "workstream": "C06",
+  "title": "Event corpus QA + W14 adjudication + bystander_target rule",
+  "completedAtIso": "2026-08-29T09:00:00Z",
+  "branch": "devin/wave-c/c06-event-taxonomy-adjudication",
+  "whatWasBuilt": [
+    "datasets/experiments/wave-c/C06-adjudications.json - append-only adjudication records closing all 5 W14 disagreements (2 TA, 3 ownership), each from re-viewing rendered frames with +-2..3-frame temporal scrubs; no W14 artifact modified",
+    "ml/annotations/ta-ownership-annotation-guide-v1.md - versioned annotation guide: TA operational definition, the bystander_target rule with both corpus examples, deterministic TA verdict precedence, 3-frame crowd-region scrub, motion-blur center-offset rule (<=0.05 norm), 'other' hand/arm-continuity evidence standard, static-object ledger, per-verdict confidence",
+    "datasets/paddle-bench/event-bounds-qa-wave-c.json - append-only QA record for all 34 committed eventLabels with per-event verdicts and evidence; 1 correction filed"
+  ],
+  "exactNumbers": {
+    "adjudicationsFiled": 5,
+    "adjudicationsClosed": 5,
+    "adjudicationOutcomes": "5/5 uphold primary; 2 TA cases conditionally (require new bystander_target tag); ownership @2204 target (measured box-center offset ~0.04 norm, inside the codified <=0.05 band), @2604 ambiguous (no hand/arm continuity; W14's proposed owner's paddle visibly at his waist in adjacent frames), @3372 reject (floor paddle pixel-static 1303-3505ms)",
+    "eventLabelsReviewed": 34,
+    "eventLabelBreakdown": "18 wave-a (event-bounds-wave-a.json) + 16 v1 (afn-sasebo-rally1 x7, afn-sasebo-rally2 x2, afn-vic-rally1 x3, wm-dink-01 x2, wm-volley-02 x2)",
+    "qaVerdicts": { "PASS_VERIFIED": 22, "PASS_CONSISTENT": 11, "FLAG": 1 },
+    "correctionsFiled": 1
+  },
+  "provenance": "Frames rendered with ffmpeg+Pillow from: committed bundle clips (afn-sasebo-rally1, wm-dink-01, wm-volley-02) and re-downloaded source media (Wikimedia Commons sasebo + AFN VIC webm, DVIDS 944593/944209/944403/1011384) verified against datasets/corpus/fingerprints/<recordingId>.json by per-second dhash match before use. Recording->source time offsets taken from recordings.json derivedFrom time_crop entries (e.g. afn-sasebo-rally2 = source+30.6s, afn-vic-rally1 = source+22.0s).",
+  "keyFinding": "FLAG/CORR-C06-1: afn-sasebo-rally1 eventLabels[1] (partner swing, contact 3870) - the clip has a hard camera cut between 3837 and 3850; the labeled contact and end lie beyond the cut in a different camera, invalidating the v1 ball-turn evidence. recordings.json rec-21fb75446a03 claims 'Single continuous shot', which is also wrong (source cuts at ~29.85s). Filed append-only; source annotation untouched (integrator to dispose).",
+  "honestNegatives": [
+    "11/34 events are PASS_CONSISTENT, not PASS_VERIFIED: the touch frame itself is occluded or below resolvable size (far-court small figures, paddle-occluded contacts, held-out low-res clips). Their bounds are consistent with trajectory evidence but the contact instant is not directly observable.",
+    "wavea-marne-dig initially looked wrong under fast-seek rendering (multiple simultaneous feed balls alias badly); an accurate-seek frame dump reproduced the label's ball-reversal evidence. Fast-seek contact sheets are unreliable for this scene.",
+    "wavea-sasebo-volleys idx1 note says 'far white-shirt' but the striker's shirt reads blue in zoom - description nit, bounds verified.",
+    "Held-out cases (afn-vic-rally1, wm-dink-01) were reviewed observation-only per split discipline; nothing was iterated against them. Their 5 events are all PASS_CONSISTENT (none directly verifiable at source resolution/angle).",
+    "TA kappa itself was NOT recomputed: n=12 with prevalence-dominated marginals makes kappa statistically uninformative (W14's own caveat); the deliverable is the definitional fix, not a new kappa."
+  ],
+  "blocked": [
+    "Cannot re-render the canonical TA windows or regenerate runs: pnpm lab:regen requires macOS Apple Vision pose extraction and canonical runs/ dirs are absent by design on this box. TA adjudications therefore used the frozen region coordinates from W14 artifacts against provenance-verified source frames.",
+    "Disposition of CORR-C06-1 (truncate vs drop the flagged event, and the recordings.json note fix) belongs to the corpus owner/integrator; not applied here to keep originals append-only and scope minimal."
+  ],
+  "testsAndTypecheck": "No package source touched (data/docs-only change: 2 new JSON records, 1 new versioned guide, 1 new summary). Root pnpm typecheck run for safety; see branch CI."
+}

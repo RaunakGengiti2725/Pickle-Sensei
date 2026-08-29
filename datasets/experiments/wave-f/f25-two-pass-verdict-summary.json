@@ -1,0 +1,391 @@
+{
+  "id": "f25-two-pass-verdict",
+  "wave": "F",
+  "platformLabel": "LINUX-CPU",
+  "commit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "branch": "devin/wave-f/f25-two-pass-verdict",
+  "mission": "Promotion verdict for the C08 adaptive two-pass paddle-detection path (flag --two-pass, default OFF): wall-clock, per-stage breakdown, and output equivalence vs the default one-shot dense path.",
+  "environment": {
+    "platform": "Linux-5.15.200-x86_64-with-glibc2.35",
+    "node": "v20.18.1",
+    "python": "3.10.12",
+    "torch": "2.13.0+cpu",
+    "transformers": "5.16.1",
+    "detectorModel": "ustc-community/dfine-medium-coco",
+    "ffmpeg": "4.4.2",
+    "poseInput": "MediaPipe PoseLandmarker (full) seeds generated on Linux; constant latency input only, NOT canonical Apple Vision pose and NOT accuracy evidence"
+  },
+  "datasetScope": {
+    "bundleClips": [
+      "wm-volley-02",
+      "afn-sasebo-rally1"
+    ],
+    "freshCandidates": [
+      "voa-6108955",
+      "voa-6115790",
+      "yt-6r4fOxRuKmM",
+      "yt-94KNxpNTyCw",
+      "yt-9ru97zKV8mk",
+      "yt-I5wYCXCL4dY",
+      "yt-Y7DOO0j_1P4",
+      "yt-eK-iPN2XAJQ",
+      "yt-hktiyFnghIw",
+      "yt-iuVdtmGoTbo",
+      "yt-n-QrBfQVK_w",
+      "yt-o_NeuHjTEVE",
+      "yt-tJuJ4MQdYy0"
+    ],
+    "excluded": {
+      "va-*": "AV1-encoded; OpenCV on this box decoded 0 frames, so no Linux pose seed could be generated (disclosed, not silently dropped)",
+      "held-out": "wm-dink-01 and afn-vic-rally1 untouched per program rules"
+    },
+    "labelUse": "fresh candidates used label-blind for runtime + path-equivalence only; no labels viewed, created, or tuned against",
+    "grouping": "each clip is an independent source/session unit; no random-frame splits"
+  },
+  "configuration": {
+    "arms": {
+      "default": [],
+      "twopass": [
+        "--two-pass"
+      ]
+    },
+    "repsPerArm": {
+      "bundleClips": 5,
+      "freshCandidates": 3
+    },
+    "methodology": "1 warm-up per arm, arms interleaved per repetition (order reversed on odd reps), rep1/rep2 artifacts preserved for equivalence, default-rep1-vs-rep2 kept as determinism control",
+    "script": "tools/latency-bench/bench_two_pass.py",
+    "rawResults": "tools/latency-bench/artifacts/f25-two-pass/bench-results.json"
+  },
+  "equivalenceTolerance": "*Ms fields within one frame interval of the clip (16.68-40.00 ms), confidence/score fields within 0.02, all other report fields exact; report normalized by dropping timings/outDir/paddleSchedule and int->float numeric normalization; paddle-dets compared on shared timestamps only (two-pass intentionally scans a different frame set); ball candidates compared after stripping timing fields",
+  "results": {
+    "wallClock": {
+      "clipCount": 15,
+      "geoMeanTwopassOverDefaultP50Ratio": 0.997,
+      "medianTwopassOverDefaultP50Ratio": 1.011,
+      "clipsFaster": 4,
+      "clipsWithin5pct": 4,
+      "clipsSlower": 7,
+      "bestRatio": 0.629,
+      "worstRatio": 1.306
+    },
+    "perStageMedianMs": {
+      "default": {
+        "paddleDetectMs": 16984.0,
+        "ballCandidatesMs": 1837.5,
+        "playerTrackMs": 62,
+        "ballTrackMs": 81.5,
+        "paddleTrackMs": 18.0,
+        "fusionAnalysisMs": 27.0
+      },
+      "twopass": {
+        "paddleDetectMs": 16240.0,
+        "paddleDetectSparseMs": 6752.0,
+        "paddleDetectDenseMs": 9055.0,
+        "ballCandidatesMs": 1898.0,
+        "playerTrackMs": 62,
+        "ballTrackMs": 81.0,
+        "paddleTrackMs": 15.5,
+        "fusionAnalysisMs": 24.0
+      }
+    },
+    "outputEquivalence": {
+      "clipsWithReportFieldDiffs": 14,
+      "clipsWithZeroReportDiffs": 1,
+      "clipsWithSharedPaddleFrameByteMismatches": 5,
+      "maxReportFieldDiffsOnOneClip": 75,
+      "downstreamArtifactsAffected": "ballStage (trackId, medianSpeed, timeline states, reacquisition), contact (status, confidence, estimatedContactMs, contactDistribution, ballConfirmed/paddleConfirmed), events (proposals, source), strokePrediction, temporalPhases/temporalPhasesV2 boundaries",
+      "determinismControl": "default rep1 vs rep2 byte-equal on all shared paddle frames on every clip; only report diff is the timing field report.paddle.inferenceMsPerFrame -> observed divergence is caused by the two-pass path, not ordinary nondeterminism"
+    },
+    "perClip": {
+      "wm-volley-02": {
+        "kind": "bundle_clip",
+        "reps": 5,
+        "defaultWallMsP50": 15269.0,
+        "defaultWallMsMean": 17036.8,
+        "twopassWallMsP50": 12550.1,
+        "twopassWallMsMean": 13273.1,
+        "twopassOverDefaultP50Ratio": 0.822,
+        "reportFieldDiffsDefaultVsTwopass": 44,
+        "paddleSharedFrames": 57,
+        "paddleSharedFramesByteEqual": 56,
+        "ballCandidatesTimingStrippedEqual": true,
+        "determinismControlReportDiffs": [
+          "report.paddle.inferenceMsPerFrame"
+        ],
+        "outcomeDefault": "not_analyzable"
+      },
+      "afn-sasebo-rally1": {
+        "kind": "bundle_clip",
+        "reps": 5,
+        "defaultWallMsP50": 24255.8,
+        "defaultWallMsMean": 22738.2,
+        "twopassWallMsP50": 24526.1,
+        "twopassWallMsMean": 24388.9,
+        "twopassOverDefaultP50Ratio": 1.011,
+        "reportFieldDiffsDefaultVsTwopass": 4,
+        "paddleSharedFrames": 97,
+        "paddleSharedFramesByteEqual": 95,
+        "ballCandidatesTimingStrippedEqual": true,
+        "determinismControlReportDiffs": [
+          "report.paddle.inferenceMsPerFrame"
+        ],
+        "outcomeDefault": "abstained"
+      },
+      "voa-6108955": {
+        "kind": "fresh_candidate",
+        "reps": 3,
+        "defaultWallMsP50": 3581.8,
+        "defaultWallMsMean": 3545.4,
+        "twopassWallMsP50": 3548.3,
+        "twopassWallMsMean": 3556.9,
+        "twopassOverDefaultP50Ratio": 0.991,
+        "reportFieldDiffsDefaultVsTwopass": 0,
+        "paddleSharedFrames": null,
+        "paddleSharedFramesByteEqual": null,
+        "ballCandidatesTimingStrippedEqual": null,
+        "determinismControlReportDiffs": [],
+        "outcomeDefault": "abstained"
+      },
+      "voa-6115790": {
+        "kind": "fresh_candidate",
+        "reps": 3,
+        "defaultWallMsP50": 18589.0,
+        "defaultWallMsMean": 15781.7,
+        "twopassWallMsP50": 11699.8,
+        "twopassWallMsMean": 13601.4,
+        "twopassOverDefaultP50Ratio": 0.629,
+        "reportFieldDiffsDefaultVsTwopass": 4,
+        "paddleSharedFrames": 33,
+        "paddleSharedFramesByteEqual": 33,
+        "ballCandidatesTimingStrippedEqual": true,
+        "determinismControlReportDiffs": [
+          "report.paddle.inferenceMsPerFrame"
+        ],
+        "outcomeDefault": "not_analyzable"
+      },
+      "yt-6r4fOxRuKmM": {
+        "kind": "fresh_candidate",
+        "reps": 3,
+        "defaultWallMsP50": 32946.6,
+        "defaultWallMsMean": 33332.8,
+        "twopassWallMsP50": 26353.6,
+        "twopassWallMsMean": 29949.7,
+        "twopassOverDefaultP50Ratio": 0.8,
+        "reportFieldDiffsDefaultVsTwopass": 6,
+        "paddleSharedFrames": 120,
+        "paddleSharedFramesByteEqual": 120,
+        "ballCandidatesTimingStrippedEqual": true,
+        "determinismControlReportDiffs": [
+          "report.paddle.inferenceMsPerFrame"
+        ],
+        "outcomeDefault": "not_analyzable"
+      },
+      "yt-94KNxpNTyCw": {
+        "kind": "fresh_candidate",
+        "reps": 3,
+        "defaultWallMsP50": 17697.2,
+        "defaultWallMsMean": 16330.2,
+        "twopassWallMsP50": 19150.2,
+        "twopassWallMsMean": 17363.8,
+        "twopassOverDefaultP50Ratio": 1.082,
+        "reportFieldDiffsDefaultVsTwopass": 12,
+        "paddleSharedFrames": 60,
+        "paddleSharedFramesByteEqual": 44,
+        "ballCandidatesTimingStrippedEqual": true,
+        "determinismControlReportDiffs": [
+          "report.paddle.inferenceMsPerFrame"
+        ],
+        "outcomeDefault": "not_analyzable"
+      },
+      "yt-9ru97zKV8mk": {
+        "kind": "fresh_candidate",
+        "reps": 3,
+        "defaultWallMsP50": 4193.4,
+        "defaultWallMsMean": 5194.6,
+        "twopassWallMsP50": 4143.1,
+        "twopassWallMsMean": 4225.9,
+        "twopassOverDefaultP50Ratio": 0.988,
+        "reportFieldDiffsDefaultVsTwopass": 1,
+        "paddleSharedFrames": 1,
+        "paddleSharedFramesByteEqual": 1,
+        "ballCandidatesTimingStrippedEqual": true,
+        "determinismControlReportDiffs": [
+          "report.paddle.inferenceMsPerFrame"
+        ],
+        "outcomeDefault": "not_analyzable"
+      },
+      "yt-I5wYCXCL4dY": {
+        "kind": "fresh_candidate",
+        "reps": 3,
+        "defaultWallMsP50": 48715.4,
+        "defaultWallMsMean": 48059.4,
+        "twopassWallMsP50": 56217.0,
+        "twopassWallMsMean": 56543.9,
+        "twopassOverDefaultP50Ratio": 1.154,
+        "reportFieldDiffsDefaultVsTwopass": 73,
+        "paddleSharedFrames": 268,
+        "paddleSharedFramesByteEqual": 265,
+        "ballCandidatesTimingStrippedEqual": true,
+        "determinismControlReportDiffs": [
+          "report.paddle.inferenceMsPerFrame"
+        ],
+        "outcomeDefault": "not_analyzable"
+      },
+      "yt-Y7DOO0j_1P4": {
+        "kind": "fresh_candidate",
+        "reps": 3,
+        "defaultWallMsP50": 12667.6,
+        "defaultWallMsMean": 12653.5,
+        "twopassWallMsP50": 15495.7,
+        "twopassWallMsMean": 15477.4,
+        "twopassOverDefaultP50Ratio": 1.223,
+        "reportFieldDiffsDefaultVsTwopass": 3,
+        "paddleSharedFrames": 68,
+        "paddleSharedFramesByteEqual": 68,
+        "ballCandidatesTimingStrippedEqual": true,
+        "determinismControlReportDiffs": [
+          "report.paddle.inferenceMsPerFrame"
+        ],
+        "outcomeDefault": "not_analyzable"
+      },
+      "yt-eK-iPN2XAJQ": {
+        "kind": "fresh_candidate",
+        "reps": 3,
+        "defaultWallMsP50": 14745.5,
+        "defaultWallMsMean": 20543.1,
+        "twopassWallMsP50": 16003.4,
+        "twopassWallMsMean": 16061.8,
+        "twopassOverDefaultP50Ratio": 1.085,
+        "reportFieldDiffsDefaultVsTwopass": 1,
+        "paddleSharedFrames": 73,
+        "paddleSharedFramesByteEqual": 73,
+        "ballCandidatesTimingStrippedEqual": true,
+        "determinismControlReportDiffs": [
+          "report.paddle.inferenceMsPerFrame"
+        ],
+        "outcomeDefault": "not_analyzable"
+      },
+      "yt-hktiyFnghIw": {
+        "kind": "fresh_candidate",
+        "reps": 3,
+        "defaultWallMsP50": 24696.9,
+        "defaultWallMsMean": 24617.0,
+        "twopassWallMsP50": 23848.2,
+        "twopassWallMsMean": 23728.9,
+        "twopassOverDefaultP50Ratio": 0.966,
+        "reportFieldDiffsDefaultVsTwopass": 75,
+        "paddleSharedFrames": 126,
+        "paddleSharedFramesByteEqual": 125,
+        "ballCandidatesTimingStrippedEqual": true,
+        "determinismControlReportDiffs": [
+          "report.paddle.inferenceMsPerFrame"
+        ],
+        "outcomeDefault": "not_analyzable"
+      },
+      "yt-iuVdtmGoTbo": {
+        "kind": "fresh_candidate",
+        "reps": 3,
+        "defaultWallMsP50": 19605.8,
+        "defaultWallMsMean": 24199.4,
+        "twopassWallMsP50": 24710.1,
+        "twopassWallMsMean": 24886.1,
+        "twopassOverDefaultP50Ratio": 1.26,
+        "reportFieldDiffsDefaultVsTwopass": 1,
+        "paddleSharedFrames": 132,
+        "paddleSharedFramesByteEqual": 132,
+        "ballCandidatesTimingStrippedEqual": true,
+        "determinismControlReportDiffs": [
+          "report.paddle.inferenceMsPerFrame"
+        ],
+        "outcomeDefault": "not_analyzable"
+      },
+      "yt-n-QrBfQVK_w": {
+        "kind": "fresh_candidate",
+        "reps": 3,
+        "defaultWallMsP50": 12451.2,
+        "defaultWallMsMean": 12504.6,
+        "twopassWallMsP50": 10188.6,
+        "twopassWallMsMean": 10317.4,
+        "twopassOverDefaultP50Ratio": 0.818,
+        "reportFieldDiffsDefaultVsTwopass": 65,
+        "paddleSharedFrames": 43,
+        "paddleSharedFramesByteEqual": 43,
+        "ballCandidatesTimingStrippedEqual": true,
+        "determinismControlReportDiffs": [
+          "report.paddle.inferenceMsPerFrame"
+        ],
+        "outcomeDefault": "not_analyzable"
+      },
+      "yt-o_NeuHjTEVE": {
+        "kind": "fresh_candidate",
+        "reps": 3,
+        "defaultWallMsP50": 4225.2,
+        "defaultWallMsMean": 4595.3,
+        "twopassWallMsP50": 4604.3,
+        "twopassWallMsMean": 4541.9,
+        "twopassOverDefaultP50Ratio": 1.09,
+        "reportFieldDiffsDefaultVsTwopass": 23,
+        "paddleSharedFrames": 1,
+        "paddleSharedFramesByteEqual": 1,
+        "ballCandidatesTimingStrippedEqual": true,
+        "determinismControlReportDiffs": [
+          "report.outcome.record.createdAtIso",
+          "report.outcome.record.id",
+          "report.outcome.record.modelRuns[0].completedAtIso",
+          "report.outcome.record.modelRuns[0].id",
+          "report.outcome.record.modelRuns[0].startedAtIso",
+          "report.outcome.record.modelRuns[1].completedAtIso",
+          "report.outcome.record.modelRuns[1].id",
+          "report.outcome.record.modelRuns[1].startedAtIso",
+          "report.outcome.record.modelRuns[2].completedAtIso",
+          "report.outcome.record.modelRuns[2].id",
+          "report.outcome.record.modelRuns[2].startedAtIso",
+          "report.outcome.record.modelRuns[3].completedAtIso",
+          "report.outcome.record.modelRuns[3].id",
+          "report.outcome.record.modelRuns[3].startedAtIso",
+          "report.outcome.record.modelRuns[4].completedAtIso",
+          "report.outcome.record.modelRuns[4].id",
+          "report.outcome.record.modelRuns[4].startedAtIso",
+          "report.outcome.record.modelRuns[5].completedAtIso",
+          "report.outcome.record.modelRuns[5].id",
+          "report.outcome.record.modelRuns[5].startedAtIso",
+          "report.outcome.record.result.capturedAtIso",
+          "report.outcome.record.result.id",
+          "report.paddle.inferenceMsPerFrame"
+        ],
+        "outcomeDefault": "analyzed"
+      },
+      "yt-tJuJ4MQdYy0": {
+        "kind": "fresh_candidate",
+        "reps": 3,
+        "defaultWallMsP50": 13636.1,
+        "defaultWallMsMean": 13695.4,
+        "twopassWallMsP50": 17811.9,
+        "twopassWallMsMean": 17982.3,
+        "twopassOverDefaultP50Ratio": 1.306,
+        "reportFieldDiffsDefaultVsTwopass": 29,
+        "paddleSharedFrames": 85,
+        "paddleSharedFramesByteEqual": 85,
+        "ballCandidatesTimingStrippedEqual": true,
+        "determinismControlReportDiffs": [
+          "report.paddle.inferenceMsPerFrame"
+        ],
+        "outcomeDefault": "not_analyzable"
+      }
+    }
+  },
+  "verdict": "SCIENTIFIC_NEGATIVE",
+  "recommendation": "keep-flagged",
+  "rationale": [
+    "No aggregate speed win: geo-mean two-pass/default p50 wall-clock ratio 0.997 over 15 clips (4 clips >5% faster, best 0.63; 7 clips >5% slower, worst 1.31). The adaptive schedule saves frames on some clips and adds frames on others (consistent with C08's afn-sasebo-rally1 finding).",
+    "Output equivalence FAILS: 14/15 clips have report field diffs beyond tolerance (up to 75 fields), including contact status, strokePrediction, and temporal phase boundaries; 5/15 clips have byte-level mismatches on shared paddle-detection frames (e.g. yt-94KNxpNTyCw 16/60 shared frames differ). Determinism control confirms the default path is deterministic, so divergence is attributable to the two-pass path.",
+    "Promotion (default flip) is therefore ruled out without an accuracy study showing two-pass outputs are as good or better - which requires labeled contact/stroke ground truth that this label-blind corpus cannot provide (and Mac/Apple Vision canonical runs remain BLOCKED_EXTERNAL).",
+    "Removal is not recommended yet: the path is correct-by-construction on its own schedule, shows 18-37% wall-clock wins on 4/15 clips, and remains the only adaptive-sampling implementation; it stays behind --two-pass (default OFF) until an accuracy-based comparison exists."
+  ],
+  "honestyNotes": [
+    "All numbers are LINUX-CPU; no Mac/iPhone/Apple Vision claims.",
+    "Pose seeds are MediaPipe-derived constant inputs for latency comparison only; per-clip 'not_analyzable'/'abstained' outcomes are the pipeline's honest gates and were identical between arms on every clip.",
+    "Fresh-candidate pool used label-blind; no labeling, no tuning, held-out clips untouched."
+  ]
+}

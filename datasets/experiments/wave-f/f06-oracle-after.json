@@ -1,0 +1,496 @@
+{
+  "oracleVersion": "event-failure-oracle-1 (wave-d D06)",
+  "generatedAtIso": "2026-08-29T11:10:14.358Z",
+  "scope": {
+    "goldTargetEvents": 21,
+    "otherOwnerEventsExcluded": 13,
+    "exclusionReason": "the pipeline proposes TARGET events from the target wrist series; other-owner labels measure contamination, not target-event recall",
+    "paddleSeriesNote": "no paddle-speed series is committed for any oracle case — paddle confirmation is structurally unavailable in every Linux replay (recorded, not a defect of the cases)",
+    "heldOutDiscipline": "wm-dink-01 and afn-vic-rally1 rows cite only previously recorded Mac artifacts; no replay or iteration was run against held-out material"
+  },
+  "countsPerAttribution": {
+    "UNATTRIBUTABLE_HERE": 1,
+    "CONTACT_ANCHOR_ABSENT": 1,
+    "SAMPLING": 1,
+    "WRIST_SIGNAL_QUALITY": 2
+  },
+  "failedEvents": 5,
+  "notReplayableRows": 0,
+  "rows": [
+    {
+      "eventKey": "wm-dink-01#1",
+      "split": "held_out",
+      "goldSpanMs": [
+        1050,
+        1650
+      ],
+      "goldContactMs": 1260,
+      "signalSource": "datasets/cascade/cascade-1787971753680.json (recorded Mac selection)",
+      "outcome": "MIS_BOUNDED",
+      "attribution": "UNATTRIBUTABLE_HERE",
+      "evidence": "recorded Mac cascade: selected 1400–1960 vs gold 1050–1650 (overlap 42%). Wrist/paddle series for this case are not committed — deciding artifact: datasets/paddle-bench/runs/wm-dink-01/{people.json,report.json} (Mac, pnpm lab:regen)",
+      "signalStats": null,
+      "matchedProposal": null
+    },
+    {
+      "eventKey": "wm-volley-02#1",
+      "split": "development",
+      "goldSpanMs": [
+        6300,
+        7100
+      ],
+      "goldContactMs": 6680,
+      "signalSource": "datasets/cascade/cascade-1787971753680.json (recorded Mac selection)",
+      "outcome": "PROPOSED_OK",
+      "attribution": null,
+      "evidence": "recorded Mac cascade: selected 5600–6840 vs gold 6300–7100 (overlap 68%, contact inside). Wrist/paddle series for this case are not committed — deciding artifact: datasets/paddle-bench/runs/wm-volley-02/{people.json,report.json} (Mac, pnpm lab:regen)",
+      "signalStats": null,
+      "matchedProposal": null
+    },
+    {
+      "eventKey": "afn-sasebo-rally1#1",
+      "split": "development",
+      "goldSpanMs": [
+        2600,
+        3600
+      ],
+      "goldContactMs": 2900,
+      "signalSource": "apps/mobile/__tests__/fixtures/sessionReplay.afn-sasebo-rally1.json (W6 replay-validated tap-seeded target wrist series)",
+      "outcome": "SELECTION_FAILED",
+      "attribution": "CONTACT_ANCHOR_ABSENT",
+      "evidence": "selectTargetEventV2(contact=null) → ambiguous: MULTI_STROKE_AMBIGUOUS: 3 events with comparable prominence (ratio 1.11); a proposal covering gold exists (2703–3770, overlap 0.9) but contact abstained (recorded: datasets/cascade/cascade-1787971753680.json CONTACT \"status abstained\"; HANDOFF_V3 §2: gold 2900 has zero tracked support in any modality) — perception coverage, not event logic",
+      "signalStats": {
+        "samplesInside": 23,
+        "spanCoverage": 0.97,
+        "maxGapMs": 133,
+        "smoothedPeakInside": 1.059,
+        "proposalGate": 0.5
+      },
+      "matchedProposal": {
+        "startMs": 2703,
+        "endMs": 3770,
+        "overlapOfGold": 0.9
+      }
+    },
+    {
+      "eventKey": "afn-sasebo-rally1#3",
+      "split": "development",
+      "goldSpanMs": [
+        233,
+        500
+      ],
+      "goldContactMs": 317,
+      "signalSource": "apps/mobile/__tests__/fixtures/sessionReplay.afn-sasebo-rally1.json (W6 replay-validated tap-seeded target wrist series)",
+      "outcome": "PROPOSED_OK",
+      "attribution": null,
+      "evidence": "proposal 367–901 covers gold (overlap 0.5, contact inside)",
+      "signalStats": {
+        "samplesInside": 6,
+        "spanCoverage": 0.87,
+        "maxGapMs": 67,
+        "smoothedPeakInside": 1.575,
+        "proposalGate": 0.5
+      },
+      "matchedProposal": {
+        "startMs": 367,
+        "endMs": 901,
+        "overlapOfGold": 0.5
+      }
+    },
+    {
+      "eventKey": "afn-sasebo-rally1#4",
+      "split": "development",
+      "goldSpanMs": [
+        1017,
+        1284
+      ],
+      "goldContactMs": 1117,
+      "signalSource": "apps/mobile/__tests__/fixtures/sessionReplay.afn-sasebo-rally1.json (W6 replay-validated tap-seeded target wrist series)",
+      "outcome": "PROPOSED_OK",
+      "attribution": null,
+      "evidence": "proposal 968–2636 covers gold (overlap 1, contact inside)",
+      "signalStats": {
+        "samplesInside": 8,
+        "spanCoverage": 0.88,
+        "maxGapMs": 34,
+        "smoothedPeakInside": 0.288,
+        "proposalGate": 0.5
+      },
+      "matchedProposal": {
+        "startMs": 968,
+        "endMs": 2636,
+        "overlapOfGold": 1
+      }
+    },
+    {
+      "eventKey": "afn-sasebo-rally1#5",
+      "split": "development",
+      "goldSpanMs": [
+        1417,
+        1617
+      ],
+      "goldContactMs": 1484,
+      "signalSource": "apps/mobile/__tests__/fixtures/sessionReplay.afn-sasebo-rally1.json (W6 replay-validated tap-seeded target wrist series)",
+      "outcome": "PROPOSED_OK",
+      "attribution": null,
+      "evidence": "proposal 968–2636 covers gold (overlap 1, contact inside)",
+      "signalStats": {
+        "samplesInside": 4,
+        "spanCoverage": 0.83,
+        "maxGapMs": 100,
+        "smoothedPeakInside": 0.533,
+        "proposalGate": 0.5
+      },
+      "matchedProposal": {
+        "startMs": 968,
+        "endMs": 2636,
+        "overlapOfGold": 1
+      }
+    },
+    {
+      "eventKey": "afn-sasebo-rally1#6",
+      "split": "development",
+      "goldSpanMs": [
+        1651,
+        1818
+      ],
+      "goldContactMs": 1717,
+      "signalSource": "apps/mobile/__tests__/fixtures/sessionReplay.afn-sasebo-rally1.json (W6 replay-validated tap-seeded target wrist series)",
+      "outcome": "PROPOSED_OK",
+      "attribution": null,
+      "evidence": "proposal 968–2636 covers gold (overlap 1, contact inside)",
+      "signalStats": {
+        "samplesInside": 3,
+        "spanCoverage": 0.6,
+        "maxGapMs": 66,
+        "smoothedPeakInside": 0.339,
+        "proposalGate": 0.5
+      },
+      "matchedProposal": {
+        "startMs": 968,
+        "endMs": 2636,
+        "overlapOfGold": 1
+      }
+    },
+    {
+      "eventKey": "afn-sasebo-rally2#1",
+      "split": "development",
+      "goldSpanMs": [
+        2380,
+        3050
+      ],
+      "goldContactMs": 2620,
+      "signalSource": "datasets/experiments/wave-a/E-replay-validation.json (recorded Mac batch proposals)",
+      "outcome": "PROPOSED_OK",
+      "attribution": null,
+      "evidence": "recorded batch proposal 2236–2836 covers gold 2380–3050 (overlap 0.68)",
+      "signalStats": null,
+      "matchedProposal": {
+        "startMs": 2236,
+        "endMs": 2836,
+        "overlapOfGold": 0.68
+      }
+    },
+    {
+      "eventKey": "afn-sasebo-rally2#2",
+      "split": "development",
+      "goldSpanMs": [
+        3600,
+        4233
+      ],
+      "goldContactMs": 3834,
+      "signalSource": "datasets/experiments/wave-a/E-replay-validation.json (recorded Mac batch proposals)",
+      "outcome": "PROPOSED_OK",
+      "attribution": null,
+      "evidence": "recorded batch proposal 3604–4538 covers gold 3600–4233 (overlap 0.99)",
+      "signalStats": null,
+      "matchedProposal": {
+        "startMs": 3604,
+        "endMs": 4538,
+        "overlapOfGold": 0.99
+      }
+    },
+    {
+      "eventKey": "afn-vic-rally1#1",
+      "split": "test_held_out",
+      "goldSpanMs": [
+        450,
+        1150
+      ],
+      "goldContactMs": 680,
+      "signalSource": "datasets/cascade/cascade-1787971753680.json (recorded Mac selection)",
+      "outcome": "PROPOSED_OK",
+      "attribution": null,
+      "evidence": "recorded Mac cascade: selected 100–1068 vs gold 450–1150 (overlap 88%, contact inside). Wrist/paddle series for this case are not committed — deciding artifact: datasets/paddle-bench/runs/afn-vic-rally1/{people.json,report.json} (Mac, pnpm lab:regen)",
+      "signalStats": null,
+      "matchedProposal": null
+    },
+    {
+      "eventKey": "wavea-marne-serve#1",
+      "split": "development",
+      "goldSpanMs": [
+        34017,
+        35433
+      ],
+      "goldContactMs": 34689,
+      "signalSource": "runs-wave-a/wavea-marne-serve/people.json (auto-target wrist series, replayed)",
+      "outcome": "PROPOSED_OK",
+      "attribution": null,
+      "evidence": "proposal 34117–35335 covers gold (overlap 0.86, contact inside)",
+      "signalStats": {
+        "samplesInside": 81,
+        "spanCoverage": 0.99,
+        "maxGapMs": 84,
+        "smoothedPeakInside": 2.751,
+        "proposalGate": 0.825
+      },
+      "matchedProposal": {
+        "startMs": 34117,
+        "endMs": 35335,
+        "overlapOfGold": 0.86
+      }
+    },
+    {
+      "eventKey": "wavea-marne-dig#1",
+      "split": "development",
+      "goldSpanMs": [
+        14042,
+        14333
+      ],
+      "goldContactMs": 14188,
+      "signalSource": "runs-wave-a/wavea-marne-dig/people.json (auto-target wrist series, replayed)",
+      "outcome": "PROPOSED_OK",
+      "attribution": null,
+      "evidence": "proposal 13830–14398 covers gold (overlap 1, contact inside)",
+      "signalStats": {
+        "samplesInside": 18,
+        "spanCoverage": 0.98,
+        "maxGapMs": 17,
+        "smoothedPeakInside": 0.449,
+        "proposalGate": 0.5
+      },
+      "matchedProposal": {
+        "startMs": 13830,
+        "endMs": 14398,
+        "overlapOfGold": 1
+      }
+    },
+    {
+      "eventKey": "wavea-faead-feed#1",
+      "split": "development",
+      "goldSpanMs": [
+        33358,
+        34050
+      ],
+      "goldContactMs": 33442,
+      "signalSource": "runs-wave-a/wavea-faead-feed/people.json (auto-target wrist series, replayed)",
+      "outcome": "PROPOSED_OK",
+      "attribution": null,
+      "evidence": "proposal 33083–34417 covers gold (overlap 1, contact inside)",
+      "signalStats": {
+        "samplesInside": 11,
+        "spanCoverage": 0.96,
+        "maxGapMs": 292,
+        "smoothedPeakInside": 0.456,
+        "proposalGate": 0.5
+      },
+      "matchedProposal": {
+        "startMs": 33083,
+        "endMs": 34417,
+        "overlapOfGold": 1
+      }
+    },
+    {
+      "eventKey": "wavea-faead-rally#1",
+      "split": "development",
+      "goldSpanMs": [
+        13417,
+        13833
+      ],
+      "goldContactMs": null,
+      "signalSource": "runs-wave-a/wavea-faead-rally/people.json (auto-target wrist series, replayed)",
+      "outcome": "PROPOSED_OK",
+      "attribution": null,
+      "evidence": "proposal 13333–14042 covers gold (overlap 1)",
+      "signalStats": {
+        "samplesInside": 7,
+        "spanCoverage": 0.6,
+        "maxGapMs": 42,
+        "smoothedPeakInside": 0.619,
+        "proposalGate": 0.5
+      },
+      "matchedProposal": {
+        "startMs": 13333,
+        "endMs": 14042,
+        "overlapOfGold": 1
+      }
+    },
+    {
+      "eventKey": "wavea-faead-rally#2",
+      "split": "development",
+      "goldSpanMs": [
+        13875,
+        14500
+      ],
+      "goldContactMs": 14042,
+      "signalSource": "runs-wave-a/wavea-faead-rally/people.json (auto-target wrist series, replayed)",
+      "outcome": "MISSED",
+      "attribution": "SAMPLING",
+      "evidence": "wrist series inside gold span is sparse (maxGap 292ms, span coverage 0.67): sampling failure precedes any logic decision",
+      "signalStats": {
+        "samplesInside": 5,
+        "spanCoverage": 0.67,
+        "maxGapMs": 292,
+        "smoothedPeakInside": 0.306,
+        "proposalGate": 0.5
+      },
+      "matchedProposal": null
+    },
+    {
+      "eventKey": "wavea-944403-dink#3",
+      "split": "development",
+      "goldSpanMs": [
+        20950,
+        21500
+      ],
+      "goldContactMs": 21117,
+      "signalSource": "runs-wave-a/wavea-944403-dink/people.json (auto-target wrist series, replayed)",
+      "outcome": "PROPOSED_OK",
+      "attribution": null,
+      "evidence": "proposal 20103–21154 covers gold (overlap 0.37, contact inside)",
+      "signalStats": {
+        "samplesInside": 27,
+        "spanCoverage": 0.97,
+        "maxGapMs": 67,
+        "smoothedPeakInside": 0.479,
+        "proposalGate": 0.5
+      },
+      "matchedProposal": {
+        "startMs": 20103,
+        "endMs": 21154,
+        "overlapOfGold": 0.37
+      }
+    },
+    {
+      "eventKey": "wavea-944403-smash#2",
+      "split": "development",
+      "goldSpanMs": [
+        4317,
+        4525
+      ],
+      "goldContactMs": 4379,
+      "signalSource": "runs-wave-a/wavea-944403-smash/people.json (auto-target wrist series, replayed)",
+      "outcome": "PROPOSED_OK",
+      "attribution": null,
+      "evidence": "proposal 4071–4605 covers gold (overlap 1, contact inside)",
+      "signalStats": {
+        "samplesInside": 13,
+        "spanCoverage": 0.96,
+        "maxGapMs": 17,
+        "smoothedPeakInside": 0.463,
+        "proposalGate": 0.5
+      },
+      "matchedProposal": {
+        "startMs": 4071,
+        "endMs": 4605,
+        "overlapOfGold": 1
+      }
+    },
+    {
+      "eventKey": "wavea-wgm-wheelchair#1",
+      "split": "development",
+      "goldSpanMs": [
+        182400,
+        183067
+      ],
+      "goldContactMs": 182583,
+      "signalSource": "runs-wave-a/wavea-wgm-wheelchair/people.json (auto-target wrist series, replayed)",
+      "outcome": "PROPOSED_OK",
+      "attribution": null,
+      "evidence": "proposal 182567–183300 covers gold (overlap 0.75, contact inside)",
+      "signalStats": {
+        "samplesInside": 20,
+        "spanCoverage": 1,
+        "maxGapMs": 66,
+        "smoothedPeakInside": 1.63,
+        "proposalGate": 0.536
+      },
+      "matchedProposal": {
+        "startMs": 182567,
+        "endMs": 183300,
+        "overlapOfGold": 0.75
+      }
+    },
+    {
+      "eventKey": "wavea-sasebo-volleys#1",
+      "split": "development",
+      "goldSpanMs": [
+        51900,
+        52300
+      ],
+      "goldContactMs": 52000,
+      "signalSource": "runs-wave-a/wavea-sasebo-volleys/people.json (auto-target wrist series, replayed)",
+      "outcome": "MIS_BOUNDED",
+      "attribution": "WRIST_SIGNAL_QUALITY",
+      "evidence": "in-span smoothed wrist peak 0.31 is below the proposal gate 0.5 (max(0.5, 30% of global peak)): the recorded signal never reads as a swing here",
+      "signalStats": {
+        "samplesInside": 12,
+        "spanCoverage": 0.92,
+        "maxGapMs": 34,
+        "smoothedPeakInside": 0.31,
+        "proposalGate": 0.5
+      },
+      "matchedProposal": {
+        "startMs": 52152,
+        "endMs": 52920,
+        "overlapOfGold": 0.37
+      }
+    },
+    {
+      "eventKey": "wavea-sasebo-volleys#3",
+      "split": "development",
+      "goldSpanMs": [
+        52434,
+        52900
+      ],
+      "goldContactMs": 52683,
+      "signalSource": "runs-wave-a/wavea-sasebo-volleys/people.json (auto-target wrist series, replayed)",
+      "outcome": "PROPOSED_OK",
+      "attribution": null,
+      "evidence": "proposal 52152–52920 covers gold (overlap 1, contact inside)",
+      "signalStats": {
+        "samplesInside": 14,
+        "spanCoverage": 0.93,
+        "maxGapMs": 34,
+        "smoothedPeakInside": 0.692,
+        "proposalGate": 0.5
+      },
+      "matchedProposal": {
+        "startMs": 52152,
+        "endMs": 52920,
+        "overlapOfGold": 1
+      }
+    },
+    {
+      "eventKey": "wavea-sasebo-volleys#5",
+      "split": "development",
+      "goldSpanMs": [
+        52934,
+        53234
+      ],
+      "goldContactMs": 53067,
+      "signalSource": "runs-wave-a/wavea-sasebo-volleys/people.json (auto-target wrist series, replayed)",
+      "outcome": "MISSED",
+      "attribution": "WRIST_SIGNAL_QUALITY",
+      "evidence": "in-span smoothed wrist peak 0.344 is below the proposal gate 0.5 (max(0.5, 30% of global peak)): the recorded signal never reads as a swing here",
+      "signalStats": {
+        "samplesInside": 9,
+        "spanCoverage": 0.89,
+        "maxGapMs": 34,
+        "smoothedPeakInside": 0.344,
+        "proposalGate": 0.5
+      },
+      "matchedProposal": null
+    }
+  ]
+}

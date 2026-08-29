@@ -2,13 +2,68 @@
  * Coach-review types for the admin console.
  *
  * MIRROR of the authoritative schema in packages/swing-lab/src/coachReview.ts
- * (v2). The runtime contract between the two is the emitted JSON under
+ * (v3). The runtime contract between the two is the emitted JSON under
  * datasets/coach-review/ (queue.json, schema.json, taxonomy, drills): the UI
  * loads those artifacts and REFUSES to operate when schemaVersion differs
  * from EXPECTED_SCHEMA_VERSION, so the mirror cannot silently drift.
  */
 
-export const EXPECTED_SCHEMA_VERSION = 2 as const;
+export const EXPECTED_SCHEMA_VERSION = 3 as const;
+
+export const STROKE_PHASES = [
+  { id: "preparation", name: "Preparation / ready position" },
+  { id: "backswing", name: "Backswing / take-back" },
+  { id: "contact", name: "Contact" },
+  { id: "follow_through", name: "Follow-through" },
+  { id: "recovery", name: "Recovery to ready" },
+] as const;
+
+export type StrokePhaseId = (typeof STROKE_PHASES)[number]["id"];
+
+export const SKILL_LEVEL_RELEVANCE = ["beginner", "intermediate", "advanced", "all"] as const;
+export type SkillLevelRelevance = (typeof SKILL_LEVEL_RELEVANCE)[number];
+
+export type PhaseAssessment = "good" | "minor_issue" | "major_issue" | "not_observable";
+
+export interface PhaseEvaluation {
+  phaseId: StrokePhaseId;
+  assessment: PhaseAssessment;
+  note: string;
+}
+
+export interface DrillSuggestion {
+  drillId: string | null;
+  freeText: string;
+  whyApplies: string;
+  role: "recommended" | "alternative";
+  progressionNote: string | null;
+  regressionNote: string | null;
+  equipmentNote: string | null;
+  skillLevelRelevance: SkillLevelRelevance;
+}
+
+export interface ReviewProvenance {
+  coachQualificationSnapshot: {
+    coachId: string;
+    credentialRef: string;
+    registryStatus: "active";
+    provisionedAtIso: string;
+    provisionedBy: string;
+    snapshotAtIso: string;
+  };
+  videoRef: {
+    path: string;
+    annotatorId: string | null;
+    annotationRevision: number | null;
+  };
+  analysisVersions: Record<string, string>;
+  rawLabelsShown: {
+    annotatedStrokeV3: string | null;
+    contactMs: number | null;
+    windowMs: { start: number; end: number } | null;
+  } | null;
+  adjudicationState: "unadjudicated";
+}
 
 export type QualityValue = 1 | 2 | 3 | 4 | 5;
 export type Severity = 1 | 2 | 3;
@@ -112,19 +167,12 @@ export interface SchemaDescriptor {
   drillLibraryVersion: string;
 }
 
-export interface CoachRegistryEntry {
-  coachId: string;
-  credentialRef: string;
-  status: "active" | "suspended";
-  provisionedAtIso: string;
-  provisionedBy: string;
-}
-
-export interface CoachRegistry {
-  schemaVersion: number;
-  note: string;
-  coaches: CoachRegistryEntry[];
-}
+/** Registry v2 (identity + qualification) lives in ./provisioning, the
+ * mirror of packages/swing-lab/src/coachProvisioning.ts. */
+export type {
+  CoachRegistryEntryV2 as CoachRegistryEntry,
+  CoachRegistryV2 as CoachRegistry,
+} from "./provisioning";
 
 export type StrokeConfirmation =
   | { kind: "confirmed"; stroke: string }
@@ -136,6 +184,7 @@ export interface FaultEntry {
   severity: Severity;
   evidence: {
     timestampsMs: number[];
+    frames: number[];
     region: { x: number; y: number; w: number; h: number } | null;
   };
   rationale: string;
@@ -153,11 +202,14 @@ export interface CoachReview {
   drillLibraryVersion: string | null;
   strokeConfirmation: StrokeConfirmation;
   overallQuality: { scaleId: string; value: QualityValue } | null;
+  phaseEvaluations: PhaseEvaluation[];
+  primaryFaultId: string | null;
   faults: FaultEntry[];
-  drillSuggestions: Array<{ drillId: string | null; freeText: string }>;
+  drillSuggestions: DrillSuggestion[];
   confidence: number;
   cannotEvaluate: { reason: string } | null;
   rationale: string;
+  provenance: ReviewProvenance;
   createdAtIso: string;
   submittedAtIso: string;
 }

@@ -1,0 +1,129 @@
+{
+  "workstream": "wave-d2/d2-03-acq-milgov",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "date": "2026-08-29",
+  "objective": "Acquisition sweep of .mil/.gov sources beyond the exhausted DVIDS pickleball queries: base newspapers, MWR/recreation offices, VA adaptive sports, state/city parks & recreation media, military health/fitness channels. Public-domain or explicit-license only (quoted); cleared items downloaded <200MB as role=fresh_candidate, label-blind; full search log.",
+  "verdict": "GREEN",
+  "accepted": {
+    "count": 2,
+    "totalBytesAdded": 146556833,
+    "budgetBytes": 200000000,
+    "items": [
+      {
+        "id": "voa-6108955",
+        "path": "datasets/pickleball/fresh-candidates/voa-6108955.mp4",
+        "sourceUrl": "https://www.voanews.com/a/episode_pickleball-coach-proves-age-doesnt-matter-sports-4242761/6108955.html",
+        "title": "Pickleball Coach Proves Age Doesn't Matter in Sports",
+        "publisher": "Voice of America (VOA News), author Maxim Moskalkov (VOA correspondent)",
+        "publishedAt": "2020-04-01",
+        "media": "1920x1080@29.97, 196.8s, 5899 frames, 89063575 bytes, H.264 video stream copied unmodified from source MP4 (av.voanews.com), audio stripped",
+        "sha256": "e95c7ce92b16d7a526a17db14d7185310d948dd5e6df36fbc4fcb4c2856e3600",
+        "role": "fresh_candidate",
+        "labelBlind": true
+      },
+      {
+        "id": "voa-6115790",
+        "path": "datasets/pickleball/fresh-candidates/voa-6115790.mp4",
+        "sourceUrl": "https://www.voanews.com/a/episode_pickleball-coach-proves-age-and-pandemic-arent-obstacles-when-it-comes-true-passion-4640536/6115790.html",
+        "title": "Pickleball Coach Proves Age - And Pandemic - Aren't Obstacles When It Comes to True Passion",
+        "publisher": "Voice of America (VOA News), author Maxim Moskalkov (VOA correspondent)",
+        "publishedAt": "2021-03-28",
+        "media": "1920x1080@29.97, 184.1s, 5518 frames, 57493258 bytes, H.264 video stream copied unmodified from source MP4 (av.voanews.com), audio stripped",
+        "sha256": "d002effb42d00c2d6f2984b1f937394cec4590c9871b7d7d7133bb2d836cbc9b",
+        "role": "fresh_candidate",
+        "labelBlind": true
+      }
+    ],
+    "licenseQuote": "All text, audio and video material produced exclusively by the Voice of America is in the public domain. Credit for any use of VOA material should be given to voanews.com, Voice of America, or VOA. However, voanews.com content may also contain text, video, audio, images, graphics, and other copyrighted material that is licensed for use in VOA programming only. This material is not in the public domain and may not be copied, redistributed, sold, or published without the express permission of the copyright owner.",
+    "licenseQuoteSource": "voanews.com Terms of Use / usage policy, read 2026-08-29",
+    "clearanceMethod": "For each accepted video: (1) verified publication on voanews.com with VOA as publisher and a VOA correspondent credited as author (JSON-LD datePublished/author read from the page); (2) downloaded the direct MP4 from av.voanews.com; (3) extracted a 10-frame dense contact sheet spanning the full duration and visually confirmed every sampled frame carries only the VOA watermark, with no AFP/AP/Reuters or other third-party agency marks. Residual caveats recorded in registry.json (exclusive-VOA-production assessed, not confirmed per-video in writing; on-screen private individuals' publicity rights for non-news commercial contexts).",
+    "labelBlindStatement": "Both accepted clips were viewed only for rights screening (watermark scan) and pickleball-relevance confirmation. No annotations, labels, or sidecar files were created for them; they are registered role=fresh_candidate, excluded from corpus/splits/training per the freshCandidates policy."
+  },
+  "rejectedOrQuarantined": [
+    {
+      "id": "voa-7050366",
+      "url": "https://www.voanews.com/a/pickleball-is-booming-in-the-us-and-not-everyone-is-happy/7050366.html",
+      "outcome": "excluded",
+      "reason": "Frame screening showed AFP and REUTERS watermarks on multiple segments; per the quoted VOA policy, third-party agency material inside VOA videos is licensed for VOA use only and is NOT public domain. Downloaded to a temp dir for screening only; never added to the corpus."
+    },
+    {
+      "id": "voa-5831583 / voa-5356510 / voa-5356512 / voa-5356513",
+      "outcome": "duplicate_not_downloaded",
+      "reason": "Four alternate 25fps edits of the same two stories accepted above; the native 29.97fps edits were chosen to avoid frame-rate-converted (blended) frames. Registered in quarantinedUnknownRights as duplicates for the record."
+    },
+    {
+      "id": "yt-6N3Yc184a_c",
+      "url": "https://www.youtube.com/watch?v=6N3Yc184a_c",
+      "outcome": "quarantined_not_downloaded",
+      "reason": "VA Golden Age Games 'The Pickleball Experience' on the official U.S. Dept. of Veterans Affairs YouTube channel. PD-USGov basis plausible but the YouTube license field could not be verified and the file could not be downloaded: yt-dlp blocked by YouTube 'Sign in to confirm you're not a bot' (multiple player clients and browser-cookie attempts failed). Retry from an environment with working YouTube access."
+    },
+    {
+      "id": "yt-O1dLhGGPErc",
+      "url": "https://www.youtube.com/watch?v=O1dLhGGPErc",
+      "outcome": "quarantined_not_downloaded",
+      "reason": "VA 2025 Golden Age Games Day 4 highlights (includes pickleball); same YouTube bot-check block; highlight reels commonly contain licensed music."
+    },
+    {
+      "id": "yt-JoTQChXsc64",
+      "url": "https://www.youtube.com/watch?v=JoTQChXsc64",
+      "outcome": "quarantined_not_downloaded",
+      "reason": "City of Leesburg FL parks & recreation indoor pickleball video on the city's government access channel (LakeFront TV); no explicit license and municipal (non-federal) works retain copyright by default."
+    },
+    {
+      "id": "yt-QhcW1Y2Z7Ko",
+      "url": "https://www.youtube.com/watch?v=QhcW1Y2Z7Ko",
+      "outcome": "excluded",
+      "reason": "FOX54 News Huntsville commercial TV coverage of city pickleball courts; copyrighted broadcaster content."
+    }
+  ],
+  "searchLog": [
+    {
+      "channel": "DVIDS (supplemental queries beyond exhausted pickleball queries)",
+      "queries": [
+        "MWR pickleball",
+        "recreation center pickleball",
+        "fitness center pickleball",
+        "adaptive sports pickleball"
+      ],
+      "method": "Public HTML search at dvidshub.net (API rejected: 'Bad Request - No API key was provided')",
+      "result": "Only videos already registered in datasets/corpus/sources.json, or non-pickleball adaptive-sports content. No new pickleball videos."
+    },
+    {
+      "channel": "Military health/fitness (health.mil / Military Health System)",
+      "queries": ["pickleball"],
+      "result": "Article/news results only; no non-DVIDS hosted video."
+    },
+    {
+      "channel": "Base newspapers / installation news (.mil: af.mil, army.mil)",
+      "queries": ["pickleball site searches of installation news"],
+      "result": "Pickleball stories embed DVIDS-hosted video already covered by the exhausted DVIDS inventory, or are photo/text-only. No new non-DVIDS .mil-hosted video."
+    },
+    {
+      "channel": "VA adaptive sports (news.va.gov, VA YouTube: Golden Age Games / Warrior Games era events)",
+      "queries": ["pickleball", "Golden Age Games pickleball"],
+      "result": "Official VA YouTube pickleball videos found (see quarantined items); downloads blocked by YouTube bot check in this environment. VA news articles embed the same YouTube videos and host no separate downloadable media."
+    },
+    {
+      "channel": "State/city parks & recreation media",
+      "queries": ["city parks and recreation pickleball video (web/YouTube/Vimeo)"],
+      "result": "Municipal videos exist but carry no explicit license (quarantined, e.g. Leesburg FL); local commercial TV coverage excluded. No explicitly licensed municipal video found."
+    },
+    {
+      "channel": "Voice of America (voanews.com)",
+      "queries": ["https://www.voanews.com/s?k=pickleball"],
+      "result": "7 video pages. 2 accepted (voa-6108955, voa-6115790: VOA-exclusive production, public domain, quoted policy, watermark-screened). 4 duplicate alternate edits registered-not-downloaded. 1 excluded for embedded AFP/Reuters footage (voa-7050366)."
+    }
+  ],
+  "environmentNotes": [
+    "yt-dlp YouTube downloads blocked by 'Sign in to confirm you're not a bot' despite player-client and browser-cookie workaround attempts; all YouTube-only candidates were register-quarantined instead of downloaded.",
+    "DVIDS API requires an API key not present in this environment; public HTML search used instead.",
+    "Pose extraction is macOS-only and was not run; no cascade numbers are claimed.",
+    "Held-out cases wm-dink-01 and afn-vic-rally1 were not viewed, labeled, or used."
+  ],
+  "filesChanged": [
+    "datasets/pickleball/fresh-candidates/voa-6108955.mp4 (new, 89063575 bytes)",
+    "datasets/pickleball/fresh-candidates/voa-6115790.mp4 (new, 57493258 bytes)",
+    "datasets/pickleball/registry.json (2 freshCandidates items, 6 quarantine/exclusion records, 6 officialSearchChecks entries)",
+    "datasets/experiments/wave-d2/d2-03-acq-milgov-summary.json (this file)"
+  ]
+}

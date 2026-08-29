@@ -1,0 +1,24 @@
+{
+  "workstream": "e25-docs-evidence-pack",
+  "date": "2026-08-29",
+  "branch": "devin/wave-e/e25-docs-evidence-pack",
+  "baseCommit": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+  "deliverable": "datasets/experiments/wave-e/e25-docs-evidence-pack.json",
+  "datasetScope": "Programmatic recount of datasets/ta-bench/cases.json, datasets/paddle-bench/bundles/*/annotation/*.json, stroke-gold.json, ownership-review/ownership-review.json at head; artifact-existence and content checks across datasets/experiments/wave-{a,b,c,d,d2,d3,d4}, docs/DECISIONS.md, and referenced source files.",
+  "configuration": "Linux box, read-only reconciliation; no docs edited, no labels added, no thresholds touched; held-out bundles wm-dink-01/afn-vic-rally1 never viewed (aggregate JSON record counts only, held-out contribution reported separately).",
+  "metrics": {
+    "claimsMapped": { "statusBoard": 13, "handoffV4Draft": 10, "knownSuspects": 6 },
+    "suspectVerdicts": {
+      "eventDenominators": "STALE both docs — head recount 62 records (39 target) vs 34 (board/D-043) vs 47 (V4 draft); unique events remain a separate denominator (28 per c05)",
+      "ownershipBases": "78/83 matches no committed artifact; head bases: 102/142 records, 85/140 visible points, 100 sidecar, 50 duals",
+      "c16Clips": "board '1' wrong — c16 artifact documents 6 accepted (181.08 MB, 360 s); 8 fresh-candidate clips on disk at head (6 C16 + 2 wave-d2)",
+      "c07Wiring": "board correct, V3 stale — default ON confirmed in analyzeVideo.ts (--no-paddle-worker opt-out)",
+      "c03InFlight": "board stale — merge f548115 + c03-summary.json committed",
+      "c12Wording": "supported — 3-vs-13 correction disclosed in-artifact"
+    },
+    "newStaleness": "HANDOFF_V4_DRAFT's own section-5 inventory is stale post wave-D/D2/D3/D4 integration: events 47->62, ball 60->103 (occlusionState 37->78), stroke gold 22->29; TA 301/59/54/5 and paddle 102/142/100/50 still current. STATUS_BOARD has zero wave D-D4 coverage despite 40+ committed summaries."
+  },
+  "artifacts": ["datasets/experiments/wave-e/e25-docs-evidence-pack.json"],
+  "heldOutTouched": 0,
+  "verdict": "GREEN"
+}

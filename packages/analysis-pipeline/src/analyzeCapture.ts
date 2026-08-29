@@ -9,9 +9,11 @@ import type {
 } from "@pickle/shared-types";
 import { fail, failure, ok } from "@pickle/shared-types";
 import {
+  CAPTURE_ENVELOPE_VERSION_NOT_MEASURED,
   resolveStroke,
   toLegacyPoseFrames,
   type AnalysisRecord,
+  type AnalysisRunProvenance,
   type BallTrack,
   type EvidenceRef,
   type ModalityRecord,
@@ -38,6 +40,7 @@ import type {
 import {
   detectFlatDisagreement,
   detectHierarchicalDisagreement,
+  drillMappingVersionForProfile,
   resolvePredictedProfile,
   resolveSlugProfileId,
   type CaptureAnalysisRecord,
@@ -113,6 +116,12 @@ export interface CaptureAnalysisOptions {
   nowIso: () => string;
   makeId: () => string;
   focusCheckpoint?: string;
+  /**
+   * Threshold-set version of the capture-envelope verdict measured for this
+   * attempt, when one was measured. Absent/null is recorded honestly as
+   * CAPTURE_ENVELOPE_VERSION_NOT_MEASURED — never guessed.
+   */
+  captureEnvelopeThresholdsVersion?: string | null;
 }
 
 const CHECKPOINT_PHASE: Record<string, PhaseKey> = {
@@ -422,11 +431,12 @@ export async function analyzeCapture(
     source: "real",
   };
 
+  const createdAtIso = options.nowIso();
   return ok({
     schemaVersion: 1,
     id: options.analysisId,
     captureId: input.captureId,
-    createdAtIso: options.nowIso(),
+    createdAtIso,
     engineVersion: FUSION_ENGINE_VERSION,
     strokeTaxonomyVersion: STROKE_TAXONOMY_VERSION,
     strokeResolution,
@@ -438,6 +448,14 @@ export async function analyzeCapture(
       camera: false,
     },
     modelRuns,
+    provenance: buildRunProvenance({
+      input,
+      options,
+      modelRuns,
+      scoreVersion: providers.scorer.descriptor.modelVersion,
+      drillMappingVersion: drillMappingVersionForProfile(resolvedProfileId),
+      recordedAtIso: createdAtIso,
+    }),
     result,
     faults: faults.ok ? faults.value : [],
     uncertainty: uncertainty.value,
@@ -536,11 +554,12 @@ async function partialAutoRecord(args: {
     disagreement: null,
   };
 
+  const createdAtIso = options.nowIso();
   return ok({
     schemaVersion: 1,
     id: options.analysisId,
     captureId: input.captureId,
-    createdAtIso: options.nowIso(),
+    createdAtIso,
     engineVersion: FUSION_ENGINE_VERSION,
     strokeTaxonomyVersion: STROKE_TAXONOMY_VERSION,
     strokeResolution: {
@@ -558,6 +577,16 @@ async function partialAutoRecord(args: {
       camera: false,
     },
     modelRuns,
+    provenance: buildRunProvenance({
+      input,
+      options,
+      modelRuns,
+      scoreVersion: providers.scorer.descriptor.modelVersion,
+      drillMappingVersion: drillMappingVersionForProfile(
+        resolution.kind === "side" ? resolution.profileId : null,
+      ),
+      recordedAtIso: createdAtIso,
+    }),
     result: null,
     faults: [],
     uncertainty,
@@ -565,6 +594,48 @@ async function partialAutoRecord(args: {
     shadow: [],
     strokeIntent,
   });
+}
+
+/**
+ * Complete run-level version snapshot. providerVersions covers the input
+ * producers (pose, paddle, trigger) plus every provider execution recorded
+ * in modelRuns, deduplicated by providerId@modelVersion — the stored record
+ * alone must explain which exact models participated.
+ */
+function buildRunProvenance(args: {
+  input: CaptureAnalysisInput;
+  options: CaptureAnalysisOptions;
+  modelRuns: ModelRunRecord[];
+  scoreVersion: string;
+  drillMappingVersion: string;
+  recordedAtIso: string;
+}): AnalysisRunProvenance {
+  const { input, options, modelRuns } = args;
+  const producers: ModelRef[] = [
+    input.pose.producedBy,
+    ...(input.paddle.status === "measured" ? [input.paddle.data.producedBy] : []),
+    ...(input.ball.status === "measured" ? [input.ball.data.producedBy] : []),
+    input.trigger.producedBy,
+  ];
+  const seen = new Set<string>();
+  const providerVersions: ModelRef[] = [];
+  for (const model of [...producers, ...modelRuns.map((run) => run.model)]) {
+    const key = `${model.providerId}@${model.modelVersion}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    providerVersions.push(model);
+  }
+  return {
+    appVersion: options.appVersion,
+    pipelineVersion: FUSION_ENGINE_VERSION,
+    providerVersions,
+    scoreVersion: args.scoreVersion,
+    taxonomyVersion: STROKE_TAXONOMY_VERSION,
+    drillMappingVersion: args.drillMappingVersion,
+    captureEnvelopeVersion:
+      options.captureEnvelopeThresholdsVersion ?? CAPTURE_ENVELOPE_VERSION_NOT_MEASURED,
+    recordedAtIso: args.recordedAtIso,
+  };
 }
 
 function phaseWindow(

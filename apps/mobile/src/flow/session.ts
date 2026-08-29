@@ -14,6 +14,12 @@ import {
   type ShotTypeSlug,
 } from '@pickle/shared-types';
 import type { AnalysisRecord } from '@pickle/swing-domain';
+import {
+  sessionCaptureAvailable,
+  type CapturedClip,
+  type PoseSequenceSidecarRef,
+} from '../camera/capture';
+import { stabilitySlo } from '../analysis/stabilityTelemetry';
 
 /**
  * SESSION FLOW — the mobile state machine around the canonical
@@ -27,45 +33,38 @@ import type { AnalysisRecord } from '@pickle/swing-domain';
  *      postCompletionMotion, src/camera/capture.ts) and exactly what
  *      workstream E specified for the future native stream event.
  *   2. PER-EVENT ANALYSIS DISPATCH — a typed seam
- *      (SessionEventAnalysisRequest → SessionEventAnalysisProvider). Today
- *      the only shipped provider is an honest stub that leaves every event
- *      "pending" with reason NATIVE_CLIP_EXTRACTION_NOT_BUILT, because
- *      session mode has no per-event clip/pose-slice extraction natively.
- *      No fake results, ever.
+ *      (SessionEventAnalysisRequest → SessionEventAnalysisProvider) plus a
+ *      clip-extraction seam (SessionEventClipSource) that cuts real clip
+ *      video and a pose-sidecar slice from the rolling native recording for
+ *      each closed event. Replay mode has no clip source and keeps the
+ *      honest pending-stub provider. No fake results, ever.
  *   3. VIEW MAPPING — pure functions that turn the engine's Session into
  *      timeline segments, event cards and count-only technique distribution
  *      (MOBBIN brief §3). Pure so jest can pin them without rendering.
  *
- * ── NATIVE GAPS (precise, for the next wave) ───────────────────────────────
+ * ── NATIVE SESSION SURFACE (D-040 gaps, closed in TS + Swift; Swift is
+ *    UNVERIFIED-ON-DEVICE until an iOS build runs) ───────────────────────
  *
  * GAP 1 — CONTINUOUS WRIST-SPEED EMITTER (NATIVE_SESSION_MOTION_STREAM_NOT_BUILT):
- * No native surface streams per-frame target wrist speed to JS today. The
- * emitter surface exists (NativeEventEmitter 'PickleCameraEvent',
- * subscribeToCameraEvents, src/camera/capture.ts L349–362) and the native
- * pipeline already computes the exact series live (StrokeCompletionMonitor —
- * the D-029 instrument that fills CaptureCompletionTelemetryV1
- * postCompletionMotion with bounded `{ tMs, v }` samples after the anchor).
- * What's missing: a session capture mode that (a) keeps the AVCapture session
- * recording + pose sidecar rolling instead of finalizing at
- * pendingStroke.endMs + 1500ms (GuidedCaptureViewController.swift), and
- * (b) emits every wrist-motion sample as a
- * `{ type: 'session_motion_sample', tMs, v }` PickleCameraEvent
- * (SESSION_MOTION_SAMPLE_EVENT_TYPE below is the agreed contract). Per
- * HANDOFF rule 14, that Swift change is TA-bench-gated and belongs to a
- * capture workstream — NOT done here. Until it lands, the flow runs in
- * 'replay' mode only (recorded series), which is exactly how it is tested.
+ * The native session capture mode (SessionCaptureCoordinator.swift) keeps
+ * the AVCapture session recording + pose sidecar rolling and emits every
+ * wrist-motion sample as a `{ type: 'session_motion_sample', tMs, v }`
+ * PickleCameraEvent (SESSION_MOTION_SAMPLE_EVENT_TYPE — the frozen
+ * contract). src/flow/sessionNative.ts consumes the stream and feeds
+ * LiveSessionFlow.pushSample. Builds whose bridge lacks the session surface
+ * still report the gap honestly and run replay mode only.
  *
  * GAP 2 — PER-EVENT CLIP EXTRACTION (NATIVE_CLIP_EXTRACTION_NOT_BUILT):
- * A closed SessionStrokeEvent has exact bounds, but there is no native API to
- * cut clip video / slice the rolling pose sidecar for [startMs, endMs] of one
- * event. runCaptureAnalysis (src/analysis/runCaptureAnalysis.ts) requires a
- * CapturedClip with a pose-sequence sidecar; analyzeCapture additionally maps
- * trigger.startMs/endMs/peakMotionMs — which the proposal provides verbatim
- * (startMs/endMs/peakMs) — so the seam below carries the proposal untouched.
- * Declared stroke: session play has no per-event declaration; declared-null
- * (AUTO) routing already exists in @pickle/analysis-pipeline
- * (strokeAutoResolution.ts), so `declaredStroke: null` is the intended path
- * once per-event inputs exist.
+ * A closed SessionStrokeEvent's exact [startMs, endMs] bounds are cut from
+ * the rolling recording (clip video + pose-sidecar slice) through the
+ * SessionEventClipSource seam below (native implementation:
+ * extractSessionEventClip, src/camera/capture.ts). runCaptureAnalysis
+ * (src/analysis/runCaptureAnalysis.ts) consumes the validated CapturedClip;
+ * analyzeCapture maps trigger.startMs/endMs/peakMotionMs — which the
+ * proposal provides verbatim (startMs/endMs/peakMs) — so the seam carries
+ * the proposal untouched. Declared stroke: session play has no per-event
+ * declaration; declared-null (AUTO) routing in @pickle/analysis-pipeline
+ * (strokeAutoResolution.ts) is the analysis path.
  */
 
 // ─── Motion feed contract ───────────────────────────────────────────────────
@@ -103,12 +102,16 @@ export type SessionMotionFeedAvailability =
     };
 
 /**
- * Honest capability check for the live feed. Hard-coded unavailable until the
- * native session capture mode exists — there is no native code path that can
- * emit SESSION_MOTION_SAMPLE_EVENT_TYPE in this build, so probing the bridge
- * would be theater.
+ * Honest capability check for the live feed. Available exactly when the
+ * native bridge exposes the full session-capture surface (start/stop +
+ * per-event clip extraction) — the same native mode that emits
+ * SESSION_MOTION_SAMPLE_EVENT_TYPE. Builds without it (including jest and
+ * any partial bridge) stay honestly unavailable and run replay mode only.
  */
 export function nativeSessionMotionFeedAvailability(): SessionMotionFeedAvailability {
+  if (sessionCaptureAvailable()) {
+    return { available: true, mode: 'native' };
+  }
   return {
     available: false,
     gap: NATIVE_SESSION_MOTION_STREAM_NOT_BUILT,
@@ -128,8 +131,8 @@ export const NATIVE_CLIP_EXTRACTION_NOT_BUILT =
  * Everything a per-event analysis needs. The proposal maps 1:1 into the
  * trigger envelope the canonical pipeline already consumes
  * (trigger.startMs/endMs/peakMotionMs ← proposal.startMs/endMs/peakMs);
- * `clip`/`poseSequenceSlice` are typed as `null` — not optional — so the day
- * native extraction lands, widening these types breaks every stub loudly.
+ * `clip`/`poseSequenceSlice` are null when the flow has no clip source
+ * (replay mode, or a build without native extraction) — never fabricated.
  */
 export interface SessionEventAnalysisRequest {
   sessionId: string;
@@ -140,12 +143,35 @@ export interface SessionEventAnalysisRequest {
   closedAtMs: number;
   /** Session play has no per-event declaration. Declared-null (AUTO) routing
    * in @pickle/analysis-pipeline (strokeAutoResolution.ts) is the analysis
-   * path once per-event inputs exist. */
+   * path for per-event inputs. */
   declaredStroke: ShotTypeSlug | null;
-  /** Gap 2: no native per-event clip extraction in this build. */
-  clip: null;
-  /** Gap 2: no rolling pose sidecar to slice to [startMs, endMs] yet. */
-  poseSequenceSlice: null;
+  /** Validated per-event clip from the rolling recording, when a clip source
+   * is attached; null in replay mode or without native extraction (Gap 2). */
+  clip: CapturedClip | null;
+  /** The clip's pose sidecar sliced to the extracted window; null exactly
+   * when `clip` is null or the window held no measured pose frames. */
+  poseSequenceSlice: PoseSequenceSidecarRef | null;
+}
+
+// ─── Per-event clip extraction seam (Gap 2 closure) ────────────────────────
+
+export type SessionEventClipExtraction =
+  /** A REAL validated clip cut from the rolling recording. */
+  | {
+      status: 'extracted';
+      clip: CapturedClip;
+      poseSequenceSlice: PoseSequenceSidecarRef | null;
+    }
+  /** Extraction could not produce a trustworthy clip; the event stays
+   * honestly pending with this reason. Never a fabricated clip. */
+  | { status: 'unavailable'; pendingReason: string };
+
+/** Cuts clip video + pose-sidecar slice for one closed event's exact bounds
+ * from the rolling session recording. Bounds come from the frozen proposal
+ * verbatim; implementations must never alter them. */
+export interface SessionEventClipSource {
+  readonly sourceId: string;
+  extract(event: SessionStrokeEvent): Promise<SessionEventClipExtraction>;
 }
 
 export type SessionEventAnalysisOutcome =
@@ -166,8 +192,10 @@ export interface SessionEventAnalysisProvider {
   ): Promise<SessionEventAnalysisOutcome>;
 }
 
-/** The only shipped provider: honest about Gap 2. Every closed event keeps
- * state 'pending' with reason NATIVE_CLIP_EXTRACTION_NOT_BUILT. */
+/** Replay-mode provider: honest about having no per-event inputs. Every
+ * closed event keeps state 'pending' with reason
+ * NATIVE_CLIP_EXTRACTION_NOT_BUILT. Live native sessions use
+ * createNativeSessionAnalysisProvider (src/flow/sessionNative.ts). */
 export function createPendingStubAnalysisProvider(): SessionEventAnalysisProvider {
   return {
     providerId:
@@ -348,6 +376,15 @@ export function formatSessionClock(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
+/** Header pill for the active capture mode. Only a replay session may carry
+ * the replay banner — a live camera session must never be labeled a replay,
+ * and a replay must never pass as live. */
+export function captureModePillLabel(
+  source: LiveSessionSnapshot['source'],
+): string | null {
+  return source === 'replay' ? 'REPLAY · DEV RALLY' : null;
+}
+
 export const CLOSE_REASON_LABEL: Record<SessionEventCloseReason, string> = {
   settle: 'Closed on settle',
   next_stroke_valley: 'Closed at next-stroke valley',
@@ -372,6 +409,9 @@ export interface LiveSessionSnapshot {
   distribution: TechniqueDistributionChip[];
   qualityNotes: string[];
   droppedLateSamples: number;
+  /** onUpdate callbacks that threw — isolated and counted, never allowed to
+   * corrupt event states or kill the motion feed. */
+  onUpdateFailures: number;
   engineVersion: string;
   analysisProviderId: string;
 }
@@ -380,6 +420,9 @@ export interface LiveSessionFlowOptions {
   sessionId: string;
   source: 'live' | 'replay';
   provider: SessionEventAnalysisProvider;
+  /** Per-event clip extraction (Gap 2). Absent in replay mode: requests then
+   * carry clip: null and the provider decides honestly what that means. */
+  clipSource?: SessionEventClipSource;
   startedAtIso?: string;
   fps?: number | null;
   /** Called after every state change (new samples, closures, analysis
@@ -393,6 +436,7 @@ export class LiveSessionFlow {
   private readonly dispatches: Array<Promise<void>> = [];
   private phase: SessionFlowPhase = 'running';
   private lastSampleMs = 0;
+  private onUpdateFailures = 0;
 
   constructor(private readonly options: LiveSessionFlowOptions) {
     this.engine = new SessionEventEngine({
@@ -403,6 +447,12 @@ export class LiveSessionFlow {
         source: options.source,
       },
     });
+  }
+
+  /** True once end() has run; late samples (e.g. a queued native emission
+   * delivered after stop) must not be pushed. */
+  ended(): boolean {
+    return this.phase === 'ended';
   }
 
   /** Feed one wrist-speed sample; returns the events CLOSED by this sample
@@ -426,8 +476,8 @@ export class LiveSessionFlow {
   end(): LiveSessionSnapshot {
     if (this.phase === 'running') {
       const closed = this.engine.flush();
-      for (const event of closed) this.dispatchAnalysis(event);
       this.phase = 'ended';
+      for (const event of closed) this.dispatchAnalysis(event);
       const snapshot = this.snapshot();
       completedSessions.set(this.options.sessionId, snapshot);
       this.notify();
@@ -455,6 +505,7 @@ export class LiveSessionFlow {
       distribution: techniqueDistribution(events),
       qualityNotes: session.qualityState.notes,
       droppedLateSamples: session.qualityState.droppedLateSamples,
+      onUpdateFailures: this.onUpdateFailures,
       engineVersion: SESSION_ENGINE_VERSION,
       analysisProviderId: this.options.provider.providerId,
     };
@@ -467,20 +518,31 @@ export class LiveSessionFlow {
       this.pendingReasons.set(event.eventId, availability.pendingReason);
       return;
     }
-    const request: SessionEventAnalysisRequest = {
-      sessionId: this.options.sessionId,
-      eventId: event.eventId,
-      proposal: event.proposal,
-      closeReason: event.closeReason,
-      closedAtMs: event.closedAtMs,
-      declaredStroke: null,
-      clip: null,
-      poseSequenceSlice: null,
-    };
     this.engine.markEvent(event.eventId, 'processing');
-    const run = this.options.provider
-      .analyzeEvent(request)
+    const run = this.extractClip(event)
+      .then(extraction => {
+        if (extraction.status === 'unavailable') {
+          // Could not produce per-event inputs — honest 'pending', no
+          // analysis. The ENGINE state reverts too: nothing is processing.
+          this.pendingReasons.set(event.eventId, extraction.pendingReason);
+          this.engine.markEvent(event.eventId, 'pending');
+          this.notify();
+          return null;
+        }
+        const request: SessionEventAnalysisRequest = {
+          sessionId: this.options.sessionId,
+          eventId: event.eventId,
+          proposal: event.proposal,
+          closeReason: event.closeReason,
+          closedAtMs: event.closedAtMs,
+          declaredStroke: null,
+          clip: extraction.clip,
+          poseSequenceSlice: extraction.poseSequenceSlice,
+        };
+        return this.options.provider.analyzeEvent(request);
+      })
       .then(outcome => {
+        if (outcome === null) return;
         if (outcome.status === 'ready') {
           this.engine.markEvent(event.eventId, 'ready', {
             analysis: outcome.analysis,
@@ -490,13 +552,24 @@ export class LiveSessionFlow {
             abstainReason: outcome.abstainReason,
           });
         } else {
-          // Could not start after all — the view resolves back to 'pending'.
+          // Could not start after all — honest revert to 'pending' (engine
+          // state included), never a fake terminal outcome.
           this.pendingReasons.set(event.eventId, outcome.pendingReason);
+          this.engine.markEvent(event.eventId, 'pending');
         }
         this.notify();
       })
       .catch((error: unknown) => {
+        // A terminal state already recorded for this event is append-only:
+        // a late dispatch failure (e.g. from a notify subscriber) must never
+        // rewrite a real outcome into ANALYSIS_DISPATCH_FAILED.
+        const state = this.engine.eventState(event.eventId);
+        if (state === 'ready' || state === 'abstained') return;
         const message = error instanceof Error ? error.message : String(error);
+        stabilitySlo.record({
+          kind: 'session_flow_failed',
+          reason: 'analysis_dispatch_failed',
+        });
         this.engine.markEvent(event.eventId, 'abstained', {
           abstainReason: `ANALYSIS_DISPATCH_FAILED: ${message}`,
         });
@@ -505,8 +578,50 @@ export class LiveSessionFlow {
     this.dispatches.push(run);
   }
 
+  /** Replay mode (no clip source) legitimately has no per-event clip; the
+   * request carries nulls exactly as before Gap 2 closed. */
+  private async extractClip(event: SessionStrokeEvent): Promise<
+    | {
+        status: 'extracted';
+        clip: CapturedClip | null;
+        poseSequenceSlice: PoseSequenceSidecarRef | null;
+      }
+    | { status: 'unavailable'; pendingReason: string }
+  > {
+    if (!this.options.clipSource) {
+      return { status: 'extracted', clip: null, poseSequenceSlice: null };
+    }
+    try {
+      return await this.options.clipSource.extract(event);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: 'unavailable',
+        pendingReason: `SESSION_CLIP_EXTRACTION_FAILED: ${message}`,
+      };
+    }
+  }
+
   private notify(): void {
-    this.options.onUpdate?.(this.snapshot());
+    // Analysis outcomes can settle after end(): keep the completed-session
+    // registry (what LiveSummary reads) in sync with every state change
+    // instead of freezing the summary at whatever was in flight at stop.
+    if (this.phase === 'ended') {
+      completedSessions.set(this.options.sessionId, this.snapshot());
+    }
+    if (!this.options.onUpdate) return;
+    try {
+      this.options.onUpdate(this.snapshot());
+    } catch {
+      // A throwing UI subscriber must not corrupt event states, break the
+      // dispatch chain, or take down the native motion feed. Counted, and
+      // surfaced on every snapshot — never silent.
+      this.onUpdateFailures += 1;
+      stabilitySlo.record({
+        kind: 'session_flow_failed',
+        reason: 'on_update_subscriber_failed',
+      });
+    }
   }
 }
 

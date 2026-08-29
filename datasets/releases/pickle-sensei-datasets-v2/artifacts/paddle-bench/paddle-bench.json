@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "provenance": "licensed",
+  "note": "REAL footage benchmark. Labels are human-eyeballed center points (see each annotation's notes for precision).",
+  "cases": [
+    {
+      "id": "wm-dink-01",
+      "video": "videos/wm-dink-nearplayer.mp4",
+      "labels": "bundles/wm-dink-01/annotation/devin-visual-v1.json",
+      "runDir": "runs/wm-dink-01",
+      "sourceKey": "wm-pickleball-game",
+      "sessionKey": "wm-tournament-2014",
+      "role": "held_out"
+    },
+    {
+      "id": "wm-volley-02",
+      "video": "videos/wm-volley-nearplayer.mp4",
+      "labels": "bundles/wm-volley-02/annotation/devin-visual-v1.json",
+      "runDir": "runs/wm-volley-02",
+      "sourceKey": "wm-pickleball-game",
+      "sessionKey": "wm-tournament-2014",
+      "role": "development"
+    },
+    {
+      "id": "afn-sasebo-rally1",
+      "video": "videos/afn-sasebo-rally1.mp4",
+      "labels": "bundles/afn-sasebo-rally1/annotation/devin-visual-v1.json",
+      "runDir": "runs/afn-sasebo-rally1",
+      "sourceKey": "afn-sasebo-indoor",
+      "sessionKey": "afn-sasebo-2025-06",
+      "role": "development"
+    },
+    {
+      "id": "afn-sasebo-rally2",
+      "video": "videos/afn-sasebo-rally2.mp4",
+      "labels": "bundles/afn-sasebo-rally2/annotation/devin-visual-v1.json",
+      "runDir": "runs/afn-sasebo-rally2",
+      "sourceKey": "afn-sasebo-indoor",
+      "sessionKey": "afn-sasebo-2025-06",
+      "role": "development"
+    },
+    {
+      "id": "afn-vic-rally1",
+      "video": "videos/afn-vic-rally1.mp4",
+      "labels": "bundles/afn-vic-rally1/annotation/devin-visual-v1.json",
+      "runDir": "runs/afn-vic-rally1",
+      "sourceKey": "afn-provic",
+      "sessionKey": "afn-vic-2025",
+      "role": "test_held_out"
+    }
+  ],
+  "excludedCases": [
+    {
+      "id": "wm-far-03",
+      "video": "videos/wm-farplayer-return.mp4",
+      "runDir": "runs/wm-far-03",
+      "reason": "primary-subject ambiguity: two similar-size far players plus a foreground walk-in; pose target flips mid-window, so 'the player's paddle' is ill-defined. Kept as a failure-mode exhibit, not scored."
+    }
+  ],
+  "coverageGaps": [
+    "no left-handed primary player labeled",
+    "no bright/white paddle close-up labeled",
+    "no low-light footage",
+    "no true side view labeled (front-oblique + rear only)",
+    "no deliberate motion-blur stress case",
+    "strokes covered: dink, volley, backhand volley only"
+  ],
+  "splitNote": "development cases were used to debug identity/occlusion this session; wm-dink-01 was NOT tuned against (its regressions are reported as-is). Formal train/val/test splits by sessionKey begin when training begins."
+}

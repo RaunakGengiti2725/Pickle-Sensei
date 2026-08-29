@@ -1,0 +1,46 @@
+{
+  "workstream": "e19-result-state-props",
+  "branch": "devin/wave-e/e19-result-state-props",
+  "baseCommit": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+  "mission": "Property-test the mobile Result / Try Again state machine (apps/mobile) for stale-state bugs: repeated attempts, old clip reuse, wrong target inheritance, prior-result contamination, attempt sequencing.",
+  "method": {
+    "framework": "jest with deterministic seeded generators (mulberry32, fixed seeds, 300 randomized cases per property)",
+    "testFile": "apps/mobile/__tests__/resultStateProps.test.ts",
+    "surfacesUnderTest": [
+      "apps/mobile/src/screens/tryAgainHandoff.ts (armTryAgain/consumeTryAgainHandoff lifecycle, tryAgainFromResult, techniqueIntentFromHandoff)",
+      "apps/mobile/src/components/strokeResultModel.ts (attemptChips, contactMarkerPresentation, contactHaloHalfWidthMs, phaseTimelinePresentation, strokeResultHeader, measuredRows, visibleMeasuredRows, isAbstainedResult)"
+    ],
+    "properties": [
+      "declared-null envelopes always re-arm AUTO; a prediction is never laundered into a declaration",
+      "the re-armed canonical always belongs to the declared stroke (no cross-technique inheritance)",
+      "handoff -> intent keeps canonical/slug registry-consistent; ambiguous slugs stay canonical-null",
+      "legacy rows (no envelope) re-declare exactly the analyzed shot, never a canonical",
+      "handoff lifecycle matches a single-slot reference model over random arm/peek/consume sequences",
+      "attempt chips: contiguous capture-order labels, exactly one current, permutation-invariant, later attempts never renumber earlier ones, null sessionId yields no chips",
+      "contact marker drawn iff estimated + (ball/paddle confirmation or confidence >= 0.6) + finite ms; halo finite and within [33, 165]ms; halo monotone non-increasing in confidence",
+      "phase timeline segments always positive-length, ordered, non-overlapping; anchor-free mode never draws a contact tick and always carries the motion-evidence caption",
+      "selector purity: interleaved A,B,A derivations identical to isolated A (no prior-result contamination via module state)",
+      "visibleMeasuredRows never drops or duplicates rows (visible + hiddenCount == total, prefix-stable)"
+    ]
+  },
+  "violationsFound": [
+    {
+      "id": "cross-technique-canonical-inheritance",
+      "property": "the re-armed canonical always belongs to the declared stroke",
+      "reproduction": "seed 0xe19_02; concrete case: strokeIntent { declaredStroke: 'volley', resolutionBasis: 'declared', resolvedProfileId: 'SERVE' } -> handoff.declaredCanonical === 'SERVE' -> techniqueIntentFromHandoff produced { canonical: 'SERVE', legacySlug: 'volley' }",
+      "impact": "wrong target inheritance: a stored record whose resolvedProfileId does not correspond to its declaration (heterogeneous/corrupt persisted rows) re-armed the NEXT capture with another technique's canonical profile while keeping the declared slug — the zero-touch scoring gate would run with a contradictory canonical/slug pair",
+      "fix": "apps/mobile/src/screens/tryAgainHandoff.ts: tryAgainFromResult now accepts resolvedProfileId only when SELECTABLE_TECHNIQUES_V1 maps that canonical to the exact declared legacySlug (canonicalMatchesSlug), replacing the membership-only SELECTABLE_CANONICALS check; otherwise canonical is honestly null and techniqueIntentFromHandoff falls back to the unambiguous-slug mapping",
+      "regressionTest": "resultStateProps.test.ts: 'regression: a mismatched resolvedProfileId never seeds another technique's canonical'"
+    }
+  ],
+  "violationsNotFound": "All other 12 properties held over 300 seeded cases each (handoff lifecycle, AUTO re-arm honesty, attempt sequencing/permutation invariance, contact marker gate and halo bounds, phase timeline structure, selector purity, measured-row visibility).",
+  "gates": {
+    "tsc": "npx tsc --noEmit in apps/mobile: clean",
+    "jest": "npx jest in apps/mobile: 39 suites / 373 tests all pass (14 of them the new resultStateProps suite, ~3,900 randomized property cases; 359 pre-existing tests untouched and green)",
+    "eslint": "pnpm exec eslint on both touched files: clean (apps/mobile's own npm run lint script is broken at repo level — eslint.config.mjs resolves @eslint/js from the pnpm root, unrelated to this change)",
+    "prettier": "pnpm format:check at root: all files clean"
+  },
+  "datasetScope": "none — no dataset records, labels, or held-out cases touched",
+  "verdict": "GREEN",
+  "environment": "Ubuntu, Node 20.18.1, pnpm 10.15.1 (corepack), jest 29.7.0"
+}

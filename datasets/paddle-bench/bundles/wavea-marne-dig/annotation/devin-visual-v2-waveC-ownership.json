@@ -1,0 +1,124 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-marne-dig",
+  "annotatorId": "devin-visual-v2-waveC",
+  "createdAtIso": "2026-08-29T06:00:00.000Z",
+  "revision": 1,
+  "stroke": "unsure",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.6,
+  "notes": "WAVE-C ownership dual labels (devin-visual-v2-waveC). RECORDING clock (DOD_111781177.mp4, 24 fps, absolute frame index).\nEvery box below was VISUALLY observed on an extracted absolute-CFR frame (ffmpeg select=eq(n,IDX)); no interpolation. Points are normalized paddle-box centers; per-box pixel boxes, wrist proximity and uncertainty are recorded per frame in ownership-review.json sidecar (annotator devin-visual-v2-waveC). Ambiguous boxes are sidecar-only (never coordinates here).\nt=12862.85: 3 boxes (other, other, target)\nt=13263.25: 2 boxes (other, other)\nt=13596.92: 2 boxes (other, other)\nt=14130.78: 3 boxes (other, other, target)\nt=14264.25: 3 boxes (target, other, other)",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T06:00:00.000Z"
+    }
+  ],
+  "paddleFrames": [
+    {
+      "tMs": 12862.85,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 14130.78,
+      "point": null,
+      "visibility": "occluded"
+    },
+    {
+      "tMs": 14264.25,
+      "point": {
+        "x": 0.082,
+        "y": 0.5782
+      },
+      "visibility": "visible"
+    }
+  ],
+  "otherPaddleFrames": [
+    {
+      "tMs": 12862.85,
+      "point": {
+        "x": 0.4755,
+        "y": 0.4106
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 12862.85,
+      "point": {
+        "x": 0.6979,
+        "y": 0.6352
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 13263.25,
+      "point": {
+        "x": 0.4609,
+        "y": 0.4444
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 13263.25,
+      "point": {
+        "x": 0.6651,
+        "y": 0.625
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 13596.92,
+      "point": {
+        "x": 0.4523,
+        "y": 0.4676
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 13596.92,
+      "point": {
+        "x": 0.6555,
+        "y": 0.6481
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 14130.78,
+      "point": {
+        "x": 0.4818,
+        "y": 0.3991
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 14130.78,
+      "point": {
+        "x": 0.6448,
+        "y": 0.4944
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 14264.25,
+      "point": {
+        "x": 0.6432,
+        "y": 0.5
+      },
+      "visibility": "visible"
+    },
+    {
+      "tMs": 14264.25,
+      "point": {
+        "x": 0.487,
+        "y": 0.4259
+      },
+      "visibility": "visible"
+    }
+  ]
+}

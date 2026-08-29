@@ -1,4 +1,4 @@
-import type { Handedness, Result, ShotTypeSlug } from "@pickle/shared-types";
+import type { EnvelopeVerdict, Handedness, Result, ShotTypeSlug } from "@pickle/shared-types";
 import {
   SELECTABLE_TECHNIQUES_V1,
   SHARED_SIDE_PROFILES_V1,
@@ -12,6 +12,7 @@ import type {
   PoseSequence,
   StrokePrediction as FlatStrokePrediction,
 } from "@pickle/swing-domain";
+import { DRILL_MAPPING_VERSION_UNRESOLVED } from "@pickle/swing-domain";
 import type { ProviderDescriptor } from "@pickle/vision-contracts";
 
 /**
@@ -45,8 +46,9 @@ import type { ProviderDescriptor } from "@pickle/vision-contracts";
 /**
  * CONFIDENCE GATE — read this before changing the numbers.
  *
- * The producing classifier today is swing-lab's stroke-heuristic-1
- * (`classifyStroke`): measured geometry, NOT a learned or calibrated model.
+ * The producing classifier today is the canonical stroke heuristic
+ * (`classifyStroke` in @pickle/vision-geometry; version string
+ * STROKE_HEURISTIC_VERSION): measured geometry, NOT a learned or calibrated model.
  * Its confidences are ordinal bookkeeping, not probabilities:
  *  - UNKNOWN is emitted at a fixed 0.2;
  *  - a depth-2 side commitment is 0.45 + 0.5·margin, clamped to [0.45, 0.8],
@@ -65,7 +67,7 @@ import type { ProviderDescriptor } from "@pickle/vision-contracts";
  * auto-detect precision without calibration data, and do NOT lower it.
  *
  * Depth-3 commitments (DINK vs DRIVE vs VOLLEY…) do not exist today —
- * bounce is unobserved and stroke-heuristic-1 refuses L3. The predicted_l3
+ * bounce is unobserved and the stroke heuristic refuses L3. The predicted_l3
  * route is exercised only when a classifier genuinely commits a leaf; this
  * module must never promote a depth-2 prediction to a leaf.
  */
@@ -76,7 +78,7 @@ export type StrokeResolutionBasis = "declared" | "predicted_l3" | "predicted_fam
 
 /**
  * Hierarchical stroke prediction — structurally compatible with the output
- * of swing-lab's `classifyStroke` (stroke-heuristic-1), so an adapter can
+ * of the stroke heuristic's `classifyStroke`, so an adapter can
  * pass it through unchanged. Kept separate from swing-domain's flat
  * StrokePrediction: hierarchy depth is the honesty mechanism here.
  */
@@ -143,6 +145,13 @@ export interface StrokeIntentEnvelope {
 /** AnalysisRecord + the stroke-intent envelope (additive, non-breaking). */
 export interface CaptureAnalysisRecord extends AnalysisRecord {
   strokeIntent: StrokeIntentEnvelope;
+  /**
+   * Capture-envelope verdict measured for this attempt (additive,
+   * non-breaking: records written before this field exist without it).
+   * Downstream Result surfaces read it to explain quality-related
+   * abstentions; it never alters usable-result semantics.
+   */
+  captureEnvelope?: EnvelopeVerdict | null;
 }
 
 /** Outcome of resolving the analysis profile from a prediction. */
@@ -238,6 +247,20 @@ export function resolveSlugProfileId(
     return { profileId: profile.canonical, profileVersion: profile.profileVersion };
   }
   return { profileId: null, profileVersion: null };
+}
+
+/**
+ * Drill mapping version carried by a resolved profile (leaf or shared side),
+ * registry-terminated. A null or unknown profile id yields the unresolved
+ * sentinel — a drill mapping is never guessed for a profile that did not
+ * resolve.
+ */
+export function drillMappingVersionForProfile(profileId: string | null): string {
+  if (profileId === null) return DRILL_MAPPING_VERSION_UNRESOLVED;
+  const leaf = TECHNIQUE_ANALYSIS_PROFILES_V1[profileId];
+  if (leaf) return leaf.drillMappingVersion;
+  const side = Object.values(SHARED_SIDE_PROFILES_V1).find((profile) => profile.id === profileId);
+  return side ? side.drillMappingVersion : DRILL_MAPPING_VERSION_UNRESOLVED;
 }
 
 const SIDE_PREFIXES = ["FOREHAND_", "BACKHAND_"] as const;

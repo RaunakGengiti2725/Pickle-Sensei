@@ -1,0 +1,232 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-944403-dink",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "createdAtIso": "2026-08-29T09:15:42.000Z",
+  "revision": 1,
+  "modality": "phases",
+  "clock": "RECORDING clock of datasets/corpus/media/dvids-944403-916657917f2b.mp4 (60000/1001 fps CFR, absolute frame index n; tMs=round(n*1001/60)). Media re-acquired from the registered DVIDS mediaUrl; sha256 verified equal to rec-916657917f2b (916657917f2b...ad13).",
+  "method": "Wave D2 phase-only pass. Boundaries read from extracted absolute-CFR frames (ffmpeg drawtext %{n} before select=between(n,A,B), cropped sheets, stride 2 over n1198-1344; 1 frame = 16.7ms, stride-2 sampling adds +-1 frame to stated uncertainties). Contacts are the committed devin-visual-v2-waveC eventLabels, not re-labeled. Unknown = not visible, never interpolated.",
+  "eventPhases": [
+    {
+      "eventStartMs": 20125,
+      "contactMs": 20354,
+      "owner": "other",
+      "stroke": "forehand scoop dink (near-right player, blue paddle)",
+      "phases": {
+        "preparationStartMs": 20120,
+        "backswingStartMs": 20220,
+        "accelerationStartMs": 20320,
+        "contactMs": 20354,
+        "followThroughEndMs": 20487
+      },
+      "boundaries": [
+        {
+          "phase": "preparationStart",
+          "valueMs": 20120,
+          "frameIdx": 1206,
+          "uncertaintyFrames": 3,
+          "basis": "observed",
+          "note": "rightward stride + paddle drop underway by n1206 (committed eventStart 20125 = n1207)"
+        },
+        {
+          "phase": "backswingStart",
+          "valueMs": 20220,
+          "frameIdx": 1212,
+          "uncertaintyFrames": 3,
+          "basis": "observed",
+          "note": "paddle drawn low behind the ball line n1212-1216"
+        },
+        {
+          "phase": "accelerationStart",
+          "valueMs": 20320,
+          "frameIdx": 1218,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "forward under-swing onset n1218"
+        },
+        {
+          "phase": "contact",
+          "valueMs": 20354,
+          "frameIdx": 1220,
+          "uncertaintyFrames": 1,
+          "basis": "committed_label_supported",
+          "note": "committed 20354 (waveC, window n1219-1221); my frames: ball just above paddle n1220, departing up-left n1222-1224"
+        },
+        {
+          "phase": "followThroughEnd",
+          "valueMs": 20487,
+          "frameIdx": 1228,
+          "uncertaintyFrames": 3,
+          "basis": "observed",
+          "note": "scoop finishes n1226-1230"
+        }
+      ]
+    },
+    {
+      "eventStartMs": 20700,
+      "contactMs": 20804,
+      "owner": "other",
+      "stroke": "far-player forehand dink",
+      "phases": {
+        "preparationStartMs": null,
+        "backswingStartMs": null,
+        "accelerationStartMs": 20770,
+        "contactMs": 20804,
+        "followThroughEndMs": 20871
+      },
+      "boundaries": [
+        {
+          "phase": "preparationStart",
+          "valueMs": null,
+          "frameIdx": null,
+          "basis": "unknown",
+          "note": "far player is small in frame; no preparation onset distinguishable from ready stance in n1235-1243"
+        },
+        {
+          "phase": "backswingStart",
+          "valueMs": null,
+          "frameIdx": null,
+          "basis": "unknown",
+          "note": "no distinct backswing resolvable at this scale"
+        },
+        {
+          "phase": "accelerationStart",
+          "valueMs": 20770,
+          "frameIdx": 1245,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "forward push begins n1245 as the ball drops in front of him"
+        },
+        {
+          "phase": "contact",
+          "valueMs": 20804,
+          "frameIdx": 1247,
+          "uncertaintyFrames": 1,
+          "basis": "committed_label_supported",
+          "note": "committed 20804 (waveC, window n1246-1248); my frames: ball at his low paddle n1247, back over the net n1249"
+        },
+        {
+          "phase": "followThroughEnd",
+          "valueMs": 20871,
+          "frameIdx": 1251,
+          "uncertaintyFrames": 3,
+          "basis": "observed",
+          "note": "cross-body lift completes ~n1251-1253"
+        }
+      ]
+    },
+    {
+      "eventStartMs": 20950,
+      "contactMs": 21121,
+      "owner": "target",
+      "stroke": "forehand drive (near-left big man)",
+      "phases": {
+        "preparationStartMs": 20957,
+        "backswingStartMs": 21024,
+        "accelerationStartMs": 21091,
+        "contactMs": 21121,
+        "followThroughEndMs": 21260
+      },
+      "boundaries": [
+        {
+          "phase": "preparationStart",
+          "valueMs": 20957,
+          "frameIdx": 1256,
+          "uncertaintyFrames": 3,
+          "basis": "observed",
+          "note": "coil begins ~n1256 (committed 20950 = n1255.7, consistent)"
+        },
+        {
+          "phase": "backswingStart",
+          "valueMs": 21024,
+          "frameIdx": 1260,
+          "uncertaintyFrames": 3,
+          "basis": "observed",
+          "note": "paddle drawn back n1258-1262 while the ball crosses toward him"
+        },
+        {
+          "phase": "accelerationStart",
+          "valueMs": 21091,
+          "frameIdx": 1264,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "forward swing onset n1264 (committed accel 21075 = n1263.2 is within my uncertainty)"
+        },
+        {
+          "phase": "contact",
+          "valueMs": 21121,
+          "frameIdx": 1266,
+          "uncertaintyFrames": 1,
+          "basis": "committed_label_supported_by_transit",
+          "note": "committed 21121 (waveC, window n1265-1267). My frames reproduce the waveC transit basis: ball inbound low n1262-1264, occluded against the net band at n1266 mid-swing, outbound over the net by n1268; no direct ball-on-paddle frame"
+        },
+        {
+          "phase": "followThroughEnd",
+          "valueMs": 21260,
+          "frameIdx": 1276,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "wrap-across completes by n1276; reset n1278-1280 (committed followThroughEnd 21292 = n1276.3, consistent)"
+        }
+      ]
+    },
+    {
+      "eventStartMs": 22000,
+      "contactMs": 22131,
+      "owner": "other",
+      "stroke": "forehand scramble lob/scoop (near-right player)",
+      "phases": {
+        "preparationStartMs": 21890,
+        "backswingStartMs": 22055,
+        "accelerationStartMs": 22122,
+        "contactMs": 22131,
+        "followThroughEndMs": 22222
+      },
+      "boundaries": [
+        {
+          "phase": "preparationStart",
+          "valueMs": 21890,
+          "frameIdx": 1312,
+          "uncertaintyFrames": 4,
+          "basis": "observed",
+          "note": "chase toward the dropping ball is already underway at n1310; onset blends into recovery from the previous exchange, hence the wide uncertainty (committed eventStart 22000 = n1318.7)"
+        },
+        {
+          "phase": "backswingStart",
+          "valueMs": 22055,
+          "frameIdx": 1320,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "bent-over, paddle drawn low behind the ball n1318-1322"
+        },
+        {
+          "phase": "accelerationStart",
+          "valueMs": 22122,
+          "frameIdx": 1324,
+          "uncertaintyFrames": 1,
+          "basis": "observed",
+          "note": "low forward flick begins n1324"
+        },
+        {
+          "phase": "contact",
+          "valueMs": 22131,
+          "frameIdx": 1326,
+          "uncertaintyFrames": 1,
+          "basis": "committed_label_supported",
+          "note": "committed 22131 (waveC, window n1326-1327); my frames: ball at the low paddle n1326, then rising steeply n1334-1344 (lob out)"
+        },
+        {
+          "phase": "followThroughEnd",
+          "valueMs": 22222,
+          "frameIdx": 1332,
+          "uncertaintyFrames": 2,
+          "basis": "observed",
+          "note": "upward flick finishes n1330-1332; recovery from n1334"
+        }
+      ]
+    }
+  ],
+  "propertyCheck": "phase order preparation<=backswing<=acceleration<=contact<=followThroughEnd holds for every non-null sequence above; acceleration<=contact holds everywhere, including vs the committed phases (21075<=21121).",
+  "history": [{ "revision": 1, "savedAtIso": "2026-08-29T09:15:42.000Z" }]
+}

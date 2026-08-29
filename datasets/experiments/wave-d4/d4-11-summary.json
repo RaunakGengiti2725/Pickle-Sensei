@@ -1,0 +1,40 @@
+{
+  "workstream": "D4-11 — End-to-end provenance chain verification",
+  "branch": "devin/wave-d4/d4-11-provenance-chain",
+  "date": "2026-08-29",
+  "environment": "LINUX-CPU (no Apple Vision pose extraction; canonical runs/ absent as expected); checker is fixture-based plus committed wave artifacts",
+  "built": {
+    "provenance_chain_checker": "packages/swing-lab/src/provenanceChain.ts (provenance-chain-1) — deep-walk checker verifying every user-visible Result-contract claim traces to OBSERVED/TRACKED/PREDICTED provenance, and that no PREDICTED value surfaces as an observation anywhere in the chain. Rules read from existing contracts (offlineStroke.ts ContactEstimate, report.ts PaddleReportEntry/BallStageReportEntry, paddleCropRecovery.ts tracked_estimate bridge, strokeHeuristic.ts StrokePrediction, strokeResultModel.ts MeasuredRowView provenance chips), never invented.",
+    "rules": [
+      "chain_contact_estimate_without_evidence — a full ContactEstimate (status=estimated) must carry >=1 traceable supporting evidence signal (registered family, finite timestampMs, weight>0)",
+      "chain_confirmation_without_signal — ballConfirmed/paddleConfirmed=true require a signal of the matching modality in supportingEvidence",
+      "chain_unregistered_evidence_signal — evidence signal outside the registered observed/tracked families",
+      "chain_abstention_with_estimate — an abstained contact must not carry estimatedContactMs",
+      "chain_tracked_without_observations — status=tracked stage claims require observationCount >= 1",
+      "chain_bridge_without_anchors — PREDICTED bridge points (bridgePointCount) require >=2 real observations to interpolate between; count must be a non-negative finite number",
+      "chain_predicted_as_observation — a source=tracked_estimate observation must not carry a positive detectorScore or nearWrist=true (bridge points are PREDICTED, detectorScore is 0 and nearWrist false by construction)",
+      "chain_prediction_without_evidence — a stroke prediction committing to a label must carry its evidence trail (null/UNKNOWN abstentions exempt)",
+      "chain_unknown_row_provenance — Result-surface measured rows must carry a registered chip (DETECTED/ESTIMATE/MEASURED/PREDICTED)",
+      "chain_predicted_row_masquerade — predicted_stroke rows must be PREDICTED and contact_estimate rows must be ESTIMATE; a prediction/estimate never surfaces under an observation chip"
+    ],
+    "c15_integration": "packages/swing-lab/src/corpusCheck.ts now runs checkProvenanceChain alongside checkArtifactInvariants as an additional invariant class (script unchanged: pnpm -F @pickle/swing-lab invariants:corpus). Violations remain findings — the checker never mutates or repairs data.",
+    "tests": "packages/swing-lab/test/provenanceChain.test.ts — a COMPLETE artifact-set fixture typed against the real pipeline types (ContactEstimate, PaddleReportEntry, BallStageReportEntry, StrokePrediction, TrackedPaddleObservation) verifies the type layer and runtime checker against the same shapes; 18 violation/acceptance cases + corpus integration test."
+  },
+  "design_decision_digest_echoes": {
+    "decision": "Evidence tracing applies only to FULL ContactEstimate nodes (which always carry supportingEvidence/limitingFactors when estimated). Experiment digests that echo an estimate (status + estimatedContactMs + errMs-vs-gold only) are derived reporting whose provenance lives in the run artifact they summarize; they are not chain sources.",
+    "reviewed_digest_nodes": [
+      "datasets/experiments/wave-a/H-downstream.json ($.<case>.baseline/candidate.contact — ballConfirmed/paddleConfirmed echoes without supportingEvidence: summary of runs, not runtime artifacts)",
+      "datasets/experiments/wave-b/W9-baseline-predictions.json ($.<case>.contact)",
+      "datasets/experiments/wave-b/W9-cascade-stroke-verdict.json ($.<case>.contact)"
+    ],
+    "note": "These 3 files (16 digest nodes) were inspected by hand before the recognizer was narrowed; nothing in them conflates PREDICTED with observed. Recorded here so the exemption is auditable, not silent."
+  },
+  "measured_results_LINUX_CPU": {
+    "corpus_check": "305 files · 0 parse failures · 0 violations (existing invariant class + new provenance-chain class)",
+    "committed_artifact_findings": "NONE — no PREDICTED value surfaces as an observation in any committed artifact; full ContactEstimate nodes in datasets/ball-bench/failures/*/report.json all carry traceable supporting evidence; no tracked claim lacks observations; no tracked_estimate point masquerades as a detection",
+    "swing_lab_tests": "20 files · 250 passed, 4 skipped (includes 19 new provenance-chain tests)",
+    "repo_typecheck": "pnpm typecheck green across all workspaces"
+  },
+  "held_out_untouched": ["wm-dink-01", "afn-vic-rally1"],
+  "no_data_modified": "checker reports only; no file under datasets/ was edited (this summary file is the only datasets/ addition)"
+}

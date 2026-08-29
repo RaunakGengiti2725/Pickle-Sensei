@@ -1,0 +1,81 @@
+{
+  "workstreamId": "g25-pr-audit",
+  "mission": "PR #1 integration risk audit (read-only first, fix only real risk): inventory integrated subsystems; find duplicate implementations, overlapping/dead experimental flags, dead/stale paths, canonical-vs-compatibility confusion, single-copy test coverage of duplicated logic, data/schema version mismatches, TS/Swift/backend state-machine divergence, unrerun cascades, test-fixture leakage into production, experimental code default-ON, unversioned behavior changes, missing/misordered migrations, API/client contract drift, mobile/backend mismatches.",
+  "method": "Static code audit on the integration branch head (104ea0f) plus targeted verification runs on Linux. Read-only inspection of subsystem topology, CLI flag parsing/defaults, API route registrations vs mobile client calls, zod contract schemas, migration filename ordering + runner semantics, annotation schema-version validation, held-out exclusion machinery, and Swift source inventory. Semantic diff of the duplicated stroke heuristic (swing-lab vs vision-geometry Lite). All root and mobile gates rerun; corpus invariants rerun. One additive test (held-out exclusion-list consistency pin) and one stale-comment correction were the only code changes; no thresholds, denominators, labels, or behavior were changed.",
+  "datasetScopeAndGrouping": "No dataset evaluation was performed; this is a code/contract audit. Where dataset metadata was inspected (annotation files, paddle-bench registry, split tables), inspection was metadata-level only (ids, roles, schemaVersion), grouped by source session per the repo's split discipline. Held-out case CONTENTS (frames, labels, media) were never read.",
+  "holdoutStatement": "Held-out case contents were never touched, read, or evaluated. Only the exclusion machinery that names them (HELD_OUT_BUNDLES, HELD_OUT_CASES, ownership/paddle-bench split metadata) was inspected and pinned for mutual consistency by a new test; the pin compares id lists only, never case data.",
+  "configuration": {
+    "baseBranch": "devin/1787988068-wave-c-integration",
+    "baseHead": "104ea0f",
+    "branch": "devin/wave-g/g25-pr-audit",
+    "node": "v20.18.1",
+    "pnpm": "10.15.1",
+    "platform": "Linux (Mac/iPhone/Swift toolchain unavailable)"
+  },
+  "measuredResults": {
+    "rootGates": {
+      "typecheck": "pass",
+      "test": "pass",
+      "lint": "pass",
+      "formatCheck": "pass"
+    },
+    "mobileGates": {
+      "npmCi": "pass",
+      "tscNoEmit": "pass",
+      "jest": "pass"
+    },
+    "corpusInvariants": "pass (pnpm --filter @pickle/swing-lab invariants:corpus)",
+    "counts": {
+      "subsystemDirsInventoried": 23,
+      "migrationsInspectedInOrder": 17,
+      "strokeHeuristicParityTests": 19,
+      "duplicatedStrokeHeuristicImplementations": 2,
+      "experimentalCliFlagsAudited": 7,
+      "flagsDefaultOn": 1,
+      "annotationRecordsSchemaV1": 70,
+      "heldOutExclusionListCopiesPinned": 4,
+      "newTestsAdded": 4,
+      "testFixtureImportsInProductionSrc": 0
+    }
+  },
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "residual-medium",
+      "title": "Duplicated stroke heuristic (swing-lab strokeHeuristic.ts vs vision-geometry strokeHeuristicLite.ts)",
+      "detail": "Both export STROKE_HEURISTIC_VERSION 'stroke-heuristic-6 (uncalibrated)' and are covered by a 19-test parity suite comparing full prediction objects on shared fixtures, so current behavior matches. Risk is forward-looking: an edit to one copy that also adjusts the parity fixtures could drift silently. Documented dedup follow-up exists. No fix beyond correcting stale header comments in the Lite copy that still claimed the stroke-heuristic-4 absence-of-measurement gates were NOT ported (they are ported; the stale claim invited a bad 'fix')."
+    },
+    {
+      "id": "F2",
+      "severity": "residual-low",
+      "title": "Held-out exclusion list declared independently in multiple tools",
+      "detail": "HELD_OUT_BUNDLES (labelQueueV2), HELD_OUT_CASES (learningCurveModality), OWNERSHIP_CASES split table, and paddle-bench.json roles each independently name the held-out cases. All four copies currently agree. Added test/heldOutConsistency.test.ts to pin all copies to the canonical export and scan swing-lab/vision-geometry sources for literals naming only a subset. ownershipBench's --include-held-out override remains by design (explicit, off by default)."
+    },
+    {
+      "id": "F3",
+      "severity": "ok",
+      "title": "Experimental flag defaults",
+      "detail": "analyzeVideo CLI: merge-tracklets, crop-recovery, two-pass, tight-window, pass1-roi are all default-OFF and opt-in; paddle worker is default-ON intentionally and documented; tight-window is correctly suppressed under --full-scan/--two-pass with a warning. No experimental path is accidentally default-ON."
+    },
+    {
+      "id": "F4",
+      "severity": "ok",
+      "title": "API/client contract alignment",
+      "detail": "Mobile client routes (sessions finalize, analysis-permits reserve/finalize, consent, training) match registered Fastify routes; zod schemas enforce ratingId presence only for scored outcomes and null otherwise, matching the mobile client's non-scored finalize calls. Path-placeholder differences are Fastify-vs-OpenAPI syntax only."
+    },
+    {
+      "id": "F5",
+      "severity": "ok",
+      "title": "Migrations and schema versions",
+      "detail": "Migrations 0001-0017 are contiguous, sorted-filename-ordered with checksum tracking; no gaps or misordering. ANNOTATION_SCHEMA_VERSION=1 is validated on load; all 70 non-held-out annotation records carry schemaVersion 1. No test fixture imports found in any services/apps production src."
+    },
+    {
+      "id": "F6",
+      "severity": "blocked-external",
+      "title": "TS/Swift state-machine divergence and cascade remeasurement not verifiable on Linux",
+      "detail": "native/vision-core TemporalStrokeDetector ('temporal-stroke-heuristic-2') is a separate live-capture contract, not a third copy of the stroke heuristic; native/swing-lab main.swift only renders overlays. But Swift build/test, Mac canonical strict-cascade remeasure, and iPhone latency remain unrunnable here; no numbers are claimed for them."
+    }
+  ],
+  "verdict": "YELLOW",
+  "rationale": "All Linux-verifiable gates pass and the audit found no concrete correctness or contract-drift bug on the integration branch: flags are default-OFF as documented, migrations are ordered, API/client contracts align, no fixture leakage, annotation schema versions validate. Residual risk is real but bounded: a deliberately duplicated stroke heuristic (parity-tested today, drift-prone tomorrow) and multiple independent held-out exclusion lists (now pinned by a new consistency test). Mac-gated items (Swift build/tests, canonical cascade remeasure, device latency) remain externally blocked and unmeasured, which prevents PROVISIONAL_GREEN; nothing found warrants ORANGE/RED."
+}

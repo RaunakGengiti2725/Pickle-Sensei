@@ -365,6 +365,68 @@ export async function setDeclaredStroke(
   );
 }
 
+/**
+ * Target selection ("tap yourself") is the user's identity seed for a
+ * capture. It is stored on the capture row so an imported clip's tap
+ * survives app restarts and stays available to any later analysis pass,
+ * instead of living only in transient screen state.
+ */
+export interface CaptureTargetSeed {
+  point: { x: number; y: number };
+  selectedAtIso: string;
+}
+
+function isCaptureTargetSeed(value: unknown): value is CaptureTargetSeed {
+  if (typeof value !== 'object' || value === null) return false;
+  const seed = value as {
+    point?: { x?: unknown; y?: unknown };
+    selectedAtIso?: unknown;
+  };
+  return (
+    typeof seed.point === 'object' &&
+    seed.point !== null &&
+    typeof seed.point.x === 'number' &&
+    Number.isFinite(seed.point.x) &&
+    typeof seed.point.y === 'number' &&
+    Number.isFinite(seed.point.y) &&
+    typeof seed.selectedAtIso === 'string'
+  );
+}
+
+export async function setCaptureTargetSeed(
+  db: LocalDb,
+  captureId: string,
+  seed: CaptureTargetSeed,
+): Promise<void> {
+  const owner = requireWritableDataOwner();
+  await db.execute(
+    `UPDATE local_capture SET target_seed = ?
+     WHERE owner_key = ? AND id = ?`,
+    [JSON.stringify(seed), owner, captureId],
+  );
+}
+
+export async function getCaptureTargetSeed(
+  db: LocalDb,
+  captureId: string,
+): Promise<CaptureTargetSeed | null> {
+  const owner = getActiveDataOwner();
+  const { rows } = await db.execute(
+    `SELECT target_seed FROM local_capture
+     WHERE owner_key = ? AND id = ?`,
+    [owner, captureId],
+  );
+  const raw = rows[0]?.['target_seed'];
+  if (typeof raw !== 'string' || raw.length === 0) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return isCaptureTargetSeed(parsed) ? parsed : null;
+  } catch {
+    // A corrupt seed row reads as absent, never as a reconstructed tap.
+    return null;
+  }
+}
+
 export async function markCaptureAnalyzed(
   db: LocalDb,
   captureId: string,

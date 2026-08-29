@@ -1,0 +1,90 @@
+{
+  "workstreamId": "g21-session-e2e",
+  "wave": "G",
+  "date": "2026-08-29",
+  "branch": "devin/wave-g/g21-session-e2e",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "mission": "Session product E2E on every executable environment (TS / backend / mobile-jest; Swift unavailable): drive the real session scheduler/pipeline through E1/E2/E3, 10+ events, rapid events, analysis backlog, an abstained event, failed clip extraction, event ordering, session stop during processing, restart/recovery, duplicate dispatch, stale analysis, and event Result routing; verify the session user receives ACTUAL per-event analysis content, not just state chips.",
+  "method": {
+    "environments": {
+      "ts_package": "packages/analysis-pipeline (vitest): REAL SessionEventEngine + REAL SessionAnalysisScheduler + REAL analyzeCapture fusion pipeline executed per event. New test file test/sessionE2EG21.test.ts (3 tests).",
+      "mobile_jest": "apps/mobile (jest): REAL LiveSessionFlow + REAL analyzeCapture per event + REAL Result-route evidence loader (loadStrokeResultEvidence) read back by the routed analysisId. New test files __tests__/sessionRealAnalysisE2E.test.ts (1 test) and __tests__/liveSummaryRouting.test.tsx (2 tests).",
+      "backend": "services/api integration suite (22 tests) run against a REAL PostgreSQL 16 (docker, DATABASE_URL_TEST) — includes POST /v1/sessions, shots:batch sync, finalize, GET session (this suite is visibly skipped without a database; it was actually executed here).",
+      "swift_native": "NOT executed. Swift/Mac/iPhone toolchain is unavailable on this Linux box; no native numbers are claimed."
+    },
+    "seams_that_are_not_production_code": [
+      "Event-segmentation input: clearly-synthetic wrist-speed streams (Gaussian bumps) in the TS tests, and the committed dev-split replay fixture sessionReplay.afn-sasebo-rally1.json (96 wrist samples, 3 expected events) in the mobile tests.",
+      "Per-event analysis input: a deterministic generated pose sequence (generateSwingSequence) stands in for native per-event clip extraction, which does not exist on this box (NATIVE_CLIP_EXTRACTION gap, D-040). Everything downstream — scheduling, lifecycle, fusion analysis, record content, storage read-back — is production code.",
+      "The abstained event and the first-attempt extraction failure are scripted at the executor seam (the seam whose contract is under test); real content-level abstentions are covered by the fusion engine's own tests."
+    ],
+    "defect_pinning": "The LiveSummary routing defect was pinned failing-first (test written and observed failing: 0 tappable analysis routes found), then fixed in production code, then observed passing."
+  },
+  "datasetScopeAndGrouping": "No gold/tier datasets were used or modified. Inputs: synthetic wrist streams (TS) and the committed dev-split replay fixture afn-sasebo-rally1 (mobile). No accuracy, label, coach, or device measurements are claimed — this experiment measures pipeline plumbing truthfulness (states, ordering, retries, recovery, and whether real analysis content reaches the user surface), with all counts per test run below.",
+  "holdoutStatement": "The held-out cases were not read, listed, referenced, or touched by any code or test added in this workstream.",
+  "configuration": {
+    "node": "v20.18.1",
+    "pnpm": "9.15.9",
+    "scheduler": "SessionAnalysisScheduler (session-scheduler-1), concurrency 2 (main E2E) / 1 (stop-recovery), maxAttempts 2",
+    "analysis": "analyzeCapture fusion engine with GeometricPhaseSegmenter, GeometryBiomechanicsExtractor, Sm1TechniqueScorer, CheckpointThresholdFaultDetector, EngineUncertaintyEstimator, PriorityCoachingRanker; pose-only modalities (paddle/ball honestly unavailable)",
+    "backend_db": "postgres:16 docker container, migrations + seed from packages/database"
+  },
+  "measuredResults": {
+    "ts_e2e_main_run": {
+      "events_emitted": 12,
+      "emission_order": "E1..E12 append-only (includes a rapid pair E7/E8 ~900ms apart)",
+      "enqueued": 12,
+      "ready_with_real_scored_record": 11,
+      "abstained": 1,
+      "retries": 1,
+      "duplicates_refused": 0,
+      "executor_throws": 0,
+      "max_in_flight": "<= 2 (bounded)",
+      "max_queue_depth_at_least": 1,
+      "first_attempt_dispatch_order": "strict FIFO, equal to emission order (12/12)",
+      "per_ready_record_checks": "11/11 records carry engineVersion=fusion engine, result.resultKind=scored, non-null overallScore, >0 evidence entries, and all 6 pipeline model runs"
+    },
+    "ts_e2e_stop_and_recovery_run": {
+      "events": 4,
+      "in_flight_outcome_applied_after_suspend": 1,
+      "queue_frozen_at_suspend": 3,
+      "dispatched_before_restart": 1,
+      "recovered_by_new_scheduler_recoverPending": 3,
+      "second_recoverPending_readmissions": 0,
+      "final_ready": "4/4 with real scored records"
+    },
+    "ts_e2e_stale_duplicate_run": {
+      "events": 1,
+      "re_dispatch_after_terminal": 0,
+      "stale_second_ready_outcome": "rejected (throws, append-only)",
+      "stale_revert_to_pending_after_terminal": "rejected (throws)",
+      "original_record_survives": true
+    },
+    "mobile_e2e_real_analysis_run": {
+      "fixture_wrist_samples": 96,
+      "events_emitted": 3,
+      "emission_order_matches_fixture_expectedEmissions": "3/3 (E1,E2,E3)",
+      "ready_with_real_scored_record": 3,
+      "result_route_read_back_by_routed_analysisId": "3/3 records loaded via loadStrokeResultEvidence with matching id, overallScore, and analysisConfidence",
+      "distribution": "1 family chip (drive, count 3) derived from the real records"
+    },
+    "mobile_summary_routing_defect": {
+      "failing_first": "before the fix, 0 tappable analysis routes existed on the session summary for 3 ready events",
+      "after_fix": "3/3 ready events tappable, each navigating to Result with its own real analysisId; 0 routes offered for 3 non-ready (pending) events"
+    },
+    "backend_integration": {
+      "tests_run": 22,
+      "tests_passed": 22,
+      "database": "real PostgreSQL 16 (not mocked); session create / batch shot sync / finalize / session view covered by the suite"
+    },
+    "gates": "root (pnpm typecheck, test, lint, format:check) and mobile (npx tsc --noEmit, npx jest) run on this branch — see findings for final status"
+  },
+  "findings": [
+    "DEFECT (fixed): LiveSummaryScreen rendered ready session events as READY state chips with NO route to the actual analysis content. LiveCourtScreen tears the live flow down on end() and navigates to LiveSummary, so after ending a session the user had no path from a ready event to its analysis — the mission's exact 'state chips instead of content' failure. Fixed by making ready rows (state ready AND a non-null record) navigate to Result with the event's real analysisId; non-ready rows remain non-tappable. Pinned failing-then-fixed in __tests__/liveSummaryRouting.test.tsx.",
+    "VERIFIED: the full analysisId chain is truthful end-to-end on the executable stack — the record produced by the real fusion analysis is the same object on the event view, and the Result-route loader returns that same content (id, overallScore, analysisConfidence) by the routed id.",
+    "VERIFIED: scheduler honesty contracts hold under a 12-event run with real analysis: FIFO first attempts, bounded concurrency with a real backlog, retry-at-back-of-queue after a failed extraction, honest abstain, exactly-once enqueue, suspend applies in-flight outcomes, restart via a NEW scheduler's recoverPending() finishes with real content, and stale outcomes for terminal events are rejected append-only.",
+    "LIMITATION (not fixed, documented): LiveSummaryScreen reads getCompletedSession once at render and does not subscribe to late analysis outcomes; the registry is kept in sync by the flow, but an already-mounted summary will not re-render when a late outcome lands. Navigating away and back shows the updated state.",
+    "NATIVE GAP (external, unchanged): per-event clip extraction and the native motion stream are Swift/Mac/iPhone work that cannot be built or run on this box; the pose-sequence input to per-event analysis in these tests is a deterministic synthetic stand-in for that extraction. No native measurements are claimed."
+  ],
+  "verdict": "PROVISIONAL_GREEN",
+  "rationale": "Every mission scenario that is executable on this box was driven through production code with real per-event fusion analysis and counted results (TS: 12-event run + stop/recovery + stale/duplicate; mobile: fixture rally with real records and Result read-back; backend: 22 integration tests on real Postgres). One real user-facing defect (summary offered chips, not content) was pinned failing-first and fixed with all gates green. PROVISIONAL rather than full green because the native halves of the session product (Swift motion stream, real clip extraction, on-device analysis) remain unbuilt/unverifiable here — the per-event analysis input on this box is a synthetic stand-in for extraction, so no claim is made that a real recorded rally produces these records on-device."
+}

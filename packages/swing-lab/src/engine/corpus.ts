@@ -167,7 +167,7 @@ export function loadRecordings(root = CORPUS_DIR): RecordingRecord[] {
   return readJsonArray<RecordingRecord>(corpusPaths(root).recordings);
 }
 
-export function saveSources(sources: SourceRecord[], root = CORPUS_DIR): void {
+function saveSources(sources: SourceRecord[], root = CORPUS_DIR): void {
   writeJsonAtomic(
     corpusPaths(root).sources,
     [...sources].sort((a, b) => a.sourceId.localeCompare(b.sourceId)),
@@ -235,7 +235,7 @@ export function writeEventsShard(
   return path;
 }
 
-export function readEventsShard(recordingId: string, root = CORPUS_DIR): CandidateEventRecord[] {
+function readEventsShard(recordingId: string, root = CORPUS_DIR): CandidateEventRecord[] {
   const path = join(corpusPaths(root).eventsDir, `${recordingId}.jsonl`);
   if (!existsSync(path)) return [];
   return readFileSync(path, "utf8")

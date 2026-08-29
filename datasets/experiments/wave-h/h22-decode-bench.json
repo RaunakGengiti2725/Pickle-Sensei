@@ -1,0 +1,106 @@
+{
+  "bench": "bench_decode-v1",
+  "platform": "LINUX-CPU",
+  "scenarios": [
+    {
+      "clip": "wm-volley-02",
+      "scenario": "frame_iter full clip stride1",
+      "framesYielded": 200,
+      "contentDigest": "62bd29a486fcd4ca4f95c483565803854b6a07967b8e04bb4977e3f7b426fdb8",
+      "runs": 5,
+      "medianWallSec": 0.6463,
+      "minWallSec": 0.6316,
+      "maxWallSec": 0.6726
+    },
+    {
+      "clip": "wm-volley-02",
+      "scenario": "frame_iter mid window stride1",
+      "framesYielded": 74,
+      "contentDigest": "84a9d6b91d4a57a6ab9b61b9867641161a14a1eb081c4bfeff87a7974efc5dde",
+      "runs": 5,
+      "medianWallSec": 0.339,
+      "minWallSec": 0.3366,
+      "maxWallSec": 0.3524
+    },
+    {
+      "clip": "wm-volley-02",
+      "scenario": "frame_iter mid window stride3",
+      "framesYielded": 25,
+      "contentDigest": "b90a93642f69e4894f4b9a0c3f41e2735c47b38b2007d8130d2f03c2553e66e4",
+      "runs": 5,
+      "medianWallSec": 0.2054,
+      "minWallSec": 0.1971,
+      "maxWallSec": 0.2088
+    },
+    {
+      "clip": "wm-volley-02",
+      "scenario": "decode_frames_at late cluster (21 frames @80%)",
+      "framesYielded": 21,
+      "contentDigest": "58291e947742c85cdd58108ce0c63fa4d6464bbab289de2835c3c68361cc7172",
+      "runs": 5,
+      "medianWallSec": 0.2374,
+      "minWallSec": 0.2176,
+      "maxWallSec": 0.2468
+    },
+    {
+      "clip": "wm-volley-02",
+      "scenario": "decode_frames_at early cluster (21 frames @start)",
+      "framesYielded": 21,
+      "contentDigest": "9fb18e61ec588b70e430cc282a9874f11e189e85828f35dcd3311e994e40d3c2",
+      "runs": 5,
+      "medianWallSec": 0.1266,
+      "minWallSec": 0.1244,
+      "maxWallSec": 0.1789
+    },
+    {
+      "clip": "afn-sasebo-rally1",
+      "scenario": "frame_iter full clip stride1",
+      "framesYielded": 132,
+      "contentDigest": "a346a4ea9148adc9d1066eef366df132f67fa822bccb2ff026be509ef954de71",
+      "runs": 5,
+      "medianWallSec": 0.8204,
+      "minWallSec": 0.7938,
+      "maxWallSec": 0.8375
+    },
+    {
+      "clip": "afn-sasebo-rally1",
+      "scenario": "frame_iter mid window stride1",
+      "framesYielded": 73,
+      "contentDigest": "47bed4ef1e9510a863fc065dace6d9f1a5081421a13a72da5db21df91324da73",
+      "runs": 5,
+      "medianWallSec": 0.5467,
+      "minWallSec": 0.5373,
+      "maxWallSec": 0.5629
+    },
+    {
+      "clip": "afn-sasebo-rally1",
+      "scenario": "frame_iter mid window stride3",
+      "framesYielded": 25,
+      "contentDigest": "32712b278b53ca8d006b40e0b49b16c2c82c0a650fa36dc9006fcd020144a9ab",
+      "runs": 5,
+      "medianWallSec": 0.2923,
+      "minWallSec": 0.2905,
+      "maxWallSec": 0.2976
+    },
+    {
+      "clip": "afn-sasebo-rally1",
+      "scenario": "decode_frames_at late cluster (21 frames @80%)",
+      "framesYielded": 21,
+      "contentDigest": "4be6b71c09d7b92aab343569717989cee1a40558f4ec73fee3e2b2b955605e57",
+      "runs": 5,
+      "medianWallSec": 0.3019,
+      "minWallSec": 0.2877,
+      "maxWallSec": 0.3985
+    },
+    {
+      "clip": "afn-sasebo-rally1",
+      "scenario": "decode_frames_at early cluster (21 frames @start)",
+      "framesYielded": 21,
+      "contentDigest": "5dd5862d35246cf529110ee5c46a186e8cc252e32ddddc0ed38f36017d17cb4b",
+      "runs": 5,
+      "medianWallSec": 0.2057,
+      "minWallSec": 0.2032,
+      "maxWallSec": 0.2277
+    }
+  ]
+}

@@ -64,6 +64,61 @@ describe("proposeStrokeEvents", () => {
   });
 });
 
+describe("low-amplitude tier (wrist-only compact strokes)", () => {
+  it("admits a sub-floor compact stroke only from wrist, flagged and confidence-penalized", () => {
+    const compact = speedBumps([{ peakMs: 2000, height: 0.28, halfWidthMs: 130 }], 0, 4000);
+    const fromWrist = proposeStrokeEvents({
+      paddleSpeeds: null,
+      wristSpeeds: compact,
+      clipStartMs: 0,
+      clipEndMs: 4000,
+    });
+    expect(fromWrist.source).toBe("wrist");
+    expect(fromWrist.events.length).toBe(1);
+    expect(fromWrist.events[0]!.lowAmplitude).toBe(true);
+    expect(fromWrist.events[0]!.peakSpeed).toBeLessThan(0.5);
+    const unpenalized = Math.max(
+      0.2,
+      Math.min(0.9, 0.4 + (fromWrist.events[0]!.prominence - 1) * 0.12),
+    );
+    expect(fromWrist.events[0]!.confidence).toBeCloseTo(unpenalized - 0.15, 6);
+    expect(Math.abs(fromWrist.events[0]!.peakMs - 2000)).toBeLessThanOrEqual(60);
+    const fromPaddle = proposeStrokeEvents({
+      paddleSpeeds: compact,
+      wristSpeeds: null,
+      clipStartMs: 0,
+      clipEndMs: 4000,
+    });
+    expect(fromPaddle.events.length).toBe(0); // tier-2 is wrist-only
+  });
+
+  it("rejects the same amplitude over a busy baseline (prominence gate)", () => {
+    const busy = speedBumps([{ peakMs: 2000, height: 0.2, halfWidthMs: 130 }], 0, 4000).map(
+      (sample) => ({ ...sample, value: sample.value + 0.1 }), // baseline 0.18, peak ≈0.38
+    );
+    const { events } = proposeStrokeEvents({
+      paddleSpeeds: null,
+      wristSpeeds: busy,
+      clipStartMs: 0,
+      clipEndMs: 4000,
+    });
+    expect(events.length).toBe(0);
+  });
+
+  it("never alters tier-1 output: full swings keep identical bounds and no flag", () => {
+    const wrist = speedBumps([{ peakMs: 1500, height: 2.0, halfWidthMs: 120 }], 0, 4000);
+    const { events } = proposeStrokeEvents({
+      paddleSpeeds: null,
+      wristSpeeds: wrist,
+      clipStartMs: 0,
+      clipEndMs: 4000,
+    });
+    expect(events.length).toBe(1);
+    expect(events[0]!.lowAmplitude).toBeUndefined();
+    expect(events[0]!.peakSpeed).toBeGreaterThan(0.5);
+  });
+});
+
 describe("selectTargetEvent", () => {
   const two = proposeStrokeEvents({
     paddleSpeeds: speedBumps([

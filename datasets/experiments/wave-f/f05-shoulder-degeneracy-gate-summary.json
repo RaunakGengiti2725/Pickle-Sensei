@@ -1,0 +1,32 @@
+{
+  "id": "f05-shoulder-degeneracy-gate",
+  "wave": "wave-f",
+  "branch": "devin/wave-f/f05-shoulder-degeneracy-gate",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "codeCommit": "808d79f612b953e45ae63d130db378b09bb7cd32",
+  "date": "2026-08-29",
+  "mission": "Close the E10-F3 ROOT CAUSE: shoulderWidth was floored at 0.02 and used as the side-decision normalization base (and facing-sign source) with no degeneracy gate, unlike TORSO_MIN_EXTENT.",
+  "change": {
+    "files": [
+      "packages/swing-lab/src/strokeHeuristic.ts",
+      "packages/vision-geometry/src/strokeHeuristicLite.ts",
+      "packages/swing-lab/test/strokeHeuristicV4Gates.test.ts",
+      "packages/swing-lab/test/strokeHeuristicAmbiguous.redteam.test.ts",
+      "packages/vision-geometry/test/strokeHeuristicLite.test.ts"
+    ],
+    "gate": "SHOULDER_MIN_SEPARATION = 0.04 (normalized image units). At the Level-2 side decision, if the raw image-plane shoulder separation |rightShoulder.x - leftShoulder.x| at the reference frame is strictly below 0.04, classifyStroke abstains (UNKNOWN) with limiting factor shoulder_separation_degenerate_side_decision_unreliable and evidence recording the measured separation, regardless of contact-point provenance or margin. Applied identically in swing-lab strokeHeuristic.ts and the vision-geometry Lite port (port contract: behavioral changes in BOTH files).",
+    "floorRationale": "Frontal/rear fixtures measure ~0.16-0.2u shoulder separation; the near-profile E10-F3 fixture measures 0.005u (estimator-noise scale). 0.04 mirrors TORSO_MIN_EXTENT's reasoning. Strict '<' keeps the E10-F4 mid-rotation crossing fixture (exactly 0.04u at contact, float 0.04000000000000004) outside the gate, so the pinned E10-F4 characterization is unchanged."
+  },
+  "fixtures": {
+    "newRegressionFixture": "strokeHeuristicV4Gates.test.ts 'gate: degenerate shoulder separation abstains the side decision (E10-F3 root cause)': collapsed shoulders at 0.02u separation with a MEASURED rival (left) wrist (13 measured frames in ±200ms) and normal 0.2u torso extent, so the rival-wrist attribution gate cannot mask the degeneracy and the input reaches the side decision. Without the gate, the 0.02-clamped shoulderWidth read the wrist's 0.14u midline offset as 7 shoulder-widths and committed FOREHAND; with the gate it abstains via shoulder_separation_degenerate_side_decision_unreliable and NOT via dominant_wrist_attribution_unverifiable_rival_unmeasured.",
+    "boundaryFixture": "separation exactly at the 0.04 floor (0.70/0.74) does not trip the gate (E10-F4 boundary).",
+    "negativeControls": "normal shoulders (0.16u) still commit FOREHAND in both swing-lab and Lite suites.",
+    "litePort": "mirrored fixture in vision-geometry strokeHeuristicLite.test.ts (Lite lacks the rival-wrist gate, so the shoulder gate is the only defense there)."
+  },
+  "results": {
+    "swingLabTests": "47 files, 539 passed / 4 skipped (includes new shoulder-gate describe: 3 tests; E10-F3/E10-F4 redteam pins unchanged; strokeHeuristicBench green)",
+    "visionGeometryTests": "8 files, 72 passed (includes new Lite shoulder-gate describe: 2 tests)",
+    "rootGates": "pnpm typecheck PASS, pnpm lint PASS, pnpm format:check PASS"
+  },
+  "notes": "No thresholds, denominators, or contracts were weakened; the change is a pure abstention gate. Held-out cases and fresh-candidate pool untouched. The E10-F3 fixture itself still abstains via the rival-wrist gate (fires earlier); its test comment was updated to point at the new gate's own fixtures."
+}

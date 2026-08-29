@@ -1,0 +1,62 @@
+{
+  "id": "D3-04",
+  "title": "Red-team CONTACT: fabricated-marker family (thin-evidence fixtures must abstain)",
+  "branch": "devin/wave-d3/d3-04-rt-contact",
+  "base": "origin/devin/1787988068-wave-c-integration",
+  "environment": "Linux; canonical run dirs absent, pose extraction macOS-only — every fixture below is SYNTHETIC and clearly labeled; no cascade numbers claimed or re-measured",
+  "method": "Adversarial probes against estimateContact (contact-evidence-4) using generateSwingSequence + hand-built ball/paddle/wrist series covering: no ball, edge-on sparse paddle, sparse detections, zero pose in window, dead-ball hover, ungated ball-only evidence, junk-confidence detections, idle wrist micro-drift.",
+  "breaks_found": 3,
+  "breaks_fixed": 3,
+  "breaks_open": 0,
+  "breaks": [
+    {
+      "id": "B1-untethered-ball-marker",
+      "severity": "high",
+      "fixture": "Lone ungated ball direction change (and clustered zig-zag variant), zero pose/paddle in the scan window, no target reference anywhere",
+      "before": "status=estimated, confidence up to 0.87, ballConfirmed=true — a confident fabricated target-contact marker from ball motion with no tie to the target (same family as the documented merge 695ms fabrication)",
+      "after": "abstains with limiting factor ball_evidence_untethered; untethered ball kernels can also never count toward ballConfirmed mass",
+      "fix": "Ball kernels carry a tethered flag (gated turn / proximity = tethered; ungated turn = untethered). If every surviving kernel is untethered ball evidence (no target motion evidence, no tethered ball evidence), the estimator abstains. ballConfirmed mass is restricted to tethered kernels.",
+      "regression_tests": [
+        "abstains when the only evidence is a lone ungated ball turn (no pose/paddle in window)",
+        "abstains on clustered ungated zig-zag turns even when peakMotionMs is near them"
+      ],
+      "status": "FIXED"
+    },
+    {
+      "id": "B2-junk-confidence-ball-confirms",
+      "severity": "medium",
+      "fixture": "Perfect turn geometry at the swing peak but every ball detection carries confidence 0.05 (below the tracker's constructive floor of 0.35)",
+      "before": "status=estimated, confidence 0.93, ballConfirmed=true — detections the tracker itself barely trusts drove a confirmed high-confidence marker",
+      "after": "estimate survives on the genuine wrist swing but ballConfirmed=false, confidence capped at 0.55 (ball_evidence_weak)",
+      "fix": "Ball kernel mass is ramped by nearest observation confidence (full at >=0.35; the tracker's heuristic confidence is >=0.35 by construction, so real tracks are unaffected), and low-confidence kernels are excluded from confirmation mass.",
+      "regression_tests": ["does not let junk-confidence ball detections confirm the estimate"],
+      "status": "FIXED"
+    },
+    {
+      "id": "B3-idle-wrist-micro-bump",
+      "severity": "medium",
+      "fixture": "Wrists frozen except one tiny smooth bump (~0.4 torso/s peak, vs dev-measured real strokes 5-8 torso/s), no ball, no paddle",
+      "before": "status=estimated, confidence 0.55 — a contact marker invented from idle fidgeting",
+      "after": "abstains (no kernels survive)",
+      "fix": "minWristPeakTorsoPerSec=0.5 floor on wrist peaks, symmetric to the existing minPaddlePeakSpeed idle-drift floor.",
+      "regression_tests": ["rejects idle wrist micro-drift instead of estimating from a fidget"],
+      "status": "FIXED"
+    }
+  ],
+  "already_safe": [
+    "no ball + no pose in window → abstains (no evidence)",
+    "edge-on sparse paddle with boundary peak and quiet wrist → abstains (mass 0.08 < 0.15)",
+    "dead-ball hover jitter next to a real swing → ball kernels discounted to ~0, estimate rides the genuine wrist motion unconfirmed",
+    "idle-jitter wrist across the window → multi-modal abstention"
+  ],
+  "silent_failure_v1": "Verified via synthetic fixture reports that silent-failure-v1 counts a wrong marker correctly, including a new merge-reactivation-style fixture: gold+695ms with ballConfirmed/paddleConfirmed both true is still a silent failure. Contract semantics untouched.",
+  "estimator_version": "contact-evidence-4 -> contact-evidence-4.1 (stricter abstention/confirmation semantics, re-versioned rather than silently changed)",
+  "coverage_on_committed_positive_gold": {
+    "note": "Canonical dev gold replay (contactForensics over run artifacts) is impossible on this box — run dirs absent. Measured on the committed positive contact fixtures in packages/vision-geometry/test/offlineStroke.test.ts.",
+    "before_fix": "20/20 committed contact tests pass (12 positive estimate fixtures all estimate)",
+    "after_fix": "same 20/20 still pass unchanged, plus 5 new regression tests; explicit coverage-guard test keeps the tethered tracker-trusted ball turn confirmed",
+    "delta": "0 — no committed positive fixture lost its estimate or its confirmation"
+  },
+  "tests": "packages/vision-geometry 52/52 pass; packages/swing-lab 232 pass / 4 skipped; pnpm typecheck green",
+  "held_out_cases": "wm-dink-01 and afn-vic-rally1 untouched"
+}

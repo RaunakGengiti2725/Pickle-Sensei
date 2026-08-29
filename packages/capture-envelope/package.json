@@ -1,0 +1,29 @@
+{
+  "name": "@pickle/capture-envelope",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "eval:bundles": "tsx src/evalBundles.ts",
+    "eval:corpus": "tsx src/evalCorpus.ts",
+    "eval:f18": "tsx src/f18DegradationLadder.ts",
+    "eval:f18-analyze": "tsx src/f18Analysis.ts",
+    "mine:g08": "tsx src/g08MineEvidence.ts",
+    "gate:g08": "tsx src/g08EvalGate.ts"
+  },
+  "dependencies": {
+    "@pickle/shared-types": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

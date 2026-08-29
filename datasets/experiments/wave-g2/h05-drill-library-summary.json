@@ -1,0 +1,34 @@
+{
+  "id": "h05-drill-library",
+  "wave": "G2",
+  "date": "2026-08-29",
+  "branch": "devin/wave-g2/h05-drill-library",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "mission": "Build the curated versioned DRILL LIBRARY infrastructure: per-drill schema, fault→drill mapping evidence records with real-coach endorsement provenance, and a recommendation gate that abstains from personalized recommendation unless every evidence condition holds. Seed ONLY Tier-C/UNVALIDATED content; prove unvalidated mappings can never be recommended.",
+  "method": "New module packages/swing-lab/src/drillLibrary.ts (drill-library-v1) alongside — not replacing — the v0 schema in coachReview.ts (v0 ids preserved via a supersedes field so existing coach drillSuggestions stay interpretable). Structural validators enforce the honesty invariants (COACH_VALIDATED requires ≥2 independent real-coach endorsements with off-repo credential refs + on-disk review refs and stated agreement ≥0.7; Tier-C can never be GOLD; synthetic coach ids rejected; UNVALIDATED records must carry zero endorsements). evaluateDrillRecommendation() is the single sanctioned diagnosis→drill path: it requires a validated fault source (real coach review or a validated evaluator — machine-proposed and engineer-labeled sources are rejected), diagnosis confidence ≥0.7, COACH_VALIDATED drill AND mapping (structurally re-validated at gate time so a forged state flag still abstains), a technique profile whose evaluator is not BLOCKED_ON_VALIDATION and whose drillMappingVersion matches drill-library-v1, stroke-family coverage, severity within the endorsed band, and every context restriction KNOWN TRUE — otherwise it abstains with explicit reasons, identically in production and research modes.",
+  "deliverables": [
+    "packages/swing-lab/src/drillLibrary.ts — DrillEntryV1 schema (drillId, name, supportedStrokeFamilies, faultMappingIds, coachProvenance, purpose, instructions, equipment, difficulty, repsOrDuration, progressions, regressions, safetyNotes, mediaRefs, provenance, evidenceTier, validationState, version), FaultDrillMappingV1 evidence records (endorsing coaches, endorsement count via agreement, stroke/severity/context restrictions, agreement fraction, version), validators, recommendation gate, 7 Tier-C UNVALIDATED seed drills + 10 UNVALIDATED zero-endorsement mappings, library-level integrity check, CLI emitter (pnpm --filter @pickle/swing-lab coach:drills)",
+    "datasets/coach-review/drills/drill-library.v1.json — derived artifact (7 Tier-C drills)",
+    "datasets/coach-review/drills/fault-drill-mappings.v1.json — derived artifact (10 UNVALIDATED mappings, gate thresholds stated in-file)",
+    "packages/swing-lab/test/drillLibrary.test.ts — 21 tests: every seed is Tier-C/UNVALIDATED with no coach provenance and zero endorsements; validators reject forged validation states, synthetic coaches, insufficient endorsements, low agreement; the gate ABSTAINS on every seeded mapping in production AND research mode, abstains for every live TECHNIQUE_ANALYSIS_PROFILES_V1 profile (all BLOCKED_ON_VALIDATION), abstains on machine/engineer fault sources, low confidence, out-of-band severity, unknown/false context, uncovered stroke family, and structurally forged evidence; recommends only on a fully-validated hypothetical fixture",
+    "eslint.config.mjs — drillLibrary.ts added to the existing CLI no-console allowlist (same class as coachReview.ts)",
+    "packages/swing-lab/package.json — coach:drills script"
+  ],
+  "gates": {
+    "typecheck": "pnpm typecheck — all packages Done",
+    "test": "pnpm test — all workspace packages green (swing-lab 614 passed | 4 skipped, incl. 21 new drillLibrary tests)",
+    "lint": "pnpm lint — 0 errors",
+    "formatCheck": "pnpm format:check — all files use Prettier code style"
+  },
+  "truthConstraints": {
+    "noFabrication": "Zero coach reviews, endorsements, or validations were created; all seeds are marked Tier-C UNVALIDATED with provenance strings stating they are engineering proposals for coaches to endorse or reject.",
+    "blockedOnValidation": "The gate abstains for every live technique profile because TECHNIQUE_ANALYSIS_PROFILES_V1 carries techniqueEvaluator=BLOCKED_ON_VALIDATION and drillMappingVersion=none — this lock is consumed and verified, not weakened.",
+    "heldOut": "wm-dink-01 and afn-vic-rally1 untouched (no dataset case files modified)."
+  },
+  "irreduciblyExternal": [
+    "Real qualified-coach endorsements of fault→drill mappings (≥2 independent coaches per mapping with stated agreement) — the only thing that can flip validationState to COACH_VALIDATED",
+    "Coach authorship/endorsement of drill entries themselves (coachProvenance)",
+    "A validated technique evaluator (GATE A) so fault diagnoses can come from a validated source; until then even a fully-validated mapping cannot fire in production"
+  ],
+  "verdict": "GREEN (infrastructure) · BLOCKED_EXTERNAL (coach evidence) — the recommendation gate provably abstains on the entire shipped library; when real coaches arrive, only their endorsements are missing."
+}

@@ -1,0 +1,372 @@
+[
+  {
+    "caseId": "wavea-944403-dink",
+    "tMs": 21171.15,
+    "buckets": [
+      "dark_on_dark",
+      "edge_on"
+    ],
+    "otherOwnershipFactor": 0.85,
+    "pose": {
+      "targetWrists": [
+        {
+          "x": 0.14611287415027618,
+          "y": 0.3384053707122803
+        },
+        {
+          "x": 0.2637900710105896,
+          "y": 0.3927297592163086
+        }
+      ],
+      "otherWrists": [
+        {
+          "x": 0.6800898313522339,
+          "y": 0.49358856678009033
+        },
+        {
+          "x": 0.7505807876586914,
+          "y": 0.45917677879333496
+        },
+        {
+          "x": 0.5003746747970581,
+          "y": 0.38625168800354004
+        },
+        {
+          "x": 0.43685466051101685,
+          "y": 0.3092014789581299
+        }
+      ],
+      "torsoMid": {
+        "x": 0.18055804073810577,
+        "y": 0.36942794919013977
+      },
+      "torsoSpan": 0.16351332822419917
+    },
+    "candidates": [
+      {
+        "index": 0,
+        "goldOwner": "target",
+        "annotatorId": "devin-visual-v2-waveC",
+        "point": {
+          "x": 0.3021,
+          "y": 0.5315
+        },
+        "dTargetWrist": 0.144,
+        "dOtherWrist": 0.2458,
+        "otherOwnedByVeto": false,
+        "picked": false
+      },
+      {
+        "index": 1,
+        "goldOwner": "other",
+        "annotatorId": "devin-visual-v2-waveC",
+        "point": {
+          "x": 0.3177,
+          "y": 0.3611
+        },
+        "dTargetWrist": 0.0625,
+        "dOtherWrist": 0.13,
+        "otherOwnedByVeto": false,
+        "picked": true
+      }
+    ],
+    "pick": {
+      "index": 1,
+      "reason": "nearest target wrist among not-other-owned"
+    },
+    "pickedOwner": "other"
+  },
+  {
+    "caseId": "wavea-944403-dink",
+    "tMs": 22088.73,
+    "buckets": [
+      "dark_on_dark",
+      "multi_paddle"
+    ],
+    "otherOwnershipFactor": 0.85,
+    "pose": {
+      "targetWrists": [
+        {
+          "x": 0.21143141388893127,
+          "y": 0.42181527614593506
+        },
+        {
+          "x": 0.3091968894004822,
+          "y": 0.44598162174224854
+        }
+      ],
+      "otherWrists": [
+        {
+          "x": 0.6845344305038452,
+          "y": 0.4469999074935913
+        },
+        {
+          "x": 0.7207796573638916,
+          "y": 0.5721299052238464
+        },
+        {
+          "x": 0.5256925821304321,
+          "y": 0.38565683364868164
+        },
+        {
+          "x": 0.4619448781013489,
+          "y": 0.3953421115875244
+        }
+      ],
+      "torsoMid": {
+        "x": 0.2382524125277996,
+        "y": 0.3755388557910919
+      },
+      "torsoSpan": 0.1476519926245177
+    },
+    "candidates": [
+      {
+        "index": 0,
+        "goldOwner": "target",
+        "annotatorId": "devin-visual-v2-waveC",
+        "point": {
+          "x": 0.349,
+          "y": 0.5167
+        },
+        "dTargetWrist": 0.0812,
+        "dOtherWrist": 0.1658,
+        "otherOwnedByVeto": false,
+        "picked": false
+      },
+      {
+        "index": 1,
+        "goldOwner": "other",
+        "annotatorId": "devin-visual-v2-waveC",
+        "point": {
+          "x": 0.7161,
+          "y": 0.6093
+        },
+        "dTargetWrist": 0.4385,
+        "dOtherWrist": 0.0375,
+        "otherOwnedByVeto": true,
+        "picked": false
+      },
+      {
+        "index": 2,
+        "goldOwner": "other",
+        "annotatorId": "devin-visual-v2-waveC",
+        "point": {
+          "x": 0.3255,
+          "y": 0.3773
+        },
+        "dTargetWrist": 0.0706,
+        "dOtherWrist": 0.1376,
+        "otherOwnedByVeto": false,
+        "picked": true
+      },
+      {
+        "index": 3,
+        "goldOwner": "other",
+        "annotatorId": "devin-visual-v2-waveC",
+        "point": {
+          "x": 0.4479,
+          "y": 0.4477
+        },
+        "dTargetWrist": 0.1387,
+        "dOtherWrist": 0.0542,
+        "otherOwnedByVeto": true,
+        "picked": false
+      }
+    ],
+    "pick": {
+      "index": 2,
+      "reason": "nearest target wrist among not-other-owned"
+    },
+    "pickedOwner": "other"
+  },
+  {
+    "caseId": "wavea-944403-dink",
+    "tMs": 22338.98,
+    "buckets": [
+      "dark_on_dark",
+      "multi_paddle"
+    ],
+    "otherOwnershipFactor": 0.85,
+    "pose": {
+      "targetWrists": [
+        {
+          "x": 0.21125689148902893,
+          "y": 0.39227545261383057
+        },
+        {
+          "x": 0.298382043838501,
+          "y": 0.3954249620437622
+        }
+      ],
+      "otherWrists": [
+        {
+          "x": 0.6755815148353577,
+          "y": 0.5082935690879822
+        },
+        {
+          "x": 0.6767498254776001,
+          "y": 0.5079870820045471
+        },
+        {
+          "x": 0.5148429274559021,
+          "y": 0.39530253410339355
+        },
+        {
+          "x": 0.4594041705131531,
+          "y": 0.3902338743209839
+        }
+      ],
+      "torsoMid": {
+        "x": 0.23959140479564667,
+        "y": 0.3483564257621765
+      },
+      "torsoSpan": 0.1355155824036306
+    },
+    "candidates": [
+      {
+        "index": 0,
+        "goldOwner": "target",
+        "annotatorId": "devin-visual-v2-waveC",
+        "point": {
+          "x": 0.3417,
+          "y": 0.4556
+        },
+        "dTargetWrist": 0.0741,
+        "dOtherWrist": 0.1346,
+        "otherOwnedByVeto": false,
+        "picked": false
+      },
+      {
+        "index": 1,
+        "goldOwner": "other",
+        "annotatorId": "devin-visual-v2-waveC",
+        "point": {
+          "x": 0.4536,
+          "y": 0.4491
+        },
+        "dTargetWrist": 0.1642,
+        "dOtherWrist": 0.0592,
+        "otherOwnedByVeto": true,
+        "picked": false
+      },
+      {
+        "index": 2,
+        "goldOwner": "other",
+        "annotatorId": "devin-visual-v2-waveC",
+        "point": {
+          "x": 0.3141,
+          "y": 0.3815
+        },
+        "dTargetWrist": 0.021,
+        "dOtherWrist": 0.1456,
+        "otherOwnedByVeto": false,
+        "picked": true
+      },
+      {
+        "index": 3,
+        "goldOwner": "other",
+        "annotatorId": "devin-visual-v4-waveE-e05",
+        "point": {
+          "x": 0.645,
+          "y": 0.512
+        },
+        "dTargetWrist": 0.3657,
+        "dOtherWrist": 0.0308,
+        "otherOwnedByVeto": true,
+        "picked": false
+      }
+    ],
+    "pick": {
+      "index": 2,
+      "reason": "nearest target wrist among not-other-owned"
+    },
+    "pickedOwner": "other"
+  },
+  {
+    "caseId": "wavea-944403-dink",
+    "tMs": 22589.23,
+    "buckets": [
+      "dark_on_dark",
+      "edge_on",
+      "multi_paddle"
+    ],
+    "otherOwnershipFactor": 0.85,
+    "pose": {
+      "targetWrists": [
+        {
+          "x": 0.22331932187080383,
+          "y": 0.3836970329284668
+        },
+        {
+          "x": 0.3173808455467224,
+          "y": 0.39877939224243164
+        }
+      ],
+      "otherWrists": [
+        {
+          "x": 0.7102435827255249,
+          "y": 0.49064338207244873
+        },
+        {
+          "x": 0.514686107635498,
+          "y": 0.39267969131469727
+        },
+        {
+          "x": 0.45373883843421936,
+          "y": 0.3870912790298462
+        }
+      ],
+      "torsoMid": {
+        "x": 0.2521231733262539,
+        "y": 0.34732235968112946
+      },
+      "torsoSpan": 0.1529451861841464
+    },
+    "candidates": [
+      {
+        "index": 0,
+        "goldOwner": "target",
+        "annotatorId": "devin-visual-v2-waveC",
+        "point": {
+          "x": 0.3469,
+          "y": 0.462
+        },
+        "dTargetWrist": 0.0698,
+        "dOtherWrist": 0.1305,
+        "otherOwnedByVeto": false,
+        "picked": false
+      },
+      {
+        "index": 1,
+        "goldOwner": "other",
+        "annotatorId": "devin-visual-v2-waveC",
+        "point": {
+          "x": 0.295,
+          "y": 0.385
+        },
+        "dTargetWrist": 0.0263,
+        "dOtherWrist": 0.1588,
+        "otherOwnedByVeto": false,
+        "picked": true
+      },
+      {
+        "index": 2,
+        "goldOwner": "other",
+        "annotatorId": "devin-visual-v4-waveE-e05",
+        "point": {
+          "x": 0.693,
+          "y": 0.588
+        },
+        "dTargetWrist": 0.4206,
+        "dOtherWrist": 0.0989,
+        "otherOwnedByVeto": true,
+        "picked": false
+      }
+    ],
+    "pick": {
+      "index": 1,
+      "reason": "nearest target wrist among not-other-owned"
+    },
+    "pickedOwner": "other"
+  }
+]

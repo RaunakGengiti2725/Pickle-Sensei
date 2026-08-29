@@ -1,0 +1,81 @@
+{
+  "id": "e10-rt-stroke-ambiguous",
+  "wave": "wave-e",
+  "date": "2026-08-29",
+  "baseCommit": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "mission": "Red-team stroke classification with ambiguous motions (practice swings, aborted strokes, hybrid motions, non-dominant hand, wheelchair play) via the real code path; force confidently-wrong L1/L2/L3 outputs; regression fixture + root cause for each.",
+  "codePath": {
+    "attacked": [
+      "packages/swing-lab/src/strokeHeuristic.ts (classifyStroke, stroke-heuristic-3)",
+      "packages/vision-geometry/src/strokeHeuristicLite.ts (byte-equivalent mobile port — parity of every finding verified by direct execution)"
+    ],
+    "method": "Synthetic adversarial pose sequences (provenance-stamped, @pickle/evaluation) fed directly into classifyStroke; outputs measured, not asserted. No held-out case was viewed or touched (wm-dink-01, afn-vic-rally1 untouched)."
+  },
+  "datasetScope": "Synthetic adversarial fixtures only (6 new, deterministic). No human data, no gold labels, no run dirs touched. Fixtures are labeled synthetic and cannot satisfy release eligibility.",
+  "configuration": {
+    "handednessDeclared": "right",
+    "paddleTrack": null,
+    "referenceModes": ["contactMs", "eventPeakMs (contact-less)"],
+    "environment": "Linux, Node 20.18.1, pnpm 9.15.9, vitest 3.2.7"
+  },
+  "findings": [
+    {
+      "id": "E10-F1",
+      "fixture": "practice-shadow-swing",
+      "groundTruth": "not a stroke (ball-less shadow swing, reference is motion peak)",
+      "measuredOutput": "FOREHAND depth 2 confidence 0.80 (both copies)",
+      "rootCause": "reference_is_event_peak_not_contact is recorded as a limiting factor but never gates commitment or caps L2 confidence; no ball/contact evidence is required anywhere in the hierarchy to assert a stroke identity."
+    },
+    {
+      "id": "E10-F2",
+      "fixture": "non-dominant-hand-swing",
+      "groundTruth": "left-hand forehand by a declared right-handed player",
+      "measuredOutput": "BACKHAND depth 2 confidence 0.80 (both copies) — mirrored side",
+      "rootCause": "Side decision uses declared handedness only; the measured dominant-motion wrist side (left, from dominantWristInfo) contradicts the declaration and is never cross-checked."
+    },
+    {
+      "id": "E10-F3",
+      "fixture": "profile-view-collapsed-shoulders",
+      "groundTruth": "side not measurable (image-plane shoulder width 0.005u; midline offset 0.0075u = noise scale)",
+      "measuredOutput": "FOREHAND depth 2 confidence 0.64 (both copies)",
+      "rootCause": "shoulderWidth is floored at 0.02 and used as the side-margin normalization base with no degeneracy gate (torso extent has TORSO_MIN_EXTENT; shoulder width has no analog). 0.0075u becomes 0.38 shoulder-widths, clearing SIDE_MARGIN_FLOOR 0.15."
+    },
+    {
+      "id": "E10-F4",
+      "fixture": "facing-flip-at-contact",
+      "groundTruth": "FOREHAND (rear view every frame; torso rotation crosses shoulders past profile at the contact frame only)",
+      "measuredOutput": "BACKHAND depth 2 confidence 0.80 with evidence 'front-ish view' (both copies)",
+      "rootCause": "Facing sign is derived from the shoulder x-order of the single nearest frame; mid-swing rotation at that instant inverts it and mirrors the side call at full confidence. No multi-frame facing consensus, no small-shoulder-separation guard."
+    },
+    {
+      "id": "E10-F5",
+      "fixture": "wheelchair-rim-push",
+      "groundTruth": "not a stroke (symmetric bimanual wheelchair rim propulsion, 0.9 u/s, hip height)",
+      "measuredOutput": "FOREHAND depth 2 confidence 0.80 (both copies)",
+      "rootCause": "Non-stroke gates test only single-dominant-wrist energy (floor 0.25 u/s) and travel (floor 0.05u); symmetric two-arm motion — the signature of rim propulsion — has no discriminator."
+    }
+  ],
+  "defensesHeld": [
+    {
+      "fixture": "energetic-aborted-swing",
+      "attack": "fast backswing pull (1.0 u/s window peak, defeating the energy gate) checked before the reference",
+      "measuredOutput": "UNKNOWN via no_swing_motion_near_reference (travel gate) — regression-guarded"
+    }
+  ],
+  "metrics": {
+    "attacksAttempted": 6,
+    "confidentlyWrongFound": 5,
+    "confidentlyWrongAtCeiling0.8": 4,
+    "defensesHeld": 1,
+    "litePortParityVerified": true,
+    "newTests": 7,
+    "newFixtures": 6
+  },
+  "artifacts": {
+    "fixtures": "packages/evaluation/src/synthetic/adversarialStrokeFixtures.ts (append-only: practiceShadowSwingFixture, nonDominantHandSwingFixture, profileViewCollapsedShouldersFixture, facingFlipAtContactFixture, wheelchairRimPushFixture, energeticAbortedSwingFixture)",
+    "tests": "packages/swing-lab/test/strokeHeuristicAmbiguous.redteam.test.ts (5 pinned open findings + 2 defense guards; pins assert the CURRENT wrong output so a classifier fix must flip them consciously)"
+  },
+  "boundaryNotes": "Classifier code NOT modified (outside e10 ownership; lite/lab copies additionally require paired changes + calibration per strokeHeuristicLite.ts header). Findings are pinned characterization tests + forensic root causes for a follow-up calibration wave. Predictions were never relabeled as observations; no thresholds or contracts were altered.",
+  "verdict": "GREEN"
+}

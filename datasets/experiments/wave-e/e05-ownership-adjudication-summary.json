@@ -1,0 +1,81 @@
+{
+  "workstream": "e05-ownership-adjudication",
+  "branch": "devin/wave-e/e05-ownership-adjudication",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "baseCommit": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+  "createdAtIso": "2026-08-29T09:55:00.000Z",
+  "mission": "Apply the D2-04 blind-audit adjudications to the ownership gold as VERSIONED append-only correction records (originals never rewritten), then re-run the S3 ownership evaluator (ownership-bench-v1, packages/swing-lab/src/ownershipBench.ts) and report before/after on the corrected labels.",
+  "inputs": {
+    "auditSummary": "datasets/experiments/wave-d2/d2-04-ownership-audit-summary.json",
+    "auditSidecars": [
+      "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+      "datasets/paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v4-waveD2-ownership-audit.json",
+      "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v4-waveD2-ownership-audit.json"
+    ]
+  },
+  "correctionPolicy": "Only auditor-upheld adjudications become corrections. resolved-to-waveC, downgraded-to-ambiguous, partial (presence agreed / certifiability contested, waveC omission ruled defensible: ADJ-D1), and unresolved-classification (ADJ-D3) adjudications are recorded as no-change dispositions. Corrections live in new sidecar files of kind 'ownership-correction-set' (schemaVersion 1); each record cites its adjudicationId and, for supersede-point, the exact original point it supersedes. Original waveC files are byte-identical to before. The evaluator applies corrections in memory only when --apply-corrections is passed, so the uncorrected baseline remains reproducible from the same tree.",
+  "correctionFiles": [
+    "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v4-waveE-ownership-corrections.json",
+    "datasets/paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v4-waveE-ownership-corrections.json",
+    "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v4-waveE-ownership-corrections.json"
+  ],
+  "adjudicationsReviewed": 17,
+  "correctionsApplied": {
+    "total": 6,
+    "supersededPoints": 2,
+    "addedVisibleLabels": 4,
+    "unmatched": 0,
+    "detail": [
+      { "adjudicationId": "ADJ-D2", "case": "wavea-944403-dink", "tMs": 21087.73, "owner": "target", "action": "supersede-point", "from": [0.3021, 0.5407], "to": [0.293, 0.455] },
+      { "adjudicationId": "ADJ-D4", "case": "wavea-944403-dink", "tMs": 21337.98, "owner": "target", "action": "add-visible", "to": [0.315, 0.4] },
+      { "adjudicationId": "ADJ-D6", "case": "wavea-944403-dink", "tMs": 22338.98, "owner": "other", "action": "add-visible", "to": [0.645, 0.512] },
+      { "adjudicationId": "ADJ-D7", "case": "wavea-944403-dink", "tMs": 22589.23, "owner": "other", "action": "supersede-point", "from": [0.3547, 0.3843], "to": [0.295, 0.385] },
+      { "adjudicationId": "ADJ-D8", "case": "wavea-944403-dink", "tMs": 22589.23, "owner": "other", "action": "add-visible", "to": [0.693, 0.588] },
+      { "adjudicationId": "ADJ-S6", "case": "wavea-944403-smash", "tMs": 3970.63, "owner": "other", "action": "add-visible", "to": [0.478, 0.437] }
+    ],
+    "noChangeDispositions": 11
+  },
+  "evaluator": {
+    "id": "ownership-bench-v1",
+    "entry": "packages/swing-lab/src/ownershipBench.ts",
+    "commands": {
+      "before": "tsx src/ownershipBench.ts --out datasets/experiments/wave-e/e05-ownership-eval-before.json",
+      "after": "tsx src/ownershipBench.ts --apply-corrections --out datasets/experiments/wave-e/e05-ownership-eval-after.json"
+    },
+    "datasetScope": "dev split only (8 cases, grouped by source session); held-out wm-dink-01 and afn-vic-rally1 untouched and excluded",
+    "changes": "added append-only correction-set loading (skipped as annotation passes), in-memory application behind --apply-corrections, correctionsApplied reporting, and --out path override; default behavior and wave-d artifacts unchanged"
+  },
+  "artifacts": {
+    "before": "datasets/experiments/wave-e/e05-ownership-eval-before.json",
+    "after": "datasets/experiments/wave-e/e05-ownership-eval-after.json"
+  },
+  "results": {
+    "dualFrames": { "before": 38, "after": 39, "note": "ADJ-D4 makes the target paddle visible at dink t=21337.98 where other paddles were already labeled, creating one new dual frame; add-visible 'other' corrections at t=22338.98/22589.23/3970.63 add candidates to existing dual frames" },
+    "framesWithPose": { "before": 17, "after": 18 },
+    "allFrames": {
+      "incumbent_wrist_ratio": { "before": { "accuracy": 0.342, "correct": 13, "scored": 38, "answering": 0.765, "coverage": 0.447 }, "after": { "accuracy": 0.333, "correct": 13, "scored": 39, "answering": 0.765, "coverage": 0.436 } },
+      "b1_wrist_distance_only": { "before": { "accuracy": 0.316, "correct": 12, "scored": 38, "answering": 0.706, "coverage": 0.447 }, "after": { "accuracy": 0.333, "correct": 13, "scored": 39, "answering": 0.722, "coverage": 0.462 } },
+      "b2_target_geometry": { "before": { "accuracy": 0.211, "correct": 8, "scored": 38, "answering": 0.471, "coverage": 0.447 }, "after": { "accuracy": 0.205, "correct": 8, "scored": 39, "answering": 0.444, "coverage": 0.462 } },
+      "b3_temporal_continuity": { "before": { "accuracy": 0.533, "correct": 16, "scored": 30, "answering": 0.533, "coverage": 1 }, "after": { "accuracy": 0.516, "correct": 16, "scored": 31, "answering": 0.516, "coverage": 1 } }
+    },
+    "poseSubset": {
+      "incumbent_wrist_ratio": { "before": { "accuracy": 0.765, "correct": 13, "scored": 17 }, "after": { "accuracy": 0.722, "correct": 13, "scored": 18 } },
+      "b1_wrist_distance_only": { "before": { "accuracy": 0.706, "correct": 12, "scored": 17 }, "after": { "accuracy": 0.722, "correct": 13, "scored": 18 } },
+      "b2_target_geometry": { "before": { "accuracy": 0.471, "correct": 8, "scored": 17 }, "after": { "accuracy": 0.444, "correct": 8, "scored": 18 } },
+      "b3_temporal_continuity": { "before": { "accuracy": 0.25, "correct": 3, "scored": 12 }, "after": { "accuracy": 0.231, "correct": 3, "scored": 13 } }
+    }
+  },
+  "interpretation": [
+    "corrections are small relative to the bench (6 label changes across 2 of 8 dev cases), so aggregate movement is bounded: the incumbent goes 13/38 -> 13/39 overall (0.342 -> 0.333) and 13/17 -> 13/18 on the pose subset (0.765 -> 0.722) — it does not recover the new ADJ-D4 dual frame (abstains: all candidates other-owned by wrist ratio) and it survives the added distractor candidates without new wrong picks",
+    "b1 (no other-wrist veto) gains the ADJ-D4 frame (12/17 -> 13/18 pose subset), overtaking nothing but closing its gap to the incumbent to zero correct-count difference on corrected labels; the incumbent's other-wrist veto is what abstains on the corrected frame",
+    "b2/b3 lose ground slightly on corrected labels (8/38 -> 8/39, 16/30 -> 16/31): added distractor candidates and the corrected target y at t=21087.73 do not help geometry/continuity",
+    "no method's ranking flips: incumbent remains best-when-answering on the pose subset before and after corrections",
+    "these are dev-split numbers grouped by source session; held-out cases untouched"
+  ],
+  "honesty": {
+    "originalsUntouched": "git diff shows zero changes to any devin-visual-v2-waveC*.json or other pre-existing annotation file",
+    "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"],
+    "noRunsDirsModified": true,
+    "predictionsVsObservations": "corrections derive solely from human adjudication records in the D2-04 audit sidecars, never from model predictions"
+  }
+}

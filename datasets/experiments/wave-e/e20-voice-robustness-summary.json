@@ -1,0 +1,50 @@
+{
+  "workstream": "e20-voice-robustness",
+  "wave": "e",
+  "branch": "devin/wave-e/e20-voice-robustness",
+  "base": "origin/devin/1787988068-wave-c-integration",
+  "date": "2026-08-29",
+  "environment": "LINUX-CPU (Ubuntu, Node 20, pnpm; deterministic parsing contract only — no speech engine, no real user speech)",
+  "scope": "Voice technique-intent robustness expansion (extends d4-10 voice-intent-v1): misspellings/ASR variants, fillers, multi-intent phrases, non-technique speech (idioms reusing technique words), ambiguous terms. Unknowns re-prompt, never silently mis-select.",
+  "implemented": {
+    "module": "packages/shared-types/src/voiceTechniqueIntent.ts — voice-intent-v1 → voice-intent-v2 (versioned, not softened in place; v2 strictly reduces silent accepts, never adds them)",
+    "changes": [
+      "bounded misspelling/ASR-variant lexicon added to the component grammar (forhand/fourhand/four hand, backand/bakhand, volly/vollie/voley, serv/surve, crosscort, ernie, half-volly, plural sides)",
+      "bounded NON_TECHNIQUE_IDIOMS scrub list (serve dinner / serves you right / return my call / return it / drop me off / drop it / kitchen counter / countertop / on a roll / let's roll / roll out / block out|of / roadblock / drive home|to|back…): idiom spans are removed before technique detection so everyday speech resolves to honest unknown + re-prompt",
+      "multi-side detection (detectSides): 'forehand and backhand dink' now stays a coarse both-sides candidate set (v1 silently guessed forehand); two-hand phrases still count as one side",
+      "spoken-family filter: when the only family-bearing word IS a stroke family name (volley/dink/serve/return), candidates stay within that family so compound slugs (volley serve → SERVE, volley reset → RESET) no longer leak into the option set — 'forehand volley' now resolves FOREHAND_VOLLEY instead of a spurious 3-way ambiguity",
+      "fillers required no code change (bounded keyword grammar ignores them) — verified by the filler category below"
+    ],
+    "tests": [
+      "packages/shared-types/test/voiceUtteranceEvalCorpus.ts (73-utterance labeled synthetic corpus, 8 categories, projection-level golds)",
+      "packages/shared-types/test/voiceUtteranceEval.test.ts (metrics harness: accuracy + false-accept rate; hard invariants: 0 false accepts, ≥95% accuracy, multi-intent/non-technique never resolve)",
+      "apps/mobile/__tests__/voiceIntentCorpus.test.ts extended with misspelling-leaf, multi-intent, and idiom sections (61 → 78 tests)"
+    ]
+  },
+  "metrics": {
+    "corpus": "73 synthetic utterances: clean 12, misspelling 13, filler 8, multi_intent 8, non_technique 14 (incl. 12 idiom traps), ambiguous_term 7, auto 6, unselectable_specialty 5",
+    "false_accept_definition": "projection returns status 'resolved' (the only silent-select path in TechniqueIntentPicker) when gold is not resolved, or resolved to the wrong canonical",
+    "baseline_voice_intent_v1": {
+      "resolution_accuracy": "52/73 = 71.2%",
+      "false_accepts": "6/73 = 8.2% overall (multi_intent 2/8 = 25%: 'forehand and backhand dink'→FOREHAND_DINK, 'forehand or backhand drive'→FOREHAND_DRIVE; non_technique 4/14 = 28.6%: 'serve dinner tonight'→SERVE, 'that serves you right'→SERVE, 'return my call later'→RETURN, 'can you return it'→RETURN)",
+      "other_misses": "misspellings 4/13 correct (31%); 'forehand volley' ambiguous instead of FOREHAND_VOLLEY (compound-slug leak)"
+    },
+    "after_voice_intent_v2": {
+      "resolution_accuracy": "73/73 = 100% (per category: clean 12/12, misspelling 13/13, filler 8/8, multi_intent 8/8, non_technique 14/14, ambiguous_term 7/7, auto 6/6, unselectable_specialty 5/5)",
+      "false_accept_rate": "0/73 = 0% (hard test invariant)"
+    },
+    "honesty_note": "Corpus is synthetic and hand-written; 100% reflects a deterministic grammar evaluated on a corpus authored with achievable projection-level golds (golds for inherently coarse phrases are 'ambiguous', not resolved). No real speech, no Mac/iPhone dictation measurements (BLOCKED_EXTERNAL for real-ASR error rates). Baseline numbers were measured by running the identical harness at the pre-change commit state."
+  },
+  "evidence": {
+    "shared_types_vitest": "33/33 passed (6 files) incl. new voiceUtteranceEval.test.ts; VOICE_EVAL_METRICS logged in test output",
+    "root_pnpm_test": "20 workspace projects green (459 passed / 4 skipped in swing-lab etc.)",
+    "mobile_jest_full_suite": "38 suites / 376 tests passed (was 38/359 pre-change on this branch; +17 robustness tests)",
+    "mobile_tsc_noEmit": "0 errors",
+    "pnpm_typecheck": "green (all workspace packages)",
+    "pnpm_lint": "0 errors, 0 warnings",
+    "pnpm_format_check": "clean"
+  },
+  "contracts": "DeclaredStroke/PredictedStroke separation untouched; VOICE_INTENT_VERSION bumped v1→v2 (contract versioned, not weakened); no thresholds/denominators changed; SELECTABLE_TECHNIQUES_V1 and taxonomy untouched",
+  "held_out": "wm-dink-01 and afn-vic-rally1 untouched; no runs/ artifacts touched; no dataset labels rewritten (this file is the only datasets/ addition)",
+  "verdict": "GREEN"
+}

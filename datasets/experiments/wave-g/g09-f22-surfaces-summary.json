@@ -1,0 +1,83 @@
+{
+  "workstream": "g09-f22-surfaces",
+  "mission": "Property/counterfactual sweep of the capture-envelope decision surfaces: parameterized synthetic sweeps over player scale, crop, brightness, blur sigma, body visibility, paddle visibility, number of players, camera tilt, occlusion, resolution, and FPS; measure each envelope dimension's verdict along each axis and test monotonicity/sanity (a strictly-worse capture must never get a strictly-better verdict); pin violations as regression tests. Map the surface without moving it: no thresholds changed.",
+  "date": "2026-08-29",
+  "branch": "devin/wave-g/g09-f22-surfaces",
+  "thresholdsVersion": "capture-envelope-thresholds-v0.3-provisional",
+  "method": {
+    "layers": [
+      "ANALYTIC: pure evaluator (classifyDimension/evaluateCaptureEnvelope) swept along 11 per-dimension worsening trajectories (65 adjacent comparisons) plus the full 3^9 = 19683 severity lattice (118098 one-step-worse successor comparisons) — verifies the band math itself is monotone.",
+      "VIDEO-LEVEL: parameterized ffmpeg degradation sweeps run end-to-end through the real measurement pipeline (clipProbe.measureClip → evaluateCaptureEnvelope). 12 axes: brightness-darken, brightness-blowout, blur-sigma, resolution, fps, camera-tilt, crop, occlusion (on all 3 bases), player-scale, player-count, body-visibility, paddle-visibility (synthetic scene only), plus 4 cross-dimension counterfactual families (shake-plus-blur, shake-plus-darken on 2 bases). Along each axis every step is strictly-worse capture than the previous; any per-dimension or overall verdict IMPROVEMENT between adjacent steps is a violation.",
+      "Tooling: ffmpeg 6.1.1 (libx264 crf18 veryfast, each base re-encoded once as shared control so codec effects cancel)."
+    ],
+    "generatedBy": "packages/capture-envelope/src/sweepSurfacesG09.ts",
+    "artifact": "datasets/experiments/wave-g/g09-f22-decision-surfaces.json",
+    "regressionTests": "packages/capture-envelope/test/g09SurfacesMonotonicity.test.ts (5 tests: analytic trajectory monotonicity, lattice monotonicity + overall==worst, structural NOT_MEASURED upgrade characterization, and the 2 pinned video-level violations verbatim)"
+  },
+  "datasetScopeAndGrouping": {
+    "bases": [
+      "synthetic-scene: frozen testsrc2 720p background + moving textured player patches with optional white paddle patch (fully synthetic, no labels involved)",
+      "wm-volley-02 (committed bundle clip, 1000x1080@25, 8.0s)",
+      "afn-sasebo-rally1 (committed bundle clip, 1920x1080@29.97, 4.44s)"
+    ],
+    "grouping": "rows carry base id; every monotonicity comparison is within a single (base, axis) run — no cross-base or random-split comparisons",
+    "labels": "none used; ground truth is BY CONSTRUCTION (the injected degradation ordering). No Gold labels touched, no Tier-C counted as truth."
+  },
+  "holdoutStatement": "Held-out cases wm-dink-01 and afn-vic-rally1 were never opened, read, listed, or referenced by any sweep, test, or artifact in this workstream.",
+  "configuration": {
+    "node": "v20.18.1",
+    "ffmpeg": "ffmpeg version 6.1.1-3ubuntu5 (Ubuntu)",
+    "platform": "Linux (no pose extraction: player_pixel_height and player_visibility are NOT_MEASURED in every video-level row, as designed)",
+    "thresholdChanges": "none (mapping only)"
+  },
+  "measuredResults": {
+    "analytic": {
+      "trajectories": 11,
+      "adjacentComparisons": 65,
+      "violations": 0,
+      "latticeVectors": 19683,
+      "latticeSuccessorComparisons": 118098,
+      "latticeOverallMonotonicityViolations": 0,
+      "latticeOverallEqualsWorstDimensionViolations": 0,
+      "structuralNotMeasuredUpgrades": "198 of 198 probed vectors: nulling the unique worst dimension's measurement upgrades the overall verdict every time (known F22 A5 structure, now counted and pinned as a characterization test)"
+    },
+    "videoLevel": {
+      "rows": 167,
+      "adjacentStepPairs": 135,
+      "checksPerPair": "9 dimension comparisons + 1 overall comparison (1350 total checks)",
+      "violations": 4,
+      "dimensionViolations": 2,
+      "overallViolations": 2,
+      "violationDetail": [
+        "afn-sasebo-rally1 shake-plus-blur: shaken control camera_motion DEGRADED (meanAbsFrameDiff 35.44) → +gblur sigma-1@320w (strictly worse) camera_motion SUPPORTED (30.00); OVERALL improved DEGRADED→SUPPORTED",
+        "afn-sasebo-rally1 shake-plus-darken: shaken control DEGRADED (35.44) → +eq brightness -0.15 (strictly worse) camera_motion SUPPORTED (30.67), brightness still supported (luma 60.05); OVERALL improved DEGRADED→SUPPORTED"
+      ]
+    },
+    "surfacesByAxis": {
+      "brightness-darken": "monotone on all 3 bases: SUPPORTED → DEGRADED (eq -0.2 to -0.3) → UNSUPPORTED",
+      "brightness-blowout": "monotone on all 3 bases: SUPPORTED → DEGRADED/UNSUPPORTED at eq +0.3 to +0.45",
+      "blur-sigma": "monotone on all 3 bases: DEGRADED at sigma 1-2 @320w, UNSUPPORTED at 2-4",
+      "resolution": "monotone on all 3 bases: DEGRADED at short side 640/480, UNSUPPORTED at 360/240",
+      "fps": "monotone on all 3 bases: DEGRADED at 20/15, UNSUPPORTED at 12 and below",
+      "crop": "monotone on all 3 bases via the resolution dimension (crop shrinks short side); synthetic base flips DEGRADED already at keep=0.9 (short side 648)",
+      "camera-tilt": "BLIND axis, 15/15 steps: tilt up to 45 degrees stays overall SUPPORTED on all 3 bases — no dimension measures orientation",
+      "occlusion": "caught only via the brightness SIDE EFFECT of the black occluder (mean luma drops): occlude=0.5 DEGRADED (luma 55-57) and 0.75 UNSUPPORTED (luma 27-32) on real bases; a mid-gray occluder would pass — the envelope has no occlusion dimension",
+      "player-scale": "BLIND on Linux, 6/6 steps SUPPORTED down to heightFrac=0.04: player_pixel_height is pose-gated and NOT_MEASURED, which never worsens the overall verdict (structural A5)",
+      "body-visibility": "BLIND on Linux, 4/4 steps SUPPORTED down to 25% of body visible: player_visibility pose-gated NOT_MEASURED",
+      "paddle-visibility": "BLIND by design, 2/2 SUPPORTED: no envelope dimension observes the paddle",
+      "player-count": "BLIND by design, 4/4 SUPPORTED for 1-4 players: no envelope dimension observes player count",
+      "shake-plus-blur / shake-plus-darken": "VIOLATIONS on the real base (see violationDetail); on the synthetic base the shaken control already measured camera_motion SUPPORTED (frame-diff 15.27 — the known contrast-dependence from F22 a11), so no improvement was observable there"
+    }
+  },
+  "findings": [
+    "The analytic decision surface (band math + overall aggregation) is fully monotone: 0 violations in 65 trajectory comparisons and 118098 lattice successor comparisons; overall == worst measured dimension in all 19683 vectors.",
+    "The video-level surface is monotone along every SINGLE-degradation axis measured (brightness both directions, blur, resolution, fps, crop): 0 violations across the 123 single-axis adjacent step pairs (1230 checks); all 4 violations sit in the 12 counterfactual-family pairs.",
+    "CONFIRMED VIOLATION (2 counts, pinned): the camera_motion frame-diff proxy is content-dependent, so blurring or darkening an already-shaken clip — strictly worse capture — pulls meanAbsFrameDiff back under the supported edge (33) and the OVERALL verdict improves DEGRADED→SUPPORTED. This is the same proxy weakness F18/F22 documented (subject-motion conflation, contrast dependence), now shown to break overall-verdict monotonicity, not just single-dimension accuracy. Fix requires a background-registered motion estimate (already stated in thresholds.ts), not band re-tuning.",
+    "STRUCTURAL (known F22 A5, now counted): NOT_MEASURED never worsens the overall verdict, so losing the measurement of the worst dimension upgrades the verdict in 198/198 probed lattice vectors, and all pose-gated axes (player scale to 4% frame height, body visibility to 25%, and implicitly any pose-dependent quality) are invisible on Linux captures until a pose pass runs.",
+    "BLIND AXES: camera tilt (to 45 deg), occlusion as such (only its brightness side effect registers), paddle visibility, and player count have no envelope dimension at all; a capture can be arbitrarily bad along these axes and read overall SUPPORTED.",
+    "No thresholds were changed; all violations are recorded verbatim in the artifact and pinned in g09SurfacesMonotonicity.test.ts as characterization tests that will flip when the surface is fixed or silently drifts."
+  ],
+  "verdict": "YELLOW",
+  "verdictRationale": "The mapping itself succeeded and the surface is monotone along every single-degradation axis (0 violations in 1230 single-axis checks) and in the full analytic lattice (0/118098). YELLOW rather than GREEN because the sweep CONFIRMED 2 overall-verdict monotonicity violations via the content-dependent camera_motion proxy (strictly-worse capture reading strictly-better overall) and quantified 6 blind/pose-gated axes where arbitrarily bad captures read SUPPORTED. These are real, pinned deficiencies of the current envelope, disclosed with counts — not failures of the sweep.",
+  "excludedHeldOutBundles": ["wm-dink-01", "afn-vic-rally1"]
+}

@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import type { ShotTypeSlug } from '@pickle/shared-types';
+import type { EnvelopeVerdict, ShotTypeSlug } from '@pickle/shared-types';
 import {
   analyzeCapture,
   type CaptureAnalysisRecord,
@@ -24,6 +24,11 @@ import {
   type ApiConfigState,
 } from '../data/api';
 import { makeUuid } from '../util/uuid';
+import {
+  recordEvaluationTrial,
+  type EvaluationTelemetryContext,
+} from '../evaluation/trialCapture';
+import { stabilitySlo } from './stabilityTelemetry';
 
 /**
  * Capture → canonical observations → fusion analysis → durable records.
@@ -45,7 +50,17 @@ export type CaptureAnalysisOutcome =
       record: CaptureAnalysisRecord;
       guidance: string | null;
     }
-  | { kind: 'unavailable'; reason: string };
+  | { kind: 'unavailable'; reason: string }
+  | {
+      /**
+       * The capture envelope is UNSUPPORTED: analysis is honestly withheld
+       * BEFORE inference — poor input never becomes a confident score. No
+       * permit is reserved and nothing is recorded as an analysis.
+       */
+      kind: 'quality_blocked';
+      reason: string;
+      envelope: EnvelopeVerdict;
+    };
 
 export interface RunCaptureAnalysisRequest {
   db: LocalDb;
@@ -79,12 +94,85 @@ export interface RunCaptureAnalysisRequest {
     point: { x: number; y: number };
     selectedAtIso: string;
   } | null;
+  /**
+   * Capture-envelope verdict for this attempt (canonical shared-types
+   * contract). UNSUPPORTED forces the honest-abstention path before any
+   * inference; DEGRADED proceeds and is recorded so Result can explain
+   * quality-related abstentions. Null/undefined means no envelope was
+   * measured — the run proceeds exactly as before.
+   */
+  captureEnvelope?: EnvelopeVerdict | null;
+  /**
+   * Evaluation-trial capture context (Wave G2 fresh-user loop). Present and
+   * consentActive only when the server ledger shows an active
+   * `evaluation_telemetry` grant; absent or inactive → no trial is recorded.
+   * Telemetry never alters or blocks the analysis outcome.
+   */
+  evaluationTelemetry?: EvaluationTelemetryContext | null;
 }
 
 export async function runCaptureAnalysis(
   request: RunCaptureAnalysisRequest,
 ): Promise<CaptureAnalysisOutcome> {
+  const startedAt = Date.now();
+  stabilitySlo.record({ kind: 'analysis_started' });
+  let outcome: CaptureAnalysisOutcome;
+  try {
+    outcome = await runCaptureAnalysisCore(request);
+  } catch (error) {
+    stabilitySlo.record({ kind: 'analysis_failed', failureKind: 'exception' });
+    throw error;
+  }
+  // 'scored', 'low_confidence' and 'quality_blocked' all answered the user
+  // honestly; only 'unavailable' means the run produced no outcome at all.
+  if (outcome.kind === 'unavailable') {
+    stabilitySlo.record({
+      kind: 'analysis_failed',
+      failureKind: 'unavailable',
+    });
+  } else {
+    stabilitySlo.record({ kind: 'analysis_completed' });
+  }
+  const telemetry = request.evaluationTelemetry ?? null;
+  if (telemetry && telemetry.consentActive) {
+    try {
+      await recordEvaluationTrial(request.db, {
+        outcome,
+        captureId: request.captureId,
+        capturedAtIso: request.clip.capturedAtIso,
+        declaredStroke: request.declaredStroke,
+        latencyMs: Date.now() - startedAt,
+        appVersion: request.appVersion,
+        context: telemetry,
+      });
+    } catch {
+      // Telemetry is best-effort evidence collection: a failed queue write
+      // must never surface as an analysis failure to the user.
+    }
+  }
+  return outcome;
+}
+
+async function runCaptureAnalysisCore(
+  request: RunCaptureAnalysisRequest,
+): Promise<CaptureAnalysisOutcome> {
   const { clip } = request;
+  // ── Capture-envelope gate: UNSUPPORTED input never enters inference ────
+  const envelope = request.captureEnvelope ?? null;
+  if (envelope && envelope.overall === 'UNSUPPORTED') {
+    const blocking = envelope.dimensions
+      .filter(d => d.status === 'UNSUPPORTED')
+      .map(d => d.dimension.replace(/_/g, ' '))
+      .join(', ');
+    return {
+      kind: 'quality_blocked',
+      reason:
+        'This capture cannot be analyzed honestly — the measured capture ' +
+        `quality is outside the supported envelope (${blocking}). ` +
+        'Nothing was rated.',
+      envelope,
+    };
+  }
   if (clip.captureMode !== 'automatic_pose_trigger') {
     return {
       kind: 'unavailable',
@@ -187,6 +275,7 @@ export async function runCaptureAnalysis(
       modelBundleVersion: 'on-device-fusion-1',
       nowIso: () => new Date().toISOString(),
       makeId: makeUuid,
+      captureEnvelopeThresholdsVersion: envelope?.thresholdsVersion ?? null,
       ...(request.focusCheckpoint
         ? { focusCheckpoint: request.focusCheckpoint }
         : {}),
@@ -199,7 +288,12 @@ export async function runCaptureAnalysis(
     });
     return { kind: 'unavailable', reason: result.failure.message };
   }
-  const record = result.value;
+  // Attach the measured envelope so downstream Result can explain
+  // quality-related abstentions (additive; old records simply lack it).
+  const record: CaptureAnalysisRecord = {
+    ...result.value,
+    captureEnvelope: envelope,
+  };
 
   // Every run is durably recorded, scored or not — reprocessing history.
   await saveAnalysisRecord(request.db, record);

@@ -1,0 +1,148 @@
+{
+  "workstream": "e25-docs-evidence-pack",
+  "title": "STATUS_BOARD / HANDOFF_V4_DRAFT reconciliation evidence pack (claim -> committed artifact)",
+  "date": "2026-08-29",
+  "branch": "devin/wave-e/e25-docs-evidence-pack",
+  "baseCommit": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "environment": "Linux, Node 20, pnpm; no Mac/Apple Vision/iPhone; canonical run dirs absent — no cascade numbers re-measured or claimed here",
+  "method": "Every checked claim was matched against COMMITTED artifacts at baseCommit. Label counts were recounted programmatically (python3 json walk over datasets/ta-bench/cases.json, datasets/paddle-bench/bundles/*/annotation/*.json, datasets/paddle-bench/stroke-gold.json, datasets/paddle-bench/ownership-review/ownership-review.json), reproducing the d4-12 recount method at the CURRENT integration head (which now includes waves D, D2, D3, D4 merged AFTER HANDOFF_V4_DRAFT was written). Held-out bundles wm-dink-01 and afn-vic-rally1 were never viewed, labeled, or tuned against; their pre-existing annotation files entered aggregate record counts only (same basis as d4-12), with the held-out contribution reported separately so either denominator can be used.",
+  "heldOutPolicy": {
+    "cases": ["wm-dink-01", "afn-vic-rally1"],
+    "touched": 0,
+    "note": "Aggregate JSON record counting only; no frames extracted, no media opened, no labels added or read individually. Held-out eventLabel records (pre-existing devin-visual-v1.json): wm-dink-01=2, afn-vic-rally1=3."
+  },
+
+  "recountAtHead": {
+    "comment": "Programmatic recount at baseCommit (post wave D/D2/D3/D4 integration). Compare column-by-column with HANDOFF_V4_DRAFT section 5 (recounted 2026-08-29 pre-wave-D) and HANDOFF_V3/STATUS_BOARD prose.",
+    "ta_cases": { "total_pool": 301, "verified": 59, "dev": 54, "locked_test": 5 },
+    "eventLabels_records_total": 62,
+    "eventLabels_by_owner": { "target": 39, "other": 23 },
+    "eventLabels_records_excluding_held_out": 57,
+    "event_contactMs_records": 59,
+    "ballFrames_total": 103,
+    "ballFrames_by_visibility": { "visible": 86, "uncertain": 6, "not_visible": 5, "occluded": 6 },
+    "ballFrames_with_occlusionState": 78,
+    "paddleFrames_target_points": 102,
+    "otherPaddleFrames_points": 142,
+    "ownership_sidecar_verdict_entries": 100,
+    "same_tMs_target_other_dual_frames": 50,
+    "stroke_gold_labels": 29,
+    "stroke_gold_cases": 11,
+    "fresh_candidate_clips_on_disk": 8,
+    "decisions_md": { "last_entry": "D-043", "lines": 175 }
+  },
+
+  "knownSuspects": [
+    {
+      "id": "SUSPECT-1-event-denominators",
+      "claim": "STATUS_BOARD row Q: 'Event labels 9->34'; DECISIONS.md D-043: 'events 9->34'; HANDOFF_V4_DRAFT section 5: '47 (29 target)' event label records.",
+      "evidence": [
+        "datasets/experiments/wave-c/c05-summary.json (countReconciliation: 41 contact annotation records incl. independent relabels; 28 unique contact events post-Wave-C)",
+        "datasets/experiments/wave-d/d04-contact-gold-scale-summary.json (Wave D added 15 more eventLabel records via devin-visual-v3-waveD-contact files)",
+        "datasets/experiments/wave-d4/d4-12-summary.json (47/29 recount, valid at its commit 19561b0, pre-wave-D-integration merge order)"
+      ],
+      "verdict": "STALE_IN_BOTH_DOCS",
+      "correction": "At head 8fc388e there are 62 eventLabel annotation RECORDS (39 target / 23 other; 59 with contactMs; 57 excluding the 5 pre-existing held-out records). '34' (STATUS_BOARD/D-043) was the Wave-B-end record count and is two waves stale. '47' (V4 draft section 5) was correct when written but is stale post-D04. Unique contact EVENTS remain a separate denominator: 28 per c05-summary.json countReconciliation (D04 added observations over existing dev events plus new events — see d04-contact-gold-scale-summary.json for its own unique-event accounting). Final V4 must state record count (62) and unique-event count separately and date-stamp both."
+    },
+    {
+      "id": "SUSPECT-2-ownership-bases",
+      "claim": "HANDOFF_V3 section 3: 'target boxes 78, other 83'; HANDOFF_V4_DRAFT section 5: 'Paddle frames: target/other 102/142'; ownership-review/README.md sidecar bases 65->85 target / 81->140 other.",
+      "evidence": [
+        "datasets/paddle-bench/ownership-review/README.md (counts table: sidecar entries 70->100, dual frames 30->50, visible target points 65->85, visible other points 81->140; explicitly warns STATUS_BOARD's 78/83 is a third basis)",
+        "datasets/experiments/wave-c/c03-summary.json (30 Wave C frames: 20 visible target / 59 visible other / 6 ambiguous / 4 occluded-target)",
+        "recountAtHead above (annotation-file record counts 102/142; dual frames 50; sidecar 100)"
+      ],
+      "verdict": "CONFIRMED_THREE_BASES",
+      "correction": "Recount at head confirms V4 draft's 102/142 (all paddleFrames/otherPaddleFrames records incl. non-visible) and 85/140 (visible-point basis per README) are both current; 78/83 appears in no committed artifact at head and should be retired. Final V4 must define ONE basis (recommend: visible-point basis from ownership-review/README.md) and print the others as cross-references, never interchangeably."
+    },
+    {
+      "id": "SUSPECT-3-c16-clip-count",
+      "claim": "STATUS_BOARD Wave C addendum row C16: '1 new CC-licensed candidate accepted'.",
+      "evidence": [
+        "datasets/experiments/wave-c/c16-data-acquisition-summary.json (accepted.count=6, 181080528 bytes, 360 s, 6 sha256-listed items) ",
+        "datasets/pickleball/fresh-candidates/ (8 clips on disk at head: the 6 yt-* C16 clips + 2 voa-* clips added by wave-d2 acquisition workstreams, see datasets/experiments/wave-d2/d2-03-acq-milgov-summary.json et al.)"
+      ],
+      "verdict": "STALE_UNDERCOUNT",
+      "correction": "Row C16 should read '6 accepted CC BY 3.0 clips (181.08 MB, 360 s) committed + 4 unknown-rights items quarantined'. Note for final V4: fresh-candidate pool at head is 8 clips (C16's 6 + wave-d2's 2 voa-*); cite per-wave provenance, don't merge counts silently."
+    },
+    {
+      "id": "SUSPECT-4-c07-wiring-language",
+      "claim": "HANDOFF_V3 latency section: 'once runPaddleStage wires it' (projection language); STATUS_BOARD Wave C row C07: wired, default ON.",
+      "evidence": [
+        "packages/swing-lab/src/paddleWorker.ts (exists at head)",
+        "packages/swing-lab/src/analyzeVideo.ts line 214: paddleWorker: !argv.includes(\"--no-paddle-worker\") — default ON, opt-out flag as documented",
+        "datasets/experiments/wave-c/c07-summary.json (bit-equality method on 2 committed dev clips, Linux CPU; ~11.9s stated as PROJECTION)"
+      ],
+      "verdict": "STATUS_BOARD_CORRECT__V3_STALE",
+      "correction": "STATUS_BOARD row C07 language is accurate and artifact-backed. HANDOFF_V3's 'once runPaddleStage wires it' is stale (V3 predates Wave C — not a truth violation). Final V4 must say: wired default ON with --no-paddle-worker opt-out and any-failure fallback; bit-equal verified LINUX-CPU only; 11.9s E2E remains a projection until Mac re-measure. Also note wave-d/d09-warm-worker-hardening-summary.json exists at head (post-C07 hardening) and should be cited alongside."
+    },
+    {
+      "id": "SUSPECT-5-c03-in-flight",
+      "claim": "STATUS_BOARD Wave C addendum: row C03 'still running / IN FLIGHT' and header '17 branches merged ... (C03 ownership-label scaling still in flight — lands separately)'.",
+      "evidence": [
+        "git commit f548115 'Merge origin/devin/wave-c/c03-ownership-labels' present in baseBranch history",
+        "datasets/experiments/wave-c/c03-summary.json (committed: 30 frames, per-bundle tally, dual frames 30->50)",
+        "datasets/paddle-bench/bundles/*/annotation/devin-visual-v2-waveC-ownership.json files present"
+      ],
+      "verdict": "STALE",
+      "correction": "Row C03 should read GREEN (labels): '30 multi-paddle ownership frames across 6 bundles (20 visible target / 59 other / 6 ambiguous / 4 occluded-target); dual frames 30->50; see c03-summary.json'. Header should say 18/18 merged."
+    },
+    {
+      "id": "SUSPECT-6-c12-wording",
+      "claim": "STATUS_BOARD row C12: 'measured over the 3 committed bundle clips only (premise said 13 — corrected, disclosed)'.",
+      "evidence": [
+        "datasets/experiments/wave-c/c12-summary.json (status field carries the identical disclosed premise correction: only 3 bundle clips committed, not 13)",
+        "datasets/experiments/wave-c/c12-envelope-measurements.json",
+        "packages/capture-envelope/src/thresholds.ts (capture-envelope-thresholds-v0.1-provisional present)"
+      ],
+      "verdict": "SUPPORTED",
+      "correction": "None needed on the count. Final V4 must carry the disclosure forward verbatim (as V4 draft finding 6 already instructs), and keep the thresholds' 'v0.1-provisional / NOT validated' qualifier attached wherever the checker is mentioned."
+    }
+  ],
+
+  "statusBoardClaims": [
+    { "claim": "North-star table (run start/run end, n=5)", "evidence": ["datasets/experiments/EXP-2026-08-28-cascade-waterfall.json", "datasets/experiments/wave-a/U-usable-result-v1-measurement.json"], "verdict": "PARTIALLY_RECONSTRUCTABLE", "note": "Committed EXP-2026-08-28-cascade-waterfall.json unconditional stage counts (TARGET 5, EVENT 4, PADDLE 5, BALL 4, CONTACT 3, PHASE 3, STROKE 3) match NEITHER the run-start nor run-end row exactly (rows say EVENT 3/5 both, BALL 5/5 at end); U-measurement confirms STRICT/USABLE 1/5 at run start only. The run-end row's per-stage source is a Mac cascade run whose canonical run dir is not committed (gitignored). Final V4 should either cite the exact cascade artifact ID for the run-end row or mark the row 'Mac 2026-08-28, run dir not committed'. No number can be verified or refuted from this box." },
+    { "claim": "Row A contact-evidence-4 (dev 30/30ms, held-out 250/245ms disclosed)", "evidence": ["datasets/experiments/wave-a/A-summary.json", "datasets/experiments/wave-a/A-forensics-final.txt"], "verdict": "ARTIFACT_PRESENT" },
+    { "claim": "Row B S4 forensics root cause", "evidence": ["datasets/experiments/wave-a/B-summary.json", "datasets/experiments/wave-a/B-selection-forensics.json"], "verdict": "ARTIFACT_PRESENT" },
+    { "claim": "Row W1 flip-segmentation S4 R .29->.43", "evidence": ["datasets/experiments/wave-b/W1-summary.json", "datasets/experiments/wave-b/W1-waterfall-before.txt", "datasets/experiments/wave-b/W1-waterfall-after.txt"], "verdict": "ARTIFACT_PRESENT" },
+    { "claim": "Row I ball-track-2 BALL 5/5, body-overlap 0->.17", "evidence": ["datasets/experiments/wave-a/I-summary.json", "datasets/experiments/wave-a/I-bench/", "datasets/experiments/wave-a/I-forensics/"], "verdict": "ARTIFACT_PRESENT" },
+    { "claim": "Row W9 stroke honesty (dev L1 2/2, vic held-out wrong disclosed)", "evidence": ["datasets/experiments/wave-b/W9-summary.json", "datasets/experiments/wave-b/W9-cascade-stroke-verdict.json"], "verdict": "ARTIFACT_PRESENT" },
+    { "claim": "Row W5 phases v2.1 PHASE 2/5->4/5", "evidence": ["datasets/experiments/wave-b/W5-summary.json", "datasets/experiments/wave-b/W5-anchor-free-measurement.json"], "verdict": "ARTIFACT_PRESENT" },
+    { "claim": "Row U usable-result-v1 live in lab:cascade", "evidence": ["datasets/experiments/wave-a/U-summary.json", "datasets/experiments/wave-a/U-usable-result-v1-measurement.json", "packages/swing-lab/src/cascadeWaterfall.ts (3 usable-result-v1 hits)"], "verdict": "ARTIFACT_PRESENT" },
+    { "claim": "Rows D+W4 / E+W6 / G / Q / C / W8 / J / K / W3 / L / W14 / P / W2 / H / W12 / W13 / T / merge-reactivation", "evidence": ["datasets/experiments/wave-a/{D,E,G,Q,C,J,K,L,P,H,T}-summary.json", "datasets/experiments/wave-b/{W4,W6,W8,W3,W14,W2,W12,W13}-summary.json", "datasets/experiments/wave-a/E-replay-validation.json", "datasets/experiments/wave-b/W3-variant-table.json", "datasets/experiments/EXP-2026-08-28-tracklet-merge.json", "datasets/experiments/EXP-2026-08-28-adaptive-completion.json"], "verdict": "ARTIFACT_PRESENT", "note": "Every board row has its named summary JSON committed; merge-reactivation RED verdict numbers (rally2 30->145ms, rally1 695ms) match EXP-2026-08-28-tracklet-merge.json and D-043-adjacent DECISIONS.md text verbatim." },
+    { "claim": "Gates at run end (typecheck 17/17, mobile jest 214/214, Swift builds, locked_test regen once)", "evidence": ["docs/STATUS_BOARD.md only"], "verdict": "NOT_INDEPENDENTLY_VERIFIABLE_HERE", "note": "Mac-run gate outputs are not committed as artifacts; nothing on this box contradicts them. The 'typecheck 17/17' vs Wave C 'typecheck 19/19' delta is explained by 2 packages added in Wave C (capture-envelope + one other) — final V4 should state the package-count basis change." },
+    { "claim": "Wave C rows C01,C02,C04,C05,C06,C08,C09,C10,C11,C13,C14,C15,C17,C18", "evidence": ["datasets/experiments/wave-c/c01-summary.json", "datasets/experiments/wave-c/c02-edgeon-crop-production-summary.json", "datasets/experiments/wave-c/c04-ball-gold-summary.json", "datasets/experiments/wave-c/c05-summary.json", "datasets/experiments/wave-c/C06-summary.json + C06-adjudications.json + ml/annotations/ta-ownership-annotation-guide-v1.md", "datasets/experiments/wave-c/c08-concurrency-twopass-summary.json", "datasets/experiments/wave-c/c09-session-native-summary.json", "datasets/experiments/wave-c/c10-consent-architecture-summary.json + packages/shared-types/src/consent.ts + packages/database/migrations/0015_consent_records.sql", "datasets/experiments/wave-c/c11-summary.json + c11-coverage-risk.json + packages/swing-lab/src/silentFailure.ts", "datasets/experiments/wave-c/c13-summary.json", "datasets/experiments/wave-c/c14-coach-portal-summary.json", "datasets/experiments/wave-c/c15-ood-property-tests-summary.json", "datasets/experiments/wave-c/c17-acquire-v4-instrumentation-summary.json", "datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json", "tools/paddle-lab/test_timestamp_alignment.py", "packages/swing-lab/src/paddleCropRecovery.ts"], "verdict": "ARTIFACT_PRESENT", "note": "All referenced code artifacts confirmed to exist at head. C04's '22->60 ball labels' was true at Wave C end; head total is 103 after wave-d2 d2-06 (+43) — see corrections." },
+    { "claim": "STATUS_BOARD contains no Wave D/D2/D3/D4 addendum", "evidence": ["datasets/experiments/wave-d/*.json (14 workstreams)", "datasets/experiments/wave-d2/*.json", "datasets/experiments/wave-d3/*.json", "datasets/experiments/wave-d4/*.json"], "verdict": "STRUCTURALLY_STALE", "note": "Four post-Wave-C waves are merged into the integration branch with full summary artifacts, but the board ends at the Wave C addendum. Integrator must add wave D–D4 addenda (or the final V4 must supersede the board) before the board can be called current." }
+  ],
+
+  "handoffV4DraftClaims": [
+    { "claim": "Section 1 north stars 'NOT re-measured since Mac 2026-08-28'", "evidence": ["docs/STATUS_BOARD.md Wave C measurement boundary", "absence of any committed cascade run artifact newer than 2026-08-28"], "verdict": "SUPPORTED" },
+    { "claim": "Section 2.1 TA gold 59 (54 dev + 5 locked), pool 301", "evidence": ["datasets/ta-bench/cases.json recount at head: 301 total / 59 verified / 54 dev / 5 locked_test"], "verdict": "SUPPORTED_AND_STILL_CURRENT" },
+    { "claim": "Section 2.4 ball gold 60 frames (47/4/5/4), 37 occlusionState", "evidence": ["recountAtHead: 103 frames (86 visible / 6 uncertain / 5 not_visible / 6 occluded), 78 with occlusionState", "datasets/experiments/wave-d2/d2-06-ball-hard-slices-summary.json (+43 labels, commit f5d633f)"], "verdict": "STALE_POST_D2-06", "correction": "Final V4 section 5 ball row: 103 total (86 visible / 6 uncertain / 5 not_visible / 6 occluded); 78 carry occlusionState." },
+    { "claim": "Section 2.6 stroke gold 22 labels", "evidence": ["recountAtHead: 29 labels / 11 cases", "datasets/experiments/wave-d/d13-stroke-gold-scale-summary.json (22->29, coverage matrices before/after)"], "verdict": "STALE_POST_D13", "correction": "Final V4: 29 stroke gold labels across 11 cases (L1: volley 10, dink 9, overhead_lob 5, groundstroke 2, serve 1, unknown 2; empty families return/drop_reset/attack_counter/specialty per d13 summary)." },
+    { "claim": "Section 5 event records 47 (29 target), 44 contactMs", "evidence": ["recountAtHead: 62 records (39 target / 23 other), 59 with contactMs"], "verdict": "STALE_POST_D04", "correction": "See knownSuspects SUSPECT-1." },
+    { "claim": "Section 5 paddle 102/142, sidecar 100, duals 50", "evidence": ["recountAtHead identical: 102/142/100/50"], "verdict": "SUPPORTED_AND_STILL_CURRENT" },
+    { "claim": "Section 3 decision log ends at D-043, 175 lines; Wave C shipped default-ON worker + versioned contracts with no D-044+", "evidence": ["docs/DECISIONS.md (last entry D-043, wc -l = 175 at head)"], "verdict": "SUPPORTED_AND_STILL_CURRENT", "note": "Gap has WIDENED: waves D–D4 also shipped changes with no new D-numbers. D-044+ backlog now spans Wave C (c01,c02,c07,c10,c11,c12) plus wave D/D2/D3/D4 behavior changes (e.g. d09 worker hardening, d4-05 pose reuse, d4-07 clip trim, d3-11 OOD gate)." },
+    { "claim": "Section 6 contract-version table (usable-result-v1, silent-failure-v1, crop-recovery-v1, paddle-serve-v1, capture-envelope-thresholds-v0.1-provisional, consent contracts, ...)", "evidence": ["packages/swing-lab/src/cascadeWaterfall.ts", "packages/swing-lab/src/silentFailure.ts", "packages/swing-lab/src/paddleCropRecovery.ts", "packages/swing-lab/src/paddleWorker.ts", "packages/capture-envelope/src/thresholds.ts", "packages/shared-types/src/consent.ts", "datasets/paddle-bench/stroke-gold.json (taxonomyVersion field)"], "verdict": "SPOT_CHECKED_PRESENT", "note": "All spot-checked files exist at head with the named identifiers. Full grep re-verification of every row was not repeated; V4 draft states it was grep-verified at its commit." },
+    { "claim": "Section 7 findings 1-8", "evidence": ["see knownSuspects (findings 1,2,3,4,8 = suspects 1,2,3,4,5; finding 6 = suspect 6)", "finding 5 decision-gap re-verified above", "finding 7 stroke-heuristic-1 grep: references still present in swing-lab (legacy replay/registry)"], "verdict": "ALL_CONFIRMED", "note": "Every V4 draft finding reproduces at head; three of its own section-5 numbers are now additionally stale (events 47->62, ball 60->103, stroke gold 22->29) because waves D/D2/D3/D4 merged after the draft." },
+    { "claim": "Section 9 blocker 3 'footage supply (6 fresh candidates committed)'", "evidence": ["datasets/pickleball/fresh-candidates/ = 8 clips at head (6 yt-* from C16 + 2 voa-* from wave-d2 acquisitions)"], "verdict": "STALE_UNDERCOUNT", "correction": "8 fresh-candidate clips at head; cite C16 (6) + wave-d2 d2-01/02/03 (2 voa-*) separately." }
+  ],
+
+  "correctionsForIntegrator": [
+    "STATUS_BOARD Wave C header: '17 branches merged (C03 still in flight)' -> '18/18 merged'; row C03 -> GREEN (labels), 30 frames / duals 30->50, cite c03-summary.json.",
+    "STATUS_BOARD row C16: '1 new CC-licensed candidate' -> '6 accepted CC BY 3.0 clips (181.08 MB, 360 s) + 4 quarantined' per c16-data-acquisition-summary.json.",
+    "STATUS_BOARD needs Wave D/D2/D3/D4 addenda (or explicit supersession by final V4): 40+ summary artifacts exist under datasets/experiments/wave-d*/ with zero board coverage.",
+    "Event labels: state BOTH denominators, dated: 62 annotation records at head (39 target, 59 with contactMs; 57 excluding held-out) vs unique contact events (28 per c05 reconciliation, plus D04's additions per d04-contact-gold-scale-summary.json). Retire the bare '34'.",
+    "Ownership: pick ONE basis. At head: annotation-file records 102 target / 142 other; visible points 85/140 (README basis); sidecar verdicts 100; duals 50. Retire '78/83' — it matches no committed artifact.",
+    "Ball gold: 103 frames at head (86/6/5/6), 78 with occlusionState — update both C04 row context and V4 section 5.",
+    "Stroke gold: 29 labels / 11 cases at head (d13), not 22.",
+    "Fresh footage: 8 clips on disk (C16's 6 + wave-d2's 2), not 1 and not 6.",
+    "C07: keep 'wired default ON, --no-paddle-worker opt-out, bit-equal LINUX-CPU only, 11.9s still a projection'; replace HANDOFF_V3's 'once runPaddleStage wires it' in final V4; also cite d09-warm-worker-hardening-summary.json.",
+    "Decision log: D-044+ backlog now covers Wave C AND waves D–D4 behavior changes; DECISIONS.md still ends at D-043.",
+    "North-star table: run-end row's per-stage numbers have no committed source artifact (Mac run dir gitignored); the committed EXP-2026-08-28-cascade-waterfall.json shows different per-stage counts (EVENT 4/5 uncond). Final V4 should cite the exact cascade artifact ID for the run-end row or mark it 'not committed; Mac 2026-08-28'."
+  ],
+
+  "verdict": "GREEN",
+  "docsEdited": "none (integrator-owned docs untouched; this artifact is the only deliverable)"
+}

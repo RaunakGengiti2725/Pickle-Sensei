@@ -13,8 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@aws-sdk/client-sqs": "^3.658.0",
-    "@pickle/shared-types": "workspace:*"
+    "@aws-sdk/client-sqs": "^3.658.0"
   },
   "devDependencies": {
     "typescript": "^5.9.2",

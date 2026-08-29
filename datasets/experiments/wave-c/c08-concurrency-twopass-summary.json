@@ -1,0 +1,75 @@
+{
+  "id": "c08-concurrency-twopass",
+  "branch": "devin/wave-c/c08-concurrency-twopass",
+  "dateIso": "2026-08-29",
+  "workstream": "C08 — paddle∥ball concurrency + adaptive two-pass detector schedule (HANDOFF_V3 §6 item 4)",
+  "built": {
+    "concurrency": "analyzeVideo.ts now runs the paddle detector (detect_paddle.py) and ball candidate generator (ball_candidates.py) subprocesses concurrently (preparePaddleDetections ∥ prepareBallCandidates). Tracking phases stay sequential — ball gating consumes the selected paddle track. Error isolation: each prep returns a status union (ready/env_missing/failed); a failure in one stage becomes that stage's honest 'unavailable' reason and never poisons the other.",
+    "twoPass": "OFF-by-default --two-pass flag (plus --sparse-stride, default 3): pass 1 sparse scan over the detect span; planTwoPassSchedule (paddleSchedule.ts, pure/unit-testable) plans stride-1 dense regions around event peaks, primary-track uncertainty (low-confidence obs + birth/death inside span), high paddle-speed change, and coverage holes; pass 2 runs the detector per dense region; passes merge into paddle-dets.json (dense copy wins grid-slot collisions). Provenance: paddle-schedule.json records the schedule, realized frame counts, and per-frame pass assignment (framesByPass); report.paddleSchedule carries the schedule. Two-pass mode never reuses a cached paddle-dets.json (a stride-1 artifact must not stand in for a scheduled one).",
+    "designNote": "Uncertainty/missing-frame anchors come from the PRIMARY (densest) sparse candidate only: with all candidate tracks, background/crowd tracks' permanently-noisy confidences densified the entire span (measured on wm-volley-02: dense region = whole span, 74 frames processed vs 55 full-dense)."
+  },
+  "measurements": {
+    "concurrencyByteIdentity": {
+      "method": "Exact detector/candidate commands analyzeVideo issues, run sequentially then concurrently, on 2 committed dev bundle clips (CPU, D-FINE dfine-medium-coco). Full-file byte compare, then compare with the wall-clock 'timing' block stripped.",
+      "clips": {
+        "wm-volley-02": {
+          "paddleWindowMs": [5550, 7750],
+          "ballWindowMs": [4600, 8700],
+          "paddleFrames": 55,
+          "ballFrames": 83,
+          "detectionPayloadIdenticalTimingStripped": true
+        },
+        "afn-sasebo-rally1": {
+          "paddleWindowMs": [2350, 3850],
+          "ballWindowMs": [1400, 4404],
+          "paddleFrames": 45,
+          "ballFrames": 88,
+          "detectionPayloadIdenticalTimingStripped": true
+        }
+      },
+      "honestCaveat": "Full files are NOT byte-identical because the artifacts embed wall-clock timing (modelLoadSec/inferenceSecTotal/wallSecTotal/msPerFrame). Control: two SEQUENTIAL runs of the same command also differ only in those timing fields (verified on afn-sasebo-rally1 paddle). Everything except the timing block — all frames, boxes, scores, labels, window, detector metadata — is byte-identical sequential vs concurrent."
+    },
+    "twoPassDemo": {
+      "method": "Same flow as preparePaddleDetections driven directly (pose is macOS-only): sparse stride-3 pass → buildPaddleTracks → planTwoPassSchedule with event peak = committed annotation contactMs (dev cases only) → stride-1 dense regions → merge. Baseline = full stride-1 scan of the same detect span.",
+      "clips": {
+        "wm-volley-02": {
+          "contactMs": 6680,
+          "detectSpanMs": [5550, 7750],
+          "fps": 25,
+          "fullDenseFramesProcessed": 55,
+          "twoPassFramesProcessed": 47,
+          "twoPassBreakdown": { "sparse": 19, "dense": 28 },
+          "mergedFrames": 37,
+          "denseRegions": [
+            { "startMs": 6030, "endMs": 7150, "reasons": ["paddle_speed_change", "event_peak"] }
+          ],
+          "contactNeighborhoodPm100ms": "5/5 on-grid frames (40ms grid: 6590,6630,6670,6710,6750), all pass=dense (stride 1)",
+          "framesSavedVsFullDense": "47 vs 55 = 14.5% fewer detector frames"
+        },
+        "afn-sasebo-rally1": {
+          "contactMs": 2900,
+          "detectSpanMs": [2350, 3850],
+          "fps": 29.97,
+          "fullDenseFramesProcessed": 45,
+          "twoPassFramesProcessed": 54,
+          "twoPassBreakdown": { "sparse": 15, "dense": 39 },
+          "mergedFrames": 42,
+          "denseRegions": [
+            { "startMs": 2416.7, "endMs": 3351, "reasons": ["event_peak"] },
+            { "startMs": 3484.5, "endMs": 3818.1, "reasons": ["track_uncertainty"] }
+          ],
+          "contactNeighborhoodPm100ms": "6/6 on-grid frames, all pass=dense (stride 1)",
+          "honestNegative": "two-pass processed MORE frames than full dense (54 vs 45): the span is only 1500ms and the 900ms event-peak pad plus an uncertainty region cover most of it, so sparse+dense overlap costs more than it saves. Savings scale with detect-span length relative to the dense pads; short event-gated spans should stay one-pass."
+        }
+      }
+    },
+    "unitTests": "packages/swing-lab: 12 test files, 159 passed / 4 skipped, including new test/paddleSchedule.test.ts (12 tests: no-dense-when-clean, event-peak pad, span clamping, birth/death + low-confidence uncertainty, speed-change, missing-frames holes, region merge + reason union, fewer-than-full-scan, dense-wins merge collisions, timing accumulation, per-frame pass provenance). pnpm --filter @pickle/swing-lab typecheck passes."
+  },
+  "environmentNotes": {
+    "ffmpegStride": "System ffmpeg 4.4.2 (Ubuntu 22.04) lacks -fps_mode (added in 5.1), so detect_paddle.py --stride N decodes 0 frames on stock Linux. Demos above used a static ffmpeg 7.0.2 on PATH. The repo tool was NOT modified.",
+    "venv": "tools/paddle-lab/.venv built with python3.10 (3.12 unavailable here) + torch 2.13.0+cpu, torchvision 0.28.0+cpu, transformers 5.16.1."
+  },
+  "blocked": {
+    "downstreamCascade": "NOT validated: pose extraction (Apple Vision) is macOS-only and canonical runs/ dirs are absent on Linux, so no claim is made about contact error, phase evidence, or paddle selection impact of either the concurrency change (expected none — payloads byte-identical) or the two-pass schedule (needs the macOS cascade + paddle bench before any default-on decision)."
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "workstream": "D12",
+  "title": "Result → Try Again → rearm loop hardening (apps/mobile)",
+  "branch": "devin/wave-d/d12-result-tryagain",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "date": "2026-08-29",
+  "annotatorId": "devin-visual-v3-waveD",
+  "whatWasAudited": [
+    "ResultScreen evidence loading (loadStrokeResultEvidence by analysisId) — already reset + cancellation-guarded; no leak.",
+    "ResultScreen sync-receipt loading (hasShotSyncReceipt) — LEAK FOUND: no cancellation guard, a slow receipt lookup from a previous attempt could resolve after navigating to another attempt and stamp the wrong sync state.",
+    "StrokeResult component-local state (measured-rows expansion, replay playhead, replay playing flag, replay setInterval timer) — LEAK FOUND: state survives if the component instance is reused when the Result route repoints to another attempt of the same session.",
+    "AnalyzeScreen rearm loop — LEAK FOUND: captureEnvelope (envelope verdict) and targetSeed persisted across repeated run() invocations on the same mounted screen, so a second capture could briefly show / reuse the previous clip's readiness verdict and target seed.",
+    "TryAgainHandoff module (armTryAgain/consumeTryAgainHandoff) — single-shot semantics already correct; declared runs preserve declaration, AUTO runs re-arm AUTO, predictions never become declarations. No leak.",
+    "Pure selectors (strokeResultHeader, selectInsight, contactMarkerPresentation, phaseTimelinePresentation, attemptChips, uncertainty notes) — all derive strictly from the current record/analysis; no module-level state. No leak."
+  ],
+  "fixes": [
+    {
+      "file": "apps/mobile/src/screens/ResultScreen.tsx",
+      "change": "Added effect-local cancellation guard + setSyncEvidence('checking') reset to the sync-receipt effect; added key={route.params.analysisId} on <StrokeResult> so all component-local UI state (rows expansion, replay playhead/playing/interval) is remounted per attempt."
+    },
+    {
+      "file": "apps/mobile/src/screens/AnalyzeScreen.tsx",
+      "change": "run() now clears captureEnvelope and targetSeed at the start of every capture attempt — both describe exactly one clip."
+    }
+  ],
+  "tests": {
+    "newFile": "apps/mobile/__tests__/resultRearmLoop.test.tsx",
+    "newTests": 9,
+    "coverage": [
+      "3 consecutive attempts (usable → abstention → usable) on one mounted keyed Result surface: contact marker count/caption, contact ms, stroke header, abstention ledger, uncertainty microcopy, and score presence are each exclusive to their own attempt.",
+      "Attempt chips: exactly one selected chip, matching the current attempt ('Attempt 2' then 'Attempt 3').",
+      "Measured-rows expansion does not leak into the next attempt.",
+      "Replay playback (playhead + running interval + pause control) resets on attempt switch; old interval no longer advances anything.",
+      "TechniqueIntent preservation through rearm: declared loop keeps {source:'tap', canonical:'FOREHAND_DRIVE', legacySlug:'forehand_drive'} across all three attempts incl. contact abstention; AUTO loop re-arms {source:'auto'} every time and never converts a prediction to a declaration; handoff.source stays 'camera' (capture configuration).",
+      "Declared forehand vs predicted BACKHAND mismatch: existing contract copy asserted ('DECLARED · CAMERA READ DIFFERS', 'neither overwrites the other', PREDICTED-labeled classifier row); rearm keeps the declared forehand; mismatch treatment does not leak into the next attempt."
+    ]
+  },
+  "verification": {
+    "npmCi": "pass (apps/mobile)",
+    "tsc": "pass (npx tsc --noEmit, apps/mobile, 0 errors)",
+    "jest": "36 suites / 275 tests passed, 0 failed (apps/mobile, includes 9 new D12 tests)",
+    "prettier": "run on all 3 touched files"
+  },
+  "honestNegatives": [
+    "The StrokeResult remount fix relies on the parent key; there is no runtime assertion inside StrokeResult itself that its instance never survives an analysisId change — the jest suite enforces it at the ResultScreen usage pattern instead.",
+    "The ResultScreen sync-receipt cancellation guard is not directly unit-tested (would require a full react-navigation + sqlite harness); it follows the exact pattern of the already-guarded evidence-loading effect.",
+    "AnalyzeScreen's run() reset is not covered by a jest test: the screen depends on native camera modules not available under jest; the reset is two setState(null) calls at the top of run().",
+    "No memory profiling was performed — 'must not leak memory' is addressed structurally (interval cleared on unmount/remount, single-shot handoff module, no module-level caches found), not measured with a heap profiler; RN heap profiling requires a device/simulator this Linux environment cannot run."
+  ],
+  "blocked": [
+    "Full cascade / pnpm lab:regen cannot run on Linux (Apple Vision pose extraction is macOS-only; canonical runs/ dirs absent). No cascade numbers are claimed.",
+    "MOBBIN MCP UNAVAILABLE IN THIS ENVIRONMENT — no design research performed; existing design system and existing mismatch contract copy reused verbatim."
+  ]
+}

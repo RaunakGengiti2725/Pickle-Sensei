@@ -1,0 +1,92 @@
+{
+  "startedAt": "2026-08-29T09:50:18.790Z",
+  "mode": "real",
+  "node": "v20.18.1",
+  "commit": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+  "realCleanup": {
+    "orphans": [],
+    "pass": true
+  },
+  "phases": [
+    {
+      "phase": "real-sequential",
+      "requests": 200,
+      "okCount": 200,
+      "workerFailures": 0,
+      "fallbacks": 0,
+      "wallMs": 817122,
+      "rss": {
+        "worker": {
+          "samples": 41,
+          "firstKb": 625984,
+          "lastKb": 645304,
+          "minKb": 625984,
+          "maxKb": 710224,
+          "slopeKbPerRequest": -28.91828149519858
+        },
+        "client": {
+          "samples": 41,
+          "firstKb": 65960,
+          "lastKb": 64316,
+          "minKb": 63608,
+          "maxKb": 65960,
+          "slopeKbPerRequest": -1.4791749924259703
+        }
+      },
+      "failures": [],
+      "notes": [
+        "ready: modelLoadSec=0.625 warmupSec=2.323 device=cpu",
+        "repeat requests of the same shape are byte-compared (timing-stripped) against the first response",
+        "rssSamples=[{\"request\":1,\"atMs\":8433,\"workerRssKb\":625984,\"clientRssKb\":65960},{\"request\":5,\"atMs\":13185,\"workerRssKb\":645044,\"clientRssKb\":63720},{\"request\":10,\"atMs\":70058,\"workerRssKb\":626016,\"clientRssKb\":64508},{\"request\":15,\"atMs\":97147,\"workerRssKb\":668284,\"clientRssKb\":64160},{\"request\":20,\"atMs\":110825,\"workerRssKb\":641900,\"clientRssKb\":64160},{\"request\":25,\"atMs\":125242,\"workerRssKb\":673612,\"clientRssKb\":63956},{\"request\":30,\"atMs\":136512,\"workerRssKb\":660316,\"clientRssKb\":63948},{\"request\":35,\"atMs\":155221,\"workerRssKb\":649800,\"clientRssKb\":63804},{\"request\":40,\"atMs\":164637,\"workerRssKb\":655216,\"clientRssKb\":63784},{\"request\":45,\"atMs\":175181,\"workerRssKb\":626472,\"clientRssKb\":63752},{\"request\":50,\"atMs\":189388,\"workerRssKb\":634808,\"clientRssKb\":64268},{\"request\":55,\"atMs\":199014,\"workerRssKb\":643836,\"clientRssKb\":64244},{\"request\":60,\"atMs\":205564,\"workerRssKb\":655108,\"clientRssKb\":63952},{\"request\":65,\"atMs\":214076,\"workerRssKb\":656476,\"clientRssKb\":63936},{\"request\":70,\"atMs\":222326,\"workerRssKb\":626540,\"clientRssKb\":63904},{\"request\":75,\"atMs\":233680,\"workerRssKb\":638848,\"clientRssKb\":63620},{\"request\":80,\"atMs\":254739,\"workerRssKb\":651160,\"clientRssKb\":64412},{\"request\":85,\"atMs\":269162,\"workerRssKb\":632200,\"clientRssKb\":64124},{\"request\":90,\"atMs\":310922,\"workerRssKb\":637836,\"clientRssKb\":64108},{\"request\":95,\"atMs\":337312,\"workerRssKb\":660888,\"clientRssKb\":63824},{\"request\":100,\"atMs\":372545,\"workerRssKb\":710224,\"clientRssKb\":63812},{\"request\":105,\"atMs\":386408,\"workerRssKb\":640828,\"clientRssKb\":63788},{\"request\":110,\"atMs\":412403,\"workerRssKb\":675876,\"clientRssKb\":64316},{\"request\":115,\"atMs\":419714,\"workerRssKb\":642512,\"clientRssKb\":64040},{\"request\":120,\"atMs\":440533,\"workerRssKb\":633240,\"clientRssKb\":64016},{\"request\":125,\"atMs\":456559,\"workerRssKb\":642996,\"clientRssKb\":64004},{\"request\":130,\"atMs\":477770,\"workerRssKb\":654744,\"clientRssKb\":63716},{\"request\":135,\"atMs\":506397,\"workerRssKb\":662788,\"clientRssKb\":63704},{\"request\":140,\"atMs\":550847,\"workerRssKb\":626036,\"clientRssKb\":64232},{\"request\":145,\"atMs\":568719,\"workerRssKb\":626264,\"clientRssKb\":64208},{\"request\":150,\"atMs\":619975,\"workerRssKb\":626116,\"clientRssKb\":64192},{\"request\":155,\"atMs\":639568,\"workerRssKb\":626612,\"clientRssKb\":63908},{\"request\":160,\"atMs\":648623,\"workerRssKb\":643464,\"clientRssKb\":63896},{\"request\":165,\"atMs\":664157,\"workerRssKb\":626488,\"clientRssKb\":63608},{\"request\":170,\"atMs\":684433,\"workerRssKb\":653696,\"clientRssKb\":64400},{\"request\":175,\"atMs\":700859,\"workerRssKb\":626336,\"clientRssKb\":64124},{\"request\":180,\"atMs\":714084,\"workerRssKb\":626160,\"clientRssKb\":64100},{\"request\":185,\"atMs\":727938,\"workerRssKb\":663220,\"clientRssKb\":63824},{\"request\":190,\"atMs\":738568,\"workerRssKb\":667704,\"clientRssKb\":63800},{\"request\":195,\"atMs\":803279,\"workerRssKb\":637088,\"clientRssKb\":63788},{\"request\":200,\"atMs\":817121,\"workerRssKb\":645304,\"clientRssKb\":64316}]"
+      ]
+    },
+    {
+      "phase": "real-concurrent",
+      "requests": 40,
+      "okCount": 40,
+      "workerFailures": 0,
+      "fallbacks": 0,
+      "wallMs": 149041,
+      "rss": {
+        "worker": {
+          "samples": 10,
+          "firstKb": 607740,
+          "lastKb": 607768,
+          "minKb": 607544,
+          "maxKb": 640944,
+          "slopeKbPerRequest": 177.44848484848484
+        },
+        "client": {
+          "samples": 10,
+          "firstKb": 63744,
+          "lastKb": 63932,
+          "minKb": 63744,
+          "maxKb": 63932,
+          "slopeKbPerRequest": 6.836363636363636
+        }
+      },
+      "failures": [],
+      "notes": [
+        "rssSamples=[{\"request\":4,\"atMs\":9908,\"workerRssKb\":607740,\"clientRssKb\":63744},{\"request\":8,\"atMs\":21168,\"workerRssKb\":627196,\"clientRssKb\":63744},{\"request\":12,\"atMs\":37914,\"workerRssKb\":607960,\"clientRssKb\":63744},{\"request\":16,\"atMs\":56542,\"workerRssKb\":607968,\"clientRssKb\":63744},{\"request\":20,\"atMs\":67174,\"workerRssKb\":629308,\"clientRssKb\":63932},{\"request\":24,\"atMs\":84971,\"workerRssKb\":607948,\"clientRssKb\":63932},{\"request\":28,\"atMs\":96495,\"workerRssKb\":607544,\"clientRssKb\":63932},{\"request\":32,\"atMs\":104881,\"workerRssKb\":616612,\"clientRssKb\":63932},{\"request\":36,\"atMs\":132488,\"workerRssKb\":640944,\"clientRssKb\":63932},{\"request\":40,\"atMs\":149040,\"workerRssKb\":607768,\"clientRssKb\":63932}]"
+      ]
+    },
+    {
+      "phase": "real-crash-restart",
+      "requests": 3,
+      "okCount": 2,
+      "workerFailures": 0,
+      "fallbacks": 1,
+      "restarts": 1,
+      "wallMs": 16982,
+      "rss": {
+        "worker": null,
+        "client": null
+      },
+      "failures": [],
+      "notes": [
+        "spawns=2 restarts=1 firstPid=9599 secondPid=9668"
+      ]
+    }
+  ],
+  "finishedAt": "2026-08-29T10:06:42.454Z"
+}

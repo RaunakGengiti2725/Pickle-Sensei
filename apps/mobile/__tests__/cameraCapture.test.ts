@@ -3,6 +3,7 @@ import {
   CAPTURE_COMPLETION_PARAMS_V1,
   MAX_BALL_SPEED_REPROJECTION_ERROR_PX,
   setCaptureCompletionStrategy,
+  TARGET_LOCK_PARAMS_V1,
 } from '../src/camera/capture';
 
 const baseClip = {
@@ -492,5 +493,248 @@ describe('D-029 movement-completion telemetry boundary', () => {
     await expect(setCaptureCompletionStrategy('adaptive')).rejects.toThrow(
       /not available/i,
     );
+  });
+});
+
+describe('target-lock telemetry boundary (acquire-v4 promotion evidence)', () => {
+  const tapPoint = { x: 0.5, y: 0.62 };
+  const lockTorso = { x: 0.53, y: 0.6 };
+  const lockedTelemetry = {
+    schemaVersion: 1,
+    algorithmVersion: 'target-lock-live-v1',
+    coordinateSystem: 'normalized_capture_space',
+    tapPoint,
+    lockOutcome: 'locked',
+    lockSource: 'start_region_occupancy',
+    lockTorso,
+    tapToLockDistance: Math.hypot(
+      lockTorso.x - tapPoint.x,
+      lockTorso.y - tapPoint.y,
+    ),
+    timeToLockMs: 640,
+    ambiguityEntered: false,
+    params: TARGET_LOCK_PARAMS_V1,
+  };
+  const lockedClip = {
+    ...automaticClip,
+    targetSeed: {
+      x: lockTorso.x,
+      y: lockTorso.y,
+      source: 'start_region_occupancy',
+    },
+    targetLock: lockedTelemetry,
+  };
+
+  it('accepts a locked record whose distance recomputes from its points', () => {
+    const clip = assertCapturedClip(lockedClip);
+    if (clip.captureMode !== 'automatic_pose_trigger') {
+      throw new Error('expected automatic capture');
+    }
+    expect(clip.targetLock?.tapToLockDistance).toBeCloseTo(
+      Math.hypot(0.03, 0.02),
+      10,
+    );
+    expect(clip.targetLock?.lockSource).toBe('start_region_occupancy');
+  });
+
+  it('accepts captures that predate the instrument (no targetLock)', () => {
+    expect(() => assertCapturedClip(automaticClip)).not.toThrow();
+  });
+
+  it('accepts an honest no-lock record with no seed', () => {
+    const clip = assertCapturedClip({
+      ...automaticClip,
+      targetLock: {
+        schemaVersion: 1,
+        algorithmVersion: 'target-lock-live-v1',
+        coordinateSystem: 'normalized_capture_space',
+        tapPoint,
+        lockOutcome: 'no_lock',
+        ambiguityEntered: true,
+        ambiguityDurationMs: 2100,
+        params: TARGET_LOCK_PARAMS_V1,
+      },
+    });
+    if (clip.captureMode !== 'automatic_pose_trigger') {
+      throw new Error('expected automatic capture');
+    }
+    expect(clip.targetLock?.lockOutcome).toBe('no_lock');
+  });
+
+  it('rejects a distance that does not recompute from the recorded points', () => {
+    expect(() =>
+      assertCapturedClip({
+        ...lockedClip,
+        targetLock: { ...lockedTelemetry, tapToLockDistance: 0.01 },
+      }),
+    ).toThrow(/invalid or incomplete/i);
+  });
+
+  it('rejects a locked record that disagrees with the clip targetSeed', () => {
+    expect(() =>
+      assertCapturedClip({
+        ...lockedClip,
+        targetSeed: { x: 0.9, y: 0.9, source: 'start_region_occupancy' },
+      }),
+    ).toThrow(/invalid or incomplete/i);
+    expect(() =>
+      assertCapturedClip({
+        ...lockedClip,
+        targetSeed: {
+          x: lockTorso.x,
+          y: lockTorso.y,
+          source: 'gesture_confirmed',
+        },
+      }),
+    ).toThrow(/invalid or incomplete/i);
+    expect(() =>
+      assertCapturedClip({
+        ...automaticClip,
+        targetLock: lockedTelemetry,
+      }),
+    ).toThrow(/invalid or incomplete/i);
+  });
+
+  it('rejects ambiguity-resolved locks that never flagged ambiguity', () => {
+    const gestureTorso = { x: 0.47, y: 0.65 };
+    const gestureLock = {
+      ...lockedTelemetry,
+      lockSource: 'gesture_confirmed',
+      lockTorso: gestureTorso,
+      tapToLockDistance: Math.hypot(
+        gestureTorso.x - tapPoint.x,
+        gestureTorso.y - tapPoint.y,
+      ),
+    };
+    const gestureSeed = {
+      x: gestureTorso.x,
+      y: gestureTorso.y,
+      source: 'gesture_confirmed',
+    };
+    expect(() =>
+      assertCapturedClip({
+        ...automaticClip,
+        targetSeed: gestureSeed,
+        targetLock: { ...gestureLock, ambiguityEntered: false },
+      }),
+    ).toThrow(/invalid or incomplete/i);
+    expect(() =>
+      assertCapturedClip({
+        ...automaticClip,
+        targetSeed: gestureSeed,
+        targetLock: {
+          ...gestureLock,
+          ambiguityEntered: true,
+          ambiguityDurationMs: 900,
+        },
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects a timeout lock whose ambiguity lasted less than the timeout', () => {
+    const timeoutLock = {
+      ...lockedTelemetry,
+      lockSource: 'ambiguity_timeout',
+      ambiguityEntered: true,
+    };
+    const timeoutSeed = {
+      x: lockTorso.x,
+      y: lockTorso.y,
+      source: 'ambiguity_timeout',
+    };
+    expect(() =>
+      assertCapturedClip({
+        ...automaticClip,
+        targetSeed: timeoutSeed,
+        targetLock: { ...timeoutLock, ambiguityDurationMs: 2000 },
+      }),
+    ).toThrow(/invalid or incomplete/i);
+    expect(() =>
+      assertCapturedClip({
+        ...automaticClip,
+        targetSeed: timeoutSeed,
+        targetLock: { ...timeoutLock, ambiguityDurationMs: 3040 },
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects params drifted from the shipped D-027 constants', () => {
+    expect(() =>
+      assertCapturedClip({
+        ...lockedClip,
+        targetLock: {
+          ...lockedTelemetry,
+          params: { ...TARGET_LOCK_PARAMS_V1, startRegionRadius: 0.25 },
+        },
+      }),
+    ).toThrow(/invalid or incomplete/i);
+  });
+
+  it('rejects malformed points, sources, and outcomes', () => {
+    expect(() =>
+      assertCapturedClip({
+        ...lockedClip,
+        targetLock: { ...lockedTelemetry, tapPoint: { x: 1.4, y: 0.5 } },
+      }),
+    ).toThrow(/invalid or incomplete/i);
+    expect(() =>
+      assertCapturedClip({
+        ...lockedClip,
+        targetLock: { ...lockedTelemetry, lockSource: 'manual_override' },
+      }),
+    ).toThrow(/invalid or incomplete/i);
+    expect(() =>
+      assertCapturedClip({
+        ...lockedClip,
+        targetLock: { ...lockedTelemetry, lockOutcome: 'maybe' },
+      }),
+    ).toThrow(/invalid or incomplete/i);
+    expect(() =>
+      assertCapturedClip({
+        ...lockedClip,
+        targetLock: { ...lockedTelemetry, timeToLockMs: -5 },
+      }),
+    ).toThrow(/invalid or incomplete/i);
+  });
+
+  it('rejects a no-lock record that still claims lock evidence or a seed', () => {
+    const noLock = {
+      schemaVersion: 1,
+      algorithmVersion: 'target-lock-live-v1',
+      coordinateSystem: 'normalized_capture_space',
+      tapPoint,
+      lockOutcome: 'no_lock',
+      ambiguityEntered: false,
+      params: TARGET_LOCK_PARAMS_V1,
+    };
+    expect(() =>
+      assertCapturedClip({
+        ...automaticClip,
+        targetLock: { ...noLock, lockTorso },
+      }),
+    ).toThrow(/invalid or incomplete/i);
+    expect(() =>
+      assertCapturedClip({
+        ...automaticClip,
+        targetSeed: {
+          x: lockTorso.x,
+          y: lockTorso.y,
+          source: 'start_region_occupancy',
+        },
+        targetLock: noLock,
+      }),
+    ).toThrow(/invalid or incomplete/i);
+  });
+
+  it('rejects imported video that pretends live target acquisition ran', () => {
+    expect(() =>
+      assertCapturedClip({
+        ...baseClip,
+        captureMode: 'imported_video',
+        recognition: { status: 'unknown', reason: 'analysis_not_run' },
+        ballSpeed: { status: 'unavailable', reason: 'analysis_not_run' },
+        targetLock: lockedTelemetry,
+      }),
+    ).toThrow(/invalid or incomplete/i);
   });
 });

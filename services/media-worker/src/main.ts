@@ -1,13 +1,22 @@
 import pg from "pg";
 import { InMemoryJobQueue, SqsJobQueue } from "@pickle/queue";
+import { BufferedAnalytics } from "@pickle/analytics";
+import { QueueSloMonitor, DEFAULT_QUEUE_SLO_CONFIG } from "@pickle/slo";
 import { runOnce, type WorkerDeps } from "./worker.js";
+import { buildObjectDeleter } from "./objectStore.js";
 
-const databaseUrl = process.env["DATABASE_URL"];
+// Worker runtime role (DATABASE_URL_WORKER) with DATABASE_URL fallback for
+// single-credential local setups; migrations use owner credentials via the
+// @pickle/database CLI.
+const databaseUrl = process.env["DATABASE_URL_WORKER"] ?? process.env["DATABASE_URL"];
 if (!databaseUrl) {
-  console.error("DATABASE_URL required");
+  console.error("DATABASE_URL_WORKER or DATABASE_URL required");
   process.exit(1);
 }
 const sqsUrl = process.env["SQS_QUEUE_URL"];
+const analytics = new BufferedAnalytics(async (batch) => {
+  for (const event of batch) console.error(`[media-worker] analytics ${JSON.stringify(event)}`);
+});
 const deps: WorkerDeps = {
   pool: new pg.Pool({ connectionString: databaseUrl }),
   queue: sqsUrl
@@ -17,17 +26,42 @@ const deps: WorkerDeps = {
         ...(process.env["SQS_ENDPOINT"] ? { endpoint: process.env["SQS_ENDPOINT"] } : {}),
       })
     : new InMemoryJobQueue(),
-  objectStore: null, // wired to S3ObjectStore in deployment
+  // Built from configuration: without it purge and account deletion stall
+  // (the worker refuses to claim an erasure it cannot perform).
+  objectStore: buildObjectDeleter(process.env),
   transcoder: null, // ffmpeg pipeline wired in deployment image
   log: (line) => console.error(`[media-worker] ${line}`),
+  analytics,
+  sloMonitor: new QueueSloMonitor(DEFAULT_QUEUE_SLO_CONFIG),
 };
 
 const intervalMs = Number(process.env["WORKER_INTERVAL_MS"] ?? 5000);
 console.error(`[media-worker] polling every ${intervalMs}ms`);
+// Restart counting: each process start emits worker_started; the alerting
+// side counts these per unit time — a restart loop shows up as a spike.
+analytics.track({ name: "worker_started", at: new Date().toISOString(), platform: "service" });
+await analytics.flush();
 
+let crashCount = 0;
 while (true) {
-  const { jobs, deletions } = await runOnce(deps);
-  if (jobs || deletions)
-    console.error(`[media-worker] processed jobs=${jobs} deletions=${deletions}`);
+  // A transient failure (DB outage, queue unreachable) must not crash the
+  // worker process: log loudly and keep polling.
+  try {
+    const { jobs, deletions, swept, expired } = await runOnce(deps);
+    if (jobs || deletions || swept || expired)
+      console.error(
+        `[media-worker] processed jobs=${jobs} deletions=${deletions} swept=${swept} expired=${expired}`,
+      );
+  } catch (error) {
+    crashCount++;
+    console.error(`[media-worker] poll cycle failed (crash ${crashCount}): ${String(error)}`);
+    analytics.track({
+      name: "worker_crash",
+      at: new Date().toISOString(),
+      platform: "service",
+      crashCount,
+    });
+    await analytics.flush();
+  }
   await new Promise((resolve) => setTimeout(resolve, intervalMs));
 }

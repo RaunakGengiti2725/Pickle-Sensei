@@ -1,0 +1,51 @@
+{
+  "workstream": "D2-07 — Event bounds gold on under-labeled bundles",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "status": "GREEN",
+  "scope": ["wavea-marne-serve", "wavea-wgm-wheelchair", "wavea-sasebo-volleys"],
+  "measured": {
+    "bundlesLabeled": 3,
+    "recordsAdded": 12,
+    "strokeEvents": 7,
+    "explicitNonEvents": 5,
+    "contactInsideBoundsTrue": 7,
+    "contactInsideBoundsFalse": 5,
+    "strokeCountsByBundle": {
+      "wavea-marne-serve": 1,
+      "wavea-wgm-wheelchair": 1,
+      "wavea-sasebo-volleys": 5
+    },
+    "recordCountsByBundle": {
+      "wavea-marne-serve": { "events": 1, "nonEvents": 2 },
+      "wavea-wgm-wheelchair": { "events": 1, "nonEvents": 2 },
+      "wavea-sasebo-volleys": { "events": 5, "nonEvents": 1 }
+    },
+    "sourceFrameRates": {
+      "wavea-marne-serve": "60000/1001",
+      "wavea-wgm-wheelchair": "30/1",
+      "wavea-sasebo-volleys": "30000/1001"
+    },
+    "validation": {
+      "jsonInvariantCheck": "3 files, 12 records, 7 events, 5 non-events, 0 held-out references",
+      "typecheck": "pnpm typecheck exit 0"
+    }
+  },
+  "provenance": {
+    "split": "development only",
+    "frameMethod": "Every bound/contact/non-event record was reviewed on frames extracted with ffmpeg select=eq(n,IDX) using absolute CFR indexing.",
+    "rights": "All three source pages visibly state PUBLIC DOMAIN; exact work-specific DVIDS text is quoted in each annotation sidecar.",
+    "mediaSha256": {
+      "dvids-marne-outdoor": "96ae65019c30317c177191c1941225442df8d30c67b554765c13e973870fd394",
+      "dvids-warriorgames-match": "960a1a200d6d757b831a1255f1e34d08fe223a8422c25a4e87cfb91e93d0c121",
+      "afn-sasebo-dvids-reference": "aba9629c681d159e0560583865085b8bcceaaa850f9d81f5b26832a86fc90e3c",
+      "afn-sasebo-corpus-recording": "6e06a315794722c6331464526d7c6850d13449a86c5c170f614d49ce11302955"
+    },
+    "heldOutViewed": []
+  },
+  "filesAdded": [
+    "datasets/paddle-bench/bundles/wavea-marne-serve/annotation/devin-visual-v4-waveD2-events.json",
+    "datasets/paddle-bench/bundles/wavea-wgm-wheelchair/annotation/devin-visual-v4-waveD2-events.json",
+    "datasets/paddle-bench/bundles/wavea-sasebo-volleys/annotation/devin-visual-v4-waveD2-events.json",
+    "datasets/experiments/wave-d2/d2-07-event-bounds-new-summary.json"
+  ]
+}

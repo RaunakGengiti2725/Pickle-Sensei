@@ -1,0 +1,127 @@
+{
+  "workstream": "wave-c/c16-data-acquisition",
+  "date": "2026-08-29",
+  "objective": "Find NEW rights-cleared pickleball footage beyond the exhausted DVIDS/Commons pool (HANDOFF_V3 external blocker 3) and register it as label-blind fresh holdout candidates.",
+  "whatWasBuilt": "6 new rights-cleared 60-second clips (181.08 MB total, 360 s of footage) committed under datasets/pickleball/fresh-candidates/ and registered with full provenance in datasets/pickleball/registry.json as role=fresh_candidate. 4 pickleball-relevant unknown-rights items registered as quarantined (not downloaded). No labels were created for any fresh candidate.",
+  "accepted": {
+    "count": 6,
+    "totalBytes": 181080528,
+    "totalDurationSeconds": 360,
+    "format": "H.264 mp4, audio stripped, 1920x1080, 30 or 60 fps",
+    "license": "CC BY 3.0 — each source's YouTube watch page license field reads verbatim: \"Creative Commons Attribution license (reuse allowed)\", which YouTube maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468)",
+    "diversityAdded": [
+      "outdoor rec-tournament doubles (2.5 DUPR level)",
+      "outdoor public-court 4.0 doubles",
+      "outdoor 5.0 mixed doubles sanctioned tournament",
+      "night-time outdoor men's singles under lights (singles absent from existing corpus)",
+      "indoor gym doubles on portable net",
+      "indoor multi-court amateur tournament (New Zealand)"
+    ],
+    "items": [
+      {
+        "id": "yt-tJuJ4MQdYy0",
+        "url": "https://www.youtube.com/watch?v=tJuJ4MQdYy0",
+        "uploader": "Craig vs Pickleball",
+        "sha256": "34942348e22f4d43fa4ce10d1451fb085cfb42164770994c9042dd6b91b9eb8d"
+      },
+      {
+        "id": "yt-I5wYCXCL4dY",
+        "url": "https://www.youtube.com/watch?v=I5wYCXCL4dY",
+        "uploader": "Chasing Pickleballs",
+        "sha256": "c0a327452feb7ec4bf3bc805cebbef695dee7a11f8a42a3cc74f404218b0b3c7"
+      },
+      {
+        "id": "yt-hktiyFnghIw",
+        "url": "https://www.youtube.com/watch?v=hktiyFnghIw",
+        "uploader": "pickleball4you",
+        "sha256": "f24520258593d7d11effd4b8655d108b42f1878aff0281f2fe60ae7af4715a88"
+      },
+      {
+        "id": "yt-Y7DOO0j_1P4",
+        "url": "https://www.youtube.com/watch?v=Y7DOO0j_1P4",
+        "uploader": "pickleball4you",
+        "sha256": "33949eb30efdf59b65389cf5b3dcbadefd77a855ff654a1a63ee896d32f6a6e5"
+      },
+      {
+        "id": "yt-iuVdtmGoTbo",
+        "url": "https://www.youtube.com/watch?v=iuVdtmGoTbo",
+        "uploader": "Sigal Pickleball",
+        "sha256": "c1a5391109fb32581419cf082c97839de3b638afd58fc8ac558035947ba12c0d"
+      },
+      {
+        "id": "yt-eK-iPN2XAJQ",
+        "url": "https://www.youtube.com/watch?v=eK-iPN2XAJQ",
+        "uploader": "Sandy Austin",
+        "sha256": "fca94767321a0c6f302db8b34b1b64c798b840613baa493d29feb3eb4c941468"
+      }
+    ],
+    "visualVerification": "One frame extracted from every trimmed clip and inspected: all six show live pickleball play (courts, paddles, ball in flight)."
+  },
+  "searchLog": [
+    {
+      "source": "DVIDS (dvidshub.net)",
+      "queries": [
+        "pickleball",
+        "paddle sport",
+        "paddle court",
+        "morale recreation sports",
+        "MWR tournament",
+        "fitness center tournament",
+        "base recreation"
+      ],
+      "result": "The 16 pickleball videos already in datasets/corpus/sources.json are the complete DVIDS pickleball inventory; the broader queries returned paddlecraft/boating and generic fitness footage with no pickleball content. 0 new usable items — blocker 3 confirmed."
+    },
+    {
+      "source": "Wikimedia Commons video namespace",
+      "queries": [
+        "pickleball filetype:video",
+        "pickle-ball filetype:video",
+        "paddle court game filetype:video"
+      ],
+      "result": "4 files returned, all 4 already registered in datasets/corpus (AFN Sigonella/Vicenza, Sasebo, Pickleball game.webm). 0 new."
+    },
+    {
+      "source": "Internet Archive (advancedsearch, mediatype:movies)",
+      "queries": ["pickleball"],
+      "result": "2,403 hits, overwhelmingly municipal meeting/news TV. Pickleball-relevant gameplay items carry no licenseurl (rights unknown) or CC BY-NC-SA (noncommercial). 0 accepted; 4 registered as quarantined_not_downloaded / excluded_noncommercial."
+    },
+    {
+      "source": "NARA catalog API",
+      "queries": ["pickleball"],
+      "result": "API/proxy returned inconsistent non-JSON responses in several calls; retrievable results contained no pickleball motion footage. 0 accepted."
+    },
+    {
+      "source": "Library of Congress",
+      "queries": ["pickleball (video)"],
+      "result": "No downloadable pickleball video holdings found. 0 accepted."
+    },
+    {
+      "source": "State/local government portals + stock portals (Pexels, Pixabay, Coverr)",
+      "queries": ["pickleball"],
+      "result": "Pexels and Pixabay blocked scripted access with Cloudflare 403; Coverr API rejected access (Invalid API_KEY); no verifiable direct license path. 0 accepted — a platform 'free' label without a readable per-item license page was not treated as clearance."
+    },
+    {
+      "source": "YouTube Creative Commons filter",
+      "queries": ["pickleball creativecommons"],
+      "result": "6 relevant CC BY videos from 5 personal channels verified (license field read from each watch page) and accepted as 60 s trimmed clips."
+    }
+  ],
+  "honestNegatives": [
+    "DVIDS is genuinely exhausted for pickleball: expanded base/event/year queries surfaced zero new pickleball videos.",
+    "Wikimedia Commons holds exactly the 4 pickleball videos already in the corpus.",
+    "No U.S. federal (NARA/LOC) pickleball motion footage was found, so no new public-domain-by-statute source exists.",
+    "The 6 accepted clips rely on uploader-declared CC BY 3.0. The license text was verified on each watch page and the channels are personal channels publishing self-recorded games, but uploader rights-holder authority is assessed from channel context, not independently confirmed. This caveat is recorded verbatim in each registry entry's restrictions.",
+    "The clips are 1080p re-encodes (libx264 crf20); one source is 1440p but only the 1080p stream was retrieved.",
+    "No stroke labels exist for any fresh candidate and none may be created before a future freeze (label-blind holdout policy)."
+  ],
+  "remainsBlocked": [
+    "Public-domain (rights-caveat-free) new footage remains unavailable: every federal/PD channel is exhausted, so any further growth needs either first-party consent-first collection (datasets/pickleball/collection_manifest.schema.json) or acceptance of uploader-declared CC licenses with the recorded caveat.",
+    "Fresh candidates are intentionally NOT imported into datasets/corpus (no split assignment, no mining) — that import belongs to the future holdout freeze owned by the integrator."
+  ],
+  "filesTouched": [
+    "datasets/pickleball/registry.json (added freshCandidates + quarantinedUnknownRights sections)",
+    "datasets/pickleball/fresh-candidates/*.mp4 (6 clips, 181.08 MB)",
+    "datasets/experiments/wave-c/c16-data-acquisition-summary.json"
+  ],
+  "codeTouched": "none — no package code modified, so no typecheck/test surface changed"
+}

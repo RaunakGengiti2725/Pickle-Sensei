@@ -21,6 +21,14 @@ const scorerEntry = (overrides: Partial<ModelManifestEntry>): ModelManifestEntry
   artifactUri: null,
   trainingDatasetVersion: null,
   evaluationDatasetVersion: null,
+  commit: null,
+  splits: null,
+  metrics: null,
+  supportedCaptureEnvelope: null,
+  calibrationVersion: null,
+  runtimeRequirements: [],
+  promotionDate: null,
+  rollbackPredecessor: null,
   license: null,
   notes: "",
   ...overrides,
@@ -56,7 +64,7 @@ describe("ModelRegistry", () => {
     const registry = new ModelRegistry(DEFAULT_MODEL_MANIFEST);
     const entry = registry.resolve({ task: "stroke_classification", platform: "ios" });
     expect(entry?.id).toBe("stroke.heuristic-hierarchical");
-    expect(entry?.version).toBe("stroke-heuristic-1");
+    expect(entry?.version).toBe("stroke-heuristic-7");
     expect(entry?.runtime).toBe("deterministic");
     // The notes must keep the honesty ceiling explicit: no L3 without bounce.
     expect(entry?.notes).toContain("L3 needs bounce observation");
@@ -104,6 +112,139 @@ describe("ModelRegistry", () => {
     expect(registry.shadowFor({ task: "technique_scoring", platform: "ios" })?.id).toBe(
       "scorer.candidate",
     );
+  });
+
+  it("registers every named production pipeline component with a concrete version", () => {
+    const registry = new ModelRegistry(DEFAULT_MODEL_MANIFEST);
+    const expected: Array<[Parameters<ModelRegistry["resolve"]>[0]["task"], string, string]> = [
+      ["target_player_tracking", "server", "player-track-1"],
+      ["stroke_event_detection", "server", "stroke-event-1"],
+      ["paddle_detection", "server", "dfine-medium-coco@transformers"],
+      ["paddle_tracking", "server", "paddle-track-2"],
+      ["paddle_ownership", "server", "paddle-track-2"],
+      ["paddle_selection", "server", "paddle-track-2"],
+      ["paddle_track_merge", "server", "paddle-track-2"],
+      ["ball_detection", "server", "ball-candidate-gate-1"],
+      ["ball_tracking", "server", "ball-track-2"],
+      ["contact_estimation", "server", "contact-evidence-4.4"],
+      ["phase_segmentation", "ios", "phase-geometry-1"],
+      ["stroke_classification", "ios", "stroke-heuristic-7"],
+      ["stroke_auto_resolution", "ios", "fusion-1"],
+      ["capture_completion", "ios", "capture-completion-params-v1"],
+    ];
+    for (const [task, platform, version] of expected) {
+      const entry = registry.resolve({ task, platform: platform as "ios" | "server" });
+      expect(entry, `no production entry for ${task}`).not.toBeNull();
+      expect(entry!.version).toBe(version);
+    }
+  });
+
+  it("keeps flag-gated ownership components out of production", () => {
+    // ownership-guard-v1 and ownership-posterior-v1 are OFF by default in
+    // the shipping pipeline; the registry must say candidate, not production.
+    const registry = new ModelRegistry(DEFAULT_MODEL_MANIFEST);
+    expect(registry.byId("paddle.ownership-guard", "ownership-guard-v1")?.deploymentStatus).toBe(
+      "candidate",
+    );
+    expect(
+      registry.byId("contact.ownership-posterior", "ownership-posterior-v1")?.deploymentStatus,
+    ).toBe("candidate");
+  });
+
+  it("seeds no fabricated lineage: no metrics, splits, or calibration without a real dataset", () => {
+    for (const entry of DEFAULT_MODEL_MANIFEST.entries) {
+      expect(entry.metrics, `${entry.id}@${entry.version} claims metrics`).toBeNull();
+      expect(entry.splits, `${entry.id}@${entry.version} claims splits`).toBeNull();
+      expect(
+        entry.calibrationVersion,
+        `${entry.id}@${entry.version} claims calibration`,
+      ).toBeNull();
+      expect(
+        entry.promotionDate,
+        `${entry.id}@${entry.version} claims an unrecorded promotion date`,
+      ).toBeNull();
+    }
+  });
+
+  it("forbids anonymous version aliases", () => {
+    for (const alias of ["latest", "LATEST", "current", "head", ""]) {
+      expect(
+        () =>
+          new ModelRegistry({
+            schemaVersion: 1,
+            entries: [scorerEntry({ id: "scorer.alias", version: alias })],
+          }),
+        `alias "${alias}" was accepted`,
+      ).toThrow(/version alias/);
+    }
+  });
+
+  it("byId requires an explicit version — there is no anonymous latest", () => {
+    const registry = new ModelRegistry(DEFAULT_MODEL_MANIFEST);
+    expect(registry.byId("scorer.sm-v1", "sm-v1")?.task).toBe("technique_scoring");
+    expect(registry.byId("scorer.sm-v1", "latest")).toBeNull();
+    expect(registry.byId("scorer.sm-v1", "")).toBeNull();
+  });
+
+  it("registered artifacts are immutable — no in-place overwrite, ever", () => {
+    const registry = new ModelRegistry({ schemaVersion: 1, entries: [scorerEntry({})] });
+    // Overwriting with DIFFERENT content is rejected.
+    expect(() => registry.withEntry(scorerEntry({ notes: "silently retuned" }))).toThrow(
+      /immutable/,
+    );
+    // Overwriting with IDENTICAL content is rejected too: re-registration
+    // is always a version bump, never a rewrite.
+    expect(() => registry.withEntry(scorerEntry({}))).toThrow(/immutable/);
+    // Appending a NEW version returns a new registry; the original is untouched.
+    const next = registry.withEntry(scorerEntry({ version: "sm-v2" }));
+    expect(next.byId("scorer.sm-v1", "sm-v2")).not.toBeNull();
+    expect(registry.byId("scorer.sm-v1", "sm-v2")).toBeNull();
+  });
+
+  it("validates rollback predecessors against the manifest", () => {
+    expect(
+      () =>
+        new ModelRegistry({
+          schemaVersion: 1,
+          entries: [scorerEntry({ rollbackPredecessor: "scorer.sm-v0@sm-v0" })],
+        }),
+    ).toThrow(/not registered/);
+    expect(
+      () =>
+        new ModelRegistry({
+          schemaVersion: 1,
+          entries: [scorerEntry({ rollbackPredecessor: "scorer.sm-v1@sm-v1" })],
+        }),
+    ).toThrow(/own rollback predecessor/);
+    // The default manifest's only rollback edge points at a registered entry.
+    const registry = new ModelRegistry(DEFAULT_MODEL_MANIFEST);
+    const v7 = registry.byId("stroke.heuristic-hierarchical", "stroke-heuristic-7");
+    expect(v7?.rollbackPredecessor).toBe("stroke.heuristic-hierarchical@stroke-heuristic-5");
+    expect(
+      registry.byId("stroke.heuristic-hierarchical", "stroke-heuristic-5")?.deploymentStatus,
+    ).toBe("deprecated");
+  });
+
+  it("couples splits to a training dataset and metrics to an eval dataset", () => {
+    expect(
+      () =>
+        new ModelRegistry({
+          schemaVersion: 1,
+          entries: [
+            scorerEntry({
+              splits: { train: "t", validation: "v", test: "x" },
+              trainingDatasetVersion: null,
+            }),
+          ],
+        }),
+    ).toThrow(/training dataset/);
+    expect(
+      () =>
+        new ModelRegistry({
+          schemaVersion: 1,
+          entries: [scorerEntry({ metrics: { accuracy: 0.9 }, evaluationDatasetVersion: null })],
+        }),
+    ).toThrow(/evaluation dataset/);
   });
 
   it("rejects malformed manifests", () => {

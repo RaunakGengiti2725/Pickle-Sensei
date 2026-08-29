@@ -183,7 +183,11 @@ export function dominantWristSpeeds(
     right: [],
   };
   const travel = { left: 0, right: 0 };
-  const last: Record<string, { x: number; y: number } | undefined> = {};
+  // Velocity is displacement over the gap between consecutive OBSERVATIONS of
+  // the same wrist. A gap longer than 150ms yields no sample (the velocity
+  // across it is unreliable) but the series resumes at the next consecutive
+  // observation pair — a visibility dropout never truncates the series.
+  const last: Record<string, { x: number; y: number; timestampMs: number } | undefined> = {};
   for (const frame of frames) {
     for (const side of ["left", "right"] as const) {
       const mark = frame.landmarks.find(
@@ -192,17 +196,14 @@ export function dominantWristSpeeds(
       if (!mark) continue;
       const prior = last[side];
       if (prior) {
-        const previousSample = perWrist[side][perWrist[side].length - 1];
-        const dtSec = previousSample
-          ? (frame.timestampMs - previousSample.timestampMs) / 1000
-          : 0.04;
+        const dtSec = (frame.timestampMs - prior.timestampMs) / 1000;
         const step = Math.hypot(mark.x - prior.x, mark.y - prior.y);
         if (dtSec > 0 && dtSec <= 0.15) {
           perWrist[side].push({ timestampMs: frame.timestampMs, value: step / dtSec });
           travel[side] += step;
         }
       }
-      last[side] = { x: mark.x, y: mark.y };
+      last[side] = { x: mark.x, y: mark.y, timestampMs: frame.timestampMs };
     }
   }
   return travel.right >= travel.left ? perWrist.right : perWrist.left;

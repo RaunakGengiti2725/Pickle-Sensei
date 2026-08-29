@@ -22,9 +22,19 @@ export {
   type CaptureQualityReport,
 } from "./captureQuality.js";
 export {
+  evaluateFrameAnalyzability,
+  FRAME_ANALYZABILITY_REASONS,
+  FRAME_ANALYZABILITY_VERSION,
+  FRAME_THRESHOLDS,
+  type FrameAnalyzabilityReport,
+  type FrameStats,
+} from "./frameAnalyzability.js";
+export {
   detectOfflineStrokeWindow,
   estimateContact,
+  paddleOwnershipFromHandAffinity,
   CONTACT_ESTIMATOR_VERSION,
+  CONTACT_OWNERSHIP_POSTERIOR_VERSION,
   OFFLINE_TRIGGER_VERSION,
   type ContactDistributionPoint,
   type ContactEstimate,
@@ -33,6 +43,16 @@ export {
   type OfflineStrokeWindow,
   type StrokeFamily,
 } from "./offlineStroke.js";
+export {
+  assessPaddleTrackIdentity,
+  IDENTITY,
+  PADDLE_TRACK_IDENTITY_VERSION,
+  type PaddleIdentityVerdict,
+  type PaddleTrackIdentityAssessment,
+  type PaddleTrackIdentityEvidence,
+  type PaddleTrackIdentityInput,
+  type TimedPoint,
+} from "./paddleTrackIdentity.js";
 export {
   classifyStroke,
   STROKE_HEURISTIC_VERSION,

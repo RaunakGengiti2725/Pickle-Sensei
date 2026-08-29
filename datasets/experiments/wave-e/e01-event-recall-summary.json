@@ -1,0 +1,82 @@
+{
+  "workstream": "e01-event-recall",
+  "wave": "wave-e",
+  "generatedAtIso": "2026-08-29T10:00:00.000Z",
+  "branch": "devin/wave-e/e01-event-recall",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "codeCommit": "e0005c5",
+  "mission": "raise event detection recall/bounds honestly, smallest defensible fix per known failure, no threshold hacks without forensic justification",
+  "datasetScope": {
+    "cases": "all DEV replayable cases from datasets/paddle-bench/paddle-bench.json + datasets/paddle-bench/event-bounds-wave-a.json (windowed wave-a people.json runDirs plus the W6 replay-validated rally1 fixture)",
+    "goldTargetEvents": 16,
+    "heldOutExcluded": ["wm-dink-01", "afn-vic-rally1"],
+    "grouping": "per independent source video/session; no random-frame splits; held-out cases never viewed or replayed",
+    "nonEventSpans": 5
+  },
+  "forensicBasis": {
+    "d06Oracle": "datasets/experiments/wave-d/d06-summary.json — 0 proven EVENT_LOGIC failures; 3 WRIST_SIGNAL_QUALITY (in-span smoothed wrist peaks 0.31-0.46, under the 0.5 proposal floor), 1 CONTACT_ANCHOR_ABSENT, 3 UNATTRIBUTABLE_HERE",
+    "measuredPeaks": {
+      "wavea-944403-smash#2": { "inSpanSmoothedPeak": 0.463, "localProminence": 4.11 },
+      "wavea-sasebo-volleys#1": { "inSpanSmoothedPeak": 0.31, "localProminence": 2.08 },
+      "wavea-sasebo-volleys#5": { "inSpanSmoothedPeak": 0.344, "localProminence": 2.51 }
+    },
+    "minProminenceProvenance": "minProminence 4 is the pre-existing miner boundary ('is this a stroke at all?', packages/swing-lab/src/mineVideo.ts) — not a new tuned value"
+  },
+  "change": {
+    "file": "packages/swing-lab/src/strokeEvents.ts",
+    "description": "Additive low-amplitude tier (wrist source only): local maxima below the tier-1 floor are admitted only if smoothed peak >= 0.3 AND local prominence >= 4 AND no overlap with any tier-1 proposal. Tier-1 output is never altered. Admitted proposals carry lowAmplitude: true and a -0.15 confidence penalty so downstream consumers see the weaker evidence.",
+    "gates": { "minPeakSpeed": 0.3, "minProminence": 4, "confidencePenalty": 0.15 },
+    "contractVersioning": "existing tier-1 gates (EVENT_GATES) untouched; new tier is a separate, flagged, penalized proposal class rather than a softened threshold"
+  },
+  "metrics": {
+    "criterion": "PROPOSED_OK = best proposal overlap >= 0.5 of gold OR gold contact inside proposal +/-60ms (D06 oracle / cascade criterion)",
+    "before": {
+      "goldTargetEvents": 16,
+      "proposedOk": 11,
+      "misBounded": 1,
+      "missed": 4,
+      "recall": 0.688,
+      "meanBestOverlapOfProposedOk": 0.825,
+      "contactInsideRate": 1.0,
+      "contactInsideDenominator": 11,
+      "totalProposals": 9,
+      "falseInNonEvent": 0,
+      "unmatchedProposals": 0
+    },
+    "after": {
+      "goldTargetEvents": 16,
+      "proposedOk": 12,
+      "misBounded": 1,
+      "missed": 3,
+      "recall": 0.75,
+      "meanBestOverlapOfProposedOk": 0.839,
+      "contactInsideRate": 1.0,
+      "contactInsideDenominator": 12,
+      "totalProposals": 10,
+      "lowAmplitudeProposals": 1,
+      "falseInNonEvent": 0,
+      "unmatchedProposals": 0
+    },
+    "recovered": ["wavea-944403-smash#2 (overlap 1.0, contact inside, low-amplitude tier)"],
+    "oracleAfter": "WRIST_SIGNAL_QUALITY 3 -> 2; successful proposals 14 -> 15 of 21 gold (full corpus incl. non-replayable); see e01-oracle-after.json"
+  },
+  "provenNegatives": {
+    "notRecovered": ["wavea-sasebo-volleys#1", "wavea-sasebo-volleys#5"],
+    "reason": "measured local prominence 2.08 / 2.51 is below the miner stroke boundary (4); admitting them would require lowering the only forensic anchor available and, per D06, these are perception/signal-quality failures, not proven event-logic failures. Left as honest misses rather than tuning the gate to the failures.",
+    "misBoundedRemaining": "wavea-sasebo-volleys#1 remains MIS_BOUNDED (overlap 0.37): the adjacent tier-1 proposal spans it partially; fixing bounds there would require re-cutting a tier-1 event without forensic support"
+  },
+  "falseProposalDisclosure": "labeled non-event spans reach smoothed speeds up to 1.785, so the 0.3 floor alone would NOT be safe; safety comes from the prominence gate, measured as 0 proposals inside the 5 explicit non-event spans and 0 unmatched proposals before and after",
+  "artifacts": [
+    "datasets/experiments/wave-e/e01-event-recall-baseline.json",
+    "datasets/experiments/wave-e/e01-event-recall-after.json",
+    "datasets/experiments/wave-e/e01-oracle-after.json",
+    "packages/swing-lab/src/eventRecallBench.ts (replayable bench: pnpm --filter @pickle/swing-lab exec tsx src/eventRecallBench.ts)"
+  ],
+  "gates": {
+    "pnpm typecheck": "pass",
+    "pnpm lint": "pass",
+    "pnpm format:check": "pass",
+    "pnpm test": "pass (root, all packages)",
+    "swing-lab tests": "462 passed | 4 skipped (incl. 3 new low-amplitude tier tests)"
+  }
+}

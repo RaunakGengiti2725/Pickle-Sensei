@@ -1,0 +1,133 @@
+{
+  "id": "h22-perf-cert",
+  "gate": "GATE 13 (performance) — MANDATORY",
+  "wave": "H (final production certification)",
+  "createdAtIso": "2026-08-29T21:05:00Z",
+  "rcCommit": "104ea0f6383f5573ddc9393401700c7ecc163436",
+  "baselinePreIntegrationCommit": "52ba173ea6884f400d73448950e85c51635b31e2",
+  "branch": "devin/wave-h/h22-perf-cert",
+  "method": {
+    "platform": "Linux-5.15.200-x86_64-with-glibc2.35, 8x Intel Xeon Platinum 8559C, ~31GB RAM, CPU-only (torch 2.13.0+cpu), Node v20.18.1, Python 3.10.12, ffmpeg 4.4.2",
+    "boundary": "LINUX CPU PROXY ONLY. These are movement-complete→result-interactive PROXY latencies for the analyze pipeline run with --reuse-extract (pose/people/ball/extract metadata pre-generated and held constant); they are NEVER device (iPhone/Mac/Apple Vision) numbers and no device claim is made or implied. No accuracy/cascade claims are derived from these runs. Frames are never counted as independent trials; every distribution below is grouped per clip and pooled across the two committed dev clips.",
+    "clips": ["wm-volley-02", "afn-sasebo-rally1"],
+    "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"],
+    "coldDefinition": "page cache dropped via /proc/sys/vm/drop_caches=3 before each run; fresh process (python import + model load included)",
+    "warmDefinition": "page cache warm, fresh process per run (worker model-load included in run wall; warm-worker request cost measured separately in the soak)",
+    "tools": [
+      "tools/latency-bench/bench_h22.py (new; cold/warm distributions, per-stage medians, max-RSS via /usr/bin/time -v, Try Again series, least-squares latency/RSS slopes)",
+      "tools/paddle-lab/bench_decode.py (decode-only)",
+      "packages/swing-lab/src/paddleWorkerSoak.ts (worker startup/warm/restart/concurrency/memory)",
+      "packages/swing-lab/src/sessionSchedulerSim.ts (scheduling incl. new long-session-backlog scenario)"
+    ],
+    "artifacts": [
+      "datasets/experiments/wave-h/h22-bench-results.json",
+      "datasets/experiments/wave-h/h22-decode-bench.json",
+      "datasets/experiments/wave-h/h22-scheduler-sim.json",
+      "datasets/experiments/wave-h/h22-worker-soak-prefix.json",
+      "datasets/experiments/wave-h/h22-worker-soak-postfix.json"
+    ],
+    "baselinesConsumed": [
+      "datasets/experiments/wave-e/e17-latency-e2e-summary.json (96-run E2E bench, same-machine-class Linux CPU)",
+      "datasets/experiments/wave-e/e18-warm-worker-soak-summary.json (200-request sequential soak)",
+      "datasets/experiments/wave-f/f25-two-pass-verdict-summary.json"
+    ],
+    "waveG_g23": "NOT FOUND: no g23 branch or artifact exists on the remote (searched origin branches and datasets/experiments). Comparison is therefore against committed Wave E/F artifacts plus a fresh same-machine rerun of the pre-integration baseline (origin/main 52ba173) as a worktree arm."
+  },
+  "measured": {
+    "latencyVsTargets": {
+      "targetsMs": { "ideal": 2000, "strong": 3000, "max": 5000 },
+      "warm_rc_pooled_wallMs": { "n": 16, "p50": 16172.8, "p90": 42130.3, "p95": 55152.2, "min": 14162.2, "max": 55152.2 },
+      "warm_baseline_pooled_wallMs": { "n": 16, "p50": 20323.2, "p90": 45127.9, "p95": 49855.7, "min": 14131.2, "max": 49855.7 },
+      "cold_rc_pooled_wallMs": { "n": 6, "p50": 47884.7, "p90": 65826.5, "p95": 65826.5, "min": 24567.9, "max": 65826.5 },
+      "cold_baseline_pooled_wallMs": { "n": 6, "p50": 61650.9, "p90": 74058.7, "p95": 74058.7, "min": 29324.5, "max": 74058.7 },
+      "verdictOnThisProxy": "Warm P50 16.2s and cold P50 47.9s both exceed the 5s max target by >3x on this Linux CPU proxy. No RC regression vs the same-machine pre-integration baseline (warm pooled P50 improved 20.3s -> 16.2s; cold improved 61.7s -> 47.9s); absolute numbers are dominated by CPU-only D-FINE paddle detection and are NOT device numbers. Whether the shipping device meets <=5s cannot be measured here (no iPhone/Mac available)."
+    },
+    "perStageMedianMs_rc_warm_pooled": {
+      "paddleDetectMs": 15446.0,
+      "ballCandidatesMs": 1464.0,
+      "ballTrackMs": 74.0,
+      "playerTrackMs": 3.0,
+      "poseDerivativesMs": 2.0,
+      "eventPrePassMs": 1.0,
+      "paddleTrackMs": 14.0,
+      "eventIsolationMs": 0.0,
+      "fusionAnalysisMs": 22.0,
+      "note": "paddle detection is >90% of pipeline wall on CPU. Pose is consumed from pre-generated artifacts under --reuse-extract (held constant by design); serialization/artifact-write and clip extraction are sub-second and folded into wall-vs-stage-sum residual. Decode measured separately below."
+    },
+    "decodeOnly": {
+      "tool": "tools/paddle-lab/bench_decode.py (5 runs/scenario, content-digest verified)",
+      "medianWallSec": {
+        "wm-volley-02_full_stride1": 0.6463,
+        "wm-volley-02_midwindow_stride3": 0.2054,
+        "afn-sasebo-rally1_full_stride1": 0.8204,
+        "afn-sasebo-rally1_midwindow_stride3": 0.2923
+      },
+      "note": "decode is never the bottleneck (<1s full-clip)."
+    },
+    "workerStartupAndWarm": {
+      "modelLoadSec": 0.464,
+      "warmupSec": 0.178,
+      "warmWorkerSequential": "100/100 requests ok, ~0.8s/request mean over 82.6s (real-sequential phase, post-fix soak)"
+    },
+    "tryAgainStress": {
+      "attemptsPerClip": 12,
+      "ok": "12/12 on both clips (24/24 total)",
+      "latencySlopeMsPerAttempt": { "wm-volley-02": -836.0, "afn-sasebo-rally1": -332.8 },
+      "rssSlopeKbPerAttempt": { "wm-volley-02": 564.2, "afn-sasebo-rally1": -394.9 },
+      "verdict": "no degrading latency across repeated attempts (slopes <= 0); RSS slopes are small and mixed-sign (noise), max RSS bounded ~740-812MB across all 24 attempts — no unbounded growth."
+    },
+    "longSessionBacklog": {
+      "scenario": "new long-session-backlog scenario in sessionSchedulerSim: 120 strokes @1.5s apart vs 2.5-3.5s simulated analyses, concurrency 1, maxAttempts 2 (sustained overload for the whole session)",
+      "results": { "closedEvents": 120, "violations": 0, "maxQueueDepth": 10, "queueWaitStreamMs": { "n": 120, "p50": 7540, "p95": 25140, "max": 26440 }, "outcomes": { "ready": 104, "abstained": 15, "retry_exhausted": 1 } },
+      "allScenariosCorrect": true,
+      "note": "scheduling correctness holds under sustained backlog (all events reach terminal-or-honest-pending, FIFO first attempts, no duplicate dispatch); queue-wait grows with the modeled service time as expected and drains, no runaway."
+    },
+    "memoryGrowth": {
+      "warmWorkerSoak100Sequential": { "workerRssFirstKb": 730740, "workerRssLastKb": 700212, "workerSlopeKbPerRequest": -147.7, "clientSlopeKbPerRequest": -30.0 },
+      "pipelineMaxRssKb_rc_warm_pooled": { "n": 16, "p50": 767364, "p95": 803236, "max": 803236 },
+      "verdict": "no monotonic worker or client RSS growth over 100 real requests; pipeline max RSS bounded and comparable to baseline (744MB p50 baseline vs 767MB p50 RC)."
+    },
+    "workerRestart": {
+      "realCrashRestart": "post-fix soak: worker SIGKILLed mid-run, supervisor respawned it, subsequent requests served (2/3 ok — the killed in-flight request correctly rejects and falls back one-shot)",
+      "fakeCrashRestart": "196/200 ok with 2 injected crashes (crashed windows fall back one-shot, never partial artifacts)"
+    },
+    "concurrencySoak": {
+      "preFix": "real-concurrent 19/40 ok: one queued request never answered, timed out after the 1800s request timeout, worker SIGKILLed, all remaining requests failed (datasets/experiments/wave-h/h22-worker-soak-prefix.json)",
+      "reproduction": "deterministic: 15 rounds x 4 concurrent real requests -> 7/60 ok pre-fix, 60/60 ok post-fix",
+      "postFix": "real-concurrent 40/40 ok, fake-concurrent 400/400 ok (datasets/experiments/wave-h/h22-worker-soak-postfix.json)"
+    }
+  },
+  "findings": {
+    "p0": [],
+    "p1": [
+      {
+        "id": "H22-P1-1",
+        "status": "FIXED",
+        "title": "Serve-mode paddle worker loses queued requests under concurrency: ffmpeg inherits the worker's stdin and swallows JSONL request lines",
+        "rootCause": "detect_paddle.py spawned ffmpeg via subprocess.Popen(stdout=PIPE) without detaching stdin. ffmpeg reads its inherited stdin for interactive key commands, so any request line queued on the worker's stdin while a decode is running can be consumed by ffmpeg instead of the serve loop. That request never gets a response, times out after requestTimeoutMs (default 30min), the client kills the worker, and every queued/subsequent request in the session fails. Sequential use never has queued bytes during a decode, which is why the e18 sequential soak (200/200) never caught it.",
+        "impact": "Session instability under concurrent/queued analysis (Try Again spam, multi-event sessions): observed 19/40 then 7/60 request survival with a 30-minute stall before total worker loss.",
+        "fix": "stdin=subprocess.DEVNULL on both ffmpeg Popen sites in tools/paddle-lab/detect_paddle.py",
+        "regressionTest": "packages/swing-lab/test/paddleWorker.test.ts — 'every subprocess.Popen in detect_paddle.py detaches stdin' (source contract), plus post-fix soak evidence 40/40 and repro 60/60",
+        "verification": "pre-fix repro 7/60 ok -> post-fix 60/60 ok; full soak real-concurrent 19/40 -> 40/40"
+      },
+      {
+        "id": "H22-P1-2",
+        "status": "UNRESOLVED (external hardware required to adjudicate)",
+        "title": "Movement-complete→result-interactive proxy latency far exceeds targets on Linux CPU (warm P50 16.2s vs <=5s max)",
+        "detail": "On this Linux CPU-only proxy the pipeline cannot meet the 2/3/5s bands; paddle detection (D-FINE on CPU) is >90% of wall. This matches the recorded Wave E e17 profile (warm P50 ~15.6s same machine class) — it is a known CPU-proxy property, NOT a new RC regression (RC is faster than the pre-integration baseline on the same machine: warm pooled P50 20.3s -> 16.2s). Whether shipping devices (iPhone ANE / Apple Vision path) meet the targets is unmeasurable here; no honest Linux fix exists because the dominant cost is the detector model on CPU.",
+        "disposition": "Cannot be closed internally: requires on-device measurement (external hardware). Recorded as unresolved rather than softened."
+      }
+    ],
+    "p2": [
+      {
+        "id": "H22-P2-1",
+        "status": "OPEN",
+        "title": "Cold start adds ~30s+ over warm on Linux (page-cache-dropped P50 47.9s vs warm 16.2s), dominated by python import + torch/model load and cold file reads",
+        "note": "device cold start will differ; recorded for completeness"
+      }
+    ]
+  },
+  "verdict": "FAIL",
+  "verdictRationale": "Honest gate reading: the mandatory latency targets (<=5s max) are not met on the only platform we can measure (Linux CPU proxy: warm P50 16.2s, P95 55.2s, n=16 pooled over 2 clips; cold P50 47.9s, n=6). There is NO RC regression versus the same-machine pre-integration baseline (RC is faster cold and warm), no degrading Try Again latency (negative slopes over 12 attempts/clip), no unbounded memory growth (bounded max RSS; negative worker RSS slope over 100 requests), scheduling stays correct under sustained 120-stroke backlog, and worker restart works. One P1 Session-stability release blocker (concurrent request loss via ffmpeg stdin inheritance) was found, root-caused, fixed, and regression-tested. The gate cannot honestly be marked PASS on measured evidence, and it is not purely BLOCKED_EXTERNAL because the Linux measurement itself is valid and fails the stated bands; device-side adjudication (iPhone/Mac) remains externally blocked and could overturn the latency finding but no such evidence exists.",
+  "honesty": "No device numbers claimed or implied. Held-out cases untouched. No thresholds, denominators, or assertions weakened; the pre-fix failing soak artifact is committed alongside the post-fix one. Wave G g23 artifacts do not exist on the remote and are disclosed as missing rather than substituted."
+}

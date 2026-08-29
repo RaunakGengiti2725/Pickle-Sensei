@@ -1,0 +1,1389 @@
+{
+  "meta": {
+    "workstreamId": "g16-gen-matrix",
+    "title": "GENERALIZATION_MATRIX: subsystem x slice coverage/success/abstention/silent-failure with counts",
+    "commit": "104ea0f6383f5573ddc9393401700c7ecc163436",
+    "generatedBy": "datasets/experiments/wave-g/g16-build-matrix.py",
+    "environment": "Linux Ubuntu, Node 20.18.1, pnpm 10.15.1, LINUX-CPU (no Apple Vision, no Mac, no iPhone)",
+    "holdoutStatement": "Held-out cases wm-dink-01 and afn-vic-rally1 were never read; every row derived from them (in committed Mac artifacts and c12) was excluded by caseId before any metric was computed. The fresh-candidate pool was untouched.",
+    "measurementBoundary": "TARGET and PADDLE(detector) tables reuse COMMITTED Mac artifacts (not re-run); EVENT/OWNERSHIP/BALL/CONTACT/PHASE/STROKE were re-replayed on Linux at this commit; CAPTURE_ENVELOPE reuses committed wave-c measurements; AUTO_DETECT has no replayable measured data. Nothing here is the canonical Mac strict cascade; cross-stage survival conditioning is NOT measured.",
+    "sliceDimensionsAvailable": [
+      "source",
+      "session",
+      "bundle/case",
+      "owner (target vs other player attribution)",
+      "stroke family (contact/stroke gold)",
+      "occlusion bucket (ball)",
+      "hard-slice type (ball)",
+      "difficulty bucket (ownership: clean/dark_on_dark/blur/net_post_occlusion/multi_paddle/edge_on)",
+      "situation tags (TA: multi_player, ...)",
+      "camera position (registry-backed bundles only)"
+    ],
+    "sliceDimensionsNotAvailable": {
+      "player identity": "no cross-bundle player IDs exist; 'owner' (target/other) is the only player-level split",
+      "player apparent scale": "pose-derived pixel height is Mac-only (c12 reports it NOT_MEASURED); free-text registry descriptions were not converted into invented categories",
+      "lighting": "only free-text registry/annotation descriptions; no committed categorical labels",
+      "number of players": "free-text only",
+      "paddle visibility / ball visibility as capture-level slices": "free-text registry descriptions only; frame-level visibility IS covered via ball occlusion buckets and paddle visibleFrames counts"
+    },
+    "noPercentagesWithoutCounts": "every rate in this artifact is accompanied by its numerator and denominator counts"
+  },
+  "subsystems": {
+    "TARGET": {
+      "provenance": "COMMITTED Mac ta-bench replay (ta-bench-1787969692752.json, shipped D-027 variant, 2026-08-29); NOT re-run on Linux (run dirs absent \u2014 f16 TARGET coverage proof).",
+      "harness": "ta-replay-2, scope: 54 verified dev cases (locked_test excluded by the bench; held-out bundles not part of ta-bench)",
+      "grouping": "independent unit = recordingId/sessionKey; slices join datasets/ta-bench/cases.json",
+      "overall": {
+        "n": 54,
+        "success_lockCorrect": 37,
+        "coverage_locked": 54,
+        "abstention_noLock": 0,
+        "silentFailure_lockedWrong": 17
+      },
+      "calibration": "TA ECE .121 (n=12, agreement proxy, wave-c/c11-coverage-risk.json \u2014 proxy, not true-label calibration)",
+      "slices": [
+        {
+          "dimension": "session",
+          "slice": "afn-sasebo-2025-06",
+          "n": 7,
+          "success": 3,
+          "coverage": 7,
+          "abstention": 0,
+          "silentFailure": 4
+        },
+        {
+          "dimension": "session",
+          "slice": "afn-sigonella-2025",
+          "n": 4,
+          "success": 1,
+          "coverage": 4,
+          "abstention": 0,
+          "silentFailure": 3
+        },
+        {
+          "dimension": "session",
+          "slice": "dvids-marne-2024",
+          "n": 17,
+          "success": 11,
+          "coverage": 17,
+          "abstention": 0,
+          "silentFailure": 6
+        },
+        {
+          "dimension": "session",
+          "slice": "dvids-warriorgames-2026",
+          "n": 15,
+          "success": 14,
+          "coverage": 15,
+          "abstention": 0,
+          "silentFailure": 1
+        },
+        {
+          "dimension": "session",
+          "slice": "wm-tournament-2014",
+          "n": 11,
+          "success": 8,
+          "coverage": 11,
+          "abstention": 0,
+          "silentFailure": 3
+        },
+        {
+          "dimension": "situation",
+          "slice": "contested_region",
+          "n": 36,
+          "success": 23,
+          "coverage": 36,
+          "abstention": 0,
+          "silentFailure": 13
+        },
+        {
+          "dimension": "situation",
+          "slice": "multi_player",
+          "n": 50,
+          "success": 34,
+          "coverage": 50,
+          "abstention": 0,
+          "silentFailure": 16
+        },
+        {
+          "dimension": "situation",
+          "slice": "small_target",
+          "n": 6,
+          "success": 5,
+          "coverage": 6,
+          "abstention": 0,
+          "silentFailure": 1
+        },
+        {
+          "dimension": "situation",
+          "slice": "solo",
+          "n": 2,
+          "success": 2,
+          "coverage": 2,
+          "abstention": 0,
+          "silentFailure": 0
+        },
+        {
+          "dimension": "situation",
+          "slice": "target_loss_periods",
+          "n": 27,
+          "success": 17,
+          "coverage": 27,
+          "abstention": 0,
+          "silentFailure": 10
+        },
+        {
+          "dimension": "situation",
+          "slice": "two_players",
+          "n": 2,
+          "success": 1,
+          "coverage": 2,
+          "abstention": 0,
+          "silentFailure": 1
+        }
+      ],
+      "worstMeaningfulSlice": {
+        "dimension": "session",
+        "slice": "afn-sigonella-2025",
+        "n": 4,
+        "success": 1,
+        "coverage": 4,
+        "abstention": 0,
+        "silentFailure": 3
+      }
+    },
+    "EVENT": {
+      "provenance": "Linux replay at HEAD (104ea0f), eventRecallBench.ts (e01/f06 harness) \u2014 g16-event-recall-replay.json",
+      "harness": "proposal recall on committed dev gold event spans; false-proposal check over explicit non-event spans",
+      "grouping": "independent unit = bundle -> source/session (BUNDLE_META from committed artifacts)",
+      "overall": {
+        "n": 16,
+        "success_proposedOk": 13,
+        "silentFailure_misBounded": 1,
+        "missed": 2,
+        "falseProposalsInNonEventSpans": 0,
+        "nonEventSpans": 5
+      },
+      "calibration": "not applicable (proposals carry no calibrated confidence)",
+      "slices": [
+        {
+          "dimension": "bundle",
+          "slice": "afn-sasebo-rally1",
+          "n": 5,
+          "success": 5,
+          "silentFailure_misBounded": 0,
+          "missed": 0
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-944403-dink",
+          "n": 1,
+          "success": 1,
+          "silentFailure_misBounded": 0,
+          "missed": 0
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-944403-smash",
+          "n": 1,
+          "success": 1,
+          "silentFailure_misBounded": 0,
+          "missed": 0
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-faead-feed",
+          "n": 1,
+          "success": 1,
+          "silentFailure_misBounded": 0,
+          "missed": 0
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-faead-rally",
+          "n": 2,
+          "success": 1,
+          "silentFailure_misBounded": 0,
+          "missed": 1
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-marne-dig",
+          "n": 1,
+          "success": 1,
+          "silentFailure_misBounded": 0,
+          "missed": 0
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-marne-serve",
+          "n": 1,
+          "success": 1,
+          "silentFailure_misBounded": 0,
+          "missed": 0
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-sasebo-volleys",
+          "n": 3,
+          "success": 1,
+          "silentFailure_misBounded": 1,
+          "missed": 1
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-wgm-wheelchair",
+          "n": 1,
+          "success": 1,
+          "silentFailure_misBounded": 0,
+          "missed": 0
+        },
+        {
+          "dimension": "session",
+          "slice": "afn-sasebo-2025-06",
+          "n": 8,
+          "success": 6,
+          "silentFailure_misBounded": 1,
+          "missed": 1
+        },
+        {
+          "dimension": "session",
+          "slice": "dvids-marne-2024",
+          "n": 7,
+          "success": 6,
+          "silentFailure_misBounded": 0,
+          "missed": 1
+        },
+        {
+          "dimension": "session",
+          "slice": "dvids-warriorgames-2026",
+          "n": 1,
+          "success": 1,
+          "silentFailure_misBounded": 0,
+          "missed": 0
+        },
+        {
+          "dimension": "source",
+          "slice": "afn-sasebo-indoor",
+          "n": 5,
+          "success": 5,
+          "silentFailure_misBounded": 0,
+          "missed": 0
+        },
+        {
+          "dimension": "source",
+          "slice": "dvids-944403",
+          "n": 2,
+          "success": 2,
+          "silentFailure_misBounded": 0,
+          "missed": 0
+        },
+        {
+          "dimension": "source",
+          "slice": "dvids-faead",
+          "n": 3,
+          "success": 2,
+          "silentFailure_misBounded": 0,
+          "missed": 1
+        },
+        {
+          "dimension": "source",
+          "slice": "dvids-marne",
+          "n": 2,
+          "success": 2,
+          "silentFailure_misBounded": 0,
+          "missed": 0
+        },
+        {
+          "dimension": "source",
+          "slice": "dvids-sasebo",
+          "n": 3,
+          "success": 1,
+          "silentFailure_misBounded": 1,
+          "missed": 1
+        },
+        {
+          "dimension": "source",
+          "slice": "dvids-wgm",
+          "n": 1,
+          "success": 1,
+          "silentFailure_misBounded": 0,
+          "missed": 0
+        }
+      ],
+      "worstMeaningfulSlice": {
+        "dimension": "bundle",
+        "slice": "wavea-sasebo-volleys",
+        "n": 3,
+        "success": 1,
+        "silentFailure_misBounded": 1,
+        "missed": 1
+      }
+    },
+    "PADDLE": {
+      "provenance": "COMMITTED Mac paddle-bench result (paddle-bench-1787968828222.json); paddle detection NOT replayable on Linux (runs/ gitignored, Mac-only \u2014 f16 forensics). Held-out rows present in the committed file were EXCLUDED unread beyond caseId.",
+      "harness": "paddle-bench frame-level detector scoring on human center-point gold",
+      "grouping": "independent unit = bundle (5 dev bundles from 2 sources)",
+      "overall": {
+        "n_labeledFrames": 48,
+        "n_visibleFrames": 40,
+        "success_hits": 17,
+        "misses": 19,
+        "silentFailure_wrongLocation": 4,
+        "falsePositives": 6
+      },
+      "calibration": "not available in this artifact",
+      "slices": [
+        {
+          "dimension": "bundle",
+          "slice": "wm-volley-02",
+          "session": "wm-tournament-2014",
+          "n_labeledFrames": 23,
+          "n_visibleFrames": 17,
+          "success_hits": 7,
+          "misses": 8,
+          "silentFailure_wrongLocation": 2,
+          "falsePositives": 4
+        },
+        {
+          "dimension": "bundle",
+          "slice": "afn-sasebo-rally1",
+          "session": "afn-sasebo-2025-06",
+          "n_labeledFrames": 20,
+          "n_visibleFrames": 20,
+          "success_hits": 9,
+          "misses": 11,
+          "silentFailure_wrongLocation": 0,
+          "falsePositives": 0
+        },
+        {
+          "dimension": "bundle",
+          "slice": "afn-sasebo-rally2",
+          "session": "afn-sasebo-2025-06",
+          "n_labeledFrames": 5,
+          "n_visibleFrames": 3,
+          "success_hits": 1,
+          "misses": 0,
+          "silentFailure_wrongLocation": 2,
+          "falsePositives": 2
+        }
+      ],
+      "worstMeaningfulSlice": {
+        "dimension": "bundle",
+        "slice": "afn-sasebo-rally2",
+        "session": "afn-sasebo-2025-06",
+        "n_labeledFrames": 5,
+        "n_visibleFrames": 3,
+        "success_hits": 1,
+        "misses": 0,
+        "silentFailure_wrongLocation": 2,
+        "falsePositives": 2
+      },
+      "ownershipProxy": {
+        "provenance": "Linux replay at HEAD, ownershipBench.ts --apply-corrections (g16-ownership-eval-corrected-replay.json)",
+        "method": "incumbent_wrist_ratio",
+        "overall": {
+          "n": 39,
+          "success": 13,
+          "abstention": 22,
+          "silentFailure_wrongAnswer": 4
+        },
+        "poseSubset": {
+          "n": 18,
+          "success": 13,
+          "abstention": 1
+        },
+        "calibration": "ownership ECE .098 (n=31, agreement proxy, wave-c/c11-coverage-risk.json)",
+        "slices": [
+          {
+            "dimension": "difficultyBucket",
+            "slice": "blur",
+            "n": 4,
+            "success": 1,
+            "abstention": 3,
+            "silentFailure_wrongAnswer": 0
+          },
+          {
+            "dimension": "difficultyBucket",
+            "slice": "clean",
+            "n": 10,
+            "success": 0,
+            "abstention": 10,
+            "silentFailure_wrongAnswer": 0
+          },
+          {
+            "dimension": "difficultyBucket",
+            "slice": "dark_on_dark",
+            "n": 26,
+            "success": 12,
+            "abstention": 10,
+            "silentFailure_wrongAnswer": 4
+          },
+          {
+            "dimension": "difficultyBucket",
+            "slice": "edge_on",
+            "n": 10,
+            "success": 7,
+            "abstention": 1,
+            "silentFailure_wrongAnswer": 2
+          },
+          {
+            "dimension": "difficultyBucket",
+            "slice": "multi_paddle",
+            "n": 16,
+            "success": 10,
+            "abstention": 3,
+            "silentFailure_wrongAnswer": 3
+          },
+          {
+            "dimension": "difficultyBucket",
+            "slice": "net_post_occlusion",
+            "n": 12,
+            "success": 6,
+            "abstention": 6,
+            "silentFailure_wrongAnswer": 0
+          },
+          {
+            "dimension": "sessionGroup",
+            "slice": "afn-sasebo-2025-06",
+            "n": 14,
+            "success": 0,
+            "abstention": 14,
+            "silentFailure_wrongAnswer": 0
+          },
+          {
+            "dimension": "sessionGroup",
+            "slice": "dvids-944403",
+            "n": 15,
+            "success": 9,
+            "abstention": 2,
+            "silentFailure_wrongAnswer": 4
+          },
+          {
+            "dimension": "sessionGroup",
+            "slice": "dvids-faead",
+            "n": 3,
+            "success": 3,
+            "abstention": 0,
+            "silentFailure_wrongAnswer": 0
+          },
+          {
+            "dimension": "sessionGroup",
+            "slice": "dvids-marne-2024",
+            "n": 1,
+            "success": 1,
+            "abstention": 0,
+            "silentFailure_wrongAnswer": 0
+          },
+          {
+            "dimension": "sessionGroup",
+            "slice": "wm-tournament-2014",
+            "n": 6,
+            "success": 0,
+            "abstention": 6,
+            "silentFailure_wrongAnswer": 0
+          }
+        ],
+        "worstMeaningfulSlice": {
+          "dimension": "difficultyBucket",
+          "slice": "blur",
+          "n": 4,
+          "success": 1,
+          "abstention": 3,
+          "silentFailure_wrongAnswer": 0
+        }
+      }
+    },
+    "BALL": {
+      "provenance": "Linux replay at HEAD, ballHardSliceEval.ts over committed Linux-regenerated motion candidates, D2-06 hard-slice gold (g16-ball-hardslice-replay.json)",
+      "harness": "real tracker on hard-slice gold ONLY (43 labels); NOT the full 103-frame ball gold (most bundles lack committed motion candidates on Linux)",
+      "grouping": "independent unit = bundle (4 bundles, 3 sources)",
+      "overall": {
+        "n": 43,
+        "success_hits": 10,
+        "missed": 18,
+        "silentFailure_wrongLocation": 11,
+        "abstention": 2,
+        "abstentionViolations": 0
+      },
+      "calibration": "not available (tracker observations carry no calibrated confidence in this harness)",
+      "slices": [
+        {
+          "dimension": "occlusionBucket",
+          "slice": "OBSERVED",
+          "n": 35,
+          "success": 9,
+          "missed": 16,
+          "silentFailure_wrongLocation": 10,
+          "abstention": 0,
+          "violations": 0
+        },
+        {
+          "dimension": "occlusionBucket",
+          "slice": "ENTERING_OCCLUSION",
+          "n": 3,
+          "success": 1,
+          "missed": 1,
+          "silentFailure_wrongLocation": 1,
+          "abstention": 0,
+          "violations": 0
+        },
+        {
+          "dimension": "occlusionBucket",
+          "slice": "OCCLUDED",
+          "n": 2,
+          "success": 0,
+          "missed": 0,
+          "silentFailure_wrongLocation": 0,
+          "abstention": 2,
+          "violations": 0
+        },
+        {
+          "dimension": "occlusionBucket",
+          "slice": "REACQUIRED",
+          "n": 1,
+          "success": 0,
+          "missed": 1,
+          "silentFailure_wrongLocation": 0,
+          "abstention": 0,
+          "violations": 0
+        },
+        {
+          "dimension": "occlusionBucket",
+          "slice": "UNCERTAIN_EXCLUDED",
+          "n": 2,
+          "success": 0,
+          "missed": 0,
+          "silentFailure_wrongLocation": 0,
+          "abstention": 0,
+          "violations": 0
+        },
+        {
+          "dimension": "hardSliceType",
+          "slice": "netCrossing",
+          "n": 4,
+          "success": 3,
+          "missed": 0,
+          "silentFailure_wrongLocation": 1,
+          "abstention": 0,
+          "violations": 0,
+          "excluded": 0
+        },
+        {
+          "dimension": "hardSliceType",
+          "slice": "paddleOcclusion",
+          "n": 3,
+          "success": 1,
+          "missed": 1,
+          "silentFailure_wrongLocation": 1,
+          "abstention": 0,
+          "violations": 0,
+          "excluded": 0
+        },
+        {
+          "dimension": "hardSliceType",
+          "slice": "multiBallBackground",
+          "n": 1,
+          "success": 0,
+          "missed": 1,
+          "silentFailure_wrongLocation": 0,
+          "abstention": 0,
+          "violations": 0,
+          "excluded": 1
+        },
+        {
+          "dimension": "hardSliceType",
+          "slice": "fastBlur",
+          "n": 6,
+          "success": 0,
+          "missed": 3,
+          "silentFailure_wrongLocation": 3,
+          "abstention": 0,
+          "violations": 0,
+          "excluded": 0
+        },
+        {
+          "dimension": "hardSliceType",
+          "slice": "occlusionCycle",
+          "n": 4,
+          "success": 0,
+          "missed": 2,
+          "silentFailure_wrongLocation": 0,
+          "abstention": 2,
+          "violations": 0,
+          "excluded": 0
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wm-volley-02",
+          "n": 5,
+          "success": 4,
+          "missed": 0,
+          "silentFailure_wrongLocation": 0,
+          "abstention": 0,
+          "violations": 0
+        },
+        {
+          "dimension": "bundle",
+          "slice": "afn-sasebo-rally2",
+          "n": 14,
+          "success": 1,
+          "missed": 10,
+          "silentFailure_wrongLocation": 0,
+          "abstention": 2,
+          "violations": 0
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-wgm-wheelchair",
+          "n": 9,
+          "success": 0,
+          "missed": 4,
+          "silentFailure_wrongLocation": 5,
+          "abstention": 0,
+          "violations": 0
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-sasebo-volleys",
+          "n": 15,
+          "success": 5,
+          "missed": 4,
+          "silentFailure_wrongLocation": 6,
+          "abstention": 0,
+          "violations": 0
+        }
+      ],
+      "worstMeaningfulSlice": {
+        "dimension": "hardSliceType",
+        "slice": "fastBlur",
+        "n": 6,
+        "success": 0,
+        "missed": 3,
+        "silentFailure_wrongLocation": 3,
+        "abstention": 0,
+        "violations": 0,
+        "excluded": 0
+      }
+    },
+    "CONTACT": {
+      "provenance": "Linux replay at HEAD, e02 contactGoldReplay via assertion-free wrapper (g16-contact-replay.json); estimator contact-evidence-4.3",
+      "harness": "committed windowed pose + ORACLE gold ball, paddle=null (production also sees paddle track) \u2014 NOT canonical cascade",
+      "grouping": "independent unit = bundle -> source ('session' field in rows is the source grouping)",
+      "overall": {
+        "n": 15,
+        "success_acceptable<=132ms": 8,
+        "coverage_estimated": 11,
+        "abstention": 4,
+        "silentFailure_wrongMarker>132ms": 3,
+        "medianErrorMsOfEstimated": 103
+      },
+      "calibration": {
+        "note": "confidence-bin acceptable counts over estimated rows (tiny n \u2014 indicative only)",
+        "bins": [
+          {
+            "confidenceBin": "[0.0,0.55)",
+            "n": 3,
+            "acceptable": 2
+          },
+          {
+            "confidenceBin": "[0.55,0.7)",
+            "n": 6,
+            "acceptable": 4
+          },
+          {
+            "confidenceBin": "[0.7,1.01)",
+            "n": 2,
+            "acceptable": 2
+          }
+        ]
+      },
+      "slices": [
+        {
+          "dimension": "source",
+          "slice": "dvids-944403",
+          "n": 5,
+          "success": 4,
+          "coverage": 5,
+          "abstention": 0,
+          "silentFailure": 1
+        },
+        {
+          "dimension": "source",
+          "slice": "dvids-faead",
+          "n": 4,
+          "success": 1,
+          "coverage": 1,
+          "abstention": 3,
+          "silentFailure": 0
+        },
+        {
+          "dimension": "source",
+          "slice": "dvids-marne",
+          "n": 2,
+          "success": 1,
+          "coverage": 1,
+          "abstention": 1,
+          "silentFailure": 0
+        },
+        {
+          "dimension": "source",
+          "slice": "dvids-sasebo",
+          "n": 3,
+          "success": 1,
+          "coverage": 3,
+          "abstention": 0,
+          "silentFailure": 2
+        },
+        {
+          "dimension": "source",
+          "slice": "dvids-wgm",
+          "n": 1,
+          "success": 1,
+          "coverage": 1,
+          "abstention": 0,
+          "silentFailure": 0
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-944403-dink",
+          "n": 3,
+          "success": 2,
+          "coverage": 3,
+          "abstention": 0,
+          "silentFailure": 1
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-944403-smash",
+          "n": 2,
+          "success": 2,
+          "coverage": 2,
+          "abstention": 0,
+          "silentFailure": 0
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-faead-feed",
+          "n": 2,
+          "success": 1,
+          "coverage": 1,
+          "abstention": 1,
+          "silentFailure": 0
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-faead-rally",
+          "n": 2,
+          "success": 0,
+          "coverage": 0,
+          "abstention": 2,
+          "silentFailure": 0
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-marne-dig",
+          "n": 1,
+          "success": 0,
+          "coverage": 0,
+          "abstention": 1,
+          "silentFailure": 0
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-marne-serve",
+          "n": 1,
+          "success": 1,
+          "coverage": 1,
+          "abstention": 0,
+          "silentFailure": 0
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-sasebo-volleys",
+          "n": 3,
+          "success": 1,
+          "coverage": 3,
+          "abstention": 0,
+          "silentFailure": 2
+        },
+        {
+          "dimension": "bundle",
+          "slice": "wavea-wgm-wheelchair",
+          "n": 1,
+          "success": 1,
+          "coverage": 1,
+          "abstention": 0,
+          "silentFailure": 0
+        },
+        {
+          "dimension": "owner",
+          "slice": "other",
+          "n": 5,
+          "success": 2,
+          "coverage": 4,
+          "abstention": 1,
+          "silentFailure": 2
+        },
+        {
+          "dimension": "owner",
+          "slice": "target",
+          "n": 10,
+          "success": 6,
+          "coverage": 7,
+          "abstention": 3,
+          "silentFailure": 1
+        },
+        {
+          "dimension": "strokeFamily",
+          "slice": "dink",
+          "n": 2,
+          "success": 2,
+          "coverage": 2,
+          "abstention": 0,
+          "silentFailure": 0
+        },
+        {
+          "dimension": "strokeFamily",
+          "slice": "drive",
+          "n": 1,
+          "success": 1,
+          "coverage": 1,
+          "abstention": 0,
+          "silentFailure": 0
+        },
+        {
+          "dimension": "strokeFamily",
+          "slice": "overhead",
+          "n": 2,
+          "success": 2,
+          "coverage": 2,
+          "abstention": 0,
+          "silentFailure": 0
+        },
+        {
+          "dimension": "strokeFamily",
+          "slice": "serve",
+          "n": 1,
+          "success": 1,
+          "coverage": 1,
+          "abstention": 0,
+          "silentFailure": 0
+        },
+        {
+          "dimension": "strokeFamily",
+          "slice": "unknown",
+          "n": 6,
+          "success": 2,
+          "coverage": 3,
+          "abstention": 3,
+          "silentFailure": 1
+        },
+        {
+          "dimension": "strokeFamily",
+          "slice": "volley",
+          "n": 3,
+          "success": 0,
+          "coverage": 2,
+          "abstention": 1,
+          "silentFailure": 2
+        }
+      ],
+      "worstMeaningfulSlice": {
+        "dimension": "strokeFamily",
+        "slice": "volley",
+        "n": 3,
+        "success": 0,
+        "coverage": 2,
+        "abstention": 1,
+        "silentFailure": 2
+      }
+    },
+    "PHASE": {
+      "provenance": "Linux replay at HEAD, d3-05-measure-gold.ts unmodified (g16-phase-gold-replay.txt)",
+      "harness": "anchored + anchor-free segmentation over committed wave-a gold phase events",
+      "grouping": "independent unit = bundle -> session",
+      "overall": "see anchored/overall and anchor-free/overall slice rows (segmentation coverage only \u2014 per-boundary correctness vs gold is NOT scored by this harness, so success/silent-failure are NOT measurable here; disclosed)",
+      "calibration": "not applicable",
+      "slices": [
+        {
+          "dimension": "anchored/bundle",
+          "slice": "wavea-944403-dink",
+          "n": 5,
+          "coverage_segmented": 4,
+          "abstention": 1
+        },
+        {
+          "dimension": "anchored/bundle",
+          "slice": "wavea-944403-smash",
+          "n": 2,
+          "coverage_segmented": 2,
+          "abstention": 0
+        },
+        {
+          "dimension": "anchored/bundle",
+          "slice": "wavea-faead-feed",
+          "n": 1,
+          "coverage_segmented": 1,
+          "abstention": 0
+        },
+        {
+          "dimension": "anchored/bundle",
+          "slice": "wavea-faead-rally",
+          "n": 1,
+          "coverage_segmented": 1,
+          "abstention": 0
+        },
+        {
+          "dimension": "anchored/bundle",
+          "slice": "wavea-marne-dig",
+          "n": 1,
+          "coverage_segmented": 1,
+          "abstention": 0
+        },
+        {
+          "dimension": "anchored/bundle",
+          "slice": "wavea-marne-serve",
+          "n": 1,
+          "coverage_segmented": 1,
+          "abstention": 0
+        },
+        {
+          "dimension": "anchored/bundle",
+          "slice": "wavea-sasebo-volleys",
+          "n": 5,
+          "coverage_segmented": 4,
+          "abstention": 1
+        },
+        {
+          "dimension": "anchored/bundle",
+          "slice": "wavea-wgm-wheelchair",
+          "n": 1,
+          "coverage_segmented": 1,
+          "abstention": 0
+        },
+        {
+          "dimension": "anchored/session",
+          "slice": "afn-sasebo-2025-06",
+          "n": 5,
+          "coverage_segmented": 4,
+          "abstention": 1
+        },
+        {
+          "dimension": "anchored/session",
+          "slice": "dvids-marne-2024",
+          "n": 11,
+          "coverage_segmented": 10,
+          "abstention": 1
+        },
+        {
+          "dimension": "anchored/session",
+          "slice": "dvids-warriorgames-2026",
+          "n": 1,
+          "coverage_segmented": 1,
+          "abstention": 0
+        },
+        {
+          "dimension": "anchored/overall",
+          "slice": "all",
+          "n": 17,
+          "coverage_segmented": 15,
+          "abstention": 2
+        },
+        {
+          "dimension": "anchor-free/bundle",
+          "slice": "wavea-944403-dink",
+          "n": 5,
+          "coverage_segmented": 4,
+          "abstention": 1
+        },
+        {
+          "dimension": "anchor-free/bundle",
+          "slice": "wavea-944403-smash",
+          "n": 2,
+          "coverage_segmented": 2,
+          "abstention": 0
+        },
+        {
+          "dimension": "anchor-free/bundle",
+          "slice": "wavea-faead-feed",
+          "n": 1,
+          "coverage_segmented": 1,
+          "abstention": 0
+        },
+        {
+          "dimension": "anchor-free/bundle",
+          "slice": "wavea-faead-rally",
+          "n": 2,
+          "coverage_segmented": 1,
+          "abstention": 1
+        },
+        {
+          "dimension": "anchor-free/bundle",
+          "slice": "wavea-marne-dig",
+          "n": 1,
+          "coverage_segmented": 1,
+          "abstention": 0
+        },
+        {
+          "dimension": "anchor-free/bundle",
+          "slice": "wavea-marne-serve",
+          "n": 1,
+          "coverage_segmented": 1,
+          "abstention": 0
+        },
+        {
+          "dimension": "anchor-free/bundle",
+          "slice": "wavea-sasebo-volleys",
+          "n": 5,
+          "coverage_segmented": 3,
+          "abstention": 2
+        },
+        {
+          "dimension": "anchor-free/bundle",
+          "slice": "wavea-wgm-wheelchair",
+          "n": 1,
+          "coverage_segmented": 0,
+          "abstention": 1
+        },
+        {
+          "dimension": "anchor-free/session",
+          "slice": "afn-sasebo-2025-06",
+          "n": 5,
+          "coverage_segmented": 3,
+          "abstention": 2
+        },
+        {
+          "dimension": "anchor-free/session",
+          "slice": "dvids-marne-2024",
+          "n": 12,
+          "coverage_segmented": 10,
+          "abstention": 2
+        },
+        {
+          "dimension": "anchor-free/session",
+          "slice": "dvids-warriorgames-2026",
+          "n": 1,
+          "coverage_segmented": 0,
+          "abstention": 1
+        },
+        {
+          "dimension": "anchor-free/overall",
+          "slice": "all",
+          "n": 18,
+          "coverage_segmented": 13,
+          "abstention": 5
+        }
+      ],
+      "worstMeaningfulSlice": {
+        "dimension": "anchor-free/bundle",
+        "slice": "wavea-sasebo-volleys",
+        "n": 5,
+        "coverage_segmented": 3,
+        "abstention": 2
+      }
+    },
+    "STROKE": {
+      "provenance": "Linux replay at HEAD (stroke-heuristic-6 at 104ea0f), strokeHeuristicBench (g16-stroke-bench-replay.json). NOTE: differs from f16 (heuristic-4): L1 correct 9->5, abstained 8->12, confidentlyWrong 3->2 \u2014 the post-Wave-F abstention gates' coverage cost, measured.",
+      "harness": "committed stroke gold (29 labels / evaluable 18 on this box); L1 = OVERHEAD-vs-SWING claimable class",
+      "grouping": "independent unit = corpus sessionKey (all dvids-marne recordings share one group \u2014 harness disclosure)",
+      "overall": {
+        "n": 18,
+        "success_l1": 5,
+        "wrong_l1": 0,
+        "abstention_l1": 12,
+        "goldUnknown_l1": 1,
+        "silentFailure_confidentlyWrong": 2,
+        "success_l2": 2,
+        "wrong_l2": 2
+      },
+      "calibration": "not available (bench rows carry labels, not calibrated probabilities)",
+      "slices": [
+        {
+          "dimension": "sessionGroup",
+          "slice": "afn-sasebo-2025-06",
+          "n": 5,
+          "success_l1": 0,
+          "wrong_l1": 0,
+          "abstention_l1": 5,
+          "goldUnknown_l1": 0,
+          "silentFailure_confidentlyWrong": 0,
+          "success_l2": 0,
+          "wrong_l2": 0
+        },
+        {
+          "dimension": "sessionGroup",
+          "slice": "dvids-marne-2024",
+          "n": 12,
+          "success_l1": 4,
+          "wrong_l1": 0,
+          "abstention_l1": 7,
+          "goldUnknown_l1": 1,
+          "silentFailure_confidentlyWrong": 1,
+          "success_l2": 2,
+          "wrong_l2": 1
+        },
+        {
+          "dimension": "sessionGroup",
+          "slice": "dvids-warriorgames-2026",
+          "n": 1,
+          "success_l1": 1,
+          "wrong_l1": 0,
+          "abstention_l1": 0,
+          "goldUnknown_l1": 0,
+          "silentFailure_confidentlyWrong": 1,
+          "success_l2": 0,
+          "wrong_l2": 1
+        },
+        {
+          "dimension": "owner",
+          "slice": "other",
+          "n": 7,
+          "success_l1": 2,
+          "wrong_l1": 0,
+          "abstention_l1": 5,
+          "goldUnknown_l1": 0,
+          "silentFailure_confidentlyWrong": 0,
+          "success_l2": 1,
+          "wrong_l2": 0
+        },
+        {
+          "dimension": "owner",
+          "slice": "target",
+          "n": 11,
+          "success_l1": 3,
+          "wrong_l1": 0,
+          "abstention_l1": 7,
+          "goldUnknown_l1": 1,
+          "silentFailure_confidentlyWrong": 2,
+          "success_l2": 1,
+          "wrong_l2": 2
+        },
+        {
+          "dimension": "goldStrokeFamily",
+          "slice": "dink",
+          "n": 4,
+          "success_l1": 2,
+          "wrong_l1": 0,
+          "abstention_l1": 2,
+          "goldUnknown_l1": 0,
+          "silentFailure_confidentlyWrong": 1,
+          "success_l2": 0,
+          "wrong_l2": 1
+        },
+        {
+          "dimension": "goldStrokeFamily",
+          "slice": "groundstroke",
+          "n": 2,
+          "success_l1": 1,
+          "wrong_l1": 0,
+          "abstention_l1": 1,
+          "goldUnknown_l1": 0,
+          "silentFailure_confidentlyWrong": 1,
+          "success_l2": 0,
+          "wrong_l2": 1
+        },
+        {
+          "dimension": "goldStrokeFamily",
+          "slice": "overhead_lob",
+          "n": 3,
+          "success_l1": 1,
+          "wrong_l1": 0,
+          "abstention_l1": 2,
+          "goldUnknown_l1": 0,
+          "silentFailure_confidentlyWrong": 0,
+          "success_l2": 1,
+          "wrong_l2": 0
+        },
+        {
+          "dimension": "goldStrokeFamily",
+          "slice": "serve",
+          "n": 1,
+          "success_l1": 1,
+          "wrong_l1": 0,
+          "abstention_l1": 0,
+          "goldUnknown_l1": 0,
+          "silentFailure_confidentlyWrong": 0,
+          "success_l2": 1,
+          "wrong_l2": 0
+        },
+        {
+          "dimension": "goldStrokeFamily",
+          "slice": "unknown",
+          "n": 1,
+          "success_l1": 0,
+          "wrong_l1": 0,
+          "abstention_l1": 0,
+          "goldUnknown_l1": 1,
+          "silentFailure_confidentlyWrong": 0,
+          "success_l2": 0,
+          "wrong_l2": 0
+        },
+        {
+          "dimension": "goldStrokeFamily",
+          "slice": "volley",
+          "n": 7,
+          "success_l1": 0,
+          "wrong_l1": 0,
+          "abstention_l1": 7,
+          "goldUnknown_l1": 0,
+          "silentFailure_confidentlyWrong": 0,
+          "success_l2": 0,
+          "wrong_l2": 0
+        },
+        {
+          "dimension": "case",
+          "slice": "wavea-944403-dink",
+          "n": 5,
+          "success_l1": 1,
+          "wrong_l1": 0,
+          "abstention_l1": 4,
+          "goldUnknown_l1": 0,
+          "silentFailure_confidentlyWrong": 0,
+          "success_l2": 0,
+          "wrong_l2": 0
+        },
+        {
+          "dimension": "case",
+          "slice": "wavea-944403-smash",
+          "n": 2,
+          "success_l1": 1,
+          "wrong_l1": 0,
+          "abstention_l1": 1,
+          "goldUnknown_l1": 0,
+          "silentFailure_confidentlyWrong": 0,
+          "success_l2": 1,
+          "wrong_l2": 0
+        },
+        {
+          "dimension": "case",
+          "slice": "wavea-faead-feed",
+          "n": 1,
+          "success_l1": 0,
+          "wrong_l1": 0,
+          "abstention_l1": 0,
+          "goldUnknown_l1": 1,
+          "silentFailure_confidentlyWrong": 0,
+          "success_l2": 0,
+          "wrong_l2": 0
+        },
+        {
+          "dimension": "case",
+          "slice": "wavea-faead-rally",
+          "n": 2,
+          "success_l1": 1,
+          "wrong_l1": 0,
+          "abstention_l1": 1,
+          "goldUnknown_l1": 0,
+          "silentFailure_confidentlyWrong": 1,
+          "success_l2": 0,
+          "wrong_l2": 1
+        },
+        {
+          "dimension": "case",
+          "slice": "wavea-marne-dig",
+          "n": 1,
+          "success_l1": 0,
+          "wrong_l1": 0,
+          "abstention_l1": 1,
+          "goldUnknown_l1": 0,
+          "silentFailure_confidentlyWrong": 0,
+          "success_l2": 0,
+          "wrong_l2": 0
+        },
+        {
+          "dimension": "case",
+          "slice": "wavea-marne-serve",
+          "n": 1,
+          "success_l1": 1,
+          "wrong_l1": 0,
+          "abstention_l1": 0,
+          "goldUnknown_l1": 0,
+          "silentFailure_confidentlyWrong": 0,
+          "success_l2": 1,
+          "wrong_l2": 0
+        },
+        {
+          "dimension": "case",
+          "slice": "wavea-sasebo-volleys",
+          "n": 5,
+          "success_l1": 0,
+          "wrong_l1": 0,
+          "abstention_l1": 5,
+          "goldUnknown_l1": 0,
+          "silentFailure_confidentlyWrong": 0,
+          "success_l2": 0,
+          "wrong_l2": 0
+        },
+        {
+          "dimension": "case",
+          "slice": "wavea-wgm-wheelchair",
+          "n": 1,
+          "success_l1": 1,
+          "wrong_l1": 0,
+          "abstention_l1": 0,
+          "goldUnknown_l1": 0,
+          "silentFailure_confidentlyWrong": 1,
+          "success_l2": 0,
+          "wrong_l2": 1
+        }
+      ],
+      "worstMeaningfulSlice": {
+        "dimension": "sessionGroup",
+        "slice": "afn-sasebo-2025-06",
+        "n": 5,
+        "success_l1": 0,
+        "wrong_l1": 0,
+        "abstention_l1": 5,
+        "goldUnknown_l1": 0,
+        "silentFailure_confidentlyWrong": 0,
+        "success_l2": 0,
+        "wrong_l2": 0
+      }
+    },
+    "CAPTURE_ENVELOPE": {
+      "provenance": "COMMITTED wave-c c12-envelope-measurements.json (Linux, ffprobe/ffmpeg proxies); thresholds capture-envelope-thresholds-v0.1-provisional",
+      "harness": "envelope checker over committed bundle clips \u2014 only 2 non-held-out clip(s) have committed media; 10 bundles have annotations only",
+      "grouping": "independent unit = clip",
+      "overall": {
+        "n_clipsMeasurable": 2,
+        "n_bundlesWithoutCommittedMedia": 10
+      },
+      "calibration": "NOT VALID: threshold validation failed twice (e15, f18 \u2014 preserved scientific negatives); f22 pinned 8 KNOWN-GAP bypasses. Verdict columns are v0.1-provisional hypotheses, not truth.",
+      "slices": [
+        {
+          "dimension": "clip",
+          "slice": "afn-sasebo-rally1",
+          "n_dimensionsChecked": 8,
+          "supported": 5,
+          "unsupported": 1,
+          "notMeasured": 2
+        },
+        {
+          "dimension": "clip",
+          "slice": "wm-volley-02",
+          "n_dimensionsChecked": 8,
+          "supported": 4,
+          "unsupported": 2,
+          "notMeasured": 2
+        }
+      ],
+      "worstMeaningfulSlice": {
+        "note": "no meaningful slice: n=2 clips with no validated ground truth \u2014 the envelope subsystem's generalization is UNMEASURED; this row is a coverage gap, not a pass"
+      }
+    },
+    "AUTO_DETECT": {
+      "provenance": "wave-a D-summary.json / wave-b W4 (fixture-level); no replayable per-slice measured dataset exists on this box",
+      "harness": "NONE REPLAYABLE: AUTO DETECT (declaredStroke=null routing) is validated by fixture tests only; end-to-end runs require Mac run dirs",
+      "grouping": "n/a",
+      "overall": {
+        "n": 0
+      },
+      "calibration": "not applicable",
+      "slices": [],
+      "worstMeaningfulSlice": {
+        "note": "N=0 measured slices \u2014 AUTO DETECT generalization is UNMEASURED on existing labeled/replayable data. This is the honest answer, not a pass."
+      }
+    }
+  }
+}

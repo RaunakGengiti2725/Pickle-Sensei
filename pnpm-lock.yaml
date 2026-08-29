@@ -122,6 +122,22 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@26.3.0)(tsx@4.23.12)
 
+  packages/capture-envelope:
+    dependencies:
+      '@pickle/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+    devDependencies:
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.12
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@26.3.0)(tsx@4.23.12)
+
   packages/database:
     dependencies:
       '@pickle/scoring':
@@ -163,6 +179,43 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@26.3.0)(tsx@4.23.12)
 
+  packages/first-party-intake:
+    dependencies:
+      '@pickle/capture-envelope':
+        specifier: workspace:*
+        version: link:../capture-envelope
+      '@pickle/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+    devDependencies:
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.12
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@26.3.0)(tsx@4.23.12)
+
+  packages/hard-case-queue:
+    devDependencies:
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@26.3.0)(tsx@4.23.12)
+
+  packages/incident-response:
+    devDependencies:
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@26.3.0)(tsx@4.23.12)
+
   packages/model-registry:
     dependencies:
       '@pickle/shared-types':
@@ -184,9 +237,52 @@ importers:
       '@aws-sdk/client-sqs':
         specifier: ^3.658.0
         version: 3.1119.0
+    devDependencies:
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@26.3.0)(tsx@4.23.12)
+
+  packages/release-ops:
+    dependencies:
+      '@pickle/capture-envelope':
+        specifier: workspace:*
+        version: link:../capture-envelope
+      '@pickle/database':
+        specifier: workspace:*
+        version: link:../database
+      '@pickle/model-registry':
+        specifier: workspace:*
+        version: link:../model-registry
+      '@pickle/scoring':
+        specifier: workspace:*
+        version: link:../scoring
       '@pickle/shared-types':
         specifier: workspace:*
         version: link:../shared-types
+      '@pickle/swing-lab':
+        specifier: workspace:*
+        version: link:../swing-lab
+      '@pickle/vision-geometry':
+        specifier: workspace:*
+        version: link:../vision-geometry
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.0
+        version: 20.19.43
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.12
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@20.19.43)(tsx@4.23.12)
+
+  packages/rollout:
     devDependencies:
       typescript:
         specifier: ^5.9.2
@@ -223,6 +319,15 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@26.3.0)(tsx@4.23.12)
 
+  packages/slo:
+    devDependencies:
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@26.3.0)(tsx@4.23.12)
+
   packages/swing-domain:
     dependencies:
       '@pickle/shared-types':
@@ -241,9 +346,15 @@ importers:
       '@pickle/analysis-pipeline':
         specifier: workspace:*
         version: link:../analysis-pipeline
+      '@pickle/capture-envelope':
+        specifier: workspace:*
+        version: link:../capture-envelope
       '@pickle/evaluation':
         specifier: workspace:*
         version: link:../evaluation
+      '@pickle/model-registry':
+        specifier: workspace:*
+        version: link:../model-registry
       '@pickle/scoring':
         specifier: workspace:*
         version: link:../scoring
@@ -253,9 +364,6 @@ importers:
       '@pickle/swing-domain':
         specifier: workspace:*
         version: link:../swing-domain
-      '@pickle/vision-contracts':
-        specifier: workspace:*
-        version: link:../vision-contracts
       '@pickle/vision-geometry':
         specifier: workspace:*
         version: link:../vision-geometry
@@ -307,6 +415,9 @@ importers:
       '@pickle/evaluation':
         specifier: workspace:*
         version: link:../evaluation
+      '@pickle/model-registry':
+        specifier: workspace:*
+        version: link:../model-registry
       '@pickle/scoring':
         specifier: workspace:*
         version: link:../scoring
@@ -325,6 +436,9 @@ importers:
       '@aws-sdk/s3-request-presigner':
         specifier: ^3.1119.0
         version: 3.1119.0
+      '@pickle/analytics':
+        specifier: workspace:*
+        version: link:../../packages/analytics
       '@pickle/api-contracts':
         specifier: workspace:*
         version: link:../../packages/api-contracts
@@ -337,6 +451,9 @@ importers:
       '@pickle/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
+      '@pickle/slo':
+        specifier: workspace:*
+        version: link:../../packages/slo
       fastify:
         specifier: ^5.5.0
         version: 5.12.1
@@ -350,6 +467,12 @@ importers:
         specifier: ^4.1.5
         version: 4.4.3
     devDependencies:
+      '@pickle/first-party-intake':
+        specifier: workspace:*
+        version: link:../../packages/first-party-intake
+      '@pickle/media-worker':
+        specifier: workspace:*
+        version: link:../media-worker
       '@types/pg':
         specifier: ^8.15.5
         version: 8.23.1
@@ -365,6 +488,12 @@ importers:
 
   services/media-worker:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.1119.0
+        version: 3.1119.0
+      '@pickle/analytics':
+        specifier: workspace:*
+        version: link:../../packages/analytics
       '@pickle/database':
         specifier: workspace:*
         version: link:../../packages/database
@@ -374,6 +503,9 @@ importers:
       '@pickle/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
+      '@pickle/slo':
+        specifier: workspace:*
+        version: link:../../packages/slo
       pg:
         specifier: ^8.16.3
         version: 8.23.0
@@ -390,6 +522,54 @@ importers:
       vitest:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@26.3.0)(tsx@4.23.12)
+
+  tools/iphone-trials:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.0
+        version: 20.19.43
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.12
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@20.19.43)(tsx@4.23.12)
+
+  tools/latency-slo:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.0
+        version: 20.19.43
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.12
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@20.19.43)(tsx@4.23.12)
+
+  tools/mac-bench:
+    devDependencies:
+      '@pickle/swing-lab':
+        specifier: workspace:*
+        version: link:../../packages/swing-lab
+      '@types/node':
+        specifier: ^20.17.0
+        version: 20.19.43
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.12
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@20.19.43)(tsx@4.23.12)
 
 packages:
 

@@ -1,0 +1,50 @@
+{
+  "workstreamId": "h08-capture-contract",
+  "wave": "G2",
+  "mission": "Verify and harden the SUPPORTED/DEGRADED/UNSUPPORTED iPhone capture contract in the shipped mobile flow: UNSUPPORTED must withhold analysis with actionable guidance, DEGRADED must reduce claims, and LOW EVIDENCE + HIGH CONFIDENCE + WRONG ANALYSIS must be impossible by construction on every reachable path.",
+  "method": [
+    "Audited packages/capture-envelope (shared evaluator, versioned provisional thresholds v0.3) and the full apps/mobile capture flow: live envelope, attempt envelope, guidance copy, ready gate, runCaptureAnalysis quality gate, result presentation (UncertaintyNote, strokeResultModel), and every runCaptureAnalysis call site.",
+    "Verified existing invariants held: worst-measured-dimension overall verdict; NOT_MEASURED never becomes SUPPORTED; UNSUPPORTED blocks in runCaptureAnalysis before inference, permit reservation, and record persistence; DEGRADED verdicts travel on the analysis record and surface as capture-quality uncertainty notes; guidance lines exist for every dimension in both DEGRADED and UNSUPPORTED forms.",
+    "Found and fixed three real gaps (see deliverables), each with regression tests, then ran all root and mobile gates."
+  ],
+  "gapsFoundAndFixed": [
+    {
+      "gap": "The native live-session analysis provider (apps/mobile/src/flow/sessionNative.ts) called runCaptureAnalysis WITHOUT a captureEnvelope, so an unsupported-quality session recording (e.g. 320x240) would reach inference and could be scored — a reachable path violating the invariant.",
+      "fix": "Added sessionEventClipEnvelope() judging resolution and frame rate from the real clip configuration (engine-chosen window duration deliberately stays NOT_MEASURED) and wired it into the provider; UNSUPPORTED session clips now come back quality_blocked and are held honestly pending."
+    },
+    {
+      "gap": "AnalyzeScreen kept last readiness/quality signals in refs that were never cleared between capture attempts, so evidence from one clip could be attributed to the next attempt's envelope verdict.",
+      "fix": "Introduced an AttemptEvidenceBuffer cleared at every attempt start (beginAttempt), so an attempt envelope can only rest on evidence observed during that attempt; absent evidence stays NOT_MEASURED."
+    },
+    {
+      "gap": "The quality_blocked error message showed the failing internal dimension names but not the actionable per-dimension guidance the live panel shows — the user was told analysis was withheld without being told what to change.",
+      "fix": "Added qualityBlockedMessage() appending the actionable guidance line for every measured non-SUPPORTED dimension to the withheld-analysis message; AnalyzeScreen now renders it."
+    }
+  ],
+  "deliverables": [
+    "apps/mobile/src/camera/captureEnvelope.ts — qualityBlockedMessage(), createAttemptEvidenceBuffer(), sessionEventClipEnvelope()",
+    "apps/mobile/src/flow/sessionNative.ts — session per-event clips now carry a real capture envelope into runCaptureAnalysis",
+    "apps/mobile/src/screens/AnalyzeScreen.tsx — per-attempt evidence buffer + actionable quality-blocked messaging",
+    "apps/mobile/__tests__/captureEnvelope.test.ts — regression tests for the three new seams",
+    "apps/mobile/__tests__/sessionNative.test.ts — envelope propagation + unsupported session clip held pending, never rated"
+  ],
+  "verifiedUnchangedInvariants": [
+    "runCaptureAnalysis blocks UNSUPPORTED envelopes before inference; no permit is reserved and no analysis record is persisted (captureAnalysisFlow tests)",
+    "DEGRADED proceeds but the verdict is attached to the record and surfaces as a capture-quality uncertainty note whenever any content is withheld (uncertaintyNote tests)",
+    "NOT_MEASURED dimensions never produce guidance, never block, and never count as SUPPORTED",
+    "Ready gate blocks only on UNSUPPORTED; DEGRADED guides but permits",
+    "Technique score / fault / drill remain BLOCKED_ON_VALIDATION; nothing in this workstream weakens that lock",
+    "Held-out cases wm-dink-01 and afn-vic-rally1 untouched"
+  ],
+  "gates": {
+    "root": "pnpm typecheck && pnpm test && pnpm lint && pnpm format:check — all green (2026-08-29)",
+    "mobile": "npm ci && npx tsc --noEmit && npm test — all green, 40 suites / 405 tests"
+  },
+  "irreduciblyExternal": [
+    "GATE B: physical-iPhone end-to-end validation — no iPhone/Mac/Swift available; the native capture_quality emitter is still contract-only and unverified on device, so brightness/blur/camera-motion dimensions remain NOT_MEASURED in real captures until the device-side emitter ships and is measured on hardware.",
+    "GATE A: qualified-coach evidence for technique score/fault/drill.",
+    "Capture-envelope thresholds (v0.3) are provisional hypotheses; re-learning them requires labeled real-device footage.",
+    "Per-dimension measurement of paddle-out-of-frame, contact occlusion, and target ambiguity requires device-side telemetry that does not exist yet; today those conditions surface through pose visibility, the target selector, and downstream evidence gates (contact/phase abstention), not the envelope."
+  ],
+  "verdict": "GREEN (architecture): every reachable analysis path now carries an honest capture envelope or honestly reports it unmeasured; UNSUPPORTED withholds analysis before inference with actionable guidance; DEGRADED attaches visible uncertainty; stale evidence cannot cross attempts. Device-measured envelope inputs and real-device threshold calibration remain irreducibly external (GATE B)."
+}

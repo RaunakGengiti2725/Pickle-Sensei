@@ -1,0 +1,75 @@
+{
+  "workstream": "C18 — Stroke gold scaling + canonical L1/L2/L3 taxonomy bench wiring",
+  "status": "BLOCKED_EXTERNAL",
+  "built": {
+    "canonicalTaxonomy": "Verified ml/README.md points to packages/shared-types/src/pickleballTaxonomy.ts as product-wide source of truth; its existing contract contains 61 unique techniques across 9 families.",
+    "bench": "Added a versioned pickleball-taxonomy-v2 gold contract and swing-lab scoring for L1 family, L2 side, and L3 exact technique. Verdicts preserve correct, wrong, abstained, ambiguous, gold_unknown, and L2 not_applicable separately. Reports include per-level confusion matrices.",
+    "declaredIntentPrior": "Added an opt-in prior that may deepen a sub-L3 abstention only when compatible with observed side. AUTO/null is inert; contradictory observed side or an existing L3 observation is never overwritten. The comparison path is fixture-tested with and without the prior.",
+    "linuxBehavior": "The CLI reads committed stroke gold and looks only for canonical report.json outputs. With run directories absent, it reports prediction-side metrics unavailable and identifies the macOS pose extraction / pnpm lab:regen dependency rather than producing numbers."
+  },
+  "measured": {
+    "taxonomyTechniques": 61,
+    "taxonomyFamilies": 9,
+    "goldLabels": 22,
+    "goldCases": 9,
+    "targetLabels": 14,
+    "otherPlayerLabels": 8,
+    "l1Known": 20,
+    "l1Unknown": 2,
+    "l2Known": 16,
+    "l2Unknown": 6,
+    "l3Known": 8,
+    "l3Unknown": 14,
+    "eventLinksMatched": 22,
+    "eventLinksMissing": 0,
+    "heldOutLabelsTouched": 0,
+    "l1Coverage": {
+      "dink": 9,
+      "volley": 5,
+      "overhead_lob": 3,
+      "groundstroke": 2,
+      "serve": 1,
+      "unknown": 2
+    },
+    "fixtureIntentComparison": {
+      "rows": 2,
+      "withoutIntentL1Correct": 0,
+      "withoutIntentL1Abstained": 2,
+      "withIntentL1Correct": 1,
+      "withIntentL1Abstained": 1,
+      "withIntentL3Ambiguous": 1,
+      "conflictingRowsOverwritten": 0
+    },
+    "predictionSideCanonicalRows": 0,
+    "targetLabelsWithoutCanonicalRunReport": 14,
+    "swingLabTests": "12 files passed; 164 tests passed and 4 skipped (168 total); new strokeTaxonomyBench suite: 17 passed.",
+    "sharedTypesTests": "2 files passed; 13 tests passed, including the existing 61-technique taxonomy contract tests.",
+    "workspaceTypecheck": "17 workspace projects passed pnpm typecheck.",
+    "benchCommand": "pnpm lab:stroke-taxonomy exited 0 and reported 22 labels across 9 cases."
+  },
+  "provenance": {
+    "annotations": "Event bounds and ownership are copied unchanged from existing eventLabels entries in committed non-held-out bundle annotations.",
+    "visualReview": "Each label was assigned after frame-strip review of the corresponding existing event window. Exact L3 is withheld where direction, spin, contact state, or tactical role is not visually defensible.",
+    "annotatorId": "devin-visual-v2-waveC",
+    "heldOutExcluded": ["wm-dink-01", "afn-vic-rally1"]
+  },
+  "honestNegatives": [
+    "Canonical datasets/paddle-bench/runs report directories are absent on Linux, so no model prediction accuracy or confusion numbers were measured against these 22 gold labels.",
+    "Fourteen of 22 labels retain L3 unknown because the committed visual evidence cannot distinguish the exact canonical subtype reliably.",
+    "Two informal or occluded events retain unknown at L1 rather than forcing a family.",
+    "The declared-intent comparison is fixture evidence only; no canonical run artifact with declared intent was available on this machine."
+  ],
+  "blocked": [
+    "Observed prediction-side L1/L2/L3 metrics remain blocked on canonical report generation via pnpm lab:regen on macOS with Apple Vision pose extraction.",
+    "Delivery push is externally blocked: the configured git-manager proxy returned HTTP 403 for both origin and explicit plain-HTTPS push attempts. The completed commits remain local."
+  ],
+  "filesChanged": [
+    "package.json",
+    "packages/swing-lab/package.json",
+    "packages/swing-lab/src/index.ts",
+    "packages/swing-lab/src/strokeTaxonomyBench.ts",
+    "packages/swing-lab/test/strokeTaxonomyBench.test.ts",
+    "datasets/paddle-bench/stroke-gold.json",
+    "datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json"
+  ]
+}

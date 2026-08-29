@@ -1,0 +1,59 @@
+{
+  "workstream": "E14 — refreshed learning curves over all gold added since D4-02 (D04 contact, D13 stroke, D2-06 ball, D2-07 event, D2-11 TA)",
+  "branch": "devin/wave-e/e14-learning-curves",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "environment": "LINUX-CPU artifact-join only — no pipeline stage executed, no run dir touched, no cascade/bench number re-measured on this box; ball/TA numbers below are quoted from committed Mac-run bench artifacts",
+  "status": "complete — deterministic refresh script + versioned experiment artifact; two subsystems (ball, target_acquisition) gain their first curves; TA is the first subsystem with a full-supply measured curve",
+  "extends": "wave-d4 D4-02 (packages/swing-lab/src/learningCurveModality.ts, reused unmodified via import — no swing-lab file was touched)",
+  "whatWasBuilt": {
+    "script": "datasets/experiments/wave-e/e14-learning-curves.ts (run: cd packages/swing-lab && npx tsx ../../datasets/experiments/wave-e/e14-learning-curves.ts)",
+    "artifact": "datasets/experiments/wave-e/EXP-2026-08-29-e14-learning-curves.json (curveVersion modality-learning-curve-v2-e14)",
+    "reuse": "imports groupAwareCurve/diagnose/dedupeContacts/loaders from the committed D4-02 instrument; same group-aware sessionKey bootstrap, same no-fabricated-points rule, same held-out discipline"
+  },
+  "protocol": {
+    "groupAwareSplits": "resampling unit = sessionKey; frames/labels/cases of one session always move together; never random-frame splits",
+    "noFabrication": "an accuracy point exists only where a committed label joins a committed prediction artifact (latest lab:cascade rows; latest committed ball-bench result; latest committed SHIPPED-variant ta-bench result); curves stop where coverage ends",
+    "heldOutDiscipline": "wm-dink-01 and afn-vic-rally1 never enter any curve; their committed rows are quoted read-only; no held-out file was opened, viewed, or modified",
+    "predictionsNeverRelabeled": "DeclaredStroke/PredictedStroke separation untouched; no contract, threshold, or denominator was changed"
+  },
+  "labelSupplyRefreshed": {
+    "contact": "32 dev + 3 held-out unique contact events across 4 dev sessions (66 committed records deduped at 60ms; D4-02 measured 28 dev — growth from D04 waveD contact sidecars + D2-07 records with contactMs)",
+    "event": "41 dev + 5 held-out records across 4 dev sessions (34-label D4-02 gold + 12 D2-07 records: 7 events, 5 first-ever explicit non-events)",
+    "stroke": "29 dev + 0 held-out labels across 4 dev sessions (22 → 29 via D13; dev corpus SATURATED at 29/29 — return/drop_reset/attack_counter/specialty families remain at ZERO gold, closable only with new footage)",
+    "ball": "100 dev + 3 held-out ballFrames labels across 4 dev sessions (D2-06 added 43 hard-slice labels on 4 bundles; 2 of those bundles are not in ball-bench.json yet)",
+    "target_acquisition": "54 verified dev cases across 5 dev sessions (+5 verified locked_test; +12 D2-11 per-frame torso-box records counted supply-only, never joined to lock outcomes)"
+  },
+  "joinedPredictionCoverage": {
+    "contact": "3 dev units (2/3) from cascade-1787971753680 (Mac 2026-08-28); held-out 0/2 (250/245ms) — 29 dev labels unmeasured",
+    "event": "3 dev units (2/3); held-out 1/2 — 38 dev records unmeasured",
+    "stroke": "3 dev units (2/3); held-out 1/2 (vic confidently-wrong BACKHAND) — 26 dev labels unmeasured",
+    "ball": "12 dev visible-frame outcomes (6/12 = 0.50) across 3 cases / 2 sessions from ball-bench-1787971765368 (Mac, predates D2-06 labels); rally1 is 0/4 all-miss; held-out afn-vic 1/2 — 88 dev labels unmeasured",
+    "target_acquisition": "54/54 dev cases joined (100% — the only subsystem with full-supply coverage) from ta-bench-1787969692752 SHIPPED variant: 37/54 = 0.685 lock-correct"
+  },
+  "fitDiagnosisPerSubsystem": {
+    "contact": "MEASUREMENT_LIMITED + domain-shift signature in committed rows (dev 0.667 vs held-out 0.0) — cannot separate under/overfit at 3 joined units; the un-run Mac bench over 32 dev contacts is the decisive experiment",
+    "event": "MEASUREMENT_LIMITED — largest supply-to-measurement gap (41 labels vs 3 predictions); bottleneck #1 per HANDOFF_V3 and now has false-positive probes (non-events) waiting to be exercised",
+    "stroke": "MEASUREMENT_LIMITED — 29 labels vs 3 predictions; separately, label ACQUISITION is saturated (proven negative from D13): no labeling pass can grow this gold, only new footage",
+    "ball": "MEASUREMENT_LIMITED — curve at 2 sessions / 12 units, accuracy 0.50 with k=1 interval [0.167,0.833] (still wide); rally1 0/4 all-miss hints at a reacquisition feature gap but n too small to call",
+    "target_acquisition": "MODEL_LIMITED (measured, not inferred): full 5-session curve plateaus at 0.685 with tight k=4 interval [0.59,0.72] — adding same-distribution cases will not move it. Error mass is slice-concentrated: warriorgames 14/15=.93 vs sigonella 1/4=.25, sasebo 3/7=.43. The committed candidate config (acquire-v4-strict-gesture, same 54 cases) already measures 0.863 — a features/config verdict"
+  },
+  "ranking": [
+    "1. EVENT — needs PREDICTIONS (one Mac regen/bench pass over the 41-dev-record corpus incl. non-events); largest measurement gap and gates everything downstream",
+    "2. CONTACT — needs PREDICTIONS first, then held-out-shaped DATA (edge-on/occluded contact slices; committed rows already show dev 0.667 vs held-out 0.0)",
+    "3. BALL — needs PREDICTIONS + one manifest edit (wire wavea-wgm-wheelchair + wavea-sasebo-volleys into ball-bench.json) — converts a 2-session curve into 4 sessions for free; then features (reacquisition)",
+    "4. TARGET_ACQUISITION — needs BETTER FEATURES/config (candidate .863 vs shipped .685 on identical 54 cases, D-027 gate pending); secondary: more verified cases in sigonella/sasebo-shaped contested scenes (n=4, 7)",
+    "5. STROKE — needs DATA in the strict sense of NEW FOOTAGE (4 L1 families at zero gold; dev-corpus labeling proven saturated by D13); externally gated on footage supply, hence last for this wave"
+  ],
+  "headline": "The refreshed curves finally separate the two failure classes: TA is measured MODEL/FEATURE-limited (full-supply curve, plateau 0.685, candidate config already at 0.863), while event/contact/ball remain PREDICTION-coverage-limited — their label supplies grew 21–83% since D4-02 but the newest committed prediction artifacts still cover only the n=5 cascade gold (plus 3 ball cases). One Mac session (lab:regen + event/contact/ball/stroke benches over the grown gold) converts three MEASUREMENT_LIMITED verdicts into real data-vs-features calls without a single new label.",
+  "filesChanged": [
+    "datasets/experiments/wave-e/e14-learning-curves.ts (new)",
+    "datasets/experiments/wave-e/EXP-2026-08-29-e14-learning-curves.json (new, instrument-written)",
+    "datasets/experiments/wave-e/e14-learning-curves-summary.json (new)"
+  ],
+  "gates": "pnpm format:check green on touched files · pnpm typecheck green · pnpm lint zero new issues · no package source touched (script imports swing-lab read-only) · no STATUS_BOARD/HANDOFF/DECISIONS edits · held-out untouched · no runs/ artifacts touched · datasets append-only (no existing label rewritten)",
+  "risks": [
+    "Ball per-frame units are reconstructed from committed per-case hit/miss/wrongLocation COUNTS (frame identity unknown) — valid for pooled session accuracy, not for per-frame slicing; stated in the artifact",
+    "TA shipped result contains no locked_test rows, so TA domain shift is unmeasured here (held-out verified cases exist but have no committed shipped predictions)",
+    "Contact record growth partially collapses under the 60ms dedupe (66 records → 35 unique) — D04 re-observations of existing strikes are intentionally NOT counted as new events"
+  ]
+}

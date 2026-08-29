@@ -8,6 +8,7 @@ import type { Session, SessionStrokeEvent } from '@pickle/analysis-pipeline';
 import type { AnalysisRecord } from '@pickle/swing-domain';
 import {
   buildEventViews,
+  captureModePillLabel,
   eventTechniqueFamily,
   formatSessionClock,
   resolveEventViewState,
@@ -36,6 +37,24 @@ function analysisRecordDouble(
       camera: false,
     },
     modelRuns: [],
+    provenance: {
+      appVersion: 'test-double',
+      pipelineVersion: 'test-double',
+      providerVersions: [
+        {
+          providerId: 'test-double',
+          modelVersion: 'test-double',
+          runtime: 'deterministic',
+          executionTarget: 'on_device',
+          artifactHash: null,
+        },
+      ],
+      scoreVersion: 'test-double',
+      taxonomyVersion: 'test-double',
+      drillMappingVersion: 'none',
+      captureEnvelopeVersion: 'capture-envelope-not-measured',
+      recordedAtIso: '2026-01-01T00:00:00.000Z',
+    },
     result: null,
     faults: [],
     uncertainty: {
@@ -278,5 +297,12 @@ describe('buildEventViews', () => {
     expect(views[1]!.boundaryUncertain).toBe(true);
     expect(views[1]!.durationMs).toBe(3770 - 2703);
     expect(views.map(v => v.index)).toEqual([0, 1]);
+  });
+});
+
+describe('captureModePillLabel', () => {
+  it('labels only replay sessions as replay — a live session never wears the replay banner', () => {
+    expect(captureModePillLabel('replay')).toBe('REPLAY · DEV RALLY');
+    expect(captureModePillLabel('live')).toBeNull();
   });
 });

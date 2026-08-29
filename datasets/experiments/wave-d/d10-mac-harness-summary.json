@@ -1,0 +1,56 @@
+{
+  "workstream": "D10",
+  "title": "Single-command Mac/iPhone benchmark harness",
+  "branch": "devin/wave-d/d10-mac-harness",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "environment": "Linux (Ubuntu, Node 20, pnpm 10.15.1) — NO macOS, NO iPhone",
+  "built": {
+    "toolsMacBench": {
+      "entryScript": "tools/mac-bench/run-mac-bench.sh — single command; macOS-guarded (uname != Darwin → precise refusal, exit 3, verified on this Linux host); builds Swift extractor (swift build -c release), cold pass → pnpm lab:regen --exec → N warm passes → pnpm lab:cascade → assembles mac-bench-results-v1 JSON",
+      "resultsSchema": "mac-bench-results-v1 (tools/mac-bench/src/resultsSchema.ts) — host/provenance/plan/extractor/stages(P50/P90/P95 cold+warm, nearest-rank)/cascade(copied verbatim from lab:cascade, or null + required cascadeUnmeasuredReason)",
+      "comparison": "tools/mac-bench/src/compareResults.ts — mac-bench-compare-v1; verdicts OK/REGRESSION/NOT_COMPARABLE; cascade drops & silent-failure rises are regressions; contract re-versions are NOT_COMPARABLE; latency regression gates: >10% AND >50ms on P50/P95; nonzero exit for CI gating",
+      "docs": "tools/mac-bench/README.md (schema + usage), ARTIFACTS_REQUIRED.md (videos/model/env/hashes), IPHONE_HARNESS.md (device spec)"
+    },
+    "mobileExportContract": {
+      "file": "apps/mobile/src/camera/deviceBench.ts",
+      "schema": "pickle.device-bench.v1 — thermal (ProcessInfo.thermalState transitions), fps (windowed camera-frame rate), memory (phys_footprint bytes), capture refs pointing at existing CaptureCompletionTelemetryV1 / TargetLockTelemetryV1",
+      "honesty": "empty series require a nonempty unavailableReason; recorder.finalize() throws on unexplained absence; no fabricated zeros"
+    }
+  },
+  "measured": {
+    "linuxTestEvidence": {
+      "macBenchVitest": "35/35 passed (5 files: latencyStats 8, resultsSchema 7, assembleResults 5, compareResults 10, runCase 5)",
+      "mobileJest": "279/279 passed across 36 suites incl. new deviceBench.test.ts (13 tests)",
+      "typecheck": "pnpm typecheck (all workspace packages incl. @pickle/mac-bench) passed; apps/mobile npx tsc --noEmit passed",
+      "linuxGuard": "tools/mac-bench/run-mac-bench.sh executed on this Linux host → refusal message, exit code 3 (observed)"
+    },
+    "committedClipHashes": {
+      "note": "sha256 measured 2026-08-29 on this host from committed files; recorded in ARTIFACTS_REQUIRED.md",
+      "afn-sasebo-rally1/clip.mp4": "21fb75446a038ed5fb268b4287b7b6b2831d3712cbb05fedb21b97e440ad2daf",
+      "wm-dink-01/clip.mp4": "7d396a6d65669fc3b7fc3c33988e257be08f830e93ca20c51f38171fca0959a7",
+      "wm-volley-02/clip.mp4": "8b77606225ba0e3543accc6195c7fb10a7d312f445a73a5e4a03ab68b8862c15"
+    }
+  },
+  "honestNegatives": [
+    "The macOS execution path of run-mac-bench.sh is UNVERIFIED-HERE: it has never been run on a Mac; only its Linux refusal path, bash syntax, and every pure TS component are verified.",
+    "No cascade / latency / device numbers were produced — datasets/paddle-bench/videos/ and runs/ are absent on Linux and Apple Vision does not exist here; the fixture results JSON is labeled synthetic.",
+    "Source-video SHA-256 hashes are UNAVAILABLE-HERE (videos gitignored & absent); only the three committed bundle clip hashes are recorded.",
+    "No pinned HF model revision hash for ustc-community/dfine-medium-coco (no local cache here); ARTIFACTS_REQUIRED.md instructs recording it on first Mac run.",
+    "The thermal/memory native bridge on mobile does NOT exist yet — the contract exports those series empty with unavailableReason until a bridge is built (spec'd in IPHONE_HARNESS.md).",
+    "tools/paddle-lab/.venv has no committed lockfile; exact Python package versions are unknown."
+  ],
+  "blocked": {
+    "BLOCKED_EXTERNAL": [
+      "Mac execution of the full harness (Apple Vision pose extraction, Swift build, lab:regen, lab:cascade, real latency percentiles) — requires macOS hardware.",
+      "All iPhone device evidence (thermal/FPS/memory) — requires a physical iPhone plus a small native bridge module."
+    ]
+  },
+  "filesAdded": [
+    "tools/mac-bench/{run-mac-bench.sh,README.md,ARTIFACTS_REQUIRED.md,IPHONE_HARNESS.md,package.json,tsconfig.json}",
+    "tools/mac-bench/src/{latencyStats,resultsSchema,assembleResults,compareResults,runCase,index}.ts",
+    "tools/mac-bench/test/{latencyStats,resultsSchema,assembleResults,compareResults,runCase}.test.ts + fixtures/mac-bench-results.fixture.json",
+    "apps/mobile/src/camera/deviceBench.ts",
+    "apps/mobile/__tests__/deviceBench.test.ts + fixtures/deviceBenchExport.fixture.json"
+  ],
+  "filesModified": ["pnpm-workspace.yaml (added tools/mac-bench)", "pnpm-lock.yaml"]
+}

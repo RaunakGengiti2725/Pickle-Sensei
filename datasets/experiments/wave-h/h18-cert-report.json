@@ -1,0 +1,2462 @@
+{
+  "workstream": "h18-calibration-cert",
+  "generatedAtIso": "2026-08-29T18:06:29.277Z",
+  "contract": {
+    "version": "silent-failure-v1.1",
+    "definition": "a user-visible confident material claim (target identity, event, stroke L1, contact marker, phase render) that gold says is wrong; abstentions are NOT silent failures",
+    "claims": {
+      "targetIdentity": "lock presented but strict TARGET criterion fails (coverage < 0.5); no lock = abstention",
+      "event": "event selected but strict EVENT criterion fails; no selection = abstention",
+      "strokeL1": "non-null label whose L1 side contradicts gold; null/missing label = abstention",
+      "contactMarker": "estimated with |err| > 132ms vs gold, OR 66 < |err| <= 132ms without ball/paddle confirmation; abstained = abstention",
+      "phaseRender": "segmented timeline with impossible boundary ordering (followThroughEnd <= contact); not segmented = abstention"
+    },
+    "aggregation": "trial is ANSWERED if >=1 claim answered and gold-verifiable; trial is a SILENT FAILURE if >=1 answered claim is wrong; report silent failures over ALL trials and over ANSWERED trials",
+    "disputedGold": "a claim whose gold value is under a filed dispute is excluded-and-disclosed (excluded_disputed_gold): counted neither correct nor silent failure, disclosed in the per-claim detail",
+    "nonFiniteGuard": "non-finite values (NaN/Infinity) in gold or estimates make the claim unverifiable-with-disclosure, never a confident verdict"
+  },
+  "condition": {
+    "platform": "linux-cpu — committed artifacts + committed-data replays only; canonical fresh cascade on this box is honest 0/0 (run dirs Mac-gated)",
+    "heldOut": "wm-dink-01 and afn-vic-rally1 never parsed: retro filters split=development, replay harnesses exclude by construction, ownership loader includeHeldOut=false",
+    "grouping": "source session / bundle (per-unit session recorded); never frames-as-trials",
+    "productionThresholdsChanged": false
+  },
+  "certification": {
+    "denominatorNote": "trials = gold development cases in committed canonical cascade runs (n=3 dev cases across 2 source sessions); unit counts for stage-level views are stated per view — never blended",
+    "runs": [
+      {
+        "file": "cascade-1787960997164.json",
+        "generatedAtIso": "2026-08-28T23:49:57.162Z",
+        "devTrials": 3,
+        "heldOutRowsExcluded": 2,
+        "answeredTrials": 3,
+        "silentFailureTrials": 2,
+        "strictSurvivors": 1,
+        "usableResults": 0,
+        "perCase": [
+          {
+            "caseId": "wm-volley-02",
+            "session": "wm-tournament-2014",
+            "strict": true,
+            "usable": false
+          },
+          {
+            "caseId": "afn-sasebo-rally1",
+            "session": "afn-sasebo-2025-06",
+            "strict": false,
+            "usable": false
+          },
+          {
+            "caseId": "afn-sasebo-rally2",
+            "session": "afn-sasebo-2025-06",
+            "strict": false,
+            "usable": false
+          }
+        ],
+        "perClaim": {
+          "TARGET_IDENTITY": {
+            "answeredCorrect": 3,
+            "silentFailures": 0,
+            "abstained": 0,
+            "unverifiableRetro": 0
+          },
+          "EVENT": {
+            "answeredCorrect": 2,
+            "silentFailures": 1,
+            "abstained": 0,
+            "unverifiableRetro": 0
+          },
+          "STROKE_L1": {
+            "answeredCorrect": 1,
+            "silentFailures": 2,
+            "abstained": 0,
+            "unverifiableRetro": 0
+          },
+          "CONTACT_MARKER": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "PHASE_RENDER": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          }
+        }
+      },
+      {
+        "file": "cascade-1787963165545.json",
+        "generatedAtIso": "2026-08-29T00:26:05.544Z",
+        "devTrials": 3,
+        "heldOutRowsExcluded": 2,
+        "answeredTrials": 3,
+        "silentFailureTrials": 1,
+        "strictSurvivors": 1,
+        "usableResults": 0,
+        "perCase": [
+          {
+            "caseId": "wm-volley-02",
+            "session": "wm-tournament-2014",
+            "strict": true,
+            "usable": false
+          },
+          {
+            "caseId": "afn-sasebo-rally1",
+            "session": "afn-sasebo-2025-06",
+            "strict": false,
+            "usable": false
+          },
+          {
+            "caseId": "afn-sasebo-rally2",
+            "session": "afn-sasebo-2025-06",
+            "strict": false,
+            "usable": false
+          }
+        ],
+        "perClaim": {
+          "TARGET_IDENTITY": {
+            "answeredCorrect": 3,
+            "silentFailures": 0,
+            "abstained": 0,
+            "unverifiableRetro": 0
+          },
+          "EVENT": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "STROKE_L1": {
+            "answeredCorrect": 1,
+            "silentFailures": 1,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "CONTACT_MARKER": {
+            "answeredCorrect": 1,
+            "silentFailures": 1,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "PHASE_RENDER": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          }
+        }
+      },
+      {
+        "file": "cascade-1787963173891.json",
+        "generatedAtIso": "2026-08-29T00:26:13.890Z",
+        "devTrials": 3,
+        "heldOutRowsExcluded": 2,
+        "answeredTrials": 3,
+        "silentFailureTrials": 1,
+        "strictSurvivors": 1,
+        "usableResults": 0,
+        "perCase": [
+          {
+            "caseId": "wm-volley-02",
+            "session": "wm-tournament-2014",
+            "strict": true,
+            "usable": false
+          },
+          {
+            "caseId": "afn-sasebo-rally1",
+            "session": "afn-sasebo-2025-06",
+            "strict": false,
+            "usable": false
+          },
+          {
+            "caseId": "afn-sasebo-rally2",
+            "session": "afn-sasebo-2025-06",
+            "strict": false,
+            "usable": false
+          }
+        ],
+        "perClaim": {
+          "TARGET_IDENTITY": {
+            "answeredCorrect": 3,
+            "silentFailures": 0,
+            "abstained": 0,
+            "unverifiableRetro": 0
+          },
+          "EVENT": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "STROKE_L1": {
+            "answeredCorrect": 1,
+            "silentFailures": 1,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "CONTACT_MARKER": {
+            "answeredCorrect": 1,
+            "silentFailures": 1,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "PHASE_RENDER": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          }
+        }
+      },
+      {
+        "file": "cascade-1787965901691.json",
+        "generatedAtIso": "2026-08-29T01:11:41.682Z",
+        "devTrials": 3,
+        "heldOutRowsExcluded": 2,
+        "answeredTrials": 3,
+        "silentFailureTrials": 1,
+        "strictSurvivors": 1,
+        "usableResults": 0,
+        "perCase": [
+          {
+            "caseId": "wm-volley-02",
+            "session": "wm-tournament-2014",
+            "strict": true,
+            "usable": false
+          },
+          {
+            "caseId": "afn-sasebo-rally1",
+            "session": "afn-sasebo-2025-06",
+            "strict": false,
+            "usable": false
+          },
+          {
+            "caseId": "afn-sasebo-rally2",
+            "session": "afn-sasebo-2025-06",
+            "strict": false,
+            "usable": false
+          }
+        ],
+        "perClaim": {
+          "TARGET_IDENTITY": {
+            "answeredCorrect": 3,
+            "silentFailures": 0,
+            "abstained": 0,
+            "unverifiableRetro": 0
+          },
+          "EVENT": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "STROKE_L1": {
+            "answeredCorrect": 1,
+            "silentFailures": 1,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "CONTACT_MARKER": {
+            "answeredCorrect": 1,
+            "silentFailures": 1,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "PHASE_RENDER": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          }
+        }
+      },
+      {
+        "file": "cascade-1787966875746.json",
+        "generatedAtIso": "2026-08-29T01:27:55.745Z",
+        "devTrials": 3,
+        "heldOutRowsExcluded": 2,
+        "answeredTrials": 3,
+        "silentFailureTrials": 1,
+        "strictSurvivors": 1,
+        "usableResults": 0,
+        "perCase": [
+          {
+            "caseId": "wm-volley-02",
+            "session": "wm-tournament-2014",
+            "strict": true,
+            "usable": false
+          },
+          {
+            "caseId": "afn-sasebo-rally1",
+            "session": "afn-sasebo-2025-06",
+            "strict": false,
+            "usable": false
+          },
+          {
+            "caseId": "afn-sasebo-rally2",
+            "session": "afn-sasebo-2025-06",
+            "strict": false,
+            "usable": false
+          }
+        ],
+        "perClaim": {
+          "TARGET_IDENTITY": {
+            "answeredCorrect": 3,
+            "silentFailures": 0,
+            "abstained": 0,
+            "unverifiableRetro": 0
+          },
+          "EVENT": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "STROKE_L1": {
+            "answeredCorrect": 1,
+            "silentFailures": 1,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "CONTACT_MARKER": {
+            "answeredCorrect": 1,
+            "silentFailures": 1,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "PHASE_RENDER": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          }
+        }
+      },
+      {
+        "file": "cascade-1787967090683.json",
+        "generatedAtIso": "2026-08-29T01:31:30.682Z",
+        "devTrials": 3,
+        "heldOutRowsExcluded": 2,
+        "answeredTrials": 3,
+        "silentFailureTrials": 1,
+        "strictSurvivors": 1,
+        "usableResults": 1,
+        "perCase": [
+          {
+            "caseId": "wm-volley-02",
+            "session": "wm-tournament-2014",
+            "strict": true,
+            "usable": true
+          },
+          {
+            "caseId": "afn-sasebo-rally1",
+            "session": "afn-sasebo-2025-06",
+            "strict": false,
+            "usable": false
+          },
+          {
+            "caseId": "afn-sasebo-rally2",
+            "session": "afn-sasebo-2025-06",
+            "strict": false,
+            "usable": false
+          }
+        ],
+        "perClaim": {
+          "TARGET_IDENTITY": {
+            "answeredCorrect": 3,
+            "silentFailures": 0,
+            "abstained": 0,
+            "unverifiableRetro": 0
+          },
+          "EVENT": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "STROKE_L1": {
+            "answeredCorrect": 1,
+            "silentFailures": 1,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "CONTACT_MARKER": {
+            "answeredCorrect": 1,
+            "silentFailures": 1,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "PHASE_RENDER": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          }
+        }
+      },
+      {
+        "file": "cascade-1787968886850.json",
+        "generatedAtIso": "2026-08-29T02:01:26.850Z",
+        "devTrials": 3,
+        "heldOutRowsExcluded": 2,
+        "answeredTrials": 3,
+        "silentFailureTrials": 1,
+        "strictSurvivors": 1,
+        "usableResults": 1,
+        "perCase": [
+          {
+            "caseId": "wm-volley-02",
+            "session": "wm-tournament-2014",
+            "strict": true,
+            "usable": true
+          },
+          {
+            "caseId": "afn-sasebo-rally1",
+            "session": "afn-sasebo-2025-06",
+            "strict": false,
+            "usable": false
+          },
+          {
+            "caseId": "afn-sasebo-rally2",
+            "session": "afn-sasebo-2025-06",
+            "strict": false,
+            "usable": false
+          }
+        ],
+        "perClaim": {
+          "TARGET_IDENTITY": {
+            "answeredCorrect": 3,
+            "silentFailures": 0,
+            "abstained": 0,
+            "unverifiableRetro": 0
+          },
+          "EVENT": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "STROKE_L1": {
+            "answeredCorrect": 1,
+            "silentFailures": 1,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "CONTACT_MARKER": {
+            "answeredCorrect": 1,
+            "silentFailures": 1,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "PHASE_RENDER": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          }
+        }
+      },
+      {
+        "file": "cascade-1787971517129.json",
+        "generatedAtIso": "2026-08-29T02:45:17.128Z",
+        "devTrials": 3,
+        "heldOutRowsExcluded": 2,
+        "answeredTrials": 3,
+        "silentFailureTrials": 0,
+        "strictSurvivors": 2,
+        "usableResults": 2,
+        "perCase": [
+          {
+            "caseId": "wm-volley-02",
+            "session": "wm-tournament-2014",
+            "strict": true,
+            "usable": true
+          },
+          {
+            "caseId": "afn-sasebo-rally1",
+            "session": "afn-sasebo-2025-06",
+            "strict": false,
+            "usable": false
+          },
+          {
+            "caseId": "afn-sasebo-rally2",
+            "session": "afn-sasebo-2025-06",
+            "strict": true,
+            "usable": true
+          }
+        ],
+        "perClaim": {
+          "TARGET_IDENTITY": {
+            "answeredCorrect": 3,
+            "silentFailures": 0,
+            "abstained": 0,
+            "unverifiableRetro": 0
+          },
+          "EVENT": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "STROKE_L1": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "CONTACT_MARKER": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "PHASE_RENDER": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          }
+        }
+      },
+      {
+        "file": "cascade-1787971618835.json",
+        "generatedAtIso": "2026-08-29T02:46:58.834Z",
+        "devTrials": 3,
+        "heldOutRowsExcluded": 2,
+        "answeredTrials": 3,
+        "silentFailureTrials": 0,
+        "strictSurvivors": 2,
+        "usableResults": 2,
+        "perCase": [
+          {
+            "caseId": "wm-volley-02",
+            "session": "wm-tournament-2014",
+            "strict": true,
+            "usable": true
+          },
+          {
+            "caseId": "afn-sasebo-rally1",
+            "session": "afn-sasebo-2025-06",
+            "strict": false,
+            "usable": false
+          },
+          {
+            "caseId": "afn-sasebo-rally2",
+            "session": "afn-sasebo-2025-06",
+            "strict": true,
+            "usable": true
+          }
+        ],
+        "perClaim": {
+          "TARGET_IDENTITY": {
+            "answeredCorrect": 3,
+            "silentFailures": 0,
+            "abstained": 0,
+            "unverifiableRetro": 0
+          },
+          "EVENT": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "STROKE_L1": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "CONTACT_MARKER": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "PHASE_RENDER": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          }
+        }
+      },
+      {
+        "file": "cascade-1787971753680.json",
+        "generatedAtIso": "2026-08-29T02:49:13.679Z",
+        "devTrials": 3,
+        "heldOutRowsExcluded": 2,
+        "answeredTrials": 3,
+        "silentFailureTrials": 0,
+        "strictSurvivors": 2,
+        "usableResults": 2,
+        "perCase": [
+          {
+            "caseId": "wm-volley-02",
+            "session": "wm-tournament-2014",
+            "strict": true,
+            "usable": true
+          },
+          {
+            "caseId": "afn-sasebo-rally1",
+            "session": "afn-sasebo-2025-06",
+            "strict": false,
+            "usable": false
+          },
+          {
+            "caseId": "afn-sasebo-rally2",
+            "session": "afn-sasebo-2025-06",
+            "strict": true,
+            "usable": true
+          }
+        ],
+        "perClaim": {
+          "TARGET_IDENTITY": {
+            "answeredCorrect": 3,
+            "silentFailures": 0,
+            "abstained": 0,
+            "unverifiableRetro": 0
+          },
+          "EVENT": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "STROKE_L1": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "CONTACT_MARKER": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          },
+          "PHASE_RENDER": {
+            "answeredCorrect": 2,
+            "silentFailures": 0,
+            "abstained": 1,
+            "unverifiableRetro": 0
+          }
+        }
+      }
+    ],
+    "latestCommittedRun": {
+      "file": "cascade-1787971753680.json",
+      "strictSurvival": "2/3 dev trials",
+      "usableResultRate": "2/3 dev trials",
+      "silentFailureAllTrials": "0/3",
+      "silentFailureAnsweredTrials": "0/3",
+      "coverageAnswered": "3/3",
+      "perCase": [
+        {
+          "caseId": "wm-volley-02",
+          "session": "wm-tournament-2014",
+          "strict": true,
+          "usable": true
+        },
+        {
+          "caseId": "afn-sasebo-rally1",
+          "session": "afn-sasebo-2025-06",
+          "strict": false,
+          "usable": false
+        },
+        {
+          "caseId": "afn-sasebo-rally2",
+          "session": "afn-sasebo-2025-06",
+          "strict": true,
+          "usable": true
+        }
+      ],
+      "perClaim": {
+        "TARGET_IDENTITY": {
+          "answeredCorrect": 3,
+          "silentFailures": 0,
+          "abstained": 0,
+          "unverifiableRetro": 0
+        },
+        "EVENT": {
+          "answeredCorrect": 2,
+          "silentFailures": 0,
+          "abstained": 1,
+          "unverifiableRetro": 0
+        },
+        "STROKE_L1": {
+          "answeredCorrect": 2,
+          "silentFailures": 0,
+          "abstained": 1,
+          "unverifiableRetro": 0
+        },
+        "CONTACT_MARKER": {
+          "answeredCorrect": 2,
+          "silentFailures": 0,
+          "abstained": 1,
+          "unverifiableRetro": 0
+        },
+        "PHASE_RENDER": {
+          "answeredCorrect": 2,
+          "silentFailures": 0,
+          "abstained": 1,
+          "unverifiableRetro": 0
+        }
+      }
+    }
+  },
+  "riskCoverageViews": {
+    "calibration": [
+      {
+        "name": "W14 TA blind overlap (n=12 verdicts)",
+        "provenance": "committed artifact wave-b/W14-overlap/ta-overlap.json; correct = 3-class agreement with primary annotator (agreement.json) — inter-annotator proxy, not gold",
+        "n": 12,
+        "nCorrect": 10,
+        "ece10": 0.12083333333333336,
+        "aurc": 0.07646103896103897,
+        "coverageRiskCurve": [
+          {
+            "threshold": 0.98,
+            "coverage": 0.08333333333333333,
+            "risk": 0,
+            "nAnswered": 1,
+            "nWrongAnswered": 0
+          },
+          {
+            "threshold": 0.97,
+            "coverage": 0.16666666666666666,
+            "risk": 0,
+            "nAnswered": 2,
+            "nWrongAnswered": 0
+          },
+          {
+            "threshold": 0.95,
+            "coverage": 0.3333333333333333,
+            "risk": 0,
+            "nAnswered": 4,
+            "nWrongAnswered": 0
+          },
+          {
+            "threshold": 0.9,
+            "coverage": 0.4166666666666667,
+            "risk": 0,
+            "nAnswered": 5,
+            "nWrongAnswered": 0
+          },
+          {
+            "threshold": 0.85,
+            "coverage": 0.5833333333333334,
+            "risk": 0.14285714285714285,
+            "nAnswered": 7,
+            "nWrongAnswered": 1
+          },
+          {
+            "threshold": 0.8,
+            "coverage": 0.75,
+            "risk": 0.1111111111111111,
+            "nAnswered": 9,
+            "nWrongAnswered": 1
+          },
+          {
+            "threshold": 0.75,
+            "coverage": 0.8333333333333334,
+            "risk": 0.2,
+            "nAnswered": 10,
+            "nWrongAnswered": 2
+          },
+          {
+            "threshold": 0.7,
+            "coverage": 0.9166666666666666,
+            "risk": 0.18181818181818182,
+            "nAnswered": 11,
+            "nWrongAnswered": 2
+          },
+          {
+            "threshold": 0.55,
+            "coverage": 1,
+            "risk": 0.16666666666666666,
+            "nAnswered": 12,
+            "nWrongAnswered": 2
+          }
+        ]
+      },
+      {
+        "name": "W14 ownership blind overlap (n=31 boxes)",
+        "provenance": "committed artifact wave-b/W14-overlap/ownership-overlap.json; correct = 3-class agreement with primary annotator (agreement.json) — inter-annotator proxy, not gold",
+        "n": 31,
+        "nCorrect": 28,
+        "ece10": 0.09774193548387092,
+        "aurc": 0.017596952865530858,
+        "coverageRiskCurve": [
+          {
+            "threshold": 0.97,
+            "coverage": 0.03225806451612903,
+            "risk": 0,
+            "nAnswered": 1,
+            "nWrongAnswered": 0
+          },
+          {
+            "threshold": 0.95,
+            "coverage": 0.25806451612903225,
+            "risk": 0,
+            "nAnswered": 8,
+            "nWrongAnswered": 0
+          },
+          {
+            "threshold": 0.9,
+            "coverage": 0.41935483870967744,
+            "risk": 0,
+            "nAnswered": 13,
+            "nWrongAnswered": 0
+          },
+          {
+            "threshold": 0.85,
+            "coverage": 0.5161290322580645,
+            "risk": 0,
+            "nAnswered": 16,
+            "nWrongAnswered": 0
+          },
+          {
+            "threshold": 0.8,
+            "coverage": 0.6129032258064516,
+            "risk": 0,
+            "nAnswered": 19,
+            "nWrongAnswered": 0
+          },
+          {
+            "threshold": 0.75,
+            "coverage": 0.7096774193548387,
+            "risk": 0.045454545454545456,
+            "nAnswered": 22,
+            "nWrongAnswered": 1
+          },
+          {
+            "threshold": 0.7,
+            "coverage": 0.8387096774193549,
+            "risk": 0.038461538461538464,
+            "nAnswered": 26,
+            "nWrongAnswered": 1
+          },
+          {
+            "threshold": 0.65,
+            "coverage": 0.8709677419354839,
+            "risk": 0.037037037037037035,
+            "nAnswered": 27,
+            "nWrongAnswered": 1
+          },
+          {
+            "threshold": 0.6,
+            "coverage": 0.9354838709677419,
+            "risk": 0.06896551724137931,
+            "nAnswered": 29,
+            "nWrongAnswered": 2
+          },
+          {
+            "threshold": 0.5,
+            "coverage": 1,
+            "risk": 0.0967741935483871,
+            "nAnswered": 31,
+            "nWrongAnswered": 3
+          }
+        ]
+      },
+      {
+        "name": "D2-04 ownership audit pooled (n=80 slots, 3 bundles)",
+        "provenance": "committed D2-04 audit sidecars bundles/*/annotation/devin-visual-v4-waveD2-ownership-audit.json; correct = 3-class agreement with the committed waveC ownership labels — inter-annotator proxy, not gold; POOLED across bundles — samples cluster by bundle/video, not i.i.d.",
+        "n": 80,
+        "nCorrect": 66,
+        "ece10": 0.10937499999999992,
+        "aurc": 0.12453559686820621,
+        "coverageRiskCurve": [
+          {
+            "threshold": 0.95,
+            "coverage": 0.175,
+            "risk": 0.07142857142857142,
+            "nAnswered": 14,
+            "nWrongAnswered": 1
+          },
+          {
+            "threshold": 0.9,
+            "coverage": 0.35,
+            "risk": 0.14285714285714285,
+            "nAnswered": 28,
+            "nWrongAnswered": 4
+          },
+          {
+            "threshold": 0.85,
+            "coverage": 0.525,
+            "risk": 0.14285714285714285,
+            "nAnswered": 42,
+            "nWrongAnswered": 6
+          },
+          {
+            "threshold": 0.8,
+            "coverage": 0.5625,
+            "risk": 0.13333333333333333,
+            "nAnswered": 45,
+            "nWrongAnswered": 6
+          },
+          {
+            "threshold": 0.75,
+            "coverage": 0.6125,
+            "risk": 0.14285714285714285,
+            "nAnswered": 49,
+            "nWrongAnswered": 7
+          },
+          {
+            "threshold": 0.7,
+            "coverage": 0.725,
+            "risk": 0.1206896551724138,
+            "nAnswered": 58,
+            "nWrongAnswered": 7
+          },
+          {
+            "threshold": 0.6,
+            "coverage": 0.85,
+            "risk": 0.14705882352941177,
+            "nAnswered": 68,
+            "nWrongAnswered": 10
+          },
+          {
+            "threshold": 0.55,
+            "coverage": 0.8625,
+            "risk": 0.14492753623188406,
+            "nAnswered": 69,
+            "nWrongAnswered": 10
+          },
+          {
+            "threshold": 0.5,
+            "coverage": 0.9375,
+            "risk": 0.17333333333333334,
+            "nAnswered": 75,
+            "nWrongAnswered": 13
+          },
+          {
+            "threshold": 0.45,
+            "coverage": 0.95,
+            "risk": 0.17105263157894737,
+            "nAnswered": 76,
+            "nWrongAnswered": 13
+          },
+          {
+            "threshold": 0.4,
+            "coverage": 0.9875,
+            "risk": 0.17721518987341772,
+            "nAnswered": 79,
+            "nWrongAnswered": 14
+          },
+          {
+            "threshold": 0.35,
+            "coverage": 1,
+            "risk": 0.175,
+            "nAnswered": 80,
+            "nWrongAnswered": 14
+          }
+        ]
+      },
+      {
+        "name": "D2-04 ownership audit — wavea-944403-dink (n=44 slots)",
+        "provenance": "committed D2-04 audit sidecars bundles/*/annotation/devin-visual-v4-waveD2-ownership-audit.json; correct = 3-class agreement with the committed waveC ownership labels — inter-annotator proxy, not gold; single bundle wavea-944403-dink",
+        "n": 44,
+        "nCorrect": 38,
+        "ece10": 0.1193181818181818,
+        "aurc": 0.13787186969248558,
+        "coverageRiskCurve": [
+          {
+            "threshold": 0.95,
+            "coverage": 0.18181818181818182,
+            "risk": 0.125,
+            "nAnswered": 8,
+            "nWrongAnswered": 1
+          },
+          {
+            "threshold": 0.9,
+            "coverage": 0.4318181818181818,
+            "risk": 0.15789473684210525,
+            "nAnswered": 19,
+            "nWrongAnswered": 3
+          },
+          {
+            "threshold": 0.85,
+            "coverage": 0.6818181818181818,
+            "risk": 0.13333333333333333,
+            "nAnswered": 30,
+            "nWrongAnswered": 4
+          },
+          {
+            "threshold": 0.8,
+            "coverage": 0.75,
+            "risk": 0.12121212121212122,
+            "nAnswered": 33,
+            "nWrongAnswered": 4
+          },
+          {
+            "threshold": 0.75,
+            "coverage": 0.8181818181818182,
+            "risk": 0.1388888888888889,
+            "nAnswered": 36,
+            "nWrongAnswered": 5
+          },
+          {
+            "threshold": 0.7,
+            "coverage": 0.8409090909090909,
+            "risk": 0.13513513513513514,
+            "nAnswered": 37,
+            "nWrongAnswered": 5
+          },
+          {
+            "threshold": 0.6,
+            "coverage": 0.9090909090909091,
+            "risk": 0.15,
+            "nAnswered": 40,
+            "nWrongAnswered": 6
+          },
+          {
+            "threshold": 0.5,
+            "coverage": 0.9545454545454546,
+            "risk": 0.14285714285714285,
+            "nAnswered": 42,
+            "nWrongAnswered": 6
+          },
+          {
+            "threshold": 0.4,
+            "coverage": 0.9772727272727273,
+            "risk": 0.13953488372093023,
+            "nAnswered": 43,
+            "nWrongAnswered": 6
+          },
+          {
+            "threshold": 0.35,
+            "coverage": 1,
+            "risk": 0.13636363636363635,
+            "nAnswered": 44,
+            "nWrongAnswered": 6
+          }
+        ]
+      },
+      {
+        "name": "D2-04 ownership audit — wavea-944403-smash (n=16 slots)",
+        "provenance": "committed D2-04 audit sidecars bundles/*/annotation/devin-visual-v4-waveD2-ownership-audit.json; correct = 3-class agreement with the committed waveC ownership labels — inter-annotator proxy, not gold; single bundle wavea-944403-smash",
+        "n": 16,
+        "nCorrect": 10,
+        "ece10": 0.24375000000000002,
+        "aurc": 0.26945684523809527,
+        "coverageRiskCurve": [
+          {
+            "threshold": 0.95,
+            "coverage": 0.0625,
+            "risk": 0,
+            "nAnswered": 1,
+            "nWrongAnswered": 0
+          },
+          {
+            "threshold": 0.9,
+            "coverage": 0.1875,
+            "risk": 0.3333333333333333,
+            "nAnswered": 3,
+            "nWrongAnswered": 1
+          },
+          {
+            "threshold": 0.85,
+            "coverage": 0.3125,
+            "risk": 0.4,
+            "nAnswered": 5,
+            "nWrongAnswered": 2
+          },
+          {
+            "threshold": 0.75,
+            "coverage": 0.375,
+            "risk": 0.3333333333333333,
+            "nAnswered": 6,
+            "nWrongAnswered": 2
+          },
+          {
+            "threshold": 0.7,
+            "coverage": 0.4375,
+            "risk": 0.2857142857142857,
+            "nAnswered": 7,
+            "nWrongAnswered": 2
+          },
+          {
+            "threshold": 0.6,
+            "coverage": 0.75,
+            "risk": 0.25,
+            "nAnswered": 12,
+            "nWrongAnswered": 3
+          },
+          {
+            "threshold": 0.5,
+            "coverage": 0.9375,
+            "risk": 0.3333333333333333,
+            "nAnswered": 15,
+            "nWrongAnswered": 5
+          },
+          {
+            "threshold": 0.4,
+            "coverage": 1,
+            "risk": 0.375,
+            "nAnswered": 16,
+            "nWrongAnswered": 6
+          }
+        ]
+      },
+      {
+        "name": "D2-04 ownership audit — wavea-faead-rally (n=20 slots)",
+        "provenance": "committed D2-04 audit sidecars bundles/*/annotation/devin-visual-v4-waveD2-ownership-audit.json; correct = 3-class agreement with the committed waveC ownership labels — inter-annotator proxy, not gold; single bundle wavea-faead-rally",
+        "n": 20,
+        "nCorrect": 18,
+        "ece10": 0.2,
+        "aurc": 0.020947389920880632,
+        "coverageRiskCurve": [
+          {
+            "threshold": 0.95,
+            "coverage": 0.25,
+            "risk": 0,
+            "nAnswered": 5,
+            "nWrongAnswered": 0
+          },
+          {
+            "threshold": 0.9,
+            "coverage": 0.3,
+            "risk": 0,
+            "nAnswered": 6,
+            "nWrongAnswered": 0
+          },
+          {
+            "threshold": 0.85,
+            "coverage": 0.35,
+            "risk": 0,
+            "nAnswered": 7,
+            "nWrongAnswered": 0
+          },
+          {
+            "threshold": 0.7,
+            "coverage": 0.7,
+            "risk": 0,
+            "nAnswered": 14,
+            "nWrongAnswered": 0
+          },
+          {
+            "threshold": 0.6,
+            "coverage": 0.8,
+            "risk": 0.0625,
+            "nAnswered": 16,
+            "nWrongAnswered": 1
+          },
+          {
+            "threshold": 0.55,
+            "coverage": 0.85,
+            "risk": 0.058823529411764705,
+            "nAnswered": 17,
+            "nWrongAnswered": 1
+          },
+          {
+            "threshold": 0.5,
+            "coverage": 0.9,
+            "risk": 0.1111111111111111,
+            "nAnswered": 18,
+            "nWrongAnswered": 2
+          },
+          {
+            "threshold": 0.45,
+            "coverage": 0.95,
+            "risk": 0.10526315789473684,
+            "nAnswered": 19,
+            "nWrongAnswered": 2
+          },
+          {
+            "threshold": 0.4,
+            "coverage": 1,
+            "risk": 0.1,
+            "nAnswered": 20,
+            "nWrongAnswered": 2
+          }
+        ]
+      }
+    ],
+    "selectiveRisk": [
+      {
+        "stage": "contact",
+        "units": [
+          {
+            "group": "dvids-944403",
+            "confidence": 0.782394664126404,
+            "wrong": false
+          },
+          {
+            "group": "dvids-944403",
+            "confidence": 0.55,
+            "wrong": false
+          },
+          {
+            "group": "dvids-faead",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "dvids-faead",
+            "confidence": 0.55,
+            "wrong": true
+          },
+          {
+            "group": "dvids-faead",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "dvids-faead",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "dvids-marne",
+            "confidence": 0.4877830454018606,
+            "wrong": false
+          },
+          {
+            "group": "dvids-sasebo",
+            "confidence": 0.6830856493897352,
+            "wrong": true
+          },
+          {
+            "group": "dvids-sasebo",
+            "confidence": 0.55,
+            "wrong": false
+          },
+          {
+            "group": "dvids-wgm",
+            "confidence": 0.8600052616513526,
+            "wrong": false
+          }
+        ],
+        "disclosures": [
+          "target-owned gold contact events only (silent-failure-v1 CONTACT_MARKER is a target claim)",
+          "ORACLE-BALL condition (gold ball frames, conf 0.9) — measures the estimator's temporal fusion, not the ball tracker; no committed paddle track, so paddleConfirmed is unreachable",
+          "wrong = |err| > 132ms, or 66 < |err| <= 132ms without ball confirmation (contract v1 CONTACT_MARKER)",
+          "estimator-internal abstentions stay in every coverage denominator"
+        ],
+        "curve": [
+          {
+            "threshold": 0.86,
+            "nUnits": 10,
+            "answered": 1,
+            "wrongAnswered": 0,
+            "coverage": 0.1,
+            "riskOfAnswered": 0,
+            "perGroup": {
+              "dvids-944403": {
+                "n": 2,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-faead": {
+                "n": 4,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-marne": {
+                "n": 1,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-sasebo": {
+                "n": 2,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-wgm": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 0
+              }
+            },
+            "onFrontier": false
+          },
+          {
+            "threshold": 0.782,
+            "nUnits": 10,
+            "answered": 2,
+            "wrongAnswered": 0,
+            "coverage": 0.2,
+            "riskOfAnswered": 0,
+            "perGroup": {
+              "dvids-944403": {
+                "n": 2,
+                "answered": 1,
+                "wrongAnswered": 0
+              },
+              "dvids-faead": {
+                "n": 4,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-marne": {
+                "n": 1,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-sasebo": {
+                "n": 2,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-wgm": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 0
+              }
+            },
+            "onFrontier": true
+          },
+          {
+            "threshold": 0.683,
+            "nUnits": 10,
+            "answered": 3,
+            "wrongAnswered": 1,
+            "coverage": 0.3,
+            "riskOfAnswered": 0.333,
+            "perGroup": {
+              "dvids-944403": {
+                "n": 2,
+                "answered": 1,
+                "wrongAnswered": 0
+              },
+              "dvids-faead": {
+                "n": 4,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-marne": {
+                "n": 1,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-sasebo": {
+                "n": 2,
+                "answered": 1,
+                "wrongAnswered": 1
+              },
+              "dvids-wgm": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 0
+              }
+            },
+            "onFrontier": false
+          },
+          {
+            "threshold": 0.55,
+            "nUnits": 10,
+            "answered": 6,
+            "wrongAnswered": 2,
+            "coverage": 0.6,
+            "riskOfAnswered": 0.333,
+            "perGroup": {
+              "dvids-944403": {
+                "n": 2,
+                "answered": 2,
+                "wrongAnswered": 0
+              },
+              "dvids-faead": {
+                "n": 4,
+                "answered": 1,
+                "wrongAnswered": 1
+              },
+              "dvids-marne": {
+                "n": 1,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-sasebo": {
+                "n": 2,
+                "answered": 2,
+                "wrongAnswered": 1
+              },
+              "dvids-wgm": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 0
+              }
+            },
+            "onFrontier": false
+          },
+          {
+            "threshold": 0.488,
+            "nUnits": 10,
+            "answered": 7,
+            "wrongAnswered": 2,
+            "coverage": 0.7,
+            "riskOfAnswered": 0.286,
+            "perGroup": {
+              "dvids-944403": {
+                "n": 2,
+                "answered": 2,
+                "wrongAnswered": 0
+              },
+              "dvids-faead": {
+                "n": 4,
+                "answered": 1,
+                "wrongAnswered": 1
+              },
+              "dvids-marne": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 0
+              },
+              "dvids-sasebo": {
+                "n": 2,
+                "answered": 2,
+                "wrongAnswered": 1
+              },
+              "dvids-wgm": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 0
+              }
+            },
+            "onFrontier": true
+          },
+          {
+            "threshold": 0,
+            "nUnits": 10,
+            "answered": 7,
+            "wrongAnswered": 2,
+            "coverage": 0.7,
+            "riskOfAnswered": 0.286,
+            "perGroup": {
+              "dvids-944403": {
+                "n": 2,
+                "answered": 2,
+                "wrongAnswered": 0
+              },
+              "dvids-faead": {
+                "n": 4,
+                "answered": 1,
+                "wrongAnswered": 1
+              },
+              "dvids-marne": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 0
+              },
+              "dvids-sasebo": {
+                "n": 2,
+                "answered": 2,
+                "wrongAnswered": 1
+              },
+              "dvids-wgm": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 0
+              }
+            },
+            "onFrontier": true
+          }
+        ],
+        "currentPoint": {
+          "threshold": 0,
+          "nUnits": 10,
+          "answered": 7,
+          "wrongAnswered": 2,
+          "coverage": 0.7,
+          "riskOfAnswered": 0.286,
+          "perGroup": {
+            "dvids-944403": {
+              "n": 2,
+              "answered": 2,
+              "wrongAnswered": 0
+            },
+            "dvids-faead": {
+              "n": 4,
+              "answered": 1,
+              "wrongAnswered": 1
+            },
+            "dvids-marne": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "dvids-sasebo": {
+              "n": 2,
+              "answered": 2,
+              "wrongAnswered": 1
+            },
+            "dvids-wgm": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": true
+        },
+        "zeroObservedRiskPoint": {
+          "threshold": 0.782,
+          "nUnits": 10,
+          "answered": 2,
+          "wrongAnswered": 0,
+          "coverage": 0.2,
+          "riskOfAnswered": 0,
+          "perGroup": {
+            "dvids-944403": {
+              "n": 2,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "dvids-faead": {
+              "n": 4,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-marne": {
+              "n": 1,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-sasebo": {
+              "n": 2,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-wgm": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": true
+        },
+        "reproducesG20Artifact": true
+      },
+      {
+        "stage": "stroke",
+        "units": [
+          {
+            "group": "dvids-marne-2024",
+            "confidence": 0.8,
+            "wrong": false
+          },
+          {
+            "group": "dvids-marne-2024",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "dvids-marne-2024",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "dvids-marne-2024",
+            "confidence": 0.6,
+            "wrong": true
+          },
+          {
+            "group": "dvids-marne-2024",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "dvids-marne-2024",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "dvids-marne-2024",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "dvids-marne-2024",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "dvids-marne-2024",
+            "confidence": 0.8,
+            "wrong": false
+          },
+          {
+            "group": "dvids-marne-2024",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "dvids-marne-2024",
+            "confidence": 0.85,
+            "wrong": false
+          },
+          {
+            "group": "dvids-marne-2024",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "dvids-warriorgames-2026",
+            "confidence": 0.8,
+            "wrong": true
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          }
+        ],
+        "excludedUnverifiable": 0,
+        "disclosures": [
+          "unit = evaluable stroke-gold label (committed wave-a pose windows only; paddle=null everywhere)",
+          "wrong = confidently-wrong convention (L1 wrong OR L2 wrong); answered rows with no gold-verifiable component are excluded and counted",
+          "classifier-internal abstentions (UNKNOWN) and pose-unavailable rows stay in every coverage denominator"
+        ],
+        "curve": [
+          {
+            "threshold": 0.85,
+            "nUnits": 18,
+            "answered": 1,
+            "wrongAnswered": 0,
+            "coverage": 0.056,
+            "riskOfAnswered": 0,
+            "perGroup": {
+              "afn-sasebo-2025-06": {
+                "n": 5,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-marne-2024": {
+                "n": 12,
+                "answered": 1,
+                "wrongAnswered": 0
+              },
+              "dvids-warriorgames-2026": {
+                "n": 1,
+                "answered": 0,
+                "wrongAnswered": 0
+              }
+            },
+            "onFrontier": true
+          },
+          {
+            "threshold": 0.8,
+            "nUnits": 18,
+            "answered": 4,
+            "wrongAnswered": 1,
+            "coverage": 0.222,
+            "riskOfAnswered": 0.25,
+            "perGroup": {
+              "afn-sasebo-2025-06": {
+                "n": 5,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-marne-2024": {
+                "n": 12,
+                "answered": 3,
+                "wrongAnswered": 0
+              },
+              "dvids-warriorgames-2026": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 1
+              }
+            },
+            "onFrontier": true
+          },
+          {
+            "threshold": 0.6,
+            "nUnits": 18,
+            "answered": 5,
+            "wrongAnswered": 2,
+            "coverage": 0.278,
+            "riskOfAnswered": 0.4,
+            "perGroup": {
+              "afn-sasebo-2025-06": {
+                "n": 5,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-marne-2024": {
+                "n": 12,
+                "answered": 4,
+                "wrongAnswered": 1
+              },
+              "dvids-warriorgames-2026": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 1
+              }
+            },
+            "onFrontier": true
+          },
+          {
+            "threshold": 0,
+            "nUnits": 18,
+            "answered": 5,
+            "wrongAnswered": 2,
+            "coverage": 0.278,
+            "riskOfAnswered": 0.4,
+            "perGroup": {
+              "afn-sasebo-2025-06": {
+                "n": 5,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-marne-2024": {
+                "n": 12,
+                "answered": 4,
+                "wrongAnswered": 1
+              },
+              "dvids-warriorgames-2026": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 1
+              }
+            },
+            "onFrontier": true
+          }
+        ],
+        "currentPoint": {
+          "threshold": 0,
+          "nUnits": 18,
+          "answered": 5,
+          "wrongAnswered": 2,
+          "coverage": 0.278,
+          "riskOfAnswered": 0.4,
+          "perGroup": {
+            "afn-sasebo-2025-06": {
+              "n": 5,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-marne-2024": {
+              "n": 12,
+              "answered": 4,
+              "wrongAnswered": 1
+            },
+            "dvids-warriorgames-2026": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 1
+            }
+          },
+          "onFrontier": true
+        },
+        "zeroObservedRiskPoint": {
+          "threshold": 0.85,
+          "nUnits": 18,
+          "answered": 1,
+          "wrongAnswered": 0,
+          "coverage": 0.056,
+          "riskOfAnswered": 0,
+          "perGroup": {
+            "afn-sasebo-2025-06": {
+              "n": 5,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-marne-2024": {
+              "n": 12,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "dvids-warriorgames-2026": {
+              "n": 1,
+              "answered": 0,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": true
+        },
+        "reproducesG20Artifact": true
+      },
+      {
+        "stage": "ownership",
+        "units": [
+          {
+            "group": "wm-tournament-2014",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "wm-tournament-2014",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "wm-tournament-2014",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "wm-tournament-2014",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "wm-tournament-2014",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "wm-tournament-2014",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "afn-sasebo-2025-06",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "dvids-944403",
+            "confidence": 1,
+            "wrong": false
+          },
+          {
+            "group": "dvids-944403",
+            "confidence": 1,
+            "wrong": false
+          },
+          {
+            "group": "dvids-944403",
+            "confidence": 1,
+            "wrong": false
+          },
+          {
+            "group": "dvids-944403",
+            "confidence": 1,
+            "wrong": false
+          },
+          {
+            "group": "dvids-944403",
+            "confidence": 1,
+            "wrong": false
+          },
+          {
+            "group": "dvids-944403",
+            "confidence": 0.5658290439904884,
+            "wrong": true
+          },
+          {
+            "group": "dvids-944403",
+            "confidence": null,
+            "wrong": null
+          },
+          {
+            "group": "dvids-944403",
+            "confidence": 0.3813764156481495,
+            "wrong": false
+          },
+          {
+            "group": "dvids-944403",
+            "confidence": 0.1301322253216992,
+            "wrong": true
+          },
+          {
+            "group": "dvids-944403",
+            "confidence": 0.7167844367266756,
+            "wrong": true
+          },
+          {
+            "group": "dvids-944403",
+            "confidence": 0.4262848316202643,
+            "wrong": true
+          },
+          {
+            "group": "dvids-944403",
+            "confidence": 1,
+            "wrong": false
+          },
+          {
+            "group": "dvids-944403",
+            "confidence": 1,
+            "wrong": false
+          },
+          {
+            "group": "dvids-944403",
+            "confidence": 1,
+            "wrong": false
+          },
+          {
+            "group": "dvids-faead",
+            "confidence": 0.5087638166947597,
+            "wrong": false
+          },
+          {
+            "group": "dvids-faead",
+            "confidence": 0.5745527339985738,
+            "wrong": false
+          },
+          {
+            "group": "dvids-faead",
+            "confidence": 1,
+            "wrong": false
+          },
+          {
+            "group": "dvids-marne-2024",
+            "confidence": 1,
+            "wrong": false
+          }
+        ],
+        "soleSurvivorAnswers": 10,
+        "disclosures": [
+          "unit = committed dual frame (>=1 visible target + >=1 visible other paddle point); held-out cases never loaded",
+          "the production S3 rule emits NO confidence — this margin (1 - dBest/dSecond over veto-surviving candidates) is a DERIVED geometric score measured here, not a calibrated probability and not a production output",
+          "frames whose veto leaves a single candidate answer at margin 1 (counted separately as soleSurvivorAnswers — the margin cannot rank them)",
+          "frames without committed pose are abstentions of the incumbent analog and stay in every coverage denominator"
+        ],
+        "curve": [
+          {
+            "threshold": 1,
+            "nUnits": 38,
+            "answered": 10,
+            "wrongAnswered": 0,
+            "coverage": 0.263,
+            "riskOfAnswered": 0,
+            "perGroup": {
+              "afn-sasebo-2025-06": {
+                "n": 14,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-944403": {
+                "n": 14,
+                "answered": 8,
+                "wrongAnswered": 0
+              },
+              "dvids-faead": {
+                "n": 3,
+                "answered": 1,
+                "wrongAnswered": 0
+              },
+              "dvids-marne-2024": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 0
+              },
+              "wm-tournament-2014": {
+                "n": 6,
+                "answered": 0,
+                "wrongAnswered": 0
+              }
+            },
+            "onFrontier": true
+          },
+          {
+            "threshold": 0.717,
+            "nUnits": 38,
+            "answered": 11,
+            "wrongAnswered": 1,
+            "coverage": 0.289,
+            "riskOfAnswered": 0.091,
+            "perGroup": {
+              "afn-sasebo-2025-06": {
+                "n": 14,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-944403": {
+                "n": 14,
+                "answered": 9,
+                "wrongAnswered": 1
+              },
+              "dvids-faead": {
+                "n": 3,
+                "answered": 1,
+                "wrongAnswered": 0
+              },
+              "dvids-marne-2024": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 0
+              },
+              "wm-tournament-2014": {
+                "n": 6,
+                "answered": 0,
+                "wrongAnswered": 0
+              }
+            },
+            "onFrontier": false
+          },
+          {
+            "threshold": 0.575,
+            "nUnits": 38,
+            "answered": 12,
+            "wrongAnswered": 1,
+            "coverage": 0.316,
+            "riskOfAnswered": 0.083,
+            "perGroup": {
+              "afn-sasebo-2025-06": {
+                "n": 14,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-944403": {
+                "n": 14,
+                "answered": 9,
+                "wrongAnswered": 1
+              },
+              "dvids-faead": {
+                "n": 3,
+                "answered": 2,
+                "wrongAnswered": 0
+              },
+              "dvids-marne-2024": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 0
+              },
+              "wm-tournament-2014": {
+                "n": 6,
+                "answered": 0,
+                "wrongAnswered": 0
+              }
+            },
+            "onFrontier": true
+          },
+          {
+            "threshold": 0.566,
+            "nUnits": 38,
+            "answered": 13,
+            "wrongAnswered": 2,
+            "coverage": 0.342,
+            "riskOfAnswered": 0.154,
+            "perGroup": {
+              "afn-sasebo-2025-06": {
+                "n": 14,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-944403": {
+                "n": 14,
+                "answered": 10,
+                "wrongAnswered": 2
+              },
+              "dvids-faead": {
+                "n": 3,
+                "answered": 2,
+                "wrongAnswered": 0
+              },
+              "dvids-marne-2024": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 0
+              },
+              "wm-tournament-2014": {
+                "n": 6,
+                "answered": 0,
+                "wrongAnswered": 0
+              }
+            },
+            "onFrontier": false
+          },
+          {
+            "threshold": 0.509,
+            "nUnits": 38,
+            "answered": 14,
+            "wrongAnswered": 2,
+            "coverage": 0.368,
+            "riskOfAnswered": 0.143,
+            "perGroup": {
+              "afn-sasebo-2025-06": {
+                "n": 14,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-944403": {
+                "n": 14,
+                "answered": 10,
+                "wrongAnswered": 2
+              },
+              "dvids-faead": {
+                "n": 3,
+                "answered": 3,
+                "wrongAnswered": 0
+              },
+              "dvids-marne-2024": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 0
+              },
+              "wm-tournament-2014": {
+                "n": 6,
+                "answered": 0,
+                "wrongAnswered": 0
+              }
+            },
+            "onFrontier": true
+          },
+          {
+            "threshold": 0.426,
+            "nUnits": 38,
+            "answered": 15,
+            "wrongAnswered": 3,
+            "coverage": 0.395,
+            "riskOfAnswered": 0.2,
+            "perGroup": {
+              "afn-sasebo-2025-06": {
+                "n": 14,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-944403": {
+                "n": 14,
+                "answered": 11,
+                "wrongAnswered": 3
+              },
+              "dvids-faead": {
+                "n": 3,
+                "answered": 3,
+                "wrongAnswered": 0
+              },
+              "dvids-marne-2024": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 0
+              },
+              "wm-tournament-2014": {
+                "n": 6,
+                "answered": 0,
+                "wrongAnswered": 0
+              }
+            },
+            "onFrontier": false
+          },
+          {
+            "threshold": 0.381,
+            "nUnits": 38,
+            "answered": 16,
+            "wrongAnswered": 3,
+            "coverage": 0.421,
+            "riskOfAnswered": 0.188,
+            "perGroup": {
+              "afn-sasebo-2025-06": {
+                "n": 14,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-944403": {
+                "n": 14,
+                "answered": 12,
+                "wrongAnswered": 3
+              },
+              "dvids-faead": {
+                "n": 3,
+                "answered": 3,
+                "wrongAnswered": 0
+              },
+              "dvids-marne-2024": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 0
+              },
+              "wm-tournament-2014": {
+                "n": 6,
+                "answered": 0,
+                "wrongAnswered": 0
+              }
+            },
+            "onFrontier": true
+          },
+          {
+            "threshold": 0.13,
+            "nUnits": 38,
+            "answered": 17,
+            "wrongAnswered": 4,
+            "coverage": 0.447,
+            "riskOfAnswered": 0.235,
+            "perGroup": {
+              "afn-sasebo-2025-06": {
+                "n": 14,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-944403": {
+                "n": 14,
+                "answered": 13,
+                "wrongAnswered": 4
+              },
+              "dvids-faead": {
+                "n": 3,
+                "answered": 3,
+                "wrongAnswered": 0
+              },
+              "dvids-marne-2024": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 0
+              },
+              "wm-tournament-2014": {
+                "n": 6,
+                "answered": 0,
+                "wrongAnswered": 0
+              }
+            },
+            "onFrontier": true
+          },
+          {
+            "threshold": 0,
+            "nUnits": 38,
+            "answered": 17,
+            "wrongAnswered": 4,
+            "coverage": 0.447,
+            "riskOfAnswered": 0.235,
+            "perGroup": {
+              "afn-sasebo-2025-06": {
+                "n": 14,
+                "answered": 0,
+                "wrongAnswered": 0
+              },
+              "dvids-944403": {
+                "n": 14,
+                "answered": 13,
+                "wrongAnswered": 4
+              },
+              "dvids-faead": {
+                "n": 3,
+                "answered": 3,
+                "wrongAnswered": 0
+              },
+              "dvids-marne-2024": {
+                "n": 1,
+                "answered": 1,
+                "wrongAnswered": 0
+              },
+              "wm-tournament-2014": {
+                "n": 6,
+                "answered": 0,
+                "wrongAnswered": 0
+              }
+            },
+            "onFrontier": true
+          }
+        ],
+        "currentPoint": {
+          "threshold": 0,
+          "nUnits": 38,
+          "answered": 17,
+          "wrongAnswered": 4,
+          "coverage": 0.447,
+          "riskOfAnswered": 0.235,
+          "perGroup": {
+            "afn-sasebo-2025-06": {
+              "n": 14,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-944403": {
+              "n": 14,
+              "answered": 13,
+              "wrongAnswered": 4
+            },
+            "dvids-faead": {
+              "n": 3,
+              "answered": 3,
+              "wrongAnswered": 0
+            },
+            "dvids-marne-2024": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "wm-tournament-2014": {
+              "n": 6,
+              "answered": 0,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": true
+        },
+        "zeroObservedRiskPoint": {
+          "threshold": 1,
+          "nUnits": 38,
+          "answered": 10,
+          "wrongAnswered": 0,
+          "coverage": 0.263,
+          "riskOfAnswered": 0,
+          "perGroup": {
+            "afn-sasebo-2025-06": {
+              "n": 14,
+              "answered": 0,
+              "wrongAnswered": 0
+            },
+            "dvids-944403": {
+              "n": 14,
+              "answered": 8,
+              "wrongAnswered": 0
+            },
+            "dvids-faead": {
+              "n": 3,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "dvids-marne-2024": {
+              "n": 1,
+              "answered": 1,
+              "wrongAnswered": 0
+            },
+            "wm-tournament-2014": {
+              "n": 6,
+              "answered": 0,
+              "wrongAnswered": 0
+            }
+          },
+          "onFrontier": true
+        },
+        "reproducesG20Artifact": true
+      }
+    ]
+  },
+  "confidenceRouting": {
+    "contact": {
+      "nUnits": 15,
+      "bands": {
+        "LOW_abstained_no_marker": 4,
+        "LOW_unconfirmed_low_conf_no_marker": 8,
+        "HIGH_confirmed_marker": 3,
+        "HIGH_unconfirmed_high_conf_marker": 0
+      },
+      "perSession": {
+        "dvids-944403": {
+          "LOW_unconfirmed_low_conf_no_marker": 4,
+          "HIGH_confirmed_marker": 1
+        },
+        "dvids-faead": {
+          "LOW_abstained_no_marker": 3,
+          "LOW_unconfirmed_low_conf_no_marker": 1
+        },
+        "dvids-marne": {
+          "LOW_abstained_no_marker": 1,
+          "LOW_unconfirmed_low_conf_no_marker": 1
+        },
+        "dvids-sasebo": {
+          "HIGH_confirmed_marker": 1,
+          "LOW_unconfirmed_low_conf_no_marker": 2
+        },
+        "dvids-wgm": {
+          "HIGH_confirmed_marker": 1
+        }
+      },
+      "haloBoundsHold": true,
+      "haloMonotone": true,
+      "violations": [],
+      "disclosures": [
+        "routing exercised through the ACTUAL mobile selector contactMarkerPresentation (apps/mobile/src/components/strokeResultModel.ts, pure module) on all replayable committed contact-gold events (target + other owned; e02 harness, ORACLE ball)",
+        "paddleConfirmed is false by construction on this box (no committed paddle track; the replay passes paddleSpeeds null) — the paddle-confirmed routing arm is NOT exercisable on Linux and remains Mac-gated",
+        "estimatedContactMs and confidence are the real emitted estimator values from the replay, not synthetic"
+      ]
+    },
+    "stroke": {
+      "nUnits": 18,
+      "bands": {
+        "LOW_abstained_no_label": 13,
+        "ANSWERED_label_shown": 5
+      },
+      "perGroup": {
+        "dvids-marne-2024": {
+          "ANSWERED_label_shown": 4,
+          "LOW_abstained_no_label": 8
+        },
+        "dvids-warriorgames-2026": {
+          "ANSWERED_label_shown": 1
+        },
+        "afn-sasebo-2025-06": {
+          "LOW_abstained_no_label": 5
+        }
+      },
+      "violations": [],
+      "disclosures": [
+        "stroke routing is binary by design: UNKNOWN/null routes to the explicit 'Stroke not identified' surface (strokeResultModel abstained header) and never invents a label; committed labels are shown — there is no downstream confidence gate in production (g20 finding, unchanged here)",
+        "bench = e03 committed-data stroke bench (wave-a pose windows, paddle null everywhere); held-out cases excluded by construction"
+      ]
+    }
+  },
+  "frozenReleaseGate": {
+    "path": "datasets/experiments/wave-h/h18-frozen-release-gate-g6-v1.json",
+    "sha256": "db73409ca1fba65c19a1f0d19bee6822955a0235716fae553f428465c5c7ff7c"
+  }
+}

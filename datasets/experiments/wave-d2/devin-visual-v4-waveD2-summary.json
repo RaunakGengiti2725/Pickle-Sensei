@@ -1,0 +1,48 @@
+{
+  "workstream": "D2-11",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "branch": "devin/wave-d2/d2-11-ta-gold",
+  "verdict": "GREEN",
+  "scope": ["wavea-944403-smash", "wavea-faead-feed", "wm-volley-02"],
+  "evidence": {
+    "targetAcquisitionRecords": 12,
+    "contestedRecords": 8,
+    "uncontestedRecords": 4,
+    "bundles": 3,
+    "framesViewedByAbsoluteCfrIndex": 12,
+    "heldOutCasesViewed": 0,
+    "startRegionRadiusNorm": 0.17,
+    "targetOcclusionStates": { "none": 12 }
+  },
+  "provenance": [
+    {
+      "bundle": "wavea-944403-smash",
+      "recordingId": "rec-916657917f2b",
+      "sha256": "916657917f2be72f67717b35bdc0f163915c48a1126731c25f0ae1364121ad13",
+      "frameIndices": [174, 204, 234, 264],
+      "recordingTimesMs": [2903, 3403, 3904, 4404],
+      "licenseQuote": "Public domain (U.S. federal government work, PD-USGov; DVIDS)"
+    },
+    {
+      "bundle": "wavea-faead-feed",
+      "recordingId": "rec-faead33a362c",
+      "sha256": "faead33a362caba7ce422d052e49290522b96bd514993a0070a802c7c3679cbf",
+      "frameIndices": [788, 800, 812, 824],
+      "recordingTimesMs": [32833, 33333, 33833, 34333],
+      "licenseQuote": "Public domain (U.S. federal government work, PD-USGov; DVIDS)"
+    },
+    {
+      "bundle": "wm-volley-02",
+      "sha256": "8b77606225ba0e3543accc6195c7fb10a7d312f445a73a5e4a03ab68b8862c15",
+      "frameIndices": [0, 12, 25, 37],
+      "clipTimesMs": [0, 480, 1000, 1480],
+      "provenance": "pre-existing committed canonical bundle fixture; no media acquired by D2-11"
+    }
+  ],
+  "method": "Each record was labeled only after viewing the exact ffmpeg select=eq(n,IDX) frame. Torso boxes are normalized full-frame xywh. A record is contested when another visible person's torso center is within normalized radius 0.17 of the target torso center. Uncertain and occluded boxes are explicitly marked in sidecars.",
+  "sidecars": [
+    "datasets/paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v4-waveD2-ta.json",
+    "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v4-waveD2-ta.json",
+    "datasets/paddle-bench/bundles/wm-volley-02/annotation/devin-visual-v4-waveD2-ta.json"
+  ]
+}

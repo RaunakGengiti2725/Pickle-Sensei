@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "afn-sasebo-rally2",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "createdAtIso": "2026-08-29T08:40:00.000Z",
+  "revision": 1,
+  "stroke": "unsure",
+  "handedness": "unsure",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": null,
+    "accelerationStartMs": null,
+    "contactMs": null,
+    "followThroughEndMs": null
+  },
+  "contactUncertainty": null,
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.7,
+  "notes": "Ball-only hard-slice gold pass (workstream D2-06): stroke/phase/checkpoint fields intentionally unlabeled. Method: frames decoded by absolute frame index at the exact container frame rate (ffmpeg select=eq(n\\,IDX), no -ss seeking); every committed point measured on a zoomed pixel crop of the decoded frame and re-verified in a 4x centered crop; radiusNorm = ball radius px / frame height, omitted where blur or partial overlap makes it unmeasurable. Occluded frames carry NO point by rule; uncertain frames carry no point and no occlusionState. Append-only sidecar; no existing label touched. CLIP clock. Frames decoded from the parent recording afn-sasebo-indoor (rec-6e06a3157947, 29.97fps CFR) and mapped to the clip by clip_n = source_n - 918 (clip = source 30.6-36.0s), tMs=round(clip_n*1000/29.97); the mapping was cross-registered against the v1 ball points at 2500 (0.586,0.156) and 2682 (0.698,0.238), which land within one frame / ~0.01 of my source-frame measurements, residual alignment uncertainty <=1 frame (33ms) disclosed. Covers the incoming lob, the first paddle sweep, body occlusion behind the near target and reacquisition. Background courts are active (multi-ball scene).",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T08:40:00.000Z"
+    }
+  ],
+  "ballFrames": [
+    {
+      "tMs": 2336,
+      "point": {
+        "x": 0.4955,
+        "y": 0.1617
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0123,
+      "occlusionState": "observed",
+      "note": "crisp against the upper wall"
+    },
+    {
+      "tMs": 2402,
+      "point": null,
+      "visibility": "uncertain",
+      "note": "two similar green blobs at ~(0.464,0.130) and (0.527,0.157) (motion blur vs background-court ball); cannot disambiguate the rally ball, no point committed"
+    },
+    {
+      "tMs": 2469,
+      "point": {
+        "x": 0.583,
+        "y": 0.094
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "motion-blurred vertical smear near lob apex; centroid of blur"
+    },
+    {
+      "tMs": 2536,
+      "point": {
+        "x": 0.6007,
+        "y": 0.1821
+      },
+      "visibility": "visible",
+      "occlusionState": "entering_occlusion",
+      "note": "near target's paddle motion-blur streak sweeps across the ball (first swing); ball still discernible at the streak tip"
+    },
+    {
+      "tMs": 2569,
+      "point": {
+        "x": 0.6215,
+        "y": 0.1926
+      },
+      "visibility": "visible",
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 2602,
+      "point": {
+        "x": 0.6382,
+        "y": 0.2049
+      },
+      "visibility": "visible",
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 2636,
+      "point": {
+        "x": 0.665,
+        "y": 0.2192
+      },
+      "visibility": "visible",
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 2669,
+      "point": {
+        "x": 0.6892,
+        "y": 0.2438
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "consistent with the v1 point at 2682 (0.698,0.238)"
+    },
+    {
+      "tMs": 2736,
+      "point": {
+        "x": 0.7354,
+        "y": 0.2944
+      },
+      "visibility": "visible",
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 2803,
+      "point": {
+        "x": 0.7865,
+        "y": 0.3642
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0173,
+      "occlusionState": "observed",
+      "note": "large in frame, descending just left of the near target's head"
+    },
+    {
+      "tMs": 2869,
+      "point": null,
+      "visibility": "occluded",
+      "occlusionState": "occluded",
+      "note": "expected position passes behind the near target / background players; ball not visible in any zoom crop"
+    },
+    {
+      "tMs": 2903,
+      "point": null,
+      "visibility": "occluded",
+      "occlusionState": "occluded"
+    },
+    {
+      "tMs": 3003,
+      "point": {
+        "x": 0.7617,
+        "y": 0.3866
+      },
+      "visibility": "visible",
+      "occlusionState": "reacquired",
+      "note": "re-visible as a blurred streak left of the target after body occlusion"
+    },
+    {
+      "tMs": 3070,
+      "point": {
+        "x": 0.6953,
+        "y": 0.3079
+      },
+      "visibility": "visible",
+      "occlusionState": "observed",
+      "note": "blurred, moving up-left"
+    }
+  ]
+}
