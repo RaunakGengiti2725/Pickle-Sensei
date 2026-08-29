@@ -1,0 +1,83 @@
+{
+  "workstream": "h10-stroke-flow-e2e",
+  "gate": "MANDATORY GATE 1 — Stroke Analysis full flow",
+  "baseline": {
+    "branch": "devin/1787988068-wave-c-integration",
+    "commit": "104ea0f"
+  },
+  "branch": "devin/wave-h/h10-stroke-flow-e2e",
+  "method": {
+    "summary": "Drove the literal product flow at mobile jest/component level: AnalyzeScreen mounted with React TestRenderer, real runCaptureAnalysis pipeline, real generated pose sequences with hash-validated sidecars, real capture-envelope evaluation, recording in-memory DB, mocked ONLY at the native camera boundary (captureStrokeVideo / camera events / artifact read) and the network fetch boundary. Flow driven: launch → declare (tap/voice/Auto) → camera permission events → readiness guidance (no_person → move_closer → full_body_required → hold_still → ready) → session armed → stroke_detected → processing → clip finalized with preRoll/postRoll → real analysis → Result navigation keyed by analysisId → Try Again re-arm → clean next attempt.",
+    "test_file": "apps/mobile/__tests__/analyzeScreenFullFlowE2E.test.tsx",
+    "environments_executed": [
+      "TS/backend (root pnpm workspace: typecheck, test, lint, format:check)",
+      "mobile jest/component (apps/mobile: tsc --noEmit, jest)"
+    ],
+    "environments_blocked": [
+      "native iOS execution (BLOCKED_EXTERNAL: no Apple SDK, Mac, or iPhone hardware available — live camera stream, AVFoundation capture, Vision body pose, and per-event native clip extraction remain unverified on device)"
+    ],
+    "trial_grouping": "Each scenario is one user-flow attempt (grouped by simulated user/session), never per-frame counting."
+  },
+  "measured_results": {
+    "new_full_flow_scenarios": {
+      "total": 13,
+      "passed": 13,
+      "failed": 0,
+      "scenarios": [
+        "first attempt: tap-declared full flow to real Result (real overallScore, checkpoints>0, phases>0, trigger timestamps match clip, declared stroke persisted, envelope player_visibility SUPPORTED, durable shot + outbox written)",
+        "voice declaration: dictated phrase resolves through registry, scores as declared",
+        "Auto Detect: armed AUTO run never fabricates a declaration (no SET declared_stroke; resolutionBasis in {abstained, predicted_family, predicted_l3})",
+        "10 repeated attempts: 10 distinct analysisIds, 10 capture rows, 10 scored records, each attempt clean",
+        "user cancel: returns to ready surface with nothing persisted",
+        "cancel → restart: next attempt completes end to end",
+        "close during capture: native operation cancelled before navigating away",
+        "background/foreground (unmount mid-capture): native operation cancelled",
+        "camera interruption: honest error, nothing rated, Try again recovers",
+        "permission denial: honest error surface; re-enable lets next run complete",
+        "low storage: loud failure, nothing persisted, no fake rating",
+        "network loss during analysis: capture kept, failure honest, no fabricated rating/outbox, no Result navigation",
+        "attempt isolation: stale readiness snapshot never contaminates next attempt's persisted envelope (regression test for fixed P1)"
+      ]
+    },
+    "mobile_gates": {
+      "tsc_noEmit": "PASS",
+      "jest": { "suites": 41, "tests": 410, "passed": 410, "failed": 0 }
+    },
+    "root_gates": {
+      "typecheck": "PASS",
+      "test": "PASS (51 files, 593 passed, 4 skipped at baseline; unchanged by this branch)",
+      "lint": "PASS",
+      "format_check": "PASS"
+    },
+    "contact_evidence_note": "On-device fusion records carry NO contact estimate in this build; the Result marker gate honestly renders 'Exact contact not established' instead of drawing a marker. Verified via contactMarkerPresentation — absence is an explicit honest state, not a fabrication."
+  },
+  "findings": [
+    {
+      "id": "H10-1",
+      "severity": "P1",
+      "status": "FIXED",
+      "title": "Stale readiness/quality snapshot from a previous attempt contaminated the next attempt's persisted capture envelope",
+      "detail": "AnalyzeScreen kept lastReadiness/lastQuality refs across attempts. A new capture attempt that emitted no readiness events reused the prior attempt's readiness snapshot when computing the attempt-time capture envelope, persisting measured-looking player_visibility (SUPPORTED) for a clip it was never measured on — misleading evidence attached to the wrong attempt.",
+      "fix": "run() now clears lastReadiness/lastQuality at the start of every capture attempt (apps/mobile/src/screens/AnalyzeScreen.tsx); envelope dimensions honestly read NOT_MEASURED unless measured for THIS clip.",
+      "regression_test": "analyzeScreenFullFlowE2E.test.tsx: 'a stale readiness snapshot from a previous attempt never contaminates the next attempt's persisted envelope' (failed before fix, passes after)"
+    },
+    {
+      "id": "H10-2",
+      "severity": "P2",
+      "status": "UNRESOLVED (noted, not a release blocker)",
+      "title": "Capture failure surfaces reuse the generic 'Capture interrupted' header",
+      "detail": "Camera interruption, low storage, and permission-denied failures all render under the same 'Capture interrupted' header with the specific cause in the body text. The cause IS surfaced honestly and Try again works; only the header is generic."
+    },
+    {
+      "id": "H10-3",
+      "severity": "BLOCKED_EXTERNAL",
+      "status": "UNRESOLVED (external)",
+      "title": "Native iOS execution of the flow is unverified",
+      "detail": "Live AVFoundation capture, Vision body-pose readiness, automatic pre-roll retention on-device, session event clip extraction, and real camera-permission OS dialogs cannot be executed here (no Apple SDK/Mac/iPhone). All native seams were exercised only via their typed TS contracts."
+    }
+  ],
+  "held_out_cases_untouched": ["wm-dink-01", "afn-vic-rally1"],
+  "verdict": "PASS",
+  "verdict_scope": "TS/backend + mobile jest/component level only",
+  "rationale": "Every executable-environment scenario of the mandated flow passes with real analysis content reaching the Result (real score, checkpoints, phases, trigger timestamps, honest contact absence), all fault scenarios fail loudly without fabricated evidence, and the one P1 found (cross-attempt envelope contamination) is fixed with a regression test. Native iOS execution remains BLOCKED_EXTERNAL and must be verified on device before full GO."
+}
