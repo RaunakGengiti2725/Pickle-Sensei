@@ -1,0 +1,46 @@
+{
+  "workstream": "D2-10 — Active-learning label queue v2",
+  "branch": "devin/wave-d2/d2-10-active-learning",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "status": "GREEN",
+  "whatWasBuilt": [
+    "packages/swing-lab/src/labelQueueV2.ts — deterministic active-learning scoring CLI (pnpm lab:label-queue): score = bucketThinness (1/(1+committed label count)) × measured modality failure impact × committed-evidence slice boosts ÷ per-modality acquisition cost. No RNG, no timestamps in ranking, stable tie-breaks (score desc, id asc).",
+    "packages/swing-lab/test/labelQueueV2.test.ts — 7 vitest tests on synthetic fixtures: thinness math, per-modality counting (null contactMs excluded), held-out exclusion even when files exist on disk, boost application with provenance, determinism (byte-identical repeated runs), rank/sort invariants, provenance completeness for every item.",
+    "datasets/experiments/wave-d2/label-queue-v2.json — top-30 ranked bundle×modality label buckets with per-item reasoning and full scoreInputs provenance (annotation source files, quoted artifact metrics for impacts and boosts, cost rationale)."
+  ],
+  "scoreInputProvenance": {
+    "bucketThinness": "counted live from committed annotation sidecars datasets/paddle-bench/bundles/*/annotation/*.json (held-out wm-dink-01 and afn-vic-rally1 excluded from candidate generation entirely)",
+    "failureImpact": "constants quoting EXP-2026-08-28-cascade-waterfall.json (conditional CONTACT 2/5, STROKE 1/5, rally1 0%-overlap event selection, rally2 BALL_BODY_OVERLAP), docs/HANDOFF_V3.md §2/§3/§6/rule 17, wave-b/W12-summary.json (edge-on/blur miss windows), wave-c/c04-ball-gold-summary.json (8 occlusion-adjacent labels), wave-c/c18-stroke-taxonomy-labels-summary.json (L3 known 8/22)",
+    "acquisitionCost": "documented relative frames-to-view constants per modality (ball 1, ownership 1.5, stroke 3, contact 4 per C05 frame-stepping method, events 6)"
+  },
+  "measured": {
+    "queueItems": 30,
+    "candidateBucketsScored": 55,
+    "topItem": "wavea-marne-serve/ball score 0.7 (0 committed ball labels, impact 0.7, cost 1)",
+    "boostedFailureLoci": [
+      "afn-sasebo-rally2/ball ×2 (BALL_BODY_OVERLAP) rank 7",
+      "afn-sasebo-rally1/ball ×2 (zero tracked support at gold 2900) rank 10",
+      "afn-sasebo-rally2/contact rank 24 and afn-sasebo-rally1 event/contact buckets below top-30 cutoff due to higher acquisition cost — recorded, not hidden"
+    ],
+    "gates": {
+      "typecheck": "pnpm typecheck clean",
+      "tests": "pnpm --filter @pickle/swing-lab test: labelQueueV2.test.ts 7/7 passed; full suite green",
+      "lint": "labelQueueV2.ts added to the existing swing-lab CLI no-console allowlist in eslint.config.mjs"
+    }
+  },
+  "honestNegatives": [
+    "Impact weights are ordinal constants justified by quoted committed measurements, not learned coefficients; no canonical runs exist on this Linux box to fit them (pose extraction is macOS-only).",
+    "Bucket granularity is bundle×modality; sub-event slices (e.g. specific occlusion windows) are expressed as multiplicative boosts, not separate queue rows.",
+    "No new labels were created in this workstream; the queue directs future labeling only.",
+    "Held-out cases wm-dink-01 and afn-vic-rally1 were never viewed, labeled, or scored."
+  ],
+  "filesChanged": [
+    "packages/swing-lab/src/labelQueueV2.ts (new)",
+    "packages/swing-lab/test/labelQueueV2.test.ts (new)",
+    "packages/swing-lab/package.json (label:queue script)",
+    "package.json (lab:label-queue script)",
+    "eslint.config.mjs (no-console allowlist entry)",
+    "datasets/experiments/wave-d2/label-queue-v2.json (generated output)",
+    "datasets/experiments/wave-d2/d2-10-summary.json (this file)"
+  ]
+}

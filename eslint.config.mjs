@@ -51,6 +51,7 @@ export default tseslint.config(
       "packages/swing-lab/src/eventCompletionBench.ts",
       "packages/swing-lab/src/cascadeWaterfall.ts",
       "packages/swing-lab/src/coverageRisk.ts",
+      "packages/swing-lab/src/labelQueueV2.ts",
       "packages/swing-lab/src/coachReview.ts",
       "packages/swing-lab/src/corpusCheck.ts",
       "packages/swing-lab/src/strokeTaxonomyBench.ts",
