@@ -2,6 +2,10 @@ import { z } from "zod";
 import {
   CAMERA_VIEWS,
   CHECKPOINTS,
+  CONSENT_ACTIONS,
+  CONSENT_CAPTURE_MODES,
+  CONSENT_SCOPES,
+  CONSENT_SOURCES,
   FAULT_DIRECTIONS,
   PHASES,
   SHOT_TYPES,
@@ -336,3 +340,50 @@ export const PracticeStreakSchema = z.object({
   practicedToday: z.boolean(),
   lastPracticeDate: z.iso.date().nullable(),
 });
+
+/** First-party consent ledger contracts (append-only; scopes independent).
+ * model_training is an explicit opt-in — no endpoint or default grants it. */
+export const ConsentGrantRequest = z.object({
+  scope: z.enum(CONSENT_SCOPES),
+  consentVersion: z.string().min(1).max(64),
+  source: z.enum(CONSENT_SOURCES),
+  device: z.string().min(1).max(160).nullable().optional(),
+  captureMode: z.enum(CONSENT_CAPTURE_MODES),
+  strokeIntent: z.string().min(1).max(60).nullable().optional(),
+});
+export type ConsentGrantRequestT = z.infer<typeof ConsentGrantRequest>;
+
+export const ConsentWithdrawRequest = z.object({
+  scope: z.enum(CONSENT_SCOPES),
+  source: z.enum(CONSENT_SOURCES),
+  device: z.string().min(1).max(160).nullable().optional(),
+});
+export type ConsentWithdrawRequestT = z.infer<typeof ConsentWithdrawRequest>;
+
+export const ConsentRecordSchema = z.object({
+  id: z.uuid(),
+  subjectPseudonym: z.uuid(),
+  scope: z.enum(CONSENT_SCOPES),
+  action: z.enum(CONSENT_ACTIONS),
+  consentVersion: z.string(),
+  source: z.enum(CONSENT_SOURCES),
+  device: z.string().nullable(),
+  captureMode: z.enum(CONSENT_CAPTURE_MODES).nullable(),
+  strokeIntent: z.string().nullable(),
+  recordedAt: z.iso.datetime(),
+});
+
+export const ConsentScopeStatusSchema = z.object({
+  scope: z.enum(CONSENT_SCOPES),
+  active: z.boolean(),
+  consentVersion: z.string().nullable(),
+  lastAction: z.enum(CONSENT_ACTIONS).nullable(),
+  lastActionAt: z.iso.datetime().nullable(),
+});
+
+export const ConsentStatusResponse = z.object({
+  subjectPseudonym: z.uuid().nullable(),
+  scopes: z.array(ConsentScopeStatusSchema),
+  records: z.array(ConsentRecordSchema),
+});
+export type ConsentStatusResponseT = z.infer<typeof ConsentStatusResponse>;

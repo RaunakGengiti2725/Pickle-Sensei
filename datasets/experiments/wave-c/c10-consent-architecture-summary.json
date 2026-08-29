@@ -1,0 +1,31 @@
+{
+  "workstream": "C10",
+  "branch": "devin/wave-c/c10-consent-architecture",
+  "date": "2026-08-29",
+  "what_was_built": {
+    "database": "migrations/0015_consent_records.sql: consent_subject (user_id -> pseudonym uuid mapping) + consent_record append-only ledger (pseudonymous subject, scope, action granted/withdrawn, consent_version, source, device, capture_mode, stroke_intent, recorded_at, monotonic seq). UPDATE/DELETE on consent_record rejected by trigger consent_record_append_only; withdrawal is a new appended row, never a mutation.",
+    "shared_types": "packages/shared-types/src/consent.ts: ConsentScope (video_analysis | model_training), ConsentAction, sources, capture modes, consent versions, ConsentRecord, deriveConsentStatus(), isModelTrainingConsentActive(). No record => inactive; latest action by seq decides state; scopes are independent.",
+    "api_contracts": "ConsentGrantRequest / ConsentWithdrawRequest / ConsentStatusResponse Zod schemas + OpenAPI paths POST /v1/me/consent/grant, POST /v1/me/consent/withdraw, GET /v1/me/consent/status.",
+    "api": "services/api/src/modules/consent/routes.ts: authenticated grant/withdraw/status wired in app.ts. Responses expose the pseudonym, never the app user id. model_training withdrawal flags active user-sourced ml_dataset_item rows and queues ml_dataset_review removal review. Typed errors: validation.consent_grant, validation.consent_withdraw, consent.db_unavailable (503) — no silent fallbacks.",
+    "training_gate": "services/media-worker/src/trainingConsent.ts: hasActiveModelTrainingConsent(pool, userId) and selectTrainingEligibleItems(pool) fold the latest model_training ledger action per subject; absent consent or withdrawal => ineligible; re-grant restores eligibility. This is the hook any future training selection must call.",
+    "mobile": "apps/mobile: ConsentSettingsScreen (Data & consent) reachable from Settings > Privacy, RootNavigator route ConsentSettings, consentStore (zustand) + consentApi client. Model-training toggle defaults OFF, disabled unless a server ledger status proves state, neutral copy both directions, failed requests never keep an optimistic toggle, signed-out state shares nothing."
+  },
+  "measured_evidence": {
+    "shared_types_tests": "pnpm --filter @pickle/shared-types test: 3 files, 17 tests passed (4 new consent tests).",
+    "api_contracts_tests": "pnpm --filter @pickle/api-contracts test: 3 files, 13 tests passed.",
+    "api_integration": "services/api vitest run --fileParallelism=false with DATABASE_URL_TEST (postgres 5433): consent.integration.test.ts 8/8 passed against real PostgreSQL, including DB-level rejection of UPDATE/DELETE on consent_record, pseudonymity of ledger rows, withdrawal preserving both ledger rows, and dataset removal-review queueing.",
+    "media_worker_tests": "services/media-worker vitest: 2 files, 8 tests passed, including trainingConsent.test.ts (no consent => ineligible, grant => eligible, withdrawal => ineligible, selector filtering, re-grant restores).",
+    "mobile": "cd apps/mobile && npx tsc --noEmit: clean. npx jest: 32 suites, 226 tests passed (12 new: consentStore.test.ts 7, consentSettingsScreen.test.tsx 5).",
+    "typecheck": "pnpm typecheck clean for @pickle/shared-types, @pickle/api-contracts, @pickle/database, api, media-worker."
+  },
+  "honest_negatives": [
+    "Preexisting failure unrelated to C10: services/api test/training.integration.test.ts 'derives streaks from qualifying drill completions' fails with training.completion_in_future on the current wall clock; reproduced on a clean baseline (git stash) before my changes. Not masked, not modified.",
+    "apps/mobile is npm-managed (DECISIONS D-013); its node_modules were absent in this Linux env and required a fresh npm install before tsc/jest could run.",
+    "No production training pipeline exists yet; selectTrainingEligibleItems is the gate future selection code must go through, but nothing calls it in production yet by design.",
+    "Consent screen UI verified by jest component tests only; no iOS/Android device run on Linux."
+  ],
+  "still_blocked": [
+    "End-user consent flows on a real device (external blocker: physical iPhone hardware).",
+    "Any actual training use of first-party footage remains blocked on footage volume and coach labels; this workstream only guarantees the rights gate exists before that day."
+  ]
+}

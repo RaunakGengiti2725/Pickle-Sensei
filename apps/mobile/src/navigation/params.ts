@@ -15,6 +15,7 @@ export type RootStackParams = {
   LiveCourt: undefined;
   LiveSummary: { sessionId: string };
   ConnectAccount: undefined;
+  ConsentSettings: undefined;
   Paywall:
     { source?: 'rating' | 'live_court' | 'training' | 'settings' } | undefined;
 };
