@@ -59,6 +59,24 @@ function analysisDouble(eventId: string): AnalysisRecord {
       camera: false,
     },
     modelRuns: [],
+    provenance: {
+      appVersion: 'test-double',
+      pipelineVersion: 'test-double',
+      providerVersions: [
+        {
+          providerId: 'test-double',
+          modelVersion: 'test-double',
+          runtime: 'deterministic',
+          executionTarget: 'on_device',
+          artifactHash: null,
+        },
+      ],
+      scoreVersion: 'test-double',
+      taxonomyVersion: 'test-double',
+      drillMappingVersion: 'none',
+      captureEnvelopeVersion: 'capture-envelope-not-measured',
+      recordedAtIso: '2026-08-29T12:30:00.000Z',
+    },
     result: null,
     faults: [],
     uncertainty: {

@@ -257,6 +257,7 @@ async function runCaptureAnalysisCore(
       modelBundleVersion: 'on-device-fusion-1',
       nowIso: () => new Date().toISOString(),
       makeId: makeUuid,
+      captureEnvelopeThresholdsVersion: envelope?.thresholdsVersion ?? null,
       ...(request.focusCheckpoint
         ? { focusCheckpoint: request.focusCheckpoint }
         : {}),

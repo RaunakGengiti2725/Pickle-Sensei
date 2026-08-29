@@ -12,6 +12,7 @@ import type {
   PoseSequence,
   StrokePrediction as FlatStrokePrediction,
 } from "@pickle/swing-domain";
+import { DRILL_MAPPING_VERSION_UNRESOLVED } from "@pickle/swing-domain";
 import type { ProviderDescriptor } from "@pickle/vision-contracts";
 
 /**
@@ -246,6 +247,20 @@ export function resolveSlugProfileId(
     return { profileId: profile.canonical, profileVersion: profile.profileVersion };
   }
   return { profileId: null, profileVersion: null };
+}
+
+/**
+ * Drill mapping version carried by a resolved profile (leaf or shared side),
+ * registry-terminated. A null or unknown profile id yields the unresolved
+ * sentinel — a drill mapping is never guessed for a profile that did not
+ * resolve.
+ */
+export function drillMappingVersionForProfile(profileId: string | null): string {
+  if (profileId === null) return DRILL_MAPPING_VERSION_UNRESOLVED;
+  const leaf = TECHNIQUE_ANALYSIS_PROFILES_V1[profileId];
+  if (leaf) return leaf.drillMappingVersion;
+  const side = Object.values(SHARED_SIDE_PROFILES_V1).find((profile) => profile.id === profileId);
+  return side ? side.drillMappingVersion : DRILL_MAPPING_VERSION_UNRESOLVED;
 }
 
 const SIDE_PREFIXES = ["FOREHAND_", "BACKHAND_"] as const;
