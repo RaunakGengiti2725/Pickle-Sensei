@@ -1,0 +1,59 @@
+{
+  "harness": "tools/paddle-lab/student_bench.py",
+  "protocol": {
+    "hitRadiusNorm": 0.08,
+    "matchToleranceMs": 40.0,
+    "operatingFloors": {
+      "teacher": 0.3,
+      "student": 0.3
+    },
+    "labels": "committed bundle annotation paddleFrames + otherPaddleFrames (visible, deduped across annotators)",
+    "teacherSource": "COMMITTED dets artifacts (no re-inference)"
+  },
+  "cases": {
+    "afn-sasebo-rally1": {
+      "labeledFramesScored": 25,
+      "teacher_dfine_committed": {
+        "recall": 0.949,
+        "precision": 0.616,
+        "hits": "37/39",
+        "claims": 86,
+        "medianCenterErrorNorm": 0.0
+      },
+      "student_v0": {
+        "recall": 0.846,
+        "precision": 0.627,
+        "hits": "33/39",
+        "claims": 51,
+        "medianCenterErrorNorm": 0.0232
+      }
+    },
+    "wm-volley-02": {
+      "labeledFramesScored": 21,
+      "teacher_dfine_committed": {
+        "recall": 1.0,
+        "precision": 0.518,
+        "hits": "27/27",
+        "claims": 83,
+        "medianCenterErrorNorm": 0.0001
+      },
+      "student_v0": {
+        "recall": 0.074,
+        "precision": 0.012,
+        "hits": "2/27",
+        "claims": 168,
+        "medianCenterErrorNorm": 0.0656
+      }
+    }
+  },
+  "latencyLinuxCpu": {
+    "studentMsPerFrame": 1.02,
+    "teacher": {
+      "msPerFrame": 107.5,
+      "framesTimed": 20,
+      "note": "LINUX-CPU, median, includes preprocessing"
+    },
+    "label": "LINUX-CPU (this box; NOT comparable to Mac/iPhone numbers)"
+  },
+  "honestFraming": "TINY-DATA groundwork bench: 2 dev cases only; held-out untouched. The student trained ONLY on afn-sasebo-rally1 teacher outputs, so the rally1 row is IN-DOMAIN (memorization, not generalization) and wm-volley-02 is the cross-session row. Teacher medianCenterErrorNorm ~0 partly reflects that waveC label points are recorded paddle-box centers."
+}
