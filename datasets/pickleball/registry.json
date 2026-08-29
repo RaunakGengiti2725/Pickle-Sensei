@@ -200,6 +200,60 @@
       "matchingRepositoryCount": 20,
       "usableArtifactCount": 0,
       "result": "All 20 matching sportsgirl/Pickleball01 through Pickleball20 repositories contained only .gitattributes and had no dataset card, media, labels, or license."
+    },
+    {
+      "service": "NARA National Archives Catalog (catalog.archives.gov, records/search API via site proxy)",
+      "url": "https://catalog.archives.gov/proxy/records/search?q=pickleball&limit=20",
+      "checkedAt": "2026-08-29",
+      "workstream": "wave-d2/d2-01-acq-nara",
+      "matchingRecordCount": 15,
+      "movingImageCount": 0,
+      "usableArtifactCount": 0,
+      "result": "All 15 catalog records matching 'pickleball' are Textual Records (Trademark Official Gazette issues, White House daily diaries/news summaries, a National Children's Study resource guide). The same query filtered to typeOfMaterials=Moving Images returns 0 records. The two-word variant '\"pickle ball\"' returns 6 records, all textual. NARA holds no pickleball moving images."
+    },
+    {
+      "service": "NARA National Archives Catalog — adaptable racket-sport moving-image sweep",
+      "url": "https://catalog.archives.gov/proxy/records/search?q=<term>&typeOfMaterials=Moving+Images",
+      "checkedAt": "2026-08-29",
+      "workstream": "wave-d2/d2-01-acq-nara",
+      "queriesAndMovingImageCounts": {
+        "\"paddle tennis\"": 2,
+        "racquetball": 1,
+        "badminton": 30,
+        "\"table tennis\"": 42,
+        "racquet": 2,
+        "\"wheelchair tennis\"": 0,
+        "\"warrior games\"": 47
+      },
+      "usableArtifactCount": 0,
+      "result": "Every inspected racket-sport-adjacent moving image carries useRestriction.status='Restricted - Possibly' (Copyright or Public Law 101-246 USIA restriction) and/or has no downloadable digital objects; most are 1940s-1970s military newsreel film with at most seconds of incidental play. The 47 'warrior games' items are 2010-era events that predate pickleball's inclusion in the Warrior Games; none mentions pickleball (the pickleball query above already covers all NARA mentions). No item is both clearly US-government public domain and pickleball-relevant. The 'tennis' moving-image query could not be retrieved (the catalog proxy returned the SPA HTML page instead of JSON on two attempts); it was not needed to establish the pickleball result. The three most relevant restricted items are registered in quarantinedUnknownRights (nara-543949313, nara-52717, nara-602178033)."
+    },
+    {
+      "service": "DVIDS public video search re-check (dedup gap-check against existing corpus)",
+      "url": "https://www.dvidshub.net/search?q=pickleball&filter[type]=video",
+      "checkedAt": "2026-08-29",
+      "workstream": "wave-d2/d2-01-acq-nara",
+      "matchingVideoCount": 16,
+      "newVideoCount": 0,
+      "usableArtifactCount": 0,
+      "result": "The public DVIDS video search for 'pickleball' returns 16 videos (IDs 906546, 943757, 944209, 944403, 944593, 956784, 957519, 967848, 986421, 1007845, 1008415, 1011384, 1011773, 1011822, 1019773, 1019785). Every one of the 16 IDs already appears in the existing corpus/bundles (dvids-* IDs under datasets/paddle-bench). DVIDS remains exhausted: 0 new items."
+    },
+    {
+      "service": "NASA Image and Video Library API (images.nasa.gov)",
+      "url": "https://images-api.nasa.gov/search?q=pickleball",
+      "checkedAt": "2026-08-29",
+      "workstream": "wave-d2/d2-01-acq-nara",
+      "matchingRecordCount": 1,
+      "usableArtifactCount": 0,
+      "result": "One video matches: NHQ20230209ARMD01 'NASA's The Quiet Crew | Sriram Rallabhandi' (2023-02-09, 141 s employee-profile piece). Frame inspection of the downloaded medium rendition shows ~5 seconds of extremely distant recreational play on a tennis court (subjects tens of meters from a static camera; ball and paddle contact not resolvable). The gameplay shots appear to be personal/home footage contributed by the interviewee, which NASA's media usage guidelines flag as potentially third-party material, and the footage has no perception value at that distance. Excluded; nothing downloaded into the corpus. Searches for 'badminton' (media_type=video) return 0."
+    },
+    {
+      "service": "US agency media-room web sweep (va.gov, nps.gov, defense.gov)",
+      "url": "site-restricted web searches for 'pickleball video' on va.gov, nps.gov, defense.gov",
+      "checkedAt": "2026-08-29",
+      "workstream": "wave-d2/d2-01-acq-nara",
+      "usableArtifactCount": 0,
+      "result": "va.gov and news.va.gov return text articles with photos about veteran pickleball clinics (Atlanta VA, Martinsburg VA, Richmond OAM adaptive device) but no downloadable agency video. nps.gov returns planning documents and park pages mentioning pickleball courts, no video. defense.gov media pages embed DVIDS-hosted video (covered by the DVIDS re-check above). No new downloadable US-government pickleball video found outside DVIDS."
     }
   ],
   "freshCandidates": {
@@ -528,6 +582,36 @@
       "license": "CC BY-NC-SA 4.0",
       "status": "excluded_noncommercial",
       "reason": "NC term blocks commercial training; also meeting footage, minimal gameplay."
+    },
+    {
+      "id": "nara-543949313",
+      "sourceUrl": "https://catalog.archives.gov/id/543949313",
+      "title": "Harlem Day Camp, New York (Harmon Foundation collection, NAID 543949313)",
+      "publisher": "National Archives (donated Harmon Foundation materials)",
+      "license": "useRestriction quoted verbatim from the catalog record: \"Although all rights were conveyed to the U.S. Government on July 26, 1967, proprietary rights or existing copyright in footage obtained from other sources by the Harmon Foundation may exist.\" (status: Restricted - Possibly, specificUseRestrictions: Copyright)",
+      "status": "quarantined_not_downloaded",
+      "reason": "Only NARA moving image found with downloadable MP4 digital objects (2x ~216-221 MB reels) that shows racket play: children's paddle tennis at a 1960s day camp. Donated-collection footage is not a US-government work; NARA itself flags possible third-party copyright, so it is not clearly public domain. Also exceeds the 200 MB per-workstream media budget per reel and is decades-old film of children, of negligible value to a modern pickleball perception model.",
+      "workstream": "wave-d2/d2-01-acq-nara"
+    },
+    {
+      "id": "nara-52717",
+      "sourceUrl": "https://catalog.archives.gov/id/52717",
+      "title": "The Chinese National Table Tennis Team Visits the United States (USIA, NAID 52717)",
+      "publisher": "U.S. Information Agency via National Archives",
+      "license": "useRestriction quoted verbatim from the catalog record: \"Issued February 6, 1990, this law provides for the domestic release and distribution of USIA motion pictures, films, videotapes, and other materials 12 years after initial dissemination overseas, or, if not disseminated, 12 years from the preparation of the material.\" (status: Restricted - Possibly, specificUseRestrictions: Public Law 101-246)",
+      "status": "quarantined_not_downloaded",
+      "reason": "Most substantial racket-sport USIA film found (1972 table-tennis exhibition tour). The catalog record carries a Public Law 101-246 restriction note and status 'Restricted - Possibly', and the record has no digital objects to download. Not clearly cleared; registered for provenance only.",
+      "workstream": "wave-d2/d2-01-acq-nara"
+    },
+    {
+      "id": "nara-602178033",
+      "sourceUrl": "https://catalog.archives.gov/id/602178033",
+      "title": "Around the Services, 2009-05-20 (Defense Media Activity, NAID 602178033)",
+      "publisher": "Defense Media Activity via National Archives",
+      "license": "useRestriction quoted verbatim from the catalog record: \"Some or all of this material may be restricted by copyright or other intellectual property rights restrictions.\" (status: Restricted - Possibly, specificUseRestrictions: Copyright)",
+      "status": "quarantined_not_downloaded",
+      "reason": "Sole NARA moving-image hit for 'racquetball': a 2009 news program whose racquetball segment is an interview about a collapse during a game, not gameplay footage. Restricted-possibly, no digital objects, no perception value.",
+      "workstream": "wave-d2/d2-01-acq-nara"
     }
   ]
 }
