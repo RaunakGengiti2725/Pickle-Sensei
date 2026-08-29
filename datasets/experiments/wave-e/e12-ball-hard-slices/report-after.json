@@ -1,0 +1,286 @@
+{
+  "wm-volley-02": {
+    "windows": [
+      {
+        "window": {
+          "startMs": 5200,
+          "endMs": 7800,
+          "note": "volley exchange around gold 6320-6640"
+        },
+        "status": "tracked",
+        "observationCount": 31
+      }
+    ],
+    "buckets": [
+      {
+        "bucket": "OBSERVED",
+        "n": 4,
+        "hits": 0,
+        "misses": 0,
+        "wrongLocation": 4,
+        "abstained": 0,
+        "violations": 0
+      },
+      {
+        "bucket": "UNCERTAIN_EXCLUDED",
+        "n": 1,
+        "hits": 0,
+        "misses": 0,
+        "wrongLocation": 0,
+        "abstained": 0,
+        "violations": 0
+      }
+    ],
+    "violations": []
+  },
+  "afn-sasebo-rally2": {
+    "windows": [
+      {
+        "window": {
+          "startMs": 1200,
+          "endMs": 4200,
+          "note": "lob + occlusion cycle around gold 2336-3070"
+        },
+        "status": "tracked",
+        "observationCount": 28
+      }
+    ],
+    "buckets": [
+      {
+        "bucket": "OBSERVED",
+        "n": 9,
+        "hits": 0,
+        "misses": 6,
+        "wrongLocation": 3,
+        "abstained": 0,
+        "violations": 0
+      },
+      {
+        "bucket": "ENTERING_OCCLUSION",
+        "n": 1,
+        "hits": 0,
+        "misses": 1,
+        "wrongLocation": 0,
+        "abstained": 0,
+        "violations": 0
+      },
+      {
+        "bucket": "OCCLUDED",
+        "n": 2,
+        "hits": 0,
+        "misses": 0,
+        "wrongLocation": 0,
+        "abstained": 0,
+        "violations": 2
+      },
+      {
+        "bucket": "REACQUIRED",
+        "n": 1,
+        "hits": 0,
+        "misses": 0,
+        "wrongLocation": 1,
+        "abstained": 0,
+        "violations": 0
+      },
+      {
+        "bucket": "UNCERTAIN_EXCLUDED",
+        "n": 1,
+        "hits": 0,
+        "misses": 0,
+        "wrongLocation": 0,
+        "abstained": 0,
+        "violations": 0
+      }
+    ],
+    "violations": [
+      {
+        "bucket": "OCCLUDED",
+        "tMs": 2869,
+        "kind": "EMITTED_DURING_OCCLUDED_GOLD",
+        "detail": "observation at 2870ms (0.056,0.500) within 40ms of OCCLUDED gold 2869ms"
+      },
+      {
+        "bucket": "OCCLUDED",
+        "tMs": 2903,
+        "kind": "EMITTED_DURING_OCCLUDED_GOLD",
+        "detail": "observation at 2870ms (0.056,0.500) within 40ms of OCCLUDED gold 2903ms"
+      }
+    ]
+  },
+  "wavea-wgm-wheelchair": {
+    "windows": [
+      {
+        "window": {
+          "startMs": 181600,
+          "endMs": 183600,
+          "note": "bounce + hit + post-hit blur, gold 182333-182867; camera pans right→left from ~182933"
+        },
+        "status": "tracked",
+        "observationCount": 22
+      }
+    ],
+    "buckets": [
+      {
+        "bucket": "OBSERVED",
+        "n": 9,
+        "hits": 0,
+        "misses": 1,
+        "wrongLocation": 8,
+        "abstained": 0,
+        "violations": 0
+      }
+    ],
+    "violations": []
+  },
+  "wavea-sasebo-volleys": {
+    "windows": [
+      {
+        "window": {
+          "startMs": 51100,
+          "endMs": 52700,
+          "note": "net crossings + far-paddle occlusion, gold 51718-52553"
+        },
+        "status": "tracked",
+        "observationCount": 34
+      },
+      {
+        "window": {
+          "startMs": 52700,
+          "endMs": 54300,
+          "note": "fast volley + contact occlusion + toss, gold 53220-54088"
+        },
+        "status": "tracked",
+        "observationCount": 22
+      },
+      {
+        "window": {
+          "startMs": 54200,
+          "endMs": 55200,
+          "note": "near-side crossing, gold 54455-54588"
+        },
+        "status": "tracked",
+        "observationCount": 15
+      }
+    ],
+    "buckets": [
+      {
+        "bucket": "OBSERVED",
+        "n": 13,
+        "hits": 4,
+        "misses": 4,
+        "wrongLocation": 5,
+        "abstained": 0,
+        "violations": 0
+      },
+      {
+        "bucket": "ENTERING_OCCLUSION",
+        "n": 2,
+        "hits": 1,
+        "misses": 0,
+        "wrongLocation": 1,
+        "abstained": 0,
+        "violations": 0
+      }
+    ],
+    "violations": []
+  },
+  "aggregate": [
+    {
+      "bucket": "OBSERVED",
+      "n": 35,
+      "hits": 4,
+      "misses": 11,
+      "wrongLocation": 20,
+      "abstained": 0,
+      "violations": 0
+    },
+    {
+      "bucket": "ENTERING_OCCLUSION",
+      "n": 3,
+      "hits": 1,
+      "misses": 1,
+      "wrongLocation": 1,
+      "abstained": 0,
+      "violations": 0
+    },
+    {
+      "bucket": "OCCLUDED",
+      "n": 2,
+      "hits": 0,
+      "misses": 0,
+      "wrongLocation": 0,
+      "abstained": 0,
+      "violations": 2
+    },
+    {
+      "bucket": "REACQUIRED",
+      "n": 1,
+      "hits": 0,
+      "misses": 0,
+      "wrongLocation": 1,
+      "abstained": 0,
+      "violations": 0
+    },
+    {
+      "bucket": "UNCERTAIN_EXCLUDED",
+      "n": 2,
+      "hits": 0,
+      "misses": 0,
+      "wrongLocation": 0,
+      "abstained": 0,
+      "violations": 0
+    }
+  ],
+  "slices": [
+    {
+      "slice": "netCrossing",
+      "n": 4,
+      "hits": 2,
+      "misses": 0,
+      "wrongLocation": 2,
+      "abstained": 0,
+      "violations": 0,
+      "excluded": 0
+    },
+    {
+      "slice": "paddleOcclusion",
+      "n": 3,
+      "hits": 1,
+      "misses": 1,
+      "wrongLocation": 1,
+      "abstained": 0,
+      "violations": 0,
+      "excluded": 0
+    },
+    {
+      "slice": "multiBallBackground",
+      "n": 1,
+      "hits": 0,
+      "misses": 1,
+      "wrongLocation": 0,
+      "abstained": 0,
+      "violations": 0,
+      "excluded": 1
+    },
+    {
+      "slice": "fastBlur",
+      "n": 6,
+      "hits": 0,
+      "misses": 2,
+      "wrongLocation": 4,
+      "abstained": 0,
+      "violations": 0,
+      "excluded": 0
+    },
+    {
+      "slice": "occlusionCycle",
+      "n": 4,
+      "hits": 0,
+      "misses": 0,
+      "wrongLocation": 2,
+      "abstained": 0,
+      "violations": 2,
+      "excluded": 0
+    }
+  ]
+}

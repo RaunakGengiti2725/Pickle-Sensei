@@ -64,6 +64,7 @@ export default tseslint.config(
       "packages/swing-lab/src/eventBoundsScout.ts",
       "packages/swing-lab/src/waveaValidate.ts",
       "packages/swing-lab/src/ballOcclusionBench.ts",
+      "packages/swing-lab/src/ballHardSliceEval.ts",
       "packages/swing-lab/src/eventFailureOracle.ts",
       "packages/swing-lab/src/e13EventBoundsEval.ts",
       "packages/swing-lab/src/experimentBundle.ts",

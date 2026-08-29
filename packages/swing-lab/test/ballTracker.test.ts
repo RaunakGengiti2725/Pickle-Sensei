@@ -100,6 +100,55 @@ describe("buildBallTracks", () => {
     );
     expect(gated.length).toBe(0);
   });
+
+  it("rejects camera-pan lockstep tracks but keeps a motion-outlier ball", () => {
+    // Six parallel background streaks sweep right→left in lockstep (a camera
+    // pan) while one ball flies the opposite way at a different speed.
+    const frames: BallCandidateFile["frames"] = [];
+    for (let index = 0; index < 30; index += 1) {
+      const tMs = index * 40;
+      const candidates = [];
+      for (let lane = 0; lane < 6; lane += 1) {
+        candidates.push(ball(0.98 - index * 0.028, 0.1 + lane * 0.12, 60));
+      }
+      candidates.push(ball(0.05 + index * 0.018, 0.45, 40));
+      frames.push({ tMs, candidates, rawComponentCount: candidates.length });
+    }
+    const { gated, ablation } = buildBallTracks(
+      candidateFile(frames),
+      sequence,
+      { startMs: 0, endMs: 1200 },
+      null,
+    );
+    expect(ablation.stageC_coherenceRejected).toBeGreaterThanOrEqual(5);
+    expect(gated.length).toBe(1);
+    const survivor = gated[0]!;
+    expect(survivor.observations[0]!.x).toBeLessThan(0.1); // the left-origin ball
+    expect(survivor.coherentMotionFraction).toBeLessThanOrEqual(0.5);
+  });
+
+  it("does not count sub-noise-floor wobble as jerky turns", () => {
+    // A slow descending ball whose diff-blob centroid wobbles ±0.0025 per
+    // frame: every step reverses direction (~90° turns), but below
+    // jerkyMinStepNorm the wobble is measurement noise, not physics.
+    const frames: BallCandidateFile["frames"] = [];
+    for (let index = 0; index < 40; index += 1) {
+      const wobble = (index % 2 === 0 ? 1 : -1) * 0.0025;
+      frames.push({
+        tMs: index * 40,
+        candidates: [ball(0.5 + wobble, 0.2 + index * 0.005, 40)],
+        rawComponentCount: 1,
+      });
+    }
+    const { gated } = buildBallTracks(
+      candidateFile(frames),
+      sequence,
+      { startMs: 0, endMs: 1600 },
+      null,
+    );
+    expect(gated.length).toBe(1);
+    expect(gated[0]!.jerkyFraction).toBeLessThanOrEqual(0.34);
+  });
 });
 
 describe("selectPrimaryBallTrack", () => {

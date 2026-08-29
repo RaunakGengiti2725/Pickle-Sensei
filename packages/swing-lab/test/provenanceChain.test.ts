@@ -70,6 +70,7 @@ const trackedBall: BallStageReportEntry = {
     stageB_trackedObsPerSec: 12,
     stageC_tracks: 2,
     stageC_trackedObsPerSec: 8,
+    stageC_coherenceRejected: 0,
   },
   confidenceModel: "ball-track-2",
   timeline: {
