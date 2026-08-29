@@ -75,6 +75,15 @@ export const CAPTURE_ENVELOPE_THRESHOLDS = {
    * the old bands flagged the wrong side). Supported covers the observed
    * downstream-good range; degraded covers the rest of the observed corpus
    * range (max 45.6). p100-based with n=9 good units — still provisional.
+   *
+   * F18 construct check (controlled pan injection, wave-f
+   * f18-degradation-ladders.json): the proxy rises monotonically with true
+   * camera motion but cannot separate it from subject motion — injected
+   * pans of 1–8 px @320w on most downstream-good units measure below the
+   * subject-motion-only maximum (38.5), and 2 of 9 zero-camera-motion
+   * controls already exceed the supported edge. Treat this dimension as a
+   * weak global-motion screen, not a camera-stability verdict; fixing it
+   * requires a background-registered motion estimate, not band re-tuning.
    */
   camera_motion: {
     id: "global-frame-diff-320w-v0.2",
