@@ -1,0 +1,314 @@
+{
+  "sweep": "f20-coverage-sweep-v1",
+  "createdBy": "wave-f f20-rt-stroke-hardened",
+  "classifierVersion": "stroke-heuristic-4 (uncalibrated)",
+  "provenance": "deterministic synthetic geometry only; no committed labels, run dirs, held-out cases, or fresh candidates involved",
+  "sweeps": {
+    "rivalMeasuredFrames": {
+      "groundTruth": "genuine right-arm FOREHAND (striking wrist glimpsed 2 frames)",
+      "rows": [
+        {
+          "rivalMeasuredFrames": 0,
+          "label": "UNKNOWN",
+          "confidence": 0.2,
+          "limitingFactors": [
+            "dominant_wrist_attribution_unverifiable_rival_unmeasured"
+          ]
+        },
+        {
+          "rivalMeasuredFrames": 1,
+          "label": "FOREHAND",
+          "confidence": 0.8,
+          "limitingFactors": [
+            "paddle_not_tracked_at_contact",
+            "bounce_not_observed_volley_vs_groundstroke_unresolved",
+            "bounce_not_observed_level3_uncommitted"
+          ]
+        },
+        {
+          "rivalMeasuredFrames": 2,
+          "label": "FOREHAND",
+          "confidence": 0.8,
+          "limitingFactors": [
+            "paddle_not_tracked_at_contact",
+            "bounce_not_observed_volley_vs_groundstroke_unresolved",
+            "bounce_not_observed_level3_uncommitted"
+          ]
+        },
+        {
+          "rivalMeasuredFrames": 3,
+          "label": "FOREHAND",
+          "confidence": 0.8,
+          "limitingFactors": [
+            "paddle_not_tracked_at_contact",
+            "bounce_not_observed_volley_vs_groundstroke_unresolved",
+            "bounce_not_observed_level3_uncommitted"
+          ]
+        },
+        {
+          "rivalMeasuredFrames": 4,
+          "label": "UNKNOWN",
+          "confidence": 0.2,
+          "limitingFactors": [
+            "no_contact_point_measurable"
+          ]
+        },
+        {
+          "rivalMeasuredFrames": 5,
+          "label": "UNKNOWN",
+          "confidence": 0.2,
+          "limitingFactors": [
+            "no_swing_motion_near_reference"
+          ]
+        },
+        {
+          "rivalMeasuredFrames": 6,
+          "label": "UNKNOWN",
+          "confidence": 0.2,
+          "limitingFactors": [
+            "no_swing_motion_near_reference"
+          ]
+        }
+      ]
+    },
+    "occlusionTorsoRatio": {
+      "groundTruth": "shoulder-high FOREHAND volley (contact 0.22 real torso-units above shoulders)",
+      "rows": [
+        {
+          "torsoRatio": 0.5,
+          "label": "UNKNOWN",
+          "confidence": 0.2,
+          "limitingFactors": [
+            "torso_extent_collapsed_vs_sequence_median"
+          ]
+        },
+        {
+          "torsoRatio": 0.55,
+          "label": "UNKNOWN",
+          "confidence": 0.2,
+          "limitingFactors": [
+            "torso_extent_collapsed_vs_sequence_median"
+          ]
+        },
+        {
+          "torsoRatio": 0.58,
+          "label": "UNKNOWN",
+          "confidence": 0.2,
+          "limitingFactors": [
+            "torso_extent_collapsed_vs_sequence_median"
+          ]
+        },
+        {
+          "torsoRatio": 0.6,
+          "label": "UNKNOWN",
+          "confidence": 0.2,
+          "limitingFactors": [
+            "torso_extent_collapsed_vs_sequence_median"
+          ]
+        },
+        {
+          "torsoRatio": 0.62,
+          "label": "OVERHEAD",
+          "confidence": 0.68,
+          "limitingFactors": [
+            "paddle_not_tracked_at_contact"
+          ]
+        },
+        {
+          "torsoRatio": 0.7,
+          "label": "OVERHEAD",
+          "confidence": 0.66,
+          "limitingFactors": [
+            "paddle_not_tracked_at_contact"
+          ]
+        },
+        {
+          "torsoRatio": 0.8,
+          "label": "OVERHEAD",
+          "confidence": 0.64,
+          "limitingFactors": [
+            "paddle_not_tracked_at_contact"
+          ]
+        },
+        {
+          "torsoRatio": 0.85,
+          "label": "OVERHEAD",
+          "confidence": 0.63,
+          "limitingFactors": [
+            "paddle_not_tracked_at_contact"
+          ]
+        },
+        {
+          "torsoRatio": 0.9,
+          "label": "FOREHAND",
+          "confidence": 0.8,
+          "limitingFactors": [
+            "paddle_not_tracked_at_contact",
+            "bounce_not_observed_volley_vs_groundstroke_unresolved",
+            "bounce_not_observed_level3_uncommitted"
+          ]
+        },
+        {
+          "torsoRatio": 0.95,
+          "label": "FOREHAND",
+          "confidence": 0.8,
+          "limitingFactors": [
+            "paddle_not_tracked_at_contact",
+            "bounce_not_observed_volley_vs_groundstroke_unresolved",
+            "bounce_not_observed_level3_uncommitted"
+          ]
+        },
+        {
+          "torsoRatio": 1,
+          "label": "FOREHAND",
+          "confidence": 0.8,
+          "limitingFactors": [
+            "paddle_not_tracked_at_contact",
+            "bounce_not_observed_volley_vs_groundstroke_unresolved",
+            "bounce_not_observed_level3_uncommitted"
+          ]
+        }
+      ]
+    },
+    "genuineCrouchTorsoRatio": {
+      "groundTruth": "genuine deep-crouch FOREHAND dink",
+      "rows": [
+        {
+          "torsoRatio": 0.5,
+          "label": "UNKNOWN",
+          "confidence": 0.2,
+          "limitingFactors": [
+            "torso_extent_collapsed_vs_sequence_median"
+          ]
+        },
+        {
+          "torsoRatio": 0.55,
+          "label": "UNKNOWN",
+          "confidence": 0.2,
+          "limitingFactors": [
+            "torso_extent_collapsed_vs_sequence_median"
+          ]
+        },
+        {
+          "torsoRatio": 0.58,
+          "label": "UNKNOWN",
+          "confidence": 0.2,
+          "limitingFactors": [
+            "torso_extent_collapsed_vs_sequence_median"
+          ]
+        },
+        {
+          "torsoRatio": 0.6,
+          "label": "FOREHAND",
+          "confidence": 0.8,
+          "limitingFactors": [
+            "paddle_not_tracked_at_contact",
+            "bounce_not_observed_volley_vs_groundstroke_unresolved",
+            "bounce_not_observed_level3_uncommitted"
+          ]
+        },
+        {
+          "torsoRatio": 0.62,
+          "label": "FOREHAND",
+          "confidence": 0.8,
+          "limitingFactors": [
+            "paddle_not_tracked_at_contact",
+            "bounce_not_observed_volley_vs_groundstroke_unresolved",
+            "bounce_not_observed_level3_uncommitted"
+          ]
+        },
+        {
+          "torsoRatio": 0.65,
+          "label": "FOREHAND",
+          "confidence": 0.8,
+          "limitingFactors": [
+            "paddle_not_tracked_at_contact",
+            "bounce_not_observed_volley_vs_groundstroke_unresolved",
+            "bounce_not_observed_level3_uncommitted"
+          ]
+        },
+        {
+          "torsoRatio": 0.7,
+          "label": "FOREHAND",
+          "confidence": 0.8,
+          "limitingFactors": [
+            "paddle_not_tracked_at_contact",
+            "bounce_not_observed_volley_vs_groundstroke_unresolved",
+            "bounce_not_observed_level3_uncommitted"
+          ]
+        },
+        {
+          "torsoRatio": 0.75,
+          "label": "FOREHAND",
+          "confidence": 0.8,
+          "limitingFactors": [
+            "paddle_not_tracked_at_contact",
+            "bounce_not_observed_volley_vs_groundstroke_unresolved",
+            "bounce_not_observed_level3_uncommitted"
+          ]
+        }
+      ]
+    },
+    "inWindowSubFloorSpeedSamples": {
+      "groundTruth": "genuine fast FOREHAND drive (mid-swing speed samples dropped)",
+      "rows": [
+        {
+          "inWindowSamples": 0,
+          "label": "FOREHAND",
+          "confidence": 0.76,
+          "limitingFactors": [
+            "paddle_not_tracked_at_contact",
+            "bounce_not_observed_volley_vs_groundstroke_unresolved",
+            "bounce_not_observed_level3_uncommitted"
+          ]
+        },
+        {
+          "inWindowSamples": 1,
+          "label": "FOREHAND",
+          "confidence": 0.76,
+          "limitingFactors": [
+            "speed_window_sparsely_sampled_gate_not_applicable",
+            "paddle_not_tracked_at_contact",
+            "bounce_not_observed_volley_vs_groundstroke_unresolved",
+            "bounce_not_observed_level3_uncommitted"
+          ]
+        },
+        {
+          "inWindowSamples": 2,
+          "label": "FOREHAND",
+          "confidence": 0.76,
+          "limitingFactors": [
+            "speed_window_sparsely_sampled_gate_not_applicable",
+            "paddle_not_tracked_at_contact",
+            "bounce_not_observed_volley_vs_groundstroke_unresolved",
+            "bounce_not_observed_level3_uncommitted"
+          ]
+        },
+        {
+          "inWindowSamples": 3,
+          "label": "UNKNOWN",
+          "confidence": 0.2,
+          "limitingFactors": [
+            "no_swing_energy_in_window"
+          ]
+        },
+        {
+          "inWindowSamples": 4,
+          "label": "UNKNOWN",
+          "confidence": 0.2,
+          "limitingFactors": [
+            "no_swing_energy_in_window"
+          ]
+        },
+        {
+          "inWindowSamples": 5,
+          "label": "UNKNOWN",
+          "confidence": 0.2,
+          "limitingFactors": [
+            "no_swing_energy_in_window"
+          ]
+        }
+      ]
+    }
+  }
+}
