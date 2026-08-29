@@ -19,10 +19,14 @@ import {
  *              (coverage × torso size), i.e. most-present largest person
  *   explicit — `--player <trackId>` for research overrides
  *
- * Identity persistence: association prefers the incumbent match and the
- * track never "switches" people silently — a lost target is a recorded LOSS
- * PERIOD, and a candidate that would flip identity must beat the incumbent
- * by a margin (hysteresis) or it starts its own track.
+ * Identity persistence: a lost target is a recorded LOSS PERIOD, and every
+ * frame where an association was CONTESTED (a rival track/person was within
+ * the gate at comparable cost — the geometry in which greedy assignment can
+ * silently hand a track to a different human: crossings, adjacent similar
+ * players, occlusion hand-offs) is recorded on the track as an identity
+ * contest, so downstream selection can drop confidence instead of trusting
+ * a possibly-switched track. Geometry alone cannot PREVENT a swap between
+ * lookalike detections; it can and now does refuse to be silent about it.
  */
 
 export const PLAYER_TRACKER_VERSION = "player-track-1";
@@ -53,6 +57,13 @@ export interface PlayerTrack {
   meanTorsoSpan: number;
   /** Gaps longer than one frame interval, as explicit loss periods. */
   lossPeriods: Array<{ fromMs: number; toMs: number }>;
+  /**
+   * Frames where this track's association was CONTESTED: a rival track
+   * wanted the same person, or a rival person was an almost-equal match
+   * (cost within GATES.contestCostRatio). These are exactly the frames in
+   * which greedy geometric assignment can silently switch humans.
+   */
+  identityContests: Array<{ timestampMs: number; rivalCostRatio: number }>;
 }
 
 export interface TargetSelection {
@@ -70,9 +81,9 @@ const GATES = {
   scaleRatioMax: 1.6,
   maxGapMs: 400,
   minFrames: 8,
-  /** A challenger must beat the incumbent's cost by this factor to steal a
-   * frame (hysteresis against identity flips). */
-  incumbentAdvantage: 0.7,
+  /** A rival candidate within this cost factor of the chosen assignment
+   * marks the frame as an identity CONTEST (possible silent switch). */
+  contestCostRatio: 1.5,
 } as const;
 
 const TORSO_JOINTS = ["left_shoulder", "right_shoulder", "left_hip", "right_hip"] as const;
@@ -82,6 +93,7 @@ export function buildPlayerTracks(file: PeopleFile): PlayerTrack[] {
     trackId: number;
     frames: PlayerFrame[];
     lastMs: number;
+    contests: Array<{ timestampMs: number; rivalCostRatio: number }>;
   }
   const active: Active[] = [];
   const finished: Active[] = [];
@@ -97,7 +109,7 @@ export function buildPlayerTracks(file: PeopleFile): PlayerTrack[] {
       .map((person) => describePerson(frame.t, person))
       .filter((person): person is PlayerFrame => person !== null);
 
-    // Global lowest-cost assignment with incumbent hysteresis.
+    // Global lowest-cost assignment, with contested frames recorded.
     const pairs: Array<{ trackIndex: number; personIndex: number; cost: number }> = [];
     for (const [trackIndex, track] of active.entries()) {
       const last = track.frames[track.frames.length - 1]!;
@@ -111,12 +123,10 @@ export function buildPlayerTracks(file: PeopleFile): PlayerTrack[] {
           Math.max(person.torsoSpan, last.torsoSpan) /
           Math.max(1e-6, Math.min(person.torsoSpan, last.torsoSpan));
         if (scaleRatio > GATES.scaleRatioMax) continue;
-        // Incumbent advantage: continuing a track is cheaper than starting
-        // association churn between adjacent people.
         pairs.push({
           trackIndex,
           personIndex,
-          cost: (distance + (scaleRatio - 1) * 0.1) * GATES.incumbentAdvantage,
+          cost: distance + (scaleRatio - 1) * 0.1,
         });
       }
     }
@@ -130,10 +140,26 @@ export function buildPlayerTracks(file: PeopleFile): PlayerTrack[] {
       const track = active[pair.trackIndex]!;
       track.frames.push(people[pair.personIndex]!);
       track.lastMs = frame.t;
+      // Contest detection: the cheapest FEASIBLE rival sharing this track or
+      // this person. If it is nearly as good, this frame is the geometry in
+      // which the assignment could have gone to a different human.
+      let rivalCost = Infinity;
+      for (const rival of pairs) {
+        if (rival === pair) continue;
+        if (rival.trackIndex !== pair.trackIndex && rival.personIndex !== pair.personIndex)
+          continue;
+        if (rival.cost < rivalCost) rivalCost = rival.cost;
+      }
+      if (rivalCost <= Math.max(pair.cost * GATES.contestCostRatio, pair.cost + 0.02)) {
+        track.contests.push({
+          timestampMs: frame.t,
+          rivalCostRatio: Number((rivalCost / Math.max(1e-6, pair.cost)).toFixed(3)),
+        });
+      }
     }
     for (const [personIndex, person] of people.entries()) {
       if (takenPeople.has(personIndex)) continue;
-      active.push({ trackId: nextId++, frames: [person], lastMs: frame.t });
+      active.push({ trackId: nextId++, frames: [person], lastMs: frame.t, contests: [] });
     }
   }
   finished.push(...active);
@@ -160,6 +186,7 @@ export function buildPlayerTracks(file: PeopleFile): PlayerTrack[] {
         meanTorsoSpan:
           track.frames.reduce((total, frame) => total + frame.torsoSpan, 0) / track.frames.length,
         lossPeriods,
+        identityContests: track.contests,
       };
     })
     .sort((a, b) => b.coverage * b.meanTorsoSpan - a.coverage * a.meanTorsoSpan);
@@ -193,6 +220,19 @@ export interface TargetIdentity {
 /** Frames used to resolve the seed (identity is decided early, then held). */
 const SEED_RESOLUTION_MS = 1200;
 
+/** A tap whose best/runner-up cost ratio exceeds this cannot decide identity. */
+const TAP_AMBIGUITY_COST_RATIO = 0.65;
+
+/**
+ * Alias-family median torso distance above which a coincident track is
+ * treated as a possible DISTINCT person (e.g. a clothing-similar partner
+ * standing adjacent), not a safe duplicate. Measured true duplicates sit at
+ * 0.058 / 0.068 (afn-sasebo-rally1); adjacent distinct bodies cannot sustain
+ * less than ~body width. Frames of such tracks are never absorbed and any
+ * identity built through them is flagged.
+ */
+const ALIAS_TIGHT_MEDIAN_DISTANCE = 0.08;
+
 /**
  * Resolve a user seed to ONE player track, then absorb duplicate tracks of the
  * same human as aliases (waterfall finding: duplicates were being treated as
@@ -214,7 +254,7 @@ export function initializeTargetFromSeed(
   };
 
   const risks: string[] = [];
-  let chosen: PlayerTrack | undefined;
+  let chosen: PlayerTrack | undefined; // eslint-disable-line prefer-const
   let confidence = 0.5;
 
   if (seed.mode === "user_tapped_person") {
@@ -241,6 +281,18 @@ export function initializeTargetFromSeed(
     if (ranked[0] && ranked[0].cost > 3) {
       risks.push("TARGET_TAP_FAR_FROM_ANY_PLAYER: the tap did not land near a detected person");
       confidence = Math.min(confidence, 0.5);
+    }
+    // A tap that lands almost equidistant between two people cannot decide
+    // identity — say so instead of reporting a floor-clamped 0.55.
+    if (
+      ranked[0] !== undefined &&
+      runnerUp !== undefined &&
+      ranked[0].cost >= TAP_AMBIGUITY_COST_RATIO * runnerUp
+    ) {
+      risks.push(
+        "TARGET_TAP_AMBIGUOUS: another player is nearly as close to the tap as the chosen one",
+      );
+      confidence = Math.min(confidence, 0.45);
     }
   } else if (seed.mode === "user_selected_court_half") {
     // The user's own side of the court, split at the image centerline. Only a
@@ -283,15 +335,33 @@ export function initializeTargetFromSeed(
   // The tap may land nearest a SHORT duplicate fragment of the right person
   // (measured: afn-sasebo-rally1 resolved to a 7%-coverage fragment whose
   // aliases were the real 88% track). Identity is the PERSON, so promote the
-  // best-covered member of the alias family as the base track.
+  // best-covered member of the alias family as the base track — but only
+  // through TIGHT aliases (a loose coincident track may be a different human
+  // standing adjacent, and identity must never jump through it).
   let aliasTrackIds = duplicateAliasesOf(chosen, tracks);
-  if (aliasTrackIds.length > 0) {
-    const family = [chosen, ...tracks.filter((track) => aliasTrackIds.includes(track.trackId))];
+  let tightAliasIds = aliasTrackIds.filter((id) => isTightAlias(chosen!, tracks, id));
+  if (tightAliasIds.length > 0) {
+    const family = [chosen, ...tracks.filter((track) => tightAliasIds.includes(track.trackId))];
     const best = family.sort((a, b) => b.coverage - a.coverage)[0]!;
     if (best.trackId !== chosen.trackId) {
       chosen = best;
       aliasTrackIds = duplicateAliasesOf(chosen, tracks);
+      tightAliasIds = aliasTrackIds.filter((id) => isTightAlias(chosen!, tracks, id));
     }
+  }
+  const looseAliasIds = aliasTrackIds.filter((id) => !tightAliasIds.includes(id));
+  if (looseAliasIds.length > 0) {
+    risks.push(
+      `TARGET_ALIAS_LOOSE: coincident track(s) ${looseAliasIds.join(", ")} may be a distinct adjacent person — frames not absorbed`,
+    );
+    confidence = Math.min(confidence, 0.5);
+  }
+  const contests = chosen.identityContests;
+  if (contests.length > 0) {
+    risks.push(
+      `TARGET_IDENTITY_CONTESTED: ${contests.length} contested association frame(s) — a rival was nearly as good a match; identity may have switched`,
+    );
+    confidence = Math.min(confidence, 0.5);
   }
   return ok({
     identity: {
@@ -302,8 +372,34 @@ export function initializeTargetFromSeed(
       confidence,
       risks,
     },
-    target: aliasTrackIds.length > 0 ? absorbAliases(chosen, tracks, aliasTrackIds) : chosen,
+    target: tightAliasIds.length > 0 ? absorbAliases(chosen, tracks, tightAliasIds) : chosen,
   });
+}
+
+/** True when an alias track's coincident frames sit at true-duplicate distance. */
+function isTightAlias(
+  target: PlayerTrack,
+  tracks: readonly PlayerTrack[],
+  aliasId: number,
+): boolean {
+  const alias = tracks.find((track) => track.trackId === aliasId);
+  if (!alias) return false;
+  const distances: number[] = [];
+  for (const frame of alias.frames) {
+    const targetFrame = target.frames.find(
+      (candidate) => Math.abs(candidate.timestampMs - frame.timestampMs) <= 40,
+    );
+    if (!targetFrame) continue;
+    distances.push(
+      Math.hypot(
+        frame.torsoMid.x - targetFrame.torsoMid.x,
+        frame.torsoMid.y - targetFrame.torsoMid.y,
+      ),
+    );
+  }
+  if (distances.length === 0) return false;
+  distances.sort((a, b) => a - b);
+  return distances[Math.floor(distances.length / 2)]! <= ALIAS_TIGHT_MEDIAN_DISTANCE;
 }
 
 /** Track ids that are duplicate detections of the same human as `target`. */
@@ -412,6 +508,17 @@ export function selectTargetPlayer(
     if (first > window.startMs + 100 || last < window.endMs - 100) {
       risks.push("TARGET_PLAYER_PARTIAL: target track does not span the stroke window");
     }
+  }
+  const contests = window
+    ? target.identityContests.filter(
+        (contest) => contest.timestampMs >= window.startMs && contest.timestampMs <= window.endMs,
+      )
+    : target.identityContests;
+  if (contests.length > 0) {
+    risks.push(
+      `TARGET_IDENTITY_CONTESTED: ${contests.length} contested association frame(s)${window ? " inside the stroke window" : ""} — a rival was nearly as good a match; identity may have switched`,
+    );
+    confidence = Math.min(confidence, 0.5);
   }
   if (options.policy === "auto" && confidence < 0.5) {
     risks.push("TARGET_SELECTION_AMBIGUOUS: runner-up player is nearly as prominent");

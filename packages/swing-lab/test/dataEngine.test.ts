@@ -179,7 +179,14 @@ function syntheticTrack(kind: "live" | "rigid_pan" | "frozen"): PlayerTrack {
       torsoSpan: 0.12,
     };
   });
-  return { trackId: 1, frames, coverage: 1, meanTorsoSpan: 0.12, lossPeriods: [] };
+  return {
+    trackId: 1,
+    frames,
+    coverage: 1,
+    meanTorsoSpan: 0.12,
+    lossPeriods: [],
+    identityContests: [],
+  };
 }
 
 describe("gameplay validity (permanent title-card regression class)", () => {

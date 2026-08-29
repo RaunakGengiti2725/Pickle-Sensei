@@ -1,0 +1,61 @@
+{
+  "workstream": "d3-01-rt-target",
+  "wave": "D3",
+  "subsystem": "target acquisition/persistence (packages/swing-lab: playerTracker.ts, engine/taReplay.ts)",
+  "branch": "devin/wave-d3/d3-01-rt-target",
+  "base": "origin/devin/1787988068-wave-c-integration",
+  "fixtures": "ALL fixtures are SYNTHETIC adversarial track/replay constructions (labeled synthetic in the test file). No held-out cases (wm-dink-01, afn-vic-rally1) were used or touched. No canonical cascade numbers were produced (Linux; pose extraction is macOS-only).",
+  "contracts": "usable-result-v1 and silent-failure-v1 untouched. All hardening is ADDITIVE metadata (identityContests on PlayerTrack, contested/jumped + followContestedFrames/followJumps on ReplayResult, new risk strings, confidence caps). No decision path of the shipped follower or tracker was changed; no blanket abstention was introduced.",
+  "breaks": [
+    {
+      "id": "B1-ambiguous-tap",
+      "scenario": "SYNTHETIC: user tap exactly equidistant between two players",
+      "pre_fix": "one player silently chosen, confidence 0.55, zero risks",
+      "status": "FIXED",
+      "fix": "TAP_AMBIGUITY_COST_RATIO=0.65 gate adds TARGET_TAP_AMBIGUOUS risk and caps confidence at 0.45",
+      "regression_test": "test/d3-01-targetPersistence.test.ts: 'a tap equidistant between two players surfaces TARGET_TAP_AMBIGUOUS'"
+    },
+    {
+      "id": "B2-loose-alias-absorption",
+      "scenario": "SYNTHETIC: clothing-similar DISTINCT person standing at normalized torso distance 0.10 from the target",
+      "pre_fix": "second human's frames silently absorbed as duplicate aliases (DUPLICATE_TORSO_DISTANCE=0.12), blending two people into one identity",
+      "status": "FIXED",
+      "fix": "alias absorption now requires median coincident torso distance <= ALIAS_TIGHT_MEDIAN_DISTANCE (0.08; measured true duplicates sit at 0.058/0.068). Looser coincident tracks are NOT absorbed and add TARGET_ALIAS_LOOSE risk with confidence capped at 0.5",
+      "regression_test": "'an adjacent DISTINCT person ... is NOT absorbed' + tight-duplicate positive guard"
+    },
+    {
+      "id": "B3-crossing-merge-swap",
+      "scenario": "SYNTHETIC: two similar players crossing / merging into one detection while overlapped; target dropout while a bystander passes through the target's position",
+      "pre_fix": "greedy association silently kept or handed off identity with zero surfaced signal; incumbentAdvantage multiplier scaled all costs equally (a no-op for assignment order)",
+      "status": "FIXED (disclosure)",
+      "fix": "per-frame identity-contest detection (rival feasible pair within contestCostRatio=1.5 or +0.02 absolute) recorded as identityContests on the track; selectTargetPlayer and initializeTargetFromSeed add TARGET_IDENTITY_CONTESTED risk and cap confidence at 0.5. Geometry alone cannot decide which human is which in these frames — that residual is disclosed, not hidden.",
+      "regression_test": "'two similar players crossing produce identityContests', 'merge-cross ... records contests', 'target dropout while a bystander passes'"
+    },
+    {
+      "id": "B4-exit-reenter",
+      "scenario": "SYNTHETIC: target exits frame ~1s and re-enters",
+      "pre_fix": "already safe: gap > maxGapMs(400) forces a NEW track; no silent stitch. Pinned as regression.",
+      "status": "PASS (pinned)",
+      "regression_test": "'a target that leaves and returns keeps explicit loss periods'"
+    },
+    {
+      "id": "B5-postlock-follower-steal",
+      "scenario": "SYNTHETIC replay (shipped variant, follower hysteresis on): target dropout while a mover passes; decisively larger challenger approaching",
+      "pre_fix": "post-lock follower silently handed the anchor to another body (anchor jump > incumbent radius) with zero surfaced signal",
+      "status": "FIXED (disclosure) / PARTIALLY OPEN",
+      "fix": "replayAcquisition now emits per-frame contested/jumped flags plus followContestedFrames and followJumps totals (rival within FOLLOW_CONTEST_SCORE_RATIO=0.7 of chosen, >=2 people inside FOLLOW_INCUMBENT_RADIUS=0.12, or one-frame anchor move > radius). Decision logic is unchanged (shipped semantics pinned by existing taVariantsW3 tests).",
+      "open": "OPEN: the live device follower (ApplePoseProvider.primaryPerson) can still physically follow the wrong human in these geometries; the replay-side signal makes the hazard measurable and available to gate on, but wiring a live confidence drop/abstain into the device pipeline is out of D3-01 package scope and needs the D-027 live tap instrumentation data.",
+      "regression_test": "'target dropout while a mover passes = contested frames + an anchor jump', 'decisively larger challenger', clean-follow negative guard"
+    }
+  ],
+  "counts": { "breaks_found": 4, "fixed": 4, "pinned_safe": 1, "open": 1 },
+  "coverage_delta": {
+    "method": "no committed positive gold for target acquisition exists as runnable fixtures on Linux (canonical run dirs absent); coverage guard is the synthetic clean-geometry suite instead",
+    "result": "clean solo-player and well-separated two-player fixtures: 0 contests, 0 new risks, confidence unchanged (>=0.9 seeded); tight true-duplicate absorption (measured 0.058/0.068 analogue) still absorbs silently. Full swing-lab suite (231 tests) green before and after."
+  },
+  "gates": {
+    "typecheck": "pnpm typecheck green",
+    "tests": "pnpm --filter swing-lab test green (existing 231 + 13 new)",
+    "prettier": "prettier --write on touched files"
+  }
+}
