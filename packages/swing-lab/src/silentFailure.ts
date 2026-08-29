@@ -98,7 +98,7 @@ export const SILENT_FAILURE_CLAIMS = [
 ] as const;
 export type SilentFailureClaim = (typeof SILENT_FAILURE_CLAIMS)[number];
 
-export type ClaimStatus =
+type ClaimStatus =
   "correct" | "silent_failure" | "abstained" | "unverifiable" | "excluded_disputed_gold";
 
 export interface ClaimVerdict {

@@ -91,7 +91,7 @@ interface OracleRow {
   matchedProposal: { startMs: number; endMs: number; overlapOfGold: number } | null;
 }
 
-export function smooth(series: readonly Speed[]): Speed[] {
+function smooth(series: readonly Speed[]): Speed[] {
   const sorted = [...series].sort((a, b) => a.timestampMs - b.timestampMs);
   return sorted.map((sample, index) => {
     const window = sorted.slice(Math.max(0, index - 1), index + 2);

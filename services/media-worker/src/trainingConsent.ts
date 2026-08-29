@@ -43,7 +43,7 @@ export interface TrainingEligibleItem {
   grant_consent_version: string;
 }
 
-export interface TrainingEligibleSelection {
+interface TrainingEligibleSelection {
   items: TrainingEligibleItem[];
   /**
    * Highest consent_record.seq visible when the selection was taken. A

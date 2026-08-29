@@ -17,7 +17,7 @@ import { createInterface } from "node:readline";
  * back to the legacy one-shot path.
  */
 
-export interface PaddleDetectRequest {
+interface PaddleDetectRequest {
   video: string;
   out: string;
   startMs: number;
@@ -28,7 +28,7 @@ export interface PaddleDetectRequest {
   roi?: [number, number, number, number] | null;
 }
 
-export interface PaddleReadyEvent {
+interface PaddleReadyEvent {
   event: "ready";
   protocol: string;
   modelLoadSec: number;
@@ -36,7 +36,7 @@ export interface PaddleReadyEvent {
   device: string;
 }
 
-export interface PaddleDetectResponse {
+interface PaddleDetectResponse {
   id: string;
   ok: true;
   out: string;
@@ -55,7 +55,7 @@ interface Pending {
   timer: NodeJS.Timeout | null;
 }
 
-export interface PaddleServeWorkerOptions {
+interface PaddleServeWorkerOptions {
   readyTimeoutMs?: number;
   requestTimeoutMs?: number;
   log?: (message: string) => void;
@@ -233,7 +233,7 @@ export class PaddleServeWorker {
   }
 }
 
-export interface PaddleWorkerSupervisorOptions extends PaddleServeWorkerOptions {
+interface PaddleWorkerSupervisorOptions extends PaddleServeWorkerOptions {
   /** Crash-restart budget for the whole run. A worker that keeps dying is an
    * environment problem; after this many respawns every remaining window
    * uses the one-shot fallback. */
@@ -315,7 +315,7 @@ export function startPaddleWorker(
 
 /** The detect surface detectPaddleWindow needs — a raw worker or the
  * restart-supervised handle. */
-export interface PaddleDetectHandle {
+interface PaddleDetectHandle {
   detect(request: PaddleDetectRequest): Promise<PaddleDetectResponse>;
 }
 
