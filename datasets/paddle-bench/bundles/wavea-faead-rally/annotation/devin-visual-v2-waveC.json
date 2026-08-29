@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-faead-rally",
+  "annotatorId": "devin-visual-v2-waveC",
+  "createdAtIso": "2026-08-29T06:00:00.000Z",
+  "revision": 1,
+  "stroke": "unsure",
+  "handedness": "unsure",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": null,
+    "accelerationStartMs": null,
+    "contactMs": null,
+    "followThroughEndMs": null
+  },
+  "contactUncertainty": null,
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.7,
+  "notes": "Ball-only gold pass (workstream C04): stroke/phase/checkpoint fields intentionally unlabeled (stroke=unsure means out of scope for this pass, see the wave-a annotation for stroke truth where present). Method: frames decoded by frame index at the exact container frame rate (no -ss seeking); tMs=round(n*1000/fps) on the RECORDING clock for wavea-* bundles and the CLIP clock for wm-volley-02. Ball centers measured as color+motion blob centroids on the decoded frame, each visually verified in zoomed grid crops; radiusNorm = ball radius in px / frame height. Occluded frames carry NO point by rule. dvids-944209 (fps 24). Rally ball flies right, bounces (~13208-13250), rises toward the near red-shirt player and disappears behind his torso (entering 13417, hidden 13458-13583), reappears at his right hip 13625 and is struck back left (return flight labeled 13875+).",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T06:00:00.000Z"
+    }
+  ],
+  "ballFrames": [
+    {
+      "tMs": 12875,
+      "point": {
+        "x": 0.6063,
+        "y": 0.2296
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0069,
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 13208,
+      "point": {
+        "x": 0.7307,
+        "y": 0.5292
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0081,
+      "occlusionState": "observed",
+      "note": "near court bounce"
+    },
+    {
+      "tMs": 13333,
+      "point": {
+        "x": 0.7526,
+        "y": 0.4481
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0082,
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 13417,
+      "point": {
+        "x": 0.7674,
+        "y": 0.4106
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0076,
+      "occlusionState": "entering_occlusion",
+      "note": "last frame before ball passes behind near player's torso"
+    },
+    {
+      "tMs": 13458,
+      "point": null,
+      "visibility": "occluded",
+      "occlusionState": "occluded",
+      "note": "fully behind red-shirt near player's body"
+    },
+    {
+      "tMs": 13542,
+      "point": null,
+      "visibility": "occluded",
+      "occlusionState": "occluded",
+      "note": "still fully hidden behind body"
+    },
+    {
+      "tMs": 13625,
+      "point": {
+        "x": 0.8117,
+        "y": 0.3758
+      },
+      "visibility": "visible",
+      "occlusionState": "reacquired",
+      "note": "partially visible at player's right hip edge; fragment centroid, radius not measurable"
+    },
+    {
+      "tMs": 13667,
+      "point": {
+        "x": 0.8171,
+        "y": 0.3814
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0079,
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 14000,
+      "point": {
+        "x": 0.6261,
+        "y": 0.1908
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0069,
+      "occlusionState": "observed",
+      "note": "return flight"
+    }
+  ]
+}

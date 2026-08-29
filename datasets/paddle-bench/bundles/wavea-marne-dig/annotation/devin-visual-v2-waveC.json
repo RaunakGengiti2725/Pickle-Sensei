@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-marne-dig",
+  "annotatorId": "devin-visual-v2-waveC",
+  "createdAtIso": "2026-08-29T06:00:00.000Z",
+  "revision": 1,
+  "stroke": "unsure",
+  "handedness": "unsure",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": null,
+    "accelerationStartMs": null,
+    "contactMs": null,
+    "followThroughEndMs": null
+  },
+  "contactUncertainty": null,
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.7,
+  "notes": "Ball-only gold pass (workstream C04): stroke/phase/checkpoint fields intentionally unlabeled (stroke=unsure means out of scope for this pass, see the wave-a annotation for stroke truth where present). Method: frames decoded by frame index at the exact container frame rate (no -ss seeking); tMs=round(n*1000/fps) on the RECORDING clock for wavea-* bundles and the CLIP clock for wm-volley-02. Ball centers measured as color+motion blob centroids on the decoded frame, each visually verified in zoomed grid crops; radiusNorm = ball radius in px / frame height. Occluded frames carry NO point by rule. dvids-944593 (Marne outdoor, fps 60000/1001). Incoming lob arc across the dig window: up to apex (~12529) then descending toward the digging player. Small/soft ball image outdoors; radii approximate.",
+  "history": [
+    {
+      "revision": 1,
+      "savedAtIso": "2026-08-29T06:00:00.000Z"
+    }
+  ],
+  "ballFrames": [
+    {
+      "tMs": 12229,
+      "point": {
+        "x": 0.5419,
+        "y": 0.399
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0071,
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 12529,
+      "point": {
+        "x": 0.4973,
+        "y": 0.3004
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0056,
+      "occlusionState": "observed",
+      "note": "near apex"
+    },
+    {
+      "tMs": 12729,
+      "point": {
+        "x": 0.4796,
+        "y": 0.3222
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0046,
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 12930,
+      "point": {
+        "x": 0.4655,
+        "y": 0.38
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0046,
+      "occlusionState": "observed"
+    },
+    {
+      "tMs": 13080,
+      "point": {
+        "x": 0.4564,
+        "y": 0.4406
+      },
+      "visibility": "visible",
+      "radiusNorm": 0.0042,
+      "occlusionState": "observed"
+    }
+  ]
+}

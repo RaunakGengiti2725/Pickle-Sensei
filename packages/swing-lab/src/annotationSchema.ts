@@ -40,6 +40,9 @@ export interface PaddleFrameLabel {
   visibility: "visible" | "occluded" | "absent";
 }
 
+export const BALL_OCCLUSION_STATES = ["observed", "entering_occlusion", "occluded", "reacquired"] as const;
+export type BallOcclusionState = (typeof BALL_OCCLUSION_STATES)[number];
+
 /**
  * Ball ground truth on a single frame. `not_visible` = the ball is genuinely
  * not in this frame (out of play / out of frame); `occluded` = in play but
@@ -52,6 +55,11 @@ export interface BallFrameLabel {
   visibility: "visible" | "occluded" | "not_visible" | "uncertain";
   /** Optional normalized radius when measurable. */
   radiusNorm?: number;
+  /** Optional occlusion-transition state: `occluded` must carry no point;
+   * the other three are visible frames (entering_occlusion = partially
+   * hidden on the way in, reacquired = first clear frame after occlusion). */
+  occlusionState?: BallOcclusionState;
+  note?: string;
 }
 
 export const CONTACT_UNCERTAINTIES = ["exact", "plus_minus_1", "plus_minus_2", "uncertain"] as const;
@@ -169,6 +177,17 @@ export function validateAnnotation(raw: unknown): string[] {
       (typeof frame.radiusNorm !== "number" || frame.radiusNorm <= 0 || frame.radiusNorm > 0.2)
     ) {
       problems.push("ball radiusNorm must be in (0, 0.2] when present");
+    }
+    if (frame.occlusionState !== undefined) {
+      if (!BALL_OCCLUSION_STATES.includes(frame.occlusionState)) {
+        problems.push(`invalid ball occlusionState ${String(frame.occlusionState)}`);
+      } else if (frame.occlusionState === "occluded") {
+        if (frame.visibility !== "occluded") {
+          problems.push("occlusionState=occluded requires visibility=occluded");
+        }
+      } else if (frame.visibility !== "visible") {
+        problems.push(`occlusionState=${frame.occlusionState} requires visibility=visible`);
+      }
     }
   }
   if (

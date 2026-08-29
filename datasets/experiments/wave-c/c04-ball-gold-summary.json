@@ -1,0 +1,60 @@
+{
+  "workstream": "C04",
+  "title": "Scale ball gold labels 22 -> 60 with occlusion states",
+  "branch": "devin/wave-c/c04-ball-gold",
+  "annotatorId": "devin-visual-v2-waveC",
+  "createdAtIso": "2026-08-29T06:50:00.000Z",
+  "whatWasBuilt": [
+    "38 new visually-verified ball gold labels across 6 bundles (5 wavea-* + wm-volley-02), each in a new append-only annotation file bundles/<id>/annotation/devin-visual-v2-waveC.json; no existing annotation file was modified.",
+    "Minimal schema extension: optional BallFrameLabel.occlusionState ('observed' | 'entering_occlusion' | 'occluded' | 'reacquired') + validation in packages/swing-lab/src/annotationSchema.ts. Existing visibility semantics unchanged: occlusionState=occluded requires visibility=occluded and no point; the other three require visibility=visible with a normalized point. Field is optional, so all 22 pre-existing labels remain valid unchanged.",
+    "datasets/ball-bench/ball-bench.json registry updated append-only: 5 new development cases (wavea recording-clock) + note documenting the wm-volley-02 clip-clock extension file and the 22 -> 60 total; coverageGaps rewritten to reflect actual coverage."
+  ],
+  "exactNumbers": {
+    "priorGoldBallLabels": 22,
+    "newLabels": 38,
+    "totalGoldBallLabels": 60,
+    "bundlesLabeled": 6,
+    "perBundle": {
+      "wavea-944403-dink": 7,
+      "wavea-944403-smash": 9,
+      "wavea-faead-feed": 5,
+      "wavea-faead-rally": 9,
+      "wavea-marne-dig": 5,
+      "wm-volley-02": 3
+    },
+    "occlusionStateCounts": {
+      "observed": 29,
+      "entering_occlusion": 2,
+      "occluded": 4,
+      "reacquired": 2,
+      "uncertain_no_state": 1
+    },
+    "occlusionAdjacentLabels": 8,
+    "occlusionSequences": [
+      "paddle occlusion: wavea-944403-smash 4821ms entering, 4838-4855ms occluded (contact happens while hidden; no point invented), 4872ms reacquired",
+      "body occlusion: wavea-faead-rally 13417ms entering, 13458-13583ms occluded behind near player's torso, 13625ms reacquired at hip edge"
+    ]
+  },
+  "provenance": {
+    "method": "Frames decoded by frame index at exact container fps (ffmpeg full-decode, no -ss seeking); tMs = round(n*1000/fps). Recording clock for wavea-* (matching event-bounds-wave-a.json), clip clock for wm-volley-02. Centers = color+motion blob centroids on the decoded frame, each visually verified in zoomed grid crops before acceptance; detector candidates that failed visual verification were discarded. radiusNorm = ball pixel radius / 1080.",
+    "sources": [
+      "dvids-944403 reacquired, sha256 916657917f2be72f67717b35bdc0f163915c48a1126731c25f0ae1364121ad13 == datasets/corpus/recordings.json rec-916657917f2b",
+      "dvids-944209 reacquired, sha256 faead33a362caba7ce422d052e49290522b96bd514993a0070a802c7c3679cbf == rec-faead33a362c",
+      "dvids-944593 reacquired, sha256 96ae65019c30317c177191c1941225442df8d30c67b554765c13e973870fd394 == rec-96ae65019c30",
+      "wm-volley-02 labeled from the committed bundles/wm-volley-02/clip.mp4"
+    ],
+    "heldOutDiscipline": "wm-dink-01 and afn-vic-rally1 were not opened, labeled, or iterated against."
+  },
+  "honestNegatives": [
+    "No net-crossing occlusion sequence was found and labeled: the inspected 944403-dink net pass keeps the ball fully visible over the net band, so occlusion coverage is paddle- and body-occlusion only.",
+    "The target said >=50 total including the requested states; the net-crossing priority slice specifically is still uncovered.",
+    "wavea-faead-rally 13625ms reacquired label has no radiusNorm (ball only partially visible at the hip edge; fragment radius would be a guess).",
+    "wm-volley-02 6880ms is labeled uncertain (ball indistinguishable against crowd), contributing no scoreable point.",
+    "The 5 new ball-bench cases are NOT scoreable by runBallBench yet: their runDirs (runs-wave-a/*) are event-replay runs without ball debug artifacts, and canonical run regeneration is macOS-only. runBallBench skips cases with missing debug artifacts, so denominators of existing results are unchanged.",
+    "wavea-marne-dig radii (4.5-6px at 1080p outdoors) are approximate; the ball image is small and soft."
+  ],
+  "remainsBlocked": [
+    "Scoring the new wavea labels through pnpm ball:bench requires ball debug artifacts from the macOS cascade (pnpm lab:regen / lab:analyze on the source recordings) - cannot run on this Linux box.",
+    "Net-crossing occlusion labels need footage where the ball actually passes behind the net tape/post; none of the inspected committed development windows contains one."
+  ]
+}
