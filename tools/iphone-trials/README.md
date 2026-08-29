@@ -61,6 +61,46 @@ session, and points at validation + reporting:
 pnpm --filter @pickle/iphone-trials report -- [--trials <dir>] [--out <file>]
 ```
 
+## iOS compatibility process (`ios-compat-matrix.json` + checklist harness)
+
+`pickle.ios-compat-matrix.v1` (`src/compatMatrix.ts`) is the versioned
+compatibility matrix: one entry per supported device + iOS-major combination,
+each tracking a validation state for every user-facing capability — camera,
+permissions, frameTiming, thermal, memory, modelRuntime, envelope,
+targetLock, eventTrigger, result, tryAgain, session, import.
+
+Process rules (validator-enforced, not conventions):
+
+- **New device/OS enters YELLOW.** `admitDeviceOs` is the only admission
+  path and produces an all-YELLOW entry; there is no code path that admits a
+  combination at GREEN or RED.
+- **GREEN/RED require device evidence.** A non-YELLOW cell must cite
+  `evidenceTrialIds` (DEVICE_MEASUREMENT trials for the SAME device and iOS
+  major), a `validatedAtIso` timestamp, and a human-written `evidenceNote`.
+  The checklist harness cross-checks the citations and fails the report on
+  any that do not resolve (`integrityFailures`).
+- **YELLOW must explain itself.** Every YELLOW cell carries a nonempty
+  reason. The committed matrix is honestly ALL-YELLOW: no physical iPhone
+  exists in this program, so no cell has ever been validated
+  (BLOCKED_EXTERNAL).
+
+The runnable checklist harness (`src/compatChecklist.ts`,
+`ios-compat-checklist-report-v1`) emits the operator steps per capability and
+derives an evidence status per device/OS/capability cell from the same trial
+files the trial report consumes: `BLOCKED_EXTERNAL_NO_DEVICE_TRIALS`,
+`DEVICE_TRIALS_PRESENT_METRIC_UNMEASURED`, `DEVICE_EVIDENCE_PRESENT`, or
+`MANUAL_EVIDENCE_REQUIRED` (session/import have no per-trial metric yet and
+need a human evidence note). Run it with:
+
+```
+pnpm --filter @pickle/iphone-trials compat -- \
+  [--trials <dir>] [--matrix <file>] [--compat <file>] [--out <file>]
+```
+
+An empty trials directory is a VALID state producing an all-BLOCKED_EXTERNAL
+checklist (exit 0); invalid trial files or unresolved GREEN/RED evidence exit
+1 loudly.
+
 ## Relationship to existing harnesses
 
 - `tools/mac-bench` measures the perception pipeline on a Mac; this package

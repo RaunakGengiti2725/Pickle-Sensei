@@ -11,7 +11,8 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "report": "tsx src/cli.ts"
+    "report": "tsx src/cli.ts",
+    "compat": "tsx src/compatCli.ts"
   },
   "devDependencies": {
     "@types/node": "^20.17.0",
