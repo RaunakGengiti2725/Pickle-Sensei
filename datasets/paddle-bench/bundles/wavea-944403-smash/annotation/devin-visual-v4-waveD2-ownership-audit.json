@@ -1,0 +1,377 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-944403-smash",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "auditOf": "datasets/paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v2-waveC-ownership.json",
+  "createdAtIso": "2026-08-29T08:20:00.000Z",
+  "appendOnly": true,
+  "method": "Blind multi-annotator ownership audit. 20 frames sampled deterministically: bundles sorted by name, then evenly spaced indices over each bundle's sorted union of existing waveC-labeled timestamps (11 dink / 4 smash / 5 rally, proportional to label counts). Frames extracted independently BEFORE reading any waveC coordinate values, via ffmpeg -i <video> -vf \"select=eq(n\\,IDX)\" -vsync 0 -frames:v 1 (absolute CFR indexing). Every audit value comes from directly viewing the extracted frame plus 0.01-grid overlaid crops; no interpolation. Points are normalized paddle-blade-center estimates. After freezing blind observations, waveC values were unblinded and compared; every disagreement was adjudicated by targeted re-viewing of the same extracted frame (adjudication records below).",
+  "source": {
+    "video": "datasets/corpus/media/dvids-944403-916657917f2b.mp4",
+    "sha256": "916657917f2be72f67717b35bdc0f163915c48a1126731c25f0ae1364121ad13",
+    "fps": "60000/1001",
+    "clock": "RECORDING clock, absolute CFR frame index"
+  },
+  "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"],
+  "frames": [
+    {
+      "tMs": 2902.9,
+      "frameIdx": 174,
+      "role": "near-left",
+      "audit": {
+        "cls": "visible",
+        "point": [0.51, 0.615],
+        "conf": 0.95,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.5169, 0.6125]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0073,
+      "classAgreement": true
+    },
+    {
+      "tMs": 2902.9,
+      "frameIdx": 174,
+      "role": "near-right-target",
+      "audit": {
+        "cls": "visible",
+        "point": [0.815, 0.535],
+        "conf": 0.9,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.8169, 0.5278]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0074,
+      "classAgreement": true
+    },
+    {
+      "tMs": 2902.9,
+      "frameIdx": 174,
+      "role": "far-red-1",
+      "audit": {
+        "cls": "visible",
+        "point": [0.51, 0.43],
+        "conf": 0.85,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.5161, 0.4287]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0062,
+      "classAgreement": true
+    },
+    {
+      "tMs": 2902.9,
+      "frameIdx": 174,
+      "role": "far-red-2",
+      "audit": {
+        "cls": "visible",
+        "point": [0.63, 0.455],
+        "conf": 0.6,
+        "visibility": "edge-on"
+      },
+      "waveC": {
+        "cls": "not-visible",
+        "point": null
+      },
+      "adjudicationId": "ADJ-S1",
+      "note": null,
+      "classAgreement": false
+    },
+    {
+      "tMs": 3703.7,
+      "frameIdx": 222,
+      "role": "far-red-smasher",
+      "audit": {
+        "cls": "ambiguous",
+        "point": [0.62, 0.21],
+        "conf": 0.4,
+        "visibility": "ambiguous-against-roofline"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.618, 0.2023]
+      },
+      "adjudicationId": "ADJ-S2",
+      "note": null,
+      "classAgreement": false
+    },
+    {
+      "tMs": 3703.7,
+      "frameIdx": 222,
+      "role": "gray-blade-between-players",
+      "audit": {
+        "cls": "ambiguous",
+        "point": [0.49, 0.475],
+        "conf": 0.6,
+        "visibility": "partial-ambiguous-owner"
+      },
+      "waveC": {
+        "cls": "ambiguous",
+        "point": [0.4852, 0.4722]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "classAgreement": true
+    },
+    {
+      "tMs": 3703.7,
+      "frameIdx": 222,
+      "role": "near-right-target",
+      "audit": {
+        "cls": "visible",
+        "point": [0.795, 0.515],
+        "conf": 0.85,
+        "visibility": "claimed-visible"
+      },
+      "waveC": {
+        "cls": "not-visible",
+        "point": null
+      },
+      "adjudicationId": "ADJ-S3",
+      "note": null,
+      "classAgreement": false
+    },
+    {
+      "tMs": 3703.7,
+      "frameIdx": 222,
+      "role": "near-left",
+      "audit": {
+        "cls": "not-visible",
+        "point": null,
+        "conf": 0.5,
+        "visibility": "not-visible"
+      },
+      "waveC": {
+        "cls": "not-visible",
+        "point": null
+      },
+      "adjudicationId": null,
+      "note": null,
+      "classAgreement": true
+    },
+    {
+      "tMs": 3903.9,
+      "frameIdx": 234,
+      "role": "far-red-smasher",
+      "audit": {
+        "cls": "not-visible",
+        "point": null,
+        "conf": 0.5,
+        "visibility": "missed-in-blind-pass"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.5818, 0.1167]
+      },
+      "adjudicationId": "ADJ-S4",
+      "note": null,
+      "classAgreement": false
+    },
+    {
+      "tMs": 3903.9,
+      "frameIdx": 234,
+      "role": "near-left",
+      "audit": {
+        "cls": "visible",
+        "point": [0.46, 0.545],
+        "conf": 0.7,
+        "visibility": "edge-on-behind-net-mesh"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.4534, 0.5264]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0197,
+      "classAgreement": true
+    },
+    {
+      "tMs": 3903.9,
+      "frameIdx": 234,
+      "role": "near-right-target",
+      "audit": {
+        "cls": "visible",
+        "point": [0.75, 0.525],
+        "conf": 0.6,
+        "visibility": "partial-against-dark-clothing"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.7701, 0.5324]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0214,
+      "classAgreement": true
+    },
+    {
+      "tMs": 3903.9,
+      "frameIdx": 234,
+      "role": "far-red-kneeling",
+      "audit": {
+        "cls": "visible",
+        "point": [0.475, 0.45],
+        "conf": 0.6,
+        "visibility": "edge-on-ambiguous"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.4938, 0.4454]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0194,
+      "classAgreement": true
+    },
+    {
+      "tMs": 3970.63,
+      "frameIdx": 238,
+      "role": "far-red-smasher",
+      "audit": {
+        "cls": "not-visible",
+        "point": null,
+        "conf": 0.5,
+        "visibility": "missed-in-blind-pass"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.5828, 0.1134]
+      },
+      "adjudicationId": "ADJ-S5",
+      "note": null,
+      "classAgreement": false
+    },
+    {
+      "tMs": 3970.63,
+      "frameIdx": 238,
+      "role": "near-left",
+      "audit": {
+        "cls": "visible",
+        "point": [0.445, 0.52],
+        "conf": 0.75,
+        "visibility": "edge-on"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.4461, 0.5259]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.006,
+      "classAgreement": true
+    },
+    {
+      "tMs": 3970.63,
+      "frameIdx": 238,
+      "role": "near-right-target",
+      "audit": {
+        "cls": "visible",
+        "point": [0.748, 0.52],
+        "conf": 0.6,
+        "visibility": "partial-against-dark-clothing"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.7656, 0.537]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0245,
+      "classAgreement": true
+    },
+    {
+      "tMs": 3970.63,
+      "frameIdx": 238,
+      "role": "far-red-crouching",
+      "audit": {
+        "cls": "visible",
+        "point": [0.475, 0.428],
+        "conf": 0.9,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "not-visible",
+        "point": null
+      },
+      "adjudicationId": "ADJ-S6",
+      "note": null,
+      "classAgreement": false
+    }
+  ],
+  "metrics": {
+    "slots": 16,
+    "classAgree": 10,
+    "classAgreementPct": 62.5,
+    "bothVisiblePairs": 8,
+    "meanCenterDelta": 0.014,
+    "meanCenterDeltaExclOutliers": 0.014,
+    "coordinateOutliersOver0p05": [],
+    "ambiguousUnionSlots": 2,
+    "ambiguousBothSlots": 1,
+    "ambiguousAgreementPct": 50.0,
+    "confusionMatrixRowsAuditColsWaveC": [
+      [8, 0, 3],
+      [1, 1, 0],
+      [2, 0, 1]
+    ],
+    "cohenKappa": 0.2066,
+    "kappaNote": "3-class (visible/ambiguous/not-visible) visibility-classification kappa; ownership role identity agreed on every slot where both annotators placed a box"
+  },
+  "adjudications": [
+    {
+      "id": "ADJ-S1",
+      "kind": "visibility",
+      "blind": "audit=edge-on(0.63,0.455) conf 0.6 vs waveC=not labeled (3 boxes)",
+      "reReview": "dark sliver below second far-side player's hand; low contrast; cannot certify blade boundary on re-review",
+      "resolution": "downgraded-to-ambiguous: auditor observation kept as ambiguous, not counted as certifiable visible; waveC omission defensible"
+    },
+    {
+      "id": "ADJ-S2",
+      "kind": "class",
+      "blind": "audit=ambiguous(0.62,0.21) conf 0.4 vs waveC=visible other [0.618,0.2023]",
+      "reReview": "coordinates agree within 0.008; waveC itself flags LOW CONTRAST dark-on-dark vs trees; blob is consistent with raised blade above smasher's grip",
+      "resolution": "resolved-to-waveC: visible (low contrast); audit certifiability threshold was stricter"
+    },
+    {
+      "id": "ADJ-S3",
+      "kind": "visibility",
+      "blind": "audit=claimed visible(0.795,0.515) conf 0.85 vs waveC=target paddle occluded/not distinguishable",
+      "reReview": "re-viewed 0.73-0.87 x 0.40-0.63: claimed region is the target's black shorts with small yellow logo; no distinguishable blade boundary",
+      "resolution": "resolved-to-waveC: audit blind point retracted as black-shorts false positive; target paddle not distinguishable this frame"
+    },
+    {
+      "id": "ADJ-S4",
+      "kind": "visibility",
+      "blind": "audit=missed vs waveC=visible [0.5818,0.1167]",
+      "reReview": "re-viewed 0.525-0.645 x 0.02-0.23: dark blade rectangle clearly present against trees at (0.56-0.605, 0.085-0.145), center ~(0.583,0.115)",
+      "resolution": "resolved-to-waveC: auditor blind pass missed low-contrast overhead blade; confirmed on re-view, delta to waveC 0.002"
+    },
+    {
+      "id": "ADJ-S5",
+      "kind": "visibility",
+      "blind": "audit=missed vs waveC=visible [0.5828,0.1134]",
+      "reReview": "re-viewed same window at contact frame: dark blade at (0.555-0.60, 0.09-0.135) with ball overlapping left edge, center ~(0.578,0.112)",
+      "resolution": "resolved-to-waveC: confirmed on re-view, delta to waveC 0.005"
+    },
+    {
+      "id": "ADJ-S6",
+      "kind": "visibility",
+      "blind": "waveC=3 boxes only, far-red crouching player's paddle not labeled vs audit=visible(0.475,0.428) conf 0.9",
+      "reReview": "re-viewed 0.41-0.53 x 0.33-0.53: white blade face-on unambiguously visible below far-red player's hand, center (0.478,0.437)",
+      "resolution": "auditor-upheld: waveC under-labeled a clearly visible paddle at t=3970.63"
+    }
+  ]
+}
