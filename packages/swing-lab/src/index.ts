@@ -196,3 +196,19 @@ export {
   type TrialIngestResult,
   type TrialLabel,
 } from "./freshUserTrials.js";
+export {
+  deriveReleaseStatus,
+  evaluateGoldAdmission,
+  GOLD_ADMISSION_VERSION,
+  HUMAN_LABEL_SOURCES,
+  LABEL_SOURCES,
+  type AdmissionVerdict,
+  type DatasetTier,
+  type GoldCandidate,
+  type LabelSource,
+  type PseudoLabelControls,
+  type ReleaseEvidenceEvent,
+  type ReleaseEvidenceKind,
+  type ReleaseStatus,
+  type ReleaseStatusDerivation,
+} from "./goldAdmission.js";
