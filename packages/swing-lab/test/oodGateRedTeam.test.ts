@@ -164,7 +164,7 @@ describe("OOD gate red team: committed positive corpus still passes", { timeout:
   it(
     "fresh-candidate real footage is not blanket-rejected (coverage floor)",
     { timeout: 120_000 },
-    () => {
+    async () => {
       const fresh = join(root, "datasets", "pickleball", "fresh-candidates");
       const files = readdirSync(fresh).filter((f) => f.endsWith(".mp4"));
       expect(files.length).toBeGreaterThanOrEqual(6);
@@ -172,6 +172,9 @@ describe("OOD gate red team: committed positive corpus still passes", { timeout:
       for (const f of files) {
         const report = gate(join(fresh, f));
         if (!report.analyzable) rejected.push(`${f}: ${report.reasons.join(",")}`);
+        // gate() is synchronous and can take tens of seconds per clip; yield
+        // between clips so the vitest worker's RPC channel does not starve.
+        await new Promise((resolve) => setImmediate(resolve));
       }
       // yt-iuVdtmGoTbo carries a real static score-graphic overlay; every
       // other candidate must pass. Before the frozen-pair-fraction fix,

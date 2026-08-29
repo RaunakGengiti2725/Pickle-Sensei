@@ -17,7 +17,7 @@ import { createInterface } from "node:readline";
  * back to the legacy one-shot path.
  */
 
-interface PaddleDetectRequest {
+export interface PaddleDetectRequest {
   video: string;
   out: string;
   startMs: number;

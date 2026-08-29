@@ -78,17 +78,22 @@ describe("classifyStroke ambiguous-motion OPEN FINDINGS (pinned confidently-wron
     expect(prediction.confidence).toBeCloseTo(0.8, 5);
   });
 
-  it("E10-F3: near-profile view commits a side from a noise-scale 0.0075u midline offset", () => {
+  it("E10-F3 RESOLVED (stroke-heuristic-4): near-profile view now abstains via the rival-wrist attribution gate", () => {
     // Ground truth: side not measurable (image-plane shoulder width 0.005u).
-    // ROOT CAUSE: shoulderWidth is floored at 0.02 and used as the
-    // normalization base with no degeneracy gate — unlike the torso extent,
-    // which has TORSO_MIN_EXTENT. A 0.0075u offset becomes "0.38
-    // shoulder-widths", clearing SIDE_MARGIN_FLOOR (0.15) with margin.
+    // Originally pinned as a confidently-wrong FOREHAND: shoulderWidth was
+    // floored at 0.02 and used as the normalization base with no degeneracy
+    // gate, so a noise-scale 0.0075u offset cleared SIDE_MARGIN_FLOOR.
+    // stroke-heuristic-4's absence-of-measurement gate now abstains because
+    // the rival wrist has zero measured frames near the reference, so
+    // dominant-wrist attribution is unverifiable. Note the shoulder-width
+    // degeneracy itself is still ungated; only this fixture's path is closed.
     const fixture = profileViewCollapsedShouldersFixture();
     const prediction = classifyFixture(fixture, { contactMs: fixture.window.peakMs });
-    expect(prediction.label).toBe("FOREHAND");
-    expect(prediction.taxonomyDepth).toBe(2);
-    expect(prediction.confidence).toBeGreaterThanOrEqual(0.6);
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.leaf).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain(
+      "dominant_wrist_attribution_unverifiable_rival_unmeasured",
+    );
   });
 
   it("E10-F4: single-frame shoulder crossing flips a genuine forehand to BACKHAND at 0.8", () => {
@@ -121,22 +126,27 @@ describe("classifyStroke ambiguous-motion OPEN FINDINGS (pinned confidently-wron
 
 describe("classifyStroke ambiguous-motion defenses that held (must keep holding)", () => {
   it("energetic aborted swing (fast pull, then checked) abstains on the travel gate", () => {
-    // The window-wide speed peak (1.0 u/s) defeats the energy gate, but the
-    // dominant wrist is frozen within ±200ms of the reference, so the
-    // travel gate abstains. Regression guard for stroke-heuristic-3.
+    // The window-wide speed peak (1.0 u/s) defeats the energy gate. Under
+    // stroke-heuristic-3 the ±200ms travel gate abstained
+    // (no_swing_motion_near_reference); stroke-heuristic-4's rival-wrist
+    // attribution gate now fires first on this fixture (the rival wrist has
+    // zero measured frames), so the abstention holds via a different gate.
     const prediction = classifyFixture(energeticAbortedSwingFixture());
     expect(prediction.label).toBe("UNKNOWN");
     expect(prediction.leaf).toBe("UNKNOWN");
-    expect(prediction.limitingFactors).toContain("no_swing_motion_near_reference");
+    expect(prediction.limitingFactors).toContain(
+      "dominant_wrist_attribution_unverifiable_rival_unmeasured",
+    );
   });
 
-  it("finding fixtures never silently change shape: all five still commit a leaf-less depth-2 side", () => {
+  it("open-finding fixtures never silently change shape: the four still-open pins commit a leaf-less depth-2 side", () => {
     // Umbrella pin: if any fixture starts abstaining (or committing a leaf),
     // a classifier change touched this surface — re-run the E10 forensics.
+    // F3 (profileViewCollapsedShoulders) was resolved by stroke-heuristic-4
+    // and is covered by its own abstention regression test above.
     const fixtures = [
       practiceShadowSwingFixture(),
       nonDominantHandSwingFixture(),
-      profileViewCollapsedShouldersFixture(),
       facingFlipAtContactFixture(),
       wheelchairRimPushFixture(),
     ];
