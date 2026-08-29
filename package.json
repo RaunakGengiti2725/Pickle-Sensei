@@ -14,6 +14,7 @@
     "typecheck": "pnpm -r --parallel typecheck",
     "test": "pnpm -r --workspace-concurrency=1 test",
     "build": "pnpm -r typecheck",
+    "release:check": "node tools/release/check-release-manifest.mjs",
     "db:migrate": "pnpm --filter @pickle/database migrate",
     "db:seed": "pnpm --filter @pickle/database seed",
     "dev:api": "pnpm --filter @pickle/api dev",

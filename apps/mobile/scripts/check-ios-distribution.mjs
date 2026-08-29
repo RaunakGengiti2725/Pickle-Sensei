@@ -58,6 +58,10 @@ check(
   infoPlist.includes('NSMicrophoneUsageDescription'),
 );
 check(
+  'Info.plist: photo library usage description present (video import)',
+  infoPlist.includes('NSPhotoLibraryUsageDescription'),
+);
+check(
   'Info.plist: ATS arbitrary loads disabled',
   /NSAllowsArbitraryLoads<\/key>\s*<false\/>/.test(infoPlist),
 );

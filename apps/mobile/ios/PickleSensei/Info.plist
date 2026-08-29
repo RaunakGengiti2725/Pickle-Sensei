@@ -37,6 +37,8 @@
 	<string>Pickle Sensei uses guided automatic capture to find your body position, detect a stroke motion, and run private on-device analysis.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Pickle Sensei can include court audio in a stroke recording. Audio is stored with the private clip on this device.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Pickle Sensei lets you import an existing court video for private on-device analysis. Selection happens through the system picker; the app only receives the video you choose.</string>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
