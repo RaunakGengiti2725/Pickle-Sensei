@@ -95,7 +95,7 @@ describe("classifyStroke (heuristic, hierarchical)", () => {
   const { sequence, window } = generateSwingSequence();
   const windowArg = { startMs: window.startMs, endMs: window.endMs };
 
-  it("versions its output as stroke-heuristic-2", () => {
+  it("versions its output as stroke-heuristic-3", () => {
     const prediction = classifyStroke({
       sequence,
       window: windowArg,
@@ -105,7 +105,7 @@ describe("classifyStroke (heuristic, hierarchical)", () => {
       paddleSpeeds: null,
       wristSpeeds: null,
     });
-    expect(prediction.classifierVersion).toContain("stroke-heuristic-2");
+    expect(prediction.classifierVersion).toContain("stroke-heuristic-3");
   });
 
   it("stops at depth 2 with a side when bounce is unobservable", () => {
@@ -156,9 +156,7 @@ describe("classifyStroke (heuristic, hierarchical)", () => {
     expect(prediction.label).toBe("OVERHEAD");
     expect(prediction.leaf).toBe("OVERHEAD");
     expect(prediction.taxonomyDepth).toBe(1);
-    expect(
-      prediction.evidence.some((entry) => entry.includes("overhead window")),
-    ).toBe(true);
+    expect(prediction.evidence.some((entry) => entry.includes("overhead window"))).toBe(true);
   });
 
   it("does NOT claim OVERHEAD from a floating high paddle box the wrist never reached", () => {
@@ -226,9 +224,7 @@ describe("classifyStroke (heuristic, hierarchical)", () => {
         ? frame
         : best,
     );
-    const shoulders = contactFrame.landmarks.filter((mark) =>
-      mark.name.endsWith("shoulder"),
-    );
+    const shoulders = contactFrame.landmarks.filter((mark) => mark.name.endsWith("shoulder"));
     const midX = (shoulders[0]!.x + shoulders[1]!.x) / 2;
     const midY = (shoulders[0]!.y + shoulders[1]!.y) / 2 + 0.1;
     const prediction = classifyStroke({
@@ -242,9 +238,7 @@ describe("classifyStroke (heuristic, hierarchical)", () => {
     });
     expect(prediction.label).toBe("UNKNOWN");
     expect(
-      prediction.limitingFactors.some((factor) =>
-        factor.includes("contact_too_close_to_midline"),
-      ),
+      prediction.limitingFactors.some((factor) => factor.includes("contact_too_close_to_midline")),
     ).toBe(true);
   });
 

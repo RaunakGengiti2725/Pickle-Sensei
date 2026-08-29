@@ -67,7 +67,30 @@ describe("classifyStroke (ported heuristic, hierarchical)", () => {
     expect(prediction.confidence).toBeGreaterThanOrEqual(0.525);
   });
 
-  it("claims OVERHEAD at depth 1 when contact is measured above the shoulders", () => {
+  it("claims OVERHEAD when a plausible high contact point is corroborated by the raised wrist", () => {
+    const high = generateSwingSequence({ contactHeightRatio: 1.2 });
+    const contactFrame = high.sequence.frames.reduce((best, frame) =>
+      Math.abs(frame.timestampMs - high.window.peakMs) <
+      Math.abs(best.timestampMs - high.window.peakMs)
+        ? frame
+        : best,
+    );
+    const wrist = contactFrame.landmarks.find((mark) => mark.name === "right_wrist")!;
+    const prediction = classifyStroke({
+      sequence: high.sequence,
+      window: { startMs: high.window.startMs, endMs: high.window.endMs },
+      contactMs: high.window.peakMs,
+      handedness: "right",
+      paddle: paddleAt(wrist.x + 0.02, wrist.y - 0.03, high.window.peakMs),
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    });
+    expect(prediction.label).toBe("OVERHEAD");
+    expect(prediction.leaf).toBe("OVERHEAD");
+    expect(prediction.taxonomyDepth).toBe(1);
+  });
+
+  it("does NOT claim OVERHEAD from a floating high paddle box the wrist never reached", () => {
     const prediction = classifyStroke({
       sequence,
       window: windowArg,
@@ -77,9 +100,9 @@ describe("classifyStroke (ported heuristic, hierarchical)", () => {
       paddleSpeeds: null,
       wristSpeeds: null,
     });
-    expect(prediction.label).toBe("OVERHEAD");
-    expect(prediction.leaf).toBe("OVERHEAD");
-    expect(prediction.taxonomyDepth).toBe(1);
+    expect(prediction.label).not.toBe("OVERHEAD");
+    expect(prediction.limitingFactors).toContain("paddle_point_implausible_used_wrist");
+    expect(prediction.contactPointSource).toBe("wrist");
   });
 
   it("abstains to UNKNOWN when contact sits on the body midline", () => {
@@ -103,9 +126,7 @@ describe("classifyStroke (ported heuristic, hierarchical)", () => {
     });
     expect(prediction.label).toBe("UNKNOWN");
     expect(
-      prediction.limitingFactors.some((factor) =>
-        factor.includes("contact_too_close_to_midline"),
-      ),
+      prediction.limitingFactors.some((factor) => factor.includes("contact_too_close_to_midline")),
     ).toBe(true);
   });
 
