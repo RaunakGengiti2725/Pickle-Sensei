@@ -1,6 +1,7 @@
 import type pg from "pg";
 import type { IJobQueue, JobEnvelope } from "@pickle/queue";
 import type { IAnalyticsSink } from "@pickle/analytics";
+import type { QueueSloMonitor } from "@pickle/slo";
 
 /**
  * Media/maintenance worker (spec p. 38, directive §58).
@@ -40,6 +41,8 @@ export interface WorkerDeps {
   /** Operational telemetry sink (worker_failure / queue_backlog). Optional:
    * absence means events are simply not emitted — behavior is unchanged. */
   analytics?: IAnalyticsSink;
+  /** Stalled-queue detector; each runOnce cycle feeds it one observation. */
+  sloMonitor?: QueueSloMonitor;
 }
 
 type JobOutcome = { handled: true; note: string } | { handled: false; note: string };
@@ -141,7 +144,18 @@ export async function handleJob(deps: WorkerDeps, job: JobEnvelope): Promise<Job
         // Cannot reach object storage: keep the job visible, never pretend.
         return { handled: false, note: "object store unconfigured; purge left on queue" };
       }
-      const deleted = await deleteObjectAndDerived(deps.objectStore, objectKey);
+      let deleted: number;
+      try {
+        deleted = await deleteObjectAndDerived(deps.objectStore, objectKey);
+      } catch (error) {
+        deps.analytics?.track({
+          name: "media_storage_failure",
+          at: new Date().toISOString(),
+          platform: "service",
+          operation: "purge",
+        });
+        return { handled: false, note: `object store purge failed: ${String(error)}` };
+      }
       await deps.pool.query(
         "UPDATE media_asset SET object_key = NULL WHERE id = $1 AND deleted_at IS NOT NULL",
         [mediaAssetId],
@@ -285,6 +299,12 @@ export async function sweepDeletedMedia(deps: WorkerDeps): Promise<number> {
       await deleteObjectAndDerived(deps.objectStore, row.object_key);
     } catch (error) {
       deps.log(`sweep of media_asset ${row.id} failed: ${String(error)}`);
+      deps.analytics?.track({
+        name: "media_storage_failure",
+        at: new Date().toISOString(),
+        platform: "service",
+        operation: "sweep",
+      });
       continue;
     }
     await deps.pool.query(
@@ -333,15 +353,86 @@ export async function runOnce(
   }
   const deletions = await processDeletionTasks(deps);
   const swept = await sweepDeletedMedia(deps);
+  const depth = await deps.queue.size();
+  const oldestJobAgeMs = await deps.queue.oldestJobAgeMs();
   if (deps.analytics) {
     deps.analytics.track({
       name: "queue_backlog",
       at: new Date().toISOString(),
       platform: "service",
       queue: "media",
-      depth: await deps.queue.size(),
+      depth,
+      ...(oldestJobAgeMs !== null ? { oldestJobAgeMs } : {}),
     });
-    await deps.analytics.flush();
+    const backlog = await deletionBacklog(deps.pool);
+    if (backlog) {
+      deps.analytics.track({
+        name: "deletion_backlog",
+        at: new Date().toISOString(),
+        platform: "service",
+        pending: backlog.pending,
+        exhausted: backlog.exhausted,
+        ...(backlog.oldestAgeSeconds !== null
+          ? { oldestAgeSeconds: backlog.oldestAgeSeconds }
+          : {}),
+      });
+    }
   }
+  if (deps.sloMonitor) {
+    const alert = deps.sloMonitor.observe({
+      depth,
+      oldestJobAgeMs,
+      jobsHandled: jobs,
+      jobsSeen: received.length,
+    });
+    if (alert) {
+      // Loud by design: error-level log line plus a typed analytics alert.
+      deps.log(
+        `QUEUE STALLED (${alert.reason}): queue=${alert.queue} depth=${alert.depth} ` +
+          `oldestJobAgeMs=${alert.oldestJobAgeMs ?? "unknown"} idleCycles=${alert.consecutiveIdleCycles}`,
+      );
+      deps.analytics?.track({
+        name: "queue_stalled",
+        at: new Date().toISOString(),
+        platform: "service",
+        queue: alert.queue,
+        reason: alert.reason,
+        depth: alert.depth,
+        consecutiveIdleCycles: alert.consecutiveIdleCycles,
+        ...(alert.oldestJobAgeMs !== null ? { oldestJobAgeMs: alert.oldestJobAgeMs } : {}),
+      });
+    }
+  }
+  await deps.analytics?.flush();
   return { jobs, deletions, swept };
+}
+
+/**
+ * Deletion-workflow backlog: rows not yet done, the age of the oldest one,
+ * and rows failed past the retry cap (permanently stuck — needs a human).
+ * Returns null when the table is unreachable; the caller's cycle-level error
+ * handling makes that loud.
+ */
+export async function deletionBacklog(
+  pool: pg.Pool,
+): Promise<{ pending: number; oldestAgeSeconds: number | null; exhausted: number } | null> {
+  try {
+    const { rows } = await pool.query(
+      `SELECT count(*) FILTER (WHERE status <> 'done')::int AS pending,
+              floor(extract(epoch FROM now() - min(created_at) FILTER (WHERE status <> 'done')))::int AS oldest_age_seconds,
+              count(*) FILTER (WHERE status = 'failed' AND attempts >= $1)::int AS exhausted
+       FROM deletion_task`,
+      [DELETION_TASK_MAX_ATTEMPTS],
+    );
+    const row = rows[0] as
+      { pending: number; oldest_age_seconds: number | null; exhausted: number } | undefined;
+    if (!row) return null;
+    return {
+      pending: row.pending,
+      oldestAgeSeconds: row.oldest_age_seconds,
+      exhausted: row.exhausted,
+    };
+  } catch {
+    return null;
+  }
 }

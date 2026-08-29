@@ -4,6 +4,7 @@ import pg from "pg";
 import { buildOpenApiDocument } from "@pickle/api-contracts";
 import { InMemoryJobQueue, SqsJobQueue, type IJobQueue } from "@pickle/queue";
 import { BufferedAnalytics, type IAnalyticsSink } from "@pickle/analytics";
+import { ApiSloRecorder, evaluateApiSlos, DEFAULT_API_SLO_TARGETS } from "@pickle/slo";
 import type { FailureKind } from "@pickle/shared-types";
 import type { ApiConfig } from "./config.js";
 import type { AppContext } from "./context.js";
@@ -141,6 +142,8 @@ export interface BuildAppOptions {
   rateLimit?: Partial<RateLimitConfig>;
   /** Operational telemetry sink; defaults to structured log lines. */
   analytics?: IAnalyticsSink;
+  /** Backend SLO recorder (availability, latency, 5xx, DB, pool). */
+  sloRecorder?: ApiSloRecorder;
 }
 
 export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): FastifyInstance {
@@ -193,8 +196,14 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
     new BufferedAnalytics(async (batch) => {
       for (const event of batch) app.log.info({ analyticsEvent: event }, "analytics");
     });
+  const sloRecorder = options.sloRecorder ?? new ApiSloRecorder();
   app.addHook("onResponse", async (request, reply) => {
     const status = reply.statusCode;
+    sloRecorder.recordRequest({
+      route: request.routeOptions.url ?? "unmatched",
+      statusCode: status,
+      latencyMs: reply.elapsedTime,
+    });
     if (status >= 500 || status === 401 || status === 403) {
       analytics.track({
         name: "api_failure",
@@ -293,6 +302,34 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
   registerAuth(app, context, verifier);
 
   app.get("/v1/health", async () => ({ status: "ok" as const, version: config.appVersion }));
+  // Operational SLO surface: measured values plus a per-SLO verdict. A metric
+  // that cannot be measured in this deployment reads not_evaluable — honest,
+  // never a fabricated pass.
+  app.get("/v1/health/slo", async () => {
+    if (pool) {
+      const started = process.hrtime.bigint();
+      try {
+        await pool.query("SELECT 1");
+        sloRecorder.recordDbLatency(Number(process.hrtime.bigint() - started) / 1e6);
+      } catch {
+        // Probe failure surfaces through the datastore-unavailable 5xx path of
+        // real requests; the probe itself must not throw the health route.
+      }
+      sloRecorder.recordPoolSample({
+        totalCount: pool.totalCount,
+        idleCount: pool.idleCount,
+        waitingCount: pool.waitingCount,
+        maxSize: pool.options.max ?? null,
+      });
+    }
+    const snapshot = sloRecorder.snapshot();
+    return {
+      snapshot,
+      evaluations: evaluateApiSlos(snapshot, DEFAULT_API_SLO_TARGETS),
+      queueDepth: await queue.size(),
+      queueOldestJobAgeMs: await queue.oldestJobAgeMs(),
+    };
+  });
   app.get("/v1/openapi.json", async () => buildOpenApiDocument(config.appVersion));
 
   registerCatalogRoutes(app, context);

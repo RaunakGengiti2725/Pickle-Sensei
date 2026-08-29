@@ -101,7 +101,38 @@ export type AnalyticsEvent = Base &
         fatal: boolean;
       }
     | { name: "worker_failure"; jobKind: string; failureKind: string }
-    | { name: "queue_backlog"; queue: string; depth: number }
+    | { name: "queue_backlog"; queue: string; depth: number; oldestJobAgeMs?: number }
+    | {
+        /** Stalled-queue alert (typed, loud): visible work is not completing. */
+        name: "queue_stalled";
+        queue: string;
+        reason: "no_progress" | "oldest_job_age_exceeded";
+        depth: number;
+        oldestJobAgeMs?: number;
+        consecutiveIdleCycles: number;
+      }
+    | {
+        /** Worker poll-loop crash survived by the supervisor loop. */
+        name: "worker_crash";
+        /** Crashes since this worker process started. */
+        crashCount: number;
+      }
+    | {
+        /** Worker process (re)start; restart counts come from counting these. */
+        name: "worker_started";
+      }
+    | {
+        name: "deletion_backlog";
+        /** deletion_task rows not yet done. */
+        pending: number;
+        oldestAgeSeconds?: number;
+        /** Rows failed past the retry cap — permanently stuck, needs a human. */
+        exhausted: number;
+      }
+    | {
+        name: "media_storage_failure";
+        operation: "purge" | "sweep" | "transcode";
+      }
     | {
         name: "api_failure";
         /** Route TEMPLATE (e.g. "/v1/shots/:id"), never a concrete URL. */
@@ -162,6 +193,11 @@ export const ANALYTICS_EVENT_NAMES = [
   "app_crash",
   "worker_failure",
   "queue_backlog",
+  "queue_stalled",
+  "worker_crash",
+  "worker_started",
+  "deletion_backlog",
+  "media_storage_failure",
   "api_failure",
   "score_viewed",
   "checkpoint_opened",

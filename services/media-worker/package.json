@@ -16,6 +16,7 @@
     "@pickle/analytics": "workspace:*",
     "@pickle/database": "workspace:*",
     "@pickle/queue": "workspace:*",
+    "@pickle/slo": "workspace:*",
     "pg": "^8.16.3"
   },
   "devDependencies": {
