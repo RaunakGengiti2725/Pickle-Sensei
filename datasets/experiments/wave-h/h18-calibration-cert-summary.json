@@ -1,0 +1,76 @@
+{
+  "workstream": "h18-calibration-cert",
+  "gate": "GATE 6 — calibration / silent failure certification + frozen release thresholds",
+  "baseline": "devin/1787988068-wave-c-integration @ 104ea0f",
+  "branch": "devin/wave-h/h18-calibration-cert",
+  "generatedAtIso": "2026-08-29T18:35:00Z",
+  "method": {
+    "instrument": "datasets/experiments/wave-h/h18-calibration-cert.ts (full artifact: datasets/experiments/wave-h/h18-cert-report.json)",
+    "certification": "unmodified silent-failure-v1.1 retro instrument (packages/swing-lab/src/silentFailureRetro.ts) over ALL 10 committed canonical Mac cascade runs, development split only (3 gold dev trials across 2 source sessions: wm-tournament-2014 x1, afn-sasebo-2025-06 x2); strict survival + usable-result-v1 recomputed from the same committed rows",
+    "riskCoverage": "wave-g g20 selective-risk harnesses re-executed at RC head (contact/stroke/ownership units grouped by source session, abstentions kept in denominators) and cross-checked against the committed g20 artifacts; W14 + D2-04 calibration views (ECE/AURC/coverage-risk curves) refreshed via the e07/f17 instruments",
+    "routing": "real committed replays driven through the ACTUAL mobile Result-surface selector (apps/mobile/src/components/strokeResultModel.ts contactMarkerPresentation + halo): 15 contact-gold replay units (e02 harness, ORACLE ball) and 18 stroke bench units (e03)",
+    "freeze": "release thresholds frozen as datasets/experiments/wave-h/h18-frozen-release-gate-g6-v1.json BEFORE any final holdout evaluation; immutability pinned by sha256 test packages/swing-lab/test/h18FrozenReleaseGate.test.ts (sha256 db73409ca1fba65c19a1f0d19bee6822955a0235716fae553f428465c5c7ff7c)",
+    "heldOutProtection": "wm-dink-01 / afn-vic-rally1 never parsed: retro filters split=development before parsing, replay harnesses exclude by construction, ownership loader includeHeldOut=false; no holdout evaluation performed in this workstream"
+  },
+  "measuredResults": {
+    "latestCommittedCanonicalRun": {
+      "file": "datasets/cascade/cascade-1787971753680.json",
+      "strictFullCascadeSurvival": "2/3 dev trials (wm-volley-02 pass, afn-sasebo-rally1 pass, afn-sasebo-rally2 fail)",
+      "usableResultRate": "2/3 dev trials",
+      "silentFailureRate": "0/3 all dev trials AND 0/3 answered dev trials (contract silent-failure-v1.1; both denominators stated)",
+      "coverage": "3/3 dev trials answered (>=1 gold-verifiable answered claim each)",
+      "abstention": "0/3 trials fully abstained; per-claim abstentions preserved in the per-claim table of h18-cert-report.json",
+      "trend": "silent failures 2/3 -> 0/3 and usable 0/3 -> 2/3 across the 10 committed runs (chronological) — improvements came from honest abstention + fixes, not weakened contracts"
+    },
+    "selectiveRiskAtHead": {
+      "contact": "n=10 target-owned units, answered 7, wrong 2, coverage 0.7 (t=0 production point) — reproduces g20 artifact exactly",
+      "stroke": "n=18 units, answered 5, wrong 2, coverage 0.278 — reproduces g20 artifact exactly",
+      "ownership": "n=38 units, answered 17, wrong 4, coverage 0.447 (proxy: derived geometric margin, agreement-vs-annotator correctness) — reproduces g20 artifact exactly"
+    },
+    "confidenceRouting": {
+      "contact": "15/15 units routed as designed, 0 violations: 4 abstentions -> no marker; 8 unconfirmed conf<0.6 -> no marker (LOW correctly suppressed); 3 ball-confirmed -> marker with halo; halo bounds [33,165]ms hold, monotone in confidence, no raw decimals in captions",
+      "stroke": "18/18 units routed as designed, 0 violations: 13 abstained -> explicit 'not identified' (no invented label); 5 committed labels shown with confidence present",
+      "paddleArm": "paddle-confirmed routing arm NOT exercisable on Linux (no committed paddle track) — Mac-gated, disclosed not assumed"
+    },
+    "calibrationViews": "W14 TA + D2-04 ownership ECE/AURC/coverage-risk curves refreshed in h18-cert-report.json (agreement-proxy correctness, disclosed; small n)"
+  },
+  "findings": {
+    "P0": [
+      {
+        "id": "H18-P0-NONE",
+        "status": "none found",
+        "detail": "0 silent failures on answered trials in the latest committed canonical run; 0 routing violations on 33 real replay units; frozen-gate immutability enforced by pinned test"
+      }
+    ],
+    "P1": [
+      {
+        "id": "H18-P1-1",
+        "status": "unresolved (pre-existing, Mac-gated / design-escalated)",
+        "detail": "stroke stage at its t=0 production operating point answers 5/18 committed bench units with 2 wrong — the g20 curve shows a zero-observed-risk point exists at lower coverage, but no downstream stroke-confidence gate exists in production; changing the operating point is a product decision requiring canonical Mac re-measurement, not silently tunable here (would risk fitting to the same committed data the holdout must judge)"
+      },
+      {
+        "id": "H18-P1-2",
+        "status": "unresolved (pre-existing)",
+        "detail": "ownership emits no production confidence (binary veto only); selective-risk view uses a derived geometric margin as proxy — adequate for views, not for production routing claims"
+      }
+    ],
+    "P2": [
+      {
+        "id": "H18-P2-1",
+        "status": "documented",
+        "detail": "calibration ECE views rest on small-n agreement proxies (TA n=12, ownership n=31/38 units) — adequate for direction, not for precision claims"
+      }
+    ]
+  },
+  "frozenReleaseGate": {
+    "path": "datasets/experiments/wave-h/h18-frozen-release-gate-g6-v1.json",
+    "version": "release-gate-g6-calibration-v1",
+    "sha256": "db73409ca1fba65c19a1f0d19bee6822955a0235716fae553f428465c5c7ff7c",
+    "goCriteria": "G6-1 zero answered silent failures; G6-2 zero fabricated contact markers; G6-3 coverage >= 0.5 on supported-capture holdout (>=2 sessions answered); G6-4 usable-result rate >= 0.5; G6-5 zero routing violations; G6-6 no selective-risk regression vs frozen RC baseline",
+    "frozenBeforeFinalHoldoutEvaluation": true
+  },
+  "verdict": {
+    "gateVerdict": "PASS (certification produced + thresholds frozen); canonical FRESH-cascade remeasurement remains BLOCKED_EXTERNAL",
+    "rationale": "All Gate 6 deliverables completed on real committed data with honest denominators: certification numbers with counts (strict 2/3, usable 2/3, silent failure 0/3 answered, coverage 3/3 dev trials on the latest canonical run), risk-coverage views refreshed and shown to reproduce the g20 artifacts exactly at RC head, high/medium/low routing verified on 33 real replay units with 0 violations, and the release thresholds frozen as a versioned, sha256-pinned gate BEFORE any holdout evaluation. What this session could NOT do (disclosed, not softened): run a fresh canonical cascade (Linux box has no canonical run dirs / Apple Vision — fresh `pnpm lab:cascade` here honestly reports n=0) or exercise the paddle-confirmed routing arm. The final GO/NO-GO for Gate 6 must come from the one-shot holdout evaluation on the canonical Mac environment judged against the frozen gate."
+  }
+}
