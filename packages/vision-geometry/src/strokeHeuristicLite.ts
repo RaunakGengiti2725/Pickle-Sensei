@@ -80,6 +80,14 @@ import { toLegacyPoseFrames, type PoseSequence } from "@pickle/swing-domain";
  *     measured near the reference: a rival with zero measured frames has
  *     zero travel by absence, so "this wrist moved more" is unverifiable.
  *
+ * stroke-heuristic-7 closes the G14-H6 near-tie wrist flip (invariant sweep
+ * over the committed wave-a bench rows): when both wrists are well measured,
+ * their travels are nearly tied AND they sit on opposite sides of the torso
+ * midline, the dominant-wrist argmax — and with it the side call — is
+ * decided by measurement noise. Abstain. Two-handed backhands tie on travel
+ * but keep both hands on ONE grip (same side of the midline) and keep
+ * committing.
+ *
  * declared / annotated / predicted stroke stay separate records everywhere.
  */
 
@@ -103,7 +111,7 @@ export const STROKE_TAXONOMY_V3 = {
 } as const;
 export type StrokeV3 = (typeof STROKE_TAXONOMY_V3.labels)[number];
 
-export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-6 (uncalibrated)";
+export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-7 (uncalibrated)";
 
 /**
  * Constants derived from the DEV sandbox pose/paddle data (W9-forensics.txt,
@@ -222,6 +230,18 @@ const TORSO_COLLAPSE_MEDIAN_RATIO = 0.6;
 const TORSO_MEDIAN_MIN_FRAMES = 5;
 const SHOULDER_MIN_SEPARATION = 0.04;
 const HANDEDNESS_CONTRADICTION_TRAVEL_RATIO = 1.5;
+/**
+ * Near-tie dominant-wrist counterfactual (stroke-heuristic-7, G14-H6 sweep
+ * derived — a conservative floor, NOT a calibrated statistic): the two bench
+ * rows whose committed side flipped under σ=0.002–0.01u noise or 10fps
+ * decimation measured dominant/rival travel ratios 1.16 and 1.27; the
+ * smallest correctly-committed one-armed row measures 1.45 (marne-serve).
+ * 1.35 separates them. The gate additionally requires the wrists to sit on
+ * opposite sides of the torso midline — the configuration where the argmax
+ * choice mirrors the side call — so travel-tied two-handed backhands (both
+ * hands on one grip, same side) are untouched.
+ */
+const DOMINANT_WRIST_NEAR_TIE_RATIO = 1.35;
 const FACING_WINDOW_MS = 200;
 const FACING_MIN_SHOULDER_SEPARATION = 0.03;
 const FACING_MIN_VOTES = 3;
@@ -403,6 +423,32 @@ export function classifyStroke(input: {
         `(wide-grip floor ${BIMANUAL_WIDE_SEPARATION_SW}) — rim-propulsion signature`,
     );
     return unknown("symmetric_bimanual_motion_rim_propulsion_signature", evidence, limitingFactors);
+  }
+
+  // ── Gate: near-tie dominant wrist across the midline (v7) ─────────────
+  // The dominant wrist is an argmax over comparative travel. Nearly-tied
+  // travels make that argmax noise-decided; when the wrists also sit on
+  // opposite sides of the midline the choice mirrors the side call, so a
+  // committed label would be a coin flip. Abstain. Two-handed backhands tie
+  // on travel but keep both hands on one grip (same side) — unaffected.
+  if (
+    wristInfo.measuredFrames >= MIN_TRAVEL_SAMPLE_FRAMES &&
+    wristInfo.rivalMeasuredFrames >= MIN_TRAVEL_SAMPLE_FRAMES &&
+    wristInfo.rivalTravel > 0 &&
+    wristInfo.travel < DOMINANT_WRIST_NEAR_TIE_RATIO * wristInfo.rivalTravel &&
+    wristInfo.point !== null &&
+    wristInfo.rivalPoint !== null &&
+    (wristInfo.point.x - midX) * (wristInfo.rivalPoint.x - midX) < 0
+  ) {
+    evidence.push(
+      `dominant-wrist travels nearly tied ±200ms: ${wristInfo.side} ${wristInfo.travel.toFixed(3)}u over ${wristInfo.measuredFrames} frames vs rival ${wristInfo.rivalTravel.toFixed(3)}u over ${wristInfo.rivalMeasuredFrames} ` +
+        `(ratio floor ${DOMINANT_WRIST_NEAR_TIE_RATIO}) with the wrists on opposite sides of the midline — side attribution is noise-decided`,
+    );
+    return unknown(
+      "dominant_wrist_near_tie_across_midline_side_attribution_unstable",
+      evidence,
+      limitingFactors,
+    );
   }
 
   // ── Gates: measured non-motion is not a stroke (stroke-heuristic-3) ────
@@ -961,6 +1007,7 @@ function dominantWristInfo(
   measuredFrames: number;
   rivalTravel: number;
   rivalMeasuredFrames: number;
+  rivalPoint: { x: number; y: number } | null;
 } {
   const nearby = frames.filter((frame) => Math.abs(frame.timestampMs - contactMs) <= 200);
   const travel = { left: 0, right: 0 };
@@ -984,6 +1031,9 @@ function dominantWristInfo(
     (landmark) => landmark.name === `${chosen}_wrist` && landmark.visibility >= 0.25,
   );
   const rival = chosen === "right" ? "left" : "right";
+  const rivalMark = frame?.landmarks.find(
+    (landmark) => landmark.name === `${rival}_wrist` && landmark.visibility >= 0.25,
+  );
   return {
     side: chosen,
     point: mark ? { x: mark.x, y: mark.y } : null,
@@ -992,6 +1042,7 @@ function dominantWristInfo(
     measuredFrames: measured[chosen],
     rivalTravel: travel[rival],
     rivalMeasuredFrames: measured[rival],
+    rivalPoint: rivalMark ? { x: rivalMark.x, y: rivalMark.y } : null,
   };
 }
 

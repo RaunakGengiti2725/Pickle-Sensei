@@ -150,7 +150,7 @@ describe("stroke-heuristic-4 gate COVERAGE FINDINGS (pinned false abstentions on
       paddleSpeeds: null,
       wristSpeeds: fixture.wristSpeeds,
     });
-    expect(prediction.classifierVersion).toContain("stroke-heuristic-6");
+    expect(prediction.classifierVersion).toContain("stroke-heuristic-7");
     expect(prediction.label).toBe("UNKNOWN");
     expect(prediction.limitingFactors).toContain(
       "dominant_wrist_attribution_unverifiable_rival_unmeasured",
