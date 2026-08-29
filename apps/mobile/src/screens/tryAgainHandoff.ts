@@ -6,6 +6,7 @@ import {
 } from '@pickle/shared-types';
 import type { ShotAnalysis } from '@pickle/shared-types';
 import type { StrokeResultEvidenceRecord } from '../components/strokeResultModel';
+import { stabilitySlo } from '../analysis/stabilityTelemetry';
 
 /**
  * TRY AGAIN loop (MOBBIN brief §2): from a Stroke Result, one tap re-arms
@@ -55,6 +56,16 @@ function expired(): boolean {
  * one gets nothing. Either way the handoff is cleared. */
 export function consumeTryAgainHandoff(): TryAgainHandoff | null {
   const handoff = expired() ? null : pendingHandoff;
+  if (handoff !== null) {
+    stabilitySlo.record({ kind: 'try_again_rearmed' });
+  } else if (pendingHandoff !== null) {
+    // A handoff WAS armed but its navigation never landed inside the TTL:
+    // the re-arm the user asked for did not happen.
+    stabilitySlo.record({
+      kind: 'try_again_failed',
+      reason: 'handoff_expired',
+    });
+  }
   clearTryAgainHandoff();
   return handoff;
 }

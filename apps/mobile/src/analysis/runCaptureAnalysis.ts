@@ -28,6 +28,7 @@ import {
   recordEvaluationTrial,
   type EvaluationTelemetryContext,
 } from '../evaluation/trialCapture';
+import { stabilitySlo } from './stabilityTelemetry';
 
 /**
  * Capture → canonical observations → fusion analysis → durable records.
@@ -114,7 +115,24 @@ export async function runCaptureAnalysis(
   request: RunCaptureAnalysisRequest,
 ): Promise<CaptureAnalysisOutcome> {
   const startedAt = Date.now();
-  const outcome = await runCaptureAnalysisCore(request);
+  stabilitySlo.record({ kind: 'analysis_started' });
+  let outcome: CaptureAnalysisOutcome;
+  try {
+    outcome = await runCaptureAnalysisCore(request);
+  } catch (error) {
+    stabilitySlo.record({ kind: 'analysis_failed', failureKind: 'exception' });
+    throw error;
+  }
+  // 'scored', 'low_confidence' and 'quality_blocked' all answered the user
+  // honestly; only 'unavailable' means the run produced no outcome at all.
+  if (outcome.kind === 'unavailable') {
+    stabilitySlo.record({
+      kind: 'analysis_failed',
+      failureKind: 'unavailable',
+    });
+  } else {
+    stabilitySlo.record({ kind: 'analysis_completed' });
+  }
   const telemetry = request.evaluationTelemetry ?? null;
   if (telemetry && telemetry.consentActive) {
     try {

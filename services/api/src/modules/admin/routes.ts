@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { sendFailure } from "../../lib/replies.js";
 import { audit, many, one, withTransaction } from "../../lib/db.js";
+import { StabilityWindowSubmission, createStabilityGuard } from "./stabilityGuard.js";
 
 /**
  * Admin module (directive §45): elevated role required; every access audited.
@@ -10,6 +11,45 @@ import { audit, many, one, withTransaction } from "../../lib/db.js";
  */
 
 export function registerAdminRoutes(app: FastifyInstance, context: AppContext): void {
+  // Stability SLO guard for the canary machinery (stability-slo-v1). Inactive
+  // until a real observed window is submitted; once active, a pause/hold
+  // decision blocks ADVANCING rollout percentages below — never a rollback.
+  const stabilityGuard = createStabilityGuard();
+
+  app.post(
+    "/v1/admin/stability/window",
+    { preHandler: app.requireAdmin },
+    async (request, reply) => {
+      const parsed = StabilityWindowSubmission.safeParse(request.body);
+      if (!parsed.success)
+        return sendFailure(
+          reply,
+          request,
+          400,
+          "permanent",
+          "validation.stability_window",
+          parsed.error.message,
+        );
+      const window = stabilityGuard.submitWindow(parsed.data.windowId, parsed.data.events);
+      await audit(context.pool!, {
+        actorUserId: request.user!.id,
+        action: "admin.stability_window_submit",
+        targetKind: "stability_window",
+        targetId: parsed.data.windowId,
+        requestId: request.id,
+        metadata: {
+          action: window.decision.action,
+          breachedSlos: window.decision.breachedSlos,
+          notEvaluableSlos: window.decision.notEvaluableSlos,
+        },
+      });
+      return { window };
+    },
+  );
+
+  app.get("/v1/admin/stability/decision", { preHandler: app.requireAdmin }, async () => ({
+    window: stabilityGuard.currentWindow(),
+  }));
   app.get("/v1/admin/users/:id", { preHandler: app.requireAdmin }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const user = await one(
@@ -125,6 +165,30 @@ export function registerAdminRoutes(app: FastifyInstance, context: AppContext): 
         parsed.error.message,
       );
     const b = parsed.data;
+    if (b.rolloutPercent !== undefined) {
+      const existing = await one<{ rollout_percent: number }>(
+        context.pool!,
+        "SELECT rollout_percent FROM feature_flag WHERE key = $1",
+        [key],
+      );
+      const check = stabilityGuard.checkRolloutChange(
+        existing?.rollout_percent ?? 0,
+        b.rolloutPercent,
+      );
+      if (check.active && !check.verdict.allowed) {
+        return sendFailure(
+          reply,
+          request,
+          409,
+          "permanent",
+          "stability.rollout_advance_blocked",
+          `Stability SLO decision is '${check.verdict.decision.action}'; rollout may not advance. ` +
+            `Breached: [${check.verdict.decision.breachedSlos.join(", ")}]; ` +
+            `not evaluable: [${check.verdict.decision.notEvaluableSlos.join(", ")}]. ` +
+            "Holding or reducing the rollout is always allowed.",
+        );
+      }
+    }
     await context.pool!.query(
       `INSERT INTO feature_flag (key, description, enabled, rollout_percent)
        VALUES ($1, COALESCE($2,''), COALESCE($3,false), COALESCE($4,100))
@@ -175,6 +239,28 @@ export function registerAdminRoutes(app: FastifyInstance, context: AppContext): 
           parsed.error.message,
         );
       const b = parsed.data;
+      const existing = await one<{ rollout_percent: number }>(
+        context.pool!,
+        "SELECT rollout_percent FROM model_bundle WHERE version = $1",
+        [b.version],
+      );
+      const check = stabilityGuard.checkRolloutChange(
+        existing?.rollout_percent ?? 0,
+        b.rolloutPercent,
+      );
+      if (check.active && !check.verdict.allowed) {
+        return sendFailure(
+          reply,
+          request,
+          409,
+          "permanent",
+          "stability.rollout_advance_blocked",
+          `Stability SLO decision is '${check.verdict.decision.action}'; rollout may not advance. ` +
+            `Breached: [${check.verdict.decision.breachedSlos.join(", ")}]; ` +
+            `not evaluable: [${check.verdict.decision.notEvaluableSlos.join(", ")}]. ` +
+            "Holding or reducing the rollout is always allowed.",
+        );
+      }
       await context.pool!.query(
         `INSERT INTO model_bundle (version, manifest_sha256, status, rollout_percent)
        VALUES ($1,$2,$3,$4)

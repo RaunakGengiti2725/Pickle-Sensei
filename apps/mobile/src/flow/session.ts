@@ -19,6 +19,7 @@ import {
   type CapturedClip,
   type PoseSequenceSidecarRef,
 } from '../camera/capture';
+import { stabilitySlo } from '../analysis/stabilityTelemetry';
 
 /**
  * SESSION FLOW — the mobile state machine around the canonical
@@ -565,6 +566,10 @@ export class LiveSessionFlow {
         const state = this.engine.eventState(event.eventId);
         if (state === 'ready' || state === 'abstained') return;
         const message = error instanceof Error ? error.message : String(error);
+        stabilitySlo.record({
+          kind: 'session_flow_failed',
+          reason: 'analysis_dispatch_failed',
+        });
         this.engine.markEvent(event.eventId, 'abstained', {
           abstainReason: `ANALYSIS_DISPATCH_FAILED: ${message}`,
         });
@@ -612,6 +617,10 @@ export class LiveSessionFlow {
       // dispatch chain, or take down the native motion feed. Counted, and
       // surfaced on every snapshot — never silent.
       this.onUpdateFailures += 1;
+      stabilitySlo.record({
+        kind: 'session_flow_failed',
+        reason: 'on_update_subscriber_failed',
+      });
     }
   }
 }
