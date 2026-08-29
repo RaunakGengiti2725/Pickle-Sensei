@@ -433,6 +433,8 @@ describe.skipIf(!testUrl)("real training system (isolated PostgreSQL schema)", (
       const completed = new Date(today);
       completed.setUTCDate(today.getUTCDate() - offset);
       completed.setUTCHours(12, 0, 0, 0);
+      // Noon UTC today is in the future when the suite runs before 12:00 UTC.
+      if (completed.getTime() > Date.now()) completed.setTime(Date.now() - 60_000);
       const response = await app.inject({
         method: "POST",
         url: "/v1/drill-completions",

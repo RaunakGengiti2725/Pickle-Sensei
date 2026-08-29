@@ -12,7 +12,15 @@ import { audit, one } from "../../lib/db.js";
  */
 
 const MAX_UPLOAD_BYTES = 500 * 1024 * 1024; // strict video limit (spec p. 41)
-const ALLOWED_CONTENT_TYPES = new Set(["video/mp4", "video/quicktime", "image/jpeg", "image/webp"]);
+const MAX_THUMBNAIL_BYTES = 10 * 1024 * 1024;
+const ALLOWED_CONTENT_TYPES_BY_KIND: Record<string, Set<string>> = {
+  raw_video: new Set(["video/mp4", "video/quicktime"]),
+  thumbnail: new Set(["image/jpeg", "image/webp"]),
+};
+const MAX_BYTES_BY_KIND: Record<string, number> = {
+  raw_video: MAX_UPLOAD_BYTES,
+  thumbnail: MAX_THUMBNAIL_BYTES,
+};
 
 const UploadCreate = z.object({
   kind: z.enum(["raw_video", "thumbnail"]),
@@ -35,14 +43,24 @@ export function registerMediaRoutes(app: FastifyInstance, context: AppContext): 
         parsed.error.message,
       );
     const body = parsed.data;
-    if (!ALLOWED_CONTENT_TYPES.has(body.contentType)) {
+    if (!ALLOWED_CONTENT_TYPES_BY_KIND[body.kind]!.has(body.contentType)) {
       return sendFailure(
         reply,
         request,
         422,
         "corrupted_media",
         "media.unsupported_type",
-        `Content type ${body.contentType} not allowed.`,
+        `Content type ${body.contentType} not allowed for kind ${body.kind}.`,
+      );
+    }
+    if (body.bytes > MAX_BYTES_BY_KIND[body.kind]!) {
+      return sendFailure(
+        reply,
+        request,
+        422,
+        "corrupted_media",
+        "media.too_large",
+        `Declared size ${body.bytes} exceeds the ${body.kind} limit.`,
       );
     }
     const userId = request.user!.id;
@@ -94,8 +112,56 @@ export function registerMediaRoutes(app: FastifyInstance, context: AppContext): 
 
   app.post("/v1/media/:id/complete", { preHandler: app.authenticate }, async (request, reply) => {
     const { id } = request.params as { id: string };
+    const pending = await one<{ object_key: string; size_bytes: string | number }>(
+      context.pool!,
+      "SELECT object_key, size_bytes FROM media_asset WHERE id = $1 AND owner_user_id = $2 AND status = 'uploading' AND deleted_at IS NULL",
+      [id, request.user!.id],
+    );
+    if (!pending)
+      return sendFailure(
+        reply,
+        request,
+        404,
+        "permanent",
+        "media.not_found",
+        "Upload not found or already completed.",
+      );
+    if (context.objectStore) {
+      const head = await context.objectStore.headObject(pending.object_key);
+      if (!head) {
+        return sendFailure(
+          reply,
+          request,
+          422,
+          "corrupted_media",
+          "media.object_missing",
+          "No uploaded object was found for this asset.",
+        );
+      }
+      if (head.sizeBytes > Number(pending.size_bytes) || head.sizeBytes > MAX_UPLOAD_BYTES) {
+        // Reject and queue purge of the offending object — never keep it.
+        await context.pool!.query(
+          "UPDATE media_asset SET status = 'deleted', deleted_at = now() WHERE id = $1",
+          [id],
+        );
+        try {
+          await context.queue.enqueue("media.purge", { mediaAssetId: id });
+        } catch (error) {
+          // Asset is marked deleted; the worker sweep will purge the object.
+          request.log.error({ err: error }, "media.purge dispatch failed; sweep will purge");
+        }
+        return sendFailure(
+          reply,
+          request,
+          422,
+          "corrupted_media",
+          "media.size_exceeded",
+          `Uploaded object is ${head.sizeBytes} bytes, larger than the declared/allowed size.`,
+        );
+      }
+    }
     const result = await context.pool!.query(
-      "UPDATE media_asset SET status = 'ready' WHERE id = $1 AND owner_user_id = $2 AND status = 'uploading'",
+      "UPDATE media_asset SET status = 'ready' WHERE id = $1 AND owner_user_id = $2 AND status = 'uploading' AND deleted_at IS NULL",
       [id, request.user!.id],
     );
     if (result.rowCount === 0)
@@ -107,7 +173,24 @@ export function registerMediaRoutes(app: FastifyInstance, context: AppContext): 
         "media.not_found",
         "Upload not found or already completed.",
       );
-    await context.queue.enqueue("media.process", { mediaAssetId: id });
+    try {
+      await context.queue.enqueue("media.process", { mediaAssetId: id });
+    } catch (error) {
+      // Dispatch failure mid-pipeline: revert so the client can retry complete.
+      request.log.error({ err: error }, "media.process dispatch failed");
+      await context.pool!.query(
+        "UPDATE media_asset SET status = 'uploading' WHERE id = $1 AND status = 'ready'",
+        [id],
+      );
+      return sendFailure(
+        reply,
+        request,
+        503,
+        "retryable",
+        "media.dispatch_failed",
+        "Could not queue media processing. Retry completing the upload.",
+      );
+    }
     return {
       mediaAsset: await one(
         context.pool!,
@@ -160,7 +243,13 @@ export function registerMediaRoutes(app: FastifyInstance, context: AppContext): 
     );
     if (result.rowCount === 0)
       return sendFailure(reply, request, 404, "permanent", "media.not_found", "Media not found.");
-    await context.queue.enqueue("media.purge", { mediaAssetId: id });
+    try {
+      await context.queue.enqueue("media.purge", { mediaAssetId: id });
+    } catch (error) {
+      // Deletion is already recorded (deleted_at set); the worker's deleted-media
+      // sweep guarantees the object is still purged even without this job.
+      request.log.error({ err: error }, "media.purge dispatch failed; sweep will purge");
+    }
     await audit(context.pool!, {
       actorUserId: request.user!.id,
       action: "media.delete_requested",

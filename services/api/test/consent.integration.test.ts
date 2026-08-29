@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -18,6 +19,13 @@ import type { FastifyInstance } from "fastify";
 
 const testUrl = process.env["DATABASE_URL_TEST"];
 const DEV_SECRET = "consent-secret-0123456789";
+const schemaName = `consent_it_${process.pid}_${randomUUID().replaceAll("-", "")}`;
+
+function schemaUrl(base: string, schema: string): string {
+  const url = new URL(base);
+  url.searchParams.set("options", `-c search_path=${schema}`);
+  return url.toString();
+}
 
 const migrationsDir = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -43,12 +51,15 @@ interface StatusBody {
 describe.skipIf(!testUrl)("consent ledger (real PostgreSQL)", () => {
   let app: FastifyInstance;
   let pool: pg.Pool;
+  let adminPool: pg.Pool;
   let userToken: string;
   let userId: string;
 
   beforeAll(async () => {
-    pool = new pg.Pool({ connectionString: testUrl });
-    await pool.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
+    adminPool = new pg.Pool({ connectionString: testUrl });
+    await adminPool.query(`CREATE SCHEMA ${schemaName}`);
+    const scopedUrl = schemaUrl(testUrl!, schemaName);
+    pool = new pg.Pool({ connectionString: scopedUrl });
     await runMigrations(pool, migrationsDir);
     await seed(pool);
 
@@ -57,7 +68,7 @@ describe.skipIf(!testUrl)("consent ledger (real PostgreSQL)", () => {
       port: 0,
       host: "127.0.0.1",
       appVersion: "0.1.0-test",
-      databaseUrl: testUrl!,
+      databaseUrl: schemaUrl(testUrl!, schemaName),
       devAuthSecret: DEV_SECRET,
       oidcIssuer: undefined,
       oidcAudience: undefined,
@@ -87,6 +98,10 @@ describe.skipIf(!testUrl)("consent ledger (real PostgreSQL)", () => {
   afterAll(async () => {
     await app?.close();
     await pool?.end();
+    if (adminPool) {
+      await adminPool.query(`DROP SCHEMA IF EXISTS ${schemaName} CASCADE`);
+      await adminPool.end();
+    }
   });
 
   const auth = { authorization: `Bearer ` };

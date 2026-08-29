@@ -8,7 +8,7 @@ import type { AppContext } from "./context.js";
 import { sendFailure } from "./lib/replies.js";
 import { buildVerifier } from "./auth/tokens.js";
 import { registerAuth } from "./plugins/authPlugin.js";
-import { buildObjectStore } from "./modules/media/objectStore.js";
+import { buildObjectStore, type IObjectStore } from "./modules/media/objectStore.js";
 import { registerCatalogRoutes } from "./modules/catalog/routes.js";
 import { registerCatalogExtraRoutes } from "./modules/catalog/extraRoutes.js";
 import { registerIdentityRoutes } from "./modules/identity/routes.js";
@@ -34,6 +34,7 @@ import { registerTrainingRoutes } from "./modules/training/routes.js";
 
 export interface BuildAppOptions {
   queue?: IJobQueue;
+  objectStore?: IObjectStore | null;
 }
 
 export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): FastifyInstance {
@@ -55,7 +56,8 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
     config,
     pool,
     queue,
-    objectStore: buildObjectStore(process.env),
+    objectStore:
+      options.objectStore !== undefined ? options.objectStore : buildObjectStore(process.env),
   };
   app.decorate("appContext", context);
 
