@@ -1,0 +1,88 @@
+{
+  "experiment": "f09-contact-adversarial-fixes",
+  "branch": "devin/wave-f/f09-contact-adversarial-fixes",
+  "baseCommit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "codeCommit": "f76f95ef0ddddfbb4556746b8e5099a27a83eada",
+  "estimatorVersion": { "before": "contact-evidence-4.2", "after": "contact-evidence-4.3" },
+  "codePath": "packages/vision-geometry/src/offlineStroke.ts (estimateContact)",
+  "mission": "Root-cause each confident-but-wrong contact finding left by e09 (ORANGE); fix only the defensible ones; document the rest as RED residuals with regression fixtures; report wrong-marker rate before/after on committed contact gold grouped by bundle.",
+  "findings": [
+    {
+      "id": "F3-e09-residual",
+      "title": "Foreign paddle WITHIN reach of an idle target wrist -> confident wrong contact at the opponent's hit",
+      "status": "OPEN (documented RED residual, now pinned by a committed regression test)",
+      "reproduction": "synthetic; estimate lands at truth+600ms (opponent hit) with confidence 0.778, ballConfirmed AND paddleConfirmed",
+      "rootCause": "The e09 reach tether is a spatial envelope, not an identity: a paddle track that switched to the opponent's paddle while hovering ~0.9 torso from the target's idle off-hand wrist passes the tether; its arc plus the ball turn at the opponent's hit then confirm a contact at the wrong moment.",
+      "whyNotFixed": "Distinguishing it requires upstream paddle-track identity association (outside contact-code ownership). Tightening the tether distance or maxPeakDivergenceMs would be tuning against a synthetic attack with no real-gold support (e09's stated position, re-verified).",
+      "regressionFixture": "packages/vision-geometry/test/contactRedTeam.test.ts :: 'F3 residual (documented RED): a foreign paddle WITHIN reach of an idle target wrist still yields a confident wrong contact' (pins the failure envelope so any behavior change is noticed, not silently shipped)"
+    },
+    {
+      "id": "F4-new-committed-gold",
+      "title": "Gap-censoring RAISED confidence on committed real gold (sasebo 52019: 144ms wrong at confidence 0.792, ballConfirmed)",
+      "status": "FIXED (contact-evidence-4.3)",
+      "discovery": "Fresh replay of the committed contact gold at the integration head FAILED the e02 eval gate: wavea-sasebo-volleys target event gold=52019ms estimated 51875ms (err 144ms > 132ms acceptable) at confidence 0.792 with ballConfirmed - a confident wrong marker the committed e02 artifact (err 16ms @ 0.705, commit f2dedf7) did not have.",
+      "rootCause": "Merge interaction: e02 and e09 both derived 'contact-evidence-4.2' on parallel branches. After the merge, e09's occlusion-gap censoring (gapCensorMs 150) crushes the only true-location ball direction change (sparse oracle ball annotation: 500ms gap after the turn sample at 52053) to 0.3x mass. Confidence coherence = chosenModeDensity / totalSurvivingMass, so removing the dissenting turn mass SHRANK the denominator and RAISED confidence 0.705 -> 0.792 while the estimate drifted to ball-wrist-proximity + wrist-peak evidence at 51875 (144ms early).",
+      "fix": "Structural invariant, no threshold changed: each kernel records the boundary/gap censor factor applied to its mass; the confidence coherence denominator restores the censored-away mass (mass / censorFactor). Censoring is loss of information and can now never RAISE confidence by silencing dissent. Estimate locations, abstentions, and all gating are byte-identical; only confidences at censored scenes drop (sasebo row 0.792 -> 0.683, below the 0.7 confirm band).",
+      "regressionFixture": "packages/vision-geometry/test/contactRedTeam.test.ts :: 'a gap-censored ball track yields no more confidence than the same track fully observed' (dense 0.868 vs gapped 0.550 on the synthetic pair; property is an inequality, not a tuned constant)"
+    },
+    {
+      "id": "F1-F2-e09",
+      "title": "Occlusion-gap edge drag (F1) and beyond-reach paddle identity switch (F2)",
+      "status": "remain FIXED under 4.3 - committed e09 red-team regressions all pass unchanged"
+    }
+  ],
+  "committedContactGold": {
+    "dataset": "datasets/paddle-bench/bundles/*/annotation/devin-visual-v3-waveD-contact.json (16 events, 8 bundles, 5 sessions; held-out wm-dink-01 and afn-vic-rally1 excluded)",
+    "condition": "committed runs-wave-a pose (auto target policy) + oracle ball sidecars (waveC/waveD2), the e02 replay harness (packages/vision-geometry/eval/contactGoldReplay.ts)",
+    "thresholds": { "strictMs": 66, "acceptableMs": 132, "wrongMarkerMs": ">132", "confidentBand": ">=0.7" },
+    "before_4_2_at_baseCommit": {
+      "allEvents": { "estimated": 12, "abstained": 4 },
+      "wrongMarkersOfEstimated": "3/12",
+      "confidentWrongMarkers": 1,
+      "evalGate": "FAILED (target high-confidence error 144ms > 132ms)",
+      "byBundle": {
+        "wavea-944403-dink": { "estimated": 3, "wrong": 1, "note": "155ms on an owner=other event at conf 0.55" },
+        "wavea-944403-smash": { "estimated": 2, "wrong": 0 },
+        "wavea-faead-feed": { "estimated": 1, "abstained": 1, "wrong": 0 },
+        "wavea-faead-rally": { "estimated": 0, "abstained": 2, "wrong": 0 },
+        "wavea-marne-dig": { "estimated": 0, "abstained": 1, "wrong": 0 },
+        "wavea-marne-serve": { "estimated": 1, "wrong": 0 },
+        "wavea-sasebo-volleys": { "estimated": 3, "wrong": 2, "note": "gold 52019: 144ms at conf 0.792 ballConfirmed (CONFIDENT WRONG); gold 52352 (owner=other): 148ms at conf 0.55" },
+        "wavea-wgm-wheelchair": { "estimated": 1, "wrong": 0 }
+      }
+    },
+    "after_4_3": {
+      "allEvents": { "estimated": 12, "abstained": 4 },
+      "wrongMarkersOfEstimated": "3/12 (identical estimate locations - the fix moves no marker)",
+      "confidentWrongMarkers": 0,
+      "evalGate": "PASSES (all wrong markers now sit at confidence <=0.683, below the 0.7 confirm band)",
+      "byBundle": {
+        "wavea-944403-dink": { "estimated": 3, "wrong": 1, "confidentWrong": 0 },
+        "wavea-944403-smash": { "estimated": 2, "wrong": 0 },
+        "wavea-faead-feed": { "estimated": 1, "abstained": 1, "wrong": 0 },
+        "wavea-faead-rally": { "estimated": 0, "abstained": 2, "wrong": 0 },
+        "wavea-marne-dig": { "estimated": 0, "abstained": 1, "wrong": 0 },
+        "wavea-marne-serve": { "estimated": 1, "wrong": 0 },
+        "wavea-sasebo-volleys": { "estimated": 3, "wrong": 2, "confidentWrong": 0, "note": "gold 52019 confidence 0.792 -> 0.683; estimate unchanged at 51875" },
+        "wavea-wgm-wheelchair": { "estimated": 1, "wrong": 0 }
+      }
+    },
+    "honestyNotes": [
+      "Total wrong-marker rate is UNCHANGED (3/12): the fix does not move any estimate; it removes the false confidence that made one wrong marker a silent, ballConfirmed >=0.7 failure. The remaining 3 wrong markers (155/144/148ms) all sit at confidence <=0.683 and are not modality-silent: each carries limiting factors.",
+      "Coverage/abstention unchanged (12 estimated / 4 abstained before and after) - no abstention was purchased.",
+      "The e02 committed artifact (0 wrong markers) was measured pre-e09-merge at commit f2dedf7; the regression this workstream found and fixed was introduced by the e02+e09 merge, not by e02 or e09 alone. The eval harness rewrites datasets/experiments/wave-e/e02-contact-gold-replay-metrics.json in place on every run; that file was restored to its committed state and is NOT modified by this branch.",
+      "F3 remains an open RED residual: 590ms wrong at confidence 0.778 with both modalities confirmed on the synthetic reproduction. It is pinned by a committed regression test, not fixed."
+    ]
+  },
+  "adversarialSweep": {
+    "fixtures": "packages/evaluation/src/synthetic/adversarialContactFixtures.ts (10 synthetic fixtures, labeled synthetic - not release evidence)",
+    "confidentWrongAfter": "0/10 (unchanged from e09)",
+    "redTeamSuite": "packages/vision-geometry/test/contactRedTeam.test.ts: 5 -> 7 tests, all pass"
+  },
+  "gates": {
+    "root": "pnpm typecheck / test (536 passed, 4 skipped) / lint / format:check - all green",
+    "package": "packages/vision-geometry: vitest 72 tests green; pnpm run eval green including the contact gold gate that FAILED at the base commit"
+  },
+  "verdict": "ORANGE",
+  "verdictReason": "The new committed-gold confident-wrong finding is root-caused and structurally fixed (confident wrong markers 1 -> 0, gate red -> green, nothing tuned); F1/F2 stay fixed; but F3 remains an open, documented RED residual pinned by regression, and 3/12 low-confidence wrong markers remain on committed gold."
+}
