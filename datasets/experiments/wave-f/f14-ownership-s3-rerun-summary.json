@@ -1,0 +1,82 @@
+{
+  "workstream": "f14-ownership-s3-rerun",
+  "branch": "devin/wave-f/f14-ownership-s3-rerun",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "baseCommit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "createdAtIso": "2026-08-29T11:05:00.000Z",
+  "mission": "Re-run the S3 ownership evaluation on the post-E05 corrected gold plus any labels added since, grouped by independent player/session; compare against the Wave C baseline and the e05 after-eval; identify the current worst ownership slice and produce a forensic report on its top 3 failures.",
+  "labelsAddedSinceE05": {
+    "count": 0,
+    "evidence": "git log c97925b..HEAD -- datasets/paddle-bench touches only wave-D2 CONTACT audit sidecars (afn-sasebo-rally1/2, wavea-faead-feed); no ownership annotation, sidecar, or correction file changed since the e05 merge"
+  },
+  "evaluator": {
+    "id": "ownership-bench-v1",
+    "entry": "packages/swing-lab/src/ownershipBench.ts",
+    "modified": false,
+    "command": "tsx src/ownershipBench.ts --apply-corrections --out datasets/experiments/wave-f/f14-ownership-eval.json",
+    "datasetScope": "dev split only (8 cases, 39 dual frames, 18 with committed pose), grouped by source session; held-out wm-dink-01 and afn-vic-rally1 untouched and excluded; fresh-candidate pool untouched"
+  },
+  "artifacts": {
+    "eval": "datasets/experiments/wave-f/f14-ownership-eval.json",
+    "forensicReport": "datasets/experiments/wave-f/f14-forensic-report.md",
+    "forensicEvidence": "datasets/experiments/wave-f/f14-forensics-evidence.json",
+    "forensicScript": "datasets/experiments/wave-f/f14-forensics.ts",
+    "regressionFixtures": "packages/swing-lab/test/f14OwnershipForensics.test.ts"
+  },
+  "results": {
+    "identicalToE05After": true,
+    "identityCheck": "field-by-field comparison of dualFrames/framesWithPose/all method correct/scored/abstained counts between f14-ownership-eval.json and wave-e/e05-ownership-eval-after.json: equal",
+    "comparison": {
+      "waveCBaseline_d02_uncorrected": {
+        "dualFrames": 38,
+        "framesWithPose": 17,
+        "incumbent": { "all": 0.342, "pose": 0.765, "correct": 13 },
+        "b1": { "all": 0.316, "pose": 0.706, "correct": 12 },
+        "b2": { "all": 0.211, "pose": 0.471, "correct": 8 },
+        "b3": { "all": 0.533, "pose": 0.25 }
+      },
+      "f14_corrected_equals_e05After": {
+        "dualFrames": 39,
+        "framesWithPose": 18,
+        "incumbent": { "all": 0.333, "pose": 0.722, "correct": 13, "answering": 0.765, "coverage": 0.436 },
+        "b1": { "all": 0.333, "pose": 0.722, "correct": 13 },
+        "b2": { "all": 0.205, "pose": 0.444, "correct": 8 },
+        "b3": { "all": 0.516, "pose": 0.231 }
+      },
+      "note": "no ranking flips; on corrected gold the incumbent's correct-count lead over B1 is gone (13 vs 13 on pose subset); its only remaining edge is precision-when-answering (.765 vs .722)"
+    },
+    "worstSlice": {
+      "slice": "dvids-944403 group / wavea-944403-dink dark_on_dark dual frames (pose subset)",
+      "incumbentGroupAccuracy": 0.643,
+      "groupN": 14,
+      "wrongPicks": 4,
+      "abstentions": 1,
+      "claim": "all 4 incumbent wrong picks on the entire dev bench land in this slice (4/17 answered = 23.5% wrong-pick rate overall, 4/13 = 30.8% within the group); every other failure elsewhere is an abstention on the five no-committed-pose cases, a data-availability gap rather than a ranking error"
+    },
+    "topFailures": [
+      { "tMs": 22338.98, "pickedOwner": "other", "dTargetWristPicked": 0.021, "dTargetWristGold": 0.0741, "nearestOtherWristToPicked": 0.1456, "vetoShortfall": "8.1x" },
+      { "tMs": 22589.23, "pickedOwner": "other", "dTargetWristPicked": 0.0263, "dTargetWristGold": 0.0698, "nearestOtherWristToPicked": 0.1588, "vetoShortfall": "7.1x", "note": "picked point is the ADJ-D7 human-adjudicated corrected coordinate" },
+      { "tMs": 22088.73, "pickedOwner": "other", "dTargetWristPicked": 0.0706, "dTargetWristGold": 0.0812, "nearestOtherWristToPicked": 0.1376, "vetoShortfall": "2.3x" },
+      { "tMs": 21171.15, "pickedOwner": "other", "dTargetWristPicked": 0.0625, "dTargetWristGold": 0.144, "nearestOtherWristToPicked": 0.13, "vetoShortfall": "2.4x", "note": "4th wrong pick, same signature, documented for completeness" }
+    ],
+    "rootCause": "single shared signature: an other-owned paddle sits 0.02-0.07 from the target's leading wrist — strictly closer than the true target paddle (low at y~0.46-0.53 during the dink) — while the intruding paddle's owner has NO detected wrist near it in committed pose (all other wrists at x>=0.44), so the otherOwnershipFactor=0.85 veto misses by 2-8x and nearest-target-wrist ranking picks the intruder; the gold target paddle is never vetoed on these frames (ranking fails, not the veto), and B1/B2 fail the same frames, so no committed-data method survives the slice"
+  },
+  "waveGDecision": {
+    "needed": true,
+    "reason": "100% of live wrong picks share a failure mode that wrist-distance ranking with a wrist-presence-dependent veto structurally cannot fix (threshold would need ~0.12 vs 0.85 to catch the worst case, vetoing nearly everything); Wave G should explore wrist-free ownership evidence: person-box/limb association, temporal handover consistency (the intruder persists at ~(0.30,0.37) across 21171-22589ms), paddle-height-vs-wrist-height plausibility",
+    "regressionContract": "f14OwnershipForensics.test.ts pins the 4 current wrong picks; a Wave G fix must flip those pins consciously, citing f14-forensics-evidence.json"
+  },
+  "gates": {
+    "formatCheck": "pnpm format:check clean on f14 files",
+    "typecheck": "pnpm --filter @pickle/swing-lab typecheck (via root typecheck) pass",
+    "tests": "packages/swing-lab vitest: f14OwnershipForensics.test.ts 9/9 pass alongside ownershipBench.test.ts 15/15"
+  },
+  "honesty": {
+    "productionMutation": "none — evaluator, tracker gates, and all production code untouched; only eval artifacts + one regression-fixture test added",
+    "labelsCreatedOrChanged": "none; datasets append-only respected",
+    "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"],
+    "freshCandidatePoolUntouched": true,
+    "noRunsDirsModified": true,
+    "predictionsVsObservations": "all failure analysis is against human-labeled gold (including adjudicated corrections); no prediction relabeled as observation"
+  }
+}
