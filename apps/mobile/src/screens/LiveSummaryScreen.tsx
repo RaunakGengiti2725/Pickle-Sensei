@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   useNavigation,
@@ -57,6 +64,7 @@ const EVENT_STATE_PILL: Record<
 function EngineSessionSummary(props: {
   snapshot: LiveSessionSnapshot;
   onClose: () => void;
+  onOpenAnalysis: (analysisId: string) => void;
 }) {
   const { snapshot } = props;
   const pendingCount = snapshot.events.filter(
@@ -144,34 +152,59 @@ function EngineSessionSummary(props: {
 
         <SectionTitle title="Events" />
         <Card style={styles.blockCard}>
-          {snapshot.events.map((event, index) => (
-            <View
-              key={event.eventId}
-              style={[styles.eventRow, index === 0 && { borderTopWidth: 0 }]}
-            >
-              <Text style={[type.bodyBold, { color: color.ink, width: 42 }]}>
-                {event.eventId}
-              </Text>
-              <View style={{ flex: 1 }}>
-                <Text style={[type.caption, { color: color.ink }]}>
-                  {formatSessionClock(event.startMs)}–
-                  {formatSessionClock(event.endMs)} ·{' '}
-                  {CLOSE_REASON_LABEL[event.closeReason]}
+          {snapshot.events.map((event, index) => {
+            const analysisId =
+              event.state === 'ready' && event.analysis !== null
+                ? event.analysis.id
+                : null;
+            const row = (
+              <>
+                <Text style={[type.bodyBold, { color: color.ink, width: 42 }]}>
+                  {event.eventId}
                 </Text>
-                {event.boundaryUncertain ? (
-                  <Text
-                    style={[type.micro, { color: color.warn, marginTop: 2 }]}
-                  >
-                    BOUNDS UNCERTAIN — SESSION ENDED MID-MOTION
+                <View style={{ flex: 1 }}>
+                  <Text style={[type.caption, { color: color.ink }]}>
+                    {formatSessionClock(event.startMs)}–
+                    {formatSessionClock(event.endMs)} ·{' '}
+                    {CLOSE_REASON_LABEL[event.closeReason]}
                   </Text>
+                  {event.boundaryUncertain ? (
+                    <Text
+                      style={[type.micro, { color: color.warn, marginTop: 2 }]}
+                    >
+                      BOUNDS UNCERTAIN — SESSION ENDED MID-MOTION
+                    </Text>
+                  ) : null}
+                </View>
+                <Pill
+                  label={EVENT_STATE_PILL[event.state].label}
+                  tone={EVENT_STATE_PILL[event.state].tone}
+                />
+                {analysisId !== null ? (
+                  <Icon name="chevron" size={16} color={color.inkSoft} />
                 ) : null}
+              </>
+            );
+            const rowStyle = [
+              styles.eventRow,
+              index === 0 && ({ borderTopWidth: 0 } as const),
+            ];
+            return analysisId !== null ? (
+              <Pressable
+                key={event.eventId}
+                style={rowStyle}
+                accessibilityRole="button"
+                accessibilityLabel={`Open analysis for event ${event.eventId}`}
+                onPress={() => props.onOpenAnalysis(analysisId)}
+              >
+                {row}
+              </Pressable>
+            ) : (
+              <View key={event.eventId} style={rowStyle}>
+                {row}
               </View>
-              <Pill
-                label={EVENT_STATE_PILL[event.state].label}
-                tone={EVENT_STATE_PILL[event.state].tone}
-              />
-            </View>
-          ))}
+            );
+          })}
           {snapshot.events.length === 0 ? (
             <Text style={[type.body, { color: color.inkSoft }]}>
               The engine stayed on for the whole session and closed nothing — no
@@ -262,6 +295,9 @@ export function LiveSummaryScreen() {
       <EngineSessionSummary
         snapshot={engineSession}
         onClose={() => navigation.popToTop()}
+        onOpenAnalysis={analysisId =>
+          navigation.navigate('Result', { analysisId })
+        }
       />
     );
   }
