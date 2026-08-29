@@ -50,6 +50,8 @@ export {
 export {
   buildPaddleTracks,
   MERGE_LINK_GATES,
+  OWNERSHIP_GUARD_GATES,
+  OWNERSHIP_GUARD_VERSION,
   PADDLE_CONFIDENCE_MODEL,
   PADDLE_TRACKER_VERSION,
   mergePaddleTracklets,
@@ -60,6 +62,7 @@ export {
   trackletTail,
   wristSeries,
   type NormalizedBox,
+  type PaddleSelectionOptions,
   type PaddleTrackCandidate,
   type PaddleTrackingOutcome,
   type RawPaddleDetectionFile,
