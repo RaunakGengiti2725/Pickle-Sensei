@@ -544,6 +544,10 @@ export function AnalyzeScreen() {
   const run = useCallback(async () => {
     if (operationActive.current) return;
     operationActive.current = true;
+    // Each capture attempt starts with a clean envelope verdict and target
+    // seed: both describe ONE clip and must never carry into the next one.
+    setCaptureEnvelope(null);
+    setTargetSeed(null);
     setPhase({
       kind: 'working',
       message:
