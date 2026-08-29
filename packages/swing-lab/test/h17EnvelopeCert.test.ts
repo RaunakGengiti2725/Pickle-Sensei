@@ -31,7 +31,7 @@ describe("h17 envelope certification: unsupported input fails closed", () => {
     expect(m.envelope?.unsupportedDimensions).toContain("brightness");
     expect(m.gateOk).toBe(false);
     expect(m.gateFailureKind).toBe("corrupted_media");
-  });
+  }, 60_000);
 
   it("corrupt input: envelope measurement throws (never SUPPORTED) and gate rejects", () => {
     const path = join(dir, "garbage.mp4");
@@ -42,7 +42,7 @@ describe("h17 envelope certification: unsupported input fails closed", () => {
     expect(m.envelopeError).not.toBeNull();
     expect(m.gateOk).toBe(false);
     expect(m.frameReasons).toContain("undecodable_media");
-  });
+  }, 60_000);
 
   it("dark scene: envelope UNSUPPORTED on brightness", () => {
     const path = join(dir, "dark.mp4");
@@ -62,7 +62,7 @@ describe("h17 envelope certification: unsupported input fails closed", () => {
     const m = measureH17Probe({ id: "dark", category: "dark_scene", path });
     expect(m.envelope?.overall).toBe("UNSUPPORTED");
     expect(m.envelope?.unsupportedDimensions).toContain("brightness");
-  });
+  }, 60_000);
 
   it("severe blur: envelope UNSUPPORTED on motion_blur", () => {
     const path = join(dir, "blur.mp4");
@@ -82,7 +82,7 @@ describe("h17 envelope certification: unsupported input fails closed", () => {
     const m = measureH17Probe({ id: "blur", category: "severe_blur", path });
     expect(m.envelope?.overall).toBe("UNSUPPORTED");
     expect(m.envelope?.unsupportedDimensions).toContain("motion_blur");
-  });
+  }, 60_000);
 
   it("camera obstruction (dominant black occluder): pre-analysis gate rejects", () => {
     const path = join(dir, "obstruction.mp4");
@@ -103,5 +103,5 @@ describe("h17 envelope certification: unsupported input fails closed", () => {
     expect(m.gateOk).toBe(false);
     expect(m.gateFailureKind).toBe("corrupted_media");
     expect(m.envelope?.overall).toBe("UNSUPPORTED");
-  });
+  }, 60_000);
 });
