@@ -42,6 +42,7 @@ export default tseslint.config(
       "packages/swing-lab/src/strokeBench.ts",
       "packages/swing-lab/src/datasetReport.ts",
       "packages/swing-lab/src/datasetRelease.ts",
+      "packages/swing-lab/src/datasetsReleaseManifest.ts",
       "packages/swing-lab/src/dataGaps.ts",
       "packages/swing-lab/src/mineVideo.ts",
       "packages/swing-lab/src/paddleWaterfall.ts",

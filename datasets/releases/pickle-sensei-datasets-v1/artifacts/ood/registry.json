@@ -1,0 +1,627 @@
+{
+  "schemaVersion": 1,
+  "addedAt": "2026-08-29",
+  "workstream": "wave-d/d08-ood-corpus",
+  "policy": "role=ood_negative. Real (non-synthetic) rights-cleared footage that contains NO pickleball stroke by a target athlete. These clips exist ONLY to measure and test the pre-analysis OOD gate's no-confident-analysis behavior. They are excluded from datasets/corpus, from all splits, from training, and from every positive-label pipeline. Never annotate strokes, contacts, or ownership on these clips.",
+  "conventions": "Provenance and rights fields follow datasets/pickleball/registry.json freshCandidates (wave-c/c16) conventions: per-item verbatim license quote, license verification method, provenance assessment with residual caveats recorded in restrictions, sha256 of the committed file, and a quarantinedUnknownRights section for items that were considered but NOT downloaded.",
+  "totalBytes": 82992006,
+  "items": [
+    {
+      "id": "yt--wE27MoX2AM-tennis",
+      "role": "ood_negative",
+      "category": "other_racket_sport_tennis",
+      "path": "datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=-wE27MoX2AM",
+      "title": "Jannik Sinner: CRAZY POINT \ud83e\udd2a vs Carre\u00f1o Busta (Court Level ATP Match)",
+      "uploader": "Court Level Fans",
+      "uploaderChannelId": "UCrcPOnQvLf9xPmB3EDGebpw",
+      "uploadDate": "2022-03-30",
+      "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+      "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+      "provenanceAssessment": "Fan-recorded court-level footage shot from the stands at an ATP event by the channel operator; the recording copyright belongs to the videographer. Uploader authority is assessed from channel context (a channel of self-recorded court-level fan videos), not independently confirmed.",
+      "rights": {
+        "store": "yes_with_attribution",
+        "analyze": "yes_with_attribution",
+        "annotate": "yes_with_attribution",
+        "train": "yes_with_attribution",
+        "redistributeDerivatives": "yes_with_attribution",
+        "commercial": "yes_with_attribution",
+        "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+        "reviewedBy": "wave-d:d08-ood-corpus (page-verified license; channel-context provenance assessment)",
+        "reviewedAtIso": "2026-08-29"
+      },
+      "restrictions": [
+        "attribution to the uploader required on redistribution",
+        "uploader authority assessed from channel context, not independently confirmed"
+      ],
+      "media": {
+        "type": "video/mp4 (H.264, no audio)",
+        "segment": "0s-33s of the 33s source video, re-encoded libx264 crf20",
+        "clipWidth": 1920,
+        "clipHeight": 1080,
+        "clipFps": 29.97,
+        "clipDurationSeconds": 32.77,
+        "bytes": 21899905
+      },
+      "sha256": "a583fcacf429c3f3377ee257ad770b617ba5c0b5f7fdd59eea212f69f925778a",
+      "contentVerification": "Frame extracted and visually inspected 2026-08-29: outdoor ATP tennis court with players rallying, large crowd; no pickleball."
+    },
+    {
+      "id": "yt-RpPe0h9cD5E-tennis",
+      "role": "ood_negative",
+      "category": "other_racket_sport_tennis",
+      "path": "datasets/ood/negatives/yt-RpPe0h9cD5E-tennis.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=RpPe0h9cD5E",
+      "title": "Novak Djokovic: great point in Slow Motion vs Zverev (Court Level ATP Match)",
+      "uploader": "Court Level Fans",
+      "uploaderChannelId": "UCrcPOnQvLf9xPmB3EDGebpw",
+      "uploadDate": "2021-10-01",
+      "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+      "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+      "provenanceAssessment": "Fan-recorded court-level footage (US Open stadium) shot from the stands by the channel operator; recording copyright belongs to the videographer. Uploader authority assessed from channel context, not independently confirmed.",
+      "rights": {
+        "store": "yes_with_attribution",
+        "analyze": "yes_with_attribution",
+        "annotate": "yes_with_attribution",
+        "train": "yes_with_attribution",
+        "redistributeDerivatives": "yes_with_attribution",
+        "commercial": "yes_with_attribution",
+        "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+        "reviewedBy": "wave-d:d08-ood-corpus (page-verified license; channel-context provenance assessment)",
+        "reviewedAtIso": "2026-08-29"
+      },
+      "restrictions": [
+        "attribution to the uploader required on redistribution",
+        "uploader authority assessed from channel context, not independently confirmed"
+      ],
+      "media": {
+        "type": "video/mp4 (H.264, no audio)",
+        "segment": "0s-32s of the 32s source video, re-encoded libx264 crf20",
+        "clipWidth": 1920,
+        "clipHeight": 1080,
+        "clipFps": 29.97,
+        "clipDurationSeconds": 31.47,
+        "bytes": 16212911
+      },
+      "sha256": "f36c96cf572a46bfd9e2325b31d50592fffc67b8090c27c29523b3e3ed51e0fd",
+      "contentVerification": "Frame extracted and visually inspected 2026-08-29: indoor-stadium tennis (Arthur Ashe), player at baseline, packed crowd; no pickleball."
+    },
+    {
+      "id": "yt-Iw55LinAF0U-badminton",
+      "role": "ood_negative",
+      "category": "other_racket_sport_badminton",
+      "path": "datasets/ood/negatives/yt-Iw55LinAF0U-badminton.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=Iw55LinAF0U",
+      "title": "#Badminton Badminton for fun and exercise - 17 February 2024 Queen Elizabeth Stadium, Wan Chai",
+      "uploader": "Pratik Sayare",
+      "uploaderChannelId": "UCxYcQdogNX1Lafwvee14eeg",
+      "uploadDate": "2024-02-17",
+      "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+      "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+      "provenanceAssessment": "Personal channel publishing a dated series of self-recorded recreational badminton sessions from a fixed floor-level camera at a public sports hall; channel context is consistent with the uploader being the videographer and rights holder. Not independently confirmed.",
+      "rights": {
+        "store": "yes_with_attribution",
+        "analyze": "yes_with_attribution",
+        "annotate": "yes_with_attribution",
+        "train": "yes_with_attribution",
+        "redistributeDerivatives": "yes_with_attribution",
+        "commercial": "yes_with_attribution",
+        "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+        "reviewedBy": "wave-d:d08-ood-corpus (page-verified license; channel-context provenance assessment)",
+        "reviewedAtIso": "2026-08-29"
+      },
+      "restrictions": [
+        "attribution to the uploader required on redistribution",
+        "uploader authority assessed from channel context, not independently confirmed"
+      ],
+      "media": {
+        "type": "video/mp4 (H.264, no audio)",
+        "segment": "30s-60s of the 245s source video, re-encoded libx264 crf20",
+        "clipWidth": 1280,
+        "clipHeight": 720,
+        "clipFps": 30,
+        "clipDurationSeconds": 30.0,
+        "bytes": 5523328
+      },
+      "sha256": "2e6c562a761bf65afcd5d3ef0b15ed1d237f0350e972a066726cc66a5351ac27",
+      "contentVerification": "Frame extracted and visually inspected 2026-08-29: indoor sports-hall badminton, players with rackets on a wooden floor; no pickleball."
+    },
+    {
+      "id": "yt-2wV0Gs9r384-tabletennis",
+      "role": "ood_negative",
+      "category": "other_racket_sport_table_tennis",
+      "path": "datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=2wV0Gs9r384",
+      "title": "Rohan Joshi rj1308  Best Table tennis match Ever .",
+      "uploader": "ROHAN JOSHI",
+      "uploaderChannelId": "UCgPS0TRABdptcUTmMXz0bsw",
+      "uploadDate": "2015-12-24",
+      "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+      "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+      "provenanceAssessment": "Personal channel; handheld phone recording of an amateur table-tennis tournament hall, consistent with the uploader being the videographer at the event (the title names the uploader as a participant). Not independently confirmed.",
+      "rights": {
+        "store": "yes_with_attribution",
+        "analyze": "yes_with_attribution",
+        "annotate": "yes_with_attribution",
+        "train": "yes_with_attribution",
+        "redistributeDerivatives": "yes_with_attribution",
+        "commercial": "yes_with_attribution",
+        "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+        "reviewedBy": "wave-d:d08-ood-corpus (page-verified license; channel-context provenance assessment)",
+        "reviewedAtIso": "2026-08-29"
+      },
+      "restrictions": [
+        "attribution to the uploader required on redistribution",
+        "uploader authority assessed from channel context, not independently confirmed"
+      ],
+      "media": {
+        "type": "video/mp4 (H.264, no audio)",
+        "segment": "5s-35s of the 68s source video, re-encoded libx264 crf20",
+        "clipWidth": 1280,
+        "clipHeight": 720,
+        "clipFps": 29.97,
+        "clipDurationSeconds": 30.03,
+        "bytes": 12150777
+      },
+      "sha256": "b2cf44b2dd505091c011dcbb167b219919296de071ca4d919a715e1af902f21e",
+      "contentVerification": "Frame extracted and visually inspected 2026-08-29: indoor arena with multiple table-tennis tables and players mid-match; no pickleball."
+    },
+    {
+      "id": "yt-BCJGL5E9huM-tabletennis",
+      "role": "ood_negative",
+      "category": "other_racket_sport_table_tennis",
+      "path": "datasets/ood/negatives/yt-BCJGL5E9huM-tabletennis.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=BCJGL5E9huM",
+      "title": "Chinese kids playing table tennis",
+      "uploader": "Serena Yu",
+      "uploaderChannelId": "UCR4P0ecI80V8uXEYtvfnqIQ",
+      "uploadDate": "2017-04-24",
+      "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+      "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+      "provenanceAssessment": "Personal channel; handheld recording inside a training hall, consistent with the uploader being the videographer. Not independently confirmed.",
+      "rights": {
+        "store": "yes_with_attribution",
+        "analyze": "yes_with_attribution",
+        "annotate": "yes_with_attribution",
+        "train": "yes_with_attribution",
+        "redistributeDerivatives": "yes_with_attribution",
+        "commercial": "yes_with_attribution",
+        "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+        "reviewedBy": "wave-d:d08-ood-corpus (page-verified license; channel-context provenance assessment)",
+        "reviewedAtIso": "2026-08-29"
+      },
+      "restrictions": [
+        "attribution to the uploader required on redistribution",
+        "uploader authority assessed from channel context, not independently confirmed"
+      ],
+      "media": {
+        "type": "video/mp4 (H.264, no audio)",
+        "segment": "0s-14s of the 14s source video, re-encoded libx264 crf20",
+        "clipWidth": 626,
+        "clipHeight": 360,
+        "clipFps": 25,
+        "clipDurationSeconds": 14.0,
+        "bytes": 945451
+      },
+      "sha256": "dbc0e3869643cc27d571bb785f54563de52a3ed8f7377184bbba764b693b3e2f",
+      "contentVerification": "Frame extracted and visually inspected 2026-08-29: training hall with children at table-tennis tables; no pickleball."
+    },
+    {
+      "id": "yt-zWQs7kTKcEY-emptycourt",
+      "role": "ood_negative",
+      "category": "empty_court",
+      "path": "datasets/ood/negatives/yt-zWQs7kTKcEY-emptycourt.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=zWQs7kTKcEY",
+      "title": "TENNIS COURT B ROLL - EMPTY TENNIS COURT B-ROLL B-REEL 4K",
+      "uploader": "B-ROLL",
+      "uploaderChannelId": "UCdJ_llFbi0shtuXZUIR3cdQ",
+      "uploadDate": "2022-06-25",
+      "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+      "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+      "provenanceAssessment": "Channel dedicated to publishing its own b-roll footage for reuse; the video is original ground-level b-roll of an empty outdoor court, consistent with the uploader being the videographer. Not independently confirmed.",
+      "rights": {
+        "store": "yes_with_attribution",
+        "analyze": "yes_with_attribution",
+        "annotate": "yes_with_attribution",
+        "train": "yes_with_attribution",
+        "redistributeDerivatives": "yes_with_attribution",
+        "commercial": "yes_with_attribution",
+        "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+        "reviewedBy": "wave-d:d08-ood-corpus (page-verified license; channel-context provenance assessment)",
+        "reviewedAtIso": "2026-08-29"
+      },
+      "restrictions": [
+        "attribution to the uploader required on redistribution",
+        "uploader authority assessed from channel context, not independently confirmed"
+      ],
+      "media": {
+        "type": "video/mp4 (H.264, no audio)",
+        "segment": "0s-30s of the 62s source video (1080p stream of the 4K source), re-encoded libx264 crf20",
+        "clipWidth": 1920,
+        "clipHeight": 1080,
+        "clipFps": 30,
+        "clipDurationSeconds": 30.0,
+        "bytes": 9838060
+      },
+      "sha256": "3b8e042325e3fef2f96ab35f9128a0040289ec49b6ee422dad00d5fa2715dc27",
+      "contentVerification": "Frame extracted and visually inspected 2026-08-29: empty blue outdoor court with net, no people anywhere in frame."
+    },
+    {
+      "id": "commons-ronpaul-crowd",
+      "role": "ood_negative",
+      "category": "crowd_non_sport",
+      "path": "datasets/ood/negatives/commons-ronpaul-crowd.mp4",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Ron_Paul_Leaving_Independence_Mall_(Enthusiastic_Crowd!).webm",
+      "title": "Ron Paul Leaving Independence Mall (Enthusiastic Crowd!)",
+      "uploader": "bub (Wikimedia Commons uploader; original YouTube user tom1gorman)",
+      "uploadDate": "2012-04-22 (event date per file description)",
+      "license": "CC BY 3.0 (Wikimedia Commons machine-readable extmetadata: LicenseShortName=\"CC BY 3.0\", License=\"cc-by-3.0\")",
+      "licenseVerification": "License read from the Wikimedia Commons imageinfo extmetadata API on 2026-08-29 (LicenseShortName 'CC BY 3.0'). Commons hosts only files with verified free licenses and this file has passed Commons license review processes. CC BY 3.0 permits commercial use with attribution.",
+      "provenanceAssessment": "Handheld phone recording of a political-rally crowd, uploaded by the videographer to YouTube under CC and transferred to Commons; consistent with the uploader being the videographer. Not independently confirmed beyond Commons review.",
+      "rights": {
+        "store": "yes_with_attribution",
+        "analyze": "yes_with_attribution",
+        "annotate": "yes_with_attribution",
+        "train": "yes_with_attribution",
+        "redistributeDerivatives": "yes_with_attribution",
+        "commercial": "yes_with_attribution",
+        "basis": "CC BY 3.0 recorded in Wikimedia Commons machine-readable metadata permits any use including commercial with attribution.",
+        "reviewedBy": "wave-d:d08-ood-corpus (Commons extmetadata-verified license)",
+        "reviewedAtIso": "2026-08-29"
+      },
+      "restrictions": [
+        "attribution to the uploader required on redistribution"
+      ],
+      "media": {
+        "type": "video/mp4 (H.264, no audio; transcoded from source webm)",
+        "segment": "0s-30s of the 58s source video, re-encoded libx264 crf20",
+        "clipWidth": 640,
+        "clipHeight": 480,
+        "clipFps": 30,
+        "clipDurationSeconds": 30.0,
+        "bytes": 3914648
+      },
+      "sha256": "acf5d2dd7ea36c343f7d84ca79a9a2df91f712570b5e6d2cdfd31e0ec42d6e8f",
+      "contentVerification": "Frame extracted and visually inspected 2026-08-29: dense outdoor crowd at a rally, handheld motion blur; no sport, no court."
+    },
+    {
+      "id": "ia-ProfileJ26-interview",
+      "role": "ood_negative",
+      "category": "interview_talking_head",
+      "path": "datasets/ood/negatives/ia-ProfileJ26-interview.mp4",
+      "sourceUrl": "https://archive.org/details/ProfileJ26",
+      "title": "Profile: Jamison Handy (Part I) \u2014 WWJ-TV interview program",
+      "uploader": "Prelinger Archives (Internet Archive)",
+      "uploadDate": "source program ca. 1970s; digitized by Prelinger Archives",
+      "license": "Public domain (Internet Archive item licenseurl field verbatim: \"http://creativecommons.org/licenses/publicdomain/\")",
+      "licenseVerification": "licenseurl read from the Internet Archive metadata API for item ProfileJ26 on 2026-08-29; it is the Creative Commons Public Domain dedication URL. Prelinger Archives distributes its ephemeral-film collection for free reuse including commercial use.",
+      "provenanceAssessment": "Prelinger Archives is an established archival rights source; the item carries an explicit public-domain dedication in its machine-readable metadata.",
+      "rights": {
+        "store": "yes",
+        "analyze": "yes",
+        "annotate": "yes",
+        "train": "yes",
+        "redistributeDerivatives": "yes",
+        "commercial": "yes",
+        "basis": "Public domain dedication (CC public domain licenseurl) on the Internet Archive item; no copyright restriction.",
+        "reviewedBy": "wave-d:d08-ood-corpus (IA metadata-verified licenseurl)",
+        "reviewedAtIso": "2026-08-29"
+      },
+      "restrictions": [
+        "none (public domain)"
+      ],
+      "media": {
+        "type": "video/mp4 (H.264, no audio; from IA 512kb derivative)",
+        "segment": "110s-140s of the source telecine, re-encoded libx264 crf20",
+        "clipWidth": 320,
+        "clipHeight": 240,
+        "clipFps": 29.97,
+        "clipDurationSeconds": 30.03,
+        "bytes": 1548017
+      },
+      "sha256": "0fe651a49ef6f55129a9aa98ea42b6003bd464e63552526200984e35decfc70a",
+      "contentVerification": "Frame extracted and visually inspected 2026-08-29: black-and-white close-up of a seated interviewee talking; no sport."
+    },
+    {
+      "id": "ia-HanfordS1957-titlecard",
+      "role": "ood_negative",
+      "category": "title_card_tv_graphics",
+      "path": "datasets/ood/negatives/ia-HanfordS1957-titlecard.mp4",
+      "sourceUrl": "https://archive.org/details/HanfordS1957",
+      "title": "Hanford Science Forum (1957) \u2014 opening title sequence",
+      "uploader": "Prelinger Archives (Internet Archive)",
+      "uploadDate": "source program 1957; digitized by Prelinger Archives",
+      "license": "Public domain (Internet Archive item licenseurl field verbatim: \"http://creativecommons.org/licenses/publicdomain/\")",
+      "licenseVerification": "licenseurl read from the Internet Archive metadata API for item HanfordS1957 on 2026-08-29; it is the Creative Commons Public Domain dedication URL. Prelinger Archives distributes its ephemeral-film collection for free reuse including commercial use.",
+      "provenanceAssessment": "Prelinger Archives is an established archival rights source; the item carries an explicit public-domain dedication in its machine-readable metadata.",
+      "rights": {
+        "store": "yes",
+        "analyze": "yes",
+        "annotate": "yes",
+        "train": "yes",
+        "redistributeDerivatives": "yes",
+        "commercial": "yes",
+        "basis": "Public domain dedication (CC public domain licenseurl) on the Internet Archive item; no copyright restriction.",
+        "reviewedBy": "wave-d:d08-ood-corpus (IA metadata-verified licenseurl)",
+        "reviewedAtIso": "2026-08-29"
+      },
+      "restrictions": [
+        "none (public domain)"
+      ],
+      "media": {
+        "type": "video/mp4 (H.264, no audio; from IA 512kb derivative)",
+        "segment": "0s-20s of the source telecine (broadcast title card and opening graphics), re-encoded libx264 crf20",
+        "clipWidth": 320,
+        "clipHeight": 240,
+        "clipFps": 29.97,
+        "clipDurationSeconds": 20.02,
+        "bytes": 812425
+      },
+      "sha256": "d29bf312395ed2281164f695bcc467747dcd736f83a28ccb28d4f6bdf45ff965",
+      "contentVerification": "Frame extracted and visually inspected 2026-08-29: 1957 black-and-white broadcast title card 'Hanford SCIENCE FORUM' over an atom graphic; real TV graphics, not a synthetic fixture."
+    },
+    {
+      "id": "yt-x8T5I4YAKNw-squash",
+      "role": "ood_negative",
+      "category": "other_racket_sport_squash",
+      "path": "datasets/ood/negatives/yt-x8T5I4YAKNw-squash.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=x8T5I4YAKNw",
+      "title": "PST Bobcat Classic Finals David Palmer/Thierry Lincou Game 5",
+      "uploader": "Maine Squash",
+      "uploaderChannelId": "UCcnXXPhqjP-B0cHP3TCN4Wg",
+      "uploadDate": "2013-10-01",
+      "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+      "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+      "provenanceAssessment": "Tournament footage of a professional squash exhibition recorded and uploaded by the regional association channel operating the event; recording copyright belongs to the videographer. Uploader authority is assessed from channel context (a state squash association channel of self-recorded event videos), not independently confirmed.",
+      "rights": {
+        "store": "yes_with_attribution",
+        "analyze": "yes_with_attribution",
+        "annotate": "yes_with_attribution",
+        "train": "yes_with_attribution",
+        "redistributeDerivatives": "yes_with_attribution",
+        "commercial": "yes_with_attribution",
+        "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+        "reviewedBy": "wave-e:e11-ood-expansion (page-verified license; channel-context provenance assessment)",
+        "reviewedAtIso": "2026-08-29"
+      },
+      "restrictions": [
+        "attribution to the uploader required on redistribution",
+        "uploader authority assessed from channel context, not independently confirmed"
+      ],
+      "media": {
+        "type": "video/mp4 (H.264, no audio)",
+        "segment": "120s-150s of the 882s source video, re-encoded libx264 crf24",
+        "clipWidth": 1280,
+        "clipHeight": 720,
+        "clipFps": 29.97,
+        "clipDurationSeconds": 30.0,
+        "bytes": 3495145
+      },
+      "sha256": "d2f845d62fdc4594e7f68b6e2d5736031b8db5ac859a1b7309272d359fce43f1",
+      "contentVerification": "Frame extracted and visually inspected 2026-08-29: indoor glass-walled squash court, two players with squash rackets mid-rally; no pickleball."
+    },
+    {
+      "id": "yt-EckAW5V1wv0-racquetball",
+      "role": "ood_negative",
+      "category": "other_racket_sport_racquetball",
+      "path": "datasets/ood/negatives/yt-EckAW5V1wv0-racquetball.mp4",
+      "sourceUrl": "https://www.youtube.com/watch?v=EckAW5V1wv0",
+      "title": "Racquetball Singles - Barry vs Cajetan (Match 1 of 4)",
+      "uploader": "New Brunswick Racquetball Association",
+      "uploaderChannelId": "UCxTSnZPs4CwFciobqO9Sc3Q",
+      "uploadDate": "2017-04-13",
+      "license": "CC BY 3.0 (YouTube page license field: \"Creative Commons Attribution license (reuse allowed)\")",
+      "licenseVerification": "License field read directly from the YouTube watch page metadata on 2026-08-29 via yt-dlp page parse; YouTube's 'Creative Commons Attribution license (reuse allowed)' setting maps to CC BY 3.0 (https://support.google.com/youtube/answer/2797468). CC BY 3.0 permits commercial use with attribution.",
+      "provenanceAssessment": "Club match footage recorded and uploaded by the provincial racquetball association channel; recording copyright belongs to the videographer. Uploader authority is assessed from channel context (an association channel of self-recorded club matches), not independently confirmed.",
+      "rights": {
+        "store": "yes_with_attribution",
+        "analyze": "yes_with_attribution",
+        "annotate": "yes_with_attribution",
+        "train": "yes_with_attribution",
+        "redistributeDerivatives": "yes_with_attribution",
+        "commercial": "yes_with_attribution",
+        "basis": "CC BY 3.0 declared by the uploader on YouTube permits any use including commercial with attribution.",
+        "reviewedBy": "wave-e:e11-ood-expansion (page-verified license; channel-context provenance assessment)",
+        "reviewedAtIso": "2026-08-29"
+      },
+      "restrictions": [
+        "attribution to the uploader required on redistribution",
+        "uploader authority assessed from channel context, not independently confirmed"
+      ],
+      "media": {
+        "type": "video/mp4 (H.264, no audio)",
+        "segment": "120s-150s of the 497s source video, re-encoded libx264 crf24",
+        "clipWidth": 1920,
+        "clipHeight": 1080,
+        "clipFps": 59.94,
+        "clipDurationSeconds": 30.01,
+        "bytes": 6651339
+      },
+      "sha256": "431f6deb2e800d7a7787ad18a496187b2a1fae0dacf651342bce89c422635df7",
+      "contentVerification": "Frame extracted and visually inspected 2026-08-29: indoor racquetball court, two players with racquetball rackets mid-rally, ball visible; no pickleball."
+    }
+  ],
+  "derivedItems": {
+    "policy": "role=ood_negative_derived. SYNTHETIC or derived OOD probes added by wave-e/e11-ood-expansion: still images, still-image-as-video, program-generated graphics, corrupt/truncated media, and extreme aspect ratios. Derived from the CC BY 3.0 item yt--wE27MoX2AM-tennis (whose license permits redistributed derivatives with attribution) or generated locally with ffmpeg lavfi / seeded PRNG byte edits (no external rights). These exist ONLY to measure the pre-analysis OOD gate; excluded from corpus, splits, training, and every positive-label pipeline. Kept in a separate section because items[] is real, non-synthetic footage by policy.",
+    "addedAt": "2026-08-29",
+    "workstream": "wave-e/e11-ood-expansion",
+    "generation": "Deterministic recipes recorded per item; ffmpeg 4.4.2, libx264; PRNG edits use recorded python random seeds.",
+    "totalBytes": 3169242,
+    "items": [
+      {
+        "id": "derived-still-image",
+        "role": "ood_negative_derived",
+        "category": "still_image_file",
+        "path": "datasets/ood/derived/derived-still-image.jpg",
+        "derivation": "single frame at t=3s of datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4 exported as JPEG (ffmpeg -ss 3 -frames:v 1 -q:v 2)",
+        "media": {
+          "bytes": 339688
+        },
+        "sha256": "b0987abb1469db936dc0e25d154d208adeb92695d6e1ec8b423f9b2905c1466e",
+        "contentVerification": "A single photographic still (tennis court scene); no motion, no pickleball."
+      },
+      {
+        "id": "derived-still-image-video",
+        "role": "ood_negative_derived",
+        "category": "still_image_as_video",
+        "path": "datasets/ood/derived/derived-still-image-video.mp4",
+        "derivation": "frame at t=3s of datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4 looped 8s at 30fps (ffmpeg -loop 1 -t 8 -r 30 libx264)",
+        "media": {
+          "bytes": 289602
+        },
+        "sha256": "526a10b57409adcbd58913276bc370bf12e438dfb90522b4e2e62d23e9fc44f6",
+        "contentVerification": "8s video whose every frame is the same still; no motion, no pickleball."
+      },
+      {
+        "id": "derived-graphics-testsrc",
+        "role": "ood_negative_derived",
+        "category": "synthetic_graphics_test_pattern",
+        "path": "datasets/ood/derived/derived-graphics-testsrc.mp4",
+        "derivation": "ffmpeg lavfi testsrc=size=640x360:rate=30, 8s, libx264",
+        "media": {
+          "bytes": 51461
+        },
+        "sha256": "109302c86201d871d2e5b700884b04f69f2401bb8aee2cba23fadeb88fc32876",
+        "contentVerification": "Program-generated SMPTE-style moving test pattern; pure graphics, no scene, no pickleball."
+      },
+      {
+        "id": "derived-graphics-life",
+        "role": "ood_negative_derived",
+        "category": "synthetic_graphics_animated",
+        "path": "datasets/ood/derived/derived-graphics-life.mp4",
+        "derivation": "ffmpeg lavfi life=size=320x180:rate=30:mold=10, 8s, libx264 crf28",
+        "media": {
+          "bytes": 1520354
+        },
+        "sha256": "88de9e9c3d9c3fbf881cf4e6bc9c1f804c8dfacb199fd5ebbb4f4422fca9c745",
+        "contentVerification": "Program-generated cellular-automaton animation; high motion, pure graphics, no scene, no pickleball."
+      },
+      {
+        "id": "derived-extreme-wide",
+        "role": "ood_negative_derived",
+        "category": "extreme_aspect_ratio",
+        "path": "datasets/ood/derived/derived-extreme-wide.mp4",
+        "derivation": "first 8s of datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4 rescaled to 1280x72 (aspect 17.8:1), libx264 crf28",
+        "media": {
+          "bytes": 117001
+        },
+        "sha256": "595921023865fd04ff2f9019eab95f60fad3e3fe151929f51584be96a62b5184",
+        "contentVerification": "Real footage distorted to a 17.8:1 banner aspect no capture device produces; no analyzable scene."
+      },
+      {
+        "id": "derived-extreme-tall",
+        "role": "ood_negative_derived",
+        "category": "extreme_aspect_ratio",
+        "path": "datasets/ood/derived/derived-extreme-tall.mp4",
+        "derivation": "first 8s of datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4 rescaled to 72x1280 (aspect 1:17.8), libx264 crf28",
+        "media": {
+          "bytes": 82337
+        },
+        "sha256": "ece2579b626b8616d34436ca8ae94875e68b1db92eaa7fcaf24349ecb5c9a773",
+        "contentVerification": "Real footage distorted to a 1:17.8 aspect no capture device produces; no analyzable scene."
+      },
+      {
+        "id": "derived-truncated",
+        "role": "ood_negative_derived",
+        "category": "truncated_media",
+        "path": "datasets/ood/derived/derived-truncated.mp4",
+        "derivation": "first 8s of datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4 re-encoded 640x360 crf28 faststart, then byte-truncated to the first 35% of the file (python)",
+        "media": {
+          "bytes": 147466
+        },
+        "sha256": "92c6fe61f5675728fb331ff0e265d7b4009d1b8ac2d56df3b7e41677d87941c4",
+        "contentVerification": "Faststart mp4 cut mid-mdat: container claims 8s/240 frames, only ~67 decode; decoder reports partial-file errors."
+      },
+      {
+        "id": "derived-corrupt-bytes",
+        "role": "ood_negative_derived",
+        "category": "corrupt_media",
+        "path": "datasets/ood/derived/derived-corrupt-bytes.mp4",
+        "derivation": "first 8s of datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4 re-encoded 640x360 crf28 faststart, then 3000 random bytes at offsets >=2000 overwritten (python random seed 42)",
+        "media": {
+          "bytes": 421333
+        },
+        "sha256": "86017474a2a961cf5fadf78ebfe9ea92431ffdfc3f10aff55d7b504877b3642c",
+        "contentVerification": "Header/moov region corrupted; ffprobe/ffmpeg cannot decode any frame on this build."
+      },
+      {
+        "id": "derived-garbage",
+        "role": "ood_negative_derived",
+        "category": "undecodable_random_bytes",
+        "path": "datasets/ood/derived/derived-garbage.mp4",
+        "derivation": "200000 uniform random bytes (python random seed 7) written to a .mp4 filename; not a media container",
+        "media": {
+          "bytes": 200000
+        },
+        "sha256": "929d584a86de164467f269a42316fb655b3cdc0ca884ed13370aff449661408b",
+        "contentVerification": "Not decodable media at all; ffprobe and ffmpeg both fail."
+      }
+    ]
+  },
+  "quarantinedUnknownRights": [
+    {
+      "id": "yt-dTCcy2kDyvM",
+      "sourceUrl": "https://www.youtube.com/watch?v=dTCcy2kDyvM",
+      "title": "Djokovic vs Federer: An UNDERRATED Tennis Rally",
+      "uploader": "Tennis Addict",
+      "declaredLicense": "CC BY 3.0 per YouTube page license field",
+      "status": "quarantined_not_committed",
+      "reason": "Content appears to be professional broadcast footage; the uploading channel is a highlights channel with no plausible claim to the underlying recording rights, so the CC declaration is not trusted."
+    },
+    {
+      "id": "yt-90sqbuAo7Uw",
+      "sourceUrl": "https://www.youtube.com/watch?v=90sqbuAo7Uw",
+      "title": "Super Badminton match",
+      "uploader": "SR  Creative Lite",
+      "declaredLicense": "CC BY 3.0 per YouTube page license field",
+      "status": "quarantined_not_committed",
+      "reason": "Downloaded frame shows professional BWF World Tour broadcast footage carrying a third-party fan watermark ('pearlythinaah.fans'); the uploader is clearly not the rights holder despite the CC declaration. Deleted, replaced by self-recorded badminton (yt-Iw55LinAF0U)."
+    },
+    {
+      "id": "yt-7JidyzpDH6U",
+      "sourceUrl": "https://www.youtube.com/watch?v=7JidyzpDH6U",
+      "title": "Stadium Crowd Cheering Sound Effect",
+      "uploader": "Played N Faved - Sound Effects & Stock Footage",
+      "declaredLicense": "CC BY 3.0 per YouTube page license field",
+      "status": "quarantined_not_committed",
+      "reason": "Downloaded frames show the video is a single static thumbnail graphic built from stock/AI imagery of unknown origin; the underlying image rights cannot be established from the channel. Deleted, replaced by Commons CC BY crowd footage (commons-ronpaul-crowd)."
+    }
+  ],
+  "searchLog": [
+    {
+      "source": "YouTube Creative Commons filter (sp=EgIwAQ==)",
+      "queries": [
+        "tennis rally court",
+        "badminton match",
+        "badminton practice gym",
+        "table tennis match",
+        "empty pickleball court",
+        "crowd cheering stadium",
+        "stadium crowd fans cheering game"
+      ],
+      "result": "6 accepted after per-video license-field verification and visual content inspection; 3 CC-declared candidates rejected to quarantine because the uploader is plainly not the rights holder (broadcast reposts) or the content is a stock-image still of unknown origin. 'empty pickleball court' returned no CC empty-pickleball-court footage; the accepted empty-court clip is a tennis court (recorded honestly as such)."
+    },
+    {
+      "source": "Wikimedia Commons search API (video namespace)",
+      "queries": [
+        "crowd cheering filetype:video"
+      ],
+      "result": "1 accepted (CC BY 3.0 rally crowd); other hits were CC BY-SA (share-alike, avoided for derivative redistribution simplicity) or historical newsreels better represented by the Prelinger items."
+    },
+    {
+      "source": "Internet Archive Prelinger collection (advancedsearch + metadata API)",
+      "queries": [
+        "collection:prelinger AND mediatype:movies AND licenseurl:*publicdomain*",
+        "title/description: interview"
+      ],
+      "result": "2 accepted public-domain items: ProfileJ26 (TV interview program, talking head) and HanfordS1957 (1957 TV program opening title card/graphics)."
+    },
+    {
+      "source": "DVIDS (dvidshub.net API)",
+      "queries": [
+        "interview"
+      ],
+      "result": "API now requires an API key ('Bad Request - No API key was provided'); not usable in this environment. Public-domain interview/title-card needs were covered by Prelinger instead."
+    }
+  ]
+}
