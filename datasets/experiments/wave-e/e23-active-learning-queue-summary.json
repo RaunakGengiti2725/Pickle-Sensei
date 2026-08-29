@@ -1,0 +1,69 @@
+{
+  "workstream": "wave-e/e23-active-learning-queue",
+  "branch": "devin/wave-e/e23-active-learning-queue",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "baseCommit": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+  "implementationCommit": "8a64ddcea98caaef7ff251296e645080510df73f",
+  "createdAtIso": "2026-08-29T10:00:00.000Z",
+  "status": "GREEN",
+  "mission": "Generate the next annotation queue via active learning: rank clips/frames by uncertainty, audit disagreement, hard slices, and OOD-boundary proximity, as a concrete item-level queue others can annotate from.",
+  "whatWasBuilt": [
+    "packages/swing-lab/src/labelQueueV3.ts — deterministic ITEM-level active-learning queue generator (pnpm lab:label-queue-v3). Complements D2-10's bucket-level label-queue-v2: v2 directs effort at bundle×modality buckets; v3 emits exact frames/windows/scenes/clips with per-item selection rationale and annotation instructions. score = Σ signal weights; items deduped by (target, window, modality-set); no RNG, no wall-clock in ranking; stable ties by id ascending.",
+    "packages/swing-lab/test/labelQueueV3.test.ts — 8 vitest tests on synthetic fixtures + the committed artifact: disagreement-slot selection rules, held-out exclusion even when audit files exist on disk, latest-cascade-run selection with dev-only rows, dev/val split filtering for miner events and failure-mine scenes (locked_test/shadow never queued), gate-passing-only OOD selection, merge semantics (frames never merge across roles; same-window signals sum), and committed-artifact invariants (byte-identical determinism, held-out absence, provenance completeness, score=Σweights, per-session cap, contiguous ranks).",
+    "datasets/experiments/wave-e/e23-label-queue-v3.json — the generated queue: 40 items from 69 candidates."
+  ],
+  "signalFamilies": {
+    "disagreement": "D2-04 blind ownership-audit sidecars (datasets/paddle-bench/bundles/*/annotation/devin-visual-v4-waveD2-ownership-audit.json): every slot with class disagreement, coordinate delta >0.05, or an adjudication record → frame item (10 items in queue). NOTE: the tasking referenced 'D2-04/D2-05 audit disagreements'; no D2-05 artifact, branch, or summary exists anywhere in the repo or on origin (verified: grep over the tree + git branch -r). D2-04 is the only committed audit-disagreement source; W14's 5 filed disagreements were already CLOSED by C06 adjudication (datasets/experiments/wave-c/C06-adjudications.json), so they are correctly NOT re-queued.",
+    "uncertainty": "(a) latest committed integrated-pipeline run datasets/cascade/cascade-1787971753680.json — failed/abstained stages on development cases only (4 signals; rally1 EVENT+PHASE merge to one events item at score 1.8, plus contact and stroke); (b) miner-declared uncertainty over the committed Tier-C corpus datasets/corpus/events/*.jsonl (video-mining-4), dev/val only (12 items, uncertainty 0.9-1.0, reasons quoted per item).",
+    "hardSlices": "measured windows quoted from W12 (rally2 edge-on carry 2903-3103 recovered 1/4; overhead blur 2502-2703 4/7 @IoU.30) and D2-06 hard-slice coverage (net crossing 51718-51852, paddle-occlusion contact 53887±100, multi-ball abstention 2402±100) → 5 window items; plus W13/C failure-queue TRACK_FRAGMENTATION/CROWDED_SCENE scenes (6 scene items).",
+    "oodBoundary": "wave-d d08-ood-measurements.json: the 4 committed OOD negatives with gateOk=true and poseFreeDetectable=false (2 table tennis, 1 crowd, 1 interview) are the exact clips on the pose-free pre-analysis gate's decision boundary → clip items to be recorded as verified negatives per datasets/ood/registry.json policy (never stroke/ownership-labeled)."
+  },
+  "pipelineAttempt": "pnpm lab:cascade was executed on this Linux box and honestly reports 0/0 gold events (canonical pose runs are Apple-Vision/macOS-only and absent here; unchanged Wave C measurement boundary). No cascade numbers were fabricated; the generated 0/0 run file was not committed. Pipeline-uncertainty signals therefore come from the latest COMMITTED cascade run and the committed miner outputs.",
+  "measured": {
+    "queueItems": 40,
+    "candidateItems": 69,
+    "byKind": { "window": 20, "frame": 10, "scene": 6, "clip": 4 },
+    "bySignal": {
+      "miner_uncertainty": 12,
+      "ownership_audit_disagreement": 10,
+      "failure_mine": 6,
+      "hard_slice": 5,
+      "cascade_stage_failure": 4,
+      "ood_boundary": 4
+    },
+    "bySession": {
+      "dvids-marne-2024": 10,
+      "dvids-warriorgames-2026": 10,
+      "afn-sasebo-2025-06": 9,
+      "afn-sigonella-2025": 7,
+      "ood/other_racket_sport_table_tennis": 2,
+      "ood/crowd_non_sport": 1,
+      "ood/interview_talking_head": 1
+    },
+    "perSessionCap": 10,
+    "topItem": "cascade/afn-sasebo-rally1/event score 1.8 (EVENT selected 0%-overlap window + PHASE abstained — two failed pipeline stages needing event-bounds labels)",
+    "gates": {
+      "typecheck": "pnpm typecheck clean",
+      "tests": "pnpm --filter @pickle/swing-lab test green incl. labelQueueV3.test.ts 8/8",
+      "lint": "labelQueueV3.ts added to the existing swing-lab CLI no-console allowlist in eslint.config.mjs; zero new issues",
+      "format": "pnpm format:check clean on touched files"
+    }
+  },
+  "heldOutSafety": "wm-dink-01 and afn-vic-rally1 excluded from candidate generation (bundle exclusion + development-split-only cascade rows + dev/val split filter); buildQueueV3 additionally throws if a held-out bundle ever reaches the candidate list; the committed-artifact test asserts neither id appears anywhere in the queue.",
+  "honestNegatives": [
+    "D2-05 does not exist in the repository or on any origin branch; disagreement signals are D2-04-only (disclosed above, not silently substituted).",
+    "Signal weights are ordinal constants each quoting the committed measurement that justifies it, not learned coefficients — no runnable pose pipeline exists on Linux to calibrate them.",
+    "Miner uncertainty is the miner's own declared score (video-mining-4), not a model-ensemble disagreement; it is the only committed per-item uncertainty over the unlabeled corpus.",
+    "The integrated pose cascade cannot run on Linux (0/0 measured, disclosed); cascade uncertainty is read from the latest committed macOS run (2026-08-28).",
+    "No new labels were created; the queue directs future annotation effort only."
+  ],
+  "filesChanged": [
+    "packages/swing-lab/src/labelQueueV3.ts (new)",
+    "packages/swing-lab/test/labelQueueV3.test.ts (new)",
+    "packages/swing-lab/package.json (label:queue-v3 script)",
+    "package.json (lab:label-queue-v3 script)",
+    "eslint.config.mjs (no-console allowlist entry)",
+    "datasets/experiments/wave-e/e23-label-queue-v3.json (generated queue artifact)",
+    "datasets/experiments/wave-e/e23-active-learning-queue-summary.json (this file)"
+  ]
+}

@@ -48,6 +48,7 @@
     "lab:regen": "pnpm --filter @pickle/swing-lab regen",
     "lab:risk-curves": "pnpm --filter @pickle/swing-lab risk:curves",
     "lab:label-queue": "pnpm --filter @pickle/swing-lab label:queue",
+    "lab:label-queue-v3": "pnpm --filter @pickle/swing-lab label:queue-v3",
     "lab:bundle": "pnpm --filter @pickle/swing-lab bundle:experiments"
   },
   "devDependencies": {
