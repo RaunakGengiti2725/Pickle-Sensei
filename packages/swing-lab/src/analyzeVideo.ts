@@ -83,6 +83,15 @@ import {
   type RawPaddleDetectionFile,
   type TrackedPaddleObservation,
 } from "./paddleTracker.js";
+import {
+  admitCropDetections,
+  bridgeTrackedEstimates,
+  mergeCropDetectionsIntoFile,
+  PADDLE_CROP_RECOVERY_VERSION,
+  paddleLostFrameTimes,
+  planWristCropRects,
+  type CropDetectionFrame,
+} from "./paddleCropRecovery.js";
 import { renderReport, type LabRunReport, type PlayerStageReport } from "./report.js";
 
 /**
@@ -120,6 +129,9 @@ interface CliArgs {
   fullScan: boolean;
   /** Enable CANDIDATE tracklet reconciliation (see runPaddleStage). */
   mergeTracklets: boolean;
+  /** Enable wrist-conditioned crop re-detection in the paddle-lost
+   * neighborhood (crop-recovery-v1, W12 winner). OFF by default. */
+  cropRecovery: boolean;
   /** Product-assisted target selection: one tap during setup. */
   targetSeed: TargetSeed | null;
 }
@@ -156,6 +168,7 @@ function parseArgs(argv: string[]): CliArgs {
     player: playerFlag && playerFlag !== "auto" ? Number(playerFlag) : "auto",
     fullScan: argv.includes("--full-scan"),
     mergeTracklets: argv.includes("--merge-tracklets"),
+    cropRecovery: argv.includes("--crop-recovery"),
     targetSeed: (() => {
       const tap = flag("--target-tap");
       if (tap) {
@@ -910,12 +923,77 @@ function runPaddleStage(input: {
       candidates = merged;
       input.timings["paddleMergeLinks"] = links;
     }
-    const tracking = selectPrimaryPaddleTrack(
+    const targetWrists = wristSeries(input.sequence);
+    let tracking = selectPrimaryPaddleTrack(
       candidates,
-      wristSeries(input.sequence),
+      targetWrists,
       input.window,
       input.otherWrists,
     );
+    let detectorLabel = file.detector.version;
+
+    // crop-recovery-v1 (W12 winner, HANDOFF_V3 §6 item 3): wrist-conditioned
+    // {256,704}px crop re-detection bounded to the paddle-lost neighborhood.
+    // Crop detections are provenance-tagged and only ever EXTEND tracks; the
+    // admission gate (wrist proximity + FP-family suppression) carries
+    // precision, not the score floor. OFF unless --crop-recovery.
+    if (input.args.cropRecovery) {
+      const frameIntervalMs = 1000 / file.video.fps;
+      const lost = paddleLostFrameTimes(
+        file.frames.map((frame) => frame.tMs),
+        tracking.status === "tracked" ? [tracking.lab] : [],
+        input.window,
+        frameIntervalMs,
+      );
+      const plan = planWristCropRects(lost, targetWrists, file.video);
+      if (plan.length > 0) {
+        console.log(
+          `${PADDLE_CROP_RECOVERY_VERSION}: re-detecting ${plan.length} paddle-lost frames on wrist crops…`,
+        );
+        const planPath = join(input.args.outDir, "paddle-crop-plan.json");
+        writeFileSync(planPath, JSON.stringify({ video: input.args.video, crops: plan }));
+        const cropDetsPath = join(input.args.outDir, "paddle-crop-dets.json");
+        execFileSync(
+          python,
+          [script, "--video", input.args.video, "--crops", planPath, "--out", cropDetsPath],
+          { stdio: "inherit" },
+        );
+        const cropFile = JSON.parse(readFileSync(cropDetsPath, "utf8")) as {
+          frames: CropDetectionFrame[];
+        };
+        const admission = admitCropDetections(cropFile.frames, targetWrists, file.video);
+        input.timings["cropRecoveryAdmitted"] = admission.admitted.reduce(
+          (total, frame) => total + frame.detections.length,
+          0,
+        );
+        input.timings["cropRecoveryRejectedFpFamily"] = admission.rejectedFpFamily;
+        if (admission.admitted.length > 0) {
+          const augmented = mergeCropDetectionsIntoFile(file, admission.admitted);
+          let recovered = buildPaddleTracks(augmented, input.window);
+          if (input.args.mergeTracklets) {
+            recovered = mergePaddleTracklets(recovered, input.window).merged;
+          }
+          tracking = selectPrimaryPaddleTrack(
+            recovered,
+            targetWrists,
+            input.window,
+            input.otherWrists,
+          );
+          if (tracking.status === "tracked") {
+            // Lab-side bridge only: TRACKED_ESTIMATE observations stay out of
+            // the domain PaddleTrack — estimates are never detections.
+            tracking = {
+              ...tracking,
+              lab: {
+                ...tracking.lab,
+                observations: bridgeTrackedEstimates(tracking.lab.observations, frameIntervalMs),
+              },
+            };
+          }
+          detectorLabel = `${file.detector.version}+${PADDLE_CROP_RECOVERY_VERSION}`;
+        }
+      }
+    }
     input.timings["paddleTrackMs"] = Date.now() - trackStarted;
 
     if (tracking.status === "tracked") {
@@ -929,7 +1007,7 @@ function runPaddleStage(input: {
           meanDetectorScore: tracking.lab.meanScore,
           meanWristDistance: tracking.lab.meanWristDistance,
           candidateTracks: tracking.allTracks.length,
-          detector: file.detector.version,
+          detector: detectorLabel,
           inferenceMsPerFrame: file.timing.inferenceMsPerFrame,
           confidenceModel: PADDLE_CONFIDENCE_MODEL,
           association: summarizeAssociation(tracking.association),
@@ -943,7 +1021,7 @@ function runPaddleStage(input: {
         status: "untracked",
         reason: tracking.reason,
         candidateTracks: tracking.allTracks.length,
-        detector: file.detector.version,
+        detector: detectorLabel,
         inferenceMsPerFrame: file.timing.inferenceMsPerFrame,
         association: tracking.association ? summarizeAssociation(tracking.association) : null,
       },

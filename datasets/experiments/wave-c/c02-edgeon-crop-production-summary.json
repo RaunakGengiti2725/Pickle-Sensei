@@ -1,0 +1,46 @@
+{
+  "workstream": "C02",
+  "title": "Productionize W12 edge-on paddle recovery (wrist-conditioned crop re-detect)",
+  "branch": "devin/wave-c/c02-edgeon-crop-production",
+  "date": "2026-08-29",
+  "flag": {
+    "name": "--crop-recovery (swing-lab analyzeVideo CLI)",
+    "version": "crop-recovery-v1",
+    "defaultEnabled": false
+  },
+  "built": {
+    "tsTracker": [
+      "packages/swing-lab/src/paddleCropRecovery.ts: PADDLE_CROP_RECOVERY_VERSION='crop-recovery-v1'; CROP_RECOVERY_GATES = { cropScalesPx: [256, 704], scoreFloor: 0.08 (existing floor, unchanged), wristGateRadius: TRACKER_GATES.handAffinityRadius (0.13), fpMaxAspectRatio: 3.5, fpBelowWristMargin: 0.06, maxBridgeFrames: 2 }",
+      "Crop planning is wrist-conditioned on BOTH wrists at both scales (never trusts handedness; Apple Vision swaps L/R on rear views) and only for paddle-lost frames (paddleLostFrameTimes).",
+      "Detection-source provenance ('full_frame' | 'crop' | 'tracked_estimate') carried through buildPaddleTracks -> TrackedPaddleObservation -> selection.",
+      "Gating: crop-sourced candidates may EXTEND an existing track but NEVER seed a new track (appendObservation path skips unmatched crop candidates), so they cannot enter selection as raw detections.",
+      "FP-family suppression (measured W12 hard negatives: target shorts/leg + court line, ~0.53 conf): isFpFamily rejects extreme-aspect court-line slivers (aspect > 3.5) and boxes whose top edge sits >= 0.06 below every wrist.",
+      "Temporal propagation: bridgeTrackedEstimates inserts linearly interpolated observations tagged source='tracked_estimate' with detectorScore=0 for holes of <= 2 frames ONLY; 3+-frame holes are left as holes. Estimates are never presented as detections.",
+      "analyzeVideo.ts: --crop-recovery flag (off by default) plans crops, invokes detect_paddle.py --crops, admits/gates crop detections, rebuilds tracks, reruns selection, applies the bounded bridge, and labels the detector version as '<base>+crop-recovery-v1'."
+    ],
+    "pythonDetector": [
+      "tools/paddle-lab/detect_paddle.py --crops <plan.json>: per-frame crop rectangles, absolute-CFR frame decode from t=0 (not -ss seek, per W12 timestampDiscovery), boxes mapped back to full-frame pixels, every detection tagged source='crop' + cropRect, cross-rect NMS union at IoU 0.55, existing 0.08 floor."
+    ]
+  },
+  "evidence": {
+    "typecheck": "pnpm -r typecheck: all packages pass (including swing-lab).",
+    "tests": "packages/swing-lab pnpm test: 12 files, 162 passed | 4 skipped. New test/paddleCropRecovery.test.ts (15 tests) covers: crop candidates cannot seed tracks (even at high score), crop candidates extend existing full-frame tracks with source preserved, 0.08-floor admission/rejection, far-from-wrist rejection, court-line aspect FP rejection, shorts/leg below-wrist FP rejection, in-hand paddle acceptance, 1-frame and 2-frame TRACKED_ESTIMATE bridges accepted, 3+-frame holes rejected, measured observations untouched, both-wrist/both-scale crop planning, merge provenance/immutability.",
+    "cpuCropModeDemo": {
+      "clip": "datasets/paddle-bench/bundles/wm-volley-02/clip.mp4 (committed bundle; NOT a held-out case)",
+      "device": "cpu (Linux, torch 2.13.0+cpu, transformers 5.16.1, D-FINE medium COCO)",
+      "plan": "3 frames (tMs 4600/5450/6250, chosen at annotated-visible paddle points), 2 rects each (256px + 704px squares) = 6 crops",
+      "result": "3 frames, 6 crops processed, 129.6 ms/crop inference, wall 0.93 s (model load 0.43 s). 102 proxy-label detections returned, all tagged source='crop' + cropRect; per-frame max scores 0.9248 / 0.3654 / 0.8734.",
+      "note": "Crop centers came from the committed human annotation's paddle points, used only as demo crop centers (pose/wrists unavailable on Linux). This demonstrates the --crops plumbing, not the live wrist-conditioned recall."
+    }
+  },
+  "honestNegatives": [
+    "The live wrist-conditioned path is UNMEASURED here: Apple Vision pose extraction is macOS-only, canonical runs/ dirs are absent, and pnpm lab:regen cannot run on this Linux box. No cascade/recall/precision numbers are claimed for the production path.",
+    "FP-family suppression thresholds (aspect 3.5, below-wrist margin 0.06) encode the measured W12 failure geometry but were validated only at unit level, not against live crop detections on the dev case.",
+    "bridgeTrackedEstimates is applied to the selected lab candidate's observation list; the domain PaddleTrack remains measured-only, so estimates never enter downstream metrics as detections.",
+    "The raw crop demo (floor 0.08, pre-gating) returns many boxes/frame (30/29/43) — this is expected and is exactly why tracker-side admission gating exists; raw crop output is NOT usable without the gates."
+  ],
+  "blocked": [
+    "End-to-end measurement of --crop-recovery on the dev case (afn-sasebo-rally2) requires macOS (Apple Vision pose) + canonical runs regeneration via pnpm lab:regen — must be done by the integrator on a macOS box.",
+    "Held-out cases (wm-dink-01, afn-vic-rally1) were not touched or iterated against."
+  ]
+}

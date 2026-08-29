@@ -40,6 +40,15 @@ Usage (one-shot, backward compatible):
       [--start-ms 0] [--end-ms 0=whole video] [--stride 1] [--floor 0.08] \
       [--roi x0,y0,x1,y1] [--legacy-decode] [--decode-size WxH]
 
+Crop mode (crop-recovery-v1, W12 winner): run inference on explicit crop
+rectangles instead of full frames. Detections are mapped back to full-frame
+pixels and tagged source="crop" + cropRect so the TS tracker can gate them
+(crop candidates only EXTEND tracks; they never start them):
+  .venv/bin/python detect_paddle.py --video clip.mp4 --crops crops.json \
+      --out crop-dets.json [--floor 0.08]
+  crops.json: {"crops": [{"tMs": 2502.5, "rects": [{"x0":..,"y0":..,"x1":..,"y1":..}, ...]}]}
+  Per-frame cross-rect NMS (IoU 0.55) unions the multi-scale crops.
+
 Serve mode (persistent warm worker; model loads ONCE, then serves many
 requests — kills the ~9-13s/invocation python+torch import + model load):
   .venv/bin/python detect_paddle.py --serve [--no-warmup]
@@ -337,6 +346,157 @@ def run_window(
     return payload
 
 
+def box_iou(a: list[float], b: list[float]) -> float:
+    ix0, iy0 = max(a[0], b[0]), max(a[1], b[1])
+    ix1, iy1 = min(a[2], b[2]), min(a[3], b[3])
+    inter = max(0.0, ix1 - ix0) * max(0.0, iy1 - iy0)
+    area_a = (a[2] - a[0]) * (a[3] - a[1])
+    area_b = (b[2] - b[0]) * (b[3] - b[1])
+    union = area_a + area_b - inter
+    return inter / union if union > 0 else 0.0
+
+
+def nms_union(entries: list[dict], iou_threshold: float = 0.55) -> list[dict]:
+    """Cross-scale NMS union (W12): keep the highest-score box of each
+    overlapping cluster across crop rects."""
+    kept: list[dict] = []
+    for entry in sorted(entries, key=lambda item: -item["score"]):
+        if all(box_iou(entry["box"], other["box"]) < iou_threshold for other in kept):
+            kept.append(entry)
+    return kept
+
+
+def decode_frames_at(video: str, frame_indices: list[int], width: int, height: int, fps: float):
+    """Decode exactly the requested source frames (absolute CFR indexing from
+    t=0 — deliberately NOT -ss seek, which is one frame early; W12
+    timestampDiscovery). Yields (frame_index, rgb)."""
+    wanted = sorted(set(frame_indices))
+    select = "+".join(f"eq(n\\,{idx})" for idx in wanted)
+    args = [
+        "ffmpeg", "-v", "error", "-i", video,
+        # -vsync vfr rather than -fps_mode: same semantics, also on ffmpeg < 5.1
+        "-vf", f"select={select}", "-vsync", "vfr",
+        "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
+    ]
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE)
+    frame_bytes = width * height * 3
+    assert proc.stdout is not None
+    position = 0
+    while position < len(wanted):
+        chunk = proc.stdout.read(frame_bytes)
+        if len(chunk) < frame_bytes:
+            break
+        yield wanted[position], np.frombuffer(chunk, dtype=np.uint8).reshape(height, width, 3)
+        position += 1
+    proc.wait()
+
+
+def run_crops(
+    processor,
+    model,
+    *,
+    video: str,
+    crops_path: str,
+    out: str,
+    floor: float = 0.08,
+    model_load_sec: float = 0.0,
+) -> dict:
+    """Crop-mode inference (crop-recovery-v1): detect on explicit rectangles,
+    map boxes back to full-frame pixels, tag every detection source="crop"
+    with its cropRect, and NMS-union across the rects of each frame."""
+    width, height, fps, duration_ms = ffprobe_meta(video)
+    plan = json.loads(Path(crops_path).read_text())["crops"]
+    by_frame: dict[int, dict] = {}
+    for entry in plan:
+        index = int(round(float(entry["tMs"]) * fps / 1000.0))
+        by_frame.setdefault(index, {"tMs": float(entry["tMs"]), "rects": []})
+        for rect in entry["rects"]:
+            if isinstance(rect, dict):
+                rect = [rect["x0"], rect["y0"], rect["x1"], rect["y1"]]
+            by_frame[index]["rects"].append([float(v) for v in rect])
+
+    frames_out = []
+    infer_sec_total = 0.0
+    crops_processed = 0
+    wall_started = time.perf_counter()
+    for frame_index, rgb in decode_frames_at(video, list(by_frame), width, height, fps):
+        spec = by_frame[frame_index]
+        detections: list[dict] = []
+        extras: list[dict] = []
+        for rect in spec["rects"]:
+            x0 = max(0, min(width - 32, int(rect[0])))
+            y0 = max(0, min(height - 32, int(rect[1])))
+            x1 = min(width, max(x0 + 32, int(rect[2])))
+            y1 = min(height, max(y0 + 32, int(rect[3])))
+            crop = rgb[y0:y1, x0:x1]
+            image = Image.fromarray(crop)
+            infer_started = time.perf_counter()
+            inputs = processor(images=image, return_tensors="pt").to(DEVICE)
+            with torch.no_grad():
+                outputs = model(**inputs)
+            result = processor.post_process_object_detection(
+                outputs, target_sizes=[(y1 - y0, x1 - x0)], threshold=floor
+            )[0]
+            infer_sec_total += time.perf_counter() - infer_started
+            crops_processed += 1
+            boxes_np = result["boxes"].detach().cpu().numpy()
+            scores_np = result["scores"].detach().cpu().numpy()
+            labels_np = result["labels"].detach().cpu().numpy()
+            for i in range(boxes_np.shape[0]):
+                name = model.config.id2label[int(labels_np[i])]
+                if name in PADDLE_PROXY_LABELS:
+                    bucket = detections
+                elif name in EXTRA_LABELS:
+                    bucket = extras
+                else:
+                    continue
+                bx = boxes_np[i].tolist()
+                bucket.append({
+                    "box": [round(bx[0] + x0, 1), round(bx[1] + y0, 1),
+                            round(bx[2] + x0, 1), round(bx[3] + y0, 1)],
+                    "score": round(float(scores_np[i]), 4),
+                    "label": name,
+                    "source": "crop",
+                    "cropRect": [x0, y0, x1, y1],
+                })
+        frames_out.append({
+            "tMs": round(spec["tMs"], 2),
+            "detections": nms_union(detections),
+            "extras": nms_union(extras),
+        })
+    frames_out.sort(key=lambda frame: frame["tMs"])
+
+    wall_sec = time.perf_counter() - wall_started
+    payload = {
+        "schemaVersion": 1,
+        "mode": "crops",
+        "cropRecoveryVersion": "crop-recovery-v1",
+        "detector": {
+            "modelId": MODEL_ID,
+            "version": DETECTOR_VERSION,
+            "license": "Apache-2.0 (code and weights)",
+            "device": DEVICE,
+            "proxyLabels": sorted(PADDLE_PROXY_LABELS),
+            "proxyNote": "COCO has no pickleball paddle class; these proxy classes are what the detector can actually claim.",
+            "scoreFloor": floor,
+        },
+        "video": {"path": video, "width": width, "height": height, "fps": fps,
+                  "durationMs": duration_ms},
+        "timestampModel": "constant_frame_rate_absolute_from_t0",
+        "timing": {
+            "modelLoadSec": round(model_load_sec, 3),
+            "framesProcessed": len(frames_out),
+            "cropsProcessed": crops_processed,
+            "inferenceSecTotal": round(infer_sec_total, 3),
+            "inferenceMsPerCrop": round(1000 * infer_sec_total / max(1, crops_processed), 1),
+            "wallSecTotal": round(wall_sec, 3),
+        },
+        "frames": frames_out,
+    }
+    Path(out).write_text(json.dumps(payload))
+    return payload
+
+
 def serve(warmup: bool) -> None:
     """Persistent warm worker: JSONL requests on stdin, JSONL responses on
     stdout (protocol in module docstring). stdout is protocol-only."""
@@ -444,6 +604,11 @@ def main() -> None:
     )
     parser.add_argument("--no-warmup", action="store_true",
                         help="serve mode: skip the startup dummy inference")
+    parser.add_argument(
+        "--crops", default=None,
+        help="crop-recovery-v1: JSON file of per-frame crop rectangles; "
+        "detections come back full-frame-pixel, tagged source=crop + cropRect.",
+    )
     args = parser.parse_args()
 
     if args.serve:
@@ -452,6 +617,26 @@ def main() -> None:
 
     if not args.video or not args.out:
         parser.error("--video and --out are required (unless --serve)")
+
+    if args.crops:
+        processor, model, load_sec = load_model()
+        payload = run_crops(
+            processor,
+            model,
+            video=args.video,
+            crops_path=args.crops,
+            out=args.out,
+            floor=args.floor,
+            model_load_sec=load_sec,
+        )
+        print(
+            f"detect_paddle --crops: {payload['timing']['framesProcessed']} frames, "
+            f"{payload['timing']['cropsProcessed']} crops, "
+            f"{payload['timing']['inferenceMsPerCrop']}ms/crop inference ({DEVICE}), "
+            f"-> {args.out}"
+        )
+        return
+
     roi = parse_roi(args.roi)
     decode_size = parse_decode_size(args.decode_size)
     if args.legacy_decode and decode_size is not None:
