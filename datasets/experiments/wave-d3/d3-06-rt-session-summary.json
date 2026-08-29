@@ -1,0 +1,80 @@
+{
+  "workstream": "D3-06",
+  "branch": "devin/wave-d3/d3-06-rt-session",
+  "subsystem": "SESSION engine (packages/analysis-pipeline/src/sessionEngine.ts + apps/mobile/src/flow/session.ts, sessionNative.ts)",
+  "method": "Synthetic adversarial probes (clearly synthetic: speedBumps series in vitest; recorded afn-sasebo-rally1 replay fixture with state-machine provider/clip-source doubles in jest). No canonical Mac/iPhone runs exist on Linux; no cascade numbers claimed. Held-out cases untouched.",
+  "breaks": [
+    {
+      "id": "B1",
+      "title": "Terminal event states could be rewritten by duplicate/late outcome signals",
+      "status": "FIXED",
+      "detail": "SessionEventEngine.markEvent blindly assigned state/outcome: a second signal could flip 'ready' back to 'processing' or to 'abstained' and clear a real AnalysisRecord. Fixed: 'ready'/'abstained' are terminal and a second outcome throws; added read-only eventState() so callers can check without risking a throw.",
+      "regression_tests": [
+        "packages/analysis-pipeline/test/sessionEngine.test.ts — 'terminal states are append-only: a second outcome signal throws, state survives'"
+      ]
+    },
+    {
+      "id": "B2",
+      "title": "'ready' accepted with no AnalysisRecord — an unanalyzed event could count as analyzed",
+      "status": "FIXED",
+      "detail": "markEvent(id,'ready') with no/null analysis succeeded, so LiveSummary's readyCount (analyzed) could include events with no analysis. Fixed: 'ready' without an AnalysisRecord throws; state stays 'processing'.",
+      "regression_tests": [
+        "packages/analysis-pipeline/test/sessionEngine.test.ts — \"'ready' without an AnalysisRecord is rejected\""
+      ]
+    },
+    {
+      "id": "B3",
+      "title": "Completed-session registry frozen at end(): E1 analysis still running at session end never surfaced",
+      "status": "FIXED",
+      "detail": "Measured: at end() registry showed E1/E2/E3 'processing'; after providers settled the live flow showed 3x 'ready' but getCompletedSession still returned 3x 'processing' — LiveSummary would report 0 analyzed forever. Fixed: notify() re-registers a fresh snapshot whenever phase is 'ended'. Honesty preserved: at end the registry still shows 'processing' (never fake-ready).",
+      "regression_tests": [
+        "apps/mobile/__tests__/sessionFlow.test.ts — 'analysis outliving end(): the completed-session registry updates when late outcomes settle'"
+      ]
+    },
+    {
+      "id": "B4",
+      "title": "A throwing onUpdate subscriber rewrote a real 'ready' outcome into ANALYSIS_DISPATCH_FAILED",
+      "status": "FIXED",
+      "detail": "Measured: onUpdate throwing after markEvent('ready') rejected the dispatch promise; the catch handler then marked the SAME event 'abstained' with ANALYSIS_DISPATCH_FAILED — fabricating a failure for an analysis that succeeded (and, pre-B1 fix, silently overwriting the record). Fixed: notify() isolates and counts subscriber throws (snapshot.onUpdateFailures, surfaced, never silent); the dispatch catch also refuses to touch events already terminal.",
+      "regression_tests": [
+        "apps/mobile/__tests__/sessionFlow.test.ts — 'a throwing onUpdate subscriber cannot rewrite terminal states or break dispatch'"
+      ]
+    },
+    {
+      "id": "B5",
+      "title": "Engine state stuck at 'processing' when extraction/analysis could not start",
+      "status": "FIXED",
+      "detail": "When clip extraction returned 'unavailable' or the provider returned outcome 'pending', the mobile view showed pending via pendingReasons but the ENGINE event stayed 'processing' forever — dishonest engine state and a summary-source mismatch. Fixed: both paths now revert the engine event to 'pending' (markEvent allows the honest processing→pending revert only).",
+      "regression_tests": [
+        "packages/analysis-pipeline/test/sessionEngine.test.ts — 'honest revert: processing → pending allowed; pending → pending rejected'",
+        "apps/mobile/__tests__/sessionFlow.test.ts — 'clip extraction failing for E2 while E1/E3 succeed'"
+      ]
+    },
+    {
+      "id": "B6",
+      "title": "Native motion feed killed by any pushSample throw",
+      "status": "FIXED",
+      "detail": "connectNativeSessionMotionFeed treated every pushSample throw as 'flow ended' and permanently disconnected — one bad sample on a still-running flow silently killed the entire session feed. Fixed: post-end emissions disconnect via the new flow.ended() check; a throw on a running flow drops+counts the sample and keeps the feed alive.",
+      "regression_tests": [
+        "covered indirectly: apps/mobile jest suite green (35 suites / 271 tests); behavior exercised via flow.ended() + droppedInvalidSamples counters"
+      ]
+    }
+  ],
+  "non_breaks_verified": [
+    "Out-of-order samples within tolerance: engine sorts by timestamp; adjacent-swap jitter (~40ms) loses/reorders no events (jest regression 'out-of-order samples inside the engine tolerance...').",
+    "Late wrist samples behind the emission frontier are dropped and counted (droppedLateSamples), never mutating closed events.",
+    "App backgrounding (sample gap) does not deadlock: safety_max closure eventually emits; flush() closes remainders.",
+    "Duplicate end() is idempotent: no re-dispatch (jest regression, analyzeEvent called exactly 3x for 3 events).",
+    "Clip extraction failing for E2 while E1/E3 succeed keeps E2 honestly pending with SESSION_CLIP_EXTRACTION_FAILED and analyzed count = 2."
+  ],
+  "open": [],
+  "counts": { "breaks_found": 6, "fixed": 6, "open": 0 },
+  "gates": {
+    "pnpm_typecheck": "green (all packages)",
+    "analysis_pipeline_vitest": "37 passed (incl. 3 new D3-06 regressions)",
+    "swing_lab_sessionEngine_vitest": "9 passed / 4 skipped (macOS-only)",
+    "mobile_tsc_noEmit": "green",
+    "mobile_jest": "35 suites / 271 tests passed (incl. 5 new D3-06 regressions)"
+  },
+  "contracts": "usable-result-v1 / silent-failure-v1 untouched; no contract weakened. Held-out cases wm-dink-01 / afn-vic-rally1 untouched."
+}

@@ -27,10 +27,8 @@ import {
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ENGINE_PATH = join(HERE, "../src/sessionEngine.ts");
 const CANONICAL_PROPOSER_PATH = join(HERE, "../../swing-lab/src/strokeEvents.ts");
-const BEGIN_MARKER =
-  "// === BEGIN VERBATIM MIRROR: packages/swing-lab/src/strokeEvents.ts ===\n";
-const END_MARKER =
-  "// === END VERBATIM MIRROR: packages/swing-lab/src/strokeEvents.ts ===\n";
+const BEGIN_MARKER = "// === BEGIN VERBATIM MIRROR: packages/swing-lab/src/strokeEvents.ts ===\n";
+const END_MARKER = "// === END VERBATIM MIRROR: packages/swing-lab/src/strokeEvents.ts ===\n";
 
 describe("stroke-event-2 proposer mirror — drift guard", () => {
   it("the mirrored section is byte-identical to packages/swing-lab/src/strokeEvents.ts", () => {
@@ -108,5 +106,58 @@ describe("SessionEventEngine — smoke from its new home", () => {
     expect(() => {
       (emitted[0]!.proposal as { startMs: number }).startMs = 0;
     }).toThrow();
+  });
+});
+
+/**
+ * D3-06 red-team regressions (synthetic adversarial series via speedBumps).
+ * Breaks found: (a) duplicate/late outcome signals could REWRITE a terminal
+ * event state ('ready' → 'abstained', analysis cleared); (b) 'ready' was
+ * accepted with no AnalysisRecord, so an unanalyzed event could be counted
+ * as analyzed.
+ */
+describe("SessionEventEngine — D3-06 append-only outcome hardening", () => {
+  function oneEvent(sessionId: string) {
+    const engine = new SessionEventEngine({ sessionId });
+    const emitted: SessionStrokeEvent[] = [];
+    for (const sample of speedBumps([{ peakMs: 1500, height: 2.0, halfWidthMs: 120 }], 0, 5000)) {
+      emitted.push(...engine.pushWristSample(sample));
+    }
+    expect(emitted.length).toBe(1);
+    return { engine, eventId: emitted[0]!.eventId, analysis: emitted[0]!.analysis };
+  }
+
+  const fakeAnalysis = { id: "synthetic-analysis" } as unknown as NonNullable<
+    SessionStrokeEvent["analysis"]
+  >;
+
+  it("terminal states are append-only: a second outcome signal throws, state survives", () => {
+    const { engine, eventId } = oneEvent("d306-terminal");
+    engine.markEvent(eventId, "processing");
+    engine.markEvent(eventId, "ready", { analysis: fakeAnalysis });
+    expect(() => engine.markEvent(eventId, "abstained", { abstainReason: "late dup" })).toThrow(
+      /append-only/,
+    );
+    expect(() => engine.markEvent(eventId, "processing")).toThrow(/append-only/);
+    const event = engine.snapshot().events[0]!;
+    expect(event.state).toBe("ready");
+    expect(event.analysis).toBe(fakeAnalysis);
+  });
+
+  it("'ready' without an AnalysisRecord is rejected — never counted as analyzed", () => {
+    const { engine, eventId } = oneEvent("d306-ready-null");
+    engine.markEvent(eventId, "processing");
+    expect(() => engine.markEvent(eventId, "ready")).toThrow(/AnalysisRecord/);
+    expect(() => engine.markEvent(eventId, "ready", { analysis: null })).toThrow(/AnalysisRecord/);
+    expect(engine.snapshot().events[0]!.state).toBe("processing");
+  });
+
+  it("honest revert: processing → pending allowed; pending → pending rejected", () => {
+    const { engine, eventId } = oneEvent("d306-revert");
+    engine.markEvent(eventId, "processing");
+    expect(engine.markEvent(eventId, "pending").state).toBe("pending");
+    expect(() => engine.markEvent(eventId, "pending")).toThrow(/cannot revert/);
+    expect(engine.eventState(eventId)).toBe("pending");
+    expect(engine.eventState("E99")).toBeNull();
   });
 });

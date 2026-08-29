@@ -24,6 +24,7 @@ import {
   getCompletedSession,
   nativeSessionMotionFeedAvailability,
   type SessionEventAnalysisProvider,
+  type SessionEventClipSource,
   type SessionMotionSample,
 } from '../src/flow/session';
 import fixture from './fixtures/sessionReplay.afn-sasebo-rally1.json';
@@ -133,7 +134,9 @@ describe('replay-driven session flow (recorded rally afn-sasebo-rally1)', () => 
       );
     }
     // Every batch-proposed event was emitted with matching bounds.
-    expect(closed.map(({ startMs, peakMs, endMs }) => ({ startMs, peakMs, endMs }))).toEqual(
+    expect(
+      closed.map(({ startMs, peakMs, endMs }) => ({ startMs, peakMs, endMs })),
+    ).toEqual(
       fixture.batchProposals.map(({ startMs, peakMs, endMs }) => ({
         startMs,
         peakMs,
@@ -193,9 +196,7 @@ describe('replay-driven session flow (recorded rally afn-sasebo-rally1)', () => 
     expect(getCompletedSession(sessionId)?.strokeCount).toBe(3);
     expect(getCompletedSession(sessionId)?.phase).toBe('ended');
     // No samples may follow the flush.
-    expect(() => flow.pushSample({ tMs: 9000, v: 1 })).toThrow(
-      /already ended/,
-    );
+    expect(() => flow.pushSample({ tMs: 9000, v: 1 })).toThrow(/already ended/);
   });
 
   it('available provider: events transition processing → ready and families count in the distribution', async () => {
@@ -278,5 +279,182 @@ describe('replay-driven session flow (recorded rally afn-sasebo-rally1)', () => 
       expect(availability.gap).toBe('NATIVE_SESSION_MOTION_STREAM_NOT_BUILT');
       expect(availability.detail).toContain('session_motion_sample');
     }
+  });
+});
+
+/**
+ * D3-06 red-team regressions — SYNTHETIC adversarial doubles only (the same
+ * recorded replay series drives the engine; providers/clip sources are
+ * state-machine doubles, never product results).
+ */
+describe('D3-06 red-team regressions', () => {
+  function readyProvider(): SessionEventAnalysisProvider {
+    return {
+      providerId: 'test-ready-provider',
+      availability: () => ({ status: 'available' }),
+      analyzeEvent: async request => ({
+        status: 'ready',
+        analysis: analysisRecordDouble(
+          `analysis-${request.eventId}`,
+          'forehand_drive',
+        ),
+      }),
+    };
+  }
+
+  it('analysis outliving end(): the completed-session registry updates when late outcomes settle', async () => {
+    // BREAK (fixed): end() froze the registry snapshot with events still
+    // 'processing'; LiveSummary would show 0 analyzed forever even after
+    // every analysis resolved.
+    let release: () => void = () => {};
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const provider: SessionEventAnalysisProvider = {
+      providerId: 'test-slow-provider',
+      availability: () => ({ status: 'available' }),
+      analyzeEvent: async request => {
+        await gate;
+        return {
+          status: 'ready',
+          analysis: analysisRecordDouble(
+            `analysis-${request.eventId}`,
+            'forehand_drive',
+          ),
+        };
+      },
+    };
+    const flow = makeFlow(provider, 'd306-late-analysis');
+    for (const sample of samples) flow.pushSample(sample);
+    flow.end();
+    // Honest at end: nothing is 'ready' yet, so nothing counts as analyzed.
+    const atEnd = getCompletedSession('d306-late-analysis')!;
+    expect(atEnd.events.every(event => event.state === 'processing')).toBe(
+      true,
+    );
+    release();
+    await flow.settled();
+    const after = getCompletedSession('d306-late-analysis')!;
+    expect(after.events.map(event => event.state)).toEqual([
+      'ready',
+      'ready',
+      'ready',
+    ]);
+  });
+
+  it('clip extraction failing for E2 while E1/E3 succeed: E2 honestly pending with the reason', async () => {
+    const clipSource: SessionEventClipSource = {
+      sourceId: 'test-flaky-clip-source',
+      extract: async event =>
+        event.eventId === 'E2'
+          ? {
+              status: 'unavailable',
+              pendingReason: 'SESSION_CLIP_EXTRACTION_FAILED: disk full',
+            }
+          : // Structural double: only the seam's state machine is under test.
+            {
+              status: 'extracted',
+              clip: null as never,
+              poseSequenceSlice: null,
+            },
+    };
+    const flow = new LiveSessionFlow({
+      sessionId: 'd306-flaky-clip',
+      source: 'replay',
+      provider: readyProvider(),
+      clipSource,
+    });
+    for (const sample of samples) flow.pushSample(sample);
+    flow.end();
+    await flow.settled();
+    const [e1, e2, e3] = flow.snapshot().events;
+    expect(e1!.state).toBe('ready');
+    expect(e3!.state).toBe('ready');
+    expect(e2!.state).toBe('pending');
+    expect(e2!.pendingReason).toContain('SESSION_CLIP_EXTRACTION_FAILED');
+    expect(e2!.analysis).toBeNull();
+    // Only 'ready' events carry a family — the distribution never counts E2.
+    expect(flow.snapshot().distribution).toEqual([
+      { label: 'drive', family: 'drive', count: 2 },
+      { label: 'unclassified', family: null, count: 1 },
+    ]);
+  });
+
+  it('a throwing onUpdate subscriber cannot rewrite terminal states or break dispatch', async () => {
+    // BREAK (fixed): an onUpdate throw after 'ready' rejected the dispatch
+    // chain, whose catch handler then REWROTE the ready event to
+    // 'abstained' (ANALYSIS_DISPATCH_FAILED) — fabricating a failure for an
+    // analysis that succeeded.
+    let boom = false;
+    const flow = makeFlow(readyProvider(), 'd306-throwing-onupdate', () => {
+      if (boom) throw new Error('render crash');
+    });
+    for (const sample of samples) flow.pushSample(sample);
+    boom = true;
+    flow.end();
+    await flow.settled();
+    boom = false;
+    const final = flow.snapshot();
+    for (const event of final.events) {
+      expect(event.state).toBe('ready');
+      expect(event.analysis).not.toBeNull();
+      expect(event.abstainReason).toBeNull();
+    }
+    // The failures are isolated AND surfaced — never silent.
+    expect(final.onUpdateFailures).toBeGreaterThan(0);
+  });
+
+  it('duplicate end() is idempotent and never re-dispatches analysis', async () => {
+    let calls = 0;
+    const provider: SessionEventAnalysisProvider = {
+      providerId: 'test-counting-provider',
+      availability: () => ({ status: 'available' }),
+      analyzeEvent: async request => {
+        calls += 1;
+        return {
+          status: 'ready',
+          analysis: analysisRecordDouble(
+            `analysis-${request.eventId}`,
+            'forehand_drive',
+          ),
+        };
+      },
+    };
+    const flow = makeFlow(provider, 'd306-double-end');
+    for (const sample of samples) flow.pushSample(sample);
+    const first = flow.end();
+    const second = flow.end();
+    await flow.settled();
+    expect(first.phase).toBe('ended');
+    expect(second.phase).toBe('ended');
+    expect(calls).toBe(3);
+    expect(flow.snapshot().events.map(event => event.state)).toEqual([
+      'ready',
+      'ready',
+      'ready',
+    ]);
+  });
+
+  it('out-of-order samples inside the engine tolerance never lose or reorder events', async () => {
+    // Synthetic jitter: swap adjacent samples (≈40ms) — within the engine's
+    // late-sample tolerance for in-flight data.
+    const jittered = [...samples];
+    for (let i = 4; i + 1 < jittered.length; i += 5) {
+      const a = jittered[i]!;
+      jittered[i] = jittered[i + 1]!;
+      jittered[i + 1] = a;
+    }
+    const flow = makeFlow(createPendingStubAnalysisProvider(), 'd306-jitter');
+    for (const sample of jittered) flow.pushSample(sample);
+    const final = flow.end();
+    await flow.settled();
+    expect(final.events.map(event => event.eventId)).toEqual([
+      'E1',
+      'E2',
+      'E3',
+    ]);
+    expect(final.events.map(event => event.startMs)).toEqual(
+      fixture.expectedEmissions.map(
+        (emission: { startMs: number }) => emission.startMs,
+      ),
+    );
   });
 });
