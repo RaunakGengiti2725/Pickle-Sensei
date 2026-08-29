@@ -1,0 +1,103 @@
+{
+  "gate": "Gate 11 — mobile failure modes",
+  "workstreamId": "h13-mobile-failure",
+  "branch": "devin/wave-h/h13-mobile-failure",
+  "baseline": {
+    "branch": "devin/1787988068-wave-c-integration",
+    "commit": "104ea0f"
+  },
+  "method": "Jest/component-level certification on Linux (Node v20.18.1). Real modules under test: apps/mobile src/data/sync.ts, src/data/syncRuntime.ts, src/data/api.ts, src/screens/AnalyzeScreen.tsx (rendered with react-test-renderer against mocked native camera/db/navigation boundaries). No iPhone or Mac is available: no device measurement is claimed anywhere in this file. Each scenario below is certified only at the JS contract the native layer reports into.",
+  "measuredResults": {
+    "mobileSuiteBaseline": {
+      "suites": 40,
+      "tests": 397,
+      "result": "all passing at baseline 104ea0f"
+    },
+    "mobileSuiteAfter": {
+      "suites": 42,
+      "tests": 415,
+      "result": "all passing (npx tsc --noEmit exit 0; npm test exit 0)"
+    },
+    "newGate11Tests": {
+      "files": [
+        "apps/mobile/__tests__/gate11FailureModes.test.ts",
+        "apps/mobile/__tests__/gate11AnalyzeScreenFailure.test.tsx"
+      ],
+      "count": 18,
+      "allPassing": true
+    },
+    "modifiedExistingTests": {
+      "file": "apps/mobile/__tests__/sync.test.ts",
+      "note": "offline-retry test updated to the fixed semantics: transient failures no longer consume the bounded attempt budget (attempts stays 0, last_error recorded, row stays retryable)."
+    },
+    "rootGates": {
+      "typecheck": "pass (exit 0)",
+      "test": "pass — 51 files, 593 passed, 4 skipped",
+      "lint": "pass (exit 0)",
+      "formatCheck": "pass (exit 0 after prettier on the two new test files)"
+    },
+    "scenarioMatrix": {
+      "camera_permission_denied": "COMPONENT-CERTIFIED: any native capture rejection (incl. permission denial) reaches AnalyzeScreen's shared catch → fail-closed error phase ('Capture interrupted' / 'Nothing was rated.') with Try again + Close; runCaptureAnalysis never invoked (1 test). Real iOS dialog: BLOCKED_EXTERNAL.",
+      "microphone_permission_denied": "Same shared native-rejection path as camera (capture module surfaces one typed rejection); real dialog BLOCKED_EXTERNAL.",
+      "photos_permission_denied": "COMPONENT-CERTIFIED: import rejection → fail-closed error phase with explanation and retry, nothing rated, no analysis started (1 test). Real dialog BLOCKED_EXTERNAL.",
+      "network_offline": "CERTIFIED: drainOutbox leaves rows durable; transient network errors never consume the 8-attempt budget (attempts stays 0 across repeated offline drains) (2 tests incl. updated sync.test.ts).",
+      "drop_during_upload_sync": "CERTIFIED: mid-upload 5xx and thrown transport errors keep every batched row queued with last_error recorded and budget untouched; acknowledged rows delete transactionally with a sync receipt (2 tests + existing suite).",
+      "backgrounded": "CERTIFIED: AppState 'active' re-triggers the outbox drain; a bounded 30s timer also retries (1 test).",
+      "interruption": "Existing coverage: native session 'interrupted'/'interruption_ended' events and invalid-payload rejection certified in sessionNative.test.ts / cameraCapture.test.ts at baseline; unmount mid-operation cancels native camera work (1 new test).",
+      "low_battery_low_power": "BLOCKED_EXTERNAL: no JS contract exists; iOS behavior cannot be represented in jest. Any resulting native failure surfaces through the certified fail-closed rejection path.",
+      "low_storage": "BLOCKED_EXTERNAL: same rationale as low battery.",
+      "thermal_pressure": "BLOCKED_EXTERNAL: same rationale as low battery.",
+      "process_kill_relaunch": "PARTIAL (jest level): every analysis record and outbox row is written to SQLite before any result is returned (existing captureAnalysisFlow/sync suites), so relaunch resumes from durable state; real kill/relaunch BLOCKED_EXTERNAL.",
+      "orientation": "BLOCKED_EXTERNAL: layout/rotation is native rendering behavior not representable in jest.",
+      "duplicate_taps": "CERTIFIED + FIXED: triple-tap on the imported-clip scoring action now runs exactly 1 analysis (was: unguarded — each tap could reserve a fresh analysis permit for the same clip) (1 test).",
+      "rapid_navigation": "CERTIFIED: unmount during a pending native operation calls cancelCameraOperation; pending state cannot navigate to a stale Result (navigation.replace never called on failure) (2 tests).",
+      "slow_backend": "CERTIFIED + FIXED: every API request is now bounded by a 20s AbortController timeout surfacing typed ApiError(408, network.timeout) — previously an unresponsive backend hung fetch forever, an unbounded 'Measuring your swing…' spinner (2 tests).",
+      "api_failure": "CERTIFIED: 5xx transient (budget untouched), unretryable 4xx permanent (bounded 8 attempts, rows stay durable on device after exhaustion), corrupt payload fails alone without poisoning the batch (4 tests).",
+      "expired_auth": "CERTIFIED + FIXED: 401 is classified transient — the queued shot survives for after re-auth instead of burning the attempt budget while signed out (2 tests).",
+      "sign_out_during_pending_work": "CERTIFIED: clearSyncRuntime stops all future drains synchronously; a stale trigger after an account switch never drains the new owner; existing suites certify cross-account outbox isolation (2 tests + existing repositoryAccountScope/sync suites)."
+    }
+  },
+  "findings": [
+    {
+      "id": "H13-F1",
+      "severity": "P1",
+      "status": "fixed",
+      "title": "Transient sync failures permanently exhausted the outbox attempt budget (silent lost cloud sync)",
+      "detail": "drainOutbox incremented attempts on EVERY failure, including offline, timeouts, 5xx and expired auth. After 8 transient failures (e.g. a weekend offline, or staying signed out past 8 drain triggers) the row fell below the attempts<8 drain filter forever: the analysis stayed on device but would silently never sync to the account backend again, with no UI signal. Fix: isPermanentSyncFailure() — only unretryable 4xx (not 401/408/429) and locally-unfixable rows (corrupt payload, missing permit, unknown kind) consume the budget; transient failures record last_error only and stay retryable. Regression tests in gate11FailureModes.test.ts and updated sync.test.ts.",
+      "files": ["apps/mobile/src/data/sync.ts"]
+    },
+    {
+      "id": "H13-F2",
+      "severity": "P1",
+      "status": "fixed",
+      "title": "No API request timeout — unresponsive backend produced an unbounded spinner",
+      "detail": "apps/mobile/src/data/api.ts request() had no timeout/abort. A backend that accepted the TCP connection but never responded left fetch pending indefinitely; during permit reservation this rendered as a permanent 'Measuring your swing…' state (infinite spinner, violates Gate 11 required behavior). Fix: 20s AbortController timeout surfacing typed ApiError(408, 'network.timeout') with honest retry copy; classified transient for sync. Regression tests with fake timers.",
+      "files": ["apps/mobile/src/data/api.ts"]
+    },
+    {
+      "id": "H13-F3",
+      "severity": "P1",
+      "status": "fixed",
+      "title": "Duplicate taps could start concurrent analyses (double permit consumption) for one capture",
+      "detail": "AnalyzeScreen's operationActive ref guarded only run() (capture/import). The saved-phase scoring actions (Get my Technique Score button, TargetSelector confirm/skip) called scoreCapture unguarded: rapid double taps started two concurrent runCaptureAnalysis runs for the same clip — two analysis-permit reservations and racing phase updates. Fix: scoringActive ref makes scoreCapture single-flight per attempt. Regression test: triple tap → exactly 1 analysis.",
+      "files": ["apps/mobile/src/screens/AnalyzeScreen.tsx"]
+    },
+    {
+      "id": "H13-F4",
+      "severity": "P2",
+      "status": "fixed",
+      "title": "One corrupt outbox row poisoned the whole shot batch",
+      "detail": "Payload parsing happened inside the batch try: a single corrupt/permitless row threw before transport was called, so every healthy row in the batch was marked failed. Fix: per-row parse; unparseable rows fail alone (permanently), healthy rows still sync. Regression test: 1 corrupt + 1 healthy → synced 1, failed 1.",
+      "files": ["apps/mobile/src/data/sync.ts"]
+    },
+    {
+      "id": "H13-F5",
+      "severity": "P2",
+      "status": "unresolved",
+      "title": "Attempt-exhausted outbox rows have no user-visible surface",
+      "detail": "Rows that exhaust the (now correctly scoped) 8-attempt budget for permanent rejections stay durable in SQLite but nothing in the UI reports them. Data is not lost and the failure is now limited to genuinely unretryable payloads, so this is polish: a settings/diagnostics surface listing unsynced items. Not fixed in this workstream (UI scope beyond failure-mode certification)."
+    }
+  ],
+  "verdict": "PASS at jest/component level; native device execution BLOCKED_EXTERNAL",
+  "verdictRationale": "All 18 Gate 11 scenarios were mapped to their JS contracts and certified where a contract exists: 42 suites / 415 tests pass (18 new failure-mode tests), typecheck/lint/format and all root gates pass. The three P1 violations found (silent permanent loss of cloud sync after transient failures, unbounded spinner on an unresponsive backend, duplicate-tap double analysis) are fixed with regression tests; remaining P2 is a diagnostics-surface polish item. Low battery/low power, low storage, thermal pressure, orientation, real permission dialogs and real process kill/relaunch are iOS-native behaviors that cannot be executed on this Linux environment and remain BLOCKED_EXTERNAL — they must be verified on a physical iPhone before final GO. No device results are claimed."
+}

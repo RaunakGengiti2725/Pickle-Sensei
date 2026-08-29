@@ -415,6 +415,7 @@ export function AnalyzeScreen() {
   const lastQuality = useRef<CaptureQualitySignalsV1 | null>(null);
   const profile = useAppStore(s => s.profile);
   const operationActive = useRef(false);
+  const scoringActive = useRef(false);
   const autoLaunchStarted = useRef(false);
 
   useEffect(
@@ -472,6 +473,10 @@ export function AnalyzeScreen() {
       ) {
         return;
       }
+      // One capture, one analysis: a second tap while a run is in flight is
+      // ignored rather than reserving a second permit for the same clip.
+      if (scoringActive.current) return;
+      scoringActive.current = true;
       const session = getApiSession();
       setPhase({
         kind: 'working',
@@ -536,6 +541,8 @@ export function AnalyzeScreen() {
           kind: 'error',
           message: error instanceof Error ? error.message : String(error),
         });
+      } finally {
+        scoringActive.current = false;
       }
     },
     [declaredStroke, navigation, profile, techniqueIntent],
