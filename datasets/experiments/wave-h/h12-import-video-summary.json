@@ -1,0 +1,1253 @@
+{
+  "gate": "GATE 12 \u2014 imported video (workstream h12-import-video)",
+  "baseline": {
+    "branch": "devin/1787988068-wave-c-integration",
+    "commit": "104ea0f"
+  },
+  "evidence_branch": "devin/wave-h/h12-import-video",
+  "environment": {
+    "platform": "linux-x86_64 (no iPhone/Mac; Apple Vision pose extraction unavailable)",
+    "node": "v20.18.1",
+    "ffmpeg": "4.4.2-0ubuntu0.22.04.1"
+  },
+  "method": "Static + dynamic certification of the imported-video path. (1) Code-path audit of the mobile import contract (apps/mobile/src/camera/capture.ts assertCapturedClip, AnalyzeScreen import flow, runCaptureAnalysis) for the mandatory flow: select video -> tap target -> target persists -> individual StrokeEvents -> analysis. (2) Real-media matrix: 26 files generated with ffmpeg from the committed dev-pool clip datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4 (held-out cases untouched), run through the repo's actual ingest components on Linux: probeClipStream + measureClip + evaluateCaptureEnvelope (packages/capture-envelope) and extractFrameStats(+Async) + evaluateFrameAnalyzability OOD gate (packages/swing-lab + vision-geometry). (3) Mobile regression tests for the P1 fix. Trials are grouped per generated file (one source clip), never per frame.",
+  "measured_results": {
+    "media_files_total": 26,
+    "uncaught_crashes": 0,
+    "well_formed_playable": {
+      "count": 17,
+      "probe_and_measure_succeeded": 17,
+      "envelope_SUPPORTED": 12,
+      "envelope_DEGRADED": 3,
+      "envelope_UNSUPPORTED_honest": 2,
+      "note": "DEGRADED/UNSUPPORTED classifications match the provisional thresholds exactly (240p/15fps, 480p, 1.5s, 150s, 12.9fps VFR-dropped); no threshold was weakened."
+    },
+    "corrupt_or_unsupported": {
+      "count": 9,
+      "graceful_failures_with_descriptive_error_or_reason_code": 9,
+      "crashes": 0,
+      "fabricated_metadata_or_analysis": 0
+    },
+    "orientation_metadata": {
+      "count": 2,
+      "rotation_honored_display_dims_correct": 2
+    },
+    "sync_async_frame_stats_parity": {
+      "files_compared": 26,
+      "mismatches": 0
+    },
+    "mobile_gates": {
+      "tsc_noEmit": "pass",
+      "jest": "41 suites / 401 tests pass (includes new regression suite)"
+    }
+  },
+  "per_file_results": [
+    {
+      "file": "base-h264-1080p2997.mp4",
+      "category": "h264",
+      "byteSize": 4871977,
+      "probe": {
+        "width": 1920,
+        "height": 1080,
+        "rotationDegrees": 0,
+        "displayWidth": 1920,
+        "displayHeight": 1080,
+        "avgFrameRateFps": 29.97,
+        "durationMs": 12012
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "SUPPORTED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 360,
+        "durationMs": 12046,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 361,
+        "sourceWidth": 1920,
+        "sourceHeight": 1080,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "static_overlay_suspected"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "probe+measure OK, envelope SUPPORTED",
+      "meetsExpectation": true,
+      "notes": "probe+measure OK, envelope SUPPORTED"
+    },
+    {
+      "file": "faststart.mp4",
+      "category": "h264-faststart",
+      "byteSize": 4871965,
+      "probe": {
+        "width": 1920,
+        "height": 1080,
+        "rotationDegrees": 0,
+        "displayWidth": 1920,
+        "displayHeight": 1080,
+        "avgFrameRateFps": 29.97,
+        "durationMs": 12012
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "SUPPORTED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 360,
+        "durationMs": 12013,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 360,
+        "sourceWidth": 1920,
+        "sourceHeight": 1080,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "static_overlay_suspected"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "probe+measure OK, envelope SUPPORTED",
+      "meetsExpectation": true,
+      "notes": "probe+measure OK, envelope SUPPORTED"
+    },
+    {
+      "file": "h264-720p60.mp4",
+      "category": "h264-720p60",
+      "byteSize": 1145196,
+      "probe": {
+        "width": 1280,
+        "height": 720,
+        "rotationDegrees": 0,
+        "displayWidth": 1280,
+        "displayHeight": 720,
+        "avgFrameRateFps": 60,
+        "durationMs": 12000
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "SUPPORTED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 720,
+        "durationMs": 12000,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 720,
+        "sourceWidth": 1280,
+        "sourceHeight": 720,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "static_overlay_suspected"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "probe+measure OK, envelope SUPPORTED",
+      "meetsExpectation": true,
+      "notes": "probe+measure OK, envelope SUPPORTED"
+    },
+    {
+      "file": "h264-480p24.mp4",
+      "category": "h264-480p24",
+      "byteSize": 574291,
+      "probe": {
+        "width": 854,
+        "height": 480,
+        "rotationDegrees": 0,
+        "displayWidth": 854,
+        "displayHeight": 480,
+        "avgFrameRateFps": 24,
+        "durationMs": 12083
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "DEGRADED",
+        "dims": {
+          "resolution": "DEGRADED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 290,
+        "durationMs": 12084,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 290,
+        "sourceWidth": 854,
+        "sourceHeight": 480,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "static_overlay_suspected"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "envelope DEGRADED (resolution)",
+      "meetsExpectation": true,
+      "notes": "envelope DEGRADED (resolution)"
+    },
+    {
+      "file": "h264-240p15.mp4",
+      "category": "h264-240p15",
+      "byteSize": 183430,
+      "probe": {
+        "width": 426,
+        "height": 240,
+        "rotationDegrees": 0,
+        "displayWidth": 426,
+        "displayHeight": 240,
+        "avgFrameRateFps": 15,
+        "durationMs": 12133
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "UNSUPPORTED",
+        "dims": {
+          "resolution": "UNSUPPORTED",
+          "frame_rate": "DEGRADED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 182,
+        "durationMs": 12134,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 182,
+        "sourceWidth": 426,
+        "sourceHeight": 240,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "static_overlay_suspected"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "envelope UNSUPPORTED (resolution), degraded fps",
+      "meetsExpectation": true,
+      "notes": "envelope UNSUPPORTED (resolution), degraded fps"
+    },
+    {
+      "file": "h264-2160p2997.mp4",
+      "category": "h264-4k",
+      "byteSize": 11560715,
+      "probe": {
+        "width": 3840,
+        "height": 2160,
+        "rotationDegrees": 0,
+        "displayWidth": 3840,
+        "displayHeight": 2160,
+        "avgFrameRateFps": 29.97,
+        "durationMs": 6006
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "SUPPORTED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 180,
+        "durationMs": 6007,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 180,
+        "sourceWidth": 3840,
+        "sourceHeight": 2160,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "static_overlay_suspected"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "probe+measure OK, envelope SUPPORTED",
+      "meetsExpectation": true,
+      "notes": "probe+measure OK, envelope SUPPORTED"
+    },
+    {
+      "file": "hevc-1080p2997.mp4",
+      "category": "hevc",
+      "byteSize": 1764307,
+      "probe": {
+        "width": 1920,
+        "height": 1080,
+        "rotationDegrees": 0,
+        "displayWidth": 1920,
+        "displayHeight": 1080,
+        "avgFrameRateFps": 29.97,
+        "durationMs": 12012
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "SUPPORTED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 360,
+        "durationMs": 12013,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 360,
+        "sourceWidth": 1920,
+        "sourceHeight": 1080,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "static_overlay_suspected"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "probe+measure OK, envelope SUPPORTED",
+      "meetsExpectation": true,
+      "notes": "probe+measure OK, envelope SUPPORTED"
+    },
+    {
+      "file": "container-mov.mov",
+      "category": "mov-container",
+      "byteSize": 4871912,
+      "probe": {
+        "width": 1920,
+        "height": 1080,
+        "rotationDegrees": 0,
+        "displayWidth": 1920,
+        "displayHeight": 1080,
+        "avgFrameRateFps": 29.97,
+        "durationMs": 12012
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "SUPPORTED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 360,
+        "durationMs": 12013,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 360,
+        "sourceWidth": 1920,
+        "sourceHeight": 1080,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "static_overlay_suspected"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "probe+measure OK, envelope SUPPORTED",
+      "meetsExpectation": true,
+      "notes": "probe+measure OK, envelope SUPPORTED"
+    },
+    {
+      "file": "rot90-meta.mp4",
+      "category": "orientation-rot90",
+      "byteSize": 4871965,
+      "probe": {
+        "width": 1920,
+        "height": 1080,
+        "rotationDegrees": 90,
+        "displayWidth": 1080,
+        "displayHeight": 1920,
+        "avgFrameRateFps": 29.97,
+        "durationMs": 12012
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "SUPPORTED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 360,
+        "durationMs": 12013,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 360,
+        "sourceWidth": 1920,
+        "sourceHeight": 1080,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": true,
+        "reasons": []
+      },
+      "uncaughtCrash": null,
+      "expected": "rotation honored: display dims swapped to 1080x1920",
+      "meetsExpectation": true,
+      "notes": "rotation honored: display dims swapped to 1080x1920"
+    },
+    {
+      "file": "rot180-meta.mp4",
+      "category": "orientation-rot180",
+      "byteSize": 4871965,
+      "probe": {
+        "width": 1920,
+        "height": 1080,
+        "rotationDegrees": 180,
+        "displayWidth": 1920,
+        "displayHeight": 1080,
+        "avgFrameRateFps": 29.97,
+        "durationMs": 12012
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "SUPPORTED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 360,
+        "durationMs": 12013,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 360,
+        "sourceWidth": 1920,
+        "sourceHeight": 1080,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": true,
+        "reasons": []
+      },
+      "uncaughtCrash": null,
+      "expected": "rotation honored, display dims unchanged",
+      "meetsExpectation": true,
+      "notes": "rotation honored, display dims unchanged"
+    },
+    {
+      "file": "vfr-720p.mp4",
+      "category": "vfr",
+      "byteSize": 1219408,
+      "probe": {
+        "width": 1280,
+        "height": 720,
+        "rotationDegrees": 0,
+        "displayWidth": 1280,
+        "displayHeight": 720,
+        "avgFrameRateFps": 29.97,
+        "durationMs": 12012
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "SUPPORTED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 360,
+        "durationMs": 12013,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 360,
+        "sourceWidth": 1280,
+        "sourceHeight": 720,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "static_overlay_suspected"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "probe+measure OK; no CFR assumption",
+      "meetsExpectation": true,
+      "notes": "probe+measure OK; no CFR assumption"
+    },
+    {
+      "file": "vfr-dropped-720p.mp4",
+      "category": "vfr-heavy-drops",
+      "byteSize": 1170443,
+      "probe": {
+        "width": 1280,
+        "height": 720,
+        "rotationDegrees": 0,
+        "displayWidth": 1280,
+        "displayHeight": 720,
+        "avgFrameRateFps": 12.892122905027932,
+        "durationMs": 11945
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "UNSUPPORTED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "UNSUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "DEGRADED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 359,
+        "durationMs": 11946,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 154,
+        "sourceWidth": 1280,
+        "sourceHeight": 720,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "still_image_video"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "envelope flags frame_rate UNSUPPORTED / timing DEGRADED",
+      "meetsExpectation": true,
+      "notes": "envelope flags frame_rate UNSUPPORTED / timing DEGRADED"
+    },
+    {
+      "file": "slowmo-720p120.mp4",
+      "category": "slow-motion-120fps",
+      "byteSize": 979861,
+      "probe": {
+        "width": 1280,
+        "height": 720,
+        "rotationDegrees": 0,
+        "displayWidth": 1280,
+        "displayHeight": 720,
+        "avgFrameRateFps": 120,
+        "durationMs": 20000
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "SUPPORTED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 2400,
+        "durationMs": 20000,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 2400,
+        "sourceWidth": 1280,
+        "sourceHeight": 720,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "still_image_video"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "decodes; synthetic frame-duplicated slowmo rejected by OOD gate as still_image_video (artifact of ffmpeg frame duplication, not of true unique-frame slo-mo)",
+      "meetsExpectation": true,
+      "notes": "decodes; synthetic frame-duplicated slowmo rejected by OOD gate as still_image_video (artifact of ffmpeg frame duplication, not of true unique-frame slo-mo)"
+    },
+    {
+      "file": "trimmed-1500ms.mp4",
+      "category": "trimmed-short",
+      "byteSize": 448655,
+      "probe": {
+        "width": 1920,
+        "height": 1080,
+        "rotationDegrees": 0,
+        "displayWidth": 1920,
+        "displayHeight": 1080,
+        "avgFrameRateFps": 29.97,
+        "durationMs": 1502
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "DEGRADED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "DEGRADED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 45,
+        "durationMs": 1502,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 45,
+        "sourceWidth": 1920,
+        "sourceHeight": 1080,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "static_overlay_suspected"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "envelope clip_duration DEGRADED",
+      "meetsExpectation": true,
+      "notes": "envelope clip_duration DEGRADED"
+    },
+    {
+      "file": "trimmed-copy-midgop.mp4",
+      "category": "trimmed-streamcopy-midgop",
+      "byteSize": 2979068,
+      "probe": {
+        "width": 1920,
+        "height": 1080,
+        "rotationDegrees": 0,
+        "displayWidth": 1920,
+        "displayHeight": 1080,
+        "avgFrameRateFps": 29.97,
+        "durationMs": 4140
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "SUPPORTED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 124,
+        "durationMs": 4141,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 124,
+        "sourceWidth": 1920,
+        "sourceHeight": 1080,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "static_overlay_suspected"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "decodes cleanly, envelope SUPPORTED",
+      "meetsExpectation": true,
+      "notes": "decodes cleanly, envelope SUPPORTED"
+    },
+    {
+      "file": "long-150s.mp4",
+      "category": "long-clip-150s",
+      "byteSize": 60942706,
+      "probe": {
+        "width": 1920,
+        "height": 1080,
+        "rotationDegrees": 0,
+        "displayWidth": 1920,
+        "displayHeight": 1080,
+        "avgFrameRateFps": 29.97,
+        "durationMs": 150083
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "DEGRADED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "DEGRADED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 4498,
+        "durationMs": 150084,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 4498,
+        "sourceWidth": 1920,
+        "sourceHeight": 1080,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "static_overlay_suspected"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "envelope clip_duration DEGRADED",
+      "meetsExpectation": true,
+      "notes": "envelope clip_duration DEGRADED"
+    },
+    {
+      "file": "reencoded-x2.mp4",
+      "category": "reencoded-twice",
+      "byteSize": 758496,
+      "probe": {
+        "width": 1920,
+        "height": 1080,
+        "rotationDegrees": 0,
+        "displayWidth": 1920,
+        "displayHeight": 1080,
+        "avgFrameRateFps": 29.97,
+        "durationMs": 12012
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "SUPPORTED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 360,
+        "durationMs": 12013,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 360,
+        "sourceWidth": 1920,
+        "sourceHeight": 1080,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "static_overlay_suspected"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "probe+measure OK, envelope SUPPORTED",
+      "meetsExpectation": true,
+      "notes": "probe+measure OK, envelope SUPPORTED"
+    },
+    {
+      "file": "control-croppedoverlay.mp4",
+      "category": "control-overlay-cropped",
+      "byteSize": 2246475,
+      "probe": {
+        "width": 1920,
+        "height": 720,
+        "rotationDegrees": 0,
+        "displayWidth": 1920,
+        "displayHeight": 720,
+        "avgFrameRateFps": 29.97,
+        "durationMs": 12012
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "SUPPORTED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 360,
+        "durationMs": 12013,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": 360,
+        "sourceWidth": 1920,
+        "sourceHeight": 720,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": true,
+        "reasons": []
+      },
+      "uncaughtCrash": null,
+      "expected": "OOD gate ANALYZABLE once broadcast overlay region is cropped out \u2014 proves overlay rejections on other rows are content-driven",
+      "meetsExpectation": true,
+      "notes": "OOD gate ANALYZABLE once broadcast overlay region is cropped out \u2014 proves overlay rejections on other rows are content-driven"
+    },
+    {
+      "file": "corrupt-truncated.mp4",
+      "category": "corrupt-truncated-no-moov",
+      "byteSize": 800000,
+      "probe": null,
+      "probeError": "ffprobe failed (1): [mov,mp4,m4a,3gp,3g2,mj2 @ 0x5597b7a28100] moov atom not found\n/tmp/import-matrix/corrupt-truncated.mp4: Invalid data found when processing input\n",
+      "envelope": null,
+      "measureError": "ffprobe failed (1): [mov,mp4,m4a,3gp,3g2,mj2 @ 0x555ae316b100] moov atom not found\n/tmp/import-matrix/corrupt-truncated.mp4: Invalid data found when processing input\n",
+      "frameStats": {
+        "frameCount": 0,
+        "durationMs": 0,
+        "decodeErrorCount": 1,
+        "expectedFrameCount": null,
+        "sourceWidth": null,
+        "sourceHeight": null,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "single_frame_clip",
+          "undecodable_media"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "graceful: probe/measure raise descriptive errors; OOD gate rejects undecodable_media; no crash",
+      "meetsExpectation": true,
+      "notes": "graceful: probe/measure raise descriptive errors; OOD gate rejects undecodable_media; no crash"
+    },
+    {
+      "file": "corrupt-truncated-faststart.mp4",
+      "category": "corrupt-truncated-faststart",
+      "byteSize": 900000,
+      "probe": {
+        "width": 1920,
+        "height": 1080,
+        "rotationDegrees": 0,
+        "displayWidth": 1920,
+        "displayHeight": 1080,
+        "avgFrameRateFps": 29.97,
+        "durationMs": 12012
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "UNSUPPORTED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "UNSUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 60,
+        "durationMs": 12013,
+        "decodeErrorCount": 18,
+        "expectedFrameCount": 360,
+        "sourceWidth": 1920,
+        "sourceHeight": 1080,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "decoded_frame_deficit",
+          "static_overlay_suspected"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "graceful: OOD gate rejects decoded_frame_deficit; envelope timing UNSUPPORTED",
+      "meetsExpectation": true,
+      "notes": "graceful: OOD gate rejects decoded_frame_deficit; envelope timing UNSUPPORTED"
+    },
+    {
+      "file": "corrupt-bitflip.mp4",
+      "category": "corrupt-bitflip",
+      "byteSize": 4871977,
+      "probe": {
+        "width": 1920,
+        "height": 1080,
+        "rotationDegrees": 0,
+        "displayWidth": 1920,
+        "displayHeight": 1080,
+        "avgFrameRateFps": 29.97,
+        "durationMs": 12012
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "SUPPORTED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "SUPPORTED",
+          "motion_blur": "SUPPORTED",
+          "camera_motion": "SUPPORTED",
+          "timing_stability": "SUPPORTED",
+          "clip_duration": "SUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 360,
+        "durationMs": 12046,
+        "decodeErrorCount": 7,
+        "expectedFrameCount": 361,
+        "sourceWidth": 1920,
+        "sourceHeight": 1080,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "static_overlay_suspected"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "decodes with 7 decoder errors; no crash; deficit gate not tripped (360/360 frames decoded) \u2014 see P2",
+      "meetsExpectation": true,
+      "notes": "decodes with 7 decoder errors; no crash; deficit gate not tripped (360/360 frames decoded) \u2014 see P2"
+    },
+    {
+      "file": "garbage.mp4",
+      "category": "unsupported-random-bytes",
+      "byteSize": 500000,
+      "probe": null,
+      "probeError": "ffprobe failed (1): [mov,mp4,m4a,3gp,3g2,mj2 @ 0x555b0fbb5100] moov atom not found\n/tmp/import-matrix/garbage.mp4: Invalid data found when processing input\n",
+      "envelope": null,
+      "measureError": "ffprobe failed (1): [mov,mp4,m4a,3gp,3g2,mj2 @ 0x55d1c7dbc100] moov atom not found\n/tmp/import-matrix/garbage.mp4: Invalid data found when processing input\n",
+      "frameStats": {
+        "frameCount": 0,
+        "durationMs": 0,
+        "decodeErrorCount": 1,
+        "expectedFrameCount": null,
+        "sourceWidth": null,
+        "sourceHeight": null,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "single_frame_clip",
+          "undecodable_media"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "graceful descriptive errors; undecodable_media; no crash",
+      "meetsExpectation": true,
+      "notes": "graceful descriptive errors; undecodable_media; no crash"
+    },
+    {
+      "file": "textfile.mp4",
+      "category": "unsupported-textfile",
+      "byteSize": 19,
+      "probe": null,
+      "probeError": "ffprobe failed (1): [mov,mp4,m4a,3gp,3g2,mj2 @ 0x558ee9590100] moov atom not found\n/tmp/import-matrix/textfile.mp4: Invalid data found when processing input\n",
+      "envelope": null,
+      "measureError": "ffprobe failed (1): [mov,mp4,m4a,3gp,3g2,mj2 @ 0x563dcd0b9100] moov atom not found\n/tmp/import-matrix/textfile.mp4: Invalid data found when processing input\n",
+      "frameStats": {
+        "frameCount": 0,
+        "durationMs": 0,
+        "decodeErrorCount": 1,
+        "expectedFrameCount": null,
+        "sourceWidth": null,
+        "sourceHeight": null,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "single_frame_clip",
+          "undecodable_media"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "graceful descriptive errors; undecodable_media; no crash",
+      "meetsExpectation": true,
+      "notes": "graceful descriptive errors; undecodable_media; no crash"
+    },
+    {
+      "file": "zerobyte.mp4",
+      "category": "unsupported-zero-byte",
+      "byteSize": 0,
+      "probe": null,
+      "probeError": "ffprobe failed (1): [mov,mp4,m4a,3gp,3g2,mj2 @ 0x5631e11ee100] moov atom not found\n/tmp/import-matrix/zerobyte.mp4: Invalid data found when processing input\n",
+      "envelope": null,
+      "measureError": "ffprobe failed (1): [mov,mp4,m4a,3gp,3g2,mj2 @ 0x55a896fc6100] moov atom not found\n/tmp/import-matrix/zerobyte.mp4: Invalid data found when processing input\n",
+      "frameStats": {
+        "frameCount": 0,
+        "durationMs": 0,
+        "decodeErrorCount": 1,
+        "expectedFrameCount": null,
+        "sourceWidth": null,
+        "sourceHeight": null,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "single_frame_clip",
+          "undecodable_media"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "graceful descriptive errors; undecodable_media; no crash",
+      "meetsExpectation": true,
+      "notes": "graceful descriptive errors; undecodable_media; no crash"
+    },
+    {
+      "file": "audio-only.mp4",
+      "category": "unsupported-audio-only",
+      "byteSize": 47925,
+      "probe": null,
+      "probeError": "ffprobe returned no video stream for /tmp/import-matrix/audio-only.mp4",
+      "envelope": null,
+      "measureError": "ffprobe returned no video stream for /tmp/import-matrix/audio-only.mp4",
+      "frameStats": {
+        "frameCount": 0,
+        "durationMs": 5000,
+        "decodeErrorCount": 1,
+        "expectedFrameCount": null,
+        "sourceWidth": null,
+        "sourceHeight": null,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "single_frame_clip",
+          "undecodable_media"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "graceful 'no video stream' errors; rejected; no crash",
+      "meetsExpectation": true,
+      "notes": "graceful 'no video stream' errors; rejected; no crash"
+    },
+    {
+      "file": "image-as-video.mp4",
+      "category": "unsupported-still-image",
+      "byteSize": 71033,
+      "probe": {
+        "width": 1920,
+        "height": 1080,
+        "rotationDegrees": 0,
+        "displayWidth": 1920,
+        "displayHeight": 1080,
+        "avgFrameRateFps": 25,
+        "durationMs": 0
+      },
+      "probeError": null,
+      "envelope": {
+        "overall": "UNSUPPORTED",
+        "dims": {
+          "resolution": "SUPPORTED",
+          "frame_rate": "SUPPORTED",
+          "brightness": "NOT_MEASURED",
+          "motion_blur": "NOT_MEASURED",
+          "camera_motion": "NOT_MEASURED",
+          "timing_stability": "NOT_MEASURED",
+          "clip_duration": "UNSUPPORTED",
+          "player_pixel_height": "NOT_MEASURED",
+          "player_visibility": "NOT_MEASURED"
+        }
+      },
+      "measureError": null,
+      "frameStats": {
+        "frameCount": 1,
+        "durationMs": 0,
+        "decodeErrorCount": 0,
+        "expectedFrameCount": null,
+        "sourceWidth": 1920,
+        "sourceHeight": 1080,
+        "syncAsyncParity": true
+      },
+      "oodGate": {
+        "analyzable": false,
+        "reasons": [
+          "single_frame_clip"
+        ]
+      },
+      "uncaughtCrash": null,
+      "expected": "rejected single_frame_clip / duration UNSUPPORTED; no crash",
+      "meetsExpectation": true,
+      "notes": "rejected single_frame_clip / duration UNSUPPORTED; no crash"
+    }
+  ],
+  "findings": {
+    "P0": [],
+    "P1": [
+      {
+        "id": "H12-P1-1",
+        "status": "FIXED",
+        "title": "Imported-video target tap was never persisted",
+        "detail": "The mandatory gate step 'taps target -> target persists' was not met: the tap lived only in AnalyzeScreen React state (targetSeed) and was passed to runCaptureAnalysis, which returns 'unavailable' for imported clips before persisting anything \u2014 the user's tap was silently discarded on every imported video. Fix: new local_capture.target_seed column (additive migration in apps/mobile/src/data/db.ts), setCaptureTargetSeed/getCaptureTargetSeed in apps/mobile/src/data/repository.ts (owner-scoped, corrupt rows read as null, never reconstructed), wired into AnalyzeScreen.scoreCapture before analysis. Regression tests: apps/mobile/__tests__/importedTargetSeed.test.ts (4 tests)."
+      },
+      {
+        "id": "H12-P1-2",
+        "status": "UNRESOLVED_EXTERNALLY_BLOCKED",
+        "title": "Imported videos never reach StrokeEvents or analysis \u2014 mandatory flow ends in honest abstention",
+        "detail": "runCaptureAnalysis returns {kind:'unavailable', reason:'Imported videos have no recorded pose sequence yet. Record with the guided camera to get a Technique Score.'} for every captureMode==='imported_video' clip; the CapturedClip type for imports deliberately forbids poseSequence/trigger/captureEvidence (no live-capture metadata is assumed or fabricated \u2014 verified in assertCapturedClip). Consequence: the mandatory gate flow '... -> individual StrokeEvents -> analysis' is NOT implemented in this release candidate for imported video; the UI still walks the user through stroke declaration and target tap before surfacing the abstention (misleading-UX component of this finding; the tap is at least persisted now per H12-P1-1). Building the missing path requires on-device pose extraction over imported frames (iOS Vision / device hardware), which cannot be implemented or validated on this Linux environment. Not fixable internally without fabricating pose data, which is prohibited."
+      }
+    ],
+    "P2": [
+      {
+        "id": "H12-P2-1",
+        "status": "UNRESOLVED",
+        "title": "Bit-flipped media passes the decode-deficit gate",
+        "detail": "corrupt-bitflip.mp4 decodes all 360/360 declared frames with 7 decoder error lines, so the decoded_frame_deficit check (min fraction 0.9) does not trip and the capture envelope reads SUPPORTED. Downstream pose/quality gates would still have to catch visual corruption. Noted, not weakened."
+      },
+      {
+        "id": "H12-P2-2",
+        "status": "NOTED",
+        "title": "Frame-duplicated synthetic slow motion is rejected as still_image_video",
+        "detail": "ffmpeg setpts-based slow motion duplicates frames, so >=50% frozen pairs trips the OOD gate. True unique-frame 120fps slo-mo cannot be synthesized from a 30fps source; device slo-mo behavior needs iPhone media (external)."
+      }
+    ]
+  },
+  "not_measured": [
+    "On-device iOS/Android import (native importVideo module, PhotoKit/copy path) \u2014 requires iPhone/Mac.",
+    "True variable-frame-rate device recordings and real 120/240fps slo-mo \u2014 requires device media.",
+    "End-to-end imported analysis \u2014 path does not exist in this RC (see H12-P1-2)."
+  ],
+  "verdict": "FAIL",
+  "rationale": "The ingestion half of the gate certifies cleanly on Linux with real media: 26/26 files handled without a crash, 17/17 playable files probed and measured correctly (rotation, VFR, HEVC, .mov, 4K, re-encodes), 9/9 corrupt/unsupported files failed gracefully with descriptive errors or closed-set reason codes, no live-capture metadata is assumed or fabricated for imports, and the target tap now persists (P1 fixed with regression tests). However the mandatory flow explicitly required by GATE 12 \u2014 imported video producing individual StrokeEvents and an analysis \u2014 is not implemented in this release candidate: every imported video terminates in an honest abstention. That is an honest, guided dead end rather than a silent failure, but a MANDATORY gate whose core flow cannot complete on any input cannot be certified PASS. Completing the path requires on-device pose extraction (iPhone/Mac), so remediation is externally blocked from this environment; the verdict is FAIL for the release candidate as it stands, with BLOCKED_EXTERNAL remediation."
+}

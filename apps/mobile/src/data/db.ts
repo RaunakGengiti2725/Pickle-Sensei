@@ -203,6 +203,12 @@ function ensureAccountScopedSchema(db: DB): void {
         'ALTER TABLE local_capture ADD COLUMN declared_stroke TEXT',
       );
     }
+    // Target selection ("tap yourself") is user input naming WHICH person
+    // on court is the user. It lives on the capture row so an imported
+    // clip's tap survives restarts; NULL means no tap was recorded.
+    if (!hasColumn(db, 'local_capture', 'target_seed')) {
+      db.executeSync('ALTER TABLE local_capture ADD COLUMN target_seed TEXT');
+    }
     // Consent for ML training use is explicit and off by default; product
     // telemetry never flows through this flag.
     if (!hasColumn(db, 'local_capture', 'training_consent')) {

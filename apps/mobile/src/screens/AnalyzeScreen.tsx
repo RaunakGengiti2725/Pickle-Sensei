@@ -31,7 +31,11 @@ import {
 import type { EnvelopeVerdict } from '@pickle/shared-types';
 import { TargetSelector, type TargetSelection } from '../camera/TargetSelector';
 import { getDb } from '../data/db';
-import { savePendingCapture, setDeclaredStroke } from '../data/repository';
+import {
+  savePendingCapture,
+  setCaptureTargetSeed,
+  setDeclaredStroke,
+} from '../data/repository';
 import { runCaptureAnalysis } from '../analysis/runCaptureAnalysis';
 import { getApiSession } from '../account/apiSession';
 import { useAppStore } from '../state/appStore';
@@ -553,6 +557,12 @@ export function AnalyzeScreen() {
         // writes nothing there; the prediction lives in the analysis record.
         if (declaredStroke) {
           await setDeclaredStroke(getDb(), captureId, declaredStroke);
+        }
+        // The tap is user input tied to the capture: persist it with the
+        // row so it survives restarts and stays available to any later
+        // analysis pass, whether or not this run can analyze the clip.
+        if (targetSeed) {
+          await setCaptureTargetSeed(getDb(), captureId, targetSeed);
         }
         const outcome = await runCaptureAnalysis({
           db: getDb(),
