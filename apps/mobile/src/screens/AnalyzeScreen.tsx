@@ -548,6 +548,8 @@ export function AnalyzeScreen() {
     // seed: both describe ONE clip and must never carry into the next one.
     setCaptureEnvelope(null);
     setTargetSeed(null);
+    lastReadiness.current = null;
+    lastQuality.current = null;
     setPhase({
       kind: 'working',
       message:
