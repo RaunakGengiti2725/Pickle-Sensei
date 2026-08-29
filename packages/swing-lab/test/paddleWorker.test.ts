@@ -5,6 +5,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import {
   PaddleServeWorker,
   PaddleWorkerError,
+  PaddleWorkerSupervisor,
   detectPaddleWindow,
   startPaddleWorker,
 } from "../src/paddleWorker.js";
@@ -32,8 +33,21 @@ const say = (obj) => process.stdout.write(JSON.stringify(obj) + "\\n");
 if (mode !== "never-ready") {
   say({ event: "ready", protocol: "paddle-serve-v1", modelLoadSec: 0, warmupSec: 0, device: "test" });
 }
+if (mode === "stdin-closed") {
+  // closes its stdin but stays alive: a write must not become an uncaught EPIPE
+  process.stdin.destroy();
+  setTimeout(() => process.exit(0), 10000);
+} else {
+mainLoop();
+}
+function mainLoop() {
 const lines = createInterface({ input: process.stdin });
 let requests = 0;
+const answer = (req) => {
+  writeFileSync(req.out, JSON.stringify({ frames: [], echo: req }));
+  say({ id: req.id, ok: true, out: req.out, framesProcessed: 0, paddleDetections: 0, extras: 0, timing: {}, requestWallSec: 0 });
+};
+let held = null;
 lines.on("line", (line) => {
   const req = JSON.parse(line);
   if (req.op === "shutdown") { say({ id: req.id, ok: true, event: "shutdown" }); process.exit(0); }
@@ -41,10 +55,18 @@ lines.on("line", (line) => {
   if (mode === "crash-on-request") process.exit(3);
   if (mode === "error-once" && requests === 1) { say({ id: req.id, ok: false, error: "boom" }); return; }
   if (mode === "silent") return; // never answers -> request timeout
-  writeFileSync(req.out, JSON.stringify({ frames: [], echo: req }));
-  say({ id: req.id, ok: true, out: req.out, framesProcessed: 0, paddleDetections: 0, extras: 0, timing: {}, requestWallSec: 0 });
+  if (mode === "out-of-order") {
+    // hold the FIRST request and answer it after the second — responses
+    // arrive in the reverse order of the requests.
+    if (requests === 1) { held = req; return; }
+    answer(req);
+    if (held) { answer(held); held = null; }
+    return;
+  }
+  answer(req);
 });
 lines.on("close", () => process.exit(0));
+}
 `,
   );
   return path;
@@ -125,6 +147,119 @@ describe("PaddleServeWorker protocol", () => {
     worker.dispose();
     await waitForExit(worker);
     expect(worker.alive).toBe(false);
+  });
+});
+
+describe("PaddleServeWorker concurrency", () => {
+  it("matches concurrent responses by id even when they arrive out of order", async () => {
+    const worker = spawnFake("out-of-order");
+    const out1 = join(dir, "oo1.json");
+    const out2 = join(dir, "oo2.json");
+    const [r1, r2] = await Promise.all([
+      worker.detect({ video: "clip.mp4", out: out1, startMs: 100, endMs: 200 }),
+      worker.detect({ video: "clip.mp4", out: out2, startMs: 300, endMs: 400 }),
+    ]);
+    expect(r1.out).toBe(out1);
+    expect(r2.out).toBe(out2);
+    expect(JSON.parse(readFileSync(out1, "utf8")).echo.startMs).toBe(100);
+    expect(JSON.parse(readFileSync(out2, "utf8")).echo.startMs).toBe(300);
+    worker.dispose();
+  });
+
+  it("rejects (not crashes) when the worker's stdin closes while it stays alive", async () => {
+    const worker = spawnFake("stdin-closed", { requestTimeoutMs: 1000 });
+    await worker.ready();
+    // Give the fake time to destroy its stdin end of the pipe.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await expect(worker.detect(request(join(dir, "sc1.json")))).rejects.toThrow(PaddleWorkerError);
+    worker.dispose();
+    await waitForExit(worker);
+  });
+
+  it("dispose with a request in flight rejects the pending request", async () => {
+    const worker = spawnFake("silent");
+    await worker.ready();
+    const pending = worker.detect(request(join(dir, "dp1.json")));
+    worker.dispose();
+    await expect(pending).rejects.toThrow(PaddleWorkerError);
+    await waitForExit(worker);
+  });
+});
+
+describe("PaddleWorkerSupervisor restart", () => {
+  it("serves subsequent requests from a restarted worker after a crash", async () => {
+    let spawns = 0;
+    const supervisor = new PaddleWorkerSupervisor(() => {
+      spawns += 1;
+      return spawnFake(spawns === 1 ? "crash-on-request" : "ok");
+    });
+    await expect(supervisor.detect(request(join(dir, "sv1.json")))).rejects.toThrow(/exited/);
+    // wait for the crash to be observed
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const out = join(dir, "sv2.json");
+    const response = await supervisor.detect(request(out));
+    expect(response.ok).toBe(true);
+    expect(existsSync(out)).toBe(true);
+    expect(spawns).toBe(2);
+    expect(supervisor.restarts).toBe(1);
+    supervisor.dispose();
+  });
+
+  it("stops restarting once the budget is exhausted", async () => {
+    let spawns = 0;
+    const supervisor = new PaddleWorkerSupervisor(
+      () => {
+        spawns += 1;
+        return spawnFake("crash-on-request");
+      },
+      { maxRestarts: 1 },
+    );
+    await expect(supervisor.detect(request(join(dir, "sb1.json")))).rejects.toThrow(/exited/);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await expect(supervisor.detect(request(join(dir, "sb2.json")))).rejects.toThrow(/exited/);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await expect(supervisor.detect(request(join(dir, "sb3.json")))).rejects.toThrow(
+      /restart budget/,
+    );
+    expect(spawns).toBe(2);
+    supervisor.dispose();
+  });
+
+  it("does not restart after dispose", async () => {
+    const supervisor = new PaddleWorkerSupervisor(() => spawnFake("ok"));
+    supervisor.dispose();
+    await expect(supervisor.detect(request(join(dir, "sd1.json")))).rejects.toThrow(/disposed/);
+  });
+
+  it("falls back for the crashed window, then rides the restarted worker", async () => {
+    let spawns = 0;
+    const supervisor = new PaddleWorkerSupervisor(() => {
+      spawns += 1;
+      return spawnFake(spawns === 1 ? "crash-on-request" : "ok");
+    });
+    let oneShotCalls = 0;
+    const first = await detectPaddleWindow({
+      worker: supervisor,
+      request: request(join(dir, "sw1.json")),
+      oneShot: () => {
+        oneShotCalls += 1;
+      },
+      log: () => {},
+    });
+    expect(first).toBe("one_shot");
+    expect(oneShotCalls).toBe(1);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const second = await detectPaddleWindow({
+      worker: supervisor,
+      request: request(join(dir, "sw2.json")),
+      oneShot: () => {
+        oneShotCalls += 1;
+      },
+      log: () => {},
+    });
+    expect(second).toBe("worker");
+    expect(oneShotCalls).toBe(1);
+    supervisor.dispose();
   });
 });
 

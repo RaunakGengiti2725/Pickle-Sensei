@@ -323,9 +323,7 @@ function rankCounterfactual(
   scoreOf: (entry: ExplainedCandidate) => number,
   oracleTrackId: number | null,
 ): CounterfactualResult {
-  const eligible = explained.filter(
-    (entry) => entry.nObsFull >= TRACKER_GATES.minObservations,
-  );
+  const eligible = explained.filter((entry) => entry.nObsFull >= TRACKER_GATES.minObservations);
   const ranked = [...eligible].sort((a, b) => scoreOf(b) - scoreOf(a));
   const positives = ranked.filter((entry) => scoreOf(entry) > 0);
   const winner = positives[0] ?? null;
@@ -517,7 +515,9 @@ if (isMain) {
     let firedGate: string | null = null;
     if (eligibleByScore.length === 0) {
       firedGate =
-        rejectedOtherPlayerTracks > 0 ? "only_other_players_paddles_found" : "no_tracks_formed_near_target";
+        rejectedOtherPlayerTracks > 0
+          ? "only_other_players_paddles_found"
+          : "no_tracks_formed_near_target";
     } else {
       const best = eligibleByScore[0]!;
       const runnerUp = eligibleByScore[1];
@@ -577,8 +577,7 @@ if (isMain) {
 
     // ── oracle analysis ──────────────────────────────────────────────────
     const oracle = explained.reduce<ExplainedCandidate | null>(
-      (best, entry) =>
-        entry.hitsFull.size > (best?.hitsFull.size ?? 0) ? entry : best,
+      (best, entry) => (entry.hitsFull.size > (best?.hitsFull.size ?? 0) ? entry : best),
       null,
     );
     let verdict = "no oracle track (no candidate touches any gold label)";
@@ -653,10 +652,7 @@ if (isMain) {
       eventSpans.reduce((total, span) => total + (span.endMs - span.startMs), 0),
     );
 
-    const inHandMass = (
-      entry: ExplainedCandidate,
-      spans: readonly Span[] | null,
-    ): number => {
+    const inHandMass = (entry: ExplainedCandidate, spans: readonly Span[] | null): number => {
       let mass = 0;
       for (const observation of entry.observationsAfterFlip) {
         if (spans && !inAnySpan(observation.timestampMs, spans)) continue;
@@ -720,17 +716,24 @@ if (isMain) {
       visibleLabels,
     );
     const aliasWinner =
-      [...explainedAlias]
-        .sort((a, b) => a.rankAll - b.rankAll)
-        .find((entry) => entry.eligible) ?? null;
+      [...explainedAlias].sort((a, b) => a.rankAll - b.rankAll).find((entry) => entry.eligible) ??
+      null;
     const counterfactuals: CounterfactualResult[] = [
       // CF0 keeps the current ranking objective but reports the winner's FULL
       // track hits — i.e. current scoring WITHOUT the flip-truncation deletion.
-      rankCounterfactual("CF0 current ranking, no flip deletion", explained, (entry) =>
-        entry.eligible ? entry.score : 0,
-      oracleId),
+      rankCounterfactual(
+        "CF0 current ranking, no flip deletion",
+        explained,
+        (entry) => (entry.eligible ? entry.score : 0),
+        oracleId,
+      ),
       rankCounterfactual("CF1 event-gated coverage", explained, eventGatedCoverage, oracleId),
-      rankCounterfactual("CF2 in-hand mass (window)", explained, (entry) => inHandMass(entry, null), oracleId),
+      rankCounterfactual(
+        "CF2 in-hand mass (window)",
+        explained,
+        (entry) => inHandMass(entry, null),
+        oracleId,
+      ),
       rankCounterfactual("CF3 wrist-speed correlation", explained, speedCorrelation, oracleId),
       rankCounterfactual(
         "CF4 event-gated in-hand mass",
@@ -749,11 +752,17 @@ if (isMain) {
             ? null
             : (explainedAlias.find((entry) => entry.trackId === oracleId)?.rankAll ?? null),
         top2UnionHits: unionHits(
-          [...explainedAlias].sort((a, b) => a.rankAll - b.rankAll).filter((entry) => entry.eligible).slice(0, 2),
+          [...explainedAlias]
+            .sort((a, b) => a.rankAll - b.rankAll)
+            .filter((entry) => entry.eligible)
+            .slice(0, 2),
           false,
         ),
         top3UnionHits: unionHits(
-          [...explainedAlias].sort((a, b) => a.rankAll - b.rankAll).filter((entry) => entry.eligible).slice(0, 3),
+          [...explainedAlias]
+            .sort((a, b) => a.rankAll - b.rankAll)
+            .filter((entry) => entry.eligible)
+            .slice(0, 3),
           false,
         ),
       },
@@ -763,7 +772,12 @@ if (isMain) {
       bump(`${cf.name} +top2merge`, role, cf.top2UnionHits, visibleLabels.length);
     }
     // Oracle ceiling for reference in aggregates.
-    bump("oracle single-track ceiling", role, oracle ? oracle.hitsFull.size : 0, visibleLabels.length);
+    bump(
+      "oracle single-track ceiling",
+      role,
+      oracle ? oracle.hitsFull.size : 0,
+      visibleLabels.length,
+    );
 
     // ── production parity replay (raw tracklets + alias suppression) ─────
     const productionOutcome = selectPrimaryPaddleTrack(
@@ -840,7 +854,8 @@ if (isMain) {
       },
       productionParity: {
         note: "raw tracklets (no merge) + duplicate-alias suppression, as analyzeVideo runs it",
-        winnerTrackId: productionOutcome.status === "tracked" ? productionOutcome.lab.trackId : null,
+        winnerTrackId:
+          productionOutcome.status === "tracked" ? productionOutcome.lab.trackId : null,
         winnerHitsFull: productionWinnerHits,
         status: productionOutcome.status,
       },

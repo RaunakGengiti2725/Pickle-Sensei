@@ -1,0 +1,88 @@
+{
+  "workstream": "D13 — Scale stroke gold using C18's bench harness",
+  "status": "ORANGE",
+  "branch": "devin/wave-d/d13-stroke-gold-scale",
+  "annotatorId": "devin-visual-v3-waveD",
+  "coverageAuditBefore": {
+    "goldLabels": 22,
+    "goldCases": 9,
+    "l1Matrix": {
+      "dink": 9,
+      "volley": 5,
+      "overhead_lob": 3,
+      "groundstroke": 2,
+      "serve": 1,
+      "return": 0,
+      "drop_reset": 0,
+      "attack_counter": 0,
+      "specialty": 0,
+      "unknown": 2
+    }
+  },
+  "coverageAuditAfter": {
+    "goldLabels": 29,
+    "goldCases": 11,
+    "l1Matrix": {
+      "volley": 10,
+      "dink": 9,
+      "overhead_lob": 5,
+      "groundstroke": 2,
+      "serve": 1,
+      "return": 0,
+      "drop_reset": 0,
+      "attack_counter": 0,
+      "specialty": 0,
+      "unknown": 2
+    },
+    "l2Matrix": { "backhand": 11, "unknown": 8, "forehand": 6, "overhead": 4 },
+    "l3Known": 10,
+    "l3Unknown": 19,
+    "emptyL1Families": ["return", "drop_reset", "attack_counter", "specialty"],
+    "coverageGapFinding": "return, drop_reset, attack_counter, and specialty have ZERO gold labels; the committed non-held-out development corpus contains no eventLabels windows showing those families, so closing these gaps requires new footage/bundles, not more labeling passes."
+  },
+  "newLabels": {
+    "count": 7,
+    "targetWas": 12,
+    "targetShortfallReason": "HONEST NEGATIVE: only 7 eventLabels entries in committed non-held-out dev bundles lacked stroke gold (2 in afn-sasebo-rally2, 5 in wavea-sasebo-volleys). After these 7, every committed non-held-out dev bundle event has a stroke label (29/29). Reaching ≥12 would have required inventing events or touching held-out cases; neither was done.",
+    "method": "Frame-by-frame visual review at 29.97fps of the public-domain AFN Sasebo source (datasets/paddle-bench/registry.json source URL) at each event's recording-clock window; event bounds copied unchanged from prior passes.",
+    "labels": [
+      "afn-sasebo-rally2 target 2380: overhead_lob/overhead/unknown",
+      "afn-sasebo-rally2 target 3600: overhead_lob/overhead/overhead_smash",
+      "wavea-sasebo-volleys target 51900: volley/backhand/punch_volley_backhand",
+      "wavea-sasebo-volleys other 52267: volley/unknown/unknown",
+      "wavea-sasebo-volleys target 52434: volley/backhand/unknown",
+      "wavea-sasebo-volleys other 52867: volley/unknown/unknown",
+      "wavea-sasebo-volleys target 52934: volley/backhand/unknown"
+    ],
+    "appendOnly": "stroke-gold.json appended (no prior label modified); new sidecar files datasets/paddle-bench/bundles/{afn-sasebo-rally2,wavea-sasebo-volleys}/annotation/devin-visual-v3-waveD.json; no existing annotation file touched.",
+    "heldOutLabelsTouched": 0
+  },
+  "taxonomyBench": {
+    "command": "pnpm lab:stroke-taxonomy (exit 0)",
+    "goldSide": "29 labels across 11 cases validate against pickleball-taxonomy-v2 (validator: zero problems).",
+    "predictionSide": {
+      "canonicalRows": 0,
+      "targetLabelsWithoutCanonicalRunReport": 19,
+      "confusionMatrices": "L1/L2/L3 confusion matrices vs heuristic predictions have n=0 — EVERY cell is empty because datasets/paddle-bench/runs/ canonical report.json artifacts are gitignored and absent on Linux (macOS-only pnpm lab:regen). No prediction accuracy numbers were fabricated.",
+      "finding": "Prediction-vs-gold confusion remains an open coverage gap until the macOS loop regenerates canonical runs against the 29-label gold."
+    }
+  },
+  "declaredIntentPrior": {
+    "canonicalDataRows": 0,
+    "withVsWithoutDelta": "Not measurable on canonical data: 0 prediction rows exist on this machine, so with-intent and without-intent accuracies are both undefined (n=0). Reporting a delta would be fabrication.",
+    "fixtureEvidence": "The committed fixture-tested comparison (test/strokeTaxonomyBench.test.ts, 17 tests passing) remains the only measured evidence: the prior deepens abstained rows compatible with declared side, never overrides observed side or depth-3 leaves, and flags conflicts."
+  },
+  "verification": {
+    "swingLabTests": "19 files passed; 231 tests passed, 4 skipped (235).",
+    "testAdjustment": "strokeTaxonomyBench.test.ts append-only annotator assertion widened from the single waveC id to the set {devin-visual-v2-waveC, devin-visual-v3-waveD}; required by the instructed new annotatorId, no threshold weakened.",
+    "workspaceTypecheck": "pnpm typecheck: 18 workspace projects Done.",
+    "prettier": "pnpm exec prettier --write run on all added/modified files."
+  },
+  "honestNegatives": [
+    "New-label count is 7, below the ≥12 target, because the committed dev corpus is exhausted (all 29 non-held-out events now labeled).",
+    "0 prediction-side rows: no heuristic accuracy or confusion cell was measured; all matrix cells are empty on Linux.",
+    "L3 is unknown for 4 of the 7 new labels (small far-side figures; flick-volley subtype ambiguity); L2 unknown for the 2 far-side counters.",
+    "4 of 9 L1 families still have zero gold coverage and cannot be closed from existing footage."
+  ],
+  "blocked": "Prediction-vs-gold benchmarking (canonical runs) remains blocked on the macOS pose-extraction loop (pnpm lab:regen)."
+}

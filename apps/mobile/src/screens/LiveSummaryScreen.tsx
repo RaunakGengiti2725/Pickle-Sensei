@@ -105,7 +105,11 @@ function EngineSessionSummary(props: {
             label="session time"
           />
           <View style={styles.statDivider} />
-          <Stat value={String(snapshot.strokeCount)} label="stroke events" accent />
+          <Stat
+            value={String(snapshot.strokeCount)}
+            label="stroke events"
+            accent
+          />
           <View style={styles.statDivider} />
           <Stat value={String(readyCount)} label="analyzed" />
         </View>
@@ -128,7 +132,10 @@ function EngineSessionSummary(props: {
             )}
           </View>
           <Text
-            style={[type.caption, { color: color.inkSoft, marginTop: space.md }]}
+            style={[
+              type.caption,
+              { color: color.inkSoft, marginTop: space.md },
+            ]}
           >
             Counts only — techniques are never ranked against each other, and
             unclassified strokes are counted, not hidden.
@@ -152,7 +159,9 @@ function EngineSessionSummary(props: {
                   {CLOSE_REASON_LABEL[event.closeReason]}
                 </Text>
                 {event.boundaryUncertain ? (
-                  <Text style={[type.micro, { color: color.warn, marginTop: 2 }]}>
+                  <Text
+                    style={[type.micro, { color: color.warn, marginTop: 2 }]}
+                  >
                     BOUNDS UNCERTAIN — SESSION ENDED MID-MOTION
                   </Text>
                 ) : null}
@@ -165,8 +174,8 @@ function EngineSessionSummary(props: {
           ))}
           {snapshot.events.length === 0 ? (
             <Text style={[type.body, { color: color.inkSoft }]}>
-              The engine stayed on for the whole session and closed nothing —
-              no motion crossed the stroke-proposal floor.
+              The engine stayed on for the whole session and closed nothing — no
+              motion crossed the stroke-proposal floor.
             </Text>
           ) : null}
         </Card>
@@ -174,11 +183,17 @@ function EngineSessionSummary(props: {
         {pendingCount > 0 ? (
           <Card tone="soft" style={{ marginTop: space.md }}>
             <Text style={[type.bodyBold, { color: color.ink }]}>
-              Why {pendingCount === snapshot.strokeCount ? 'every' : `${pendingCount}`}{' '}
+              Why{' '}
+              {pendingCount === snapshot.strokeCount
+                ? 'every'
+                : `${pendingCount}`}{' '}
               event{pendingCount === 1 ? ' is' : 's are'} still pending
             </Text>
             <Text
-              style={[type.caption, { color: color.inkSoft, marginTop: space.sm }]}
+              style={[
+                type.caption,
+                { color: color.inkSoft, marginTop: space.sm },
+              ]}
             >
               {snapshot.events.some(
                 event =>

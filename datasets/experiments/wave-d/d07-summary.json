@@ -1,0 +1,34 @@
+{
+  "workstreamId": "D07",
+  "title": "Capture-envelope product integration (unify C12 contract + C13 UI, wire capture flow, honest gating)",
+  "branch": "devin/wave-d/d07-capture-envelope-product",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "whatWasBuilt": {
+    "contractUnification": "apps/mobile/src/camera/captureEnvelope.ts rewritten: C13's local interface (schemaVersion/source/Partial dimensions map, 4 local dimensions) removed; guidance, readyGate, live and attempt evaluation now consume the canonical EnvelopeVerdict from @pickle/shared-types, evaluated by evaluateCaptureEnvelope from @pickle/capture-envelope with capture-envelope-thresholds-v0.1-provisional. CaptureGuidancePanel and AnalyzeScreen updated to the shared shape. GUIDANCE copy covers all 8 canonical dimensions for DEGRADED/UNSUPPORTED; NOT_MEASURED dimensions never produce guidance.",
+    "gating": "Ready gate blocks ONLY on UNSUPPORTED dimensions; DEGRADED shows guidance but allows proceeding. runCaptureAnalysis gained an optional captureEnvelope request field: overall UNSUPPORTED returns a new 'quality_blocked' outcome BEFORE any inference or permit reservation (honest abstention: nothing analyzed, nothing rated); otherwise the verdict is attached to the persisted CaptureAnalysisRecord (additive optional field captureEnvelope on the analysis-pipeline record type; old records remain readable).",
+    "downstreamResult": "StrokeResultEvidenceRecord gained optional captureEnvelope; uncertaintyNotes adds a 'capture_quality' note ONLY when at least one element was already withheld AND the measured envelope overall is DEGRADED/UNSUPPORTED — never hedging a rendered element, never inventing a claim when no envelope was measured.",
+    "captureFlowWiring": "Attempt envelope: resolution/frame_rate/clip_duration come from the recorded clip's real capture configuration (width/height/fps/durationMs); player_visibility from the last readiness event (no_person = observed 0); brightness/motion_blur/camera_motion from the typed native contract CaptureQualitySignalsV1 delivered over a new 'capture_quality' CameraEvent variant. brightnessStd/player_pixel_height remain null → NOT_MEASURED (no pose-height source on-device today).",
+    "nativeContract": "native/vision-core/Sources/CaptureQualitySignals.swift added, CONTRACT-ONLY and explicitly marked UNVERIFIED-ON-DEVICE: no emitter is wired, the struct has never been compiled against a device camera session; measurement obligations (AVCaptureDevice format values, offline-prober-identical frame normalization, nil for uncomputable signals) are documented in the file.",
+    "rnSafeEntry": "packages/capture-envelope/src/core.ts added (evaluator + thresholds only) because the package index also exports the node:child_process ffmpeg prober; apps/mobile jest/tsconfig/metro alias @pickle/capture-envelope to core.ts."
+  },
+  "exactNumbers": {
+    "mobileJest": "271 tests / 35 suites passed (cd apps/mobile && npx jest) on Linux, Node 22; pre-D07 branch count was 230 (C13). New/updated: captureEnvelope.test.ts rewritten to the canonical contract (12 tests), captureAnalysisFlow.test.ts +2 (UNSUPPORTED forces quality_blocked with zero fetches and zero db writes; DEGRADED proceeds and persists captureEnvelope in local_analysis_record JSON), uncertaintyNote.test.ts +1.",
+    "mobileTsc": "npx tsc --noEmit clean",
+    "packageTypechecks": "pnpm --filter @pickle/capture-envelope typecheck and --filter @pickle/analysis-pipeline typecheck clean",
+    "packageTests": "@pickle/capture-envelope vitest 11/11; @pickle/analysis-pipeline vitest 34/34",
+    "prettier": "pnpm exec prettier --write run on all 17 added/modified files"
+  },
+  "honestNegatives": [
+    "The Swift CaptureQualitySignals contract is UNVERIFIED-ON-DEVICE: never compiled or run against hardware (Linux environment, no Mac/iPhone). No capture_quality event fires in this build, so brightness/motion_blur/camera_motion remain NOT_MEASURED live and at attempt time.",
+    "player_pixel_height and brightness_std have no on-device source and stay NOT_MEASURED.",
+    "Thresholds remain capture-envelope-thresholds-v0.1-provisional (C12): NOT validated against downstream analyzability; the UNSUPPORTED block therefore gates on provisional bands. No thresholds were changed or tuned in D07.",
+    "C13's readiness-state distance/stability guidance (move_closer/hold_still) is no longer duplicated in the envelope panel; those cues remain in the READINESS_COPY caption. The envelope panel now only states what the canonical checker measured.",
+    "usable-result-v1 semantics unchanged: no result contract, denominator, or threshold was modified; the quality gate runs strictly BEFORE analysis and DEGRADED runs flow through the existing pipeline untouched.",
+    "No cascade numbers, device measurements, or clip re-measurements were produced in D07; the 3 committed-clip DEGRADED verdicts from C12 stand as-is."
+  ],
+  "remainingBlocked": [
+    "Wiring a real native emitter for CaptureQualitySignalsV1 (AVCaptureDevice format + preview-frame proxies) requires macOS/Xcode and a physical device — blocked on this Linux environment.",
+    "Validating the provisional thresholds against downstream analyzability requires the Mac-only cascade/pose extraction.",
+    "Mobile jest on-device/Mac re-verification per the Wave C addendum (this run verified on Linux with the mobile suite directly, which now works: 271/271)."
+  ]
+}

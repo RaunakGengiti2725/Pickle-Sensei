@@ -221,8 +221,8 @@ export async function analyzeCapture(
   // hierarchical prediction is checked first, the flat one as fallback).
   const disagreement =
     identity.declared !== null
-      ? (autoPrediction && detectHierarchicalDisagreement(identity.declared, autoPrediction)) ??
-        detectFlatDisagreement(identity.declared, identity.predicted)
+      ? ((autoPrediction && detectHierarchicalDisagreement(identity.declared, autoPrediction)) ??
+        detectFlatDisagreement(identity.declared, identity.predicted))
       : null;
 
   let shotType: ShotTypeSlug;

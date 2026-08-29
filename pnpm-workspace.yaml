@@ -2,5 +2,6 @@ packages:
   - "apps/*"
   - "services/*"
   - "packages/*"
+  - "tools/mac-bench"
   # React Native app is npm-managed to avoid metro/pnpm symlink issues (DECISIONS D-013)
   - "!apps/mobile"

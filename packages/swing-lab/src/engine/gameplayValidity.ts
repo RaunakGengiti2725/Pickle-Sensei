@@ -20,7 +20,8 @@ import type { PlayerTrack } from "../playerTracker.js";
  * exhibits are preserved in the TA bench rejects.
  */
 
-export const GAMEPLAY_VALIDITY_VERSION = "liveness-v1 (wrist-relative-to-torso motion, dense-evidence gate)";
+export const GAMEPLAY_VALIDITY_VERSION =
+  "liveness-v1 (wrist-relative-to-torso motion, dense-evidence gate)";
 
 /** Mean per-second wrist motion relative to torso below this = not alive. */
 const MIN_RELATIVE_SPEED_PER_SEC = 0.02;
@@ -44,7 +45,8 @@ export interface LivenessEvidence {
 
 export function trackLivenessEvidence(track: PlayerTrack): LivenessEvidence {
   const frames = track.frames;
-  const spanMs = frames.length >= 2 ? frames[frames.length - 1]!.timestampMs - frames[0]!.timestampMs : 0;
+  const spanMs =
+    frames.length >= 2 ? frames[frames.length - 1]!.timestampMs - frames[0]!.timestampMs : 0;
   const spanSec = spanMs / 1000;
   let relativeTravel = 0;
   let comparablePairs = 0;
@@ -89,7 +91,9 @@ export function classifyTrackLiveness(track: PlayerTrack): Liveness {
  * auto-invalidated. Measured exhibit: Ohana animated title card = 5.7
  * pairs/s at 0.12 rel-speed/s. */
 export function sparseWristSuspect(evidence: LivenessEvidence): boolean {
-  return evidence.spanSec >= 2 && evidence.wristPairsPerSec < 8 && evidence.relativeSpeedPerSec > 0.05;
+  return (
+    evidence.spanSec >= 2 && evidence.wristPairsPerSec < 8 && evidence.relativeSpeedPerSec > 0.05
+  );
 }
 
 export interface WindowValidity {
@@ -112,5 +116,10 @@ export function windowValidity(tracks: PlayerTrack[]): WindowValidity {
       staticTracks: staticCount,
     };
   }
-  return { valid: true, reason: live > 0 ? `${live} live tracks` : "no judgeable people (neutral)", liveTracks: live, staticTracks: staticCount };
+  return {
+    valid: true,
+    reason: live > 0 ? `${live} live tracks` : "no judgeable people (neutral)",
+    liveTracks: live,
+    staticTracks: staticCount,
+  };
 }

@@ -2,11 +2,8 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
-import {
-  captureGuidanceLines,
-  readyGate,
-  type EnvelopeVerdict,
-} from './captureEnvelope';
+import type { EnvelopeVerdict } from '@pickle/shared-types';
+import { captureGuidanceLines, readyGate } from './captureEnvelope';
 
 /**
  * Pre-Ready capture guidance — actionable envelope feedback shown while the
@@ -30,8 +27,8 @@ export function CaptureGuidancePanel(props: {
       {lines.map(line => (
         <View key={line.dimension} style={styles.row}>
           <Icon
-            name={line.verdict === 'UNSUPPORTED' ? 'shield' : 'spark'}
-            color={line.verdict === 'UNSUPPORTED' ? color.warn : color.mint}
+            name={line.status === 'UNSUPPORTED' ? 'shield' : 'spark'}
+            color={line.status === 'UNSUPPORTED' ? color.warn : color.mint}
             size={16}
           />
           <Text style={[type.caption, styles.lineText]}>{line.text}</Text>

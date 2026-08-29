@@ -61,7 +61,7 @@ describe("mergePaddleTracklets", () => {
 
   it("refuses to merge objects of incompatible scale", () => {
     const a = tracklet(1, 1000, 5, { x: 0.3, y: 0.5 }, { x: 0.4, y: 0 }, 0.05);
-    const big = tracklet(2, 1300, 5, { x: 0.42, y: 0.5 }, { x: 0.4, y: 0 }, 0.30);
+    const big = tracklet(2, 1300, 5, { x: 0.42, y: 0.5 }, { x: 0.4, y: 0 }, 0.3);
     const { links } = mergePaddleTracklets([a, big], WINDOW);
     expect(links).toBe(0);
   });

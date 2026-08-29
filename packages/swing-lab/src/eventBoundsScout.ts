@@ -62,11 +62,24 @@ for (const window of windows) {
   const from = Number(fromRaw);
   const to = Number(toRaw);
   if (!Number.isFinite(from) || !Number.isFinite(to)) continue;
-  const inWindow = speeds.filter((sample) => sample.timestampMs >= from && sample.timestampMs <= to);
-  const peak = inWindow.length > 0 ? inWindow.reduce((best, sample) => (sample.value > best.value ? sample : best)) : null;
+  const inWindow = speeds.filter(
+    (sample) => sample.timestampMs >= from && sample.timestampMs <= to,
+  );
+  const peak =
+    inWindow.length > 0
+      ? inWindow.reduce((best, sample) => (sample.value > best.value ? sample : best))
+      : null;
   const torsoNear = (ms: number) => {
-    const frame = [...target.frames].sort((a, b) => Math.abs(a.timestampMs - ms) - Math.abs(b.timestampMs - ms))[0];
-    return frame ? { atMs: frame.timestampMs, x: Number(frame.torsoMid.x.toFixed(3)), y: Number(frame.torsoMid.y.toFixed(3)) } : null;
+    const frame = [...target.frames].sort(
+      (a, b) => Math.abs(a.timestampMs - ms) - Math.abs(b.timestampMs - ms),
+    )[0];
+    return frame
+      ? {
+          atMs: frame.timestampMs,
+          x: Number(frame.torsoMid.x.toFixed(3)),
+          y: Number(frame.torsoMid.y.toFixed(3)),
+        }
+      : null;
   };
   const row = {
     window: `${from}-${to}`,

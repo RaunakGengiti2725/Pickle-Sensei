@@ -93,11 +93,14 @@ export async function seed(pool: Pool, log: (line: string) => void = () => {}): 
     const shotTypeId = shotRows[0]?.id;
     if (!shotTypeId) throw new Error(`shot_type missing: ${config.shotType}`);
 
+    // Never rewrite the configuration of a released (or retired) model:
+    // seeds refresh hypotheses only while a version is still pre-release.
     const { rows: modelRows } = await pool.query<{ id: string }>(
       `INSERT INTO scoring_model (shot_type_id, version, status, min_analysis_confidence,
          lower_confidence_threshold, config)
        VALUES ($1, $2, 'validating', $3, $4, $5)
        ON CONFLICT (shot_type_id, version) DO UPDATE SET config = EXCLUDED.config
+       WHERE scoring_model.status IN ('draft', 'validating')
        RETURNING id`,
       [
         shotTypeId,
@@ -111,8 +114,22 @@ export async function seed(pool: Pool, log: (line: string) => void = () => {}): 
         }),
       ],
     );
-    const scoringModelId = modelRows[0]?.id;
-    if (!scoringModelId) throw new Error("scoring_model upsert returned no id");
+    let scoringModelId = modelRows[0]?.id;
+    if (!scoringModelId) {
+      // The version exists but is released or retired: leave its config,
+      // checkpoints, and targets exactly as the release evidence recorded them.
+      const { rows: existing } = await pool.query<{ id: string; status: string }>(
+        "SELECT id, status FROM scoring_model WHERE shot_type_id = $1 AND version = $2",
+        [shotTypeId, config.scoringModelVersion],
+      );
+      const model = existing[0];
+      if (!model) throw new Error("scoring_model upsert returned no id");
+      if (model.status !== "draft" && model.status !== "validating") {
+        log(`skipped ${config.shotType} ${config.scoringModelVersion} (status ${model.status})`);
+        continue;
+      }
+      scoringModelId = model.id;
+    }
 
     for (let order = 0; order < config.checkpoints.length; order++) {
       const cp = config.checkpoints[order];

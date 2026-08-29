@@ -14,7 +14,9 @@ import {
   type PeopleFile,
 } from "../../../../packages/swing-lab/src/playerTracker.js";
 
-const runDir = resolve(process.argv[2] ?? "../../datasets/experiments/wave-a/I-runs/afn-sasebo-rally2");
+const runDir = resolve(
+  process.argv[2] ?? "../../datasets/experiments/wave-a/I-runs/afn-sasebo-rally2",
+);
 const tap = (process.argv[3] ?? "0.7923,0.702").split(",").map(Number);
 
 const report = JSON.parse(readFileSync(join(runDir, "report.json"), "utf8"));
@@ -37,17 +39,21 @@ const sequence = targetPoseSequence(peopleFile, seeded.value.target);
 
 const debug = JSON.parse(readFileSync(join(runDir, "debug.json"), "utf8"));
 const paddle =
-  debug.paddle?.observations?.map((o: { t: number; x: number; y: number; w: number; h: number; conf: number }) => ({
-    timestampMs: o.t,
-    box: { x: o.x, y: o.y, width: o.w, height: o.h },
-    center: { x: o.x + o.w / 2, y: o.y + o.h / 2 },
-    detectorScore: o.conf,
-    trackId: debug.paddle.trackId,
-    confidence: o.conf,
-    nearWrist: true,
-  })) ?? null;
+  debug.paddle?.observations?.map(
+    (o: { t: number; x: number; y: number; w: number; h: number; conf: number }) => ({
+      timestampMs: o.t,
+      box: { x: o.x, y: o.y, width: o.w, height: o.h },
+      center: { x: o.x + o.w / 2, y: o.y + o.h / 2 },
+      detectorScore: o.conf,
+      trackId: debug.paddle.trackId,
+      confidence: o.conf,
+      nearWrist: true,
+    }),
+  ) ?? null;
 
-const file = JSON.parse(readFileSync(join(runDir, "ball-candidates.json"), "utf8")) as BallCandidateFile;
+const file = JSON.parse(
+  readFileSync(join(runDir, "ball-candidates.json"), "utf8"),
+) as BallCandidateFile;
 const { gated, all, fragments } = buildBallTracks(file, sequence, window, paddle);
 
 const POINTS: Array<[number, number, number]> = [
@@ -87,5 +93,7 @@ for (const id of [121, 165, 262, 297, 248, 274, 249]) {
   if (!c) continue;
   console.log(`\n#${id} obs:`);
   for (const o of c.observations)
-    console.log(`  t=${Math.round(o.timestampMs)} (${o.x.toFixed(3)},${o.y.toFixed(3)}) area ${Math.round(o.areaPx)}`);
+    console.log(
+      `  t=${Math.round(o.timestampMs)} (${o.x.toFixed(3)},${o.y.toFixed(3)}) area ${Math.round(o.areaPx)}`,
+    );
 }

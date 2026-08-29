@@ -1,6 +1,7 @@
 export { extractFrameStats } from "./frameStats.js";
 export { checkArtifactInvariants, type InvariantViolation } from "./invariants.js";
 export { runCorpusCheck, type CorpusCheckReport, type CorpusViolation } from "./corpusCheck.js";
+export { checkProvenanceChain, PROVENANCE_CHAIN_VERSION } from "./provenanceChain.js";
 export {
   BALL_CANDIDATE_GATE_VERSION,
   BALL_GATES,
@@ -9,6 +10,17 @@ export {
   type BallCandidateDiagnostics,
   type TrajectoryFile,
 } from "./ballCandidates.js";
+export {
+  aggregateBallOcclusionResults,
+  BALL_BUCKET_ORDER,
+  bucketForBallLabel,
+  collectCommittedBallLabels,
+  scoreBallOcclusionCase,
+  type BallBucketScore,
+  type BallGoldBucket,
+  type BallOcclusionCaseResult,
+  type BallOcclusionViolation,
+} from "./ballOcclusionBench.js";
 export {
   BALL_CONFIDENCE_MODEL,
   BALL_GATES2,
@@ -37,12 +49,15 @@ export {
 } from "./playerTracker.js";
 export {
   buildPaddleTracks,
+  MERGE_LINK_GATES,
   PADDLE_CONFIDENCE_MODEL,
   PADDLE_TRACKER_VERSION,
   mergePaddleTracklets,
   paddleSpeedSeries,
   selectPrimaryPaddleTrack,
   TRACKER_GATES,
+  trackletLinkGate,
+  trackletTail,
   wristSeries,
   type NormalizedBox,
   type PaddleTrackCandidate,
@@ -51,6 +66,22 @@ export {
   type PaddleDetectionSource,
   type TrackedPaddleObservation,
 } from "./paddleTracker.js";
+export {
+  classifyMergeCandidate,
+  enumerateMergeCandidatePairs,
+  MERGE_SAFETY_GATES,
+  MERGE_SAFETY_VERSION,
+  sweepMergeCandidates,
+  type BridgedFrame,
+  type BridgedFrameProvenance,
+  type MergeCandidatePair,
+  type MergeCandidateSafetyReport,
+  type MergeCheckStatus,
+  type MergeSafetyCheck,
+  type MergeSafetyContext,
+  type MergeSafetySweepResult,
+  type MergeSafetyVerdict,
+} from "./paddleMergeSafety.js";
 export {
   admitCropDetections,
   bridgeTrackedEstimates,

@@ -2,11 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  buildPlayerTracks,
-  initializeTargetFromSeed,
-  type PeopleFile,
-} from "./playerTracker.js";
+import { buildPlayerTracks, initializeTargetFromSeed, type PeopleFile } from "./playerTracker.js";
 
 /**
  * BENCH REGEN — versioned, reproducible regeneration of the gold-case run
@@ -64,7 +60,9 @@ function deriveManifest(): ManifestEntry[] {
     const tracks = buildPlayerTracks(people);
     const target = tracks.find((track) => track.trackId === targetTrackId);
     if (!target) {
-      console.error(`${benchCase.id}: track ${targetTrackId} not rebuilt from people.json — skipped`);
+      console.error(
+        `${benchCase.id}: track ${targetTrackId} not rebuilt from people.json — skipped`,
+      );
       continue;
     }
     // Try early-frame torso centers until the seed provably re-selects the
@@ -86,7 +84,9 @@ function deriveManifest(): ManifestEntry[] {
       }
     }
     if (!tap) {
-      console.error(`${benchCase.id}: NO tap point re-selects track ${targetTrackId} — needs human attention`);
+      console.error(
+        `${benchCase.id}: NO tap point re-selects track ${targetTrackId} — needs human attention`,
+      );
       continue;
     }
     entries.push({
@@ -153,7 +153,9 @@ if (isMain) {
       wanted.length === 0 || wanted[0] === "all"
         ? manifest
         : manifest.filter((entry) => wanted.includes(entry.id));
-    const passthrough = argv.filter((argument) => argument === "--merge-tracklets" || argument === "--full-scan");
+    const passthrough = argv.filter(
+      (argument) => argument === "--merge-tracklets" || argument === "--full-scan",
+    );
     for (const entry of targets) regenCase(entry, passthrough);
     console.log(`\nregenerated ${targets.length} case(s)`);
   }

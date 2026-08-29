@@ -546,9 +546,7 @@ export class LiveSessionFlow {
 
   /** Replay mode (no clip source) legitimately has no per-event clip; the
    * request carries nulls exactly as before Gap 2 closed. */
-  private async extractClip(
-    event: SessionStrokeEvent,
-  ): Promise<
+  private async extractClip(event: SessionStrokeEvent): Promise<
     | {
         status: 'extracted';
         clip: CapturedClip | null;

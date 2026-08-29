@@ -1,0 +1,1641 @@
+{
+  "version": "label-queue-v2",
+  "workstream": "D2-10",
+  "annotatorConvention": "next labels must be appended in NEW sidecar files (append-only rule); this queue only directs effort",
+  "heldOutExcluded": ["wm-dink-01", "afn-vic-rally1"],
+  "scoringFormula": "score = (1/(1+labelCount)) × modalityImpact × sliceBoosts ÷ acquisitionCost",
+  "determinism": "all inputs committed; constants carry quoted provenance; ties broken by id ascending",
+  "modalityImpacts": [
+    {
+      "modality": "contact",
+      "impact": 1,
+      "provenance": [
+        {
+          "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+          "metric": "results.conditionalSurvival.CONTACT",
+          "value": "2/5"
+        },
+        {
+          "source": "docs/HANDOFF_V3.md",
+          "metric": "rule 17",
+          "value": "Held-out contact/stroke misses (dink 250ms, vic 245ms/BACKHAND) are DATA problems. Fix via new dev labels"
+        }
+      ]
+    },
+    {
+      "modality": "events",
+      "impact": 0.9,
+      "provenance": [
+        {
+          "source": "docs/HANDOFF_V3.md",
+          "metric": "§6 NEXT BOTTLENECKS #1",
+          "value": "EVENT disambiguation — the only stage that didn't move (3/5)"
+        },
+        {
+          "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+          "metric": "results.verdict (rally1)",
+          "value": "EVENT SELECTION picked a 0%-overlap window (paddle-speed proposal defect)"
+        }
+      ]
+    },
+    {
+      "modality": "stroke",
+      "impact": 0.8,
+      "provenance": [
+        {
+          "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+          "metric": "results.conditionalSurvival.STROKE",
+          "value": "1/5"
+        },
+        {
+          "source": "datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json",
+          "metric": "measured.l3Known / measured.goldLabels",
+          "value": "8/22"
+        }
+      ]
+    },
+    {
+      "modality": "ball",
+      "impact": 0.7,
+      "provenance": [
+        {
+          "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+          "metric": "results.verdict (rally2)",
+          "value": "ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only"
+        },
+        {
+          "source": "datasets/experiments/wave-c/c04-ball-gold-summary.json",
+          "metric": "exactNumbers.occlusionAdjacentLabels",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "modality": "ownership",
+      "impact": 0.6,
+      "provenance": [
+        {
+          "source": "docs/HANDOFF_V3.md",
+          "metric": "§3 DATA / TRUTH",
+          "value": "wrong-player 4/41 — all one dink edge-on episode; edge-on/blur S0 blindness"
+        },
+        {
+          "source": "datasets/experiments/wave-b/W12-summary.json",
+          "metric": "baseline.rally2_missA_overhead_blur",
+          "value": "recovered@IoU.30 4/7 — the S0 hole is the deep-cock/pre-contact window"
+        }
+      ]
+    }
+  ],
+  "acquisitionCosts": [
+    {
+      "modality": "ball",
+      "cost": 1,
+      "rationale": "one extracted frame, one center point (or occluded state) per label"
+    },
+    {
+      "modality": "ownership",
+      "cost": 1.5,
+      "rationale": "one extracted frame but two boxes (target + other paddle) per dual-label convention"
+    },
+    {
+      "modality": "stroke",
+      "cost": 3,
+      "rationale": "whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention"
+    },
+    {
+      "modality": "contact",
+      "cost": 4,
+      "rationale": "frame-stepping a window to the smallest visually defensible 1-2 frame contact window (C05 method)"
+    },
+    {
+      "modality": "events",
+      "cost": 6,
+      "rationale": "start/contact/end bounds + owner require scanning the full stroke neighborhood frame-by-frame"
+    }
+  ],
+  "sliceBoosts": [
+    {
+      "id": "rally1-event-zero-support",
+      "bundleId": "afn-sasebo-rally1",
+      "modality": "events",
+      "multiplier": 2,
+      "provenance": {
+        "source": "docs/HANDOFF_V3.md",
+        "metric": "§2 named losses (afn-sasebo-rally1)",
+        "value": "gold 2900 has zero tracked support in any modality — perception coverage problem, not fusion"
+      }
+    },
+    {
+      "id": "rally1-ball-zero-support",
+      "bundleId": "afn-sasebo-rally1",
+      "modality": "ball",
+      "multiplier": 2,
+      "provenance": {
+        "source": "docs/HANDOFF_V3.md",
+        "metric": "§6 NEXT BOTTLENECKS #2",
+        "value": "grow dev contact labels from the new event corpus (rally2-style raw-ball-candidate tracking: A found strong candidates near gold rejected by ball gates)"
+      }
+    },
+    {
+      "id": "rally1-contact-anchor",
+      "bundleId": "afn-sasebo-rally1",
+      "modality": "contact",
+      "multiplier": 2,
+      "provenance": {
+        "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+        "metric": "results.verdict (rally1)",
+        "value": "rally1 → EVENT SELECTION picked a 0%-overlap window; poisons contact/phase/stroke"
+      }
+    },
+    {
+      "id": "rally2-ownership-edge-on",
+      "bundleId": "afn-sasebo-rally2",
+      "modality": "ownership",
+      "multiplier": 2,
+      "provenance": {
+        "source": "datasets/experiments/wave-b/W12-summary.json",
+        "metric": "status",
+        "value": "afn-sasebo-rally2 (DEV) miss windows dense (i75-81 @2502-2703, i87-93 @2903-3103) — overhead-blur + edge-on carry"
+      }
+    },
+    {
+      "id": "rally2-ball-body-overlap",
+      "bundleId": "afn-sasebo-rally2",
+      "modality": "ball",
+      "multiplier": 2,
+      "provenance": {
+        "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+        "metric": "results.verdict (rally2)",
+        "value": "rally2 → ball untracked (BALL_BODY_OVERLAP)"
+      }
+    },
+    {
+      "id": "dink-family-contact-anchors",
+      "bundleId": "wavea-944403-dink",
+      "modality": "contact",
+      "multiplier": 1.5,
+      "provenance": {
+        "source": "docs/HANDOFF_V3.md",
+        "metric": "§6 NEXT BOTTLENECKS #2",
+        "value": "teach v4's priors per family from >3 anchors (held-out dink contact 250ms is a DATA problem)"
+      }
+    },
+    {
+      "id": "faead-rally-ball-occlusion",
+      "bundleId": "wavea-faead-rally",
+      "modality": "ball",
+      "multiplier": 1.5,
+      "provenance": {
+        "source": "datasets/experiments/wave-c/c04-ball-gold-summary.json",
+        "metric": "exactNumbers.occlusionSequences",
+        "value": "body occlusion sequence wavea-faead-rally 13458-13583ms"
+      }
+    }
+  ],
+  "items": [
+    {
+      "rank": 1,
+      "id": "wavea-marne-serve/ball",
+      "bundleId": "wavea-marne-serve",
+      "modality": "ball",
+      "score": 0.7,
+      "bucketThinness": 1,
+      "labelCount": 0,
+      "impact": 0.7,
+      "acquisitionCost": 1,
+      "boosts": [],
+      "reasoning": "wavea-marne-serve has 0 committed ball label(s) (thinness 1.000) × modality failure impact 0.7 (results.verdict (rally2)=ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; exactNumbers.occlusionAdjacentLabels=8 [datasets/experiments/wave-c/c04-ball-gold-summary.json]) ÷ acquisition cost 1 (one extracted frame, one center point (or occluded state) per label).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 0,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-marne-serve/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-marne-serve/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "ball",
+          "impact": 0.7,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.verdict (rally2)",
+              "value": "ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c04-ball-gold-summary.json",
+              "metric": "exactNumbers.occlusionAdjacentLabels",
+              "value": 8
+            }
+          ]
+        },
+        "cost": {
+          "modality": "ball",
+          "cost": 1,
+          "rationale": "one extracted frame, one center point (or occluded state) per label"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 2,
+      "id": "wavea-sasebo-volleys/ball",
+      "bundleId": "wavea-sasebo-volleys",
+      "modality": "ball",
+      "score": 0.7,
+      "bucketThinness": 1,
+      "labelCount": 0,
+      "impact": 0.7,
+      "acquisitionCost": 1,
+      "boosts": [],
+      "reasoning": "wavea-sasebo-volleys has 0 committed ball label(s) (thinness 1.000) × modality failure impact 0.7 (results.verdict (rally2)=ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; exactNumbers.occlusionAdjacentLabels=8 [datasets/experiments/wave-c/c04-ball-gold-summary.json]) ÷ acquisition cost 1 (one extracted frame, one center point (or occluded state) per label).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 0,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-sasebo-volleys/annotation/devin-visual-v2-wave-a.json"
+          ]
+        },
+        "impact": {
+          "modality": "ball",
+          "impact": 0.7,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.verdict (rally2)",
+              "value": "ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c04-ball-gold-summary.json",
+              "metric": "exactNumbers.occlusionAdjacentLabels",
+              "value": 8
+            }
+          ]
+        },
+        "cost": {
+          "modality": "ball",
+          "cost": 1,
+          "rationale": "one extracted frame, one center point (or occluded state) per label"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 3,
+      "id": "wavea-wgm-wheelchair/ball",
+      "bundleId": "wavea-wgm-wheelchair",
+      "modality": "ball",
+      "score": 0.7,
+      "bucketThinness": 1,
+      "labelCount": 0,
+      "impact": 0.7,
+      "acquisitionCost": 1,
+      "boosts": [],
+      "reasoning": "wavea-wgm-wheelchair has 0 committed ball label(s) (thinness 1.000) × modality failure impact 0.7 (results.verdict (rally2)=ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; exactNumbers.occlusionAdjacentLabels=8 [datasets/experiments/wave-c/c04-ball-gold-summary.json]) ÷ acquisition cost 1 (one extracted frame, one center point (or occluded state) per label).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 0,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-wgm-wheelchair/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-wgm-wheelchair/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "ball",
+          "impact": 0.7,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.verdict (rally2)",
+              "value": "ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c04-ball-gold-summary.json",
+              "metric": "exactNumbers.occlusionAdjacentLabels",
+              "value": 8
+            }
+          ]
+        },
+        "cost": {
+          "modality": "ball",
+          "cost": 1,
+          "rationale": "one extracted frame, one center point (or occluded state) per label"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 4,
+      "id": "wavea-marne-serve/ownership",
+      "bundleId": "wavea-marne-serve",
+      "modality": "ownership",
+      "score": 0.39999999999999997,
+      "bucketThinness": 1,
+      "labelCount": 0,
+      "impact": 0.6,
+      "acquisitionCost": 1.5,
+      "boosts": [],
+      "reasoning": "wavea-marne-serve has 0 committed ownership label(s) (thinness 1.000) × modality failure impact 0.6 (§3 DATA / TRUTH=wrong-player 4/41 — all one dink edge-on episode; edge-on/blur S0 blindness [docs/HANDOFF_V3.md]; baseline.rally2_missA_overhead_blur=recovered@IoU.30 4/7 — the S0 hole is the deep-cock/pre-contact window [datasets/experiments/wave-b/W12-summary.json]) ÷ acquisition cost 1.5 (one extracted frame but two boxes (target + other paddle) per dual-label convention).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 0,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-marne-serve/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-marne-serve/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "ownership",
+          "impact": 0.6,
+          "provenance": [
+            {
+              "source": "docs/HANDOFF_V3.md",
+              "metric": "§3 DATA / TRUTH",
+              "value": "wrong-player 4/41 — all one dink edge-on episode; edge-on/blur S0 blindness"
+            },
+            {
+              "source": "datasets/experiments/wave-b/W12-summary.json",
+              "metric": "baseline.rally2_missA_overhead_blur",
+              "value": "recovered@IoU.30 4/7 — the S0 hole is the deep-cock/pre-contact window"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "ownership",
+          "cost": 1.5,
+          "rationale": "one extracted frame but two boxes (target + other paddle) per dual-label convention"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 5,
+      "id": "wavea-sasebo-volleys/ownership",
+      "bundleId": "wavea-sasebo-volleys",
+      "modality": "ownership",
+      "score": 0.39999999999999997,
+      "bucketThinness": 1,
+      "labelCount": 0,
+      "impact": 0.6,
+      "acquisitionCost": 1.5,
+      "boosts": [],
+      "reasoning": "wavea-sasebo-volleys has 0 committed ownership label(s) (thinness 1.000) × modality failure impact 0.6 (§3 DATA / TRUTH=wrong-player 4/41 — all one dink edge-on episode; edge-on/blur S0 blindness [docs/HANDOFF_V3.md]; baseline.rally2_missA_overhead_blur=recovered@IoU.30 4/7 — the S0 hole is the deep-cock/pre-contact window [datasets/experiments/wave-b/W12-summary.json]) ÷ acquisition cost 1.5 (one extracted frame but two boxes (target + other paddle) per dual-label convention).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 0,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-sasebo-volleys/annotation/devin-visual-v2-wave-a.json"
+          ]
+        },
+        "impact": {
+          "modality": "ownership",
+          "impact": 0.6,
+          "provenance": [
+            {
+              "source": "docs/HANDOFF_V3.md",
+              "metric": "§3 DATA / TRUTH",
+              "value": "wrong-player 4/41 — all one dink edge-on episode; edge-on/blur S0 blindness"
+            },
+            {
+              "source": "datasets/experiments/wave-b/W12-summary.json",
+              "metric": "baseline.rally2_missA_overhead_blur",
+              "value": "recovered@IoU.30 4/7 — the S0 hole is the deep-cock/pre-contact window"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "ownership",
+          "cost": 1.5,
+          "rationale": "one extracted frame but two boxes (target + other paddle) per dual-label convention"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 6,
+      "id": "wavea-wgm-wheelchair/ownership",
+      "bundleId": "wavea-wgm-wheelchair",
+      "modality": "ownership",
+      "score": 0.39999999999999997,
+      "bucketThinness": 1,
+      "labelCount": 0,
+      "impact": 0.6,
+      "acquisitionCost": 1.5,
+      "boosts": [],
+      "reasoning": "wavea-wgm-wheelchair has 0 committed ownership label(s) (thinness 1.000) × modality failure impact 0.6 (§3 DATA / TRUTH=wrong-player 4/41 — all one dink edge-on episode; edge-on/blur S0 blindness [docs/HANDOFF_V3.md]; baseline.rally2_missA_overhead_blur=recovered@IoU.30 4/7 — the S0 hole is the deep-cock/pre-contact window [datasets/experiments/wave-b/W12-summary.json]) ÷ acquisition cost 1.5 (one extracted frame but two boxes (target + other paddle) per dual-label convention).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 0,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-wgm-wheelchair/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-wgm-wheelchair/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "ownership",
+          "impact": 0.6,
+          "provenance": [
+            {
+              "source": "docs/HANDOFF_V3.md",
+              "metric": "§3 DATA / TRUTH",
+              "value": "wrong-player 4/41 — all one dink edge-on episode; edge-on/blur S0 blindness"
+            },
+            {
+              "source": "datasets/experiments/wave-b/W12-summary.json",
+              "metric": "baseline.rally2_missA_overhead_blur",
+              "value": "recovered@IoU.30 4/7 — the S0 hole is the deep-cock/pre-contact window"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "ownership",
+          "cost": 1.5,
+          "rationale": "one extracted frame but two boxes (target + other paddle) per dual-label convention"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 7,
+      "id": "afn-sasebo-rally2/ball",
+      "bundleId": "afn-sasebo-rally2",
+      "modality": "ball",
+      "score": 0.27999999999999997,
+      "bucketThinness": 0.2,
+      "labelCount": 4,
+      "impact": 0.7,
+      "acquisitionCost": 1,
+      "boosts": [
+        {
+          "id": "rally2-ball-body-overlap",
+          "bundleId": "afn-sasebo-rally2",
+          "modality": "ball",
+          "multiplier": 2,
+          "provenance": {
+            "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+            "metric": "results.verdict (rally2)",
+            "value": "rally2 → ball untracked (BALL_BODY_OVERLAP)"
+          }
+        }
+      ],
+      "reasoning": "afn-sasebo-rally2 has 4 committed ball label(s) (thinness 0.200) × modality failure impact 0.7 (results.verdict (rally2)=ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; exactNumbers.occlusionAdjacentLabels=8 [datasets/experiments/wave-c/c04-ball-gold-summary.json]) ÷ acquisition cost 1 (one extracted frame, one center point (or occluded state) per label). Boosted ×2 by measured failure loci: rally2 → ball untracked (BALL_BODY_OVERLAP) [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json].",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 4,
+          "countSources": [
+            "datasets/paddle-bench/bundles/afn-sasebo-rally2/annotation/devin-visual-v1.json"
+          ]
+        },
+        "impact": {
+          "modality": "ball",
+          "impact": 0.7,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.verdict (rally2)",
+              "value": "ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c04-ball-gold-summary.json",
+              "metric": "exactNumbers.occlusionAdjacentLabels",
+              "value": 8
+            }
+          ]
+        },
+        "cost": {
+          "modality": "ball",
+          "cost": 1,
+          "rationale": "one extracted frame, one center point (or occluded state) per label"
+        },
+        "boosts": [
+          {
+            "id": "rally2-ball-body-overlap",
+            "bundleId": "afn-sasebo-rally2",
+            "modality": "ball",
+            "multiplier": 2,
+            "provenance": {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.verdict (rally2)",
+              "value": "rally2 → ball untracked (BALL_BODY_OVERLAP)"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rank": 8,
+      "id": "wavea-faead-feed/stroke",
+      "bundleId": "wavea-faead-feed",
+      "modality": "stroke",
+      "score": 0.26666666666666666,
+      "bucketThinness": 1,
+      "labelCount": 0,
+      "impact": 0.8,
+      "acquisitionCost": 3,
+      "boosts": [],
+      "reasoning": "wavea-faead-feed has 0 committed stroke label(s) (thinness 1.000) × modality failure impact 0.8 (results.conditionalSurvival.STROKE=1/5 [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; measured.l3Known / measured.goldLabels=8/22 [datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json]) ÷ acquisition cost 3 (whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 0,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-waveC-contact.json",
+            "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-waveC-ownership.json",
+            "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "stroke",
+          "impact": 0.8,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.conditionalSurvival.STROKE",
+              "value": "1/5"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json",
+              "metric": "measured.l3Known / measured.goldLabels",
+              "value": "8/22"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "stroke",
+          "cost": 3,
+          "rationale": "whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 9,
+      "id": "wavea-marne-dig/stroke",
+      "bundleId": "wavea-marne-dig",
+      "modality": "stroke",
+      "score": 0.26666666666666666,
+      "bucketThinness": 1,
+      "labelCount": 0,
+      "impact": 0.8,
+      "acquisitionCost": 3,
+      "boosts": [],
+      "reasoning": "wavea-marne-dig has 0 committed stroke label(s) (thinness 1.000) × modality failure impact 0.8 (results.conditionalSurvival.STROKE=1/5 [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; measured.l3Known / measured.goldLabels=8/22 [datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json]) ÷ acquisition cost 3 (whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 0,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-marne-dig/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-marne-dig/annotation/devin-visual-v2-waveC-contact.json",
+            "datasets/paddle-bench/bundles/wavea-marne-dig/annotation/devin-visual-v2-waveC-ownership.json",
+            "datasets/paddle-bench/bundles/wavea-marne-dig/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "stroke",
+          "impact": 0.8,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.conditionalSurvival.STROKE",
+              "value": "1/5"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json",
+              "metric": "measured.l3Known / measured.goldLabels",
+              "value": "8/22"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "stroke",
+          "cost": 3,
+          "rationale": "whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 10,
+      "id": "afn-sasebo-rally1/ball",
+      "bundleId": "afn-sasebo-rally1",
+      "modality": "ball",
+      "score": 0.2333333333333333,
+      "bucketThinness": 0.16666666666666666,
+      "labelCount": 5,
+      "impact": 0.7,
+      "acquisitionCost": 1,
+      "boosts": [
+        {
+          "id": "rally1-ball-zero-support",
+          "bundleId": "afn-sasebo-rally1",
+          "modality": "ball",
+          "multiplier": 2,
+          "provenance": {
+            "source": "docs/HANDOFF_V3.md",
+            "metric": "§6 NEXT BOTTLENECKS #2",
+            "value": "grow dev contact labels from the new event corpus (rally2-style raw-ball-candidate tracking: A found strong candidates near gold rejected by ball gates)"
+          }
+        }
+      ],
+      "reasoning": "afn-sasebo-rally1 has 5 committed ball label(s) (thinness 0.167) × modality failure impact 0.7 (results.verdict (rally2)=ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; exactNumbers.occlusionAdjacentLabels=8 [datasets/experiments/wave-c/c04-ball-gold-summary.json]) ÷ acquisition cost 1 (one extracted frame, one center point (or occluded state) per label). Boosted ×2 by measured failure loci: grow dev contact labels from the new event corpus (rally2-style raw-ball-candidate tracking: A found strong candidates near gold rejected by ball gates) [docs/HANDOFF_V3.md].",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 5,
+          "countSources": [
+            "datasets/paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v1.json",
+            "datasets/paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "ball",
+          "impact": 0.7,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.verdict (rally2)",
+              "value": "ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c04-ball-gold-summary.json",
+              "metric": "exactNumbers.occlusionAdjacentLabels",
+              "value": 8
+            }
+          ]
+        },
+        "cost": {
+          "modality": "ball",
+          "cost": 1,
+          "rationale": "one extracted frame, one center point (or occluded state) per label"
+        },
+        "boosts": [
+          {
+            "id": "rally1-ball-zero-support",
+            "bundleId": "afn-sasebo-rally1",
+            "modality": "ball",
+            "multiplier": 2,
+            "provenance": {
+              "source": "docs/HANDOFF_V3.md",
+              "metric": "§6 NEXT BOTTLENECKS #2",
+              "value": "grow dev contact labels from the new event corpus (rally2-style raw-ball-candidate tracking: A found strong candidates near gold rejected by ball gates)"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rank": 11,
+      "id": "afn-sasebo-rally1/stroke",
+      "bundleId": "afn-sasebo-rally1",
+      "modality": "stroke",
+      "score": 0.13333333333333333,
+      "bucketThinness": 0.5,
+      "labelCount": 1,
+      "impact": 0.8,
+      "acquisitionCost": 3,
+      "boosts": [],
+      "reasoning": "afn-sasebo-rally1 has 1 committed stroke label(s) (thinness 0.500) × modality failure impact 0.8 (results.conditionalSurvival.STROKE=1/5 [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; measured.l3Known / measured.goldLabels=8/22 [datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json]) ÷ acquisition cost 3 (whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 1,
+          "countSources": [
+            "datasets/paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v1.json",
+            "datasets/paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "stroke",
+          "impact": 0.8,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.conditionalSurvival.STROKE",
+              "value": "1/5"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json",
+              "metric": "measured.l3Known / measured.goldLabels",
+              "value": "8/22"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "stroke",
+          "cost": 3,
+          "rationale": "whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 12,
+      "id": "afn-sasebo-rally2/stroke",
+      "bundleId": "afn-sasebo-rally2",
+      "modality": "stroke",
+      "score": 0.13333333333333333,
+      "bucketThinness": 0.5,
+      "labelCount": 1,
+      "impact": 0.8,
+      "acquisitionCost": 3,
+      "boosts": [],
+      "reasoning": "afn-sasebo-rally2 has 1 committed stroke label(s) (thinness 0.500) × modality failure impact 0.8 (results.conditionalSurvival.STROKE=1/5 [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; measured.l3Known / measured.goldLabels=8/22 [datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json]) ÷ acquisition cost 3 (whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 1,
+          "countSources": [
+            "datasets/paddle-bench/bundles/afn-sasebo-rally2/annotation/devin-visual-v1.json"
+          ]
+        },
+        "impact": {
+          "modality": "stroke",
+          "impact": 0.8,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.conditionalSurvival.STROKE",
+              "value": "1/5"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json",
+              "metric": "measured.l3Known / measured.goldLabels",
+              "value": "8/22"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "stroke",
+          "cost": 3,
+          "rationale": "whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 13,
+      "id": "wavea-sasebo-volleys/stroke",
+      "bundleId": "wavea-sasebo-volleys",
+      "modality": "stroke",
+      "score": 0.13333333333333333,
+      "bucketThinness": 0.5,
+      "labelCount": 1,
+      "impact": 0.8,
+      "acquisitionCost": 3,
+      "boosts": [],
+      "reasoning": "wavea-sasebo-volleys has 1 committed stroke label(s) (thinness 0.500) × modality failure impact 0.8 (results.conditionalSurvival.STROKE=1/5 [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; measured.l3Known / measured.goldLabels=8/22 [datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json]) ÷ acquisition cost 3 (whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 1,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-sasebo-volleys/annotation/devin-visual-v2-wave-a.json"
+          ]
+        },
+        "impact": {
+          "modality": "stroke",
+          "impact": 0.8,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.conditionalSurvival.STROKE",
+              "value": "1/5"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json",
+              "metric": "measured.l3Known / measured.goldLabels",
+              "value": "8/22"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "stroke",
+          "cost": 3,
+          "rationale": "whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 14,
+      "id": "wavea-faead-feed/ball",
+      "bundleId": "wavea-faead-feed",
+      "modality": "ball",
+      "score": 0.11666666666666665,
+      "bucketThinness": 0.16666666666666666,
+      "labelCount": 5,
+      "impact": 0.7,
+      "acquisitionCost": 1,
+      "boosts": [],
+      "reasoning": "wavea-faead-feed has 5 committed ball label(s) (thinness 0.167) × modality failure impact 0.7 (results.verdict (rally2)=ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; exactNumbers.occlusionAdjacentLabels=8 [datasets/experiments/wave-c/c04-ball-gold-summary.json]) ÷ acquisition cost 1 (one extracted frame, one center point (or occluded state) per label).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 5,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-waveC-contact.json",
+            "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-waveC-ownership.json",
+            "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "ball",
+          "impact": 0.7,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.verdict (rally2)",
+              "value": "ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c04-ball-gold-summary.json",
+              "metric": "exactNumbers.occlusionAdjacentLabels",
+              "value": 8
+            }
+          ]
+        },
+        "cost": {
+          "modality": "ball",
+          "cost": 1,
+          "rationale": "one extracted frame, one center point (or occluded state) per label"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 15,
+      "id": "wavea-marne-dig/ball",
+      "bundleId": "wavea-marne-dig",
+      "modality": "ball",
+      "score": 0.11666666666666665,
+      "bucketThinness": 0.16666666666666666,
+      "labelCount": 5,
+      "impact": 0.7,
+      "acquisitionCost": 1,
+      "boosts": [],
+      "reasoning": "wavea-marne-dig has 5 committed ball label(s) (thinness 0.167) × modality failure impact 0.7 (results.verdict (rally2)=ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; exactNumbers.occlusionAdjacentLabels=8 [datasets/experiments/wave-c/c04-ball-gold-summary.json]) ÷ acquisition cost 1 (one extracted frame, one center point (or occluded state) per label).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 5,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-marne-dig/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-marne-dig/annotation/devin-visual-v2-waveC-contact.json",
+            "datasets/paddle-bench/bundles/wavea-marne-dig/annotation/devin-visual-v2-waveC-ownership.json",
+            "datasets/paddle-bench/bundles/wavea-marne-dig/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "ball",
+          "impact": 0.7,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.verdict (rally2)",
+              "value": "ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c04-ball-gold-summary.json",
+              "metric": "exactNumbers.occlusionAdjacentLabels",
+              "value": 8
+            }
+          ]
+        },
+        "cost": {
+          "modality": "ball",
+          "cost": 1,
+          "rationale": "one extracted frame, one center point (or occluded state) per label"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 16,
+      "id": "wavea-faead-rally/ball",
+      "bundleId": "wavea-faead-rally",
+      "modality": "ball",
+      "score": 0.10499999999999998,
+      "bucketThinness": 0.1,
+      "labelCount": 9,
+      "impact": 0.7,
+      "acquisitionCost": 1,
+      "boosts": [
+        {
+          "id": "faead-rally-ball-occlusion",
+          "bundleId": "wavea-faead-rally",
+          "modality": "ball",
+          "multiplier": 1.5,
+          "provenance": {
+            "source": "datasets/experiments/wave-c/c04-ball-gold-summary.json",
+            "metric": "exactNumbers.occlusionSequences",
+            "value": "body occlusion sequence wavea-faead-rally 13458-13583ms"
+          }
+        }
+      ],
+      "reasoning": "wavea-faead-rally has 9 committed ball label(s) (thinness 0.100) × modality failure impact 0.7 (results.verdict (rally2)=ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; exactNumbers.occlusionAdjacentLabels=8 [datasets/experiments/wave-c/c04-ball-gold-summary.json]) ÷ acquisition cost 1 (one extracted frame, one center point (or occluded state) per label). Boosted ×1.5 by measured failure loci: body occlusion sequence wavea-faead-rally 13458-13583ms [datasets/experiments/wave-c/c04-ball-gold-summary.json].",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 9,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v2-waveC-contact.json",
+            "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v2-waveC-ownership.json",
+            "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "ball",
+          "impact": 0.7,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.verdict (rally2)",
+              "value": "ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c04-ball-gold-summary.json",
+              "metric": "exactNumbers.occlusionAdjacentLabels",
+              "value": 8
+            }
+          ]
+        },
+        "cost": {
+          "modality": "ball",
+          "cost": 1,
+          "rationale": "one extracted frame, one center point (or occluded state) per label"
+        },
+        "boosts": [
+          {
+            "id": "faead-rally-ball-occlusion",
+            "bundleId": "wavea-faead-rally",
+            "modality": "ball",
+            "multiplier": 1.5,
+            "provenance": {
+              "source": "datasets/experiments/wave-c/c04-ball-gold-summary.json",
+              "metric": "exactNumbers.occlusionSequences",
+              "value": "body occlusion sequence wavea-faead-rally 13458-13583ms"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "rank": 17,
+      "id": "wavea-944403-dink/stroke",
+      "bundleId": "wavea-944403-dink",
+      "modality": "stroke",
+      "score": 0.08888888888888889,
+      "bucketThinness": 0.3333333333333333,
+      "labelCount": 2,
+      "impact": 0.8,
+      "acquisitionCost": 3,
+      "boosts": [],
+      "reasoning": "wavea-944403-dink has 2 committed stroke label(s) (thinness 0.333) × modality failure impact 0.8 (results.conditionalSurvival.STROKE=1/5 [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; measured.l3Known / measured.goldLabels=8/22 [datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json]) ÷ acquisition cost 3 (whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 2,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v2-waveC-contact.json",
+            "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v2-waveC-ownership.json",
+            "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "stroke",
+          "impact": 0.8,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.conditionalSurvival.STROKE",
+              "value": "1/5"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json",
+              "metric": "measured.l3Known / measured.goldLabels",
+              "value": "8/22"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "stroke",
+          "cost": 3,
+          "rationale": "whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 18,
+      "id": "wavea-944403-smash/stroke",
+      "bundleId": "wavea-944403-smash",
+      "modality": "stroke",
+      "score": 0.08888888888888889,
+      "bucketThinness": 0.3333333333333333,
+      "labelCount": 2,
+      "impact": 0.8,
+      "acquisitionCost": 3,
+      "boosts": [],
+      "reasoning": "wavea-944403-smash has 2 committed stroke label(s) (thinness 0.333) × modality failure impact 0.8 (results.conditionalSurvival.STROKE=1/5 [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; measured.l3Known / measured.goldLabels=8/22 [datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json]) ÷ acquisition cost 3 (whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 2,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v2-waveC-contact.json",
+            "datasets/paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v2-waveC-ownership.json",
+            "datasets/paddle-bench/bundles/wavea-944403-smash/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "stroke",
+          "impact": 0.8,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.conditionalSurvival.STROKE",
+              "value": "1/5"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json",
+              "metric": "measured.l3Known / measured.goldLabels",
+              "value": "8/22"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "stroke",
+          "cost": 3,
+          "rationale": "whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 19,
+      "id": "wavea-faead-rally/stroke",
+      "bundleId": "wavea-faead-rally",
+      "modality": "stroke",
+      "score": 0.08888888888888889,
+      "bucketThinness": 0.3333333333333333,
+      "labelCount": 2,
+      "impact": 0.8,
+      "acquisitionCost": 3,
+      "boosts": [],
+      "reasoning": "wavea-faead-rally has 2 committed stroke label(s) (thinness 0.333) × modality failure impact 0.8 (results.conditionalSurvival.STROKE=1/5 [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; measured.l3Known / measured.goldLabels=8/22 [datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json]) ÷ acquisition cost 3 (whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 2,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v2-waveC-contact.json",
+            "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v2-waveC-ownership.json",
+            "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "stroke",
+          "impact": 0.8,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.conditionalSurvival.STROKE",
+              "value": "1/5"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json",
+              "metric": "measured.l3Known / measured.goldLabels",
+              "value": "8/22"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "stroke",
+          "cost": 3,
+          "rationale": "whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 20,
+      "id": "wavea-marne-serve/stroke",
+      "bundleId": "wavea-marne-serve",
+      "modality": "stroke",
+      "score": 0.08888888888888889,
+      "bucketThinness": 0.3333333333333333,
+      "labelCount": 2,
+      "impact": 0.8,
+      "acquisitionCost": 3,
+      "boosts": [],
+      "reasoning": "wavea-marne-serve has 2 committed stroke label(s) (thinness 0.333) × modality failure impact 0.8 (results.conditionalSurvival.STROKE=1/5 [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; measured.l3Known / measured.goldLabels=8/22 [datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json]) ÷ acquisition cost 3 (whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 2,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-marne-serve/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-marne-serve/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "stroke",
+          "impact": 0.8,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.conditionalSurvival.STROKE",
+              "value": "1/5"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json",
+              "metric": "measured.l3Known / measured.goldLabels",
+              "value": "8/22"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "stroke",
+          "cost": 3,
+          "rationale": "whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 21,
+      "id": "wavea-wgm-wheelchair/stroke",
+      "bundleId": "wavea-wgm-wheelchair",
+      "modality": "stroke",
+      "score": 0.08888888888888889,
+      "bucketThinness": 0.3333333333333333,
+      "labelCount": 2,
+      "impact": 0.8,
+      "acquisitionCost": 3,
+      "boosts": [],
+      "reasoning": "wavea-wgm-wheelchair has 2 committed stroke label(s) (thinness 0.333) × modality failure impact 0.8 (results.conditionalSurvival.STROKE=1/5 [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; measured.l3Known / measured.goldLabels=8/22 [datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json]) ÷ acquisition cost 3 (whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 2,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-wgm-wheelchair/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-wgm-wheelchair/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "stroke",
+          "impact": 0.8,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.conditionalSurvival.STROKE",
+              "value": "1/5"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json",
+              "metric": "measured.l3Known / measured.goldLabels",
+              "value": "8/22"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "stroke",
+          "cost": 3,
+          "rationale": "whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 22,
+      "id": "wm-volley-02/stroke",
+      "bundleId": "wm-volley-02",
+      "modality": "stroke",
+      "score": 0.08888888888888889,
+      "bucketThinness": 0.3333333333333333,
+      "labelCount": 2,
+      "impact": 0.8,
+      "acquisitionCost": 3,
+      "boosts": [],
+      "reasoning": "wm-volley-02 has 2 committed stroke label(s) (thinness 0.333) × modality failure impact 0.8 (results.conditionalSurvival.STROKE=1/5 [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; measured.l3Known / measured.goldLabels=8/22 [datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json]) ÷ acquisition cost 3 (whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 2,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wm-volley-02/annotation/devin-visual-v1.json",
+            "datasets/paddle-bench/bundles/wm-volley-02/annotation/devin-visual-v2-waveC-contact.json",
+            "datasets/paddle-bench/bundles/wm-volley-02/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "stroke",
+          "impact": 0.8,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.conditionalSurvival.STROKE",
+              "value": "1/5"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json",
+              "metric": "measured.l3Known / measured.goldLabels",
+              "value": "8/22"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "stroke",
+          "cost": 3,
+          "rationale": "whole-event review across its frames to assign L1/L2/L3 taxonomy with abstention"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 23,
+      "id": "wavea-944403-dink/ball",
+      "bundleId": "wavea-944403-dink",
+      "modality": "ball",
+      "score": 0.0875,
+      "bucketThinness": 0.125,
+      "labelCount": 7,
+      "impact": 0.7,
+      "acquisitionCost": 1,
+      "boosts": [],
+      "reasoning": "wavea-944403-dink has 7 committed ball label(s) (thinness 0.125) × modality failure impact 0.7 (results.verdict (rally2)=ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; exactNumbers.occlusionAdjacentLabels=8 [datasets/experiments/wave-c/c04-ball-gold-summary.json]) ÷ acquisition cost 1 (one extracted frame, one center point (or occluded state) per label).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 7,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v2-waveC-contact.json",
+            "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v2-waveC-ownership.json",
+            "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "ball",
+          "impact": 0.7,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.verdict (rally2)",
+              "value": "ball untracked (BALL_BODY_OVERLAP) though contact still landed 62ms via paddle-only"
+            },
+            {
+              "source": "datasets/experiments/wave-c/c04-ball-gold-summary.json",
+              "metric": "exactNumbers.occlusionAdjacentLabels",
+              "value": 8
+            }
+          ]
+        },
+        "cost": {
+          "modality": "ball",
+          "cost": 1,
+          "rationale": "one extracted frame, one center point (or occluded state) per label"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 24,
+      "id": "afn-sasebo-rally2/contact",
+      "bundleId": "afn-sasebo-rally2",
+      "modality": "contact",
+      "score": 0.08333333333333333,
+      "bucketThinness": 0.3333333333333333,
+      "labelCount": 2,
+      "impact": 1,
+      "acquisitionCost": 4,
+      "boosts": [],
+      "reasoning": "afn-sasebo-rally2 has 2 committed contact label(s) (thinness 0.333) × modality failure impact 1 (results.conditionalSurvival.CONTACT=2/5 [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; rule 17=Held-out contact/stroke misses (dink 250ms, vic 245ms/BACKHAND) are DATA problems. Fix via new dev labels [docs/HANDOFF_V3.md]) ÷ acquisition cost 4 (frame-stepping a window to the smallest visually defensible 1-2 frame contact window (C05 method)).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 2,
+          "countSources": [
+            "datasets/paddle-bench/bundles/afn-sasebo-rally2/annotation/devin-visual-v1.json"
+          ]
+        },
+        "impact": {
+          "modality": "contact",
+          "impact": 1,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.conditionalSurvival.CONTACT",
+              "value": "2/5"
+            },
+            {
+              "source": "docs/HANDOFF_V3.md",
+              "metric": "rule 17",
+              "value": "Held-out contact/stroke misses (dink 250ms, vic 245ms/BACKHAND) are DATA problems. Fix via new dev labels"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "contact",
+          "cost": 4,
+          "rationale": "frame-stepping a window to the smallest visually defensible 1-2 frame contact window (C05 method)"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 25,
+      "id": "wavea-faead-feed/contact",
+      "bundleId": "wavea-faead-feed",
+      "modality": "contact",
+      "score": 0.08333333333333333,
+      "bucketThinness": 0.3333333333333333,
+      "labelCount": 2,
+      "impact": 1,
+      "acquisitionCost": 4,
+      "boosts": [],
+      "reasoning": "wavea-faead-feed has 2 committed contact label(s) (thinness 0.333) × modality failure impact 1 (results.conditionalSurvival.CONTACT=2/5 [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; rule 17=Held-out contact/stroke misses (dink 250ms, vic 245ms/BACKHAND) are DATA problems. Fix via new dev labels [docs/HANDOFF_V3.md]) ÷ acquisition cost 4 (frame-stepping a window to the smallest visually defensible 1-2 frame contact window (C05 method)).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 2,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-waveC-contact.json",
+            "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-waveC-ownership.json",
+            "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "contact",
+          "impact": 1,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.conditionalSurvival.CONTACT",
+              "value": "2/5"
+            },
+            {
+              "source": "docs/HANDOFF_V3.md",
+              "metric": "rule 17",
+              "value": "Held-out contact/stroke misses (dink 250ms, vic 245ms/BACKHAND) are DATA problems. Fix via new dev labels"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "contact",
+          "cost": 4,
+          "rationale": "frame-stepping a window to the smallest visually defensible 1-2 frame contact window (C05 method)"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 26,
+      "id": "wavea-faead-rally/contact",
+      "bundleId": "wavea-faead-rally",
+      "modality": "contact",
+      "score": 0.08333333333333333,
+      "bucketThinness": 0.3333333333333333,
+      "labelCount": 2,
+      "impact": 1,
+      "acquisitionCost": 4,
+      "boosts": [],
+      "reasoning": "wavea-faead-rally has 2 committed contact label(s) (thinness 0.333) × modality failure impact 1 (results.conditionalSurvival.CONTACT=2/5 [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; rule 17=Held-out contact/stroke misses (dink 250ms, vic 245ms/BACKHAND) are DATA problems. Fix via new dev labels [docs/HANDOFF_V3.md]) ÷ acquisition cost 4 (frame-stepping a window to the smallest visually defensible 1-2 frame contact window (C05 method)).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 2,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v2-waveC-contact.json",
+            "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v2-waveC-ownership.json",
+            "datasets/paddle-bench/bundles/wavea-faead-rally/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "contact",
+          "impact": 1,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.conditionalSurvival.CONTACT",
+              "value": "2/5"
+            },
+            {
+              "source": "docs/HANDOFF_V3.md",
+              "metric": "rule 17",
+              "value": "Held-out contact/stroke misses (dink 250ms, vic 245ms/BACKHAND) are DATA problems. Fix via new dev labels"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "contact",
+          "cost": 4,
+          "rationale": "frame-stepping a window to the smallest visually defensible 1-2 frame contact window (C05 method)"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 27,
+      "id": "wavea-marne-dig/contact",
+      "bundleId": "wavea-marne-dig",
+      "modality": "contact",
+      "score": 0.08333333333333333,
+      "bucketThinness": 0.3333333333333333,
+      "labelCount": 2,
+      "impact": 1,
+      "acquisitionCost": 4,
+      "boosts": [],
+      "reasoning": "wavea-marne-dig has 2 committed contact label(s) (thinness 0.333) × modality failure impact 1 (results.conditionalSurvival.CONTACT=2/5 [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; rule 17=Held-out contact/stroke misses (dink 250ms, vic 245ms/BACKHAND) are DATA problems. Fix via new dev labels [docs/HANDOFF_V3.md]) ÷ acquisition cost 4 (frame-stepping a window to the smallest visually defensible 1-2 frame contact window (C05 method)).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 2,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-marne-dig/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-marne-dig/annotation/devin-visual-v2-waveC-contact.json",
+            "datasets/paddle-bench/bundles/wavea-marne-dig/annotation/devin-visual-v2-waveC-ownership.json",
+            "datasets/paddle-bench/bundles/wavea-marne-dig/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "contact",
+          "impact": 1,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.conditionalSurvival.CONTACT",
+              "value": "2/5"
+            },
+            {
+              "source": "docs/HANDOFF_V3.md",
+              "metric": "rule 17",
+              "value": "Held-out contact/stroke misses (dink 250ms, vic 245ms/BACKHAND) are DATA problems. Fix via new dev labels"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "contact",
+          "cost": 4,
+          "rationale": "frame-stepping a window to the smallest visually defensible 1-2 frame contact window (C05 method)"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 28,
+      "id": "wavea-marne-serve/contact",
+      "bundleId": "wavea-marne-serve",
+      "modality": "contact",
+      "score": 0.08333333333333333,
+      "bucketThinness": 0.3333333333333333,
+      "labelCount": 2,
+      "impact": 1,
+      "acquisitionCost": 4,
+      "boosts": [],
+      "reasoning": "wavea-marne-serve has 2 committed contact label(s) (thinness 0.333) × modality failure impact 1 (results.conditionalSurvival.CONTACT=2/5 [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; rule 17=Held-out contact/stroke misses (dink 250ms, vic 245ms/BACKHAND) are DATA problems. Fix via new dev labels [docs/HANDOFF_V3.md]) ÷ acquisition cost 4 (frame-stepping a window to the smallest visually defensible 1-2 frame contact window (C05 method)).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 2,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-marne-serve/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-marne-serve/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "contact",
+          "impact": 1,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.conditionalSurvival.CONTACT",
+              "value": "2/5"
+            },
+            {
+              "source": "docs/HANDOFF_V3.md",
+              "metric": "rule 17",
+              "value": "Held-out contact/stroke misses (dink 250ms, vic 245ms/BACKHAND) are DATA problems. Fix via new dev labels"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "contact",
+          "cost": 4,
+          "rationale": "frame-stepping a window to the smallest visually defensible 1-2 frame contact window (C05 method)"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 29,
+      "id": "wavea-wgm-wheelchair/contact",
+      "bundleId": "wavea-wgm-wheelchair",
+      "modality": "contact",
+      "score": 0.08333333333333333,
+      "bucketThinness": 0.3333333333333333,
+      "labelCount": 2,
+      "impact": 1,
+      "acquisitionCost": 4,
+      "boosts": [],
+      "reasoning": "wavea-wgm-wheelchair has 2 committed contact label(s) (thinness 0.333) × modality failure impact 1 (results.conditionalSurvival.CONTACT=2/5 [datasets/experiments/EXP-2026-08-28-cascade-waterfall.json]; rule 17=Held-out contact/stroke misses (dink 250ms, vic 245ms/BACKHAND) are DATA problems. Fix via new dev labels [docs/HANDOFF_V3.md]) ÷ acquisition cost 4 (frame-stepping a window to the smallest visually defensible 1-2 frame contact window (C05 method)).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 2,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-wgm-wheelchair/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-wgm-wheelchair/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "contact",
+          "impact": 1,
+          "provenance": [
+            {
+              "source": "datasets/experiments/EXP-2026-08-28-cascade-waterfall.json",
+              "metric": "results.conditionalSurvival.CONTACT",
+              "value": "2/5"
+            },
+            {
+              "source": "docs/HANDOFF_V3.md",
+              "metric": "rule 17",
+              "value": "Held-out contact/stroke misses (dink 250ms, vic 245ms/BACKHAND) are DATA problems. Fix via new dev labels"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "contact",
+          "cost": 4,
+          "rationale": "frame-stepping a window to the smallest visually defensible 1-2 frame contact window (C05 method)"
+        },
+        "boosts": []
+      }
+    },
+    {
+      "rank": 30,
+      "id": "wavea-faead-feed/ownership",
+      "bundleId": "wavea-faead-feed",
+      "modality": "ownership",
+      "score": 0.08,
+      "bucketThinness": 0.2,
+      "labelCount": 4,
+      "impact": 0.6,
+      "acquisitionCost": 1.5,
+      "boosts": [],
+      "reasoning": "wavea-faead-feed has 4 committed ownership label(s) (thinness 0.200) × modality failure impact 0.6 (§3 DATA / TRUTH=wrong-player 4/41 — all one dink edge-on episode; edge-on/blur S0 blindness [docs/HANDOFF_V3.md]; baseline.rally2_missA_overhead_blur=recovered@IoU.30 4/7 — the S0 hole is the deep-cock/pre-contact window [datasets/experiments/wave-b/W12-summary.json]) ÷ acquisition cost 1.5 (one extracted frame but two boxes (target + other paddle) per dual-label convention).",
+      "scoreInputs": {
+        "thinness": {
+          "formula": "1 / (1 + labelCount)",
+          "labelCount": 4,
+          "countSources": [
+            "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-wave-a.json",
+            "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-waveC-contact.json",
+            "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-waveC-ownership.json",
+            "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v2-waveC.json"
+          ]
+        },
+        "impact": {
+          "modality": "ownership",
+          "impact": 0.6,
+          "provenance": [
+            {
+              "source": "docs/HANDOFF_V3.md",
+              "metric": "§3 DATA / TRUTH",
+              "value": "wrong-player 4/41 — all one dink edge-on episode; edge-on/blur S0 blindness"
+            },
+            {
+              "source": "datasets/experiments/wave-b/W12-summary.json",
+              "metric": "baseline.rally2_missA_overhead_blur",
+              "value": "recovered@IoU.30 4/7 — the S0 hole is the deep-cock/pre-contact window"
+            }
+          ]
+        },
+        "cost": {
+          "modality": "ownership",
+          "cost": 1.5,
+          "rationale": "one extracted frame but two boxes (target + other paddle) per dual-label convention"
+        },
+        "boosts": []
+      }
+    }
+  ]
+}

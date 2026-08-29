@@ -36,16 +36,20 @@ if (!seeded.ok) throw new Error("seed failed");
 const sequence = targetPoseSequence(peopleFile, seeded.value.target);
 const debug = JSON.parse(readFileSync(join(runDir, "debug.json"), "utf8"));
 const paddle =
-  debug.paddle?.observations?.map((o: { t: number; x: number; y: number; w: number; h: number; conf: number }) => ({
-    timestampMs: o.t,
-    box: { x: o.x, y: o.y, width: o.w, height: o.h },
-    center: { x: o.x + o.w / 2, y: o.y + o.h / 2 },
-    detectorScore: o.conf,
-    trackId: debug.paddle.trackId,
-    confidence: o.conf,
-    nearWrist: true,
-  })) ?? null;
-const file = JSON.parse(readFileSync(join(runDir, "ball-candidates.json"), "utf8")) as BallCandidateFile;
+  debug.paddle?.observations?.map(
+    (o: { t: number; x: number; y: number; w: number; h: number; conf: number }) => ({
+      timestampMs: o.t,
+      box: { x: o.x, y: o.y, width: o.w, height: o.h },
+      center: { x: o.x + o.w / 2, y: o.y + o.h / 2 },
+      detectorScore: o.conf,
+      trackId: debug.paddle.trackId,
+      confidence: o.conf,
+      nearWrist: true,
+    }),
+  ) ?? null;
+const file = JSON.parse(
+  readFileSync(join(runDir, "ball-candidates.json"), "utf8"),
+) as BallCandidateFile;
 const { gated, fragments, ablation } = buildBallTracks(file, sequence, window, paddle);
 const outcome = selectPrimaryBallTrack(gated, ablation, window, {
   paddleTrackExists: (paddle?.length ?? 0) > 0,

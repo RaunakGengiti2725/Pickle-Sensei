@@ -1,0 +1,46 @@
+{
+  "workstream": "D08",
+  "branch": "devin/wave-d/d08-ood-corpus",
+  "date": "2026-08-29",
+  "whatWasBuilt": {
+    "corpus": "9 REAL (non-synthetic) rights-cleared negative clips committed under datasets/ood/negatives/ across 7 categories: tennis (2), badminton (1), table tennis (2), empty court (1), crowd/non-sport (1), interview/talking-head (1), title card/TV graphics (1). Total 72845522 bytes (~70 MB), under the 200 MB cap.",
+    "registry": "datasets/ood/registry.json following C16 conventions: per-item quoted license text, source URL, uploader, acquisition command, SHA-256, media metadata, license verification method, provenance assessment, plus 3 quarantined candidates (uploader-declared CC but visibly third-party broadcast/stock) and the full search log (incl. DVIDS API refusing without a key).",
+    "measurement": "packages/swing-lab/src/oodNegativesMeasure.ts runs the C15 pose-free signals (extractFrameStats + evaluateFrameAnalyzability + preAnalysisGate with pose=null) over the registry and writes datasets/experiments/wave-d/d08-ood-measurements.json.",
+    "tests": "packages/swing-lab/test/oodRealNegatives.test.ts locks the measured verdicts: pose-free-detectable negatives must abstain (corrupted_media, capture.not_analyzable.*); pass-through negatives are asserted as documented findings with pose_presence and pose_capture_quality in notEvaluated."
+  },
+  "measuredResults": {
+    "gateVersion": "pre-analysis-gate-1",
+    "poseFreeRejected": {
+      "count": 5,
+      "ids": [
+        "yt--wE27MoX2AM-tennis",
+        "yt-RpPe0h9cD5E-tennis",
+        "yt-Iw55LinAF0U-badminton",
+        "yt-zWQs7kTKcEY-emptycourt",
+        "ia-HanfordS1957-titlecard"
+      ],
+      "reason": "all via still_image_video (median inter-frame diff <= 0.5)"
+    },
+    "poseFreePassedThrough": {
+      "count": 4,
+      "ids": [
+        "yt-2wV0Gs9r384-tabletennis",
+        "yt-BCJGL5E9huM-tabletennis",
+        "commons-ronpaul-crowd",
+        "ia-ProfileJ26-interview"
+      ],
+      "finding": "These real negatives reach analysis on pose-free signals alone. Rejecting them requires the pose-conditioned checks (no_person_found / person_implausible_scale, macOS-only) or content-level signals that do not exist yet. Reported, not hidden."
+    }
+  },
+  "honestNegatives": [
+    "FINDING: 4/9 real negatives (44%) pass the pose-free gate — moving, textured, non-letterboxed footage (table tennis rallies, a crowd, an interview) is indistinguishable from a valid capture by frame statistics alone.",
+    "FINDING: still_image_video over-triggers on REAL moving footage. Tennis/badminton/empty-court clips shot from fixed distant cameras have median inter-frame diff 0.10–0.34 at 64x36 grayscale, below the 0.5 threshold, so they are rejected as 'still images' despite visible play. The rejection outcome is correct for these negatives but the reason is wrong, and real pickleball footage from similar fixed distant cameras could be rejected the same way. Thresholds were NOT changed (truth over green).",
+    "Uploader authority for the YouTube CC items was assessed from channel context (same caveat as C16), not independently confirmed; 3 questionable candidates were quarantined instead of accepted.",
+    "DVIDS API could not be used (no API key: 'Bad Request - No API key was provided'); public-domain sourcing fell back to Internet Archive and Wikimedia Commons."
+  ],
+  "blocked": {
+    "poseConditionedChecks": "no_person_found and person_implausible_scale cannot be measured on this corpus here: pose extraction is Apple Vision (macOS-only). They stay contract-level — the tests assert pose_presence/pose_capture_quality appear in notEvaluated for every pass-through clip. Measuring them on the 4 pass-through negatives is the concrete macOS follow-up.",
+    "cascade": "Canonical run dirs are absent and gitignored on Linux; no cascade numbers were produced or touched."
+  },
+  "provenance": "All numbers above are from datasets/experiments/wave-d/d08-ood-measurements.json, produced by pnpm exec tsx src/oodNegativesMeasure.ts in packages/swing-lab on Linux CPU, 2026-08-29. Corpus rights evidence is per-item in datasets/ood/registry.json."
+}

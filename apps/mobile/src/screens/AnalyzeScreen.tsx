@@ -18,13 +18,16 @@ import {
   subscribeToCameraEvents,
   type CameraEvent,
   type CapturedClip,
+  type CaptureQualitySignalsV1,
 } from '../camera/capture';
 import { CaptureEvidenceCard } from '../camera/CaptureEvidenceCard';
 import { CaptureGuidancePanel } from '../camera/CaptureGuidancePanel';
 import {
-  envelopeFromReadinessEvent,
-  type EnvelopeVerdict,
+  attemptCaptureEnvelope,
+  liveCaptureEnvelope,
+  type ReadinessSnapshot,
 } from '../camera/captureEnvelope';
+import type { EnvelopeVerdict } from '@pickle/shared-types';
 import { TargetSelector, type TargetSelection } from '../camera/TargetSelector';
 import { getDb } from '../data/db';
 import { savePendingCapture, setDeclaredStroke } from '../data/repository';
@@ -405,6 +408,11 @@ export function AnalyzeScreen() {
   const [targetSeed, setTargetSeed] = useState<TargetSelection | null>(null);
   const [captureEnvelope, setCaptureEnvelope] =
     useState<EnvelopeVerdict | null>(null);
+  // Last measured live signals, kept for the attempt-time envelope: the
+  // readiness read closest to the swing and the latest native quality
+  // signals (null until an emitter exists — those dims stay NOT_MEASURED).
+  const lastReadiness = useRef<ReadinessSnapshot | null>(null);
+  const lastQuality = useRef<CaptureQualitySignalsV1 | null>(null);
   const profile = useAppStore(s => s.profile);
   const operationActive = useRef(false);
   const autoLaunchStarted = useRef(false);
@@ -413,11 +421,22 @@ export function AnalyzeScreen() {
     () =>
       subscribeToCameraEvents((event: CameraEvent) => {
         if (event.type === 'readiness') {
-          setCaptureEnvelope(envelopeFromReadinessEvent(event));
+          lastReadiness.current = {
+            state: event.state,
+            jointCoverage: event.jointCoverage,
+          };
+          setCaptureEnvelope(
+            liveCaptureEnvelope(lastReadiness.current, lastQuality.current),
+          );
           setPhase({
             kind: 'working',
             message: READINESS_COPY[event.state] ?? 'Reading your position…',
           });
+        } else if (event.type === 'capture_quality') {
+          lastQuality.current = event.signals;
+          setCaptureEnvelope(
+            liveCaptureEnvelope(lastReadiness.current, lastQuality.current),
+          );
         } else if (event.type === 'stroke_detected') {
           setCaptureEnvelope(null);
           setPhase({
@@ -481,8 +500,21 @@ export function AnalyzeScreen() {
           appVersion: '0.1.0',
           focusCheckpoint: profile?.focusCheckpoint,
           targetSeed,
+          captureEnvelope:
+            clip.captureMode === 'automatic_pose_trigger'
+              ? attemptCaptureEnvelope(
+                  clip,
+                  lastQuality.current,
+                  lastReadiness.current,
+                )
+              : null,
         });
         if (outcome.kind === 'unavailable') {
+          setPhase({ kind: 'error', message: outcome.reason });
+          return;
+        }
+        if (outcome.kind === 'quality_blocked') {
+          // Honest abstention: nothing was analyzed or rated.
           setPhase({ kind: 'error', message: outcome.reason });
           return;
         }
@@ -512,6 +544,10 @@ export function AnalyzeScreen() {
   const run = useCallback(async () => {
     if (operationActive.current) return;
     operationActive.current = true;
+    // Each capture attempt starts with a clean envelope verdict and target
+    // seed: both describe ONE clip and must never carry into the next one.
+    setCaptureEnvelope(null);
+    setTargetSeed(null);
     setPhase({
       kind: 'working',
       message:

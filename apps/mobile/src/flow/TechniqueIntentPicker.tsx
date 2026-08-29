@@ -88,8 +88,10 @@ export function TechniqueIntentPicker(props: {
         value={text}
         onChangeText={value => {
           setText(value);
-          const resolved = value.trim().length >= 3 ? resolveTechniqueIntent(value) : null;
-          if (resolved?.status === 'resolved') select(resolved.technique, 'voice');
+          const resolved =
+            value.trim().length >= 3 ? resolveTechniqueIntent(value) : null;
+          if (resolved?.status === 'resolved')
+            select(resolved.technique, 'voice');
         }}
         onSubmitEditing={onSubmitText}
         autoCorrect={false}
@@ -97,11 +99,15 @@ export function TechniqueIntentPicker(props: {
         style={[styles.intentField, props.dark && styles.intentFieldDark]}
       />
       {resolution?.status === 'ambiguous' ? (
-        <Text style={[type.caption, styles.hint, props.dark && styles.hintDark]}>
+        <Text
+          style={[type.caption, styles.hint, props.dark && styles.hintDark]}
+        >
           {resolution.reason} — pick one below.
         </Text>
       ) : resolution?.status === 'unknown' ? (
-        <Text style={[type.caption, styles.hint, props.dark && styles.hintDark]}>
+        <Text
+          style={[type.caption, styles.hint, props.dark && styles.hintDark]}
+        >
           No matching technique — tap one below.
         </Text>
       ) : null}
@@ -163,7 +169,9 @@ export function TechniqueIntentPicker(props: {
         </PressableScale>
       </View>
       {autoSelected ? (
-        <Text style={[type.caption, styles.hint, props.dark && styles.hintDark]}>
+        <Text
+          style={[type.caption, styles.hint, props.dark && styles.hintDark]}
+        >
           Auto Detect runs the on-device classifier on your recorded swing.
           Today it can usually read the swing family — forehand or backhand —
           not the exact stroke (that needs ball-bounce tracking this build

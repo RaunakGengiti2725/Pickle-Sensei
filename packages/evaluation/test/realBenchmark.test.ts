@@ -8,7 +8,11 @@ import {
   type RealBenchmarkManifest,
 } from "../src/index.js";
 
-const hash = (seed: string) => seed.repeat(64).slice(0, 64).replace(/[^0-9a-f]/g, "a");
+const hash = (seed: string) =>
+  seed
+    .repeat(64)
+    .slice(0, 64)
+    .replace(/[^0-9a-f]/g, "a");
 
 function manifest(overrides: Partial<RealBenchmarkManifest> = {}): RealBenchmarkManifest {
   return {
@@ -39,9 +43,7 @@ describe("validateRealBenchmarkManifest", () => {
   });
 
   it("rejects synthetic provenance — synthetic data cannot masquerade as real", () => {
-    const result = validateRealBenchmarkManifest(
-      manifest({ provenance: "synthetic" as never }),
-    );
+    const result = validateRealBenchmarkManifest(manifest({ provenance: "synthetic" as never }));
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.failure.code).toBe("real_benchmark.invalid_provenance");

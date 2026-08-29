@@ -1,0 +1,237 @@
+{
+  "workstream": "wave-d/d08-ood-corpus",
+  "measuredAt": "2026-08-29",
+  "environment": "Linux CPU; ffmpeg decode; pose extraction unavailable (Apple Vision is macOS-only) so pose-conditioned signals are notEvaluated by construction",
+  "gateVersion": "pre-analysis-gate-1",
+  "measurements": [
+    {
+      "id": "yt--wE27MoX2AM-tennis",
+      "category": "other_racket_sport_tennis",
+      "path": "datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4",
+      "frameCount": 982,
+      "durationMs": 32767,
+      "meanInterFrameDiff": 0.7809540116377844,
+      "medianInterFrameDiff": 0.3255208333333333,
+      "meanSpatialLumaStd": 50.76107285402752,
+      "medianSpatialLumaStd": 50.86305826393293,
+      "letterboxRowFraction": 0.0010183299389002036,
+      "frameAnalyzable": false,
+      "frameReasons": ["still_image_video"],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.still_image_video",
+      "notEvaluated": [],
+      "poseFreeDetectable": true
+    },
+    {
+      "id": "yt-RpPe0h9cD5E-tennis",
+      "category": "other_racket_sport_tennis",
+      "path": "datasets/ood/negatives/yt-RpPe0h9cD5E-tennis.mp4",
+      "frameCount": 943,
+      "durationMs": 31465,
+      "meanInterFrameDiff": 0.24874721706180702,
+      "medianInterFrameDiff": 0.24305555555555555,
+      "meanSpatialLumaStd": 43.7768328447334,
+      "medianSpatialLumaStd": 43.76620895965497,
+      "letterboxRowFraction": 0,
+      "frameAnalyzable": false,
+      "frameReasons": ["still_image_video"],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.still_image_video",
+      "notEvaluated": [],
+      "poseFreeDetectable": true
+    },
+    {
+      "id": "yt-Iw55LinAF0U-badminton",
+      "category": "other_racket_sport_badminton",
+      "path": "datasets/ood/negatives/yt-Iw55LinAF0U-badminton.mp4",
+      "frameCount": 900,
+      "durationMs": 30000,
+      "meanInterFrameDiff": 0.3366278890124827,
+      "medianInterFrameDiff": 0.1814236111111111,
+      "meanSpatialLumaStd": 52.723278588651056,
+      "medianSpatialLumaStd": 55.22200113984995,
+      "letterboxRowFraction": 0,
+      "frameAnalyzable": false,
+      "frameReasons": ["still_image_video"],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.still_image_video",
+      "notEvaluated": [],
+      "poseFreeDetectable": true
+    },
+    {
+      "id": "yt-2wV0Gs9r384-tabletennis",
+      "category": "other_racket_sport_table_tennis",
+      "path": "datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4",
+      "frameCount": 900,
+      "durationMs": 30030,
+      "meanInterFrameDiff": 3.75264616935484,
+      "medianInterFrameDiff": 2.5065104166666665,
+      "meanSpatialLumaStd": 54.825937179548454,
+      "medianSpatialLumaStd": 54.80974811612464,
+      "letterboxRowFraction": 0,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "pose_presence",
+        "pose_capture_quality"
+      ],
+      "poseFreeDetectable": false
+    },
+    {
+      "id": "yt-BCJGL5E9huM-tabletennis",
+      "category": "other_racket_sport_table_tennis",
+      "path": "datasets/ood/negatives/yt-BCJGL5E9huM-tabletennis.mp4",
+      "frameCount": 350,
+      "durationMs": 14000,
+      "meanInterFrameDiff": 1.320440594157912,
+      "medianInterFrameDiff": 1.1840277777777777,
+      "meanSpatialLumaStd": 37.355129101132576,
+      "medianSpatialLumaStd": 37.27294287015597,
+      "letterboxRowFraction": 0,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "pose_presence",
+        "pose_capture_quality"
+      ],
+      "poseFreeDetectable": false
+    },
+    {
+      "id": "yt-zWQs7kTKcEY-emptycourt",
+      "category": "empty_court",
+      "path": "datasets/ood/negatives/yt-zWQs7kTKcEY-emptycourt.mp4",
+      "frameCount": 900,
+      "durationMs": 30000,
+      "meanInterFrameDiff": 0.09987563341984912,
+      "medianInterFrameDiff": 0.08506944444444445,
+      "meanSpatialLumaStd": 58.83401049875407,
+      "medianSpatialLumaStd": 58.811432900134974,
+      "letterboxRowFraction": 0,
+      "frameAnalyzable": false,
+      "frameReasons": ["still_image_video"],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.still_image_video",
+      "notEvaluated": [],
+      "poseFreeDetectable": true
+    },
+    {
+      "id": "commons-ronpaul-crowd",
+      "category": "crowd_non_sport",
+      "path": "datasets/ood/negatives/commons-ronpaul-crowd.mp4",
+      "frameCount": 900,
+      "durationMs": 30000,
+      "meanInterFrameDiff": 4.315614957978001,
+      "medianInterFrameDiff": 3.0611979166666665,
+      "meanSpatialLumaStd": 61.2284413965972,
+      "medianSpatialLumaStd": 60.970027569882646,
+      "letterboxRowFraction": 0.0035802469135802475,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "pose_presence",
+        "pose_capture_quality"
+      ],
+      "poseFreeDetectable": false
+    },
+    {
+      "id": "ia-ProfileJ26-interview",
+      "category": "interview_talking_head",
+      "path": "datasets/ood/negatives/ia-ProfileJ26-interview.mp4",
+      "frameCount": 900,
+      "durationMs": 30031,
+      "meanInterFrameDiff": 2.052136440180446,
+      "medianInterFrameDiff": 1.8077256944444444,
+      "meanSpatialLumaStd": 31.452688403004704,
+      "medianSpatialLumaStd": 31.575841947795688,
+      "letterboxRowFraction": 0,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailureKind": null,
+      "gateFailureCode": null,
+      "notEvaluated": [
+        "camera_motion",
+        "scene_cuts",
+        "exposure_flicker",
+        "pose_presence",
+        "pose_capture_quality"
+      ],
+      "poseFreeDetectable": false
+    },
+    {
+      "id": "ia-HanfordS1957-titlecard",
+      "category": "title_card_tv_graphics",
+      "path": "datasets/ood/negatives/ia-HanfordS1957-titlecard.mp4",
+      "frameCount": 600,
+      "durationMs": 20021,
+      "meanInterFrameDiff": 0.8731559253849013,
+      "medianInterFrameDiff": 0.4192708333333333,
+      "meanSpatialLumaStd": 39.14537825926076,
+      "medianSpatialLumaStd": 33.90498336991568,
+      "letterboxRowFraction": 0,
+      "frameAnalyzable": false,
+      "frameReasons": ["still_image_video"],
+      "gateOk": false,
+      "gateFailureKind": "corrupted_media",
+      "gateFailureCode": "capture.not_analyzable.still_image_video",
+      "notEvaluated": [],
+      "poseFreeDetectable": true
+    }
+  ],
+  "findings": {
+    "poseFreePassedThrough": [
+      "yt-2wV0Gs9r384-tabletennis",
+      "yt-BCJGL5E9huM-tabletennis",
+      "commons-ronpaul-crowd",
+      "ia-ProfileJ26-interview"
+    ],
+    "note": "Every id listed here is a real negative that the pose-free signals alone would forward to analysis; rejecting these requires the pose-conditioned checks (macOS) or content-level signals that do not exist yet."
+  },
+  "additionalFinding": {
+    "stillImageVideoOverTrigger": [
+      {
+        "id": "yt--wE27MoX2AM-tennis",
+        "medianInterFrameDiff": 0.3255208333333333
+      },
+      {
+        "id": "yt-RpPe0h9cD5E-tennis",
+        "medianInterFrameDiff": 0.24305555555555555
+      },
+      {
+        "id": "yt-Iw55LinAF0U-badminton",
+        "medianInterFrameDiff": 0.1814236111111111
+      },
+      {
+        "id": "yt-zWQs7kTKcEY-emptycourt",
+        "medianInterFrameDiff": 0.08506944444444445
+      },
+      {
+        "id": "ia-HanfordS1957-titlecard",
+        "medianInterFrameDiff": 0.4192708333333333
+      }
+    ],
+    "note": "still_image_video (median inter-frame diff <= 0.5 at 64x36 grayscale) fires on REAL moving footage shot from fixed distant cameras. These negatives are rejected, but for a reason that conflates low-motion real video with stills; real pickleball footage from similar fixed distant cameras could be rejected the same way. Thresholds NOT changed; reported as a finding."
+  }
+}

@@ -16,6 +16,7 @@
     "annotate": "tsx src/annotate.ts",
     "paddle:bench": "tsx src/paddleBench.ts",
     "ball:bench": "tsx src/ballBench.ts",
+    "ball:occlusion": "tsx src/ballOcclusionBench.ts",
     "stroke:bench": "tsx src/strokeBench.ts",
     "stroke:taxonomy": "tsx src/strokeTaxonomyBench.ts",
     "dataset:report": "tsx src/datasetReport.ts",
@@ -32,12 +33,16 @@
     "corpus:sessions": "tsx src/engine/sessionGroup.ts",
     "failure:mine": "tsx src/engine/failureMine.ts",
     "own": "tsx src/ownershipAnnotate.ts",
+    "ownership:bench": "tsx src/ownershipBench.ts",
     "completion:bench": "tsx src/eventCompletionBench.ts",
     "cascade": "tsx src/cascadeWaterfall.ts",
     "coach:queue": "tsx src/coachReview.ts",
     "regen": "tsx src/benchRegen.ts",
     "risk:curves": "tsx src/coverageRisk.ts",
-    "invariants:corpus": "tsx src/corpusCheck.ts"
+    "label:queue": "tsx src/labelQueueV2.ts",
+    "bundle:experiments": "tsx src/experimentBundle.ts",
+    "invariants:corpus": "tsx src/corpusCheck.ts",
+    "merge:safety": "tsx src/paddleMergeSafetySweep.ts"
   },
   "dependencies": {
     "@pickle/analysis-pipeline": "workspace:*",
@@ -45,7 +50,6 @@
     "@pickle/scoring": "workspace:*",
     "@pickle/shared-types": "workspace:*",
     "@pickle/swing-domain": "workspace:*",
-    "@pickle/vision-contracts": "workspace:*",
     "@pickle/vision-geometry": "workspace:*"
   },
   "devDependencies": {

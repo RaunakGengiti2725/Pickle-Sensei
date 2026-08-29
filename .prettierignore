@@ -11,3 +11,16 @@ apps/mobile/ios/build/
 native/**/.build/
 apps/mobile/android/link-assets-manifest.json
 apps/mobile/ios/link-assets-manifest.json
+# Committed scientific artifacts: append-only measurement/annotation/gold records
+# (bench results, runs, fingerprints, experiment reports, releases). Their bytes are
+# provenance; reformatting rewrites provenance. Code under datasets/ (*.ts, *.mjs)
+# is NOT ignored and stays prettier-formatted.
+datasets/**/*.json
+datasets/**/*.md
+ml/annotations/
+# Integrator-owned living documents: only the integration wave edits these, and
+# formatting-only rewrites by other agents are prohibited.
+docs/STATUS_BOARD.md
+docs/HANDOFF_V3.md
+docs/DECISIONS.md
+.testing/

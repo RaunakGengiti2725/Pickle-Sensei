@@ -1,0 +1,156 @@
+{
+  "schemaVersion": "mac-bench-results-v1",
+  "generatedAtIso": "2026-08-29T00:00:00.000Z",
+  "host": {
+    "platform": "darwin",
+    "osVersion": "15.5",
+    "hardwareModel": "Mac15,6",
+    "nodeVersion": "v20.19.0",
+    "pythonVersion": "Python 3.11.9"
+  },
+  "provenance": {
+    "gitCommit": "0000000000000000000000000000000000000000",
+    "gitBranch": "main",
+    "dirtyWorkingTree": false
+  },
+  "plan": {
+    "caseIds": ["wm-volley-02", "afn-sasebo-rally2"],
+    "coldIterations": 1,
+    "warmIterations": 3
+  },
+  "extractor": {
+    "built": true,
+    "buildWallMs": 41000,
+    "binaryPath": "/tmp/bin/swing-lab"
+  },
+  "stages": [
+    {
+      "stage": "e2e",
+      "unit": "ms",
+      "cold": {
+        "sampleCount": 2,
+        "minMs": 50000,
+        "maxMs": 56000,
+        "meanMs": 53000,
+        "p50Ms": 50000,
+        "p90Ms": 56000,
+        "p95Ms": 56000
+      },
+      "warm": {
+        "sampleCount": 6,
+        "minMs": 16000,
+        "maxMs": 19000,
+        "meanMs": 17500,
+        "p50Ms": 17000,
+        "p90Ms": 19000,
+        "p95Ms": 19000
+      },
+      "samples": [
+        {
+          "stage": "e2e",
+          "caseId": "wm-volley-02",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 50000
+        },
+        {
+          "stage": "e2e",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 56000
+        },
+        {
+          "stage": "e2e",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 17000
+        },
+        {
+          "stage": "e2e",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 18000
+        },
+        {
+          "stage": "e2e",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 16000
+        },
+        {
+          "stage": "e2e",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 19000
+        }
+      ]
+    },
+    {
+      "stage": "paddleDetect",
+      "unit": "ms",
+      "cold": null,
+      "warm": {
+        "sampleCount": 2,
+        "minMs": 5800,
+        "maxMs": 6200,
+        "meanMs": 6000,
+        "p50Ms": 5800,
+        "p90Ms": 6200,
+        "p95Ms": 6200
+      },
+      "samples": [
+        {
+          "stage": "paddleDetect",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 5800
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 6200
+        }
+      ]
+    }
+  ],
+  "cascade": {
+    "sourceFile": "datasets/cascade/cascade-1787988000000.json",
+    "goldEvents": 5,
+    "unconditionalPass": {
+      "TARGET": 5,
+      "EVENT": 3,
+      "PADDLE": 5,
+      "BALL": 5,
+      "CONTACT": 2,
+      "PHASE": 4,
+      "STROKE": 3
+    },
+    "conditionalSurvival": {
+      "TARGET": 5,
+      "EVENT": 3,
+      "PADDLE": 3,
+      "BALL": 3,
+      "CONTACT": 2,
+      "PHASE": 2,
+      "STROKE": 2
+    },
+    "strictSurvival": { "survived": 2, "total": 5 },
+    "usableResult": { "usable": 2, "total": 5, "contractVersion": "usable-result-v1" },
+    "silentFailure": {
+      "silentFailures": 1,
+      "answeredTrials": 4,
+      "allTrials": 5,
+      "contractVersion": "silent-failure-v1"
+    }
+  },
+  "cascadeUnmeasuredReason": null,
+  "notes": ["fixture document for Linux tests — numbers are synthetic"]
+}

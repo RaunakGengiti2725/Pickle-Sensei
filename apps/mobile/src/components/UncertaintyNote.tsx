@@ -25,6 +25,7 @@ export const UNCERTAINTY_KINDS = [
   'stroke_identity',
   'phase_timing',
   'technique_score',
+  'capture_quality',
 ] as const;
 export type UncertaintyKind = (typeof UNCERTAINTY_KINDS)[number];
 
@@ -40,6 +41,9 @@ export const UNCERTAINTY_COPY: Record<UncertaintyKind, string> = {
   technique_score:
     'A technique score wasn’t established for this attempt — scoring stays ' +
     'withheld rather than estimated.',
+  capture_quality:
+    'The measured capture quality was below the supported range on this ' +
+    'attempt, which can limit what the analysis could establish.',
 };
 
 export interface UncertaintyNoteView {
@@ -74,10 +78,24 @@ export function uncertaintyNotes(input: {
     notes.push({ kind: 'phase_timing', text: UNCERTAINTY_COPY.phase_timing });
   }
   const analysis = input.analysis ?? record.result ?? null;
-  if (!analysis || analysis.overallScore === null) {
+  const scoreWithheld = !analysis || analysis.overallScore === null;
+  if (scoreWithheld) {
     notes.push({
       kind: 'technique_score',
       text: UNCERTAINTY_COPY.technique_score,
+    });
+  }
+  // Quality context appears ONLY when something was withheld: the note
+  // explains an abstention, it never hedges a rendered element. It reads
+  // the measured envelope verdict — absence of a verdict says nothing.
+  const envelopeOverall = record.captureEnvelope?.overall;
+  if (
+    notes.length > 0 &&
+    (envelopeOverall === 'DEGRADED' || envelopeOverall === 'UNSUPPORTED')
+  ) {
+    notes.push({
+      kind: 'capture_quality',
+      text: UNCERTAINTY_COPY.capture_quality,
     });
   }
   return notes;

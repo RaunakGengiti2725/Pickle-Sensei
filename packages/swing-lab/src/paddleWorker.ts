@@ -77,6 +77,15 @@ export class PaddleServeWorker {
     this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.log = options.log ?? ((message) => console.error(message));
     this.child = spawn(command, args, { stdio: ["pipe", "pipe", "inherit"] });
+    // A request written while the worker is dying can surface EPIPE on the
+    // stdin stream; without a listener that is an uncaught exception that
+    // takes down the whole analyze run. A worker whose stdin is broken can
+    // never serve again, so it is killed — the exit handler then rejects
+    // every pending request (fallback path).
+    this.child.stdin!.on("error", (error) => {
+      this.log(`paddle worker stdin error: ${error.message}`);
+      this.kill();
+    });
 
     let readyResolve: (event: PaddleReadyEvent) => void = () => {};
     let readyReject: (error: PaddleWorkerError) => void = () => {};
@@ -179,7 +188,25 @@ export class PaddleServeWorker {
       timer.unref();
       this.pending.set(id, { resolve, reject, timer });
     });
-    this.child.stdin!.write(`${JSON.stringify({ id, ...request })}\n`);
+    try {
+      if (this.child.stdin!.destroyed || !this.child.stdin!.writable) {
+        throw new PaddleWorkerError("worker stdin is not writable");
+      }
+      this.child.stdin!.write(`${JSON.stringify({ id, ...request })}\n`);
+    } catch (error) {
+      const waiter = this.pending.get(id);
+      if (waiter) {
+        this.pending.delete(id);
+        if (waiter.timer) clearTimeout(waiter.timer);
+        waiter.reject(
+          error instanceof PaddleWorkerError
+            ? error
+            : new PaddleWorkerError(
+                `worker stdin write failed: ${error instanceof Error ? error.message : String(error)}`,
+              ),
+        );
+      }
+    }
     return response;
   }
 
@@ -204,21 +231,96 @@ export class PaddleServeWorker {
   }
 }
 
-/** Spawn the warm detector worker if the paddle-lab environment exists;
- * returns null (caller uses the one-shot path) when it does not. */
+export interface PaddleWorkerSupervisorOptions extends PaddleServeWorkerOptions {
+  /** Crash-restart budget for the whole run. A worker that keeps dying is an
+   * environment problem; after this many respawns every remaining window
+   * uses the one-shot fallback. */
+  maxRestarts?: number;
+}
+
+const DEFAULT_MAX_RESTARTS = 2;
+
+/**
+ * Restart supervision over PaddleServeWorker. A crashed worker previously
+ * degraded EVERY subsequent detect window to the one-shot path (each paying
+ * the full python import + model load again — N times under two-pass); the
+ * supervisor respawns a fresh worker on the next request instead, within a
+ * bounded restart budget. The failed request itself still rejects (its
+ * window falls back to one-shot — never a partial worker artifact); only
+ * SUBSEQUENT requests ride the restarted worker.
+ */
+export class PaddleWorkerSupervisor {
+  private worker: PaddleServeWorker;
+  private restartsUsed = 0;
+  private readonly maxRestarts: number;
+  private disposed = false;
+
+  constructor(
+    private readonly spawnWorker: () => PaddleServeWorker,
+    options: { maxRestarts?: number } = {},
+  ) {
+    this.maxRestarts = options.maxRestarts ?? DEFAULT_MAX_RESTARTS;
+    this.worker = spawnWorker();
+  }
+
+  get alive(): boolean {
+    return this.worker.alive;
+  }
+
+  get restarts(): number {
+    return this.restartsUsed;
+  }
+
+  ready(): Promise<PaddleReadyEvent> {
+    return this.worker.ready();
+  }
+
+  async detect(request: PaddleDetectRequest): Promise<PaddleDetectResponse> {
+    if (this.disposed) throw new PaddleWorkerError("worker supervisor is disposed");
+    if (!this.worker.alive) {
+      if (this.restartsUsed >= this.maxRestarts) {
+        throw new PaddleWorkerError(
+          `worker crashed and restart budget (${this.maxRestarts}) is exhausted`,
+        );
+      }
+      this.restartsUsed += 1;
+      this.worker = this.spawnWorker();
+    }
+    return this.worker.detect(request);
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    this.worker.dispose();
+  }
+}
+
+/** Spawn the warm detector worker (with crash-restart supervision) if the
+ * paddle-lab environment exists; returns null (caller uses the one-shot
+ * path) when it does not. */
 export function startPaddleWorker(
   python: string,
   script: string,
-  options: PaddleServeWorkerOptions = {},
-): PaddleServeWorker | null {
+  options: PaddleWorkerSupervisorOptions = {},
+): PaddleWorkerSupervisor | null {
   if (!existsSync(python) || !existsSync(script)) return null;
-  return new PaddleServeWorker(python, [script, "--serve"], options);
+  const { maxRestarts, ...workerOptions } = options;
+  return new PaddleWorkerSupervisor(
+    () => new PaddleServeWorker(python, [script, "--serve"], workerOptions),
+    maxRestarts === undefined ? {} : { maxRestarts },
+  );
+}
+
+/** The detect surface detectPaddleWindow needs — a raw worker or the
+ * restart-supervised handle. */
+export interface PaddleDetectHandle {
+  detect(request: PaddleDetectRequest): Promise<PaddleDetectResponse>;
 }
 
 /** One detect window: try the warm worker, fall back to the legacy one-shot
  * path on ANY worker failure. Returns which path produced the artifact. */
 export async function detectPaddleWindow(input: {
-  worker: PaddleServeWorker | null;
+  worker: PaddleDetectHandle | null;
   request: PaddleDetectRequest;
   oneShot: () => void;
   log?: (message: string) => void;

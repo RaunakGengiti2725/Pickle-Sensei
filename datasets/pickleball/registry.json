@@ -528,6 +528,102 @@
       "license": "CC BY-NC-SA 4.0",
       "status": "excluded_noncommercial",
       "reason": "NC term blocks commercial training; also meeting footage, minimal gameplay."
+    },
+    {
+      "id": "ia-cotfl-senior-games-2024-pickleball",
+      "sourceUrl": "https://archive.org/details/cotfl-Senior_Games_2024_-_Pickleball_Competition",
+      "title": "Senior Games 2024 - Pickleball Competition",
+      "publisher": "City of Tallahassee government access TV via Internet Archive (community-media mirror uploader jhauser@pobox.com)",
+      "license": "none declared (no licenseurl field on the item; metadata checked 2026-08-29 via https://archive.org/metadata/cotfl-Senior_Games_2024_-_Pickleball_Competition)",
+      "status": "quarantined_not_downloaded",
+      "reason": "Genuine multi-hour pickleball competition livestream recording (1.15 GB mp4) — the single most gameplay-dense item found on Internet Archive — but no declared license; municipal works are not automatically public domain and the mirror uploader is not the rights holder. Eligible only if the City of Tallahassee grants rights.",
+      "provenanceAssessment": "Creator field names City of Tallahassee and the description matches its Capital City Senior Games livestream, so the origin is plausible; the Internet Archive uploader is a third-party community-media mirror account with no shown authority to license the footage.",
+      "workstream": "wave-d2/d2-02-acq-commons"
+    },
+    {
+      "id": "ia-elsca-app-pickleball-tournament",
+      "sourceUrl": "https://archive.org/details/elsca-APP_PickleBall_Tournament",
+      "title": "APP PickleBall Tournament",
+      "publisher": "El Segundo TV via Internet Archive (community-media mirror uploader jhauser@pobox.com)",
+      "license": "none declared",
+      "status": "quarantined_not_downloaded",
+      "reason": "Short municipal-TV piece about an APP tour tournament; no declared license and APP tournament footage likely embeds third-party broadcast rights.",
+      "workstream": "wave-d2/d2-02-acq-commons"
+    },
+    {
+      "id": "ia-cctv17vt-szymanski-park-pickleball",
+      "sourceUrl": "https://archive.org/details/cctv17vt-Szymanski_Park_Pickleball",
+      "title": "Szymanski Park Pickleball",
+      "publisher": "CCTV Channel 17 (Town Meeting TV, VT) via Internet Archive",
+      "license": "CC BY-NC-SA 4.0 (item licenseurl field reads verbatim: https://creativecommons.org/licenses/by-nc-sa/4.0/)",
+      "status": "quarantined_eval_only_not_downloaded",
+      "reason": "NonCommercial term blocks commercial training. Registered for potential eval-only use with the NC/SA restriction recorded; content is community-TV coverage of a court-noise controversy with limited gameplay b-roll, so eval value is low and it was not downloaded.",
+      "restrictions": [
+        "CC BY-NC-SA 4.0: NonCommercial — training-ineligible for this commercial product",
+        "ShareAlike on any redistributed derivative",
+        "attribution to CCTV17 required"
+      ],
+      "workstream": "wave-d2/d2-02-acq-commons"
+    },
+    {
+      "id": "ia-qctvmn-pickleball-with-police",
+      "sourceUrl": "https://archive.org/details/qctvmn-Pickleball_With_Police_Ramsey_MN_QCTV",
+      "title": "Pickleball With Police - Ramsey, MN - QCTV",
+      "publisher": "QCTV community TV via Internet Archive",
+      "license": "none declared",
+      "status": "quarantined_not_downloaded",
+      "reason": "Community-event coverage with some indoor play; no declared license and no rights grant from QCTV.",
+      "workstream": "wave-d2/d2-02-acq-commons"
+    },
+    {
+      "id": "ia-whhisc-third-shot-drop-tips",
+      "sourceUrl": "https://archive.org/details/whhisc-WHHI_NEWS_Sarah_Mitten_-_Pickleball_3rd_Shot_Drop_Tips_Island_Rec_Center_WHHITV",
+      "title": "WHHI NEWS - Sarah Mitten: Pickleball 3rd Shot Drop Tips - Island Rec Center",
+      "publisher": "WHHI TV via Internet Archive",
+      "license": "none declared",
+      "status": "quarantined_not_downloaded",
+      "reason": "Coaching-tips TV segment (third-shot-drop instruction) — technique-relevant, but no declared license and no rights grant from WHHI.",
+      "workstream": "wave-d2/d2-02-acq-commons"
+    },
+    {
+      "id": "ia-waters-johns-v-bright-patriquin-oc-cup",
+      "sourceUrl": "https://archive.org/details/waters-johns-v-bright-patriquin-at-the-select-medical-orange-county-cup-you-tube",
+      "title": "Waters-Johns v Bright-Patriquin at the Select Medical Orange County Cup",
+      "publisher": "unknown personal uploader (hongquan181197@gmail.com) via Internet Archive",
+      "license": "none declared",
+      "status": "quarantined_never_eligible_license_laundering_risk",
+      "reason": "Professional PPA-tour match footage re-uploaded from YouTube (source filename ends '- YouTube.mp4') by an anonymous personal account with no license and no plausible authority over pro-tour broadcast rights. Assessed as clear license-laundering risk: never download, regardless of any future license field.",
+      "workstream": "wave-d2/d2-02-acq-commons"
+    },
+    {
+      "id": "ia-utah-black-diamonds-vs-chicago-slice-mlp",
+      "sourceUrl": "https://archive.org/details/utah-black-diamonds-vs-chicago-slice-at-the-mlp-chicago",
+      "title": "Utah Black Diamonds Vs Chicago Slice At The MLP Chicago",
+      "publisher": "unknown personal uploader (hongquan181197@gmail.com) via Internet Archive",
+      "license": "none declared",
+      "status": "quarantined_never_eligible_license_laundering_risk",
+      "reason": "Major League Pickleball broadcast re-upload by the same anonymous account as the PPA item; no license, no plausible uploader authority over MLP broadcast rights. Never download.",
+      "workstream": "wave-d2/d2-02-acq-commons"
+    },
+    {
+      "id": "ia-shock-vs-5s-mlp-mid-season",
+      "sourceUrl": "https://archive.org/details/shock-vs-5s-at-the-edward-jones-mlp-mid-season-tournament",
+      "title": "Shock Vs 5s At The Edward Jones MLP Mid Season Tournament",
+      "publisher": "unknown personal uploader (hongquan181197@gmail.com) via Internet Archive",
+      "license": "none declared",
+      "status": "quarantined_never_eligible_license_laundering_risk",
+      "reason": "Same anonymous uploader pattern: MLP broadcast re-upload with no license and no plausible rights authority. Never download.",
+      "workstream": "wave-d2/d2-02-acq-commons"
+    },
+    {
+      "id": "ia-screen-recording-pickleball-christmas",
+      "sourceUrl": "https://archive.org/details/screen-recording-12-22-2025-06-24-01-1",
+      "title": "A PICKLEBALL CHRISTMAS - Studio TF1 America/Lifetime (2025)",
+      "publisher": "unknown personal uploader (jayrenfabian321@yahoo.com) via Internet Archive",
+      "license": "Public Domain Mark 1.0 (item licenseurl field reads verbatim: https://creativecommons.org/publicdomain/mark/1.0/) — assessed FALSE",
+      "status": "quarantined_never_eligible_license_laundering_risk",
+      "reason": "Screen recording of a 2025 Lifetime television film; the Public Domain Mark is plainly false (a current commercial studio production cannot be PD). Documented as a concrete license-laundering example: a declared license field on Internet Archive is a claim, not proof of rights. Never download.",
+      "workstream": "wave-d2/d2-02-acq-commons"
     }
   ]
 }

@@ -39,7 +39,11 @@ export interface ItemAgreement {
     valuesByCoach: Record<string, number | null>;
   };
   primaryFault: PairwiseRate & { primaryByCoach: Record<string, string | null> };
-  severity: { sharedFaultComparisons: number; exactRate: number | null; meanAbsDiff: number | null };
+  severity: {
+    sharedFaultComparisons: number;
+    exactRate: number | null;
+    meanAbsDiff: number | null;
+  };
   faultOverlap: { comparablePairs: number; meanJaccard: number | null };
   adjudication: { required: boolean; reasons: string[] };
 }
@@ -102,20 +106,28 @@ export function computeItemAgreement(
   for (const review of forItem) {
     base.stroke.resolvedByCoach[review.coachId] = resolvedStroke(review);
     base.rating.valuesByCoach[review.coachId] = review.overallQuality?.value ?? null;
-    base.primaryFault.primaryByCoach[review.coachId] = review.cannotEvaluate ? null : primaryFault(review);
+    base.primaryFault.primaryByCoach[review.coachId] = review.cannotEvaluate
+      ? null
+      : primaryFault(review);
   }
   if (base.status === "awaiting_reviews") return base;
 
   const reasons: string[] = [];
 
   // Stroke agreement: pairs where both resolved a stroke.
-  const strokePairs = pairs(evaluable).filter(([a, b]) => resolvedStroke(a) !== null && resolvedStroke(b) !== null);
+  const strokePairs = pairs(evaluable).filter(
+    ([a, b]) => resolvedStroke(a) !== null && resolvedStroke(b) !== null,
+  );
   base.stroke.comparablePairs = strokePairs.length;
-  base.stroke.agreeingPairs = strokePairs.filter(([a, b]) => resolvedStroke(a) === resolvedStroke(b)).length;
+  base.stroke.agreeingPairs = strokePairs.filter(
+    ([a, b]) => resolvedStroke(a) === resolvedStroke(b),
+  ).length;
   base.stroke.rate = strokePairs.length > 0 ? base.stroke.agreeingPairs / strokePairs.length : null;
   for (const [a, b] of strokePairs) {
     if (resolvedStroke(a) !== resolvedStroke(b)) {
-      reasons.push(`stroke mismatch: ${a.coachId}=${resolvedStroke(a)} vs ${b.coachId}=${resolvedStroke(b)}`);
+      reasons.push(
+        `stroke mismatch: ${a.coachId}=${resolvedStroke(a)} vs ${b.coachId}=${resolvedStroke(b)}`,
+      );
     }
   }
 
@@ -125,7 +137,9 @@ export function computeItemAgreement(
   );
   base.rating.comparablePairs = ratedPairs.length;
   if (ratedPairs.length > 0) {
-    const diffs = ratedPairs.map(([a, b]) => Math.abs(a.overallQuality!.value - b.overallQuality!.value));
+    const diffs = ratedPairs.map(([a, b]) =>
+      Math.abs(a.overallQuality!.value - b.overallQuality!.value),
+    );
     base.rating.exactMatchRate = diffs.filter((d) => d === 0).length / diffs.length;
     base.rating.meanAbsDiff = diffs.reduce((sum, d) => sum + d, 0) / diffs.length;
     for (const [index, diff] of diffs.entries()) {
@@ -141,7 +155,9 @@ export function computeItemAgreement(
   // Primary fault agreement (null==null counts as agreement: both say clean).
   const primaryPairs = pairs(evaluable);
   base.primaryFault.comparablePairs = primaryPairs.length;
-  base.primaryFault.agreeingPairs = primaryPairs.filter(([a, b]) => primaryFault(a) === primaryFault(b)).length;
+  base.primaryFault.agreeingPairs = primaryPairs.filter(
+    ([a, b]) => primaryFault(a) === primaryFault(b),
+  ).length;
   base.primaryFault.rate =
     primaryPairs.length > 0 ? base.primaryFault.agreeingPairs / primaryPairs.length : null;
   for (const [a, b] of primaryPairs) {
@@ -153,8 +169,8 @@ export function computeItemAgreement(
   }
 
   // Severity agreement on shared faults + fault-set overlap.
-  let severityDiffs: number[] = [];
-  let jaccards: number[] = [];
+  const severityDiffs: number[] = [];
+  const jaccards: number[] = [];
   for (const [a, b] of pairs(evaluable)) {
     const setA = new Set(a.faults.map((fault) => fault.faultId));
     const setB = new Set(b.faults.map((fault) => fault.faultId));
@@ -183,5 +199,7 @@ export function computeAllAgreements(
   items: Array<{ queueItemId: string; requiredReviewsTarget: number }>,
   reviews: CoachReview[],
 ): ItemAgreement[] {
-  return items.map((item) => computeItemAgreement(item.queueItemId, item.requiredReviewsTarget, reviews));
+  return items.map((item) =>
+    computeItemAgreement(item.queueItemId, item.requiredReviewsTarget, reviews),
+  );
 }

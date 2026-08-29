@@ -71,11 +71,19 @@ if (isMain) {
     for (const [sceneIndex, segment] of scenes.segments.entries()) {
       const lengthMs = segment.endMs - segment.startMs;
       if (lengthMs < 2000) continue;
-      const frames = people.frames.filter((frame) => frame.t >= segment.startMs && frame.t < segment.endMs);
+      const frames = people.frames.filter(
+        (frame) => frame.t >= segment.startMs && frame.t < segment.endMs,
+      );
       if (frames.length < 20) continue;
       const tracks = buildPlayerTracks({ ...people, frames });
       const window = { start: Math.round(segment.startMs), end: Math.round(segment.endMs) };
-      const base = { recordingId: recording.recordingId, sessionKey: recording.sessionKey, split, sceneIndex, windowMs: window };
+      const base = {
+        recordingId: recording.recordingId,
+        sessionKey: recording.sessionKey,
+        split,
+        sceneIndex,
+        windowMs: window,
+      };
       if (tracks.length === 0) {
         const peakPeople = Math.max(0, ...frames.map((frame) => frame.p.length));
         items.push({
@@ -139,7 +147,11 @@ if (isMain) {
           });
         }
       }
-      if (substantial.length > 0 && substantial.every((track) => track.meanTorsoSpan < 0.06) && meanCoverage > 0.5) {
+      if (
+        substantial.length > 0 &&
+        substantial.every((track) => track.meanTorsoSpan < 0.06) &&
+        meanCoverage > 0.5
+      ) {
         items.push({
           ...base,
           kind: "SMALL_PLAYERS",
@@ -153,7 +165,11 @@ if (isMain) {
   items.sort((a, b) => b.severity - a.severity);
   writeFileSync(
     join(CORPUS_DIR, "failure-queue.json"),
-    JSON.stringify({ generatedAtIso: new Date().toISOString(), scope: "dev+val roots", items }, null, 2),
+    JSON.stringify(
+      { generatedAtIso: new Date().toISOString(), scope: "dev+val roots", items },
+      null,
+      2,
+    ),
   );
 
   // ── Unified annotation queue: failures + high-uncertainty candidates ────

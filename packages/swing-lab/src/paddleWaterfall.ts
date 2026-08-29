@@ -62,9 +62,7 @@ function score(
   let visible = 0;
   let claims = 0;
   for (const label of labels) {
-    const near = centers.filter(
-      (center) => Math.abs(center.tMs - label.tMs) <= MATCH_TOLERANCE_MS,
-    );
+    const near = centers.filter((center) => Math.abs(center.tMs - label.tMs) <= MATCH_TOLERANCE_MS);
     if (label.visibility === "visible" && label.point) {
       visible += 1;
       if (near.length > 0) {
@@ -156,7 +154,12 @@ if (isMain) {
     // ── S2 track formation ─────────────────────────────────────────────
     const rawCandidates = buildPaddleTracks(dets, window);
     const { merged: candidates, links } = mergePaddleTracklets(rawCandidates, window);
-    mergeStats.push({ caseId: benchCase.id, before: rawCandidates.length, after: candidates.length, links });
+    mergeStats.push({
+      caseId: benchCase.id,
+      before: rawCandidates.length,
+      after: candidates.length,
+      links,
+    });
     // ── S3/S4 ownership + primary selection (real code path) ───────────
     const poseParsed = parsePoseSequence(readFileSync(posePath, "utf8"), {
       providerId: "pose.apple-vision",
@@ -190,7 +193,9 @@ if (isMain) {
     const finalCenters: Array<{ tMs: number; x: number; y: number }> = [];
     if (existsSync(debugPath)) {
       const debug = JSON.parse(readFileSync(debugPath, "utf8")) as {
-        paddle: { observations: Array<{ t: number; x: number; y: number; w: number; h: number }> } | null;
+        paddle: {
+          observations: Array<{ t: number; x: number; y: number; w: number; h: number }>;
+        } | null;
       };
       for (const observation of debug.paddle?.observations ?? []) {
         finalCenters.push({
@@ -205,9 +210,7 @@ if (isMain) {
     // O1: best achievable if primary SELECTION were perfect (pick the single
     //     best existing track). O2: best achievable if FRAGMENT MERGING were
     //     perfect (union of every track that touches the true paddle).
-    const visibleLabels = labels.filter(
-      (label) => label.visibility === "visible" && label.point,
-    );
+    const visibleLabels = labels.filter((label) => label.visibility === "visible" && label.point);
     const trackHits = candidates.map((candidate) => {
       const centers = observationsToCenters([candidate]);
       const hit = new Set<number>();
@@ -255,7 +258,12 @@ if (isMain) {
     perCase.push({ id: benchCase.id, role: benchCase.role ?? "unassigned", stages });
     for (const stage of stages) {
       const running = totals.get(stage.stage) ?? {
-        stage: stage.stage, hits: 0, visible: 0, claims: 0, precision: null, recall: null,
+        stage: stage.stage,
+        hits: 0,
+        visible: 0,
+        claims: 0,
+        precision: null,
+        recall: null,
       };
       running.hits += stage.hits;
       running.visible += stage.visible;
@@ -278,7 +286,7 @@ if (isMain) {
     const precision = running.claims > 0 ? running.hits / running.claims : null;
     const delta =
       previousRecall !== null && recall !== null
-        ? `  Δrecall ${(recall - previousRecall >= 0 ? "+" : "")}${(recall - previousRecall).toFixed(2)}`
+        ? `  Δrecall ${recall - previousRecall >= 0 ? "+" : ""}${(recall - previousRecall).toFixed(2)}`
         : "";
     console.log(
       `${stageName.padEnd(24)} P ${fmt(precision)} · R ${fmt(recall)} · hits ${running.hits}/${running.visible} · claims ${running.claims}${delta}`,
@@ -288,7 +296,9 @@ if (isMain) {
   console.log("─".repeat(74));
   console.log("TRACKLET MERGE:");
   for (const stat of mergeStats) {
-    console.log(`  ${stat.caseId}: ${stat.before} tracklets → ${stat.after} hypotheses (${stat.links} links)`);
+    console.log(
+      `  ${stat.caseId}: ${stat.before} tracklets → ${stat.after} hypotheses (${stat.links} links)`,
+    );
   }
   console.log("─".repeat(74));
   console.log("ORACLE CEILINGS (evaluation only — never runtime):");

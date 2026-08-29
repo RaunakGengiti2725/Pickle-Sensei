@@ -1,166 +1,190 @@
-import type { CameraEvent } from '../src/camera/capture';
+import type { EnvelopeVerdict } from '@pickle/shared-types';
 import {
-  DEGRADED_JOINT_COVERAGE,
-  DEGRADED_STABILITY_MS,
+  CAPTURE_ENVELOPE_THRESHOLDS_VERSION,
+  evaluateCaptureEnvelope,
+} from '@pickle/capture-envelope';
+import type { CaptureQualitySignalsV1 } from '../src/camera/capture';
+import {
+  attemptCaptureEnvelope,
   captureGuidanceLines,
-  envelopeFromReadinessEvent,
+  liveCaptureEnvelope,
   readyGate,
-  type EnvelopeVerdict,
 } from '../src/camera/captureEnvelope';
 
 /**
- * C13 — pre-Ready capture envelope. SUPPORTED/DEGRADED/UNSUPPORTED per
- * measured dimension; Ready blocks ONLY on UNSUPPORTED; unmeasured
- * dimensions (lighting has no live signal in this build) never produce
- * guidance or blocks.
+ * D07 — the mobile capture flow consumes the CANONICAL EnvelopeVerdict from
+ * @pickle/shared-types, evaluated by the shared checker (C12) with its
+ * versioned provisional thresholds. Gating rule under test: Ready blocks
+ * ONLY on UNSUPPORTED; DEGRADED guides but permits; NOT_MEASURED produces
+ * no guidance and never blocks.
  */
 
-function readinessEvent(
-  overrides: Partial<Extract<CameraEvent, { type: 'readiness' }>> = {},
-): CameraEvent {
+function qualitySignals(
+  overrides: Partial<CaptureQualitySignalsV1> = {},
+): CaptureQualitySignalsV1 {
   return {
-    type: 'readiness',
-    state: 'ready',
-    poseConfidence: 0.9,
-    jointCoverage: 0.95,
-    stableForMs: 900,
-    missingJoints: [],
-    source: 'apple_vision_body_pose',
-    modelVersion: 'apple-vision-bodypose-1',
-    emittedAtIso: '2026-08-30T10:00:00.000Z',
+    schemaVersion: 1,
+    frameWidthPx: 1080,
+    frameHeightPx: 1920,
+    avgFrameRateFps: 60,
+    brightnessMeanLuma: 120,
+    laplacianVarianceMedian: 250,
+    meanAbsFrameDiff: 2,
+    sampledFrameCount: 12,
     ...overrides,
   };
 }
 
-describe('envelopeFromReadinessEvent', () => {
-  it('non-readiness events produce no envelope', () => {
-    expect(
-      envelopeFromReadinessEvent({
-        type: 'processing',
-        state: 'preparing_clip',
-        emittedAtIso: '2026-08-30T10:00:00.000Z',
-      }),
-    ).toBeNull();
+function dimension(verdict: EnvelopeVerdict, name: string) {
+  const found = verdict.dimensions.find(d => d.dimension === name);
+  if (!found) throw new Error(`dimension ${name} missing`);
+  return found;
+}
+
+describe('liveCaptureEnvelope', () => {
+  it('returns null when nothing has been measured — no verdict from silence', () => {
+    expect(liveCaptureEnvelope(null, null)).toBeNull();
   });
 
-  it('no_person: visibility UNSUPPORTED, distance unmeasured, lighting always absent', () => {
-    const envelope = envelopeFromReadinessEvent(
-      readinessEvent({ state: 'no_person', jointCoverage: 0 }),
+  it('produces the canonical shared-types verdict with versioned thresholds', () => {
+    const verdict = liveCaptureEnvelope(
+      { state: 'ready', jointCoverage: 0.95 },
+      qualitySignals(),
     );
-    expect(envelope?.dimensions.subject_visibility?.verdict).toBe(
-      'UNSUPPORTED',
+    expect(verdict).not.toBeNull();
+    expect(verdict!.thresholdsVersion).toBe(
+      CAPTURE_ENVELOPE_THRESHOLDS_VERSION,
     );
-    expect(envelope?.dimensions.subject_distance).toBeUndefined();
-    expect(envelope?.dimensions.lighting).toBeUndefined();
+    expect(verdict!.provisional).toBe(true);
+    expect(verdict!.dimensions).toHaveLength(9);
   });
 
-  it('full_body_required: visibility UNSUPPORTED with the state as reason', () => {
-    const envelope = envelopeFromReadinessEvent(
-      readinessEvent({ state: 'full_body_required', jointCoverage: 0.6 }),
+  it('reports unmeasured dimensions NOT_MEASURED, never SUPPORTED', () => {
+    // Readiness only — no native quality emitter has fired.
+    const verdict = liveCaptureEnvelope(
+      { state: 'ready', jointCoverage: 0.95 },
+      null,
+    )!;
+    expect(dimension(verdict, 'brightness').status).toBe('NOT_MEASURED');
+    expect(dimension(verdict, 'motion_blur').status).toBe('NOT_MEASURED');
+    expect(dimension(verdict, 'resolution').status).toBe('NOT_MEASURED');
+    expect(verdict.notMeasured).toContain('brightness');
+    expect(dimension(verdict, 'player_visibility').status).toBe('SUPPORTED');
+  });
+
+  it('reads no_person as an observed zero-visibility measurement', () => {
+    const verdict = liveCaptureEnvelope(
+      { state: 'no_person', jointCoverage: 0 },
+      null,
+    )!;
+    const visibility = dimension(verdict, 'player_visibility');
+    expect(visibility.status).toBe('UNSUPPORTED');
+    expect(visibility.measured).toBe(0);
+  });
+});
+
+describe('attemptCaptureEnvelope', () => {
+  it('takes resolution/fps/duration from the real clip configuration', () => {
+    const verdict = attemptCaptureEnvelope(
+      { width: 1080, height: 1920, fps: 60, durationMs: 3200 },
+      null,
+      null,
     );
-    expect(envelope?.dimensions.subject_visibility).toEqual({
-      verdict: 'UNSUPPORTED',
-      reason: 'full_body_required',
+    expect(dimension(verdict, 'resolution')).toMatchObject({
+      status: 'SUPPORTED',
+      measured: 1080,
+    });
+    expect(dimension(verdict, 'frame_rate')).toMatchObject({
+      status: 'SUPPORTED',
+      measured: 60,
+    });
+    expect(dimension(verdict, 'clip_duration')).toMatchObject({
+      status: 'SUPPORTED',
+      measured: 3200,
     });
   });
 
-  it('move_closer: distance UNSUPPORTED while visibility follows joint coverage', () => {
-    const envelope = envelopeFromReadinessEvent(
-      readinessEvent({ state: 'move_closer', jointCoverage: 0.9 }),
+  it('classifies a low-resolution clip UNSUPPORTED with the shared thresholds', () => {
+    const verdict = attemptCaptureEnvelope(
+      { width: 320, height: 240, fps: 60, durationMs: 3200 },
+      null,
+      null,
     );
-    expect(envelope?.dimensions.subject_distance?.verdict).toBe('UNSUPPORTED');
-    expect(envelope?.dimensions.subject_visibility?.verdict).toBe('SUPPORTED');
-  });
-
-  it('partial joint coverage below the floor reads as DEGRADED visibility', () => {
-    const envelope = envelopeFromReadinessEvent(
-      readinessEvent({ jointCoverage: DEGRADED_JOINT_COVERAGE - 0.01 }),
-    );
-    expect(envelope?.dimensions.subject_visibility?.verdict).toBe('DEGRADED');
-  });
-
-  it('hold_still: stability UNSUPPORTED; short ready hold: DEGRADED', () => {
-    expect(
-      envelopeFromReadinessEvent(readinessEvent({ state: 'hold_still' }))
-        ?.dimensions.stability?.verdict,
-    ).toBe('UNSUPPORTED');
-    expect(
-      envelopeFromReadinessEvent(
-        readinessEvent({ stableForMs: DEGRADED_STABILITY_MS - 1 }),
-      )?.dimensions.stability?.verdict,
-    ).toBe('DEGRADED');
-    expect(
-      envelopeFromReadinessEvent(readinessEvent())?.dimensions.stability
-        ?.verdict,
-    ).toBe('SUPPORTED');
+    expect(dimension(verdict, 'resolution').status).toBe('UNSUPPORTED');
+    expect(verdict.overall).toBe('UNSUPPORTED');
   });
 });
 
 describe('captureGuidanceLines', () => {
-  it('renders one actionable line per measured non-SUPPORTED dimension, in fixed order', () => {
-    const envelope: EnvelopeVerdict = {
-      schemaVersion: 1,
-      source: 'live_readiness_events',
-      dimensions: {
-        stability: { verdict: 'UNSUPPORTED', reason: 'hold_still' },
-        subject_visibility: {
-          verdict: 'DEGRADED',
-          reason: 'partial_joint_coverage',
-        },
-        subject_distance: { verdict: 'SUPPORTED' },
-      },
-    };
-    const lines = captureGuidanceLines(envelope);
-    expect(lines.map(line => line.dimension)).toEqual([
-      'subject_visibility',
-      'stability',
-    ]);
-    expect(lines[0]?.text).toContain('Keep your full body visible');
-    expect(lines[1]?.text).toContain('Hold still');
+  it('returns nothing for a null or clean envelope', () => {
+    expect(captureGuidanceLines(null)).toEqual([]);
+    const clean = attemptCaptureEnvelope(
+      { width: 1080, height: 1920, fps: 60, durationMs: 3200 },
+      qualitySignals(),
+      { state: 'ready', jointCoverage: 0.95 },
+    );
+    expect(captureGuidanceLines(clean)).toEqual([]);
   });
 
-  it('a clean or absent envelope produces no guidance', () => {
-    expect(captureGuidanceLines(null)).toEqual([]);
-    expect(
-      captureGuidanceLines({
-        schemaVersion: 1,
-        source: 'live_readiness_events',
-        dimensions: { subject_visibility: { verdict: 'SUPPORTED' } },
-      }),
-    ).toEqual([]);
+  it('never invents guidance for NOT_MEASURED dimensions', () => {
+    const verdict = liveCaptureEnvelope(
+      { state: 'ready', jointCoverage: 0.95 },
+      null,
+    )!;
+    // Six dimensions are NOT_MEASURED here; none may produce a line.
+    expect(captureGuidanceLines(verdict)).toEqual([]);
+  });
+
+  it('emits actionable lines for DEGRADED and UNSUPPORTED in canonical order', () => {
+    const verdict = evaluateCaptureEnvelope({
+      frameWidthPx: 640, // DEGRADED (480 ≤ 640 < 720)
+      frameHeightPx: 1280,
+      avgFrameRateFps: 60,
+      frameIntervalCv: null,
+      brightnessMeanLuma: 10, // UNSUPPORTED (too dark)
+      brightnessStdLuma: null,
+      laplacianVarianceMedian: null,
+      meanAbsFrameDiff: null,
+      clipDurationMs: null,
+      playerPixelHeightFraction: null,
+      playerMeanJointVisibility: null,
+    });
+    const lines = captureGuidanceLines(verdict);
+    expect(lines.map(l => l.dimension)).toEqual(['resolution', 'brightness']);
+    expect(lines[0]).toMatchObject({ status: 'DEGRADED' });
+    expect(lines[1]).toMatchObject({ status: 'UNSUPPORTED' });
+    for (const line of lines) expect(line.text.length).toBeGreaterThan(0);
   });
 });
 
 describe('readyGate', () => {
-  it('blocks ONLY on UNSUPPORTED dimensions — DEGRADED guides but permits', () => {
-    const degradedOnly: EnvelopeVerdict = {
-      schemaVersion: 1,
-      source: 'live_readiness_events',
-      dimensions: {
-        subject_visibility: { verdict: 'DEGRADED' },
-        stability: { verdict: 'DEGRADED' },
-      },
-    };
-    expect(readyGate(degradedOnly)).toEqual({
+  it('does not block with no envelope', () => {
+    expect(readyGate(null)).toEqual({ blocked: false, blockingDimensions: [] });
+  });
+
+  it('DEGRADED dimensions guide but never block Ready', () => {
+    const verdict = attemptCaptureEnvelope(
+      // 640 short side → resolution DEGRADED; 25fps → frame_rate DEGRADED.
+      { width: 640, height: 1280, fps: 25, durationMs: 3200 },
+      null,
+      null,
+    );
+    expect(verdict.overall).toBe('DEGRADED');
+    expect(captureGuidanceLines(verdict).length).toBeGreaterThan(0);
+    expect(readyGate(verdict)).toEqual({
       blocked: false,
       blockingDimensions: [],
     });
-
-    const unsupported: EnvelopeVerdict = {
-      schemaVersion: 1,
-      source: 'live_readiness_events',
-      dimensions: {
-        subject_visibility: { verdict: 'DEGRADED' },
-        subject_distance: { verdict: 'UNSUPPORTED', reason: 'move_closer' },
-      },
-    };
-    expect(readyGate(unsupported)).toEqual({
-      blocked: true,
-      blockingDimensions: ['subject_distance'],
-    });
   });
 
-  it('no envelope means nothing measured and nothing blocked', () => {
-    expect(readyGate(null).blocked).toBe(false);
+  it('UNSUPPORTED dimensions block Ready and are named', () => {
+    const verdict = attemptCaptureEnvelope(
+      { width: 320, height: 240, fps: 10, durationMs: 3200 },
+      null,
+      null,
+    );
+    const gate = readyGate(verdict);
+    expect(gate.blocked).toBe(true);
+    expect(gate.blockingDimensions).toEqual(['resolution', 'frame_rate']);
   });
 });

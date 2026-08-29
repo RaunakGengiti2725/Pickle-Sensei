@@ -58,3 +58,92 @@ describe.skipIf(!testUrl)("migration runner (integration)", () => {
     }
   });
 });
+
+describe.skipIf(!testUrl)("D4-09 audit remediations (integration)", () => {
+  it("0016 adds the query-path and FK indexes", async () => {
+    const pool = new pg.Pool({ connectionString: testUrl });
+    try {
+      await pool.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
+      await runMigrations(pool, migrationsDir);
+      const { rows } = await pool.query<{ indexname: string }>(
+        "SELECT indexname FROM pg_indexes WHERE schemaname = 'public'",
+      );
+      const names = new Set(rows.map((r) => r.indexname));
+      for (const expected of [
+        "idx_drill_checkpoint_map_shot_checkpoint",
+        "idx_training_plan_source_shot",
+        "idx_ml_dataset_item_source_shot",
+        "idx_session_summary_best_shot",
+        "idx_weekly_report_best_shot",
+        "idx_share_card_shot",
+        "idx_shot_analysis_job",
+        "idx_shot_media_asset",
+        "idx_media_asset_owner_object_key",
+        "idx_deletion_task_user",
+      ]) {
+        expect(names.has(expected), expected).toBe(true);
+      }
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it("consent_record rejects UPDATE, DELETE, and TRUNCATE", async () => {
+    const pool = new pg.Pool({ connectionString: testUrl });
+    try {
+      await pool.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
+      await runMigrations(pool, migrationsDir);
+      await pool.query(
+        `INSERT INTO consent_record (subject_pseudonym, scope, action, consent_version, source)
+         VALUES (gen_random_uuid(), 'video_analysis', 'granted', 'v1', 'onboarding')`,
+      );
+      await expect(pool.query("UPDATE consent_record SET consent_version = 'v2'")).rejects.toThrow(
+        /append-only/,
+      );
+      await expect(pool.query("DELETE FROM consent_record")).rejects.toThrow(/append-only/);
+      await expect(pool.query("TRUNCATE consent_record")).rejects.toThrow(/append-only/);
+      const { rows } = await pool.query("SELECT count(*)::int AS n FROM consent_record");
+      expect(rows[0]?.n).toBe(1);
+    } finally {
+      await pool.end();
+    }
+  });
+
+  it("re-seeding never rewrites a released scoring model's config", async () => {
+    const pool = new pg.Pool({ connectionString: testUrl });
+    try {
+      await pool.query("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
+      await runMigrations(pool, migrationsDir);
+      await seed(pool);
+
+      // Promote one seeded model to active with complete release evidence.
+      const { rows: userRows } = await pool.query<{ id: string }>(
+        `INSERT INTO app_user (auth_subject) VALUES ('test|releaser') RETURNING id`,
+      );
+      const { rows: bundleRows } = await pool.query<{ id: string }>(
+        `INSERT INTO model_bundle (version, status) VALUES ('bundle-test-1', 'active') RETURNING id`,
+      );
+      const { rows: modelRows } = await pool.query<{ id: string }>(
+        `UPDATE scoring_model SET status = 'active', model_bundle_id = $1,
+           dataset_snapshot_id = 'ds-1', evaluation_report_sha256 = repeat('a', 64),
+           coach_validation_reference = 'coach-ref-1', released_by = $2,
+           released_at = now(), active_from = now(),
+           config = '{"released": true}'::jsonb
+         WHERE id = (SELECT id FROM scoring_model LIMIT 1)
+         RETURNING id`,
+        [bundleRows[0]?.id, userRows[0]?.id],
+      );
+      const releasedId = modelRows[0]?.id;
+      expect(releasedId).toBeTruthy();
+
+      await seed(pool); // must not clobber the released config
+      const { rows } = await pool.query<{ config: { released?: boolean } }>(
+        "SELECT config FROM scoring_model WHERE id = $1",
+        [releasedId],
+      );
+      expect(rows[0]?.config).toEqual({ released: true });
+    } finally {
+      await pool.end();
+    }
+  });
+});

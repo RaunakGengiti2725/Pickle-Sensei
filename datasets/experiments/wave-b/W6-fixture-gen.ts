@@ -76,7 +76,8 @@ function mirrorDominantWristSpeeds(
       if (prior) {
         const dtSec =
           perWrist[sideName].length > 0
-            ? (frame.timestampMs - perWrist[sideName][perWrist[sideName].length - 1]!.timestampMs) / 1000
+            ? (frame.timestampMs - perWrist[sideName][perWrist[sideName].length - 1]!.timestampMs) /
+              1000
             : 0.04;
         const step = Math.hypot(mark.x - prior.x, mark.y - prior.y);
         if (dtSec > 0 && dtSec <= 0.15) {
@@ -121,7 +122,10 @@ const scenesPath = join(runDir, "scenes.json");
 let analysisSegment: { startMs: number; endMs: number } | null = null;
 if (existsSync(scenesPath)) {
   const scenes = JSON.parse(readFileSync(scenesPath, "utf8")) as ScenesFile;
-  const scene = decideScene(scenes, sequence.frames.map((frame) => frame.timestampMs));
+  const scene = decideScene(
+    scenes,
+    sequence.frames.map((frame) => frame.timestampMs),
+  );
   if (scene.multiShot) {
     analysisSegment = scene.analysisSegment;
     sequence = {
@@ -194,8 +198,15 @@ const fixture = {
   qualityNotes: engine.snapshot().qualityState.notes,
 };
 
-const outPath = join(REPO_ROOT, "apps/mobile/__tests__/fixtures/sessionReplay.afn-sasebo-rally1.json");
+const outPath = join(
+  REPO_ROOT,
+  "apps/mobile/__tests__/fixtures/sessionReplay.afn-sasebo-rally1.json",
+);
 writeFileSync(outPath, `${JSON.stringify(fixture, null, 2)}\n`);
 console.log(`wrote ${outPath}`);
-console.log(`samples=${fixture.wristSamples.length} batch=${fixture.batchProposals.length} emitted=${fixture.expectedEmissions.length}`);
-console.log(`closeReasons=${fixture.expectedEmissions.map((event) => event.closeReason).join(",")}`);
+console.log(
+  `samples=${fixture.wristSamples.length} batch=${fixture.batchProposals.length} emitted=${fixture.expectedEmissions.length}`,
+);
+console.log(
+  `closeReasons=${fixture.expectedEmissions.map((event) => event.closeReason).join(",")}`,
+);

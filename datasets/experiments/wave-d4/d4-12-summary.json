@@ -1,0 +1,67 @@
+{
+  "workstream": "D4-12",
+  "title": "HANDOFF_V4 draft + decision-log reconciliation",
+  "branch": "devin/wave-d4/d4-12-handoff-v4",
+  "date": "2026-08-29",
+  "environment": "Linux (no pose extraction, no canonical run dirs; no cascade/Mac/iPhone numbers claimed)",
+  "deliverable": "docs/HANDOFF_V4_DRAFT.md (DRAFT only; HANDOFF_V3/STATUS_BOARD/DECISIONS untouched)",
+  "method": "All claims reconstructed from committed artifacts (wave-a/b/c summary JSONs, experiment JSONs, annotation files, docs/DECISIONS.md); label inventory recounted programmatically from datasets/ta-bench/cases.json, datasets/paddle-bench/bundles/*/annotation/*.json, stroke-gold.json, ownership-review/ownership-review.json.",
+  "labelInventoryRecount": {
+    "ta": {
+      "total_cases": 301,
+      "verified": 59,
+      "verified_by_split": {
+        "dev": 54,
+        "locked_test": 5
+      }
+    },
+    "eventLabels_total": 47,
+    "eventLabels_by_owner": {
+      "target": 29,
+      "other": 18
+    },
+    "event_contactMs_records": 44,
+    "ballFrames_total": 60,
+    "ballFrames_by_visibility": {
+      "visible": 47,
+      "uncertain": 4,
+      "not_visible": 5,
+      "occluded": 4
+    },
+    "ballFrames_occlusionState": {
+      "observed": 29,
+      "entering_occlusion": 2,
+      "occluded": 4,
+      "reacquired": 2
+    },
+    "paddleFrames_total": 102,
+    "otherPaddleFrames_total": 142,
+    "stroke_gold_labels": 22,
+    "ownership_sidecar_entries": 100,
+    "dual_frames_same_tMs": 50
+  },
+  "decisionLog": {
+    "lastEntry": "D-043",
+    "gap": "Wave C shipped versioned contracts / default-ON worker with no D-044+ entries (c01,c02,c07,c10,c11,c12)"
+  },
+  "macGatedRemeasures": [
+    "cascade n=5 after C01/C02/C07/C08 (lab:regen + lab:cascade)",
+    "E2E latency with wired warm worker (~11.9s projection unverified)",
+    "C09 session-native Swift build + tests",
+    "apps/mobile npm ci + tsc + jest",
+    "adaptive completion live replay captures (D-043)",
+    "acquire-v4 live tap captures + one-shot locked_test (D-027 gate)",
+    "iPhone hardware (BLOCKED_EXTERNAL)"
+  ],
+  "findings": [
+    "HANDOFF_V3 '34 event labels (21 target)' vs recount 47 records (29 target) \u2014 C05 appended 13 contact-observation records; unique events 28 (c05-summary.json countReconciliation)",
+    "HANDOFF_V3 'target boxes 78, other 83' vs annotation-file recount 102/142 vs sidecar bases (ownership-review/README.md) \u2014 three counting bases in the wild",
+    "STATUS_BOARD Wave C row C16 '1 new CC candidate' understates c16-data-acquisition-summary.json: 6 accepted clips (181.08 MB, 360s) committed + 4 quarantined",
+    "HANDOFF_V3 latency 'once runPaddleStage wires it' stale \u2014 C07 wired worker default ON (Mac re-measure pending)",
+    "STATUS_BOARD addendum lists C03 'IN FLIGHT' but commit f548115 merged C03 and c03-summary.json is committed",
+    "C12 premise correction (3 committed clips, not 13) already disclosed in-artifact \u2014 must be carried into V4",
+    "Mobile strokeHeuristicLite still v1 while stroke-heuristic-2 is live (D-036 follow-up open)"
+  ],
+  "heldOutTouched": 0,
+  "verdict": "GREEN"
+}

@@ -49,10 +49,12 @@ if (isMain) {
   }
   const flag = (name: string) => {
     const index = process.argv.indexOf(name);
-    return index >= 0 ? process.argv[index + 1] ?? null : null;
+    return index >= 0 ? (process.argv[index + 1] ?? null) : null;
   };
   const videoPath = resolve(video);
-  const outDir = resolve(flag("--out") ?? join(REPO_ROOT, "datasets/mining", basename(videoPath, ".mp4")));
+  const outDir = resolve(
+    flag("--out") ?? join(REPO_ROOT, "datasets/mining", basename(videoPath, ".mp4")),
+  );
   const maxEvents = Number(flag("--max-events") ?? 40);
   mkdirSync(outDir, { recursive: true });
 
@@ -72,14 +74,17 @@ if (isMain) {
     executionTarget: "on_device",
     artifactHash: null,
   });
-  const durationSec = peopleFile.frames.length > 0
-    ? (peopleFile.frames[peopleFile.frames.length - 1]!.t - peopleFile.frames[0]!.t) / 1000
-    : 0;
+  const durationSec =
+    peopleFile.frames.length > 0
+      ? (peopleFile.frames[peopleFile.frames.length - 1]!.t - peopleFile.frames[0]!.t) / 1000
+      : 0;
 
   // ── 2. Mine each scene independently (never across a cut) ──────────────
   const mineStarted = Date.now();
   const candidates: Candidate[] = [];
-  const usableSegments = scenes.segments.filter((segment) => segment.endMs - segment.startMs >= 1500);
+  const usableSegments = scenes.segments.filter(
+    (segment) => segment.endMs - segment.startMs >= 1500,
+  );
   for (const [sceneIndex, segment] of usableSegments.entries()) {
     const sceneFrames = peopleFile.frames.filter(
       (frame) => frame.t >= segment.startMs && frame.t < segment.endMs,
@@ -145,12 +150,23 @@ if (isMain) {
   const manifest = {
     schemaVersion: 1,
     tier: "C_CANDIDATE (proposals only — NOT labels)",
-    miner: "video-mining-1 (scene → player tracks → kinematic event proposals → uncertainty ranking)",
+    miner:
+      "video-mining-1 (scene → player tracks → kinematic event proposals → uncertainty ranking)",
     video: videoPath.replace(`${REPO_ROOT}/`, ""),
     poseFramesParsed: parsed.ok ? parsed.value.frames.length : 0,
     durationSec: Number(durationSec.toFixed(1)),
-    scenes: { cuts: scenes.cuts.length, segments: scenes.segments.length, mined: usableSegments.length },
-    timing: { extractMs, mineMs, secondsOfVideoPerSecondOfMining: Number((durationSec / Math.max(0.001, (extractMs + mineMs) / 1000)).toFixed(2)) },
+    scenes: {
+      cuts: scenes.cuts.length,
+      segments: scenes.segments.length,
+      mined: usableSegments.length,
+    },
+    timing: {
+      extractMs,
+      mineMs,
+      secondsOfVideoPerSecondOfMining: Number(
+        (durationSec / Math.max(0.001, (extractMs + mineMs) / 1000)).toFixed(2),
+      ),
+    },
     candidateCount: candidates.length,
     candidates: selected,
   };
@@ -177,9 +193,15 @@ if (isMain) {
 }
 
 function dominantWristSpeeds(
-  frames: ReadonlyArray<{ timestampMs: number; landmarks: ReadonlyArray<{ name: string; x: number; y: number; visibility: number }> }>,
+  frames: ReadonlyArray<{
+    timestampMs: number;
+    landmarks: ReadonlyArray<{ name: string; x: number; y: number; visibility: number }>;
+  }>,
 ): Array<{ timestampMs: number; value: number }> {
-  const perWrist: Record<"left" | "right", Array<{ timestampMs: number; value: number }>> = { left: [], right: [] };
+  const perWrist: Record<"left" | "right", Array<{ timestampMs: number; value: number }>> = {
+    left: [],
+    right: [],
+  };
   const travel = { left: 0, right: 0 };
   const last: Record<string, { x: number; y: number } | undefined> = {};
   for (const frame of frames) {
@@ -191,7 +213,9 @@ function dominantWristSpeeds(
       const prior = last[side];
       if (prior) {
         const previousSample = perWrist[side][perWrist[side].length - 1];
-        const dtSec = previousSample ? (frame.timestampMs - previousSample.timestampMs) / 1000 : 0.04;
+        const dtSec = previousSample
+          ? (frame.timestampMs - previousSample.timestampMs) / 1000
+          : 0.04;
         const step = Math.hypot(mark.x - prior.x, mark.y - prior.y);
         if (dtSec > 0 && dtSec <= 0.15) {
           perWrist[side].push({ timestampMs: frame.timestampMs, value: step / dtSec });

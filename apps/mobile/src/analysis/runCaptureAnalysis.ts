@@ -1,10 +1,14 @@
 import { Platform } from 'react-native';
-import type { ShotTypeSlug } from '@pickle/shared-types';
+import type { EnvelopeVerdict, ShotTypeSlug } from '@pickle/shared-types';
 import {
   analyzeCapture,
   type CaptureAnalysisRecord,
 } from '@pickle/analysis-pipeline';
-import { parsePoseSequence, sha256Hex, unavailable } from '@pickle/swing-domain';
+import {
+  parsePoseSequence,
+  sha256Hex,
+  unavailable,
+} from '@pickle/swing-domain';
 import { readCaptureArtifact, type CapturedClip } from '../camera/capture';
 import type { LocalDb } from '../data/db';
 import {
@@ -41,7 +45,17 @@ export type CaptureAnalysisOutcome =
       record: CaptureAnalysisRecord;
       guidance: string | null;
     }
-  | { kind: 'unavailable'; reason: string };
+  | { kind: 'unavailable'; reason: string }
+  | {
+      /**
+       * The capture envelope is UNSUPPORTED: analysis is honestly withheld
+       * BEFORE inference — poor input never becomes a confident score. No
+       * permit is reserved and nothing is recorded as an analysis.
+       */
+      kind: 'quality_blocked';
+      reason: string;
+      envelope: EnvelopeVerdict;
+    };
 
 export interface RunCaptureAnalysisRequest {
   db: LocalDb;
@@ -71,13 +85,40 @@ export interface RunCaptureAnalysisRequest {
    * point identifying WHICH person on court is the user. This is an
    * initialization seed for identity, never a spatial constraint.
    */
-  targetSeed?: { point: { x: number; y: number }; selectedAtIso: string } | null;
+  targetSeed?: {
+    point: { x: number; y: number };
+    selectedAtIso: string;
+  } | null;
+  /**
+   * Capture-envelope verdict for this attempt (canonical shared-types
+   * contract). UNSUPPORTED forces the honest-abstention path before any
+   * inference; DEGRADED proceeds and is recorded so Result can explain
+   * quality-related abstentions. Null/undefined means no envelope was
+   * measured — the run proceeds exactly as before.
+   */
+  captureEnvelope?: EnvelopeVerdict | null;
 }
 
 export async function runCaptureAnalysis(
   request: RunCaptureAnalysisRequest,
 ): Promise<CaptureAnalysisOutcome> {
   const { clip } = request;
+  // ── Capture-envelope gate: UNSUPPORTED input never enters inference ────
+  const envelope = request.captureEnvelope ?? null;
+  if (envelope && envelope.overall === 'UNSUPPORTED') {
+    const blocking = envelope.dimensions
+      .filter(d => d.status === 'UNSUPPORTED')
+      .map(d => d.dimension)
+      .join(', ');
+    return {
+      kind: 'quality_blocked',
+      reason:
+        'This capture cannot be analyzed honestly — the measured capture ' +
+        `quality is outside the supported envelope (${blocking}). ` +
+        'Nothing was rated.',
+      envelope,
+    };
+  }
   if (clip.captureMode !== 'automatic_pose_trigger') {
     return {
       kind: 'unavailable',
@@ -192,7 +233,12 @@ export async function runCaptureAnalysis(
     });
     return { kind: 'unavailable', reason: result.failure.message };
   }
-  const record = result.value;
+  // Attach the measured envelope so downstream Result can explain
+  // quality-related abstentions (additive; old records simply lack it).
+  const record: CaptureAnalysisRecord = {
+    ...result.value,
+    captureEnvelope: envelope,
+  };
 
   // Every run is durably recorded, scored or not — reprocessing history.
   await saveAnalysisRecord(request.db, record);

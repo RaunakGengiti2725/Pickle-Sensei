@@ -1,0 +1,95 @@
+{
+  "workstream": "wave-d2/d2-02-acq-commons",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "date": "2026-08-29",
+  "objective": "Acquire pickleball footage under PD/CC-BY/CC-BY-SA from Wikimedia Commons and Internet Archive video; quote licenses per item, assess uploader provenance (license-laundering risk), register everything, download cleared items <200MB as role=fresh_candidate, label-blind.",
+  "verdict": "ORANGE",
+  "accepted": {
+    "count": 0,
+    "totalBytesAdded": 0,
+    "reason": "Zero new PD/CC-BY/CC-BY-SA pickleball footage exists in the assigned scope that is not already registered. Nothing was downloaded and no media was added to the repo."
+  },
+  "wikimediaCommons": {
+    "checkedAt": "2026-08-29",
+    "queries": [
+      "pickleball filetype:video (namespace 6)",
+      "pickleball filemime:video/webm|video/ogg|video/mp4",
+      "pickle-ball filemime:video",
+      "pickle filetype:video (manual review of all 18 hits: none pickleball)",
+      "Category:Pickleball full member walk (files + subcats)",
+      "Category:Videos of pickleball (does not exist)"
+    ],
+    "totalPickleballVideosOnCommons": 4,
+    "items": [
+      {
+        "title": "File:Pickleball game.webm",
+        "license": "CC BY 3.0 (extmetadata UsageTerms verbatim: \"Creative Commons Attribution 3.0\", LicenseUrl https://creativecommons.org/licenses/by/3.0)",
+        "alreadyRegistered": "src-commons-Pickleball_game.webm in datasets/corpus/sources.json"
+      },
+      {
+        "title": "File:InFocus- Pro Pickleball Tour (956784).webm",
+        "license": "Public domain (extmetadata UsageTerms verbatim: \"Public domain\"; U.S. Navy video, PD-USGov)",
+        "alreadyRegistered": "src-commons-InFocus-_Pro_Pickleball_Tour_956784_.webm (also src-dvids-956784)"
+      },
+      {
+        "title": "File:Pickleball Japan Federation Visits Sasebo (967848).webm",
+        "license": "Public domain (extmetadata UsageTerms verbatim: \"Public domain\"; U.S. Navy video, PD-USGov)",
+        "alreadyRegistered": "src-commons-Pickleball_Japan_Federation_Visits_Sasebo_967848_.webm (also src-dvids-967848)"
+      },
+      {
+        "title": "File:Pro Pickleball Tour AFN VIC (957519).webm",
+        "license": "Public domain (extmetadata UsageTerms verbatim: \"Public domain\"; U.S. Army video, PD-USGov)",
+        "alreadyRegistered": "src-commons-Pro_Pickleball_Tour_AFN_VIC_957519_.webm (also src-dvids-957519). Source of held-out case afn-vic-rally1 — not viewed, not downloaded, not touched."
+      }
+    ],
+    "newItems": 0,
+    "conclusion": "The Commons pickleball video inventory is exactly the 4 files already in datasets/corpus/sources.json. Commons is exhausted for this scope."
+  },
+  "internetArchive": {
+    "checkedAt": "2026-08-29",
+    "queries": [
+      "pickleball AND mediatype:movies (2,403 items)",
+      "pickleball AND mediatype:movies AND licenseurl:* (35 items — the complete licensed subset; every item reviewed)",
+      "\"pickle ball\" AND mediatype:movies AND licenseurl:* (1 item, city-council meeting, CC BY-ND)",
+      "pickleball AND mediatype:movies AND licenseurl:*publicdomain* (4 items)",
+      "pickleball AND mediatype:movies AND licenseurl:*by-sa* (1 item, podcast)",
+      "pickleball AND mediatype:movies AND licenseurl:*usa.gov* (0 items)",
+      "pickleball AND collection:prelinger (0 items)",
+      "pickleball AND collection:opensource_movies (453 items, sampled: municipal meetings + unlicensed broadcast rips)",
+      "dink pickleball / pickleball drill mediatype:movies (no cleared footage)"
+    ],
+    "licensedSubsetBreakdown": {
+      "totalLicensedItems": 35,
+      "ccByNcOrNcNdOrNcSa": 28,
+      "ccByNd": 2,
+      "ccBy30": 1,
+      "ccBySa40": 1,
+      "publicDomainMark": 4
+    },
+    "clearedGameplayFound": 0,
+    "detail": "The single CC-BY item (youtube-GNUPnljZx04) is a political talk show, not pickleball footage. The single CC-BY-SA item (ck_518) is a podcast episode. Three of the four Public-Domain-Mark items are city-council meetings; the fourth (screen-recording-12-22-2025-06-24-01-1) is a 2025 Lifetime TV film whose PD mark is plainly false — registered as a license-laundering example. All remaining licensed items carry NC and/or ND terms. The gameplay-dense unlicensed items (City of Tallahassee Senior Games livestream; PPA/MLP broadcast re-uploads by an anonymous gmail account) were registered as quarantined without download.",
+    "newQuarantineRegistrations": [
+      "ia-cotfl-senior-games-2024-pickleball (no license; genuine municipal gameplay livestream; eligible only with a rights grant from the City of Tallahassee)",
+      "ia-elsca-app-pickleball-tournament (no license)",
+      "ia-cctv17vt-szymanski-park-pickleball (CC BY-NC-SA 4.0 — NC blocks training; registered eval-only with restrictions recorded; not downloaded)",
+      "ia-qctvmn-pickleball-with-police (no license)",
+      "ia-whhisc-third-shot-drop-tips (no license)",
+      "ia-waters-johns-v-bright-patriquin-oc-cup (license-laundering risk: PPA broadcast YouTube rip, anonymous uploader — never eligible)",
+      "ia-utah-black-diamonds-vs-chicago-slice-mlp (license-laundering risk: MLP broadcast rip — never eligible)",
+      "ia-shock-vs-5s-mlp-mid-season (license-laundering risk: MLP broadcast rip — never eligible)",
+      "ia-screen-recording-pickleball-christmas (FALSE Public Domain Mark on a 2025 Lifetime film — documented laundering example, never eligible)"
+    ]
+  },
+  "licenseLaunderingAssessment": "Three professional-tour broadcast re-uploads by one anonymous personal account (hongquan181197@gmail.com) and one falsely PD-marked commercial TV film were found in the pickleball movie corpus on Internet Archive. All were registered as never-eligible quarantine entries. This confirms the registry policy that a platform license field is a claim, not proof of uploader authority.",
+  "heldOutIntegrity": "wm-dink-01 and afn-vic-rally1 were not viewed, labeled, or iterated against. The Commons file 'Pro Pickleball Tour AFN VIC (957519).webm' (source of afn-vic-rally1) was identified by metadata only and not downloaded.",
+  "filesChanged": [
+    "datasets/pickleball/registry.json (append-only: 9 new quarantinedUnknownRights entries; no existing entry modified)",
+    "datasets/experiments/wave-d2/d2-02-acq-commons-summary.json (this file)"
+  ],
+  "mediaAddedBytes": 0,
+  "labelsCreated": 0,
+  "nextSteps": [
+    "The only realistic Commons/IA unlock is an explicit rights grant: contact the City of Tallahassee about the Senior Games livestream (largest single cleared-if-granted gameplay source found).",
+    "Footage supply in the Commons/IA lane is exhausted; further acquisition must come from other lanes (YouTube CC search — the C16 pattern — or first-party consent captures)."
+  ]
+}

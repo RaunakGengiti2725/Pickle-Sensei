@@ -98,12 +98,16 @@ describe("validateReview", () => {
     };
     expect(validateReview(review, context)).toEqual([]);
     const missingReason = { ...review, cannotEvaluate: { reason: "" } };
-    expect(validateReview(missingReason, context).join(" ")).toMatch(/cannotEvaluate.reason required/);
+    expect(validateReview(missingReason, context).join(" ")).toMatch(
+      /cannotEvaluate.reason required/,
+    );
   });
 
   it("refuses an evaluable review with neither quality nor faults", () => {
     const review: CoachReview = { ...validReview(), overallQuality: null, faults: [] };
-    expect(validateReview(review, context).join(" ")).toMatch(/must carry overallQuality and\/or faults/);
+    expect(validateReview(review, context).join(" ")).toMatch(
+      /must carry overallQuality and\/or faults/,
+    );
   });
 
   it("requires corrected strokes to carry a note and a known label", () => {

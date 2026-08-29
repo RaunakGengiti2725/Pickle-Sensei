@@ -56,9 +56,7 @@ export function evaluateCaptureQuality(sequence: PoseSequence): CaptureQualityRe
   const frames = sequence.frames;
   const reasons: string[] = [];
   const durationMs =
-    frames.length >= 2
-      ? frames[frames.length - 1]!.timestampMs - frames[0]!.timestampMs
-      : 0;
+    frames.length >= 2 ? frames[frames.length - 1]!.timestampMs - frames[0]!.timestampMs : 0;
   const effectiveFps = durationMs > 0 ? ((frames.length - 1) * 1000) / durationMs : 0;
 
   let largestGapMs = 0;

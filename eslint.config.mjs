@@ -51,9 +51,27 @@ export default tseslint.config(
       "packages/swing-lab/src/eventCompletionBench.ts",
       "packages/swing-lab/src/cascadeWaterfall.ts",
       "packages/swing-lab/src/coverageRisk.ts",
+      "packages/swing-lab/src/labelQueueV2.ts",
       "packages/swing-lab/src/coachReview.ts",
       "packages/swing-lab/src/corpusCheck.ts",
       "packages/swing-lab/src/strokeTaxonomyBench.ts",
+      "packages/swing-lab/src/benchRegen.ts",
+      "packages/swing-lab/src/contactForensics.ts",
+      "packages/swing-lab/src/paddleSelectionForensics.ts",
+      "packages/swing-lab/src/eventWindowSlice.ts",
+      "packages/swing-lab/src/eventBoundsScout.ts",
+      "packages/swing-lab/src/waveaValidate.ts",
+      "packages/swing-lab/src/ballOcclusionBench.ts",
+      "packages/swing-lab/src/eventFailureOracle.ts",
+      "packages/swing-lab/src/experimentBundle.ts",
+      "packages/swing-lab/src/oodNegativesMeasure.ts",
+      "packages/swing-lab/src/ownershipBench.ts",
+      "packages/swing-lab/src/paddleMergeSafetySweep.ts",
+      // mac-bench is a terminal benchmark harness; its CLIs print reports.
+      "tools/mac-bench/src/**/*.ts",
+      // One-off research scripts committed as per-workstream experiment evidence;
+      // they are terminal CLIs that print their findings.
+      "datasets/experiments/**/*.ts",
       // data-engine CLIs (acquire/factory/status/import/failure-mine) print reports.
       "packages/swing-lab/src/engine/**/*.ts",
     ],
