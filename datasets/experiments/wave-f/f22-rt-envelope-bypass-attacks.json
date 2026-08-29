@@ -1,0 +1,469 @@
+{
+  "workstream": "f22-rt-envelope-bypass",
+  "thresholdsVersion": "capture-envelope-thresholds-v0.3-provisional",
+  "date": "2026-08-29T11:10:19.097Z",
+  "workDir": "/tmp/f22-redteam-1788001800484",
+  "attacks": [
+    {
+      "id": "a1-blur-plus-noise",
+      "category": "motion_blur",
+      "construction": "base -> gblur=sigma=12 (identical to detected D3-07 blur case) -> noise=alls=24:allf=t, crf 14",
+      "trueCondition": "all scene detail destroyed by sigma-12 blur; only grain remains",
+      "expectedIfDetected": "motion_blur DEGRADED/UNSUPPORTED",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 126.71460069444444,
+        "brightnessStdLuma": 0.5389247209973803,
+        "laplacianVarianceMedian": 173.7800514976155,
+        "meanAbsFrameDiff": 6.059268518518519,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED",
+      "bypass": true
+    },
+    {
+      "id": "a2-bimodal-exposure",
+      "category": "brightness",
+      "construction": "left half lutyuv y=16 (crushed), right half lutyuv y=235 (blown), hstack",
+      "trueCondition": "no usable exposure anywhere in frame; spatial mean is mid-band by construction",
+      "expectedIfDetected": "brightness DEGRADED/UNSUPPORTED",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.98546223958334,
+        "brightnessStdLuma": 0.0017860638580727854,
+        "laplacianVarianceMedian": 248.982695567189,
+        "meanAbsFrameDiff": 0.003177083333333333,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED",
+      "bypass": true
+    },
+    {
+      "id": "a3-strobe-exposure",
+      "category": "brightness",
+      "construction": "blend alternates near-black / near-white full frames per frame N",
+      "trueCondition": "every individual frame is crushed or blown; temporal mean is mid-band",
+      "expectedIfDetected": "brightness DEGRADED/UNSUPPORTED",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 125.99444444444444,
+        "brightnessStdLuma": 109.00555555555555,
+        "laplacianVarianceMedian": 0.0056179775280898875,
+        "meanAbsFrameDiff": 101.73851851851853,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "UNSUPPORTED",
+        "camera_motion": "UNSUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED",
+      "bypass": true,
+      "note": "brightnessStdLuma is measured but no threshold dimension consumes it"
+    },
+    {
+      "id": "a4-upscale-240p-to-720p",
+      "category": "resolution",
+      "construction": "426x240 testsrc2 -> lanczos upscale to 1280x720",
+      "trueCondition": "true optical detail is 240p (UNSUPPORTED band); container says 720p",
+      "expectedIfDetected": "resolution DEGRADED/UNSUPPORTED",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 125.67602864583334,
+        "brightnessStdLuma": 0.5791781328846553,
+        "laplacianVarianceMedian": 607.9770315700259,
+        "meanAbsFrameDiff": 9.096493055555555,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED",
+      "bypass": true
+    },
+    {
+      "id": "a5-tiny-subject-no-pose",
+      "category": "player_pixel_height",
+      "construction": "64x36 moving patch (5% of frame height) composited on a static textured (frozen testsrc2) 720p background",
+      "trueCondition": "subject far too small for stroke analysis; only pose dims could catch it",
+      "expectedIfDetected": "player_pixel_height DEGRADED/UNSUPPORTED or overall not SUPPORTED",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.25247938368055,
+        "brightnessStdLuma": 0.0011954643961317251,
+        "laplacianVarianceMedian": 381.9104853643007,
+        "meanAbsFrameDiff": 0.0022187500000000002,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED",
+      "bypass": true,
+      "note": "structural: overall ignores NOT_MEASURED pose dimensions"
+    },
+    {
+      "id": "a6-duplicate-pts",
+      "category": "timing_stability",
+      "construction": "setpts=floor(N/2)*2/30/TB (every pair of frames shares a PTS), vsync passthrough",
+      "trueCondition": "half of all presentation intervals are zero: playback stutters at 15 effective fps",
+      "expectedIfDetected": "timing_stability or frame_rate DEGRADED/UNSUPPORTED",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30.252016100795235,
+        "brightnessMeanLuma": 127.51736219618056,
+        "brightnessStdLuma": 0.5092235572840069,
+        "laplacianVarianceMedian": 374.2756306474774,
+        "meanAbsFrameDiff": 3.35215625,
+        "frameIntervalCv": 0.1840835173049376,
+        "clipDurationMs": 3967
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "DEGRADED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED",
+      "bypass": false,
+      "note": "probe: avgFps=30.25, intervalCv=0.1840835173049376"
+    },
+    {
+      "id": "a7-three-frame-clip",
+      "category": "timing_stability",
+      "construction": "3 frames at 1fps, 3s duration",
+      "trueCondition": "timing unmeasurable (<3 intervals); is any other dimension catching it?",
+      "expectedIfDetected": "frame_rate UNSUPPORTED (1fps)",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 1,
+        "brightnessMeanLuma": 127.73324652777781,
+        "brightnessStdLuma": 0.024588886790338348,
+        "laplacianVarianceMedian": 367.460556857835,
+        "meanAbsFrameDiff": 0.5167629419191919,
+        "frameIntervalCv": null,
+        "clipDurationMs": 3000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "UNSUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "NOT_MEASURED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "UNSUPPORTED",
+      "bypass": false
+    },
+    {
+      "id": "a8-rotation-lie-480p",
+      "category": "resolution",
+      "construction": "854x480 stream-copied with rotate=90 metadata tag (content not actually rotated)",
+      "trueCondition": "true short side is 480 regardless of rotation claim",
+      "expectedIfDetected": "resolution DEGRADED (short side 480)",
+      "measured": {
+        "shortSidePx": 480,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.5419459292763,
+        "brightnessStdLuma": 0.5417739810958261,
+        "laplacianVarianceMedian": 311.3095132310418,
+        "meanAbsFrameDiff": 5.0104320175438595,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "DEGRADED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED",
+      "bypass": false,
+      "note": "probe: rotation=90, display=480x854"
+    },
+    {
+      "id": "a9-rotation-tag-normalization",
+      "category": "motion_blur",
+      "construction": "1280x720 stream-copied with rotate=90 tag; decoder auto-rotates, probe must match",
+      "trueCondition": "same pixels as base; a probe/decoder rotation mismatch distorts sampling aspect",
+      "expectedIfDetected": "laplacian within ~15% of base clip's",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 127.50506884077905,
+        "brightnessStdLuma": 0.5618643154980495,
+        "laplacianVarianceMedian": 265.9991882450258,
+        "meanAbsFrameDiff": 3.5415074823943664,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED",
+      "bypass": true,
+      "note": "probe: rotation=90, display=720x1280, lapRatio=0.707"
+    },
+    {
+      "id": "f1-low-texture-sharp",
+      "category": "motion_blur",
+      "construction": "flat gray field + razor-sharp white 120x240 block translating 8px/frame, crf 12",
+      "trueCondition": "perfectly sharp footage; scene simply has little texture",
+      "expectedIfDetected": "motion_blur SUPPORTED (it is sharp)",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 116.46368055555557,
+        "brightnessStdLuma": 1.4210854715202004e-14,
+        "laplacianVarianceMedian": 78.58356299908134,
+        "meanAbsFrameDiff": 4.778351851851852,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "DEGRADED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED",
+      "bypass": true,
+      "note": "false-reject probe: bypass=true here means FALSE REJECT"
+    },
+    {
+      "id": "real-wm-volley-02",
+      "category": "real-corpus-baseline",
+      "construction": "committed paddle-bench bundle clip, unmodified",
+      "trueCondition": "real capture previously measured in C12/E15",
+      "expectedIfDetected": "no UNSUPPORTED video dimension",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 105.08695075415464,
+        "brightnessStdLuma": 2.0645199823624716,
+        "laplacianVarianceMedian": 1968.6132515333961,
+        "meanAbsFrameDiff": 7.8427929214059295,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED",
+      "bypass": false,
+      "note": "false-reject probe on real footage: bypass=true means FALSE REJECT"
+    },
+    {
+      "id": "real-afn-sasebo-rally1",
+      "category": "real-corpus-baseline",
+      "construction": "committed paddle-bench bundle clip, unmodified",
+      "trueCondition": "real capture previously measured in C12/E15",
+      "expectedIfDetected": "no UNSUPPORTED video dimension",
+      "measured": {
+        "shortSidePx": 1080,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 104.13461902006173,
+        "brightnessStdLuma": 0.8198594165749556,
+        "laplacianVarianceMedian": 2306.033348495507,
+        "meanAbsFrameDiff": 8.96690053104575,
+        "frameIntervalCv": 0.00001415473943856815,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED",
+      "bypass": false,
+      "note": "false-reject probe on real footage: bypass=true means FALSE REJECT"
+    },
+    {
+      "id": "f4-real-rot180-consistency",
+      "category": "rotation-consistency",
+      "construction": "wm-volley-02 stream-copied with rotate=180 tag",
+      "trueCondition": "identical pixels; measurements must match the untagged clip",
+      "expectedIfDetected": "laplacian within 5% of untagged",
+      "measured": {
+        "shortSidePx": 1000,
+        "avgFrameRateFps": 25,
+        "brightnessMeanLuma": 105.0872945267341,
+        "brightnessStdLuma": 2.0658189462762304,
+        "laplacianVarianceMedian": 1968.5271454091107,
+        "meanAbsFrameDiff": 7.843027456647399,
+        "frameIntervalCv": 3.5259322704913105e-15,
+        "clipDurationMs": 8000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED",
+      "bypass": false,
+      "note": "lapDeltaFraction=0.0000"
+    },
+    {
+      "id": "a10-real-violent-shake",
+      "category": "camera_motion",
+      "construction": "afn-sasebo-rally1 with +-40px sinusoidal crop jitter per frame",
+      "trueCondition": "violent global camera shake on real footage",
+      "expectedIfDetected": "camera_motion DEGRADED/UNSUPPORTED",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 29.97002997002997,
+        "brightnessMeanLuma": 103.93330825617284,
+        "brightnessStdLuma": 2.322105862418876,
+        "laplacianVarianceMedian": 2099.8018835374723,
+        "meanAbsFrameDiff": 35.506630923202614,
+        "frameIntervalCv": 0.000014154739438544443,
+        "clipDurationMs": 4404
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "DEGRADED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "DEGRADED",
+      "bypass": false
+    },
+    {
+      "id": "a11-synthetic-shake",
+      "category": "camera_motion",
+      "construction": "testsrc2 base with the same +-40px sinusoidal crop jitter as a10",
+      "trueCondition": "violent global camera shake on lower-contrast content",
+      "expectedIfDetected": "camera_motion DEGRADED/UNSUPPORTED",
+      "measured": {
+        "shortSidePx": 720,
+        "avgFrameRateFps": 30,
+        "brightnessMeanLuma": 128.84731879340276,
+        "brightnessStdLuma": 1.8342197502360178,
+        "laplacianVarianceMedian": 335.49028477544016,
+        "meanAbsFrameDiff": 13.051630787037038,
+        "frameIntervalCv": 0.000014171564512138608,
+        "clipDurationMs": 4000
+      },
+      "dimensionStatuses": {
+        "resolution": "SUPPORTED",
+        "frame_rate": "SUPPORTED",
+        "brightness": "SUPPORTED",
+        "motion_blur": "SUPPORTED",
+        "camera_motion": "SUPPORTED",
+        "timing_stability": "SUPPORTED",
+        "clip_duration": "SUPPORTED",
+        "player_pixel_height": "NOT_MEASURED",
+        "player_visibility": "NOT_MEASURED"
+      },
+      "overall": "SUPPORTED",
+      "bypass": true,
+      "note": "contrast-dependence of the frame-diff proxy: identical shake, opposite verdict vs a10"
+    }
+  ],
+  "bypassCount": 8
+}
