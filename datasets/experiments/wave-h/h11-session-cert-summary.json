@@ -1,0 +1,87 @@
+{
+  "workstream": "h11-session-cert",
+  "wave": "wave-h-final-production-certification",
+  "gate": "MANDATORY GATE 1 (Session): start → target → E1 → clip/analyze E1 while recording continues → E2/E3+ → progressive Results → stop → summary → reopen session, across every executable environment",
+  "baseline": {
+    "branch": "devin/1787988068-wave-c-integration",
+    "commit": "104ea0f"
+  },
+  "date": "2026-08-29",
+  "environments": {
+    "executable_here": "Linux / Node v20.18.1 — TypeScript session engine, scheduler, mobile flow (jest/vitest), UI mapping logic",
+    "not_executable_here": "Swift/iOS native motion stream, rolling per-event clip extraction, Apple Vision pose extraction, on-device iPhone runs — no Mac/iPhone available; no results claimed for those legs"
+  },
+  "method": [
+    "Consumed prior wave artifacts and suites (wave-e e16 scheduler simulation, wave-f f21 scheduler red-team, D3-06 mobile red-team, D-040 session engine/native seam) instead of re-running identical experiments.",
+    "Went deeper where prior coverage was shallow: prior scheduler suites scripted a FAKE analysis object ({ id: 'synthetic-analysis' }) behind the executor seam and asserted state chips only. New certification suite packages/analysis-pipeline/test/sessionCertificationH11.test.ts runs the REAL fusion engine (analyzeCapture with the production provider bundle: GeometricPhaseSegmenter, GeometryBiomechanicsExtractor, Sm1TechniqueScorer, CheckpointThresholdFaultDetector, EngineUncertaintyEstimator, PriorityCoachingRanker) behind the executor seam over the REAL SessionEventEngine + SessionAnalysisScheduler, and asserts the CONTENT of every per-event AnalysisRecord (routing by captureId/analysis id, engineVersion, strokeResolution, scored result with non-null overallScore, full model-run provenance, evidence entries, honest missing-modality disclosure). Pose input is the synthetic generateSwingSequence fixture (clearly synthetic — Apple Vision pose extraction does not exist on Linux); segmentation, scheduling and fusion are production code.",
+    "Audited the mobile Session surface end-to-end by code review + existing suites: LiveCourtScreen (start/target/live vs replay wiring, event cards, Result routing via navigation.navigate('Result', { analysisId })), LiveSummaryScreen (engine-snapshot summary, reopen via getCompletedSession), LiveSessionFlow (dispatch-while-recording, end-during-processing, late-outcome registry update).",
+    "Ran the full root and mobile gates before and after changes."
+  ],
+  "measured_results": {
+    "baseline_gates_on_rc": {
+      "pnpm_typecheck": "PASS",
+      "pnpm_test": "PASS (all workspace suites green; analysis-pipeline 7 files / 56 tests at baseline)",
+      "pnpm_lint": "PASS",
+      "pnpm_format_check": "PASS",
+      "mobile_npm_ci_tsc_test": "PASS (40 suites, 397 tests at baseline)"
+    },
+    "new_certification_suite": {
+      "file": "packages/analysis-pipeline/test/sessionCertificationH11.test.ts",
+      "tests": 3,
+      "full_lifecycle": "12 synthetic stroke bursts over 26s → 12 events closed (≥10 asserted); enqueued=12, ready=12, duplicatesRefused=0, executorThrows=0; at least one analysis dispatched mid-recording (progressive property observed); every event carries its OWN real AnalysisRecord (captureId=capture-<eventId>, id=analysis-<sessionId>-<eventId>) with FUSION_ENGINE_VERSION, declared stroke resolution, scored result, ≥6 model-run provenance tasks, non-empty evidence, and disclosed missing paddle/ball modalities; event bounds frozen and strictly ordered",
+      "rapid_events": "two bursts 900ms apart (peaks 11200/12100) both closed and analyzed as separate events within the 12",
+      "backlog": "concurrency=2 with 12 events (plus prior wave-e/f suites: concurrency=1, 40-event storm, maxInFlight never exceeded)",
+      "stop_during_processing_restart_recovery_duplicate_dispatch": "suspend mid-flight → endOfStream → resume + recoverPending → drained: E1 transient CLIP_EXTRACTION_FAILED retried (retries≥1) then produced a real scored record; recoverPending after settle returns [] (terminal events never re-admitted)",
+      "abstained_event": "E2 abstained with honest reason CONTACT_DISAGREEMENT and analysis=null",
+      "failed_clip_extraction_exhausted": "retryable CLIP_EXTRACTION_FAILED exhausting maxAttempts=2 leaves the event honestly PENDING with analysis=null (retryExhausted=1, 2 recorded failure reasons) — never fake ready/abstained",
+      "stale_analysis": "engine.markEvent on a terminal event throws append-only errors in both directions (ready→processing rewrite refused; abstained→ready rewrite with another event's record refused)",
+      "result_routing": "per-event captureId/analysis-id routing asserted for all 12 events; mobile Result routing (EventCard → navigate('Result', { analysisId }); ResultScreen loads by route.params.analysisId via loadStrokeResultEvidence) verified by code review + existing sessionUiMapping/strokeResultData suites"
+    },
+    "post_change_gates": {
+      "pnpm_typecheck": "PASS",
+      "pnpm_test": "PASS (analysis-pipeline now 8 files / 59 tests including the 3 new certification tests)",
+      "pnpm_lint": "PASS",
+      "pnpm_format_check": "PASS",
+      "mobile_tsc_and_test": "PASS (40 suites, 398 tests — includes new captureModePillLabel regression test)"
+    }
+  },
+  "findings": [
+    {
+      "id": "H11-F1",
+      "severity": "P1",
+      "status": "FIXED",
+      "title": "Live sessions wore the 'REPLAY · DEV RALLY' header pill (misleading UX)",
+      "detail": "LiveCourtScreen rendered the header pill 'REPLAY · DEV RALLY' whenever a session snapshot existed — including genuinely LIVE native-capture sessions. A real live session would be presented to the user as a replay of a dev rally, mislabeling the provenance of live evidence. Fix: new pure helper captureModePillLabel(source) in apps/mobile/src/flow/session.ts returns the replay label only for source==='replay' and null for live; LiveCourtScreen now uses it. Regression test added in apps/mobile/__tests__/sessionUiMapping.test.ts.",
+      "files": [
+        "apps/mobile/src/flow/session.ts",
+        "apps/mobile/src/screens/LiveCourtScreen.tsx",
+        "apps/mobile/__tests__/sessionUiMapping.test.ts"
+      ]
+    },
+    {
+      "id": "H11-F2",
+      "severity": "P2",
+      "status": "UNRESOLVED (documented, deliberate divergence)",
+      "title": "Mobile flow marks provider dispatch throws as terminal 'abstained'; scheduler marks executor throws as failed_final with the event left pending",
+      "detail": "LiveSessionFlow converts an unexpected provider throw into a terminal abstain with reason 'ANALYSIS_DISPATCH_FAILED: <error>' (pinned by the D3-06 test 'abstaining and failing providers land in honest abstained states'), while SessionAnalysisScheduler treats an executor throw as a non-retryable failure and reverts the event to pending. Both are honest (the reason string discloses the crash, abstain is the safe direction) but the two seams disagree on terminality: the mobile path can never recover such an event. Not a release blocker; recommend unifying semantics post-release."
+    },
+    {
+      "id": "H11-F3",
+      "severity": "P2",
+      "status": "UNRESOLVED",
+      "title": "LiveSummary event list has no tap-through to ready Results",
+      "detail": "Ready events on the summary screen show the READY state pill but are not tappable; Result routing exists only on LiveCourtScreen event cards during/at the end of the session. Reopening a session summary therefore shows analyzed state but cannot open the analysis. Polish item."
+    },
+    {
+      "id": "H11-F4",
+      "severity": "BLOCKED_EXTERNAL",
+      "status": "UNRESOLVED (external)",
+      "title": "Native Session legs cannot be certified on this box",
+      "detail": "Swift native motion stream, rolling per-event clip extraction, Apple Vision pose extraction and on-device iPhone runs require Mac/iPhone hardware (C09 Mac-gated list in docs/HANDOFF_V4_DRAFT.md). The TypeScript seams (sessionNative validation, honest NATIVE_* gap surfacing, pending-not-fabricated behavior) are certified here; the native implementations are not. No iPhone/Mac results are claimed."
+    }
+  ],
+  "held_out_cases_untouched": ["wm-dink-01", "afn-vic-rally1"],
+  "verdict": "PASS",
+  "verdict_scope": "PASS for every environment executable on this box (session engine, scheduler, mobile flow, UI mapping, Result routing logic) with the single found P1 fixed and regression-tested. The native iOS capture/clip leg of the gate remains BLOCKED_EXTERNAL (Mac/iPhone hardware) and must be re-certified on device before a device-facing GO.",
+  "rationale": "The complete lifecycle — start → target → E1 analyzed while recording continues → E2..E12 → progressive results → stop → summary → reopen — was exercised with the REAL segmentation engine, REAL scheduler and REAL fusion engine producing real, correctly-routed, provenance-complete per-event AnalysisRecords (not state chips). All mandated stress/failure scenarios (10+ events, rapid events, backlog, abstain, failed clip extraction, stop during processing, restart/recovery, duplicate dispatch, stale analysis, result routing) hold with honest outcomes: no fake ready, no fake abstain, no terminal rewrites, no duplicate dispatch. All root and mobile gates pass on the branch."
+}

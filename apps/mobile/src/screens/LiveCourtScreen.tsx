@@ -19,6 +19,7 @@ import {
   DEV_REPLAY_RALLY,
   LiveSessionFlow,
   NATIVE_CLIP_EXTRACTION_NOT_BUILT,
+  captureModePillLabel,
   createPendingStubAnalysisProvider,
   formatSessionClock,
   nativeSessionMotionFeedAvailability,
@@ -433,7 +434,9 @@ export function LiveCourtScreen() {
         title="Live Court"
         onClose={() => navigation.goBack()}
         right={
-          snapshot ? <Pill label="REPLAY · DEV RALLY" tone="volt" /> : undefined
+          snapshot && captureModePillLabel(snapshot.source) ? (
+            <Pill label={captureModePillLabel(snapshot.source)!} tone="volt" />
+          ) : undefined
         }
       />
       {snapshot === null ? (

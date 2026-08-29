@@ -8,6 +8,7 @@ import type { Session, SessionStrokeEvent } from '@pickle/analysis-pipeline';
 import type { AnalysisRecord } from '@pickle/swing-domain';
 import {
   buildEventViews,
+  captureModePillLabel,
   eventTechniqueFamily,
   formatSessionClock,
   resolveEventViewState,
@@ -278,5 +279,12 @@ describe('buildEventViews', () => {
     expect(views[1]!.boundaryUncertain).toBe(true);
     expect(views[1]!.durationMs).toBe(3770 - 2703);
     expect(views.map(v => v.index)).toEqual([0, 1]);
+  });
+});
+
+describe('captureModePillLabel', () => {
+  it('labels only replay sessions as replay — a live session never wears the replay banner', () => {
+    expect(captureModePillLabel('replay')).toBe('REPLAY · DEV RALLY');
+    expect(captureModePillLabel('live')).toBeNull();
   });
 });
