@@ -215,6 +215,118 @@ describe("selectPrimaryBallTrack", () => {
   });
 });
 
+describe("chronic-boundary rescue", () => {
+  const { sequence } = generateSwingSequence();
+
+  /** A clean leftward flight whose track gets glued to a jittery blob living
+   * in chronically active cells (the measured afn-sasebo-rally2 shape):
+   * 15 clean observations, then a zigzag tail inside chronic cells. */
+  function gluedFrames() {
+    const frames: BallCandidateFile["frames"] = [];
+    let x = 0.95;
+    for (let index = 0; index < 40; index += 1) {
+      const tMs = index * 40;
+      const candidates = [];
+      if (index >= 2 && index < 17) {
+        candidates.push(ball(x, 0.2));
+        x -= 0.02; // clean flight 0.95 → 0.67, speed 0.5 u/s
+      } else if (index >= 17 && index < 33) {
+        // Jittery tail at x≈0.64 (chronic cells): 180° zigzag steps.
+        candidates.push(ball(0.63 + (index % 2 === 0 ? 0.015 : 0), 0.2));
+      }
+      frames.push({ tMs, candidates, rawComponentCount: candidates.length });
+    }
+    return frames;
+  }
+
+  /** Chronic activity in the tail cells only (x < 0.667 at y≈0.2). */
+  function tailChronicCells() {
+    const cells = new Array(24 * 24).fill(0);
+    for (let cy = 3; cy <= 6; cy += 1) {
+      for (let cx = 13; cx <= 15; cx += 1) cells[cy * 24 + cx] = 0.9;
+    }
+    return cells;
+  }
+
+  it("re-gates the clean measured segment after trimming a chronic zigzag tail", () => {
+    const window = { startMs: 0, endMs: 1600 };
+    const { gated, ablation } = buildBallTracks(
+      candidateFile(gluedFrames(), tailChronicCells()),
+      sequence,
+      window,
+      null,
+    );
+    expect(gated.length).toBe(1);
+    const outcome = selectPrimaryBallTrack(gated, ablation, window);
+    expect(outcome.status).toBe("tracked");
+    if (outcome.status !== "tracked") return;
+    // Only the clean measured prefix — the chronic tail is gone, nothing
+    // is invented, and every emitted point is one of the measured inputs.
+    expect(outcome.track.observations.length).toBe(15);
+    const tailStartMs = 17 * 40;
+    for (const observation of outcome.track.observations) {
+      expect(observation.timestampMs).toBeLessThan(tailStartMs);
+      expect(observation.x).toBeGreaterThanOrEqual(0.67 - 1e-9);
+    }
+  });
+
+  it("does not rescue a track that is chronic throughout (nothing clean to isolate)", () => {
+    const chronic = new Array(24 * 24).fill(0.9);
+    const { gated } = buildBallTracks(
+      candidateFile(gluedFrames(), chronic),
+      sequence,
+      { startMs: 0, endMs: 1600 },
+      null,
+    );
+    expect(gated.length).toBe(0);
+  });
+});
+
+describe("primary selection quality", () => {
+  const { sequence } = generateSwingSequence();
+
+  it("prefers a brief fast straight transit over a long meandering track", () => {
+    // A slow 300°-arc meander occupying the whole window vs a 9-observation
+    // genuine transit (the measured wm-volley-02 failure shape).
+    const frames: BallCandidateFile["frames"] = [];
+    for (let index = 0; index < 32; index += 1) {
+      const tMs = index * 40;
+      const candidates = [];
+      const angle = ((index / 31) * (300 * Math.PI)) / 180;
+      candidates.push(ball(0.18 + 0.126 * Math.cos(angle), 0.28 + 0.126 * Math.sin(angle)));
+      if (index >= 10 && index < 19) {
+        candidates.push(ball(0.95 - (index - 10) * 0.05, 0.15 + (index - 10) * 0.02));
+      }
+      frames.push({ tMs, candidates, rawComponentCount: candidates.length });
+    }
+    const window = { startMs: 0, endMs: 1280 };
+    const { gated, ablation } = buildBallTracks(candidateFile(frames), sequence, window, null);
+    expect(gated.length).toBe(2);
+    const outcome = selectPrimaryBallTrack(gated, ablation, window);
+    expect(outcome.status).toBe("tracked");
+    if (outcome.status !== "tracked") return;
+    expect(outcome.track.observations.length).toBe(9);
+    expect(outcome.lab.straightness).toBeGreaterThan(0.9);
+  });
+
+  it("refuses a primary claim on a clean but tiny streak (evidence mass bar)", () => {
+    const frames: BallCandidateFile["frames"] = [];
+    for (let index = 0; index < 30; index += 1) {
+      const tMs = index * 40;
+      const candidates = [];
+      if (index >= 10 && index < 16) {
+        candidates.push(ball(0.9 - (index - 10) * 0.04, 0.2));
+      }
+      frames.push({ tMs, candidates, rawComponentCount: candidates.length });
+    }
+    const window = { startMs: 0, endMs: 1200 };
+    const { gated, ablation } = buildBallTracks(candidateFile(frames), sequence, window, null);
+    expect(gated.length).toBe(1); // passes physics gates…
+    const outcome = selectPrimaryBallTrack(gated, ablation, window);
+    expect(outcome.status).toBe("untracked"); // …but 6 observations is no primary
+  });
+});
+
 describe("ballSpeedSeries", () => {
   it("skips gaps instead of inventing speeds across them", () => {
     const { sequence } = generateSwingSequence();

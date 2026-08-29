@@ -74,6 +74,10 @@ export const BALL_OCCLUSION = {
   primaryScoreMargin: 1.3,
 } as const;
 
+/** Minimum net-displacement/path-length ratio for a chronic-boundary-rescued
+ * track: a rescue claims a clean sub-second flight, which is near-ballistic. */
+export const BALL_RESCUE_MIN_STRAIGHTNESS = 0.8;
+
 export interface BallCandidate {
   x: number;
   y: number;
@@ -418,6 +422,53 @@ export function buildBallTracks(
       passesStableGates(candidate) &&
       candidate.coherentMotionFraction <= BALL_GATES2.maxCoherentMotionFraction,
   );
+  // ── Chronic-boundary rescue ─────────────────────────────────────────────
+  // The associator sometimes glues a genuine ball flight to a chronically
+  // active background blob at one end (crowd, net tape, waving limb). The
+  // contaminated boundary run then poisons the WHOLE track's jerky/chronic
+  // statistics and the true ball is rejected. Rescue is measurement-scoped:
+  // strip contiguous chronically-active runs from the track boundaries only
+  // (never interior points, never invented points) and re-gate the remainder.
+  // Tracks that already pass are never touched.
+  const trackById = new Map(associated.map((track) => [track.trackId, track]));
+  for (const candidate of allCandidates) {
+    if (
+      passesStableGates(candidate) &&
+      candidate.coherentMotionFraction <= BALL_GATES2.maxCoherentMotionFraction
+    ) {
+      continue;
+    }
+    const source = trackById.get(candidate.trackId);
+    if (!source) continue;
+    const trimmedObservations = trimChronicBoundaries(source.observations);
+    if (!trimmedObservations) continue;
+    const redescribed = describeTrack(
+      { ...source, observations: trimmedObservations },
+      window,
+      paddle,
+      band,
+      chronicAt,
+      joints,
+      coherence.get(candidate.trackId) ?? 0,
+    );
+    if (
+      passesStableGates(redescribed) &&
+      redescribed.coherentMotionFraction <= BALL_GATES2.maxCoherentMotionFraction &&
+      // A rescue must isolate a decisively clean flight; a remainder that is
+      // still substantially chronic was never a ball glued to background —
+      // it IS background, and marginal passes stay out.
+      redescribed.chronicFraction <= BALL_GATES2.maxChronicFraction / 3 &&
+      // A rescued track carries weaker provenance than a natively-passing
+      // one, so it must clear the primary-claim evidence bar on its own and
+      // look near-ballistic: over the sub-second span a rescue can cover, a
+      // real flight is close to straight, and anything meandering is a limb
+      // or background artifact wearing a trimmed disguise.
+      redescribed.observations.length >= BALL_OCCLUSION.minPrimaryObservations &&
+      redescribed.straightness >= BALL_RESCUE_MIN_STRAIGHTNESS
+    ) {
+      gated.push(redescribed);
+    }
+  }
   const coherenceRejected = allCandidates.filter(
     (candidate) =>
       passesStableGates(candidate) &&
@@ -772,6 +823,10 @@ export function selectPrimaryBallTrack(
   const eligible = gated.filter(
     (candidate) =>
       candidate.windowOverlapMs >= BALL_GATES2.minWindowOverlapMs &&
+      // A primary in-play claim needs real evidence mass, the same bar the
+      // body-occlusion fallback already demands: a five-blob streak is not
+      // a defensible primary no matter how clean it looks.
+      candidate.observations.length >= BALL_OCCLUSION.minPrimaryObservations &&
       candidate.medianSpeed >= BALL_GATES2.minPrimaryMedianSpeed &&
       candidate.bodyDwellFraction <= BALL_GATES2.maxBodyDwellFraction &&
       // When a paddle track exists, a primary ball claim must have actually
@@ -831,15 +886,23 @@ export function selectPrimaryBallTrack(
           ? 0.6
           : Math.max(0.2, Math.min(1, 1.2 - 3 * candidate.minPaddleDistance));
       const lengthFactor = Math.min(1, candidate.observations.length / 12);
-      const speedFactor = Math.min(1, candidate.medianSpeed / 0.8);
+      // Saturate at genuine in-play ball speed, not limb speed: limb and
+      // background artifacts top out well below a real transit, so the speed
+      // axis must keep separating candidates in that range.
+      const speedFactor = Math.min(1, candidate.medianSpeed / 1.2);
       // Balls TRAVEL and only touch the paddle momentarily; limb/paddle
-      // artifacts oscillate in place and live on the paddle.
-      const travelFactor = Math.max(0.15, candidate.straightness);
+      // artifacts oscillate in place and live on the paddle. Superlinear so
+      // meandering is punished harder than speed or duration can repay.
+      const travelFactor = Math.max(0.15, Math.pow(candidate.straightness, 1.5));
       const paddleDwellPenalty = 1 - 0.8 * candidate.nearPaddleFraction;
       return {
         candidate,
+        // A ball transit through a swing window is intrinsically brief
+        // (roughly half a second); overlap beyond that adds no ball evidence, while
+        // limb/background tracks accumulate it for free. Saturate early so
+        // duration cannot outvote trajectory quality.
         score:
-          Math.min(1.5, candidate.windowOverlapMs / 1000) *
+          Math.min(1, candidate.windowOverlapMs / 600) *
           lengthFactor *
           paddleAffinity *
           speedFactor *
@@ -1018,6 +1081,24 @@ function computeCoherentMotionFractions(tracks: readonly ActiveBallTrack[]): Map
     fractions.set(track.trackId, own.length === 0 ? 0 : coherent / own.length);
   }
   return fractions;
+}
+
+/** Strip contiguous chronically-active observation runs from the track
+ * boundaries (measured points only — interior points are never removed and
+ * nothing is invented). Returns the trimmed list, or null when nothing was
+ * trimmed or too few observations remain to describe a track. */
+function trimChronicBoundaries(
+  observations: ActiveBallTrack["observations"],
+): ActiveBallTrack["observations"] | null {
+  const isChronic = (observation: (typeof observations)[number]): boolean =>
+    observation.chronicActivity > BALL_GATES2.chronicCellThreshold;
+  let start = 0;
+  let end = observations.length;
+  while (start < end && isChronic(observations[start]!)) start += 1;
+  while (end > start && isChronic(observations[end - 1]!)) end -= 1;
+  if (start === 0 && end === observations.length) return null;
+  if (end - start < BALL_GATES2.minObservations) return null;
+  return observations.slice(start, end);
 }
 
 function describeTrack(
