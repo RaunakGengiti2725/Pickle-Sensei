@@ -1,0 +1,86 @@
+{
+  "id": "d3-11-rt-ood-gate",
+  "wave": "D3",
+  "subsystem": "OOD gate (C15): frame-analyzability pre-analysis gate",
+  "branch": "devin/wave-d3/d3-11-rt-ood-gate",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "environment": {
+    "os": "Linux (CPU-only)",
+    "notes": "Apple Vision pose extraction unavailable; canonical runs absent on Linux. No cascade numbers were measured or fabricated. Only 3 of the 13 bundle clips are committed/present on Linux; the remaining 10 live in the macOS-only bundle and were NOT measured here."
+  },
+  "fixtures": {
+    "provenance": "All adversarial fixtures are SYNTHETIC, built locally with ffmpeg from the committed dev bundle clip wm-volley-02. Held-out cases (wm-dink-01, afn-vic-rally1) were never touched.",
+    "regressionTest": "packages/swing-lab/test/oodGateRedTeam.test.ts (rebuilds all fixtures at test time; self-contained)"
+  },
+  "cases": [
+    {
+      "case": "slideshow of pickleball still photos (1s per photo)",
+      "beforeFix": "PASSED THROUGH via median inter-frame diff only for crossfade variant; hard-cut slideshow was caught",
+      "afterFix": "REJECTED (still_image_video via frozen-pair fraction >= 0.5 at pair diff <= 0.02)",
+      "status": "FIXED"
+    },
+    {
+      "case": "crossfading slideshow of pickleball still photos",
+      "beforeFix": "PASSED THROUGH (median diff above old still threshold)",
+      "afterFix": "REJECTED (still_image_video, frozen-pair fraction)",
+      "status": "FIXED"
+    },
+    {
+      "case": "pickleball video with 80% letterbox",
+      "beforeFix": "REJECTED (letterbox_frame; letterboxRowFraction > 0.4)",
+      "afterFix": "REJECTED (unchanged)",
+      "status": "ALREADY-COVERED"
+    },
+    {
+      "case": "TV broadcast with static score-graphic overlay",
+      "beforeFix": "PASSED THROUGH (no overlay signal existed)",
+      "afterFix": "REJECTED (static_overlay_suspected: frozen bottom-third connected component, size >= 8 px at 64x36, luma std >= 12)",
+      "status": "FIXED"
+    },
+    {
+      "case": "video of a phone screen playing pickleball (dark static bezel)",
+      "beforeFix": "PASSED THROUGH (no border signal existed)",
+      "afterFix": "REJECTED (static_border_frame: 2-px border ring temporal std <= 1 and mean luma <= 48)",
+      "status": "FIXED"
+    },
+    {
+      "case": "2x-speed playback",
+      "beforeFix": "PASSED THROUGH",
+      "afterFix": "STILL PASSES THROUGH. No reliable CPU-only frame-statistic discriminator was found that does not also reject legitimate high-motion footage. Honestly surfaced: 'playback_speed' is listed in report.notEvaluated.",
+      "status": "OPEN"
+    }
+  ],
+  "breaksFound": 4,
+  "breaksFixed": 3,
+  "breaksOpen": 1,
+  "fixes": {
+    "contract": "frame-analyzability re-versioned frame-analyzability-1 -> frame-analyzability-2 (new reason codes static_border_frame, static_overlay_suspected; still_image_video semantics changed to frozen-pair fraction). usable-result-v1 and silent-failure-v1 untouched.",
+    "files": [
+      "packages/vision-geometry/src/frameAnalyzability.ts",
+      "packages/swing-lab/src/frameStats.ts"
+    ],
+    "mechanisms": [
+      "frozen-pair fraction still-image detection (pair diff <= 0.02, fraction >= 0.5) replacing median-diff threshold",
+      "per-pixel temporal mean/std accumulation at 64x36 enabling border-ring and bottom-third frozen-component measurements",
+      "static dark border-ring detection (phone-screen bezel)",
+      "static bottom-third frozen-component detection (score-graphic overlay)"
+    ]
+  },
+  "positiveCoverage": {
+    "committedBundleClipsAvailableOnLinux": "3/3 pass the gate after fixes (the full 13-clip bundle is macOS-only and was not measured here)",
+    "freshCandidates": {
+      "beforeFix": "1/6 passed (old still_image_video median threshold blanket-rejected legitimate footage)",
+      "afterFix": "5/6 pass; the single reject (yt-iuVdtmGoTbo) genuinely carries a static score-graphic overlay and is rejected for static_overlay_suspected",
+      "delta": "+4 legitimate clips recovered; no blanket abstention introduced"
+    }
+  },
+  "evidence": {
+    "tests": [
+      "packages/swing-lab/test/oodGateRedTeam.test.ts: 8/8 pass",
+      "packages/swing-lab test suite green",
+      "packages/vision-geometry test suite green",
+      "packages/analysis-pipeline test suite green"
+    ],
+    "typecheck": "pnpm typecheck green"
+  }
+}
