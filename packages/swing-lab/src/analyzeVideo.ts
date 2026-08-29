@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -83,6 +83,11 @@ import {
   type RawPaddleDetectionFile,
   type TrackedPaddleObservation,
 } from "./paddleTracker.js";
+import {
+  mergePaddleDetectionFiles,
+  planTwoPassSchedule,
+  type TwoPassSchedule,
+} from "./paddleSchedule.js";
 import { renderReport, type LabRunReport, type PlayerStageReport } from "./report.js";
 
 /**
@@ -120,6 +125,11 @@ interface CliArgs {
   fullScan: boolean;
   /** Enable CANDIDATE tracklet reconciliation (see runPaddleStage). */
   mergeTracklets: boolean;
+  /** OFF-by-default adaptive two-pass detector schedule: sparse scan +
+   * stride-1 densification (see paddleSchedule.ts). */
+  twoPass: boolean;
+  /** Pass-1 stride when --two-pass is on. */
+  sparseStride: number;
   /** Product-assisted target selection: one tap during setup. */
   targetSeed: TargetSeed | null;
 }
@@ -156,6 +166,8 @@ function parseArgs(argv: string[]): CliArgs {
     player: playerFlag && playerFlag !== "auto" ? Number(playerFlag) : "auto",
     fullScan: argv.includes("--full-scan"),
     mergeTracklets: argv.includes("--merge-tracklets"),
+    twoPass: argv.includes("--two-pass"),
+    sparseStride: Number(flag("--sparse-stride") ?? 3),
     targetSeed: (() => {
       const tap = flag("--target-tap");
       if (tap) {
@@ -477,6 +489,22 @@ async function main(): Promise<void> {
     prePassEvents: prePass.events.length,
   };
 
+  // ── 5b/5c prep. Paddle detection ∥ ball candidate generation ───────────
+  // The two python extraction subprocesses are independent (video → files);
+  // only the TRACKING stages couple (ball gating consumes the paddle track).
+  // Run the subprocesses concurrently, then track in the sequential order —
+  // artifacts are byte-identical to the fully sequential pipeline. Each prep
+  // catches its own failures so one detector cannot poison the other.
+  const ballPrepPromise = prepareBallCandidates({ args, window: strokeWindow, timings });
+  const paddlePrep = await preparePaddleDetections({
+    args,
+    window: strokeWindow,
+    detectSpan,
+    eventPeaksMs: prePass.events.map((event) => event.peakMs),
+    timings,
+  });
+  const ballPrep = await ballPrepPromise;
+
   // ── 5b. Paddle perception: pixel detector → tracker → gated modality ───
   const paddleOutcome = runPaddleStage({
     args,
@@ -485,8 +513,10 @@ async function main(): Promise<void> {
     window: strokeWindow,
     detectSpan,
     timings,
+    prep: paddlePrep,
   });
   report.paddle = paddleOutcome.reportEntry;
+  report.paddleSchedule = paddlePrep.status === "ready" ? paddlePrep.schedule : null;
   const paddleObservations =
     paddleOutcome.tracking?.status === "tracked" ? paddleOutcome.tracking.lab.observations : null;
 
@@ -497,6 +527,7 @@ async function main(): Promise<void> {
     window: strokeWindow,
     paddle: paddleObservations,
     timings,
+    prep: ballPrep,
   });
   report.ballStage = ballOutcome.reportEntry;
 
@@ -836,6 +867,137 @@ interface PaddleStage {
   unavailableReason: string;
 }
 
+/** Run a paddle-lab python tool as a child process (async, logs inherited). */
+function runPythonTool(python: string, argv: string[]): Promise<void> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const child = spawn(python, argv, { stdio: ["ignore", "inherit", "inherit"] });
+    child.on("error", rejectPromise);
+    child.on("close", (code) => {
+      if (code === 0) resolvePromise();
+      else rejectPromise(new Error(`${basename(argv[0] ?? python)} exited with code ${code}`));
+    });
+  });
+}
+
+type PaddleDetectionPrep =
+  | { status: "ready"; schedule: TwoPassSchedule | null }
+  | { status: "env_missing" }
+  | { status: "failed"; message: string };
+
+type BallCandidatePrep =
+  | { status: "ready" }
+  | { status: "env_missing" }
+  | { status: "failed"; message: string };
+
+/**
+ * Detector subprocess phase of the paddle stage — file-producing only, no
+ * tracking. Kept separate from runPaddleStage so it can run CONCURRENTLY
+ * with ball candidate generation (the tracking phases stay sequential —
+ * ball gating consumes the paddle track). Never throws: every failure is
+ * carried in the prep result so one stage cannot poison the other.
+ */
+async function preparePaddleDetections(input: {
+  args: CliArgs;
+  window: { startMs: number; endMs: number };
+  detectSpan: { startMs: number; endMs: number };
+  /** Kinematic peaks from the pose-only pre-pass (two-pass densification). */
+  eventPeaksMs: readonly number[];
+  timings: Record<string, number>;
+}): Promise<PaddleDetectionPrep> {
+  const python = join(REPO_ROOT, "tools/paddle-lab/.venv/bin/python");
+  const script = join(REPO_ROOT, "tools/paddle-lab/detect_paddle.py");
+  if (!existsSync(python) || !existsSync(script)) {
+    return { status: "env_missing" };
+  }
+  const detsPath = join(input.args.outDir, "paddle-dets.json");
+  try {
+    const wantedStart = Math.max(0, input.detectSpan.startMs - 250);
+    const wantedEnd = input.detectSpan.endMs + 250;
+    // Reuse only when the existing detections actually cover the current
+    // stroke window — pose/window changes must invalidate stale detections.
+    // Two-pass mode never reuses: a stride-1 file must not stand in for a
+    // scheduled artifact (H found the reuse gate ignores stride — footgun).
+    let reusable = false;
+    if (input.args.reuseExtract && existsSync(detsPath) && !input.args.twoPass) {
+      const existing = JSON.parse(readFileSync(detsPath, "utf8")) as RawPaddleDetectionFile;
+      reusable =
+        existing.window.startMs <= wantedStart + 100 &&
+        existing.window.endMs >= wantedEnd - 100;
+      if (!reusable) console.log("existing paddle detections do not cover this window; re-detecting");
+    }
+    if (reusable) return { status: "ready", schedule: null };
+    const detect = (out: string, startMs: number, endMs: number, stride: number): Promise<void> =>
+      runPythonTool(python, [
+        script,
+        "--video", input.args.video,
+        "--out", out,
+        "--start-ms", String(startMs),
+        "--end-ms", String(endMs),
+        "--stride", String(stride),
+      ]);
+    const started = Date.now();
+    if (!input.args.twoPass) {
+      console.log("detecting paddle candidates (D-FINE COCO proxy, python)…");
+      await detect(detsPath, wantedStart, wantedEnd, 1);
+      input.timings["paddleDetectMs"] = Date.now() - started;
+      return { status: "ready", schedule: null };
+    }
+    // ── Adaptive two-pass schedule (OFF by default; paddleSchedule.ts) ────
+    console.log(
+      `two-pass paddle detection: sparse scan (stride ${input.args.sparseStride}) + adaptive densification…`,
+    );
+    const sparsePath = join(input.args.outDir, "paddle-dets.pass1.json");
+    await detect(sparsePath, wantedStart, wantedEnd, input.args.sparseStride);
+    input.timings["paddleDetectSparseMs"] = Date.now() - started;
+    const sparseFile = JSON.parse(readFileSync(sparsePath, "utf8")) as RawPaddleDetectionFile;
+    const sparseTracks = buildPaddleTracks(sparseFile, input.window);
+    const densest = [...sparseTracks].sort(
+      (a, b) => b.observations.length - a.observations.length,
+    )[0];
+    const schedule = planTwoPassSchedule({
+      detectSpan: { startMs: wantedStart, endMs: wantedEnd },
+      frameIntervalMs: 1000 / sparseFile.video.fps,
+      primaryTrack: densest ?? null,
+      paddleSpeeds: densest ? paddleSpeedSeries(densest.observations) : null,
+      eventPeaksMs: input.eventPeaksMs,
+      config: { sparseStride: input.args.sparseStride },
+    });
+    const denseStarted = Date.now();
+    const denseFiles: RawPaddleDetectionFile[] = [];
+    for (const [index, region] of schedule.denseRegions.entries()) {
+      const densePath = join(input.args.outDir, `paddle-dets.pass2-${index}.json`);
+      await detect(densePath, region.startMs, region.endMs, 1);
+      denseFiles.push(JSON.parse(readFileSync(densePath, "utf8")) as RawPaddleDetectionFile);
+    }
+    input.timings["paddleDetectDenseMs"] = Date.now() - denseStarted;
+    const merged = mergePaddleDetectionFiles(sparseFile, denseFiles, schedule);
+    writeFileSync(detsPath, JSON.stringify(merged.file));
+    writeFileSync(
+      join(input.args.outDir, "paddle-schedule.json"),
+      JSON.stringify(
+        {
+          schedule,
+          realized: {
+            sparseFrames: sparseFile.timing.framesProcessed,
+            denseFrames: denseFiles.reduce(
+              (total, file) => total + file.timing.framesProcessed,
+              0,
+            ),
+            mergedFrames: merged.file.frames.length,
+            framesByPass: merged.passes,
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    input.timings["paddleDetectMs"] = Date.now() - started;
+    return { status: "ready", schedule };
+  } catch (error) {
+    return { status: "failed", message: error instanceof Error ? error.message : String(error) };
+  }
+}
+
 /**
  * Pixel-based paddle perception: D-FINE proxy detector (python) → two-stage
  * tracker → pose-gated selection. Every failure mode is an honest
@@ -851,10 +1013,9 @@ function runPaddleStage(input: {
    * run on relevant frames only). Falls back to the stroke window. */
   detectSpan: { startMs: number; endMs: number };
   timings: Record<string, number>;
+  prep: PaddleDetectionPrep;
 }): PaddleStage {
-  const python = join(REPO_ROOT, "tools/paddle-lab/.venv/bin/python");
-  const script = join(REPO_ROOT, "tools/paddle-lab/detect_paddle.py");
-  if (!existsSync(python) || !existsSync(script)) {
+  if (input.prep.status === "env_missing") {
     return {
       tracking: null,
       reportEntry: { status: "unavailable", reason: "paddle_detector_env_not_installed" },
@@ -862,36 +1023,15 @@ function runPaddleStage(input: {
         "paddle_detector_env_not_installed (tools/paddle-lab: python3.12 venv + torch)",
     };
   }
+  if (input.prep.status === "failed") {
+    return {
+      tracking: null,
+      reportEntry: { status: "unavailable", reason: `detector_failed: ${input.prep.message}` },
+      unavailableReason: `paddle_detector_failed: ${input.prep.message}`,
+    };
+  }
   const detsPath = join(input.args.outDir, "paddle-dets.json");
   try {
-    const wantedStart = Math.max(0, input.detectSpan.startMs - 250);
-    const wantedEnd = input.detectSpan.endMs + 250;
-    // Reuse only when the existing detections actually cover the current
-    // stroke window — pose/window changes must invalidate stale detections.
-    let reusable = false;
-    if (input.args.reuseExtract && existsSync(detsPath)) {
-      const existing = JSON.parse(readFileSync(detsPath, "utf8")) as RawPaddleDetectionFile;
-      reusable =
-        existing.window.startMs <= wantedStart + 100 &&
-        existing.window.endMs >= wantedEnd - 100;
-      if (!reusable) console.log("existing paddle detections do not cover this window; re-detecting");
-    }
-    if (!reusable) {
-      console.log("detecting paddle candidates (D-FINE COCO proxy, python)…");
-      const started = Date.now();
-      execFileSync(
-        python,
-        [
-          script,
-          "--video", input.args.video,
-          "--out", detsPath,
-          "--start-ms", String(wantedStart),
-          "--end-ms", String(wantedEnd),
-        ],
-        { stdio: "inherit" },
-      );
-      input.timings["paddleDetectMs"] = Date.now() - started;
-    }
     const file = JSON.parse(readFileSync(detsPath, "utf8")) as RawPaddleDetectionFile;
     const trackStarted = Date.now();
     const rawCandidates = buildPaddleTracks(file, input.window);
@@ -1053,28 +1193,17 @@ function summarizeTimeline(timeline: BallTimeline): NonNullable<
   };
 }
 
-/**
- * Temporal ball perception: motion candidates (python, deterministic) →
- * association → physics/context gates → pose/paddle-aware selection.
- * Apple-trajectory noise never reaches this path; failures are reasons.
- */
-function runBallStage(input: {
+/** Candidate-generation subprocess phase of the ball stage — see
+ * preparePaddleDetections for the concurrency contract. Never throws. */
+async function prepareBallCandidates(input: {
   args: CliArgs;
-  sequence: PoseSequence;
   window: { startMs: number; endMs: number };
-  paddle: readonly TrackedPaddleObservation[] | null;
   timings: Record<string, number>;
-}): BallStage {
+}): Promise<BallCandidatePrep> {
   const python = join(REPO_ROOT, "tools/paddle-lab/.venv/bin/python");
   const script = join(REPO_ROOT, "tools/paddle-lab/ball_candidates.py");
   if (!existsSync(python) || !existsSync(script)) {
-    return {
-      tracking: null,
-      gated: [],
-      fragments: [],
-      reportEntry: { status: "unavailable", reason: "ball_candidate_env_not_installed" },
-      unavailableReason: "ball_candidate_env_not_installed (tools/paddle-lab)",
-    };
+    return { status: "env_missing" };
   }
   const candidatesPath = join(input.args.outDir, "ball-candidates.json");
   try {
@@ -1090,19 +1219,54 @@ function runBallStage(input: {
     if (!reusable) {
       console.log("generating ball candidates (3-frame differencing, python)…");
       const started = Date.now();
-      execFileSync(
-        python,
-        [
-          script,
-          "--video", input.args.video,
-          "--out", candidatesPath,
-          "--start-ms", String(wantedStart),
-          "--end-ms", String(wantedEnd),
-        ],
-        { stdio: "inherit" },
-      );
+      await runPythonTool(python, [
+        script,
+        "--video", input.args.video,
+        "--out", candidatesPath,
+        "--start-ms", String(wantedStart),
+        "--end-ms", String(wantedEnd),
+      ]);
       input.timings["ballCandidatesMs"] = Date.now() - started;
     }
+    return { status: "ready" };
+  } catch (error) {
+    return { status: "failed", message: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
+ * Temporal ball perception: motion candidates (python, deterministic) →
+ * association → physics/context gates → pose/paddle-aware selection.
+ * Apple-trajectory noise never reaches this path; failures are reasons.
+ */
+function runBallStage(input: {
+  args: CliArgs;
+  sequence: PoseSequence;
+  window: { startMs: number; endMs: number };
+  paddle: readonly TrackedPaddleObservation[] | null;
+  timings: Record<string, number>;
+  prep: BallCandidatePrep;
+}): BallStage {
+  if (input.prep.status === "env_missing") {
+    return {
+      tracking: null,
+      gated: [],
+      fragments: [],
+      reportEntry: { status: "unavailable", reason: "ball_candidate_env_not_installed" },
+      unavailableReason: "ball_candidate_env_not_installed (tools/paddle-lab)",
+    };
+  }
+  if (input.prep.status === "failed") {
+    return {
+      tracking: null,
+      gated: [],
+      fragments: [],
+      reportEntry: { status: "unavailable", reason: `ball_candidates_failed: ${input.prep.message}` },
+      unavailableReason: `ball_candidates_failed: ${input.prep.message}`,
+    };
+  }
+  const candidatesPath = join(input.args.outDir, "ball-candidates.json");
+  try {
     const file = JSON.parse(readFileSync(candidatesPath, "utf8")) as BallCandidateFile;
     const trackStarted = Date.now();
     const { gated, fragments, ablation } = buildBallTracks(
