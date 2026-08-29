@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-marne-serve",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "createdAtIso": "2026-08-29T09:30:00.000Z",
+  "revision": 1,
+  "modality": "event_bounds",
+  "recordingId": "rec-96ae65019c30",
+  "sourceKey": "dvids-marne-outdoor",
+  "sessionKey": "dvids-marne-2024",
+  "role": "development",
+  "recordingClock": true,
+  "sourceFps": "60000/1001",
+  "windowMs": { "from": 33350, "to": 39656 },
+  "strokeCount": 1,
+  "eventRecordCount": 1,
+  "nonEventRecordCount": 2,
+  "license": {
+    "url": "https://www.dvidshub.net/video/944593/marne-week-2024-pickleball-b-roll-3rd-cab-vs-92-eng-bn",
+    "quote": "PUBLIC DOMAIN. This work, Marne Week 2024 Pickleball B-roll 3rd CAB vs. 92 ENG BN, by SSG Dean Johnson, identified by DVIDS, must comply with the restrictions shown on https://www.dvidshub.net/about/copyright.",
+    "verifiedAtIso": "2026-08-29T09:08:00.000Z"
+  },
+  "mediaVerification": {
+    "path": "datasets/paddle-bench/videos/dvids-marne-outdoor.mp4",
+    "sha256": "96ae65019c30317c177191c1941225442df8d30c67b554765c13e973870fd394",
+    "matchesCorpusRegistry": true
+  },
+  "records": [
+    {
+      "recordId": "wavea-marne-serve-setup-address",
+      "isEvent": false,
+      "classification": "setup_motion",
+      "actor": "target_red_shirt",
+      "startMs": 33367,
+      "endMs": 34004,
+      "boundsUncertaintyMs": { "start": 17, "end": 17 },
+      "contactInsideBounds": false,
+      "contactMs": null,
+      "observedFrames": { "first": 2000, "last": 2038 },
+      "note": "Static address and ball hold before the drop/takeaway. Paddle remains low; no strike occurs in these observed frames."
+    },
+    {
+      "recordId": "wavea-marne-serve-drop-serve-1",
+      "isEvent": true,
+      "classification": "serve",
+      "actor": "target_red_shirt",
+      "owner": "target",
+      "startMs": 34021,
+      "endMs": 35435,
+      "boundsUncertaintyMs": { "start": 17, "end": 17 },
+      "contactInsideBounds": true,
+      "contactMs": 34689,
+      "contactUncertaintyMs": 9,
+      "observedFrames": { "first": 2039, "contactBracket": [2078, 2079], "last": 2124 },
+      "note": "Drop serve. Takeaway and ball release begin at frame 2039. Ball/paddle contact is bracketed by absolute CFR frames 2078-2079. Follow-through resolves and the paddle returns low by frame 2124."
+    },
+    {
+      "recordId": "wavea-marne-serve-reset-feed",
+      "isEvent": false,
+      "classification": "setup_motion",
+      "actor": "target_red_shirt",
+      "startMs": 35452,
+      "endMs": 39640,
+      "boundsUncertaintyMs": { "start": 17, "end": 17 },
+      "contactInsideBounds": false,
+      "contactMs": null,
+      "observedFrames": { "first": 2125, "last": 2376 },
+      "note": "Post-serve walk, reset, and ball-feed staging. The target changes position and readies the paddle but does not complete another stroke before the window ends."
+    }
+  ]
+}
