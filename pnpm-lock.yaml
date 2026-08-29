@@ -292,6 +292,9 @@ importers:
         specifier: workspace:*
         version: link:../vision-geometry
     devDependencies:
+      '@pickle/model-registry':
+        specifier: workspace:*
+        version: link:../model-registry
       '@types/node':
         specifier: ^20.17.0
         version: 20.19.43

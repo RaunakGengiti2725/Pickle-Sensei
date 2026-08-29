@@ -69,6 +69,7 @@
     "@pickle/vision-geometry": "workspace:*"
   },
   "devDependencies": {
+    "@pickle/model-registry": "workspace:*",
     "@types/node": "^20.17.0",
     "tsx": "^4.19.2",
     "typescript": "^5.9.2",
