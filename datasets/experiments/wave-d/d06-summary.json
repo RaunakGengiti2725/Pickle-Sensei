@@ -1,0 +1,86 @@
+{
+  "workstream": "D06 — Event coverage forensics: perception-vs-logic attribution",
+  "branch": "devin/wave-d/d06-event-oracle",
+  "generatedAtIso": "2026-08-29T08:50:00Z",
+  "whatWasBuilt": {
+    "oracle": "packages/swing-lab/src/eventFailureOracle.ts — event-failure oracle that replays committed target wrist series through proposeStrokeEventsV2, compares proposals to every gold TARGET event, and attributes each miss/mis-bound to one class using recorded signals only (never speculation). Run: pnpm --filter @pickle/swing-lab exec tsx src/eventFailureOracle.ts",
+    "attributionTable": "datasets/experiments/wave-d/d06-attribution.json — full per-event table with evidence pointers, signal stats (in-span sample count, span coverage, max gap, smoothed peak vs proposal gate), and matched proposals",
+    "tests": "packages/swing-lab/test/eventFailureOracle.test.ts — 6 tests: 5 attribution-precedence unit tests plus a committed-fixture replay regression anchor (rally1 wrist series → 3 proposals, best gold overlap ≥0.85)"
+  },
+  "scope": {
+    "goldTargetEvents": 21,
+    "otherOwnerEventsExcluded": 13,
+    "exclusionReason": "the pipeline proposes TARGET events from the target wrist series; other-owner labels measure contamination, not target-event recall",
+    "signalSources": [
+      "datasets/paddle-bench/runs-wave-a/<case>/people.json (committed windowed pose views, replayed on Linux)",
+      "apps/mobile/__tests__/fixtures/sessionReplay.afn-sasebo-rally1.json (W6 replay-validated target wrist series)",
+      "datasets/experiments/wave-a/E-replay-validation.json (recorded Mac batch proposals for both dev rallies)",
+      "datasets/cascade/cascade-1787971753680.json (recorded Mac cascade selections for the n=5 bundle cases)"
+    ]
+  },
+  "exactCounts": {
+    "PROPOSED_OK": 14,
+    "failedGoldEvents": 7,
+    "perAttributionClass": {
+      "WRIST_SIGNAL_QUALITY": 3,
+      "UNATTRIBUTABLE_HERE": 3,
+      "CONTACT_ANCHOR_ABSENT": 1,
+      "POSE_SIGNAL_ABSENT": 0,
+      "SAMPLING": 0,
+      "EVENT_LOGIC": 0
+    }
+  },
+  "failedEventDetail": [
+    {
+      "eventKey": "wavea-944403-smash#2",
+      "attribution": "WRIST_SIGNAL_QUALITY",
+      "evidence": "in-span smoothed wrist peak 0.463 < proposal gate 0.5"
+    },
+    {
+      "eventKey": "wavea-sasebo-volleys#1",
+      "attribution": "WRIST_SIGNAL_QUALITY",
+      "evidence": "in-span smoothed wrist peak 0.31 < gate 0.5 (nearest proposal 52152–52920 overlaps gold only 0.37)"
+    },
+    {
+      "eventKey": "wavea-sasebo-volleys#5",
+      "attribution": "WRIST_SIGNAL_QUALITY",
+      "evidence": "in-span smoothed wrist peak 0.344 < gate 0.5"
+    },
+    {
+      "eventKey": "afn-sasebo-rally1#1",
+      "attribution": "CONTACT_ANCHOR_ABSENT",
+      "evidence": "a proposal covering gold exists (2703–3770, overlap 0.9) but selectTargetEventV2(contact=null) abstains MULTI_STROKE_AMBIGUOUS (prominence ratio 1.11); contact abstention is recorded in cascade-1787971753680.json and HANDOFF_V3 §2 (gold 2900 has zero tracked support in any modality) — perception coverage, not event logic"
+    },
+    {
+      "eventKey": "wm-dink-01#1",
+      "attribution": "UNATTRIBUTABLE_HERE",
+      "evidence": "held-out; recorded Mac cascade selected 1400–1960 vs gold 1050–1650 (overlap 42%); no wrist/paddle series committed. Deciding artifact: datasets/paddle-bench/runs/wm-dink-01/{people.json,report.json} (Mac, pnpm lab:regen)"
+    },
+    {
+      "eventKey": "wavea-faead-rally#1",
+      "attribution": "UNATTRIBUTABLE_HERE",
+      "evidence": "committed windowed wrist series spans 12667–13708ms; gold 13417–13833ms extends past the window edge (signal still rising at 13708). Deciding artifact: datasets/paddle-bench/runs/wavea-faead-rally/people.json (Mac full-clip pose extraction)"
+    },
+    {
+      "eventKey": "wavea-faead-rally#2",
+      "attribution": "UNATTRIBUTABLE_HERE",
+      "evidence": "gold 13875–14500ms lies entirely outside the committed window (12667–13708ms). Same deciding artifact as #1"
+    }
+  ],
+  "honestNegatives": [
+    "ZERO failures are attributable to EVENT_LOGIC with committed signals proving it. Per the workstream mandate (do not tune event thresholds when perception is the real cause), NO event-logic fix was implemented and NO threshold was changed.",
+    "An earlier draft of the oracle classified wavea-faead-rally#1 as EVENT_LOGIC; probing the committed series showed it is a windowed artifact ending at 13708ms mid-swing, so the verdict was corrected to UNATTRIBUTABLE_HERE — the truncation check now runs before any logic verdict.",
+    "No paddle-speed series is committed for any oracle case, so paddle confirmation is structurally unavailable in every Linux replay (recorded per row, never guessed).",
+    "Held-out discipline: wm-dink-01 and afn-vic-rally1 rows cite only previously recorded Mac artifacts (cascade-1787971753680.json); no replay iteration or tuning was run against held-out material."
+  ],
+  "keyFinding": "EVENT coverage failures are perception-side: 3/7 are wrist-signal quality (in-span smoothed peak below the 0.5 proposal floor on volleys/smash-adjacent events — short compact strokes barely move the wrist in normalized units), 1/7 is the known rally1 contact-anchor absence blocking selection despite a 0.9-overlap proposal, and 3/7 cannot be decided on Linux because the committed windowed artifacts truncate or omit the gold span. Tuning event thresholds would be treating the wrong layer.",
+  "whatRemainsBlocked": [
+    "3 UNATTRIBUTABLE_HERE events need Mac artifacts: datasets/paddle-bench/runs/wm-dink-01/{people.json,report.json} and datasets/paddle-bench/runs/wavea-faead-rally/people.json (full clip). Re-running the oracle on a Mac after pnpm lab:regen would decide them.",
+    "The 3 WRIST_SIGNAL_QUALITY events cannot be fixed in event logic without weakening the 0.5 proposal floor, which the mandate forbids without perception-side evidence; the decisive experiment is a paddle-speed (not wrist) series for those clips, which is not committed."
+  ],
+  "validation": {
+    "typecheck": "pnpm --filter @pickle/swing-lab typecheck — pass",
+    "tests": "pnpm --filter @pickle/swing-lab test — 20 files, 237 passed / 4 skipped (includes 6 new oracle tests)",
+    "prettier": "pnpm exec prettier --write on all added/modified files"
+  }
+}
