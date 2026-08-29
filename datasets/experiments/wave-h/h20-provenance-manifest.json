@@ -1,0 +1,762 @@
+{
+  "gate": "GATE_9_DATA_RIGHTS_TRAINING_SAFETY",
+  "workstream": "h20-data-rights-cert",
+  "generatedAt": "2026-08-29T18:05:30Z",
+  "counts": {
+    "corpusSources": 20,
+    "corpusSourcesTrainingEligible": 20,
+    "corpusSourcesQuarantined": 0,
+    "corpusRecordings": 26,
+    "recordingsRootFootage": 17,
+    "recordingsDerived": 9,
+    "recordingsOnDiskVerified": 0,
+    "recordingsAbsentFromCheckout": 26,
+    "committedMediaFiles": 38,
+    "committedMediaRegistered": 38,
+    "committedMediaUnregistered": 0,
+    "benchCases": 5,
+    "benchHeldOutCases": 2,
+    "oodItems": 11,
+    "oodDerivedItems": 9,
+    "oodQuarantinedUnknownRights": 3,
+    "pickleballFreshCandidates": 12,
+    "pickleballDevPool": 3,
+    "pickleballQuarantinedUnknownRights": 23,
+    "paddleDistillV01": {
+      "total": 417,
+      "trainingEligible": 382,
+      "quarantined": 35,
+      "heldOutEligible": 0
+    },
+    "pickleRealReleases": {
+      "pickle-real-v0.1": {
+        "events": 5,
+        "nonDevelopmentEvents": 2,
+        "eventsMissingTrainingEligibilityFlag": 5
+      },
+      "pickle-real-v0.2": {
+        "events": 5,
+        "nonDevelopmentEvents": 2,
+        "eventsMissingTrainingEligibilityFlag": 5
+      },
+      "pickle-real-v0.3": {
+        "events": 5,
+        "nonDevelopmentEvents": 2,
+        "eventsMissingTrainingEligibilityFlag": 5
+      }
+    }
+  },
+  "sources": [
+    {
+      "sourceId": "src-commons-InFocus-_Pro_Pickleball_Tour_956784_.webm",
+      "license": "Public domain (U.S. federal government work, PD-USGov)",
+      "url": "https://commons.wikimedia.org/wiki/File:InFocus-_Pro_Pickleball_Tour_(956784).webm",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-commons-Pickleball_game.webm",
+      "license": "CC BY 3.0",
+      "url": "https://commons.wikimedia.org/wiki/File:Pickleball_game.webm",
+      "rightsBasis": "CC BY 3.0 \u2014 CC BY permits any use incl. commercial with attribution.",
+      "trainRight": "yes_with_attribution",
+      "analyzeRight": "yes_with_attribution",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-commons-Pickleball_Japan_Federation_Visits_Sasebo_967848_.webm",
+      "license": "Public domain (U.S. federal government work, PD-USGov)",
+      "url": "https://commons.wikimedia.org/wiki/File:Pickleball_Japan_Federation_Visits_Sasebo_(967848).webm",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-commons-Pro_Pickleball_Tour_AFN_VIC_957519_.webm",
+      "license": "Public domain (U.S. federal government work, PD-USGov)",
+      "url": "https://commons.wikimedia.org/wiki/File:Pro_Pickleball_Tour_AFN_VIC_(957519).webm",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-dvids-1007845",
+      "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "url": "https://www.dvidshub.net/video/1007845/2026-liberaider-games-highlights",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-dvids-1008415",
+      "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "url": "https://www.dvidshub.net/video/1008415/hubs-ohana-pickleball-tournament",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-dvids-1011384",
+      "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "url": "https://www.dvidshub.net/video/1011384/warrior-games-2026-pickleball-match",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-dvids-1011773",
+      "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "url": "https://www.dvidshub.net/video/1011773/2026-warrior-games",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-dvids-1011822",
+      "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "url": "https://www.dvidshub.net/video/1011822/warrior-games-2026",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-dvids-1019773",
+      "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "url": "https://www.dvidshub.net/video/1019773/2027-warrior-games-one-year-out-event-espn-wide-world-sports-b-roll",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-dvids-1019785",
+      "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "url": "https://www.dvidshub.net/video/1019785/2027-warrior-games-one-year-out-media-event-and-announcements",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-dvids-906546",
+      "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "url": "https://www.dvidshub.net/video/906546/zama-pulse-nov-dec-2023-edition",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-dvids-943757",
+      "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "url": "https://www.dvidshub.net/video/943757/jbsa-sru-adaptive-sports-camp",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-dvids-944209",
+      "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "url": "https://www.dvidshub.net/video/944209/broll-marne-week-pickleball",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-dvids-944403",
+      "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "url": "https://www.dvidshub.net/video/944403/marne-week-2024-pickleball",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-dvids-944593",
+      "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "url": "https://www.dvidshub.net/video/944593/marne-week-2024-pickleball-b-roll-3rd-cab-vs-92-eng-bn",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-dvids-956784",
+      "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "url": "https://www.dvidshub.net/video/956784/infocus-pro-pickleball-tour",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-dvids-957519",
+      "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "url": "https://www.dvidshub.net/video/957519/pro-pickleball-tour-afn-vic",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-dvids-967848",
+      "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "url": "https://www.dvidshub.net/video/967848/pickleball-japan-federation-visits-sasebo",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    },
+    {
+      "sourceId": "src-dvids-986421",
+      "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+      "url": "https://www.dvidshub.net/video/986421/blue-pages-intramural-pickleball",
+      "rightsBasis": "Public domain (U.S. federal government work, PD-USGov; DVIDS) \u2014 U.S. federal government works (17 U.S.C. \u00a7105) / CC0 carry no copyright restriction; DVIDS asks courtesy credit and no implied DoD endorsement.",
+      "trainRight": "yes",
+      "analyzeRight": "yes",
+      "trainingEligible": true,
+      "quarantined": false
+    }
+  ],
+  "recordings": [
+    {
+      "recordingId": "rec-024decaeb66e",
+      "path": "datasets/paddle-bench/videos/afn-vic-rally1.mp4",
+      "sourceId": "src-commons-Pro_Pickleball_Tour_AFN_VIC_957519_.webm",
+      "sessionKey": "afn-vic-2025",
+      "split": "locked_test",
+      "derivedFrom": [
+        "rec-274544640cc6"
+      ],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-0c19a6f0251d",
+      "path": "datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "sourceId": "src-commons-Pickleball_Japan_Federation_Visits_Sasebo_967848_.webm",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "derivedFrom": [
+        "rec-6e06a3157947"
+      ],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-1c1286ce675e",
+      "path": "datasets/corpus/media/dvids-1011822-1c1286ce675e.mp4",
+      "sourceId": "src-dvids-1011822",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "derivedFrom": [],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-208ca8beea6d",
+      "path": "datasets/corpus/media/dvids-956784-208ca8beea6d.mp4",
+      "sourceId": "src-dvids-956784",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "derivedFrom": [
+        "rec-5bf0e6a85afb"
+      ],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-21fb75446a03",
+      "path": "datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "sourceId": "src-commons-Pickleball_Japan_Federation_Visits_Sasebo_967848_.webm",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "derivedFrom": [
+        "rec-6e06a3157947"
+      ],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-274544640cc6",
+      "path": "datasets/paddle-bench/videos/afn-provic.mp4",
+      "sourceId": "src-commons-Pro_Pickleball_Tour_AFN_VIC_957519_.webm",
+      "sessionKey": "afn-vic-2025",
+      "split": "locked_test",
+      "derivedFrom": [],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-44c0c451500c",
+      "path": "datasets/paddle-bench/videos/dvids-warriorgames-broll.mp4",
+      "sourceId": "src-dvids-1011773",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "derivedFrom": [],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-5bf0e6a85afb",
+      "path": "datasets/paddle-bench/videos/afn-infocus-pro.mp4",
+      "sourceId": "src-commons-InFocus-_Pro_Pickleball_Tour_956784_.webm",
+      "sessionKey": "afn-sigonella-2025",
+      "split": "dev",
+      "derivedFrom": [],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-6e06a3157947",
+      "path": "datasets/paddle-bench/videos/afn-sasebo-indoor.mp4",
+      "sourceId": "src-commons-Pickleball_Japan_Federation_Visits_Sasebo_967848_.webm",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "derivedFrom": [],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-72cd8795bdc2",
+      "path": "datasets/corpus/media/dvids-957519-72cd8795bdc2.mp4",
+      "sourceId": "src-dvids-957519",
+      "sessionKey": "afn-vic-2025",
+      "split": "locked_test",
+      "derivedFrom": [
+        "rec-274544640cc6"
+      ],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-75c28e175c47",
+      "path": "datasets/corpus/media/dvids-986421-75c28e175c47.mp4",
+      "sourceId": "src-dvids-986421",
+      "sessionKey": "dvids-986421",
+      "split": "dev",
+      "derivedFrom": [],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-7d396a6d6566",
+      "path": "datasets/paddle-bench/videos/wm-dink-nearplayer.mp4",
+      "sourceId": "src-commons-Pickleball_game.webm",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "derivedFrom": [
+        "rec-b6f280b2900c"
+      ],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-8b77606225ba",
+      "path": "datasets/paddle-bench/videos/wm-volley-nearplayer.mp4",
+      "sourceId": "src-commons-Pickleball_game.webm",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "derivedFrom": [
+        "rec-b6f280b2900c"
+      ],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-912aeaa8c30c",
+      "path": "datasets/corpus/media/dvids-1008415-912aeaa8c30c.mp4",
+      "sourceId": "src-dvids-1008415",
+      "sessionKey": "dvids-1008415",
+      "split": "dev",
+      "derivedFrom": [],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-916657917f2b",
+      "path": "datasets/corpus/media/dvids-944403-916657917f2b.mp4",
+      "sourceId": "src-dvids-944403",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "derivedFrom": [],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-960a1a200d6d",
+      "path": "datasets/paddle-bench/videos/dvids-warriorgames-match.mp4",
+      "sourceId": "src-dvids-1011384",
+      "sessionKey": "dvids-warriorgames-2026",
+      "split": "dev",
+      "derivedFrom": [],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-96ae65019c30",
+      "path": "datasets/paddle-bench/videos/dvids-marne-outdoor.mp4",
+      "sourceId": "src-dvids-944593",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "derivedFrom": [],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-aaead01533ed",
+      "path": "datasets/corpus/media/dvids-1019785-aaead01533ed.mp4",
+      "sourceId": "src-dvids-1019785",
+      "sessionKey": "dvids-espn-oneyearout-2026",
+      "split": "shadow",
+      "derivedFrom": [],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-aba9629c681d",
+      "path": "datasets/corpus/media/dvids-967848-aba9629c681d.mp4",
+      "sourceId": "src-dvids-967848",
+      "sessionKey": "afn-sasebo-2025-06",
+      "split": "dev",
+      "derivedFrom": [
+        "rec-0c19a6f0251d"
+      ],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-ac6c9d7b5055",
+      "path": "datasets/paddle-bench/videos/wm-farplayer-return.mp4",
+      "sourceId": "src-commons-Pickleball_game.webm",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "derivedFrom": [
+        "rec-b6f280b2900c"
+      ],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-afd0b6bad5d0",
+      "path": "datasets/corpus/media/dvids-943757-afd0b6bad5d0.mp4",
+      "sourceId": "src-dvids-943757",
+      "sessionKey": "dvids-943757",
+      "split": "dev",
+      "derivedFrom": [],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-b6f280b2900c",
+      "path": "datasets/paddle-bench/videos/wm-pickleball-game.mp4",
+      "sourceId": "src-commons-Pickleball_game.webm",
+      "sessionKey": "wm-tournament-2014",
+      "split": "dev",
+      "derivedFrom": [],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-c1b5580db415",
+      "path": "datasets/corpus/media/dvids-906546-c1b5580db415.mp4",
+      "sourceId": "src-dvids-906546",
+      "sessionKey": "dvids-906546",
+      "split": "shadow",
+      "derivedFrom": [],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-d230484fbaa5",
+      "path": "datasets/corpus/media/dvids-1007845-d230484fbaa5.mp4",
+      "sourceId": "src-dvids-1007845",
+      "sessionKey": "dvids-1007845",
+      "split": "dev",
+      "derivedFrom": [],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-d613b17cfef1",
+      "path": "datasets/corpus/media/dvids-1019773-d613b17cfef1.mp4",
+      "sourceId": "src-dvids-1019773",
+      "sessionKey": "dvids-espn-oneyearout-2026",
+      "split": "shadow",
+      "derivedFrom": [],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    },
+    {
+      "recordingId": "rec-faead33a362c",
+      "path": "datasets/corpus/media/dvids-944209-faead33a362c.mp4",
+      "sourceId": "src-dvids-944209",
+      "sessionKey": "dvids-marne-2024",
+      "split": "dev",
+      "derivedFrom": [],
+      "onDisk": false,
+      "hashVerified": null,
+      "rightsTrainingEligible": true
+    }
+  ],
+  "committedMedia": [
+    {
+      "path": "datasets/ood/derived/derived-corrupt-bytes.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/derived/derived-extreme-tall.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/derived/derived-extreme-wide.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/derived/derived-garbage.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/derived/derived-graphics-life.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/derived/derived-graphics-testsrc.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/derived/derived-still-image-video.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/derived/derived-still-image.jpg",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/derived/derived-truncated.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/negatives/commons-ronpaul-crowd.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/negatives/ia-HanfordS1957-titlecard.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/negatives/ia-ProfileJ26-interview.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/negatives/yt--wE27MoX2AM-tennis.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/negatives/yt-BCJGL5E9huM-tabletennis.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/negatives/yt-EckAW5V1wv0-racquetball.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/negatives/yt-Iw55LinAF0U-badminton.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/negatives/yt-RpPe0h9cD5E-tennis.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/negatives/yt-x8T5I4YAKNw-squash.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/ood/negatives/yt-zWQs7kTKcEY-emptycourt.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/paddle-bench/bundles/afn-sasebo-rally1/clip.mp4",
+      "registered": true,
+      "resolvedVia": "sha256->rec-21fb75446a03"
+    },
+    {
+      "path": "datasets/paddle-bench/bundles/wm-dink-01/clip.mp4",
+      "registered": true,
+      "resolvedVia": "sha256->rec-7d396a6d6566"
+    },
+    {
+      "path": "datasets/paddle-bench/bundles/wm-volley-02/clip.mp4",
+      "registered": true,
+      "resolvedVia": "sha256->rec-8b77606225ba"
+    },
+    {
+      "path": "datasets/pickleball/dev-pool/va-6N3Yc184a_c.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/pickleball/dev-pool/yt-94KNxpNTyCw.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/pickleball/dev-pool/yt-o_NeuHjTEVE.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/pickleball/fresh-candidates/va-O1dLhGGPErc.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/pickleball/fresh-candidates/voa-6108955.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/pickleball/fresh-candidates/voa-6115790.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/pickleball/fresh-candidates/yt-6r4fOxRuKmM.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/pickleball/fresh-candidates/yt-9ru97zKV8mk.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/pickleball/fresh-candidates/yt-I5wYCXCL4dY.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/pickleball/fresh-candidates/yt-Y7DOO0j_1P4.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/pickleball/fresh-candidates/yt-eK-iPN2XAJQ.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/pickleball/fresh-candidates/yt-hktiyFnghIw.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/pickleball/fresh-candidates/yt-iuVdtmGoTbo.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/pickleball/fresh-candidates/yt-n-QrBfQVK_w.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    },
+    {
+      "path": "datasets/pickleball/fresh-candidates/yt-tJuJ4MQdYy0.mp4",
+      "registered": true,
+      "resolvedVia": "path"
+    }
+  ],
+  "findings": {
+    "P0": [],
+    "P1": [
+      "pickle-real-v0.1: 2 non-development events (incl. locked test) appear in per-event 'training-ready' records with no trainingEligible/quarantine flag \u2014 a downstream consumer could train on locked test / held-out (fixed in datasetRelease.ts for future releases; released manifests are immutable)",
+      "pickle-real-v0.2: 2 non-development events (incl. locked test) appear in per-event 'training-ready' records with no trainingEligible/quarantine flag \u2014 a downstream consumer could train on locked test / held-out (fixed in datasetRelease.ts for future releases; released manifests are immutable)",
+      "pickle-real-v0.3: 2 non-development events (incl. locked test) appear in per-event 'training-ready' records with no trainingEligible/quarantine flag \u2014 a downstream consumer could train on locked test / held-out (fixed in datasetRelease.ts for future releases; released manifests are immutable)"
+    ],
+    "P2": [
+      "media registered by content hash only (byte-identical to corpus recording, no path-level registry entry): datasets/paddle-bench/bundles/afn-sasebo-rally1/clip.mp4",
+      "media registered by content hash only (byte-identical to corpus recording, no path-level registry entry): datasets/paddle-bench/bundles/wm-dink-01/clip.mp4",
+      "media registered by content hash only (byte-identical to corpus recording, no path-level registry entry): datasets/paddle-bench/bundles/wm-volley-02/clip.mp4"
+    ]
+  }
+}

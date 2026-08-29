@@ -1,0 +1,85 @@
+{
+  "gate": "GATE_9_DATA_RIGHTS_TRAINING_SAFETY",
+  "workstream": "h20-data-rights-cert",
+  "baseline": "devin/1787988068-wave-c-integration @ 104ea0f",
+  "branch": "devin/wave-h/h20-data-rights-cert",
+  "verdict": "PASS",
+  "verdictRationale": "Every committed dataset/media item resolves to a registry record with source, license, reviewed rights profile, split, and dedup lineage (38/38; 35 by path, 3 bench-bundle clips byte-identical to corpus recordings). Unknown rights are quarantined by construction everywhere audited (26 quarantined registry entries across pickleball + ood; rightsForLicense returns all-unclear for unrecognized licenses; trainingEligible() requires affirmative train+store+analyze). Training permission is never inferred from analysis permission on any traced code path. The single P1 gap found (pickle-real per-event 'training-ready' records carried no eligibility flag, so locked-test/held-out events were exportable as training input) is fixed in the release generator with regression tests; the three already-released manifests are immutable by policy and are marked unresolved-by-policy with the mitigation that all downstream training consumers audited (distill_export.py) already quarantine held-out roles independently.",
+  "method": [
+    "Enumerated all committed media via git ls-files (38 files) and reconciled each against corpus recordings.json, paddle-bench registry/paddle-bench.json, ood registry, and pickleball registry, with SHA-256 content-hash fallback (script: datasets/experiments/wave-h/h20_provenance_audit.py; output: h20-provenance-manifest.json).",
+    "Audited all 20 corpus sources for complete six-modality rights profiles (store/analyze/annotate/train/redistributeDerivatives/commercial) and all 26 recordings for source resolution, split assignment, and derivedFrom lineage.",
+    "Traced every training-selection code path: services/media-worker/src/trainingConsent.ts (SQL restricted to scope='model_training', latest ledger action, capture-mode coverage, fresh-connection revalidation), tools/paddle-lab/distill_export.py (rights gate + explicit model_training consent gate for first-party, held-out roles hard-quarantined), packages/first-party-intake/src/consentRef.ts (requires BOTH video_analysis AND model_training active; absence = not consented), services/api consent/privacy routes (privacy-center mirrors only revocations into the ledger, never grants), packages/swing-lab engine/rights.ts + datasetRelease.ts.",
+    "Verified paddle-distill-v0.1 release: 417 examples, 382 training-eligible (all development split, zero with sourceUserId), 35 quarantined (28 held_out + 7 test_held_out), 0 held-out examples marked eligible, all eligible rights train in {yes, yes_with_attribution}.",
+    "Verified held-out cases wm-dink-01 and afn-vic-rally1 carry held_out/test_held_out roles and were not modified.",
+    "Ran root gates on the branch: pnpm typecheck, pnpm test (599 passed | 4 skipped), pnpm lint, pnpm format:check — all pass. Mobile untouched."
+  ],
+  "measuredCounts": {
+    "committedMediaFiles": 38,
+    "committedMediaResolvedByPath": 35,
+    "committedMediaResolvedByContentHash": 3,
+    "committedMediaUnregistered": 0,
+    "corpusSources": 20,
+    "corpusSourcesTrainingEligible": 20,
+    "corpusRecordings": 26,
+    "corpusRecordingsRoot": 17,
+    "corpusRecordingsDerived": 9,
+    "benchCases": 5,
+    "benchHeldOutCases": 2,
+    "oodItems": 11,
+    "oodDerivedItems": 9,
+    "oodQuarantinedUnknownRights": 3,
+    "pickleballFreshCandidates": 12,
+    "pickleballDevPool": 3,
+    "pickleballQuarantinedUnknownRights": 23,
+    "paddleDistillV01": {
+      "total": 417,
+      "trainingEligible": 382,
+      "quarantined": 35,
+      "heldOutMarkedEligible": 0,
+      "firstPartyEligibleWithoutConsent": 0
+    },
+    "pickleRealReleases": {
+      "pickle-real-v0.1": { "events": 5, "nonDevelopmentEvents": 2, "eventsMissingEligibilityFlag": 5 },
+      "pickle-real-v0.2": { "events": 5, "nonDevelopmentEvents": 2, "eventsMissingEligibilityFlag": 5 },
+      "pickle-real-v0.3": { "events": 5, "nonDevelopmentEvents": 2, "eventsMissingEligibilityFlag": 5 }
+    },
+    "rootGates": { "typecheck": "pass", "test": "599 passed | 4 skipped", "lint": "pass", "formatCheck": "pass" }
+  },
+  "findings": {
+    "P0": [],
+    "P1": [
+      {
+        "id": "H20-P1-01",
+        "status": "FIXED_FORWARD",
+        "finding": "pickle-real release manifests emit per-event 'training-ready' records for ALL target-owner events including held_out (wm-dink-01) and test_held_out (afn-vic-rally1) splits, with no trainingEligible flag or quarantine reasons — a downstream consumer reading manifest.events as training input could train on locked test / holdout footage.",
+        "fix": "packages/swing-lab/src/trainingGate.ts: default-quarantine per-event gate (only development split + rights-cleared source may be eligible; unknown rights quarantined); wired into datasetRelease.ts so every future release event carries explicit trainingEligible + quarantineReasons, plus a hard problem if a non-development event is ever marked eligible. Regression tests: packages/swing-lab/test/trainingGate.test.ts (6 tests).",
+        "residual": "Released manifests v0.1–v0.3 are immutable by policy and still lack the flag (unresolved-by-policy). Mitigation: the only audited training exporter (tools/paddle-lab/distill_export.py) independently quarantines held-out roles, and its shipped release has 0 held-out eligible examples."
+      }
+    ],
+    "P2": [
+      {
+        "id": "H20-P2-01",
+        "status": "DOCUMENTED",
+        "finding": "3 bench-bundle clips (afn-sasebo-rally1, wm-dink-01, wm-volley-02 under datasets/paddle-bench/bundles/*/clip.mp4) have no path-level registry entry; each is byte-identical (SHA-256 verified) to a registered corpus recording, so provenance is resolvable by content hash only."
+      },
+      {
+        "id": "H20-P2-02",
+        "status": "DOCUMENTED",
+        "finding": "Session wm-tournament-2014 spans development and held_out splits (known limitation already recorded in splits.json and release warnings; different players from one recording; acceptable only while corpus is tiny)."
+      }
+    ]
+  },
+  "consentSeparationEvidence": {
+    "trainingSelector": "services/media-worker/src/trainingConsent.ts — WHERE cr.scope = 'model_training' only; latest ledger action must be 'granted'; capture-mode-narrowed grants cover zero unclassified items; verifyTrainingEligibility revalidates on a fresh connection before model use.",
+    "analysisScopeNeverGrantsTraining": "No selection path references scope 'video_analysis'; consent grant route inserts the requested scope verbatim; privacy-center legacy endpoint mirrors only model_training WITHDRAWALS into the canonical ledger, never grants.",
+    "firstPartyIntake": "packages/first-party-intake/src/consentRef.ts requires ACTIVE grants for BOTH video_analysis AND model_training; absence of record = not consented.",
+    "offlineExporter": "tools/paddle-lab/distill_export.py: rights gate (train in {yes, yes_with_attribution}) AND explicit model_training consent for any sourceUserId; held-out roles always quarantined."
+  },
+  "artifacts": [
+    "datasets/experiments/wave-h/h20-provenance-manifest.json",
+    "datasets/experiments/wave-h/h20_provenance_audit.py",
+    "packages/swing-lab/src/trainingGate.ts",
+    "packages/swing-lab/test/trainingGate.test.ts"
+  ],
+  "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"]
+}

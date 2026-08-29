@@ -6,6 +6,7 @@ import type { StrokeEventLabel, SwingAnnotation } from "./annotationSchema.js";
 import { corpusPaths, loadRecordings, loadSources, readAllEvents } from "./engine/corpus.js";
 import { trainingEligible } from "./engine/rights.js";
 import { auditSplits, loadSplits } from "./engine/splits.js";
+import { gateEventForTraining } from "./trainingGate.js";
 
 /**
  * Canonical immutable dataset releases: pickle-real-vX.Y
@@ -109,8 +110,11 @@ if (isMain) {
     masks: { paddleTrack: boolean; ballTrack: boolean; contactEstimate: boolean };
     annotator: string;
     annotationRevision: number;
+    trainingEligible: boolean;
+    quarantineReasons: string[];
   }
   const events: EventRecord[] = [];
+  const videoPathByCase = new Map<string, string>();
   const cases: object[] = [];
   const sessionsBySplit = new Map<string, Set<string>>();
 
@@ -161,6 +165,7 @@ if (isMain) {
     if (!annotation.annotatorId) problems.push(`${benchCase.id}: missing annotator id`);
 
     const videoPath = resolve(PB, benchCase.video);
+    videoPathByCase.set(benchCase.id, videoPath);
     const runDir = resolve(PB, benchCase.runDir);
     const ref = (path: string) =>
       existsSync(path) ? { path: path.replace(`${ROOT}/`, ""), sha256: sha256(path) } : null;
@@ -217,6 +222,8 @@ if (isMain) {
         },
         annotator: annotation.annotatorId,
         annotationRevision: annotation.revision,
+        trainingEligible: false,
+        quarantineReasons: [],
       });
     }
   }
@@ -272,6 +279,20 @@ if (isMain) {
     if (sha256(videoPath) !== recording.sha256) {
       problems.push(
         `bench case ${benchCase.id}: bytes differ from corpus recording ${recording.recordingId}`,
+      );
+    }
+  }
+  const sourceById = new Map(sources.map((source) => [source.sourceId, source]));
+  for (const event of events) {
+    const videoPath = videoPathByCase.get(event.caseId);
+    const recording = videoPath ? recordingByPath.get(videoPath) : undefined;
+    const rights = recording ? (sourceById.get(recording.sourceId)?.rights ?? null) : null;
+    const gate = gateEventForTraining(event.split, rights);
+    event.trainingEligible = gate.trainingEligible;
+    event.quarantineReasons = gate.quarantineReasons;
+    if (event.trainingEligible && event.split !== "development") {
+      problems.push(
+        `TRAINING GATE VIOLATION: non-development event marked eligible: ${event.exampleId}`,
       );
     }
   }
