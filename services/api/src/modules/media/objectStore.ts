@@ -12,13 +12,46 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
  * URLs, random opaque keys. Video never proxies through the API server.
  */
 
+/** Exactly what the client is allowed to store under a presigned upload URL. */
+export interface UploadConstraints {
+  contentType: string;
+  sizeBytes: number;
+  /** Lowercase hex SHA-256 of the bytes the client declared. */
+  sha256Hex: string;
+}
+
+/** What storage actually holds for a key (used to verify the upload). */
+export interface StoredObject {
+  sizeBytes: number;
+  contentType: string | null;
+  /** Base64 SHA-256 recorded by storage, or null when the client omitted it. */
+  checksumSha256: string | null;
+}
+
 export interface IObjectStore {
   readonly bucket: string;
-  presignUpload(key: string, contentType: string, expiresSeconds: number): Promise<string>;
+  presignUpload(
+    key: string,
+    expiresSeconds: number,
+    constraints: UploadConstraints,
+  ): Promise<string>;
   presignDownload(key: string, expiresSeconds: number): Promise<string>;
   deleteObject(key: string): Promise<void>;
-  /** Returns the stored object's size, or null when the object does not exist. */
-  headObject(key: string): Promise<{ sizeBytes: number } | null>;
+  /** Returns what storage holds for the key, or null when the object is absent. */
+  headObject(key: string): Promise<StoredObject | null>;
+}
+
+/** Headers a client MUST send on the presigned PUT for the signature to match. */
+export function uploadRequiredHeaders(constraints: UploadConstraints): Record<string, string> {
+  return {
+    "content-type": constraints.contentType,
+    "content-length": String(constraints.sizeBytes),
+    "x-amz-checksum-sha256": sha256HexToBase64(constraints.sha256Hex),
+  };
+}
+
+export function sha256HexToBase64(hex: string): string {
+  return Buffer.from(hex, "hex").toString("base64");
 }
 
 export interface S3StoreConfig {
@@ -50,11 +83,26 @@ class S3ObjectStore implements IObjectStore {
     });
   }
 
-  async presignUpload(key: string, contentType: string, expiresSeconds: number): Promise<string> {
+  async presignUpload(
+    key: string,
+    expiresSeconds: number,
+    constraints: UploadConstraints,
+  ): Promise<string> {
     return getSignedUrl(
       this.client,
-      new PutObjectCommand({ Bucket: this.bucket, Key: key, ContentType: contentType }),
-      { expiresIn: expiresSeconds },
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        ContentType: constraints.contentType,
+        ContentLength: constraints.sizeBytes,
+        ChecksumSHA256: sha256HexToBase64(constraints.sha256Hex),
+      }),
+      {
+        expiresIn: expiresSeconds,
+        // Binds the declared type and byte count into the signature: storage
+        // itself rejects a spoofed content type or a larger body.
+        signableHeaders: new Set(["content-type", "content-length"]),
+      },
     );
   }
 
@@ -68,10 +116,16 @@ class S3ObjectStore implements IObjectStore {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
-  async headObject(key: string): Promise<{ sizeBytes: number } | null> {
+  async headObject(key: string): Promise<StoredObject | null> {
     try {
-      const head = await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
-      return { sizeBytes: Number(head.ContentLength ?? 0) };
+      const head = await this.client.send(
+        new HeadObjectCommand({ Bucket: this.bucket, Key: key, ChecksumMode: "ENABLED" }),
+      );
+      return {
+        sizeBytes: Number(head.ContentLength ?? 0),
+        contentType: head.ContentType ?? null,
+        checksumSha256: head.ChecksumSHA256 ?? null,
+      };
     } catch (error) {
       const name = (error as { name?: string }).name;
       if (name === "NotFound" || name === "NoSuchKey") return null;

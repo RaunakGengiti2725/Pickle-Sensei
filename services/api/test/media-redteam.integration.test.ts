@@ -9,7 +9,7 @@ import { InMemoryJobQueue } from "@pickle/queue";
 import { buildApp } from "../src/app.js";
 import { DevTokenVerifier } from "../src/auth/tokens.js";
 import type { ApiConfig } from "../src/config.js";
-import type { IObjectStore } from "../src/modules/media/objectStore.js";
+import { FakeObjectStore } from "./support/fakeObjectStore.js";
 import { publishTestScoringRelease } from "./support/scoringRelease.js";
 
 /**
@@ -35,28 +35,6 @@ function schemaUrl(base: string, schema: string): string {
   const url = new URL(base);
   url.searchParams.set("options", `-c search_path=${schema}`);
   return url.toString();
-}
-
-/** Synthetic in-memory object store: byte sizes are set per key by tests. */
-class FakeObjectStore implements IObjectStore {
-  readonly bucket = "fake-bucket";
-  objects = new Map<string, number>();
-  deletedKeys: string[] = [];
-
-  async presignUpload(key: string): Promise<string> {
-    return `https://fake/upload/${key}`;
-  }
-  async presignDownload(key: string): Promise<string> {
-    return `https://fake/download/${key}`;
-  }
-  async deleteObject(key: string): Promise<void> {
-    this.objects.delete(key);
-    this.deletedKeys.push(key);
-  }
-  async headObject(key: string): Promise<{ sizeBytes: number } | null> {
-    const size = this.objects.get(key);
-    return size === undefined ? null : { sizeBytes: size };
-  }
 }
 
 /** Queue wrapper that can be told to fail the next enqueue (dispatch fault). */
