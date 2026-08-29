@@ -13,6 +13,7 @@ export const ENVELOPE_DIMENSIONS = [
   "brightness",
   "motion_blur",
   "camera_motion",
+  "timing_stability",
   "clip_duration",
   "player_pixel_height",
   "player_visibility",

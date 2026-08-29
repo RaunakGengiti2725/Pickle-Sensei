@@ -10,7 +10,7 @@
  * `degraded` → DEGRADED, else UNSUPPORTED. Bounds are inclusive.
  */
 
-export const CAPTURE_ENVELOPE_THRESHOLDS_VERSION = "capture-envelope-thresholds-v0.1-provisional";
+export const CAPTURE_ENVELOPE_THRESHOLDS_VERSION = "capture-envelope-thresholds-v0.2-provisional";
 export const CAPTURE_ENVELOPE_THRESHOLDS_PROVISIONAL = true;
 
 export interface EnvelopeBand {
@@ -68,6 +68,17 @@ export const CAPTURE_ENVELOPE_THRESHOLDS = {
     unit: "mean abs luma diff @320w",
     supported: { max: 6 },
     degraded: { max: 14 },
+  },
+  /**
+   * Timing-stability proxy: coefficient of variation (std dev / mean) of
+   * inter-frame presentation intervals. Near 0 for constant-frame-rate
+   * capture; large for VFR clips whose AVERAGE frame rate still looks fine.
+   */
+  timing_stability: {
+    id: "timing-stability-interval-cv-v0.2",
+    unit: "cv of frame intervals",
+    supported: { max: 0.15 },
+    degraded: { max: 0.35 },
   },
   /** Clip duration, ms. */
   clip_duration: {
