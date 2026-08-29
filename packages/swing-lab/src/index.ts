@@ -1,4 +1,4 @@
-export { extractFrameStats } from "./frameStats.js";
+export { extractFrameStats, extractFrameStatsAsync } from "./frameStats.js";
 export { checkArtifactInvariants, type InvariantViolation } from "./invariants.js";
 export { runCorpusCheck, type CorpusCheckReport, type CorpusViolation } from "./corpusCheck.js";
 export { checkProvenanceChain, PROVENANCE_CHAIN_VERSION } from "./provenanceChain.js";

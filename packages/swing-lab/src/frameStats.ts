@@ -1,5 +1,8 @@
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
+import { promisify } from "node:util";
 import type { FrameStats } from "@pickle/vision-geometry";
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Pose-free frame statistics for the pre-analysis OOD gate: decodes the clip
@@ -21,31 +24,70 @@ const FROZEN_PIXEL_MAX_STD = 0.5;
 /** First raster row of the bottom third, where a broadcast score graphic sits. */
 const BOTTOM_THIRD_START_ROW = Math.floor((STAT_HEIGHT * 2) / 3);
 
-export function extractFrameStats(videoPath: string): FrameStats {
-  const decode = spawnSync(
-    "ffmpeg",
-    [
-      "-v",
-      "error",
-      "-i",
-      videoPath,
-      "-vf",
-      `scale=${STAT_WIDTH}:${STAT_HEIGHT}`,
-      "-pix_fmt",
-      "gray",
-      "-f",
-      "rawvideo",
-      "-",
-    ],
-    { maxBuffer: 1024 * 1024 * 1024 },
-  );
-  const raw = decode.stdout ?? Buffer.alloc(0);
-  const stderrText = decode.stderr?.toString("utf8") ?? "";
-  let decodeErrorCount = stderrText
+const DECODE_ARGS = (videoPath: string) => [
+  "-v",
+  "error",
+  "-i",
+  videoPath,
+  "-vf",
+  `scale=${STAT_WIDTH}:${STAT_HEIGHT}`,
+  "-pix_fmt",
+  "gray",
+  "-f",
+  "rawvideo",
+  "-",
+];
+
+function countDecodeErrors(stderrText: string, exitedNonZero: boolean): number {
+  const count = stderrText
     .split("\n")
     .filter((line) => /error|invalid data|partial file|truncat|corrupt|missing/i.test(line)).length;
-  if (decode.status !== 0 && decodeErrorCount === 0) decodeErrorCount = 1;
+  return exitedNonZero && count === 0 ? 1 : count;
+}
+
+export function extractFrameStats(videoPath: string): FrameStats {
+  const decode = spawnSync("ffmpeg", DECODE_ARGS(videoPath), { maxBuffer: 1024 * 1024 * 1024 });
+  const raw = decode.stdout ?? Buffer.alloc(0);
+  const stderrText = decode.stderr?.toString("utf8") ?? "";
+  const decodeErrorCount = countDecodeErrors(stderrText, decode.status !== 0);
   const source = probeSource(videoPath);
+  const durationMs = probeDurationMs(videoPath);
+  return computeFrameStats(raw, decodeErrorCount, source, durationMs);
+}
+
+/**
+ * Same statistics as extractFrameStats but with the ffmpeg/ffprobe subprocess
+ * waits off the event loop; byte-identical inputs produce identical outputs.
+ */
+export async function extractFrameStatsAsync(videoPath: string): Promise<FrameStats> {
+  let raw: Buffer = Buffer.alloc(0);
+  let stderrText = "";
+  let exitedNonZero = false;
+  try {
+    const decode = await execFileAsync("ffmpeg", DECODE_ARGS(videoPath), {
+      maxBuffer: 1024 * 1024 * 1024,
+      encoding: "buffer",
+    });
+    raw = decode.stdout;
+    stderrText = decode.stderr.toString("utf8");
+  } catch (error) {
+    exitedNonZero = true;
+    const failed = error as { stdout?: Buffer; stderr?: Buffer };
+    if (Buffer.isBuffer(failed.stdout)) raw = failed.stdout;
+    if (Buffer.isBuffer(failed.stderr)) stderrText = failed.stderr.toString("utf8");
+  }
+  const decodeErrorCount = countDecodeErrors(stderrText, exitedNonZero);
+  const source = probeSource(videoPath);
+  const durationMs = probeDurationMs(videoPath);
+  return computeFrameStats(raw, decodeErrorCount, source, durationMs);
+}
+
+function computeFrameStats(
+  raw: Buffer,
+  decodeErrorCount: number,
+  source: { width: number; height: number; fps: number | null } | null,
+  durationMs: number,
+): FrameStats {
   const frameSize = STAT_WIDTH * STAT_HEIGHT;
   const frameCount = Math.floor(raw.length / frameSize);
 
@@ -108,7 +150,6 @@ export function extractFrameStats(videoPath: string): FrameStats {
     }
   }
 
-  const durationMs = probeDurationMs(videoPath);
   const expectedFrameCount =
     source !== null && source.fps !== null && durationMs > 0
       ? Math.round((durationMs / 1000) * source.fps)

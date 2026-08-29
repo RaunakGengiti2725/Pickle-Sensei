@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
 import { evaluateFrameAnalyzability } from "@pickle/vision-geometry";
-import { extractFrameStats } from "../src/frameStats.js";
+import { extractFrameStats, extractFrameStatsAsync } from "../src/frameStats.js";
 
 /**
  * D3-11 red team: adversarial NEAR-MISS fixtures for the OOD gate — inputs
@@ -170,11 +170,10 @@ describe("OOD gate red team: committed positive corpus still passes", { timeout:
       expect(files.length).toBeGreaterThanOrEqual(6);
       const rejected: string[] = [];
       for (const f of files) {
-        const report = gate(join(fresh, f));
+        // The async extractor keeps the decode off the event loop so the
+        // vitest worker's RPC channel does not starve on slow runners.
+        const report = evaluateFrameAnalyzability(await extractFrameStatsAsync(join(fresh, f)));
         if (!report.analyzable) rejected.push(`${f}: ${report.reasons.join(",")}`);
-        // gate() is synchronous and can take tens of seconds per clip; yield
-        // between clips so the vitest worker's RPC channel does not starve.
-        await new Promise((resolve) => setImmediate(resolve));
       }
       // yt-iuVdtmGoTbo carries a real static score-graphic overlay; every
       // other candidate must pass. Before the frozen-pair-fraction fix,
