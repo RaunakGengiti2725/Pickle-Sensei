@@ -91,6 +91,8 @@ export interface LabRunReport {
     spanMs: number;
     prePassEvents: number;
   } | null;
+  /** Present only when --two-pass ran (adaptive detector schedule). */
+  paddleSchedule?: import("./paddleSchedule.js").TwoPassSchedule | null;
   scene?: {
     detector: string;
     cutCount: number;
@@ -312,6 +314,14 @@ export function renderReport(report: LabRunReport): string {
       `detector span         ${span.mode} · ${span.spanMs}ms of ${span.windowMs}ms window ` +
         `(${Math.round((span.spanMs / Math.max(1, span.windowMs)) * 100)}%) · pre-pass events ${span.prePassEvents}`,
     );
+    if (report.paddleSchedule) {
+      const schedule = report.paddleSchedule;
+      rows.push(
+        `detector schedule     two-pass · sparse stride ${schedule.sparse.stride} (${schedule.planned.sparseFrames} frames) + ` +
+          `${schedule.denseRegions.length} dense region(s) (+${schedule.planned.denseOnlyFrames} frames) · ` +
+          `${schedule.planned.totalFrames}/${schedule.planned.fullScanFrames} of full scan`,
+      );
+    }
   }
   if (report.scene) {
     const scene = report.scene;
