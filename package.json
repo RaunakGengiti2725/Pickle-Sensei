@@ -57,7 +57,8 @@
     "lab:label-queue": "pnpm --filter @pickle/swing-lab label:queue",
     "lab:label-queue-v3": "pnpm --filter @pickle/swing-lab label:queue-v3",
     "lab:al-priority": "pnpm --filter @pickle/swing-lab al:priority",
-    "lab:bundle": "pnpm --filter @pickle/swing-lab bundle:experiments"
+    "lab:bundle": "pnpm --filter @pickle/swing-lab bundle:experiments",
+    "lab:health-review": "pnpm --filter @pickle/swing-lab health:review"
   },
   "devDependencies": {
     "@eslint/js": "^9.34.0",

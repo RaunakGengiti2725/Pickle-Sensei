@@ -60,7 +60,8 @@
     "worker:soak": "tsx src/paddleWorkerSoak.ts",
     "worker:latency-dist": "tsx src/paddleWorkerLatencyDist.ts",
     "session:scheduler-sim": "tsx src/sessionSchedulerSim.ts",
-    "ood:speed-gap": "tsx src/oodSpeedGapMeasure.ts"
+    "ood:speed-gap": "tsx src/oodSpeedGapMeasure.ts",
+    "health:review": "tsx src/modelHealthReview.ts"
   },
   "dependencies": {
     "@pickle/analysis-pipeline": "workspace:*",
