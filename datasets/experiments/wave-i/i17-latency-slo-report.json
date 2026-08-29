@@ -1,0 +1,361 @@
+{
+  "schemaVersion": "pickle.latency-slo-report.v1",
+  "generatedAtIso": "2026-08-29T21:21:59.406Z",
+  "metric": "MOVEMENT_COMPLETION_TO_RESULT_INTERACTIVE",
+  "thresholds": {
+    "version": "latency-slo-thresholds-v1",
+    "metric": "MOVEMENT_COMPLETION_TO_RESULT_INTERACTIVE",
+    "judgedPercentile": "p95",
+    "idealMs": 2000,
+    "strongMs": 3000,
+    "maxMs": 5000
+  },
+  "recordCounts": {
+    "LINUX_BENCH_NOT_DEVICE": 104,
+    "DEVICE_MEASUREMENT": 0
+  },
+  "deviceEvidence": "BLOCKED_EXTERNAL_NO_DEVICE_MEASUREMENTS",
+  "linuxNotDeviceDisclaimer": "Contains LINUX_BENCH_NOT_DEVICE samples: measured on a Linux CI/dev box, NOT on a physical iPhone. Valid for regression trend tracking only — never extrapolate to device latency or GATE B evidence.",
+  "slices": [
+    {
+      "sliceKey": "overall|phase=cold",
+      "dimension": "overall",
+      "value": null,
+      "phase": "cold",
+      "summary": {
+        "sampleCount": 8,
+        "minMs": 13634.9,
+        "maxMs": 18647.4,
+        "meanMs": 15488.1375,
+        "p50Ms": 14712.8,
+        "p75Ms": 15765,
+        "p90Ms": 18647.4,
+        "p95Ms": 18647.4
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "device=linux-x86_64|phase=cold",
+      "dimension": "device",
+      "value": "linux-x86_64",
+      "phase": "cold",
+      "summary": {
+        "sampleCount": 8,
+        "minMs": 13634.9,
+        "maxMs": 18647.4,
+        "meanMs": 15488.1375,
+        "p50Ms": 14712.8,
+        "p75Ms": 15765,
+        "p90Ms": 18647.4,
+        "p95Ms": 18647.4
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "os=Linux-5.15.200-x86_64-with-glibc2.35|phase=cold",
+      "dimension": "os",
+      "value": "Linux-5.15.200-x86_64-with-glibc2.35",
+      "phase": "cold",
+      "summary": {
+        "sampleCount": 8,
+        "minMs": 13634.9,
+        "maxMs": 18647.4,
+        "meanMs": 15488.1375,
+        "p50Ms": 14712.8,
+        "p75Ms": 15765,
+        "p90Ms": 18647.4,
+        "p95Ms": 18647.4
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "stroke=volley|phase=cold",
+      "dimension": "stroke",
+      "value": "volley",
+      "phase": "cold",
+      "summary": {
+        "sampleCount": 4,
+        "minMs": 13634.9,
+        "maxMs": 14712.8,
+        "meanMs": 14212.425,
+        "p50Ms": 13853.9,
+        "p75Ms": 14648.1,
+        "p90Ms": 14712.8,
+        "p95Ms": 14712.8
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "modelVersion=baseline-pre-integration@52ba173ea688|phase=cold",
+      "dimension": "modelVersion",
+      "value": "baseline-pre-integration@52ba173ea688",
+      "phase": "cold",
+      "summary": {
+        "sampleCount": 2,
+        "minMs": 14648.1,
+        "maxMs": 16910.2,
+        "meanMs": 15779.150000000001,
+        "p50Ms": 14648.1,
+        "p75Ms": 16910.2,
+        "p90Ms": 16910.2,
+        "p95Ms": 16910.2
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "captureCondition=UNLABELED_COMMITTED_DEV_CLIP|phase=cold",
+      "dimension": "captureCondition",
+      "value": "UNLABELED_COMMITTED_DEV_CLIP",
+      "phase": "cold",
+      "summary": {
+        "sampleCount": 8,
+        "minMs": 13634.9,
+        "maxMs": 18647.4,
+        "meanMs": 15488.1375,
+        "p50Ms": 14712.8,
+        "p75Ms": 15765,
+        "p90Ms": 18647.4,
+        "p95Ms": 18647.4
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "stroke=rally-mixed|phase=cold",
+      "dimension": "stroke",
+      "value": "rally-mixed",
+      "phase": "cold",
+      "summary": {
+        "sampleCount": 4,
+        "minMs": 15732.8,
+        "maxMs": 18647.4,
+        "meanMs": 16763.85,
+        "p50Ms": 15765,
+        "p75Ms": 16910.2,
+        "p90Ms": 18647.4,
+        "p95Ms": 18647.4
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "modelVersion=integrated-default@8fc388ee1625|phase=cold",
+      "dimension": "modelVersion",
+      "value": "integrated-default@8fc388ee1625",
+      "phase": "cold",
+      "summary": {
+        "sampleCount": 2,
+        "minMs": 13634.9,
+        "maxMs": 15765,
+        "meanMs": 14699.95,
+        "p50Ms": 13634.9,
+        "p75Ms": 15765,
+        "p90Ms": 15765,
+        "p95Ms": 15765
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "modelVersion=integrated-twopass-roi@8fc388ee1625|phase=cold",
+      "dimension": "modelVersion",
+      "value": "integrated-twopass-roi@8fc388ee1625",
+      "phase": "cold",
+      "summary": {
+        "sampleCount": 2,
+        "minMs": 14712.8,
+        "maxMs": 18647.4,
+        "meanMs": 16680.1,
+        "p50Ms": 14712.8,
+        "p75Ms": 18647.4,
+        "p90Ms": 18647.4,
+        "p95Ms": 18647.4
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "modelVersion=integrated-tight-window@8fc388ee1625|phase=cold",
+      "dimension": "modelVersion",
+      "value": "integrated-tight-window@8fc388ee1625",
+      "phase": "cold",
+      "summary": {
+        "sampleCount": 2,
+        "minMs": 13853.9,
+        "maxMs": 15732.8,
+        "meanMs": 14793.349999999999,
+        "p50Ms": 13853.9,
+        "p75Ms": 15732.8,
+        "p90Ms": 15732.8,
+        "p95Ms": 15732.8
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "overall|phase=warm",
+      "dimension": "overall",
+      "value": null,
+      "phase": "warm",
+      "summary": {
+        "sampleCount": 96,
+        "minMs": 13736.3,
+        "maxMs": 39110.4,
+        "meanMs": 16786.765625000004,
+        "p50Ms": 15801.3,
+        "p75Ms": 17657.8,
+        "p90Ms": 19630.8,
+        "p95Ms": 23855.5
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "device=linux-x86_64|phase=warm",
+      "dimension": "device",
+      "value": "linux-x86_64",
+      "phase": "warm",
+      "summary": {
+        "sampleCount": 96,
+        "minMs": 13736.3,
+        "maxMs": 39110.4,
+        "meanMs": 16786.765625000004,
+        "p50Ms": 15801.3,
+        "p75Ms": 17657.8,
+        "p90Ms": 19630.8,
+        "p95Ms": 23855.5
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "os=Linux-5.15.200-x86_64-with-glibc2.35|phase=warm",
+      "dimension": "os",
+      "value": "Linux-5.15.200-x86_64-with-glibc2.35",
+      "phase": "warm",
+      "summary": {
+        "sampleCount": 96,
+        "minMs": 13736.3,
+        "maxMs": 39110.4,
+        "meanMs": 16786.765625000004,
+        "p50Ms": 15801.3,
+        "p75Ms": 17657.8,
+        "p90Ms": 19630.8,
+        "p95Ms": 23855.5
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "stroke=volley|phase=warm",
+      "dimension": "stroke",
+      "value": "volley",
+      "phase": "warm",
+      "summary": {
+        "sampleCount": 48,
+        "minMs": 13736.3,
+        "maxMs": 23984.5,
+        "meanMs": 15307.208333333334,
+        "p50Ms": 14854.3,
+        "p75Ms": 15253.9,
+        "p90Ms": 17766.2,
+        "p95Ms": 18188.7
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "modelVersion=baseline-pre-integration@52ba173ea688|phase=warm",
+      "dimension": "modelVersion",
+      "value": "baseline-pre-integration@52ba173ea688",
+      "phase": "warm",
+      "summary": {
+        "sampleCount": 24,
+        "minMs": 14323.1,
+        "maxMs": 20384.3,
+        "meanMs": 16570.766666666666,
+        "p50Ms": 16980.3,
+        "p75Ms": 17657.8,
+        "p90Ms": 18217.7,
+        "p95Ms": 18393.2
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "captureCondition=UNLABELED_COMMITTED_DEV_CLIP|phase=warm",
+      "dimension": "captureCondition",
+      "value": "UNLABELED_COMMITTED_DEV_CLIP",
+      "phase": "warm",
+      "summary": {
+        "sampleCount": 96,
+        "minMs": 13736.3,
+        "maxMs": 39110.4,
+        "meanMs": 16786.765625000004,
+        "p50Ms": 15801.3,
+        "p75Ms": 17657.8,
+        "p90Ms": 19630.8,
+        "p95Ms": 23855.5
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "stroke=rally-mixed|phase=warm",
+      "dimension": "stroke",
+      "value": "rally-mixed",
+      "phase": "warm",
+      "summary": {
+        "sampleCount": 48,
+        "minMs": 15584.3,
+        "maxMs": 39110.4,
+        "meanMs": 18266.322916666664,
+        "p50Ms": 17235.8,
+        "p75Ms": 18939.5,
+        "p90Ms": 20426.2,
+        "p95Ms": 23855.5
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "modelVersion=integrated-default@8fc388ee1625|phase=warm",
+      "dimension": "modelVersion",
+      "value": "integrated-default@8fc388ee1625",
+      "phase": "warm",
+      "summary": {
+        "sampleCount": 24,
+        "minMs": 13736.3,
+        "maxMs": 23984.5,
+        "meanMs": 15709.024999999996,
+        "p50Ms": 15584.3,
+        "p75Ms": 15801.5,
+        "p90Ms": 17118.6,
+        "p95Ms": 18939.8
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "modelVersion=integrated-twopass-roi@8fc388ee1625|phase=warm",
+      "dimension": "modelVersion",
+      "value": "integrated-twopass-roi@8fc388ee1625",
+      "phase": "warm",
+      "summary": {
+        "sampleCount": 24,
+        "minMs": 14527.6,
+        "maxMs": 39110.4,
+        "meanMs": 19232.562500000004,
+        "p50Ms": 18458,
+        "p75Ms": 19630.8,
+        "p90Ms": 23887.3,
+        "p95Ms": 27203.6
+      },
+      "tier": "FAIL"
+    },
+    {
+      "sliceKey": "modelVersion=integrated-tight-window@8fc388ee1625|phase=warm",
+      "dimension": "modelVersion",
+      "value": "integrated-tight-window@8fc388ee1625",
+      "phase": "warm",
+      "summary": {
+        "sampleCount": 24,
+        "minMs": 13765.8,
+        "maxMs": 19633.7,
+        "meanMs": 15634.708333333336,
+        "p50Ms": 15727,
+        "p75Ms": 16420,
+        "p90Ms": 17551.3,
+        "p95Ms": 18141.1
+      },
+      "tier": "FAIL"
+    }
+  ]
+}

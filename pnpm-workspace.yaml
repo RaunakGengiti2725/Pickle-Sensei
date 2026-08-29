@@ -4,5 +4,6 @@ packages:
   - "packages/*"
   - "tools/mac-bench"
   - "tools/iphone-trials"
+  - "tools/latency-slo"
   # React Native app is npm-managed to avoid metro/pnpm symlink issues (DECISIONS D-013)
   - "!apps/mobile"
