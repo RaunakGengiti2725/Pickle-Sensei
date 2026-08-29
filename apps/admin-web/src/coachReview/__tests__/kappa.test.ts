@@ -1,12 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { cohenKappa, computePairKappas, primaryFaultLabelExtractor, strokeLabelExtractor } from "../kappa";
-import { syntheticAgreeingPair, syntheticCannotEvaluate, syntheticDisagreeingPair } from "../syntheticFixtures";
+import {
+  cohenKappa,
+  computePairKappas,
+  primaryFaultLabelExtractor,
+  strokeLabelExtractor,
+} from "../kappa";
+import {
+  syntheticAgreeingPair,
+  syntheticCannotEvaluate,
+  syntheticDisagreeingPair,
+} from "../syntheticFixtures";
 import type { CoachReview } from "../types";
 
 describe("cohenKappa", () => {
   it("returns nulls for <2 label pairs — never fabricated", () => {
-    expect(cohenKappa([])).toEqual({ observedAgreement: null, expectedAgreement: null, kappa: null });
-    expect(cohenKappa([["A", "A"]])).toEqual({ observedAgreement: null, expectedAgreement: null, kappa: null });
+    expect(cohenKappa([])).toEqual({
+      observedAgreement: null,
+      expectedAgreement: null,
+      kappa: null,
+    });
+    expect(cohenKappa([["A", "A"]])).toEqual({
+      observedAgreement: null,
+      expectedAgreement: null,
+      kappa: null,
+    });
   });
 
   it("returns kappa null (undefined) when there is no label variation", () => {
@@ -58,7 +75,11 @@ describe("computePairKappas", () => {
 
   it("excludes cannot-evaluate reviews from every pair", () => {
     const pairs = computePairKappas([...reviews, syntheticCannotEvaluate()], strokeLabelExtractor);
-    expect(pairs.every((pair) => pair.coachA !== "SYNTHETIC-COACH-C" && pair.coachB !== "SYNTHETIC-COACH-C")).toBe(true);
+    expect(
+      pairs.every(
+        (pair) => pair.coachA !== "SYNTHETIC-COACH-C" && pair.coachB !== "SYNTHETIC-COACH-C",
+      ),
+    ).toBe(true);
   });
 
   it("labels zero-fault evaluable reviews CLEAN for the primary-fault kappa", () => {

@@ -108,7 +108,8 @@ export function validateStrokeGoldFile(raw: unknown): string[] {
     }
     if (label.l3 !== "unknown" && label.l1 !== "unknown") {
       const family = FAMILY_OF_SLUG.get(label.l3 as string);
-      if (family !== label.l1) problems.push(`${at}: l3 ${String(label.l3)} is not in family ${String(label.l1)}`);
+      if (family !== label.l1)
+        problems.push(`${at}: l3 ${String(label.l3)} is not in family ${String(label.l1)}`);
     }
     if (label.l3 !== "unknown" && label.l1 === "unknown") {
       problems.push(`${at}: l3 committed while l1 unknown`);
@@ -178,7 +179,9 @@ export interface LevelVerdicts {
   l3: L3Verdict;
 }
 
-function predictionSide(prediction: StrokePredictionLike): "forehand" | "backhand" | "overhead" | null {
+function predictionSide(
+  prediction: StrokePredictionLike,
+): "forehand" | "backhand" | "overhead" | null {
   const label = prediction.leaf ?? prediction.label;
   if (label === "OVERHEAD") return "overhead";
   if (prediction.taxonomyDepth < 2) return null;
@@ -315,19 +318,30 @@ export interface BenchReport {
   l2: LevelSummary;
   l3: LevelSummary;
   /** goldLabel → predictedLabel → count. Predicted "ABSTAINED" is explicit. */
-  confusion: { l1: Record<string, Record<string, number>>; l2: Record<string, Record<string, number>>; l3: Record<string, Record<string, number>> };
+  confusion: {
+    l1: Record<string, Record<string, number>>;
+    l2: Record<string, Record<string, number>>;
+    l3: Record<string, Record<string, number>>;
+  };
 }
 
 function emptySummary(): LevelSummary {
   return { applicable: 0, correct: 0, ambiguous: 0, wrong: 0, abstained: 0, goldUnknown: 0 };
 }
 
-function bump(matrix: Record<string, Record<string, number>>, gold: string, predicted: string): void {
+function bump(
+  matrix: Record<string, Record<string, number>>,
+  gold: string,
+  predicted: string,
+): void {
   matrix[gold] = matrix[gold] ?? {};
   matrix[gold]![predicted] = (matrix[gold]![predicted] ?? 0) + 1;
 }
 
-export function benchStrokeGold(rows: BenchRow[], options?: { useDeclaredIntent?: boolean }): BenchReport {
+export function benchStrokeGold(
+  rows: BenchRow[],
+  options?: { useDeclaredIntent?: boolean },
+): BenchReport {
   const report: BenchReport = {
     rows: [],
     l1: emptySummary(),
@@ -346,7 +360,10 @@ export function benchStrokeGold(rows: BenchRow[], options?: { useDeclaredIntent?
     const leaf = prediction ? (prediction.leaf ?? prediction.label) : "ABSTAINED";
     const predictedL1 = prediction ? (V3_LEAF_FAMILY[leaf] ?? "ABSTAINED") : "ABSTAINED";
     const predictedL2 = prediction ? (predictionSide(prediction) ?? "ABSTAINED") : "ABSTAINED";
-    const predictedL3 = prediction && prediction.taxonomyDepth >= 3 && prediction.leaf ? prediction.leaf : "ABSTAINED";
+    const predictedL3 =
+      prediction && prediction.taxonomyDepth >= 3 && prediction.leaf
+        ? prediction.leaf
+        : "ABSTAINED";
     bump(report.confusion.l1, row.gold.l1, predictedL1);
     if (row.gold.l2 !== "not_applicable") bump(report.confusion.l2, row.gold.l2, predictedL2);
     bump(report.confusion.l3, row.gold.l3, predictedL3);
@@ -395,7 +412,9 @@ function formatSummary(name: string, summary: LevelSummary): string {
 const isMain = process.argv[1]?.endsWith("strokeTaxonomyBench.ts");
 if (isMain) {
   const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-  const goldPath = resolve(process.argv[2] ?? join(repoRoot, "datasets/paddle-bench/stroke-gold.json"));
+  const goldPath = resolve(
+    process.argv[2] ?? join(repoRoot, "datasets/paddle-bench/stroke-gold.json"),
+  );
   const gold = JSON.parse(readFileSync(goldPath, "utf8")) as StrokeGoldFile;
   const problems = validateStrokeGoldFile(gold);
   if (problems.length > 0) {
@@ -407,7 +426,9 @@ if (isMain) {
   console.log("═".repeat(66));
   console.log(`CANONICAL STROKE TAXONOMY BENCH [${STROKE_GOLD_TAXONOMY_VERSION}]`);
   console.log(`gold file: ${goldPath} [provenance: ${gold.provenance}]`);
-  console.log(`labels: ${gold.labels.length} across ${new Set(gold.labels.map((label) => label.caseId)).size} cases`);
+  console.log(
+    `labels: ${gold.labels.length} across ${new Set(gold.labels.map((label) => label.caseId)).size} cases`,
+  );
   const byAnnotator = new Map<string, number>();
   for (const label of gold.labels) {
     byAnnotator.set(label.annotatorId, (byAnnotator.get(label.annotatorId) ?? 0) + 1);
@@ -415,8 +436,12 @@ if (isMain) {
   console.log(`annotators: ${[...byAnnotator].map(([id, count]) => `${id}×${count}`).join(" · ")}`);
   const countBy = (extract: (label: StrokeGoldLabel) => string) => {
     const counts = new Map<string, number>();
-    for (const label of gold.labels) counts.set(extract(label), (counts.get(extract(label)) ?? 0) + 1);
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([key, count]) => `${key}×${count}`).join(" · ");
+    for (const label of gold.labels)
+      counts.set(extract(label), (counts.get(extract(label)) ?? 0) + 1);
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([key, count]) => `${key}×${count}`)
+      .join(" · ");
   };
   console.log(`L1 coverage: ${countBy((label) => label.l1)}`);
   console.log(`L2 coverage: ${countBy((label) => label.l2)}`);
@@ -454,7 +479,9 @@ if (isMain) {
     );
   } else {
     if (missingRuns > 0) {
-      console.log(`NOTE: ${missingRuns} target labels skipped — no canonical run report on this machine.`);
+      console.log(
+        `NOTE: ${missingRuns} target labels skipped — no canonical run report on this machine.`,
+      );
     }
     const benched = benchStrokeGold(rows);
     console.log(formatSummary("L1 family", benched.l1));

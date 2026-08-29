@@ -116,9 +116,7 @@ describe("crop admission gates", () => {
   const wrists = wristsAt(wrist, [0]);
   const near = (score: number): CropDetectionFrame => ({
     tMs: 0,
-    detections: [
-      { box: [370, 370, 430, 450], score, label: "tennis racket", source: "crop" },
-    ],
+    detections: [{ box: [370, 370, 430, 450], score, label: "tennis racket", source: "crop" }],
   });
 
   it("admits a plausible near-wrist crop detection at the 0.08 floor", () => {
@@ -175,9 +173,7 @@ describe("crop admission gates", () => {
   });
 
   it("isFpFamily keeps a normal in-hand paddle box", () => {
-    expect(
-      isFpFamily({ x: 0.37, y: 0.37, width: 0.06, height: 0.08 }, [wrist]),
-    ).toBe(false);
+    expect(isFpFamily({ x: 0.37, y: 0.37, width: 0.06, height: 0.08 }, [wrist])).toBe(false);
   });
 });
 

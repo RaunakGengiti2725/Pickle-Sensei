@@ -1,5 +1,9 @@
 import type { AnalysisRecord } from "@pickle/swing-domain";
-import type { CaptureQualityReport, ContactEstimate, OfflineStrokeWindow } from "@pickle/vision-geometry";
+import type {
+  CaptureQualityReport,
+  ContactEstimate,
+  OfflineStrokeWindow,
+} from "@pickle/vision-geometry";
 import type { BallCandidateDiagnostics } from "./ballCandidates.js";
 import type { BallAblation } from "./ballTracker.js";
 import type { StrokePrediction } from "./strokeHeuristic.js";
@@ -197,7 +201,9 @@ export function renderReport(report: LabRunReport): string {
         `  confidence: ${stage.confidenceModel}`,
       );
     } else if (stage.status === "untracked") {
-      rows.push(`ball track            UNTRACKED — ${stage.reason} (${stage.gatedTracks} gated tracks)`);
+      rows.push(
+        `ball track            UNTRACKED — ${stage.reason} (${stage.gatedTracks} gated tracks)`,
+      );
     } else {
       rows.push(`ball track            UNAVAILABLE — ${stage.reason}`);
     }
@@ -356,7 +362,7 @@ export function renderReport(report: LabRunReport): string {
     }
   }
   if (report.contactScanNote) {
-    rows.push(`  contact scan: ${report.contactScanNote}`)
+    rows.push(`  contact scan: ${report.contactScanNote}`);
   }
   if (report.temporalPhasesV2) {
     const phases = report.temporalPhasesV2;
@@ -407,9 +413,7 @@ export function renderReport(report: LabRunReport): string {
   }
   const timingEntries = Object.entries(report.timings);
   if (timingEntries.length > 0) {
-    rows.push(
-      `timings: ${timingEntries.map(([stage, ms]) => `${stage}=${ms}ms`).join(" · ")}`,
-    );
+    rows.push(`timings: ${timingEntries.map(([stage, ms]) => `${stage}=${ms}ms`).join(" · ")}`);
   }
   rows.push(line, `artifacts: ${report.outDir}`, line);
   return rows.join("\n");

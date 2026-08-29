@@ -1,7 +1,11 @@
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { evaluateFrameAnalyzability, FRAME_ANALYZABILITY_REASONS, type FrameStats } from "@pickle/vision-geometry";
+import {
+  evaluateFrameAnalyzability,
+  FRAME_ANALYZABILITY_REASONS,
+  type FrameStats,
+} from "@pickle/vision-geometry";
 import { checkArtifactInvariants } from "../src/invariants.js";
 import { runCorpusCheck } from "../src/corpusCheck.js";
 import { proposeStrokeEvents, proposeStrokeEventsV2 } from "../src/strokeEvents.js";
@@ -51,8 +55,18 @@ describe("property/fuzz: stroke event proposals", () => {
       const paddle = rand() < 0.3 ? null : randomSeries(rand, clipEndMs);
       const wrist = rand() < 0.2 ? null : randomSeries(rand, clipEndMs);
       for (const proposal of [
-        proposeStrokeEvents({ paddleSpeeds: paddle, wristSpeeds: wrist, clipStartMs: 0, clipEndMs }),
-        proposeStrokeEventsV2({ paddleSpeeds: paddle, wristSpeeds: wrist, clipStartMs: 0, clipEndMs }),
+        proposeStrokeEvents({
+          paddleSpeeds: paddle,
+          wristSpeeds: wrist,
+          clipStartMs: 0,
+          clipEndMs,
+        }),
+        proposeStrokeEventsV2({
+          paddleSpeeds: paddle,
+          wristSpeeds: wrist,
+          clipStartMs: 0,
+          clipEndMs,
+        }),
       ]) {
         let lastStart = -Infinity;
         for (const event of proposal.events) {
@@ -82,7 +96,9 @@ describe("property/fuzz: temporal phase segmentation v2", () => {
       const startMs = Math.floor(rand() * 1000);
       const endMs = startMs + 300 + Math.floor(rand() * 2000);
       const contactMs =
-        rand() < 0.4 ? null : startMs + Math.floor(rand() * (endMs - startMs) * 1.4 - (endMs - startMs) * 0.2);
+        rand() < 0.4
+          ? null
+          : startMs + Math.floor(rand() * (endMs - startMs) * 1.4 - (endMs - startMs) * 0.2);
       const peakMs = rand() < 0.5 ? undefined : startMs + Math.floor(rand() * (endMs - startMs));
       const outcome = segmentPhasesTemporalV2({
         event: peakMs === undefined ? { startMs, endMs } : { startMs, endMs, peakMs },
@@ -91,7 +107,10 @@ describe("property/fuzz: temporal phase segmentation v2", () => {
         wristSpeeds: rand() < 0.3 ? null : randomSeries(rand, clipEndMs),
       });
       if (outcome.status !== "segmented") {
-        expect(outcome.reason.length, `seed ${seed}: abstention must carry a reason`).toBeGreaterThan(0);
+        expect(
+          outcome.reason.length,
+          `seed ${seed}: abstention must carry a reason`,
+        ).toBeGreaterThan(0);
         continue;
       }
       segmented += 1;
@@ -100,7 +119,9 @@ describe("property/fuzz: temporal phase segmentation v2", () => {
       expect(b.version.length, `seed ${seed}`).toBeGreaterThan(0);
       if (b.anchorBasis === "event_peak") {
         anchorFree += 1;
-        expect(Number.isNaN(b.contactMs), `seed ${seed}: anchor-free must not carry contact`).toBe(true);
+        expect(Number.isNaN(b.contactMs), `seed ${seed}: anchor-free must not carry contact`).toBe(
+          true,
+        );
       } else {
         expect(Number.isFinite(b.contactMs), `seed ${seed}`).toBe(true);
       }

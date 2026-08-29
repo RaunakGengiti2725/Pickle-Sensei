@@ -40,7 +40,9 @@
           "twoPassFramesProcessed": 47,
           "twoPassBreakdown": { "sparse": 19, "dense": 28 },
           "mergedFrames": 37,
-          "denseRegions": [{ "startMs": 6030, "endMs": 7150, "reasons": ["paddle_speed_change", "event_peak"] }],
+          "denseRegions": [
+            { "startMs": 6030, "endMs": 7150, "reasons": ["paddle_speed_change", "event_peak"] }
+          ],
           "contactNeighborhoodPm100ms": "5/5 on-grid frames (40ms grid: 6590,6630,6670,6710,6750), all pass=dense (stride 1)",
           "framesSavedVsFullDense": "47 vs 55 = 14.5% fewer detector frames"
         },

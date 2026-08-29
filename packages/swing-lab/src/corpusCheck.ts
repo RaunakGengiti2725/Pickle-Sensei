@@ -31,7 +31,10 @@ export function runCorpusCheck(rootDir: string): CorpusCheckReport {
     try {
       parsed = JSON.parse(readFileSync(file, "utf8"));
     } catch (error) {
-      parseFailures.push({ file: rel, error: error instanceof Error ? error.message : String(error) });
+      parseFailures.push({
+        file: rel,
+        error: error instanceof Error ? error.message : String(error),
+      });
       continue;
     }
     for (const violation of checkArtifactInvariants(parsed)) {
@@ -50,13 +53,15 @@ function collectJsonFiles(dir: string, out: string[]): void {
   }
 }
 
-const invokedDirectly =
-  process.argv[1] !== undefined && process.argv[1].endsWith("corpusCheck.ts");
+const invokedDirectly = process.argv[1] !== undefined && process.argv[1].endsWith("corpusCheck.ts");
 if (invokedDirectly) {
   const root = process.argv[2] ?? join(process.cwd(), "..", "..", "datasets");
   const report = runCorpusCheck(root);
-  console.log(`corpus check · ${report.filesChecked} files · ${report.parseFailures.length} parse failures · ${report.violations.length} violations`);
-  for (const failure of report.parseFailures) console.log(`  PARSE ${failure.file}: ${failure.error}`);
+  console.log(
+    `corpus check · ${report.filesChecked} files · ${report.parseFailures.length} parse failures · ${report.violations.length} violations`,
+  );
+  for (const failure of report.parseFailures)
+    console.log(`  PARSE ${failure.file}: ${failure.error}`);
   const byRule = new Map<string, CorpusViolation[]>();
   for (const violation of report.violations) {
     const list = byRule.get(violation.rule) ?? [];
@@ -65,6 +70,7 @@ if (invokedDirectly) {
   }
   for (const [rule, list] of byRule) {
     console.log(`  ${rule}: ${list.length}`);
-    for (const violation of list) console.log(`    ${violation.file} ${violation.path} — ${violation.detail}`);
+    for (const violation of list)
+      console.log(`    ${violation.file} ${violation.path} — ${violation.detail}`);
   }
 }

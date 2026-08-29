@@ -54,17 +54,20 @@ export function validateAssignment(
     problems.push("coachIds must list ≥1 provisioned coach");
   } else {
     for (const coachId of entry.coachIds) {
-      if (/synthetic/i.test(coachId)) problems.push(`SYNTHETIC coach ${coachId} can never be assigned`);
+      if (/synthetic/i.test(coachId))
+        problems.push(`SYNTHETIC coach ${coachId} can never be assigned`);
       else if (!context.activeCoachIds.includes(coachId)) {
         problems.push(`coach ${coachId} is not an active entry in coaches.json`);
       }
     }
-    if (new Set(entry.coachIds).size !== entry.coachIds.length) problems.push("coachIds must be unique");
+    if (new Set(entry.coachIds).size !== entry.coachIds.length)
+      problems.push("coachIds must be unique");
   }
   if (typeof entry.assignedAtIso !== "string" || Number.isNaN(Date.parse(entry.assignedAtIso))) {
     problems.push("assignedAtIso must be an ISO timestamp");
   }
-  if (!entry.assignedBy || typeof entry.assignedBy !== "string") problems.push("assignedBy required");
+  if (!entry.assignedBy || typeof entry.assignedBy !== "string")
+    problems.push("assignedBy required");
   return problems;
 }
 
@@ -83,7 +86,10 @@ export interface ReviewAmendment {
   createdAtIso: string;
 }
 
-export function validateAmendment(amendment: ReviewAmendment, context: ValidationContext): string[] {
+export function validateAmendment(
+  amendment: ReviewAmendment,
+  context: ValidationContext,
+): string[] {
   const problems: string[] = [];
   if (amendment.schemaVersion !== 1) problems.push("amendment schemaVersion must be 1");
   if (!Number.isInteger(amendment.revision) || amendment.revision < 2) {
@@ -95,7 +101,10 @@ export function validateAmendment(amendment: ReviewAmendment, context: Validatio
   if (!amendment.reason || amendment.reason.trim().length < 10) {
     problems.push("amendment reason required (≥10 chars)");
   }
-  if (typeof amendment.createdAtIso !== "string" || Number.isNaN(Date.parse(amendment.createdAtIso))) {
+  if (
+    typeof amendment.createdAtIso !== "string" ||
+    Number.isNaN(Date.parse(amendment.createdAtIso))
+  ) {
     problems.push("createdAtIso must be an ISO timestamp");
   }
   if (!amendment.review || typeof amendment.review !== "object") {
@@ -156,7 +165,8 @@ export function validateAdjudication(
   } else {
     for (const reviewId of record.reviewedReviewIds) {
       const reviewer = context.reviewerCoachIdsByReviewId[reviewId];
-      if (reviewer === undefined) problems.push(`reviewedReviewIds: no persisted review ${reviewId}`);
+      if (reviewer === undefined)
+        problems.push(`reviewedReviewIds: no persisted review ${reviewId}`);
       else if (reviewer === record.adjudicatorId) {
         problems.push("adjudicator must not be one of the original reviewers");
       }
@@ -175,10 +185,16 @@ export function validateAdjudication(
     if (outcome.overallQuality !== null && ![1, 2, 3, 4, 5].includes(outcome.overallQuality)) {
       problems.push("new_verdict overallQuality must be null or 1..5");
     }
-    if (outcome.primaryFaultId !== null && !context.knownFaultIds.includes(outcome.primaryFaultId)) {
-      problems.push(`new_verdict primaryFaultId ${outcome.primaryFaultId} not in ${context.faultTaxonomyVersion}`);
+    if (
+      outcome.primaryFaultId !== null &&
+      !context.knownFaultIds.includes(outcome.primaryFaultId)
+    ) {
+      problems.push(
+        `new_verdict primaryFaultId ${outcome.primaryFaultId} not in ${context.faultTaxonomyVersion}`,
+      );
     }
-    if (!outcome.note || outcome.note.trim().length < 5) problems.push("new_verdict requires a note");
+    if (!outcome.note || outcome.note.trim().length < 5)
+      problems.push("new_verdict requires a note");
   } else if (outcome.kind === "unresolvable") {
     if (!outcome.reason || outcome.reason.trim().length < 10) {
       problems.push("unresolvable outcome requires a reason (≥10 chars)");
@@ -228,7 +244,9 @@ export function validateMappingProposal(
     problems.push(`drillId ${proposal.drillId ?? "(missing)"} not in the drill library`);
   }
   if (!proposal.faultId || !context.knownFaultIds.includes(proposal.faultId)) {
-    problems.push(`faultId ${proposal.faultId ?? "(missing)"} not in ${context.faultTaxonomyVersion}`);
+    problems.push(
+      `faultId ${proposal.faultId ?? "(missing)"} not in ${context.faultTaxonomyVersion}`,
+    );
   }
   if (!proposal.coachId || !COACH_ID_PATTERN.test(proposal.coachId)) {
     problems.push("coachId required (opaque id, 2-64 chars [a-z0-9_-])");
@@ -243,7 +261,8 @@ export function validateMappingProposal(
     proposal.drillId &&
     proposal.faultId &&
     proposal.coachId &&
-    proposal.proposalId !== mappingProposalIdFor(proposal.drillId, proposal.faultId, proposal.coachId)
+    proposal.proposalId !==
+      mappingProposalIdFor(proposal.drillId, proposal.faultId, proposal.coachId)
   ) {
     problems.push("proposalId must equal `${drillId}.${faultId}.${coachId}`");
   }
@@ -253,7 +272,10 @@ export function validateMappingProposal(
   if (!proposal.rationale || proposal.rationale.trim().length < 20) {
     problems.push("mapping rationale required (≥20 chars)");
   }
-  if (typeof proposal.createdAtIso !== "string" || Number.isNaN(Date.parse(proposal.createdAtIso))) {
+  if (
+    typeof proposal.createdAtIso !== "string" ||
+    Number.isNaN(Date.parse(proposal.createdAtIso))
+  ) {
     problems.push("createdAtIso must be an ISO timestamp");
   }
   return problems;

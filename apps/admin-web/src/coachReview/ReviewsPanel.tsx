@@ -1,10 +1,23 @@
 import React, { useState } from "react";
-import { currentReviewVersion, submitAssignment, type CoachReviewData, type SubmitResult } from "./data";
+import {
+  currentReviewVersion,
+  submitAssignment,
+  type CoachReviewData,
+  type SubmitResult,
+} from "./data";
 import { canSeeOtherReviews } from "./blind";
 import type { CoachReview, QueueItem } from "./types";
 import { labBox, mono } from "./CoachReviewLab";
 
-function ReviewCard({ data, review, synthetic }: { data: CoachReviewData; review: CoachReview; synthetic: boolean }) {
+function ReviewCard({
+  data,
+  review,
+  synthetic,
+}: {
+  data: CoachReviewData;
+  review: CoachReview;
+  synthetic: boolean;
+}) {
   const { review: current, revision, history } = currentReviewVersion(review, data.amendments);
   const primary =
     current.faults.length === 0
@@ -13,13 +26,22 @@ function ReviewCard({ data, review, synthetic }: { data: CoachReviewData; review
           (fault) => fault.severity === Math.max(...current.faults.map((entry) => entry.severity)),
         );
   return (
-    <div style={{ border: "1px dashed #cbd5d1", borderRadius: 8, padding: 8, marginBottom: 8, fontSize: 13 }}>
-      <strong>{current.coachId}</strong> {synthetic && <span style={{ color: "#b91c1c" }}>SYNTHETIC (dev)</span>} ·
-      rev {revision}
+    <div
+      style={{
+        border: "1px dashed #cbd5d1",
+        borderRadius: 8,
+        padding: 8,
+        marginBottom: 8,
+        fontSize: 13,
+      }}
+    >
+      <strong>{current.coachId}</strong>{" "}
+      {synthetic && <span style={{ color: "#b91c1c" }}>SYNTHETIC (dev)</span>} · rev {revision}
       {history.length > 0 && (
         <span style={{ color: "#6b7a75" }}>
           {" "}
-          (amended ×{history.length}: {history.map((entry) => `r${entry.revision} — ${entry.reason}`).join("; ")})
+          (amended ×{history.length}:{" "}
+          {history.map((entry) => `r${entry.revision} — ${entry.reason}`).join("; ")})
         </span>
       )}
       <div>
@@ -28,14 +50,19 @@ function ReviewCard({ data, review, synthetic }: { data: CoachReviewData; review
           ? `cannot judge (${current.strokeConfirmation.reason})`
           : `${current.strokeConfirmation.kind} ${current.strokeConfirmation.stroke}`}{" "}
         · quality: {current.overallQuality?.value ?? "—"} · confidence {current.confidence}
-        {current.cannotEvaluate && <span style={{ color: "#b45309" }}> · CANNOT EVALUATE: {current.cannotEvaluate.reason}</span>}
+        {current.cannotEvaluate && (
+          <span style={{ color: "#b45309" }}>
+            {" "}
+            · CANNOT EVALUATE: {current.cannotEvaluate.reason}
+          </span>
+        )}
       </div>
       {current.faults.length > 0 && (
         <ul style={{ margin: "4px 0" }}>
           {current.faults.map((fault) => (
             <li key={fault.faultId} style={mono}>
-              {fault === primary ? <strong>[primary]</strong> : "[secondary]"} {fault.faultId} · sev {fault.severity} @{" "}
-              {fault.evidence.timestampsMs.join(", ")} ms — {fault.rationale}
+              {fault === primary ? <strong>[primary]</strong> : "[secondary]"} {fault.faultId} · sev{" "}
+              {fault.severity} @ {fault.evidence.timestampsMs.join(", ")} ms — {fault.rationale}
             </li>
           ))}
         </ul>
@@ -58,7 +85,9 @@ export function ReviewsPanel({ data, item }: { data: CoachReviewData; item: Queu
     <section style={labBox}>
       <h3>
         Existing reviews — {real.length} real
-        {loaded.length - real.length > 0 && <span style={{ color: "#b91c1c" }}> (+{loaded.length - real.length} synthetic dev)</span>}
+        {loaded.length - real.length > 0 && (
+          <span style={{ color: "#b91c1c" }}> (+{loaded.length - real.length} synthetic dev)</span>
+        )}
       </h3>
       <label style={{ display: "block", marginBottom: 8 }}>
         Viewing as:{" "}
@@ -74,22 +103,39 @@ export function ReviewsPanel({ data, item }: { data: CoachReviewData; item: Queu
       {!visible && (
         <p style={{ color: "#b45309", fontSize: 13, maxWidth: 720 }}>
           <strong>Blind review in progress:</strong> contents are hidden until this item reaches{" "}
-          {item.requiredReviewsTarget} real reviews, or until the viewing coach has submitted their own review.
-          Counts stay visible; reviews stay independent.
+          {item.requiredReviewsTarget} real reviews, or until the viewing coach has submitted their
+          own review. Counts stay visible; reviews stay independent.
         </p>
       )}
-      {shown.length === 0 && visible && <p style={{ color: "#6b7a75", fontSize: 13 }}>No reviews on file for this item.</p>}
+      {shown.length === 0 && visible && (
+        <p style={{ color: "#6b7a75", fontSize: 13 }}>No reviews on file for this item.</p>
+      )}
       {shown.map((entry) => (
-        <ReviewCard key={entry.review.reviewId + entry.source} data={data} review={entry.review} synthetic={entry.synthetic} />
+        <ReviewCard
+          key={entry.review.reviewId + entry.source}
+          data={data}
+          review={entry.review}
+          synthetic={entry.synthetic}
+        />
       ))}
     </section>
   );
 }
 
 /** Multi-coach assignment per queue item (admin workflow config, registry-gated). */
-export function AssignmentPanel({ data, item, onSaved }: { data: CoachReviewData; item: QueueItem; onSaved: () => void }) {
+export function AssignmentPanel({
+  data,
+  item,
+  onSaved,
+}: {
+  data: CoachReviewData;
+  item: QueueItem;
+  onSaved: () => void;
+}) {
   const activeCoaches = data.registry.coaches.filter((coach) => coach.status === "active");
-  const existing = data.assignments.assignments.find((entry) => entry.queueItemId === item.queueItemId);
+  const existing = data.assignments.assignments.find(
+    (entry) => entry.queueItemId === item.queueItemId,
+  );
   const [selected, setSelected] = useState<string[]>(existing?.coachIds ?? []);
   const [assignedBy, setAssignedBy] = useState("");
   const [result, setResult] = useState<SubmitResult | null>(null);
@@ -104,8 +150,8 @@ export function AssignmentPanel({ data, item, onSaved }: { data: CoachReviewData
       )}
       {activeCoaches.length === 0 ? (
         <p style={{ color: "#92400e", fontSize: 13, maxWidth: 720 }}>
-          No coach identity provisioned — nothing can be assigned. This panel unlocks the day coaches exist in{" "}
-          <code style={mono}>datasets/coach-review/coaches.json</code>.
+          No coach identity provisioned — nothing can be assigned. This panel unlocks the day
+          coaches exist in <code style={mono}>datasets/coach-review/coaches.json</code>.
         </p>
       ) : (
         <>
@@ -116,14 +162,20 @@ export function AssignmentPanel({ data, item, onSaved }: { data: CoachReviewData
                 checked={selected.includes(coach.coachId)}
                 onChange={(e) =>
                   setSelected(
-                    e.target.checked ? [...selected, coach.coachId] : selected.filter((id) => id !== coach.coachId),
+                    e.target.checked
+                      ? [...selected, coach.coachId]
+                      : selected.filter((id) => id !== coach.coachId),
                   )
                 }
               />{" "}
               {coach.coachId}
             </label>
           ))}
-          <input placeholder="assignedBy (admin identity)" value={assignedBy} onChange={(e) => setAssignedBy(e.target.value)} />{" "}
+          <input
+            placeholder="assignedBy (admin identity)"
+            value={assignedBy}
+            onChange={(e) => setAssignedBy(e.target.value)}
+          />{" "}
           <button
             disabled={selected.length === 0 || assignedBy.trim() === ""}
             onClick={() => {

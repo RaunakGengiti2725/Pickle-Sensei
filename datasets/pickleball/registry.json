@@ -27,12 +27,7 @@
       "declaredLicenseTermsPermitCommercialUse": true,
       "itemCount": 338,
       "countType": "images",
-      "classes": [
-        "ball",
-        "player",
-        "paddle",
-        "PB-Paddle"
-      ],
+      "classes": ["ball", "player", "paddle", "PB-Paddle"],
       "status": "registered_not_downloaded",
       "trainingEligible": false,
       "commercialTrainingClearance": "not_cleared",
@@ -66,9 +61,7 @@
         "validation": 6028,
         "test": 2748
       },
-      "classes": [
-        "pickleball"
-      ],
+      "classes": ["pickleball"],
       "status": "registered_not_downloaded",
       "trainingEligible": false,
       "commercialTrainingClearance": "not_cleared",
@@ -99,13 +92,8 @@
       "modality": "youtube_segment_metadata",
       "globalRowCount": 934,
       "pickleballRowCount": 2,
-      "pickleballActions": [
-        "Punch volley"
-      ],
-      "pickleballSegmentDurationsSeconds": [
-        2,
-        2
-      ],
+      "pickleballActions": ["Punch volley"],
+      "pickleballSegmentDurationsSeconds": [2, 2],
       "mediaDistribution": "not_distributed_by_dataset",
       "mediaLicenseForPickleballRows": "not_declared",
       "declaredMediaLicenseTermsPermitCommercialUse": null,
@@ -120,19 +108,12 @@
     {
       "id": "university-of-rochester-pickleball-analytics",
       "name": "University of Rochester Pickleball Analytics senior design dataset",
-      "officialUrls": [
-        "https://www.hajim.rochester.edu/senior-design-day/pickleball-analytics/"
-      ],
+      "officialUrls": ["https://www.hajim.rochester.edu/senior-design-day/pickleball-analytics/"],
       "task": "ball_tracking",
       "modality": "video_frames_with_ball_coordinates",
       "trimmedFrameCount": 12810,
       "ballLabeledFrameCount": 12000,
-      "labelFields": [
-        "Frame",
-        "Visibility",
-        "X",
-        "Y"
-      ],
+      "labelFields": ["Frame", "Visibility", "X", "Y"],
       "mediaDistribution": "not_published",
       "declaredDatasetLicense": "none_found",
       "declaredMediaLicenseTermsPermitCommercialUse": null,
@@ -146,9 +127,7 @@
     {
       "id": "ball-tracking-pickleball-github",
       "name": "TrackNet-Pickleball repository",
-      "officialUrls": [
-        "https://github.com/shivam-d11/Ball-Tracking-PickleBall"
-      ],
+      "officialUrls": ["https://github.com/shivam-d11/Ball-Tracking-PickleBall"],
       "task": "ball_tracking_code_and_weights",
       "modality": "code_and_model_weights",
       "repositoryLicense": "Apache-2.0",
@@ -199,9 +178,7 @@
     {
       "id": "scientific-reports-mctn-pickleball-dataset-claim",
       "name": "Pickleball Dataset referenced by the MCTN Scientific Reports paper",
-      "officialUrls": [
-        "https://www.nature.com/articles/s41598-025-33985-6"
-      ],
+      "officialUrls": ["https://www.nature.com/articles/s41598-025-33985-6"],
       "task": "claimed_pose_and_action_detection",
       "modality": "not_retrievable",
       "itemCount": "not_reported",

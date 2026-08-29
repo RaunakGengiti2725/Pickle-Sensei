@@ -12,11 +12,45 @@
   },
   "synthetic_negative_fixtures": {
     "note": "SYNTHETIC NEGATIVES built locally with ffmpeg for OOD unit tests (packages/swing-lab/test/oodGate.test.ts); not real captures.",
-    "solid_color_2s_30fps": { "frameCount": 60, "durationMs": 2000, "meanInterFrameDiff": 0.0, "meanSpatialLumaStd": 0.164, "reasons": ["still_image_video", "solid_color_frames"], "analyzable": false },
-    "still_image_2s_30fps": { "frameCount": 60, "durationMs": 2000, "meanInterFrameDiff": 0.002, "meanSpatialLumaStd": 79.552, "reasons": ["still_image_video"], "analyzable": false },
-    "one_frame_clip": { "frameCount": 1, "durationMs": 34, "reasons": ["single_frame_clip"], "analyzable": false },
-    "letterboxed_title_card": { "frameCount": 60, "durationMs": 2000, "meanInterFrameDiff": 0.1407, "letterboxRowFraction": 0.611, "reasons": ["still_image_video", "letterbox_dominant"], "analyzable": false },
-    "positive_control_wm_volley_02_clip": { "frameCount": 200, "durationMs": 8000, "meanInterFrameDiff": 1.7002, "meanSpatialLumaStd": 49.588, "letterboxRowFraction": 0.0, "reasons": [], "analyzable": true }
+    "solid_color_2s_30fps": {
+      "frameCount": 60,
+      "durationMs": 2000,
+      "meanInterFrameDiff": 0.0,
+      "meanSpatialLumaStd": 0.164,
+      "reasons": ["still_image_video", "solid_color_frames"],
+      "analyzable": false
+    },
+    "still_image_2s_30fps": {
+      "frameCount": 60,
+      "durationMs": 2000,
+      "meanInterFrameDiff": 0.002,
+      "meanSpatialLumaStd": 79.552,
+      "reasons": ["still_image_video"],
+      "analyzable": false
+    },
+    "one_frame_clip": {
+      "frameCount": 1,
+      "durationMs": 34,
+      "reasons": ["single_frame_clip"],
+      "analyzable": false
+    },
+    "letterboxed_title_card": {
+      "frameCount": 60,
+      "durationMs": 2000,
+      "meanInterFrameDiff": 0.1407,
+      "letterboxRowFraction": 0.611,
+      "reasons": ["still_image_video", "letterbox_dominant"],
+      "analyzable": false
+    },
+    "positive_control_wm_volley_02_clip": {
+      "frameCount": 200,
+      "durationMs": 8000,
+      "meanInterFrameDiff": 1.7002,
+      "meanSpatialLumaStd": 49.588,
+      "letterboxRowFraction": 0.0,
+      "reasons": [],
+      "analyzable": true
+    }
   },
   "fuzz_suite": {
     "file": "packages/swing-lab/test/propertyInvariants.test.ts",
@@ -45,7 +79,11 @@
   },
   "verification": {
     "typecheck": "pnpm -F @pickle/vision-geometry|@pickle/analysis-pipeline|@pickle/swing-lab typecheck — all pass",
-    "tests": { "vision-geometry": "47 passed", "analysis-pipeline": "34 passed", "swing-lab": "159 passed, 4 skipped" }
+    "tests": {
+      "vision-geometry": "47 passed",
+      "analysis-pipeline": "34 passed",
+      "swing-lab": "159 passed, 4 skipped"
+    }
   },
   "honest_negatives_and_blocked": [
     "Pose-conditioned checks are contract-level only on Linux: no real pose sequences can be generated here (Apple Vision is macOS-only), so no_person_found / person_implausible_scale are exercised with constructed PoseSequence/CaptureQualityReport inputs, not real extractions.",

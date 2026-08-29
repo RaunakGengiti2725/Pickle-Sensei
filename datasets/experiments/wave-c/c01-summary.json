@@ -14,7 +14,10 @@
     "alsoTouched": "tools/paddle-lab/edge_on_probe.py: ffprobe_meta 5-tuple unpack only."
   },
   "proof": {
-    "clips": ["datasets/paddle-bench/bundles/wm-volley-02/clip.mp4 (dev, 25fps, start_time 0)", "datasets/paddle-bench/bundles/afn-sasebo-rally1/clip.mp4 (dev, 29.97fps, start_time 33.367ms)"],
+    "clips": [
+      "datasets/paddle-bench/bundles/wm-volley-02/clip.mp4 (dev, 25fps, start_time 0)",
+      "datasets/paddle-bench/bundles/afn-sasebo-rally1/clip.mp4 (dev, 29.97fps, start_time 33.367ms)"
+    ],
     "device": "cpu (Linux, torch 2.13.0+cpu, D-FINE dfine-medium-coco), ffmpeg 7.0.2 static",
     "fullDetectorOldVsNew": {
       "window": "startMs 617, endMs 1217 on both clips",

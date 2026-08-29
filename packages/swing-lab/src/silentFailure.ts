@@ -52,12 +52,14 @@ export const SILENT_FAILURE_CONTRACT = {
   definition:
     "a user-visible confident material claim (target identity, event, stroke L1, contact marker, phase render) that gold says is wrong; abstentions are NOT silent failures",
   claims: {
-    targetIdentity: "lock presented but strict TARGET criterion fails (coverage < 0.5); no lock = abstention",
+    targetIdentity:
+      "lock presented but strict TARGET criterion fails (coverage < 0.5); no lock = abstention",
     event: "event selected but strict EVENT criterion fails; no selection = abstention",
     strokeL1: "non-null label whose L1 side contradicts gold; null/missing label = abstention",
     contactMarker:
       "estimated with |err| > 132ms vs gold, OR 66 < |err| <= 132ms without ball/paddle confirmation; abstained = abstention",
-    phaseRender: "segmented timeline with impossible boundary ordering (followThroughEnd <= contact); not segmented = abstention",
+    phaseRender:
+      "segmented timeline with impossible boundary ordering (followThroughEnd <= contact); not segmented = abstention",
   },
   aggregation:
     "trial is ANSWERED if >=1 claim answered and gold-verifiable; trial is a SILENT FAILURE if >=1 answered claim is wrong; report silent failures over ALL trials and over ANSWERED trials",
@@ -89,8 +91,16 @@ export interface SilentFailureVerdict {
 export interface SilentFailureReportView {
   player?: { targetCoverage?: number; policy?: string };
   targetEvent?: { status?: string; event?: { startMs: number; endMs: number } };
-  contact?: { status?: string; estimatedContactMs?: number; ballConfirmed?: boolean; paddleConfirmed?: boolean };
-  temporalPhasesV2?: { status?: string; boundaries?: { contactMs?: number | null; followThroughEndMs?: number | null } };
+  contact?: {
+    status?: string;
+    estimatedContactMs?: number;
+    ballConfirmed?: boolean;
+    paddleConfirmed?: boolean;
+  };
+  temporalPhasesV2?: {
+    status?: string;
+    boundaries?: { contactMs?: number | null; followThroughEndMs?: number | null };
+  };
   strokePrediction?: { label?: string | null };
 }
 
@@ -104,48 +114,81 @@ export interface SilentFailureGold {
 const l1Side = (label: string): string =>
   label.includes("BACKHAND") ? "BACKHAND" : label.includes("FOREHAND") ? "FOREHAND" : label;
 
-export function evaluateSilentFailure(report: SilentFailureReportView, gold: SilentFailureGold): SilentFailureVerdict {
+export function evaluateSilentFailure(
+  report: SilentFailureReportView,
+  gold: SilentFailureGold,
+): SilentFailureVerdict {
   const claims = {} as Record<SilentFailureClaim, ClaimVerdict>;
 
   const player = report.player;
   if (!player) {
-    claims.TARGET_IDENTITY = { status: "abstained", detail: "no lock presented (no player identity in report)" };
+    claims.TARGET_IDENTITY = {
+      status: "abstained",
+      detail: "no lock presented (no player identity in report)",
+    };
   } else {
     const coverage = player.targetCoverage ?? 0;
     claims.TARGET_IDENTITY =
       coverage >= 0.5
         ? { status: "correct", detail: `lock presented, coverage ${coverage.toFixed(2)} >= 0.5` }
-        : { status: "silent_failure", detail: `lock presented but coverage ${coverage.toFixed(2)} < 0.5` };
+        : {
+            status: "silent_failure",
+            detail: `lock presented but coverage ${coverage.toFixed(2)} < 0.5`,
+          };
   }
 
   const selected = report.targetEvent?.event;
   if (report.targetEvent?.status !== "selected" || !selected) {
-    claims.EVENT = { status: "abstained", detail: `no event selected (status ${report.targetEvent?.status ?? "missing"})` };
+    claims.EVENT = {
+      status: "abstained",
+      detail: `no event selected (status ${report.targetEvent?.status ?? "missing"})`,
+    };
   } else {
-    const overlap = Math.max(0, Math.min(selected.endMs, gold.eventEndMs) - Math.max(selected.startMs, gold.eventStartMs));
+    const overlap = Math.max(
+      0,
+      Math.min(selected.endMs, gold.eventEndMs) - Math.max(selected.startMs, gold.eventStartMs),
+    );
     const goldSpan = gold.eventEndMs - gold.eventStartMs;
-    const contactInside = gold.contactMs !== null && gold.contactMs >= selected.startMs && gold.contactMs <= selected.endMs;
+    const contactInside =
+      gold.contactMs !== null &&
+      gold.contactMs >= selected.startMs &&
+      gold.contactMs <= selected.endMs;
     const pass = overlap / goldSpan >= 0.5 || contactInside;
     claims.EVENT = pass
-      ? { status: "correct", detail: `selected event holds (overlap ${((overlap / goldSpan) * 100).toFixed(0)}%${contactInside ? ", contact inside" : ""})` }
-      : { status: "silent_failure", detail: `selected wrong event (overlap ${((overlap / goldSpan) * 100).toFixed(0)}%, gold contact outside)` };
+      ? {
+          status: "correct",
+          detail: `selected event holds (overlap ${((overlap / goldSpan) * 100).toFixed(0)}%${contactInside ? ", contact inside" : ""})`,
+        }
+      : {
+          status: "silent_failure",
+          detail: `selected wrong event (overlap ${((overlap / goldSpan) * 100).toFixed(0)}%, gold contact outside)`,
+        };
   }
 
   const predicted = report.strokePrediction?.label ?? null;
   if (predicted === null) {
     claims.STROKE_L1 = { status: "abstained", detail: "stroke abstained (null/missing label)" };
   } else if (gold.strokeLabel === null) {
-    claims.STROKE_L1 = { status: "unverifiable", detail: `predicted ${predicted} but gold stroke unlabeled` };
+    claims.STROKE_L1 = {
+      status: "unverifiable",
+      detail: `predicted ${predicted} but gold stroke unlabeled`,
+    };
   } else {
     const match = l1Side(predicted) === l1Side(gold.strokeLabel);
     claims.STROKE_L1 = match
       ? { status: "correct", detail: `predicted ${predicted}, L1 matches gold ${gold.strokeLabel}` }
-      : { status: "silent_failure", detail: `confidently wrong L1: predicted ${predicted} vs gold ${gold.strokeLabel}` };
+      : {
+          status: "silent_failure",
+          detail: `confidently wrong L1: predicted ${predicted} vs gold ${gold.strokeLabel}`,
+        };
   }
 
   const contact = report.contact;
   if (contact?.status !== "estimated") {
-    claims.CONTACT_MARKER = { status: "abstained", detail: `contact ${contact?.status ?? "missing"} — no marker claimed` };
+    claims.CONTACT_MARKER = {
+      status: "abstained",
+      detail: `contact ${contact?.status ?? "missing"} — no marker claimed`,
+    };
   } else if (contact.estimatedContactMs === undefined || gold.contactMs === null) {
     claims.CONTACT_MARKER = {
       status: "unverifiable",
@@ -155,7 +198,10 @@ export function evaluateSilentFailure(report: SilentFailureReportView, gold: Sil
     const err = Math.abs(contact.estimatedContactMs - gold.contactMs);
     const confirmed = contact.ballConfirmed === true || contact.paddleConfirmed === true;
     if (err <= 66) {
-      claims.CONTACT_MARKER = { status: "correct", detail: `marker |err| ${Math.round(err)}ms <= 66ms` };
+      claims.CONTACT_MARKER = {
+        status: "correct",
+        detail: `marker |err| ${Math.round(err)}ms <= 66ms`,
+      };
     } else if (err <= 132 && confirmed) {
       claims.CONTACT_MARKER = {
         status: "correct",
@@ -174,18 +220,28 @@ export function evaluateSilentFailure(report: SilentFailureReportView, gold: Sil
 
   const phases = report.temporalPhasesV2;
   if (phases?.status !== "segmented") {
-    claims.PHASE_RENDER = { status: "abstained", detail: `phases ${phases?.status ?? "missing"} — no timeline rendered` };
+    claims.PHASE_RENDER = {
+      status: "abstained",
+      detail: `phases ${phases?.status ?? "missing"} — no timeline rendered`,
+    };
   } else {
     const boundaries = phases.boundaries ?? {};
     const orderingValid =
-      boundaries.followThroughEndMs == null || boundaries.contactMs == null || boundaries.followThroughEndMs > boundaries.contactMs;
+      boundaries.followThroughEndMs == null ||
+      boundaries.contactMs == null ||
+      boundaries.followThroughEndMs > boundaries.contactMs;
     claims.PHASE_RENDER = orderingValid
       ? { status: "correct", detail: "timeline rendered, ordering valid" }
-      : { status: "silent_failure", detail: "timeline rendered with impossible ordering (followThroughEnd <= contact)" };
+      : {
+          status: "silent_failure",
+          detail: "timeline rendered with impossible ordering (followThroughEnd <= contact)",
+        };
   }
 
   const values = Object.values(claims);
-  const answered = values.some((claim) => claim.status === "correct" || claim.status === "silent_failure");
+  const answered = values.some(
+    (claim) => claim.status === "correct" || claim.status === "silent_failure",
+  );
   const silentFailure = values.some((claim) => claim.status === "silent_failure");
   return { answered, silentFailure, claims };
 }

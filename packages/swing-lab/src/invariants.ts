@@ -95,7 +95,11 @@ function checkObject(obj: JsonObject, path: string, out: InvariantViolation[]): 
     });
   }
   if (typeof obj["startMs"] === "number" && !Number.isFinite(obj["startMs"])) {
-    out.push({ rule: "non_finite_timestamp", path: `${path}.startMs`, detail: String(obj["startMs"]) });
+    out.push({
+      rule: "non_finite_timestamp",
+      path: `${path}.startMs`,
+      detail: String(obj["startMs"]),
+    });
   }
   if (typeof obj["endMs"] === "number" && !Number.isFinite(obj["endMs"])) {
     out.push({ rule: "non_finite_timestamp", path: `${path}.endMs`, detail: String(obj["endMs"]) });
@@ -193,10 +197,18 @@ function checkPhaseBoundaries(obj: JsonObject, path: string, out: InvariantViola
   if (!machineBoundaries) return;
 
   if (typeof obj["version"] !== "string" || obj["version"].length === 0) {
-    out.push({ rule: "provenance_missing", path: `${path}.version`, detail: "phase boundaries must carry a version" });
+    out.push({
+      rule: "provenance_missing",
+      path: `${path}.version`,
+      detail: "phase boundaries must carry a version",
+    });
   }
   if (obj["source"] !== "paddle" && obj["source"] !== "wrist") {
-    out.push({ rule: "provenance_missing", path: `${path}.source`, detail: "phase boundaries must carry a kinematic source" });
+    out.push({
+      rule: "provenance_missing",
+      path: `${path}.source`,
+      detail: "phase boundaries must carry a kinematic source",
+    });
   }
 
   // Anchor-free timelines have no established contact — a numeric contact

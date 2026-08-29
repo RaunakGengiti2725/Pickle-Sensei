@@ -25,7 +25,8 @@ export function cohenKappa(labelPairs: Array<[string, string]>): {
   expectedAgreement: number | null;
   kappa: number | null;
 } {
-  if (labelPairs.length < 2) return { observedAgreement: null, expectedAgreement: null, kappa: null };
+  if (labelPairs.length < 2)
+    return { observedAgreement: null, expectedAgreement: null, kappa: null };
   const n = labelPairs.length;
   const observed = labelPairs.filter(([a, b]) => a === b).length / n;
   const marginalsA = new Map<string, number>();
@@ -38,7 +39,8 @@ export function cohenKappa(labelPairs: Array<[string, string]>): {
   for (const [label, countA] of marginalsA) {
     expected += (countA / n) * ((marginalsB.get(label) ?? 0) / n);
   }
-  if (expected === 1) return { observedAgreement: observed, expectedAgreement: expected, kappa: null };
+  if (expected === 1)
+    return { observedAgreement: observed, expectedAgreement: expected, kappa: null };
   return {
     observedAgreement: observed,
     expectedAgreement: expected,
@@ -73,7 +75,14 @@ export function computePairKappas(reviews: CoachReview[], extract: LabelExtracto
         if (labelB !== undefined) labelPairs.push([labelA, labelB]);
       }
       const { observedAgreement, expectedAgreement, kappa } = cohenKappa(labelPairs);
-      out.push({ coachA, coachB, sharedItems: labelPairs.length, observedAgreement, expectedAgreement, kappa });
+      out.push({
+        coachA,
+        coachB,
+        sharedItems: labelPairs.length,
+        observedAgreement,
+        expectedAgreement,
+        kappa,
+      });
     }
   }
   return out;

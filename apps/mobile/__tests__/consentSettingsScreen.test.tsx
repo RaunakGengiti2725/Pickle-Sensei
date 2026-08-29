@@ -5,9 +5,8 @@ import TestRenderer, { act } from 'react-test-renderer';
 jest.mock('../src/data/db', () => ({ getDb: jest.fn() }));
 
 jest.mock('react-native-safe-area-context', () => {
-  const { View } = jest.requireActual<typeof import('react-native')>(
-    'react-native',
-  );
+  const { View } =
+    jest.requireActual<typeof import('react-native')>('react-native');
   return { SafeAreaView: View };
 });
 

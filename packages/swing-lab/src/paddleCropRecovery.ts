@@ -192,7 +192,10 @@ export function isFpFamily(
   box: { x: number; y: number; width: number; height: number },
   frameWrists: ReadonlyArray<{ x: number; y: number }>,
 ): boolean {
-  const aspect = Math.max(box.width / Math.max(1e-6, box.height), box.height / Math.max(1e-6, box.width));
+  const aspect = Math.max(
+    box.width / Math.max(1e-6, box.height),
+    box.height / Math.max(1e-6, box.width),
+  );
   if (aspect > CROP_RECOVERY_GATES.fpMaxAspectRatio) return true;
   const belowEveryWrist = frameWrists.every(
     (wrist) => box.y > wrist.y + CROP_RECOVERY_GATES.fpBelowWristMargin,

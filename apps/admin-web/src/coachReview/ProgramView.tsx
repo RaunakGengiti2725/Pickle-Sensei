@@ -22,23 +22,25 @@ function DrillMappingEditor({ data }: { data: CoachReviewData }) {
       <h2>Drill mapping editor — {data.mappingProposals.length} proposal(s) on file</h2>
       <p style={{ color: "#42505f", fontSize: 13, maxWidth: 760 }}>
         A proposal records a provisioned coach's evidence that a drill addresses a fault (against{" "}
-        <code style={mono}>{data.drills.version}</code> / <code style={mono}>{data.taxonomy.version}</code>). It is
-        append-only input for curation — the library's <code style={mono}>validatedFaultMappings</code> stay EMPTY
-        until proposals are reviewed and the library is re-versioned.
+        <code style={mono}>{data.drills.version}</code> /{" "}
+        <code style={mono}>{data.taxonomy.version}</code>). It is append-only input for curation —
+        the library's <code style={mono}>validatedFaultMappings</code> stay EMPTY until proposals
+        are reviewed and the library is re-versioned.
       </p>
       {data.mappingProposals.length > 0 && (
         <ul style={{ ...mono, fontSize: 12 }}>
           {data.mappingProposals.map((proposal) => (
             <li key={proposal.proposalId}>
-              {proposal.drillId} ← {proposal.faultId} · by {proposal.coachId} · evidence: {proposal.evidence.join(", ")}
+              {proposal.drillId} ← {proposal.faultId} · by {proposal.coachId} · evidence:{" "}
+              {proposal.evidence.join(", ")}
             </li>
           ))}
         </ul>
       )}
       {activeCoaches.length === 0 ? (
         <p style={{ color: "#92400e", fontSize: 13, maxWidth: 720 }}>
-          No coach identity provisioned — mappings require a real coach to endorse them, so this editor stays
-          disabled and the library stays UNVALIDATED.
+          No coach identity provisioned — mappings require a real coach to endorse them, so this
+          editor stays disabled and the library stays UNVALIDATED.
         </p>
       ) : (
         <div style={{ fontSize: 13 }}>
@@ -115,7 +117,9 @@ export function ProgramView({ data }: { data: CoachReviewData }) {
   const [coachingDoc, setCoachingDoc] = useState<string | null>(null);
   useEffect(() => {
     fetch("/docs/COACHING.md")
-      .then((response) => (response.ok ? response.text() : Promise.reject(new Error(`HTTP ${response.status}`))))
+      .then((response) =>
+        response.ok ? response.text() : Promise.reject(new Error(`HTTP ${response.status}`)),
+      )
       .then(setCoachingDoc)
       .catch(() => setCoachingDoc(null));
   }, []);
@@ -141,7 +145,8 @@ export function ProgramView({ data }: { data: CoachReviewData }) {
         </ul>
         <h3>Review record storage</h3>
         <p style={{ color: "#42505f" }}>
-          {data.schema.reviewRecord.storage} · reviewId rule: <code style={mono}>{data.schema.reviewRecord.reviewIdRule}</code>
+          {data.schema.reviewRecord.storage} · reviewId rule:{" "}
+          <code style={mono}>{data.schema.reviewRecord.reviewIdRule}</code>
         </p>
         <h3>Quality scale — {data.schema.qualityScale.id}</h3>
         <p style={{ color: "#b45309" }}>{data.schema.qualityScale.status}</p>
@@ -172,15 +177,24 @@ export function ProgramView({ data }: { data: CoachReviewData }) {
             <summary>
               <strong>{family.displayName}</strong> ({family.faults.length} draft faults)
             </summary>
-            <table cellPadding={6} style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
+            <table
+              cellPadding={6}
+              style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}
+            >
               <tbody>
                 {family.faults.map((fault) => (
-                  <tr key={fault.id} style={{ borderBottom: "1px solid #eef2f0", verticalAlign: "top" }}>
+                  <tr
+                    key={fault.id}
+                    style={{ borderBottom: "1px solid #eef2f0", verticalAlign: "top" }}
+                  >
                     <td style={{ ...mono, whiteSpace: "nowrap" }}>{fault.id}</td>
                     <td>
-                      <strong>{fault.name}</strong> <span style={{ color: "#6b7a75" }}>({fault.typicalPhase})</span>
+                      <strong>{fault.name}</strong>{" "}
+                      <span style={{ color: "#6b7a75" }}>({fault.typicalPhase})</span>
                       <div>{fault.description}</div>
-                      <div style={{ color: "#6b7a75", fontSize: 12 }}>Observable: {fault.observableEvidence}</div>
+                      <div style={{ color: "#6b7a75", fontSize: 12 }}>
+                        Observable: {fault.observableEvidence}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -207,16 +221,27 @@ export function ProgramView({ data }: { data: CoachReviewData }) {
           </thead>
           <tbody>
             {data.drills.drills.map((drill) => (
-              <tr key={drill.id} style={{ borderBottom: "1px solid #eef2f0", verticalAlign: "top" }}>
+              <tr
+                key={drill.id}
+                style={{ borderBottom: "1px solid #eef2f0", verticalAlign: "top" }}
+              >
                 <td>
                   <strong>{drill.name}</strong>
                   <div style={{ ...mono, fontSize: 11 }}>{drill.id}</div>
-                  <div style={{ color: "#6b7a75", fontSize: 12, maxWidth: 280 }}>{drill.description}</div>
+                  <div style={{ color: "#6b7a75", fontSize: 12, maxWidth: 280 }}>
+                    {drill.description}
+                  </div>
                   <div style={{ fontSize: 12 }}>
-                    {drill.difficulty} · {drill.repsOrDuration} · equipment: {drill.equipment.join(", ")}
+                    {drill.difficulty} · {drill.repsOrDuration} · equipment:{" "}
+                    {drill.equipment.join(", ")}
                   </div>
                 </td>
-                <td style={{ color: drill.validationStatus === "UNVALIDATED" ? "#b91c1c" : "#15803d", fontWeight: 700 }}>
+                <td
+                  style={{
+                    color: drill.validationStatus === "UNVALIDATED" ? "#b91c1c" : "#15803d",
+                    fontWeight: 700,
+                  }}
+                >
                   {drill.validationStatus}
                 </td>
                 <td style={{ ...mono, fontSize: 11 }}>{drill.supportedTechniques.join(", ")}</td>
@@ -229,7 +254,10 @@ export function ProgramView({ data }: { data: CoachReviewData }) {
                 </td>
                 <td style={{ fontSize: 12, color: "#6b7a75", maxWidth: 200 }}>
                   {drill.provenance}
-                  <div>coachProvenance: {drill.coachProvenance === null ? "null" : drill.coachProvenance.coachId}</div>
+                  <div>
+                    coachProvenance:{" "}
+                    {drill.coachProvenance === null ? "null" : drill.coachProvenance.coachId}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -242,7 +270,15 @@ export function ProgramView({ data }: { data: CoachReviewData }) {
       <section style={labBox}>
         <h2>Coach onboarding (docs/COACHING.md)</h2>
         {coachingDoc ? (
-          <pre style={{ whiteSpace: "pre-wrap", fontSize: 12, background: "#f8fafc", padding: 12, borderRadius: 8 }}>
+          <pre
+            style={{
+              whiteSpace: "pre-wrap",
+              fontSize: 12,
+              background: "#f8fafc",
+              padding: 12,
+              borderRadius: 8,
+            }}
+          >
             {coachingDoc}
           </pre>
         ) : (

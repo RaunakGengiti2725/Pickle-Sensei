@@ -65,7 +65,10 @@ describe('consentStore', () => {
   });
 
   it('reports signed_out and stays off without a session', async () => {
-    const fetchFn = jest.fn<ReturnType<ConsentFetch>, Parameters<ConsentFetch>>();
+    const fetchFn = jest.fn<
+      ReturnType<ConsentFetch>,
+      Parameters<ConsentFetch>
+    >();
     await useConsentStore.getState().hydrate(fetchFn);
     expect(useConsentStore.getState().availability).toBe('signed_out');
     expect(useConsentStore.getState().modelTrainingActive).toBe(false);
@@ -74,7 +77,9 @@ describe('consentStore', () => {
 
   it('hydrates from the server ledger', async () => {
     establishApiSession(session);
-    const fetchFn = jest.fn(() => Promise.resolve(jsonResponse(statusBody(true))));
+    const fetchFn = jest.fn(() =>
+      Promise.resolve(jsonResponse(statusBody(true))),
+    );
     await useConsentStore.getState().hydrate(fetchFn);
     const state = useConsentStore.getState();
     expect(state.availability).toBe('ready');
@@ -104,7 +109,10 @@ describe('consentStore', () => {
 
   it('withdrawal turns consent off from the server response', async () => {
     establishApiSession(session);
-    useConsentStore.setState({ availability: 'ready', modelTrainingActive: true });
+    useConsentStore.setState({
+      availability: 'ready',
+      modelTrainingActive: true,
+    });
     const fetchFn: jest.MockedFunction<ConsentFetch> = jest.fn(
       (_input: string, _init?: RequestInit) =>
         Promise.resolve(jsonResponse(statusBody(false))),

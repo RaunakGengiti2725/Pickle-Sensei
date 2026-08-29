@@ -50,7 +50,11 @@ describe("currentReviewVersion (append-only versioning)", () => {
   };
 
   it("returns the original as revision 1 when no amendments exist", () => {
-    expect(currentReviewVersion(original, [])).toEqual({ review: original, revision: 1, history: [] });
+    expect(currentReviewVersion(original, [])).toEqual({
+      review: original,
+      revision: 1,
+      history: [],
+    });
   });
 
   it("returns the latest amendment while preserving the full history", () => {
@@ -79,8 +83,16 @@ describe("primaryFaultIndex", () => {
 
 describe("buildAdjudicatedExport", () => {
   const reviews: LoadedReview[] = [
-    { review: review("coach-01"), source: "datasets/coach-review/reviews/a.json", synthetic: false },
-    { review: review("coach-02"), source: "datasets/coach-review/reviews/b.json", synthetic: false },
+    {
+      review: review("coach-01"),
+      source: "datasets/coach-review/reviews/a.json",
+      synthetic: false,
+    },
+    {
+      review: review("coach-02"),
+      source: "datasets/coach-review/reviews/b.json",
+      synthetic: false,
+    },
     { review: syntheticAgreeingPair()[0]!, source: "SYNTHETIC-FIXTURE", synthetic: true },
   ];
   const adjudication: AdjudicationRecord = {
@@ -96,11 +108,19 @@ describe("buildAdjudicatedExport", () => {
   };
 
   it("exports adjudicated items with their reviews and excludes synthetic fixtures", () => {
-    const exported = buildAdjudicatedExport(reviews, [], [adjudication], "2026-08-29T01:00:00.000Z");
+    const exported = buildAdjudicatedExport(
+      reviews,
+      [],
+      [adjudication],
+      "2026-08-29T01:00:00.000Z",
+    );
     expect(exported.exportVersion).toBe("adjudicated-reviews-export-v1");
     expect(exported.generatedAtIso).toBe("2026-08-29T01:00:00.000Z");
     expect(exported.items).toHaveLength(1);
-    expect(exported.items[0]!.reviews.map((entry) => entry.review.coachId).sort()).toEqual(["coach-01", "coach-02"]);
+    expect(exported.items[0]!.reviews.map((entry) => entry.review.coachId).sort()).toEqual([
+      "coach-01",
+      "coach-02",
+    ]);
   });
 
   it("carries amendment history so consumers keep the disagreement trail", () => {
@@ -115,7 +135,9 @@ describe("buildAdjudicatedExport", () => {
       createdAtIso: "2026-08-29T00:30:00.000Z",
     };
     const exported = buildAdjudicatedExport(reviews, [amendment], [adjudication]);
-    const entry = exported.items[0]!.reviews.find((candidate) => candidate.review.coachId === "coach-01")!;
+    const entry = exported.items[0]!.reviews.find(
+      (candidate) => candidate.review.coachId === "coach-01",
+    )!;
     expect(entry.revision).toBe(2);
     expect(entry.review.confidence).toBe(0.95);
     expect(entry.amendmentHistory).toHaveLength(1);

@@ -2,7 +2,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { REPO_ROOT } from "./engine/corpus.js";
 import type { StrokeEventLabel, SwingAnnotation } from "./annotationSchema.js";
-import { SILENT_FAILURE_CONTRACT, SILENT_FAILURE_CLAIMS, evaluateSilentFailure } from "./silentFailure.js";
+import {
+  SILENT_FAILURE_CONTRACT,
+  SILENT_FAILURE_CLAIMS,
+  evaluateSilentFailure,
+} from "./silentFailure.js";
 import type { SilentFailureVerdict } from "./silentFailure.js";
 
 /**
@@ -46,8 +50,16 @@ interface Report {
   targetEvent?: { status?: string; event?: { startMs: number; endMs: number } };
   paddle?: { status?: string; windowCoverage?: number };
   ballStage?: { status?: string };
-  contact?: { status?: string; estimatedContactMs?: number; ballConfirmed?: boolean; paddleConfirmed?: boolean };
-  temporalPhasesV2?: { status?: string; boundaries?: { contactMs?: number | null; followThroughEndMs?: number | null } };
+  contact?: {
+    status?: string;
+    estimatedContactMs?: number;
+    ballConfirmed?: boolean;
+    paddleConfirmed?: boolean;
+  };
+  temporalPhasesV2?: {
+    status?: string;
+    boundaries?: { contactMs?: number | null; followThroughEndMs?: number | null };
+  };
   strokePrediction?: { label?: string | null };
 }
 
@@ -98,8 +110,10 @@ type StageName = (typeof STAGES)[number];
 const USABLE_RESULT_CONTRACT = {
   version: "usable-result-v1",
   clauses: {
-    target: "TARGET pass (strict criterion: coverage >= 0.5) — wrong/unlocked target is never usable",
-    event: "EVENT pass (strict criterion: >=50% gold-span overlap or gold contact inside selection) — wrong event is never usable",
+    target:
+      "TARGET pass (strict criterion: coverage >= 0.5) — wrong/unlocked target is never usable",
+    event:
+      "EVENT pass (strict criterion: >=50% gold-span overlap or gold contact inside selection) — wrong event is never usable",
     strokeHonesty:
       "L1-side prediction matches gold (strict criterion) OR explicit abstention/unknown; a wrong confident prediction is never usable",
     replayEvidence:
@@ -132,11 +146,18 @@ function evaluateUsableResult(
   const strokeHonest = stages.STROKE.pass || strokeAbstained;
 
   // Clause 4 — trustworthy replay artifact.
-  const confirmed = report.contact?.ballConfirmed === true || report.contact?.paddleConfirmed === true;
+  const confirmed =
+    report.contact?.ballConfirmed === true || report.contact?.paddleConfirmed === true;
   let replayClause: UsableVerdict["replayClause"] = null;
   if (contactEstimated && contactErrMs !== null && contactErrMs <= 66) {
     replayClause = "a";
-  } else if (contactEstimated && contactErrMs !== null && contactErrMs > 66 && contactErrMs <= 132 && confirmed) {
+  } else if (
+    contactEstimated &&
+    contactErrMs !== null &&
+    contactErrMs > 66 &&
+    contactErrMs <= 132 &&
+    confirmed
+  ) {
     replayClause = "b";
   } else if (report.contact?.status === "abstained" && stages.PHASE.pass) {
     replayClause = "c";
@@ -146,14 +167,17 @@ function evaluateUsableResult(
   const fabricated = contactEstimated && contactErrMs !== null && contactErrMs > 132;
 
   const reasons: string[] = [];
-  if (!stages.TARGET.pass) reasons.push(`TARGET fail — wrong/unlocked target is never usable (${stages.TARGET.detail})`);
-  if (!stages.EVENT.pass) reasons.push(`EVENT fail — wrong event is never usable (${stages.EVENT.detail})`);
+  if (!stages.TARGET.pass)
+    reasons.push(`TARGET fail — wrong/unlocked target is never usable (${stages.TARGET.detail})`);
+  if (!stages.EVENT.pass)
+    reasons.push(`EVENT fail — wrong event is never usable (${stages.EVENT.detail})`);
   if (fabricated) {
     reasons.push(
       `fabricated evidence veto: contact marker ${Math.round(contactErrMs ?? 0)}ms off gold (>132ms) — a misleading marker is worse than none`,
     );
   }
-  if (!strokeHonest) reasons.push(`stroke not honest: wrong confident prediction (${stages.STROKE.detail})`);
+  if (!strokeHonest)
+    reasons.push(`stroke not honest: wrong confident prediction (${stages.STROKE.detail})`);
   if (replayClause === null) {
     reasons.push(
       `no trustworthy replay artifact (contact ${report.contact?.status ?? "missing"}${
@@ -162,7 +186,8 @@ function evaluateUsableResult(
     );
   }
 
-  const usable = stages.TARGET.pass && stages.EVENT.pass && strokeHonest && replayClause !== null && !fabricated;
+  const usable =
+    stages.TARGET.pass && stages.EVENT.pass && strokeHonest && replayClause !== null && !fabricated;
   if (usable) {
     const replayDetail =
       replayClause === "a"
@@ -177,9 +202,11 @@ function evaluateUsableResult(
 
 const isMain = process.argv[1]?.endsWith("cascadeWaterfall.ts");
 if (isMain) {
-  const bench = (JSON.parse(readFileSync(join(PB, "paddle-bench.json"), "utf8")) as {
-    cases: Array<{ id: string; labels: string; runDir: string; role?: string }>;
-  }).cases;
+  const bench = (
+    JSON.parse(readFileSync(join(PB, "paddle-bench.json"), "utf8")) as {
+      cases: Array<{ id: string; labels: string; runDir: string; role?: string }>;
+    }
+  ).cases;
   const rows: Array<{
     caseId: string;
     split: string;
@@ -191,7 +218,9 @@ if (isMain) {
   }> = [];
 
   for (const benchCase of bench) {
-    const annotation = JSON.parse(readFileSync(resolve(PB, benchCase.labels), "utf8")) as SwingAnnotation & {
+    const annotation = JSON.parse(
+      readFileSync(resolve(PB, benchCase.labels), "utf8"),
+    ) as SwingAnnotation & {
       eventLabels?: StrokeEventLabel[];
       annotatedStrokeV3?: string;
     };
@@ -212,15 +241,24 @@ if (isMain) {
 
     const selected = report.targetEvent?.event;
     if (report.targetEvent?.status === "selected" && selected) {
-      const overlap = Math.max(0, Math.min(selected.endMs, gold.eventEndMs) - Math.max(selected.startMs, gold.eventStartMs));
+      const overlap = Math.max(
+        0,
+        Math.min(selected.endMs, gold.eventEndMs) - Math.max(selected.startMs, gold.eventStartMs),
+      );
       const goldSpan = gold.eventEndMs - gold.eventStartMs;
-      const contactInside = gold.contactMs !== null && gold.contactMs >= selected.startMs && gold.contactMs <= selected.endMs;
+      const contactInside =
+        gold.contactMs !== null &&
+        gold.contactMs >= selected.startMs &&
+        gold.contactMs <= selected.endMs;
       stages.EVENT = {
         pass: overlap / goldSpan >= 0.5 || contactInside,
-        detail: `selected ${Math.round(selected.startMs)}–${Math.round(selected.endMs)} vs gold ${gold.eventStartMs}–${gold.eventEndMs} (overlap ${(overlap / goldSpan * 100).toFixed(0)}%${contactInside ? ", contact inside" : ""})`,
+        detail: `selected ${Math.round(selected.startMs)}–${Math.round(selected.endMs)} vs gold ${gold.eventStartMs}–${gold.eventEndMs} (overlap ${((overlap / goldSpan) * 100).toFixed(0)}%${contactInside ? ", contact inside" : ""})`,
       };
     } else {
-      stages.EVENT = { pass: false, detail: `targetEvent status ${report.targetEvent?.status ?? "missing"}` };
+      stages.EVENT = {
+        pass: false,
+        detail: `targetEvent status ${report.targetEvent?.status ?? "missing"}`,
+      };
     }
 
     stages.PADDLE = {
@@ -232,19 +270,36 @@ if (isMain) {
       detail: `status ${report.ballStage?.status ?? "missing"}`,
     };
 
-    if (report.contact?.status === "estimated" && report.contact.estimatedContactMs !== undefined && gold.contactMs !== null) {
+    if (
+      report.contact?.status === "estimated" &&
+      report.contact.estimatedContactMs !== undefined &&
+      gold.contactMs !== null
+    ) {
       const error = Math.abs(report.contact.estimatedContactMs - gold.contactMs);
-      stages.CONTACT = { pass: error <= 66, detail: `error ${Math.round(error)}ms (est ${Math.round(report.contact.estimatedContactMs)} vs gold ${gold.contactMs})` };
+      stages.CONTACT = {
+        pass: error <= 66,
+        detail: `error ${Math.round(error)}ms (est ${Math.round(report.contact.estimatedContactMs)} vs gold ${gold.contactMs})`,
+      };
     } else {
-      stages.CONTACT = { pass: false, detail: `status ${report.contact?.status ?? "missing"}${gold.contactMs === null ? " · no gold contact" : ""}` };
+      stages.CONTACT = {
+        pass: false,
+        detail: `status ${report.contact?.status ?? "missing"}${gold.contactMs === null ? " · no gold contact" : ""}`,
+      };
     }
 
     const phases = report.temporalPhasesV2;
     if (phases?.status === "segmented") {
       const boundaries = phases.boundaries ?? {};
       const orderingValid =
-        boundaries.followThroughEndMs == null || boundaries.contactMs == null || boundaries.followThroughEndMs > boundaries.contactMs;
-      stages.PHASE = { pass: orderingValid, detail: orderingValid ? "segmented, ordering valid" : "segmented but followEnd ≤ contact (known v2 defect)" };
+        boundaries.followThroughEndMs == null ||
+        boundaries.contactMs == null ||
+        boundaries.followThroughEndMs > boundaries.contactMs;
+      stages.PHASE = {
+        pass: orderingValid,
+        detail: orderingValid
+          ? "segmented, ordering valid"
+          : "segmented but followEnd ≤ contact (known v2 defect)",
+      };
     } else {
       stages.PHASE = { pass: false, detail: `status ${phases?.status ?? "missing"}` };
     }
@@ -252,10 +307,17 @@ if (isMain) {
     const goldStroke = annotation.annotatedStrokeV3 ?? null;
     const predicted = report.strokePrediction?.label ?? null;
     if (goldStroke && predicted) {
-      const side = (label: string) => (label.includes("BACKHAND") ? "BACKHAND" : label.includes("FOREHAND") ? "FOREHAND" : label);
-      stages.STROKE = { pass: side(predicted) === side(goldStroke), detail: `predicted ${predicted} vs gold ${goldStroke}` };
+      const side = (label: string) =>
+        label.includes("BACKHAND") ? "BACKHAND" : label.includes("FOREHAND") ? "FOREHAND" : label;
+      stages.STROKE = {
+        pass: side(predicted) === side(goldStroke),
+        detail: `predicted ${predicted} vs gold ${goldStroke}`,
+      };
     } else {
-      stages.STROKE = { pass: false, detail: `predicted ${predicted ?? "none"} vs gold ${goldStroke ?? "unlabeled"}` };
+      stages.STROKE = {
+        pass: false,
+        detail: `predicted ${predicted ?? "none"} vs gold ${goldStroke ?? "unlabeled"}`,
+      };
     }
 
     let reached = "COMPLETE";
@@ -272,7 +334,15 @@ if (isMain) {
       contactMs: gold.contactMs,
       strokeLabel: goldStroke,
     });
-    rows.push({ caseId: benchCase.id, split: benchCase.role ?? "unassigned", stroke: goldStroke, stages, conditionalReached: reached, usable, silent });
+    rows.push({
+      caseId: benchCase.id,
+      split: benchCase.role ?? "unassigned",
+      stroke: goldStroke,
+      stages,
+      conditionalReached: reached,
+      usable,
+      silent,
+    });
   }
 
   const unconditional = Object.fromEntries(
@@ -281,7 +351,9 @@ if (isMain) {
   const conditional: Record<string, number> = {};
   let alive = rows.length;
   for (const stage of STAGES) {
-    alive = rows.filter((row) => STAGES.slice(0, STAGES.indexOf(stage) + 1).every((s) => row.stages[s].pass)).length;
+    alive = rows.filter((row) =>
+      STAGES.slice(0, STAGES.indexOf(stage) + 1).every((s) => row.stages[s].pass),
+    ).length;
     conditional[stage] = alive;
   }
 
@@ -293,7 +365,8 @@ if (isMain) {
   const result = {
     generatedAtIso: new Date().toISOString(),
     goldEvents: rows.length,
-    caveat: "n=5 gold events — the waterfall SHAPE is the product diagnosis; rates are not stable estimates (learning curves prove instability at this n)",
+    caveat:
+      "n=5 gold events — the waterfall SHAPE is the product diagnosis; rates are not stable estimates (learning curves prove instability at this n)",
     unconditionalPass: unconditional,
     conditionalSurvival: conditional,
     strictSurvival: { survived: strictSurvived, total: rows.length },
@@ -321,7 +394,9 @@ if (isMain) {
   console.log(`END-TO-END CASCADE (n=${rows.length} gold target events)`);
   console.log("stage        unconditional   conditional-survival");
   for (const stage of STAGES) {
-    console.log(`  ${stage.padEnd(10)} ${String(unconditional[stage]).padStart(3)}/${rows.length}            ${String(conditional[stage]).padStart(3)}/${rows.length}`);
+    console.log(
+      `  ${stage.padEnd(10)} ${String(unconditional[stage]).padStart(3)}/${rows.length}            ${String(conditional[stage]).padStart(3)}/${rows.length}`,
+    );
   }
   console.log("─".repeat(74));
   for (const row of rows) {
@@ -332,23 +407,39 @@ if (isMain) {
     }
   }
   console.log("═".repeat(74));
-  console.log(`USABLE RESULT RATE — contract ${USABLE_RESULT_CONTRACT.version} (defined before measuring)`);
-  console.log("second north-star: trustworthy-evidence bar; complements strict survival, never replaces it");
-  console.log(`  strict survival ${strictSurvived}/${rows.length} · usable results ${usableCount}/${rows.length}`);
+  console.log(
+    `USABLE RESULT RATE — contract ${USABLE_RESULT_CONTRACT.version} (defined before measuring)`,
+  );
+  console.log(
+    "second north-star: trustworthy-evidence bar; complements strict survival, never replaces it",
+  );
+  console.log(
+    `  strict survival ${strictSurvived}/${rows.length} · usable results ${usableCount}/${rows.length}`,
+  );
   for (const row of rows) {
-    console.log(`  ${row.usable.usable ? "✓ USABLE    " : "✗ NOT USABLE"} ${row.caseId.padEnd(20)}`);
+    console.log(
+      `  ${row.usable.usable ? "✓ USABLE    " : "✗ NOT USABLE"} ${row.caseId.padEnd(20)}`,
+    );
     for (const reason of row.usable.reasons) {
       console.log(`        ${reason}`);
     }
   }
   console.log("═".repeat(74));
-  console.log(`SILENT FAILURE RATE — contract ${SILENT_FAILURE_CONTRACT.version} (defined before measuring)`);
-  console.log("third north-star: confident material claims gold says are wrong; abstentions are NOT silent failures");
+  console.log(
+    `SILENT FAILURE RATE — contract ${SILENT_FAILURE_CONTRACT.version} (defined before measuring)`,
+  );
+  console.log(
+    "third north-star: confident material claims gold says are wrong; abstentions are NOT silent failures",
+  );
   console.log(
     `  SILENT FAILURES ${silentFailureCount}/${rows.length} ALL TRIALS · ${silentFailureCount}/${answeredCount} ANSWERED TRIALS`,
   );
   for (const row of rows) {
-    const tag = row.silent.silentFailure ? "✗ SILENT FAIL" : row.silent.answered ? "✓ ANSWERED   " : "○ ABSTAINED  ";
+    const tag = row.silent.silentFailure
+      ? "✗ SILENT FAIL"
+      : row.silent.answered
+        ? "✓ ANSWERED   "
+        : "○ ABSTAINED  ";
     console.log(`  ${tag} ${row.caseId.padEnd(20)}`);
     for (const claim of SILENT_FAILURE_CLAIMS) {
       const verdict = row.silent.claims[claim];

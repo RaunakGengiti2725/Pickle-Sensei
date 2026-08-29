@@ -46,7 +46,17 @@ describe("OOD gate on ffmpeg-constructed negatives", () => {
 
   it("rejects a 1-frame clip", () => {
     const path = join(dir, "oneframe.mp4");
-    ffmpeg(["-f", "lavfi", "-i", "testsrc=size=320x240:rate=30", "-frames:v", "1", "-pix_fmt", "yuv420p", path]);
+    ffmpeg([
+      "-f",
+      "lavfi",
+      "-i",
+      "testsrc=size=320x240:rate=30",
+      "-frames:v",
+      "1",
+      "-pix_fmt",
+      "yuv420p",
+      path,
+    ]);
     const report = evaluateFrameAnalyzability(extractFrameStats(path));
     expect(report.analyzable).toBe(false);
     expect(report.reasons).toContain("single_frame_clip");
@@ -57,9 +67,19 @@ describe("OOD gate on ffmpeg-constructed negatives", () => {
     ffmpeg(["-f", "lavfi", "-i", "testsrc=size=320x64:rate=30", "-frames:v", "1", image]);
     const path = join(dir, "titlecard.mp4");
     ffmpeg([
-      "-loop", "1", "-i", image, "-t", "2", "-r", "30",
-      "-vf", "pad=320:240:0:88:black",
-      "-pix_fmt", "yuv420p", path,
+      "-loop",
+      "1",
+      "-i",
+      image,
+      "-t",
+      "2",
+      "-r",
+      "30",
+      "-vf",
+      "pad=320:240:0:88:black",
+      "-pix_fmt",
+      "yuv420p",
+      path,
     ]);
     const report = evaluateFrameAnalyzability(extractFrameStats(path));
     expect(report.analyzable).toBe(false);

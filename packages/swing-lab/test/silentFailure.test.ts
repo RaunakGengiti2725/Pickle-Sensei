@@ -25,7 +25,10 @@ const FIXTURE_ALL_CORRECT: SilentFailureReportView = {
   player: { targetCoverage: 0.9 },
   targetEvent: { status: "selected", event: { startMs: 950, endMs: 2100 } },
   contact: { status: "estimated", estimatedContactMs: 1530 },
-  temporalPhasesV2: { status: "segmented", boundaries: { contactMs: 1530, followThroughEndMs: 1900 } },
+  temporalPhasesV2: {
+    status: "segmented",
+    boundaries: { contactMs: 1530, followThroughEndMs: 1900 },
+  },
   strokePrediction: { label: "FOREHAND_DRIVE" },
 };
 
@@ -79,7 +82,10 @@ describe("silent-failure-v1 contract", () => {
 
   it("66–132ms marker WITH confirmation is not a silent failure; WITHOUT is", () => {
     const confirmed = evaluateSilentFailure(
-      { ...FIXTURE_ALL_CORRECT, contact: { status: "estimated", estimatedContactMs: 1600, paddleConfirmed: true } },
+      {
+        ...FIXTURE_ALL_CORRECT,
+        contact: { status: "estimated", estimatedContactMs: 1600, paddleConfirmed: true },
+      },
       FIXTURE_GOLD,
     );
     expect(confirmed.claims.CONTACT_MARKER.status).toBe("correct");
@@ -107,7 +113,10 @@ describe("silent-failure-v1 contract", () => {
     const verdict = evaluateSilentFailure(
       {
         ...FIXTURE_ALL_CORRECT,
-        temporalPhasesV2: { status: "segmented", boundaries: { contactMs: 1530, followThroughEndMs: 1400 } },
+        temporalPhasesV2: {
+          status: "segmented",
+          boundaries: { contactMs: 1530, followThroughEndMs: 1400 },
+        },
       },
       FIXTURE_GOLD,
     );
@@ -115,13 +124,22 @@ describe("silent-failure-v1 contract", () => {
   });
 
   it("unverifiable claims count as neither correct nor silent failure", () => {
-    const noGoldStroke = evaluateSilentFailure(FIXTURE_ALL_CORRECT, { ...FIXTURE_GOLD, strokeLabel: null });
+    const noGoldStroke = evaluateSilentFailure(FIXTURE_ALL_CORRECT, {
+      ...FIXTURE_GOLD,
+      strokeLabel: null,
+    });
     expect(noGoldStroke.claims.STROKE_L1.status).toBe("unverifiable");
-    const noGoldContact = evaluateSilentFailure(FIXTURE_ALL_CORRECT, { ...FIXTURE_GOLD, contactMs: null });
+    const noGoldContact = evaluateSilentFailure(FIXTURE_ALL_CORRECT, {
+      ...FIXTURE_GOLD,
+      contactMs: null,
+    });
     expect(noGoldContact.claims.CONTACT_MARKER.status).toBe("unverifiable");
     // A report answering ONLY unverifiable claims is not an answered trial.
     const onlyUnverifiable = evaluateSilentFailure(
-      { contact: { status: "estimated", estimatedContactMs: 1500 }, strokePrediction: { label: null } },
+      {
+        contact: { status: "estimated", estimatedContactMs: 1500 },
+        strokePrediction: { label: null },
+      },
       { ...FIXTURE_GOLD, contactMs: null },
     );
     expect(onlyUnverifiable.answered).toBe(false);

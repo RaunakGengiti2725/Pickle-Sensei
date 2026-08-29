@@ -473,8 +473,7 @@ export function selectPrimaryPaddleTrack(
       keptSegments.reduce((total, segment) => {
         const segmentInWindow = segment.filter(
           (observation) =>
-            observation.timestampMs >= window.startMs &&
-            observation.timestampMs <= window.endMs,
+            observation.timestampMs >= window.startMs && observation.timestampMs <= window.endMs,
         );
         return segmentInWindow.length >= 2
           ? total +
@@ -530,9 +529,7 @@ export function selectPrimaryPaddleTrack(
     ).length;
     const handAffinity = targetDistances.length > 0 ? handHits / targetDistances.length : 0;
     const proximityFactor =
-      meanWristDistance === null
-        ? 0.2
-        : Math.max(0.1, Math.min(1, 1.25 - meanWristDistance * 4));
+      meanWristDistance === null ? 0.2 : Math.max(0.1, Math.min(1, 1.25 - meanWristDistance * 4));
     return {
       candidate: { ...candidate, observations, windowCoverage, meanScore, meanWristDistance },
       meanOtherDistance,
@@ -549,8 +546,7 @@ export function selectPrimaryPaddleTrack(
 
   const eligible = scored.filter(
     (entry) =>
-      !entry.otherPlayers &&
-      entry.candidate.observations.length >= TRACKER_GATES.minObservations,
+      !entry.otherPlayers && entry.candidate.observations.length >= TRACKER_GATES.minObservations,
   );
   const association: PaddleAssociationDecision = {
     meanTargetWristDistance: null,
@@ -578,8 +574,7 @@ export function selectPrimaryPaddleTrack(
   const runnerUp = eligible[1];
   association.meanTargetWristDistance = best.candidate.meanWristDistance;
   association.meanOtherWristDistance = best.meanOtherDistance;
-  association.selectionMargin =
-    runnerUp && runnerUp.score > 0 ? best.score / runnerUp.score : null;
+  association.selectionMargin = runnerUp && runnerUp.score > 0 ? best.score / runnerUp.score : null;
 
   // Ambiguity: two comparable candidates near DIFFERENT hands → abstain.
   if (

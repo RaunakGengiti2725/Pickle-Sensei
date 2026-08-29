@@ -196,7 +196,8 @@ export function buildOpenApiDocument(apiVersion: string): Record<string, unknown
       "/v1/me/consent/grant": {
         post: {
           operationId: "grantConsent",
-          summary: "Append a scoped consent grant to the immutable ledger (model_training is explicit opt-in, never a default)",
+          summary:
+            "Append a scoped consent grant to the immutable ledger (model_training is explicit opt-in, never a default)",
           requestBody: {
             required: true,
             content: { "application/json": { schema: schema(ConsentGrantRequest) } },
@@ -214,7 +215,8 @@ export function buildOpenApiDocument(apiVersion: string): Record<string, unknown
       "/v1/me/consent/withdraw": {
         post: {
           operationId: "withdrawConsent",
-          summary: "Append a withdrawal — an append-only state change that never deletes the audit trail",
+          summary:
+            "Append a withdrawal — an append-only state change that never deletes the audit trail",
           requestBody: {
             required: true,
             content: { "application/json": { schema: schema(ConsentWithdrawRequest) } },

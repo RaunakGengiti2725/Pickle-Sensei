@@ -50,7 +50,10 @@ lines.on("close", () => process.exit(0));
   return path;
 }
 
-function spawnFake(mode: string, options: { requestTimeoutMs?: number; readyTimeoutMs?: number } = {}) {
+function spawnFake(
+  mode: string,
+  options: { requestTimeoutMs?: number; readyTimeoutMs?: number } = {},
+) {
   return new PaddleServeWorker(process.execPath, [fakeWorkerScript(mode)], {
     log: () => {},
     ...options,

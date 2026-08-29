@@ -5,14 +5,31 @@
   "what": "Wired the detect_paddle.py --serve warm worker into runPaddleStage (HANDOFF_V3 §6 item 4, W2-worker-integration.md sketch). New packages/swing-lab/src/paddleWorker.ts: PaddleServeWorker (paddle-serve-v1 JSONL client: ready handshake, id-matched requests, ready/request timeouts, crash detection, dispose = stdin EOF then 3s SIGKILL backstop — lifetime tied to the parent, no orphan), startPaddleWorker (null when the venv/script is absent), detectPaddleWindow (worker-first with fallback to the legacy one-shot execFileSync path on ANY worker failure). analyzeVideo.ts spawns the worker immediately after arg parse so startup overlaps pose extraction, and disposes it in a finally around the run. Default ON (bit-equality proven, below); --no-paddle-worker restores the one-shot-only path. timings.paddleDetectViaWorker (1/0) records which path produced the artifact.",
   "bitEquality": {
     "method": "Both paths run on 2 committed dev bundle clips (wm-volley-02, afn-sasebo-rally1 — the only dev bundles with committed clip.mp4; afn-sasebo-rally2 has no committed clip; held-out clips not used), full-clip window, Linux CPU. compare_paddle_dets.py one-shot vs worker, plus a byte-compare of the serialized frames array (JSON.stringify of parsed frames).",
-    "wm-volley-02": { "pass": true, "bitEqualFrames": true, "matchedPairs": 10975, "bitEqualPairs": 10975, "minIoU": 1.0, "maxAbsScoreDelta": 0.0 },
-    "afn-sasebo-rally1": { "pass": true, "bitEqualFrames": true, "matchedPairs": 5627, "bitEqualPairs": 5627, "minIoU": 1.0, "maxAbsScoreDelta": 0.0 },
+    "wm-volley-02": {
+      "pass": true,
+      "bitEqualFrames": true,
+      "matchedPairs": 10975,
+      "bitEqualPairs": 10975,
+      "minIoU": 1.0,
+      "maxAbsScoreDelta": 0.0
+    },
+    "afn-sasebo-rally1": {
+      "pass": true,
+      "bitEqualFrames": true,
+      "matchedPairs": 5627,
+      "bitEqualPairs": 5627,
+      "minIoU": 1.0,
+      "maxAbsScoreDelta": 0.0
+    },
     "sameSathRepeatability": "one-shot rep1 vs rep2 frames byte-equal on both clips (CPU deterministic)",
     "note": "Byte-for-byte equality holds for the frames payload; the timing block differs by construction (worker requests report modelLoadSec 0.0 and their own wall/inference times). Detection content (boxes/scores/labels/tMs) is what downstream consumes and what the regen manifest hashes care about."
   },
   "latencyLinuxCpu": {
     "label": "LINUX-CPU (this box, torch 2.13.0+cpu, D-FINE medium via transformers 5.16.1). Explicitly NOT Mac/MPS and NOT iPhone numbers — HANDOFF_V3's 17.25s→~11.9s projection is a Mac/MPS projection and is NOT reproducible on this hardware.",
-    "oneShotInvocationWallMs": { "wm-volley-02 (200 frames)": [25416, 25199], "afn-sasebo-rally1 (132 frames)": [20331, 18972] },
+    "oneShotInvocationWallMs": {
+      "wm-volley-02 (200 frames)": [25416, 25199],
+      "afn-sasebo-rally1 (132 frames)": [20331, 18972]
+    },
     "workerRequestWallMs": { "wm-volley-02": [23488, 23620], "afn-sasebo-rally1": [15969, 16032] },
     "workerStartupToReadyMs": 2590,
     "workerReady": { "modelLoadSec": 0.484, "warmupSec": 0.145, "device": "cpu" },

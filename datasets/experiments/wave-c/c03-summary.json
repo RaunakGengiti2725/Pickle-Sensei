@@ -25,9 +25,23 @@
       "wavea-faead-feed": 2,
       "afn-sasebo-rally1": 2
     },
-    "boxes": { "targetVisible": 20, "targetOccludedNoPoint": 4, "otherVisible": 59, "ambiguous": 6 },
-    "sameTimestampTargetOtherDualFrames": { "before": 30, "after": 50, "definition": "frames with >=1 visible target point AND >=1 visible other point at the same tMs, aggregated across annotator files per bundle; recomputed from committed files" },
-    "annotationFileVisiblePoints": { "targetBefore": 65, "targetAfter": 85, "otherBefore": 81, "otherAfter": 140 },
+    "boxes": {
+      "targetVisible": 20,
+      "targetOccludedNoPoint": 4,
+      "otherVisible": 59,
+      "ambiguous": 6
+    },
+    "sameTimestampTargetOtherDualFrames": {
+      "before": 30,
+      "after": 50,
+      "definition": "frames with >=1 visible target point AND >=1 visible other point at the same tMs, aggregated across annotator files per bundle; recomputed from committed files"
+    },
+    "annotationFileVisiblePoints": {
+      "targetBefore": 65,
+      "targetAfter": 85,
+      "otherBefore": 81,
+      "otherAfter": 140
+    },
     "sidecarEntries": { "before": 70, "after": 100 },
     "waveaBundlesWithDualsBefore": 0,
     "waveaBundlesWithDualsAfter": 5

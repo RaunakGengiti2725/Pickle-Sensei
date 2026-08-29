@@ -100,9 +100,9 @@ describe('uncertaintyNotes', () => {
       contact: confirmedContact,
       temporalPhasesV2: segmentedPhases,
     };
-    expect(
-      uncertaintyNotes({ record, analysis: analysisFixture() }),
-    ).toEqual([]);
+    expect(uncertaintyNotes({ record, analysis: analysisFixture() })).toEqual(
+      [],
+    );
   });
 
   it('withheld contact marker yields the honest contact line', () => {
@@ -155,7 +155,12 @@ describe('uncertaintyNotes', () => {
     };
     expect(
       uncertaintyNotes({ record, analysis: null }).map(note => note.kind),
-    ).toEqual(['contact', 'stroke_identity', 'phase_timing', 'technique_score']);
+    ).toEqual([
+      'contact',
+      'stroke_identity',
+      'phase_timing',
+      'technique_score',
+    ]);
   });
 
   it('never adds a stroke-identity note when the classifier committed', () => {

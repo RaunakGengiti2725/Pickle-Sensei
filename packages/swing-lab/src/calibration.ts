@@ -21,7 +21,8 @@ export interface ReliabilityBin {
 }
 
 export function reliabilityBins(samples: ConfidenceSample[], nBins = 10): ReliabilityBin[] {
-  if (!Number.isInteger(nBins) || nBins < 1) throw new Error(`nBins must be a positive integer, got ${nBins}`);
+  if (!Number.isInteger(nBins) || nBins < 1)
+    throw new Error(`nBins must be a positive integer, got ${nBins}`);
   const bins: ReliabilityBin[] = Array.from({ length: nBins }, (_, index) => ({
     lower: index / nBins,
     upper: (index + 1) / nBins,
@@ -93,7 +94,8 @@ export function coverageRiskCurve(samples: ConfidenceSample[]): CoverageRiskPoin
     if (!sample) continue;
     answered += 1;
     if (!sample.correct) wrong += 1;
-    const isLastOfValue = index === sorted.length - 1 || sorted[index + 1]?.confidence !== sample.confidence;
+    const isLastOfValue =
+      index === sorted.length - 1 || sorted[index + 1]?.confidence !== sample.confidence;
     if (isLastOfValue) {
       points.push({
         threshold: sample.confidence,

@@ -127,7 +127,9 @@ export class PaddleServeWorker {
       if (message["ok"] === true) {
         waiter.resolve(message as unknown as PaddleDetectResponse);
       } else {
-        waiter.reject(new PaddleWorkerError(`worker responded ok=false: ${String(message["error"])}`));
+        waiter.reject(
+          new PaddleWorkerError(`worker responded ok=false: ${String(message["error"])}`),
+        );
       }
     });
 

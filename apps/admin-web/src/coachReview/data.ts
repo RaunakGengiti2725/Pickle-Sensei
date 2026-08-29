@@ -54,19 +54,33 @@ export function isSyntheticMode(): boolean {
 
 export async function loadCoachReviewData(): Promise<CoachReviewData> {
   const problems: string[] = [];
-  const [queue, schema, taxonomy, drills, registry, realReviews, assignments, adjudications, amendments, mappingProposals] =
-    await Promise.all([
-      getJson<QueueManifest>("/datasets/coach-review/queue.json"),
-      getJson<SchemaDescriptor>("/datasets/coach-review/schema.json"),
-      getJson<FaultTaxonomy>("/datasets/coach-review/taxonomy/fault-taxonomy.v0-draft.json"),
-      getJson<DrillLibrary>("/datasets/coach-review/drills/drill-library.v0.json"),
-      getJson<CoachRegistry>("/datasets/coach-review/coaches.json"),
-      getJson<Array<{ file: string; review: CoachReview }>>("/api/coach-reviews"),
-      getJson<AssignmentsFile>("/api/coach-assignments").catch(() => EMPTY_ASSIGNMENTS),
-      getJson<AdjudicationRecord[]>("/api/coach-adjudications").catch(() => [] as AdjudicationRecord[]),
-      getJson<ReviewAmendment[]>("/api/coach-review-amendments").catch(() => [] as ReviewAmendment[]),
-      getJson<DrillMappingProposal[]>("/api/drill-mapping-proposals").catch(() => [] as DrillMappingProposal[]),
-    ]);
+  const [
+    queue,
+    schema,
+    taxonomy,
+    drills,
+    registry,
+    realReviews,
+    assignments,
+    adjudications,
+    amendments,
+    mappingProposals,
+  ] = await Promise.all([
+    getJson<QueueManifest>("/datasets/coach-review/queue.json"),
+    getJson<SchemaDescriptor>("/datasets/coach-review/schema.json"),
+    getJson<FaultTaxonomy>("/datasets/coach-review/taxonomy/fault-taxonomy.v0-draft.json"),
+    getJson<DrillLibrary>("/datasets/coach-review/drills/drill-library.v0.json"),
+    getJson<CoachRegistry>("/datasets/coach-review/coaches.json"),
+    getJson<Array<{ file: string; review: CoachReview }>>("/api/coach-reviews"),
+    getJson<AssignmentsFile>("/api/coach-assignments").catch(() => EMPTY_ASSIGNMENTS),
+    getJson<AdjudicationRecord[]>("/api/coach-adjudications").catch(
+      () => [] as AdjudicationRecord[],
+    ),
+    getJson<ReviewAmendment[]>("/api/coach-review-amendments").catch(() => [] as ReviewAmendment[]),
+    getJson<DrillMappingProposal[]>("/api/drill-mapping-proposals").catch(
+      () => [] as DrillMappingProposal[],
+    ),
+  ]);
   if (queue.schemaVersion !== EXPECTED_SCHEMA_VERSION) {
     problems.push(
       `queue.json schemaVersion ${queue.schemaVersion} ≠ UI's expected ${EXPECTED_SCHEMA_VERSION} — regenerate with \`pnpm lab:coach-queue\` or update the UI mirror.`,
@@ -105,13 +119,19 @@ export function currentReviewVersion(
     .filter((amendment) => amendment.reviewId === review.reviewId)
     .sort((a, b) => a.revision - b.revision);
   const latest = chain[chain.length - 1];
-  return { review: latest ? latest.review : review, revision: latest ? latest.revision : 1, history: chain };
+  return {
+    review: latest ? latest.review : review,
+    revision: latest ? latest.revision : 1,
+    history: chain,
+  };
 }
 
 export function validationContextFrom(data: CoachReviewData): ValidationContext {
   return {
     knownQueueItemIds: data.queue.queue.map((item) => item.queueItemId),
-    knownFaultIds: data.taxonomy.families.flatMap((family) => family.faults.map((fault) => fault.id)),
+    knownFaultIds: data.taxonomy.families.flatMap((family) =>
+      family.faults.map((fault) => fault.id),
+    ),
     knownDrillIds: data.drills.drills.map((drill) => drill.id),
     strokeTaxonomyVersion: data.schema.strokeTaxonomy.version,
     strokeLabels: data.schema.strokeTaxonomy.labels,
@@ -133,9 +153,12 @@ export async function submitReview(review: CoachReview): Promise<SubmitResult> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(review),
   });
-  const body = (await response.json().catch(() => null)) as
-    | { ok?: boolean; message?: string; path?: string; problems?: string[] }
-    | null;
+  const body = (await response.json().catch(() => null)) as {
+    ok?: boolean;
+    message?: string;
+    path?: string;
+    problems?: string[];
+  } | null;
   const problems = body?.problems ? ` — ${body.problems.join("; ")}` : "";
   const result: SubmitResult = {
     ok: response.ok,
@@ -152,9 +175,12 @@ async function postJson(path: string, payload: unknown): Promise<SubmitResult> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const body = (await response.json().catch(() => null)) as
-    | { ok?: boolean; message?: string; path?: string; problems?: string[] }
-    | null;
+  const body = (await response.json().catch(() => null)) as {
+    ok?: boolean;
+    message?: string;
+    path?: string;
+    problems?: string[];
+  } | null;
   const problems = body?.problems ? ` — ${body.problems.join("; ")}` : "";
   const result: SubmitResult = {
     ok: response.ok,

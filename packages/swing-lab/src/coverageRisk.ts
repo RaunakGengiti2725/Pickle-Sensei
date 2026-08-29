@@ -31,7 +31,11 @@ interface TaOverlap {
   verdicts: Array<{ caseId: string; verdict: string; confidence: number }>;
 }
 interface OwnershipOverlap {
-  verdicts: Array<{ caseId: string; tMs: number; boxes: Record<string, { class: string; confidence: number }> }>;
+  verdicts: Array<{
+    caseId: string;
+    tMs: number;
+    boxes: Record<string, { class: string; confidence: number }>;
+  }>;
 }
 interface Agreement {
   ta: { disagreements: Array<{ caseId: string }> };
@@ -45,9 +49,13 @@ export interface NamedDataset {
 }
 
 export function loadW14Datasets(experimentsDir = EXPERIMENTS): NamedDataset[] {
-  const agreement = JSON.parse(readFileSync(join(experimentsDir, "wave-b/W14-overlap/agreement.json"), "utf8")) as Agreement;
+  const agreement = JSON.parse(
+    readFileSync(join(experimentsDir, "wave-b/W14-overlap/agreement.json"), "utf8"),
+  ) as Agreement;
 
-  const ta = JSON.parse(readFileSync(join(experimentsDir, "wave-b/W14-overlap/ta-overlap.json"), "utf8")) as TaOverlap;
+  const ta = JSON.parse(
+    readFileSync(join(experimentsDir, "wave-b/W14-overlap/ta-overlap.json"), "utf8"),
+  ) as TaOverlap;
   const taDisagree = new Set(agreement.ta.disagreements.map((entry) => entry.caseId));
   const taSamples = ta.verdicts.map((verdict) => ({
     confidence: verdict.confidence,
@@ -118,13 +126,17 @@ if (isMain) {
     console.log("═".repeat(74));
     console.log(dataset.name);
     console.log(`  provenance: ${dataset.provenance}`);
-    console.log(`  n=${dataset.n} · ECE(10 bins)=${dataset.ece10.toFixed(4)} · AURC=${dataset.aurc.toFixed(4)}`);
+    console.log(
+      `  n=${dataset.n} · ECE(10 bins)=${dataset.ece10.toFixed(4)} · AURC=${dataset.aurc.toFixed(4)}`,
+    );
     console.log("  threshold  coverage  risk      answered  wrong");
     for (const point of dataset.coverageRiskCurve) {
       console.log(
         `  ${point.threshold.toFixed(2).padStart(9)} ${point.coverage.toFixed(3).padStart(9)} ${point.risk
           .toFixed(3)
-          .padStart(9)} ${String(point.nAnswered).padStart(9)} ${String(point.nWrongAnswered).padStart(6)}`,
+          .padStart(
+            9,
+          )} ${String(point.nAnswered).padStart(9)} ${String(point.nWrongAnswered).padStart(6)}`,
       );
     }
   }

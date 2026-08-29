@@ -16,5 +16,7 @@ export function canSeeOtherReviews(
   viewerCoachId: string | null,
 ): boolean {
   if (realReviewsForItem.length >= item.requiredReviewsTarget) return true;
-  return viewerCoachId !== null && realReviewsForItem.some((review) => review.coachId === viewerCoachId);
+  return (
+    viewerCoachId !== null && realReviewsForItem.some((review) => review.coachId === viewerCoachId)
+  );
 }

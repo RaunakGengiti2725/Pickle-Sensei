@@ -1,6 +1,11 @@
 import React, { useState } from "react";
 import { computeAllAgreements } from "./agreement";
-import { computePairKappas, primaryFaultLabelExtractor, strokeLabelExtractor, type PairKappa } from "./kappa";
+import {
+  computePairKappas,
+  primaryFaultLabelExtractor,
+  strokeLabelExtractor,
+  type PairKappa,
+} from "./kappa";
 import {
   buildAdjudicatedExport,
   downloadJson,
@@ -12,7 +17,8 @@ import type { AdjudicationOutcome, AdjudicationRecord } from "./records";
 import type { QualityValue } from "./types";
 import { labBox, mono } from "./CoachReviewLab";
 
-const formatRate = (rate: number | null): string => (rate === null ? "—" : `${Math.round(rate * 100)}%`);
+const formatRate = (rate: number | null): string =>
+  rate === null ? "—" : `${Math.round(rate * 100)}%`;
 const formatNumber = (value: number | null): string => (value === null ? "—" : value.toFixed(2));
 
 function KappaTable({ title, pairs }: { title: string; pairs: PairKappa[] }) {
@@ -20,7 +26,9 @@ function KappaTable({ title, pairs }: { title: string; pairs: PairKappa[] }) {
     <div style={{ marginBottom: 12 }}>
       <h4 style={{ margin: "4px 0" }}>{title}</h4>
       {pairs.length === 0 ? (
-        <p style={{ color: "#6b7a75", fontSize: 13 }}>No coach pair shares evaluable reviews yet.</p>
+        <p style={{ color: "#6b7a75", fontSize: 13 }}>
+          No coach pair shares evaluable reviews yet.
+        </p>
       ) : (
         <table cellPadding={6} style={{ borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
@@ -34,7 +42,10 @@ function KappaTable({ title, pairs }: { title: string; pairs: PairKappa[] }) {
           </thead>
           <tbody>
             {pairs.map((pair) => (
-              <tr key={`${pair.coachA}|${pair.coachB}`} style={{ borderBottom: "1px solid #eef2f0" }}>
+              <tr
+                key={`${pair.coachA}|${pair.coachB}`}
+                style={{ borderBottom: "1px solid #eef2f0" }}
+              >
                 <td style={mono}>
                   {pair.coachA} × {pair.coachB}
                 </td>
@@ -66,7 +77,9 @@ function AdjudicationEditor({ data, queueItemId }: { data: CoachReviewData; queu
     (coach) => coach.status === "active" && !reviewerIds.has(coach.coachId),
   );
   const [adjudicatorId, setAdjudicatorId] = useState("");
-  const [outcomeKind, setOutcomeKind] = useState<"uphold" | "new_verdict" | "unresolvable">("uphold");
+  const [outcomeKind, setOutcomeKind] = useState<"uphold" | "new_verdict" | "unresolvable">(
+    "uphold",
+  );
   const [upheldReviewId, setUpheldReviewId] = useState(realReviews[0]?.reviewId ?? "");
   const [stroke, setStroke] = useState<string>("");
   const [quality, setQuality] = useState<string>("");
@@ -109,8 +122,8 @@ function AdjudicationEditor({ data, queueItemId }: { data: CoachReviewData; queu
   if (eligible.length === 0) {
     return (
       <p style={{ color: "#92400e", fontSize: 13 }}>
-        No eligible adjudicator: an adjudication needs an active provisioned coach who was NOT one of the original
-        reviewers. Nothing can be recorded until such a coach exists.
+        No eligible adjudicator: an adjudication needs an active provisioned coach who was NOT one
+        of the original reviewers. Nothing can be recorded until such a coach exists.
       </p>
     );
   }
@@ -131,7 +144,12 @@ function AdjudicationEditor({ data, queueItemId }: { data: CoachReviewData; queu
         outcome:{" "}
         {(["uphold", "new_verdict", "unresolvable"] as const).map((kind) => (
           <label key={kind} style={{ marginRight: 10 }}>
-            <input type="radio" checked={outcomeKind === kind} onChange={() => setOutcomeKind(kind)} /> {kind}
+            <input
+              type="radio"
+              checked={outcomeKind === kind}
+              onChange={() => setOutcomeKind(kind)}
+            />{" "}
+            {kind}
           </label>
         ))}
       </div>
@@ -165,13 +183,20 @@ function AdjudicationEditor({ data, queueItemId }: { data: CoachReviewData; queu
           </select>{" "}
           <select value={primaryFaultId} onChange={(e) => setPrimaryFaultId(e.target.value)}>
             <option value="">primary fault: no verdict</option>
-            {data.taxonomy.families.flatMap((family) => family.faults).map((fault) => (
-              <option key={fault.id} value={fault.id}>
-                {fault.id}
-              </option>
-            ))}
+            {data.taxonomy.families
+              .flatMap((family) => family.faults)
+              .map((fault) => (
+                <option key={fault.id} value={fault.id}>
+                  {fault.id}
+                </option>
+              ))}
           </select>{" "}
-          <input placeholder="note (required)" value={note} onChange={(e) => setNote(e.target.value)} style={{ width: 260 }} />
+          <input
+            placeholder="note (required)"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            style={{ width: 260 }}
+          />
         </div>
       )}
       {outcomeKind === "unresolvable" && (
@@ -223,22 +248,27 @@ export function AgreementView({ data }: { data: CoachReviewData }) {
   const anyComputed = agreements.some((agreement) => agreement.status === "computed");
   const strokeKappas = computePairKappas(reviews, strokeLabelExtractor);
   const faultKappas = computePairKappas(reviews, primaryFaultLabelExtractor);
-  const adjudicationByItem = new Map(data.adjudications.map((record) => [record.queueItemId, record]));
+  const adjudicationByItem = new Map(
+    data.adjudications.map((record) => [record.queueItemId, record]),
+  );
 
   return (
     <div>
       <section style={labBox}>
         <h2>Inter-coach agreement</h2>
         <p style={{ color: "#42505f", maxWidth: 760 }}>
-          Policy: {data.queue.program.disagreementPolicy}. Metrics ({data.queue.program.agreementMetrics}) are
-          pairwise over evaluable reviews; <em>cannot-evaluate</em> outcomes are counted, never imputed. Agreement is
-          computed once a queue item has ≥2 evaluable reviews.
+          Policy: {data.queue.program.disagreementPolicy}. Metrics (
+          {data.queue.program.agreementMetrics}) are pairwise over evaluable reviews;{" "}
+          <em>cannot-evaluate</em> outcomes are counted, never imputed. Agreement is computed once a
+          queue item has ≥2 evaluable reviews.
         </p>
         {!anyComputed && !data.syntheticMode && (
           <p style={{ color: "#b45309" }}>
-            <strong>Awaiting reviews:</strong> 0 coach reviews exist, so no agreement can be computed yet. The
-            computation is implemented and unit-tested (apps/admin-web/src/coachReview/agreement.ts); append{" "}
-            <code style={mono}>?synthetic=1</code> to the URL to see it exercise flagged dev fixtures.
+            <strong>Awaiting reviews:</strong> 0 coach reviews exist, so no agreement can be
+            computed yet. The computation is implemented and unit-tested
+            (apps/admin-web/src/coachReview/agreement.ts); append{" "}
+            <code style={mono}>?synthetic=1</code> to the URL to see it exercise flagged dev
+            fixtures.
           </p>
         )}
         <table cellPadding={8} style={{ borderCollapse: "collapse", width: "100%", fontSize: 13 }}>
@@ -257,14 +287,19 @@ export function AgreementView({ data }: { data: CoachReviewData }) {
           </thead>
           <tbody>
             {agreements.map((agreement) => (
-              <tr key={agreement.queueItemId} style={{ borderBottom: "1px solid #eef2f0", verticalAlign: "top" }}>
+              <tr
+                key={agreement.queueItemId}
+                style={{ borderBottom: "1px solid #eef2f0", verticalAlign: "top" }}
+              >
                 <td>
                   <a href={`#/coach/item/${agreement.queueItemId}`}>{agreement.queueItemId}</a>
                 </td>
                 <td>
                   {agreement.reviewCount}/{agreement.requiredReviewsTarget}
                   {agreement.cannotEvaluateCount > 0 && (
-                    <div style={{ color: "#6b7a75", fontSize: 11 }}>{agreement.cannotEvaluateCount} cannot-evaluate</div>
+                    <div style={{ color: "#6b7a75", fontSize: 11 }}>
+                      {agreement.cannotEvaluateCount} cannot-evaluate
+                    </div>
                   )}
                 </td>
                 <td style={{ color: agreement.status === "computed" ? "#15803d" : "#b45309" }}>
@@ -272,18 +307,22 @@ export function AgreementView({ data }: { data: CoachReviewData }) {
                 </td>
                 <td>{formatRate(agreement.stroke.rate)}</td>
                 <td>
-                  {formatRate(agreement.rating.exactMatchRate)} / {formatNumber(agreement.rating.meanAbsDiff)}
+                  {formatRate(agreement.rating.exactMatchRate)} /{" "}
+                  {formatNumber(agreement.rating.meanAbsDiff)}
                 </td>
                 <td>{formatRate(agreement.primaryFault.rate)}</td>
                 <td>
-                  {formatRate(agreement.severity.exactRate)} / {formatNumber(agreement.severity.meanAbsDiff)}
+                  {formatRate(agreement.severity.exactRate)} /{" "}
+                  {formatNumber(agreement.severity.meanAbsDiff)}
                 </td>
                 <td>{formatNumber(agreement.faultOverlap.meanJaccard)}</td>
                 <td>
                   {agreement.adjudication.required ? (
                     adjudicationByItem.has(agreement.queueItemId) ? (
                       <details style={{ color: "#15803d" }}>
-                        <summary>RECORDED ({adjudicationByItem.get(agreement.queueItemId)!.outcome.kind})</summary>
+                        <summary>
+                          RECORDED ({adjudicationByItem.get(agreement.queueItemId)!.outcome.kind})
+                        </summary>
                         <div style={{ ...mono, fontSize: 11 }}>
                           by {adjudicationByItem.get(agreement.queueItemId)!.adjudicatorId} ·{" "}
                           {adjudicationByItem.get(agreement.queueItemId)!.rationale}
@@ -316,23 +355,35 @@ export function AgreementView({ data }: { data: CoachReviewData }) {
       <section style={labBox}>
         <h3>Chance-corrected agreement — Cohen's κ per coach pair (cross-item)</h3>
         <p style={{ color: "#42505f", fontSize: 13, maxWidth: 760 }}>
-          κ compares observed cross-item agreement with the chance agreement implied by each coach's own label
-          marginals. It is only reported when a pair shares ≥2 evaluable items AND labels vary — otherwise “—”,
-          never a fabricated number. Per-item percent agreement stays in the table above.
+          κ compares observed cross-item agreement with the chance agreement implied by each coach's
+          own label marginals. It is only reported when a pair shares ≥2 evaluable items AND labels
+          vary — otherwise “—”, never a fabricated number. Per-item percent agreement stays in the
+          table above.
         </p>
-        <KappaTable title={`Stroke label (${data.schema.strokeTaxonomy.version})`} pairs={strokeKappas} />
-        <KappaTable title={`Primary fault (${data.schema.faultTaxonomyVersion}; zero faults ⇒ CLEAN)`} pairs={faultKappas} />
+        <KappaTable
+          title={`Stroke label (${data.schema.strokeTaxonomy.version})`}
+          pairs={strokeKappas}
+        />
+        <KappaTable
+          title={`Primary fault (${data.schema.faultTaxonomyVersion}; zero faults ⇒ CLEAN)`}
+          pairs={faultKappas}
+        />
       </section>
       <section style={labBox}>
         <h3>Adjudicated reviews — export</h3>
         <p style={{ color: "#42505f", fontSize: 13, maxWidth: 760 }}>
-          JSON export of every adjudicated queue item: the adjudication record plus the frozen disagreeing reviews
-          (latest revision + full amendment history). Synthetic dev fixtures are always excluded. Currently{" "}
-          <strong>{data.adjudications.length}</strong> adjudication(s) on file.
+          JSON export of every adjudicated queue item: the adjudication record plus the frozen
+          disagreeing reviews (latest revision + full amendment history). Synthetic dev fixtures are
+          always excluded. Currently <strong>{data.adjudications.length}</strong> adjudication(s) on
+          file.
         </p>
         <button
           disabled={data.adjudications.length === 0}
-          title={data.adjudications.length === 0 ? "no adjudications exist — nothing to export" : "download JSON"}
+          title={
+            data.adjudications.length === 0
+              ? "no adjudications exist — nothing to export"
+              : "download JSON"
+          }
           onClick={() =>
             downloadJson(
               `adjudicated-reviews-${new Date().toISOString().slice(0, 10)}.json`,
@@ -347,20 +398,20 @@ export function AgreementView({ data }: { data: CoachReviewData }) {
         <h3>Adjudication flow</h3>
         <ol style={{ color: "#42505f", maxWidth: 760 }}>
           <li>
-            A queue item whose computed agreement trips a trigger (stroke mismatch · rating gap ≥2 · primary-fault
-            mismatch) is flagged <strong>REQUIRED</strong> above. Original reviews are never edited or averaged.
+            A queue item whose computed agreement trips a trigger (stroke mismatch · rating gap ≥2 ·
+            primary-fault mismatch) is flagged <strong>REQUIRED</strong> above. Original reviews are
+            never edited or averaged.
           </li>
           <li>
-            A third qualified coach (not among the original reviewers) reviews the clip blind, then sees the
-            disagreeing reviews and records an adjudication:{" "}
-            <code style={mono}>
-              datasets/coach-review/adjudications/&lt;queueItemId&gt;.json
-            </code>{" "}
-            — {"{"}adjudicatorId, outcome, rationale, timestamps{"}"} (append-only, same identity rules as reviews).
+            A third qualified coach (not among the original reviewers) reviews the clip blind, then
+            sees the disagreeing reviews and records an adjudication:{" "}
+            <code style={mono}>datasets/coach-review/adjudications/&lt;queueItemId&gt;.json</code> —{" "}
+            {"{"}adjudicatorId, outcome, rationale, timestamps{"}"} (append-only, same identity
+            rules as reviews).
           </li>
           <li>
-            Consumers (future calibration training sets) use adjudicated truth where it exists and PRESERVE the
-            disagreement record alongside it. Full contract: docs/COACHING.md §6.
+            Consumers (future calibration training sets) use adjudicated truth where it exists and
+            PRESERVE the disagreement record alongside it. Full contract: docs/COACHING.md §6.
           </li>
         </ol>
       </section>

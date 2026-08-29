@@ -81,7 +81,5 @@ export function deriveConsentStatus(records: readonly ConsentRecord[]): ConsentS
 }
 
 export function isModelTrainingConsentActive(records: readonly ConsentRecord[]): boolean {
-  return (
-    deriveConsentStatus(records).find((s) => s.scope === "model_training")?.active ?? false
-  );
+  return deriveConsentStatus(records).find((s) => s.scope === "model_training")?.active ?? false;
 }

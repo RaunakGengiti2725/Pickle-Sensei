@@ -51,10 +51,7 @@ export const DEFAULT_TWO_PASS_CONFIG: TwoPassScheduleConfig = {
 };
 
 export type DenseReason =
-  | "event_peak"
-  | "track_uncertainty"
-  | "paddle_speed_change"
-  | "missing_frames";
+  "event_peak" | "track_uncertainty" | "paddle_speed_change" | "missing_frames";
 
 export interface DenseRegion {
   startMs: number;
@@ -150,7 +147,11 @@ export function planTwoPassSchedule(input: TwoPassScheduleInput): TwoPassSchedul
     if (threshold > 0) {
       for (const delta of deltas) {
         if (delta.magnitude >= threshold) {
-          anchors.push({ atMs: delta.atMs, padMs: config.anchorPadMs, reason: "paddle_speed_change" });
+          anchors.push({
+            atMs: delta.atMs,
+            padMs: config.anchorPadMs,
+            reason: "paddle_speed_change",
+          });
         }
       }
     }
@@ -186,7 +187,12 @@ export function planTwoPassSchedule(input: TwoPassScheduleInput): TwoPassSchedul
   const sparseFrames = frameCount(spanStart, spanEnd, frameIntervalMs, config.sparseStride);
   const denseOnlyFrames = denseRegions.reduce((total, region) => {
     const frames = frameCount(region.startMs, region.endMs, frameIntervalMs, 1);
-    const alreadySparse = sparseFramesInside(region, spanStart, frameIntervalMs, config.sparseStride);
+    const alreadySparse = sparseFramesInside(
+      region,
+      spanStart,
+      frameIntervalMs,
+      config.sparseStride,
+    );
     return total + Math.max(0, frames - alreadySparse);
   }, 0);
 
@@ -246,7 +252,12 @@ function snapUp(tMs: number, originMs: number, frameIntervalMs: number): number 
   return originMs + Math.ceil((tMs - originMs) / frameIntervalMs) * frameIntervalMs;
 }
 
-function frameCount(startMs: number, endMs: number, frameIntervalMs: number, stride: number): number {
+function frameCount(
+  startMs: number,
+  endMs: number,
+  frameIntervalMs: number,
+  stride: number,
+): number {
   if (endMs <= startMs) return 0;
   return Math.floor((endMs - startMs) / (frameIntervalMs * stride)) + 1;
 }

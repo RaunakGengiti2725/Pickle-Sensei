@@ -8,7 +8,19 @@ import { AssignmentPanel, ReviewsPanel } from "./ReviewsPanel";
 /** Context shown around the labeled event (matches the queue's replayCommand). */
 const PAD_MS = 800;
 
-function Marker({ tMs, padStart, padEnd, color, label }: { tMs: number; padStart: number; padEnd: number; color: string; label: string }) {
+function Marker({
+  tMs,
+  padStart,
+  padEnd,
+  color,
+  label,
+}: {
+  tMs: number;
+  padStart: number;
+  padEnd: number;
+  color: string;
+  label: string;
+}) {
   const percent = ((tMs - padStart) / (padEnd - padStart)) * 100;
   if (percent < 0 || percent > 100) return null;
   return (
@@ -77,9 +89,9 @@ export function EventDetail({
     setCurrentMs(Math.round(tMs));
   };
 
-  const phases = Object.entries(item.bundle.phases ?? {}).filter(([, value]) => typeof value === "number") as Array<
-    [string, number]
-  >;
+  const phases = Object.entries(item.bundle.phases ?? {}).filter(
+    ([, value]) => typeof value === "number",
+  ) as Array<[string, number]>;
 
   return (
     <div>
@@ -94,8 +106,10 @@ export function EventDetail({
         <p style={{ color: "#42505f", fontSize: 13, maxWidth: 760 }}>
           Bundle: role <strong>{item.bundle.role}</strong> · annotator {item.bundle.annotatorId} rev{" "}
           {item.bundle.revision} (confidence {item.bundle.annotatorConfidence}) ·{" "}
-          {item.bundle.analyzable ? "analyzable" : `NOT analyzable: ${item.bundle.notAnalyzableReason ?? "—"}`} ·
-          contact uncertainty {item.bundle.contactUncertainty ?? "—"}
+          {item.bundle.analyzable
+            ? "analyzable"
+            : `NOT analyzable: ${item.bundle.notAnalyzableReason ?? "—"}`}{" "}
+          · contact uncertainty {item.bundle.contactUncertainty ?? "—"}
           {item.bundle.eventNote ? <> · note: “{item.bundle.eventNote}”</> : null}
         </p>
         <video
@@ -116,26 +130,62 @@ export function EventDetail({
             onChange={(e) => seek(Number(e.target.value))}
             style={{ width: "100%", position: "absolute", top: 4, left: 0, zIndex: 2 }}
           />
-          <Marker tMs={item.windowMs.start} padStart={padStart} padEnd={padEnd} color="#15803d" label="event start" />
+          <Marker
+            tMs={item.windowMs.start}
+            padStart={padStart}
+            padEnd={padEnd}
+            color="#15803d"
+            label="event start"
+          />
           {item.contactMs !== null && (
-            <Marker tMs={item.contactMs} padStart={padStart} padEnd={padEnd} color="#b91c1c" label="contact" />
+            <Marker
+              tMs={item.contactMs}
+              padStart={padStart}
+              padEnd={padEnd}
+              color="#b91c1c"
+              label="contact"
+            />
           )}
-          <Marker tMs={item.windowMs.end} padStart={padStart} padEnd={padEnd} color="#1d4ed8" label="event end" />
+          <Marker
+            tMs={item.windowMs.end}
+            padStart={padStart}
+            padEnd={padEnd}
+            color="#1d4ed8"
+            label="event end"
+          />
           {phases.map(([name, tMs]) => (
-            <Marker key={name} tMs={tMs} padStart={padStart} padEnd={padEnd} color="#9ca3af" label={`phase: ${name}`} />
+            <Marker
+              key={name}
+              tMs={tMs}
+              padStart={padStart}
+              padEnd={padEnd}
+              color="#9ca3af"
+              label={`phase: ${name}`}
+            />
           ))}
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontFamily: "ui-sans-serif, system-ui" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+            fontFamily: "ui-sans-serif, system-ui",
+          }}
+        >
           <button onClick={() => void videoRef.current?.play()}>play</button>
           <button onClick={() => videoRef.current?.pause()}>pause</button>
           <button onClick={() => seek(currentMs - 33)}>−1f</button>
           <button onClick={() => seek(currentMs + 33)}>+1f</button>
           <button onClick={() => seek(padStart)}>⇤ window</button>
           <button onClick={() => seek(item.windowMs.start)}>event start</button>
-          {item.contactMs !== null && <button onClick={() => seek(item.contactMs!)}>contact</button>}
+          {item.contactMs !== null && (
+            <button onClick={() => seek(item.contactMs!)}>contact</button>
+          )}
           <button onClick={() => seek(item.windowMs.end)}>event end</button>
           <label>
-            <input type="checkbox" checked={loop} onChange={(e) => setLoop(e.target.checked)} /> loop event
+            <input type="checkbox" checked={loop} onChange={(e) => setLoop(e.target.checked)} />{" "}
+            loop event
           </label>
           <select value={rate} onChange={(e) => setRate(Number(e.target.value))}>
             {[0.25, 0.5, 1].map((r) => (
@@ -151,14 +201,20 @@ export function EventDetail({
         </div>
         <p style={{ ...mono, color: "#6b7a75" }}>
           markers: <span style={{ color: "#15803d" }}>■ event start</span> ·{" "}
-          <span style={{ color: "#b91c1c" }}>■ contact</span> · <span style={{ color: "#1d4ed8" }}>■ event end</span> ·{" "}
+          <span style={{ color: "#b91c1c" }}>■ contact</span> ·{" "}
+          <span style={{ color: "#1d4ed8" }}>■ event end</span> ·{" "}
           <span style={{ color: "#9ca3af" }}>■ annotated phases</span> — CLI replay:{" "}
           <code>{item.replayCommand}</code>
         </p>
       </section>
       <AssignmentPanel data={data} item={item} onSaved={onPersisted} />
       <ReviewsPanel data={data} item={item} />
-      <ReviewForm data={data} item={item} getCurrentMs={() => currentMs} onPersisted={onPersisted} />
+      <ReviewForm
+        data={data}
+        item={item}
+        getCurrentMs={() => currentMs}
+        onPersisted={onPersisted}
+      />
     </div>
   );
 }

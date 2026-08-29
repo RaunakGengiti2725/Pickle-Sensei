@@ -51,10 +51,7 @@
     "annotations": "Event bounds and ownership are copied unchanged from existing eventLabels entries in committed non-held-out bundle annotations.",
     "visualReview": "Each label was assigned after frame-strip review of the corresponding existing event window. Exact L3 is withheld where direction, spin, contact state, or tactical role is not visually defensible.",
     "annotatorId": "devin-visual-v2-waveC",
-    "heldOutExcluded": [
-      "wm-dink-01",
-      "afn-vic-rally1"
-    ]
+    "heldOutExcluded": ["wm-dink-01", "afn-vic-rally1"]
   },
   "honestNegatives": [
     "Canonical datasets/paddle-bench/runs report directories are absent on Linux, so no model prediction accuracy or confusion numbers were measured against these 22 gold labels.",

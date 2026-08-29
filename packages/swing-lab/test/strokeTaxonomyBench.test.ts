@@ -35,7 +35,13 @@ function goldLabel(overrides: Partial<StrokeGoldLabel>): StrokeGoldLabel {
 }
 
 function prediction(overrides: Partial<StrokePredictionLike>): StrokePredictionLike {
-  return { label: "BACKHAND_VOLLEY", leaf: "BACKHAND_VOLLEY", taxonomyDepth: 3, confidence: 0.7, ...overrides };
+  return {
+    label: "BACKHAND_VOLLEY",
+    leaf: "BACKHAND_VOLLEY",
+    taxonomyDepth: 3,
+    confidence: 0.7,
+    ...overrides,
+  };
 }
 
 describe("v3 → v2 canonical taxonomy mapping", () => {
@@ -196,7 +202,9 @@ describe("stroke gold file", () => {
     };
     const problems = validateStrokeGoldFile(bad);
     expect(problems.some((problem) => problem.includes("not in family"))).toBe(true);
-    expect(problems.some((problem) => problem.includes("l3 committed while l1 unknown"))).toBe(true);
+    expect(problems.some((problem) => problem.includes("l3 committed while l1 unknown"))).toBe(
+      true,
+    );
     expect(problems.some((problem) => problem.includes("invalid l3"))).toBe(true);
   });
 

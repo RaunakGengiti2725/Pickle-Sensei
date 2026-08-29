@@ -13,12 +13,12 @@ Same-timestamp dual frames = frames with >=1 visible `target` point AND >=1
 visible `other` point at the same tMs, aggregated across all annotator files
 per bundle.
 
-| metric | pre-waveC | post-waveC |
-| --- | --- | --- |
-| sidecar verdict entries | 70 | 100 |
-| same-timestamp target+other dual frames | 30 | 50 |
-| visible target points (annotation files) | 65 | 85 |
-| visible other points (annotation files) | 81 | 140 |
+| metric                                   | pre-waveC | post-waveC |
+| ---------------------------------------- | --------- | ---------- |
+| sidecar verdict entries                  | 70        | 100        |
+| same-timestamp target+other dual frames  | 30        | 50         |
+| visible target points (annotation files) | 65        | 85         |
+| visible other points (annotation files)  | 81        | 140        |
 
 (STATUS_BOARD's "78 target / 83 other boxes" uses a different counting than
 either row above — do not conflate the denominators. Sidecar per-box verdicts:

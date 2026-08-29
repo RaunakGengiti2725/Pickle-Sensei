@@ -47,25 +47,41 @@ function isScope(value: unknown): value is ConsentScope {
 
 function parseStatus(payload: unknown): ConsentStatus {
   if (!isRecord(payload) || !Array.isArray(payload['scopes'])) {
-    throw new ConsentApiError('The consent server returned an invalid response.');
+    throw new ConsentApiError(
+      'The consent server returned an invalid response.',
+    );
   }
   const subjectPseudonym = payload['subjectPseudonym'];
   if (!(subjectPseudonym === null || typeof subjectPseudonym === 'string')) {
-    throw new ConsentApiError('The consent server returned an invalid response.');
+    throw new ConsentApiError(
+      'The consent server returned an invalid response.',
+    );
   }
   const scopes = payload['scopes'].map((row): ConsentScopeStatus => {
-    if (!isRecord(row) || !isScope(row['scope']) || typeof row['active'] !== 'boolean') {
-      throw new ConsentApiError('The consent server returned an invalid response.');
+    if (
+      !isRecord(row) ||
+      !isScope(row['scope']) ||
+      typeof row['active'] !== 'boolean'
+    ) {
+      throw new ConsentApiError(
+        'The consent server returned an invalid response.',
+      );
     }
     const lastAction = row['lastAction'];
     const lastActionAt = row['lastActionAt'];
     const consentVersion = row['consentVersion'];
     if (
-      !(lastAction === null || lastAction === 'granted' || lastAction === 'withdrawn') ||
+      !(
+        lastAction === null ||
+        lastAction === 'granted' ||
+        lastAction === 'withdrawn'
+      ) ||
       !(lastActionAt === null || typeof lastActionAt === 'string') ||
       !(consentVersion === null || typeof consentVersion === 'string')
     ) {
-      throw new ConsentApiError('The consent server returned an invalid response.');
+      throw new ConsentApiError(
+        'The consent server returned an invalid response.',
+      );
     }
     return {
       scope: row['scope'],

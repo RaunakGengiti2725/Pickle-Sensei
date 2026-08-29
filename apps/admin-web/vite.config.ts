@@ -1,4 +1,12 @@
-import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  createReadStream,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
@@ -53,7 +61,8 @@ function serveRepoFile(req: IncomingMessage, res: ServerResponse, urlPath: strin
   const decoded = decodeURIComponent(urlPath.split("?")[0] ?? "");
   const filePath = normalize(join(REPO_ROOT, decoded));
   const allowed =
-    filePath.startsWith(join(REPO_ROOT, "datasets") + "/") || filePath === join(REPO_ROOT, "docs/COACHING.md");
+    filePath.startsWith(join(REPO_ROOT, "datasets") + "/") ||
+    filePath === join(REPO_ROOT, "docs/COACHING.md");
   if (!allowed || !existsSync(filePath) || !statSync(filePath).isFile()) {
     sendJson(res, 404, { message: `not found: ${decoded}` });
     return;
@@ -80,7 +89,11 @@ function serveRepoFile(req: IncomingMessage, res: ServerResponse, urlPath: strin
     createReadStream(filePath, { start, end }).pipe(res);
     return;
   }
-  res.writeHead(200, { "content-type": contentType, "content-length": size, "accept-ranges": "bytes" });
+  res.writeHead(200, {
+    "content-type": contentType,
+    "content-length": size,
+    "accept-ranges": "bytes",
+  });
   createReadStream(filePath).pipe(res);
 }
 
@@ -103,8 +116,12 @@ function readBody(req: IncomingMessage, limitBytes: number): Promise<string> {
 }
 
 function loadValidationContext(): ValidationContext {
-  const queue = JSON.parse(readFileSync(join(COACH_REVIEW_DIR, "queue.json"), "utf8")) as QueueManifest;
-  const schema = JSON.parse(readFileSync(join(COACH_REVIEW_DIR, "schema.json"), "utf8")) as SchemaDescriptor;
+  const queue = JSON.parse(
+    readFileSync(join(COACH_REVIEW_DIR, "queue.json"), "utf8"),
+  ) as QueueManifest;
+  const schema = JSON.parse(
+    readFileSync(join(COACH_REVIEW_DIR, "schema.json"), "utf8"),
+  ) as SchemaDescriptor;
   const taxonomy = JSON.parse(
     readFileSync(join(COACH_REVIEW_DIR, "taxonomy/fault-taxonomy.v0-draft.json"), "utf8"),
   ) as FaultTaxonomy;
@@ -144,7 +161,9 @@ function gateIdentity(
   credentialRef: string | undefined,
 ): CoachRegistryEntry | null {
   const registry = loadRegistry();
-  const active = registry.coaches.find((coach) => coach.coachId === coachId && coach.status === "active");
+  const active = registry.coaches.find(
+    (coach) => coach.coachId === coachId && coach.status === "active",
+  );
   if (!active) {
     sendJson(res, 403, {
       message:
@@ -154,7 +173,9 @@ function gateIdentity(
     return null;
   }
   if (/synthetic/i.test(coachId ?? "") || /synthetic/i.test(credentialRef ?? "")) {
-    sendJson(res, 403, { message: "SYNTHETIC identities are dev fixtures and can never be persisted" });
+    sendJson(res, 403, {
+      message: "SYNTHETIC identities are dev fixtures and can never be persisted",
+    });
     return null;
   }
   if (credentialRef !== active.credentialRef) {
@@ -164,10 +185,17 @@ function gateIdentity(
   return active;
 }
 
-function writeAppendOnly(res: ServerResponse, filePath: string, record: unknown, publicPath: string): void {
+function writeAppendOnly(
+  res: ServerResponse,
+  filePath: string,
+  record: unknown,
+  publicPath: string,
+): void {
   mkdirSync(dirname(filePath), { recursive: true });
   if (existsSync(filePath)) {
-    sendJson(res, 409, { message: `append-only: ${publicPath} already exists and is never overwritten` });
+    sendJson(res, 409, {
+      message: `append-only: ${publicPath} already exists and is never overwritten`,
+    });
     return;
   }
   writeFileSync(filePath, JSON.stringify(record, null, 2));
@@ -181,7 +209,11 @@ function readAssignments(): AssignmentsFile {
 
 async function handleAdjudications(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method === "GET") {
-    sendJson(res, 200, readJsonDir<AdjudicationRecord>(ADJUDICATIONS_DIR).map((entry) => entry.record));
+    sendJson(
+      res,
+      200,
+      readJsonDir<AdjudicationRecord>(ADJUDICATIONS_DIR).map((entry) => entry.record),
+    );
     return;
   }
   if (req.method !== "POST") {
@@ -194,7 +226,10 @@ async function handleAdjudications(req: IncomingMessage, res: ServerResponse): P
   for (const entry of readJsonDir<CoachReview>(REVIEWS_DIR)) {
     reviewerCoachIdsByReviewId[entry.record.reviewId] = entry.record.coachId;
   }
-  const problems = validateAdjudication(record, { ...loadValidationContext(), reviewerCoachIdsByReviewId });
+  const problems = validateAdjudication(record, {
+    ...loadValidationContext(),
+    reviewerCoachIdsByReviewId,
+  });
   if (problems.length > 0) {
     sendJson(res, 422, { message: "adjudication failed schema validation", problems });
     return;
@@ -209,7 +244,11 @@ async function handleAdjudications(req: IncomingMessage, res: ServerResponse): P
 
 async function handleAmendments(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method === "GET") {
-    sendJson(res, 200, readJsonDir<ReviewAmendment>(AMENDMENTS_DIR).map((entry) => entry.record));
+    sendJson(
+      res,
+      200,
+      readJsonDir<ReviewAmendment>(AMENDMENTS_DIR).map((entry) => entry.record),
+    );
     return;
   }
   if (req.method !== "POST") {
@@ -220,7 +259,9 @@ async function handleAmendments(req: IncomingMessage, res: ServerResponse): Prom
   if (!gateIdentity(res, amendment.review?.coachId, amendment.review?.coachCredentialRef)) return;
   const basePath = join(REVIEWS_DIR, `${amendment.reviewId}.json`);
   if (!existsSync(basePath)) {
-    sendJson(res, 404, { message: `no base review ${amendment.reviewId} — amendments can only version an existing review` });
+    sendJson(res, 404, {
+      message: `no base review ${amendment.reviewId} — amendments can only version an existing review`,
+    });
     return;
   }
   const base = JSON.parse(readFileSync(basePath, "utf8")) as CoachReview;
@@ -260,7 +301,9 @@ async function handleAssignments(req: IncomingMessage, res: ServerResponse): Pro
   }
   const entry = JSON.parse(await readBody(req, 100_000)) as AssignmentEntry;
   const registry = loadRegistry();
-  const activeCoachIds = registry.coaches.filter((coach) => coach.status === "active").map((coach) => coach.coachId);
+  const activeCoachIds = registry.coaches
+    .filter((coach) => coach.status === "active")
+    .map((coach) => coach.coachId);
   if (activeCoachIds.length === 0) {
     sendJson(res, 403, {
       message: "no coach identity provisioned: assignments require ≥1 active coach in coaches.json",
@@ -278,15 +321,26 @@ async function handleAssignments(req: IncomingMessage, res: ServerResponse): Pro
   const file = readAssignments();
   const next: AssignmentsFile = {
     ...file,
-    assignments: [...file.assignments.filter((existing) => existing.queueItemId !== entry.queueItemId), entry],
+    assignments: [
+      ...file.assignments.filter((existing) => existing.queueItemId !== entry.queueItemId),
+      entry,
+    ],
   };
   writeFileSync(ASSIGNMENTS_FILE, JSON.stringify(next, null, 2));
-  sendJson(res, 201, { ok: true, message: "assignment saved", path: "datasets/coach-review/assignments.json" });
+  sendJson(res, 201, {
+    ok: true,
+    message: "assignment saved",
+    path: "datasets/coach-review/assignments.json",
+  });
 }
 
 async function handleMappingProposals(req: IncomingMessage, res: ServerResponse): Promise<void> {
   if (req.method === "GET") {
-    sendJson(res, 200, readJsonDir<DrillMappingProposal>(DRILL_MAPPINGS_DIR).map((entry) => entry.record));
+    sendJson(
+      res,
+      200,
+      readJsonDir<DrillMappingProposal>(DRILL_MAPPINGS_DIR).map((entry) => entry.record),
+    );
     return;
   }
   if (req.method !== "POST") {
@@ -327,7 +381,10 @@ function coachReviewLabPlugin(): Plugin {
       server.middlewares.use((req, res, next) => {
         void (async () => {
           const url = req.url ?? "";
-          if (req.method === "GET" && (url.startsWith("/datasets/") || url === "/docs/COACHING.md")) {
+          if (
+            req.method === "GET" &&
+            (url.startsWith("/datasets/") || url === "/docs/COACHING.md")
+          ) {
             serveRepoFile(req, res, url);
             return;
           }
@@ -388,8 +445,13 @@ function coachReviewLabPlugin(): Plugin {
             });
             return;
           }
-          if (/synthetic/i.test(review.coachId) || /synthetic/i.test(review.coachCredentialRef ?? "")) {
-            sendJson(res, 403, { message: "SYNTHETIC identities are dev fixtures and can never be persisted" });
+          if (
+            /synthetic/i.test(review.coachId) ||
+            /synthetic/i.test(review.coachCredentialRef ?? "")
+          ) {
+            sendJson(res, 403, {
+              message: "SYNTHETIC identities are dev fixtures and can never be persisted",
+            });
             return;
           }
           if (review.coachCredentialRef !== activeCoach.credentialRef) {

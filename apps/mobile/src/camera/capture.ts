@@ -200,9 +200,7 @@ export const TARGET_LOCK_PARAMS_V1 = {
 
 /** Live lock sources the shipped (D-027) acquisition can emit. */
 export type TargetLockSource =
-  | 'start_region_occupancy'
-  | 'gesture_confirmed'
-  | 'ambiguity_timeout';
+  'start_region_occupancy' | 'gesture_confirmed' | 'ambiguity_timeout';
 
 /**
  * Live target-lock instrumentation, recorded by guided capture whenever the
@@ -694,7 +692,10 @@ function isTargetLockTelemetry(
   ) {
     return false;
   }
-  if (value.ambiguityEntered === true && value.ambiguityDurationMs === undefined) {
+  if (
+    value.ambiguityEntered === true &&
+    value.ambiguityDurationMs === undefined
+  ) {
     return false;
   }
 

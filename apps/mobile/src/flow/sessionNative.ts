@@ -182,7 +182,8 @@ export function createNativeSessionAnalysisProvider(
   deps: NativeSessionAnalysisDeps,
 ): SessionEventAnalysisProvider {
   return {
-    providerId: 'session-analysis-native-1 (per-event clips via rolling recording)',
+    providerId:
+      'session-analysis-native-1 (per-event clips via rolling recording)',
     availability() {
       return { status: 'available' };
     },

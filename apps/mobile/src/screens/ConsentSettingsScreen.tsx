@@ -1,5 +1,12 @@
 import React, { useEffect } from 'react';
-import { ScrollView, StatusBar, StyleSheet, Switch, Text, View } from 'react-native';
+import {
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Card, SectionTitle } from '../design/components';
 import { Icon } from '../design/icons';
@@ -39,7 +46,9 @@ export function ConsentSettingsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <Text style={[type.hero, { color: color.ink }]}>Data & consent</Text>
-        <Text style={[type.body, { color: color.inkSoft, marginTop: space.sm }]}>
+        <Text
+          style={[type.body, { color: color.inkSoft, marginTop: space.sm }]}
+        >
           Two separate choices. Analyzing your video never opts you into
           anything else.
         </Text>
@@ -81,8 +90,8 @@ export function ConsentSettingsScreen() {
           <Text style={[type.body, styles.bodyText]}>
             Off unless you turn it on. When on, your captured stroke clips may
             be used to improve Pickle Sensei's stroke and scoring models. You
-            can turn it off at any time and new training use stops; a record
-            of your choice is kept for accountability.
+            can turn it off at any time and new training use stops; a record of
+            your choice is kept for accountability.
           </Text>
           {signedOut ? (
             <Text style={[type.caption, styles.noteText]}>

@@ -17,10 +17,7 @@ import {
  */
 
 export type ConsentAvailability =
-  | 'loading'
-  | 'ready'
-  | 'signed_out'
-  | 'unavailable';
+  'loading' | 'ready' | 'signed_out' | 'unavailable';
 
 interface ConsentState {
   availability: ConsentAvailability;
@@ -40,10 +37,9 @@ function deviceLabel(): string {
   return `${Platform.OS} ${String(Platform.Version)}`;
 }
 
-function applyStatus(status: ConsentStatus): Pick<
-  ConsentState,
-  'availability' | 'modelTrainingActive' | 'lastActionAt'
-> {
+function applyStatus(
+  status: ConsentStatus,
+): Pick<ConsentState, 'availability' | 'modelTrainingActive' | 'lastActionAt'> {
   const training = status.scopes.find(s => s.scope === 'model_training');
   return {
     availability: 'ready',

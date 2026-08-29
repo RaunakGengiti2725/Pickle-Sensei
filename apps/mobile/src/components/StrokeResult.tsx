@@ -443,11 +443,7 @@ export function StrokeResult(props: StrokeResultProps) {
       ) : null}
 
       {/* §1.2 — REPLAY card. */}
-      <ReplayCard
-        analysis={analysis}
-        record={props.record}
-        clip={props.clip}
-      />
+      <ReplayCard analysis={analysis} record={props.record} clip={props.clip} />
 
       {/* §1.3 — ONE INSIGHT: a single defensible sentence, never a tip. */}
       <Card tone="soft" style={styles.insightCard} testID="stroke-insight">

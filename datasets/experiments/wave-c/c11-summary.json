@@ -16,7 +16,12 @@
     },
     "calibrationModule": {
       "file": "packages/swing-lab/src/calibration.ts",
-      "exports": ["reliabilityBins", "expectedCalibrationError", "coverageRiskCurve", "areaUnderRiskCoverage"]
+      "exports": [
+        "reliabilityBins",
+        "expectedCalibrationError",
+        "coverageRiskCurve",
+        "areaUnderRiskCoverage"
+      ]
     },
     "coverageRiskCli": {
       "file": "packages/swing-lab/src/coverageRisk.ts",

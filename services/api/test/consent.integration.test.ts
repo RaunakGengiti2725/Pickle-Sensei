@@ -118,9 +118,7 @@ describe.skipIf(!testUrl)("consent ledger (real PostgreSQL)", () => {
       payload: { scope: "everything", consentVersion: "x" },
     });
     expect(res.statusCode).toBe(400);
-    expect((res.json() as { error: { code: string } }).error.code).toBe(
-      "validation.consent_grant",
-    );
+    expect((res.json() as { error: { code: string } }).error.code).toBe("validation.consent_grant");
   });
 
   it("grants video_analysis without touching model_training (scopes independent)", async () => {
