@@ -96,6 +96,26 @@ export interface StrokeResultHeader {
   tone: 'neutral' | 'attention';
 }
 
+function savedAnalysisHeader(analyzedShot: string | null): StrokeResultHeader {
+  return {
+    eyebrow: 'STROKE',
+    title: analyzedShot ? titleCase(analyzedShot) : 'Saved stroke',
+    subtitle: 'From your saved analysis on this device.',
+    tone: 'neutral',
+  };
+}
+
+function familyHeader(side: string): StrokeResultHeader {
+  return {
+    eyebrow: 'AUTO-DETECTED · FAMILY-LEVEL',
+    title: `${titleCase(side)} swing`,
+    subtitle:
+      'Auto-detected at family level — the exact stroke was not claimed ' +
+      'because this build cannot verify it.',
+    tone: 'neutral',
+  };
+}
+
 export function strokeResultHeader(
   record: StrokeResultEvidenceRecord | null,
   analysis: ShotAnalysis | null,
@@ -106,17 +126,12 @@ export function strokeResultHeader(
   if (!intent) {
     // Record predates the strokeIntent envelope (or only the product rating
     // row survived). No provenance is claimed that was not recorded.
-    return {
-      eyebrow: 'STROKE',
-      title: analyzedShot ? titleCase(analyzedShot) : 'Saved stroke',
-      subtitle: 'From your saved analysis on this device.',
-      tone: 'neutral',
-    };
+    return savedAnalysisHeader(analyzedShot);
   }
 
   switch (intent.resolutionBasis) {
     case 'declared': {
-      const declared = intent.declaredStroke ?? analyzedShot ?? 'stroke';
+      const declared = intent.declaredStroke;
       if (intent.disagreement) {
         return {
           eyebrow: 'DECLARED · CAMERA READ DIFFERS',
@@ -128,6 +143,9 @@ export function strokeResultHeader(
           tone: 'attention',
         };
       }
+      // A "declared" basis without a recorded declaration carries no
+      // declaration evidence — no provenance is claimed for it.
+      if (!declared) return savedAnalysisHeader(analyzedShot);
       return {
         eyebrow: 'STROKE',
         title: titleCase(declared),
@@ -136,9 +154,16 @@ export function strokeResultHeader(
       };
     }
     case 'predicted_l3': {
-      const leaf =
-        intent.predictedStroke?.leaf ??
-        (analyzedShot ? analyzedShot : 'stroke');
+      const leaf = intent.predictedStroke?.leaf ?? null;
+      if (!leaf) {
+        // No committed leaf exists: a classifier claim would be unbacked.
+        // A recorded family label supports the family framing; otherwise
+        // no auto-detection provenance is claimed at all.
+        const side = intent.predictedStroke?.label ?? null;
+        return side && side !== 'UNKNOWN'
+          ? familyHeader(side)
+          : savedAnalysisHeader(analyzedShot);
+      }
       return {
         eyebrow: 'AUTO-DETECTED',
         title: titleCase(leaf),
@@ -148,17 +173,8 @@ export function strokeResultHeader(
         tone: 'neutral',
       };
     }
-    case 'predicted_family': {
-      const side = intent.predictedStroke?.label ?? 'UNKNOWN';
-      return {
-        eyebrow: 'AUTO-DETECTED · FAMILY-LEVEL',
-        title: `${titleCase(side)} swing`,
-        subtitle:
-          'Auto-detected at family level — the exact stroke was not claimed ' +
-          'because this build cannot verify it.',
-        tone: 'neutral',
-      };
-    }
+    case 'predicted_family':
+      return familyHeader(intent.predictedStroke?.label ?? 'UNKNOWN');
     case 'abstained':
       return {
         eyebrow: 'STROKE NOT IDENTIFIED',
@@ -168,6 +184,9 @@ export function strokeResultHeader(
           'so no label was invented.',
         tone: 'attention',
       };
+    default:
+      // Stored records are unvalidated JSON: an unknown basis claims nothing.
+      return savedAnalysisHeader(analyzedShot);
   }
 }
 
@@ -602,6 +621,23 @@ export function isAbstainedResult(
     return effective.resultKind !== 'scored' || effective.overallScore === null;
   }
   return record !== null;
+}
+
+/**
+ * The technique-score section (score ring, SCORABLE pill, read confidence,
+ * priority fix, stroke map, version trace) renders ONLY when a real score
+ * exists: `resultKind === "scored"` with a non-null overallScore. A scored
+ * kind whose score is null is an abstention surface (isAbstainedResult) and
+ * must not simultaneously present a score stage.
+ */
+export function techniqueScoreSectionVisible(
+  analysis: ShotAnalysis | null,
+): analysis is ShotAnalysis & { overallScore: number } {
+  return (
+    analysis !== null &&
+    analysis.resultKind === 'scored' &&
+    analysis.overallScore !== null
+  );
 }
 
 export function abstentionLedger(input: {
