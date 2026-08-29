@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-marne-dig",
+  "annotatorId": "devin-visual-v2-waveC",
+  "createdAtIso": "2026-08-29T06:45:00.000Z",
+  "revision": 1,
+  "stroke": "unsure",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 14042,
+    "accelerationStartMs": 14125,
+    "contactMs": 14188,
+    "followThroughEndMs": 14250,
+    "recoveryEndMs": 14333
+  },
+  "contactUncertainty": "plus_minus_2",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.6,
+  "notes": "Wave C contact-only independent frame pass; event bounds identify the prior event and were not re-annotated.",
+  "history": [{ "revision": 1, "savedAtIso": "2026-08-29T06:45:00.000Z" }],
+  "eventLabels": [
+    {
+      "eventStartMs": 14042,
+      "contactMs": 14188,
+      "eventEndMs": 14333,
+      "owner": "target",
+      "annotator": "devin-visual-v2-waveC",
+      "note": "defensive forehand overhead dig; inferred from descending-to-rising ball reversal at cropped frame edge; source frames n849-n851, 14164-14198ms plus first clear outgoing n852 14214ms; contact window 14164-14214ms (3 frames), midpoint label 14188ms"
+    }
+  ]
+}

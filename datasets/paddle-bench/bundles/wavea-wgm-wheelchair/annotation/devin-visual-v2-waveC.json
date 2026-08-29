@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-wgm-wheelchair",
+  "annotatorId": "devin-visual-v2-waveC",
+  "createdAtIso": "2026-08-29T06:45:00.000Z",
+  "revision": 1,
+  "stroke": "dink",
+  "annotatedStrokeV3": "BACKHAND_DINK",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 182400,
+    "accelerationStartMs": 182500,
+    "contactMs": 182584,
+    "followThroughEndMs": 182833,
+    "recoveryEndMs": 183067
+  },
+  "contactUncertainty": "plus_minus_1",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.82,
+  "notes": "Wave C contact-only independent frame pass; event bounds identify the prior event and were not re-annotated.",
+  "history": [{ "revision": 1, "savedAtIso": "2026-08-29T06:45:00.000Z" }],
+  "eventLabels": [
+    {
+      "eventStartMs": 182400,
+      "contactMs": 182584,
+      "eventEndMs": 183067,
+      "owner": "target",
+      "annotator": "devin-visual-v2-waveC",
+      "note": "wheelchair backhand lift/dink; direct ball-paddle adjacency; source frames n5477-n5478, 182567-182600ms; contact window 182567-182600ms (1 frame at 30fps), midpoint label 182584ms"
+    }
+  ]
+}

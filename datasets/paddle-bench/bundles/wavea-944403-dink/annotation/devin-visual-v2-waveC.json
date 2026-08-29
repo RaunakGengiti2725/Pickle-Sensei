@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-944403-dink",
+  "annotatorId": "devin-visual-v2-waveC",
+  "createdAtIso": "2026-08-29T06:45:00.000Z",
+  "revision": 1,
+  "stroke": "forehand_drive",
+  "annotatedStrokeV3": "FOREHAND_DRIVE",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 20950,
+    "accelerationStartMs": 21075,
+    "contactMs": 21121,
+    "followThroughEndMs": 21292,
+    "recoveryEndMs": 21500
+  },
+  "contactUncertainty": "plus_minus_2",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.66,
+  "notes": "Wave C contact-only independent frame pass. Event bounds identify prior events and were not re-annotated. The prior 21604 contact was not reproduced: frames 21655-22072 show the same inbound ball continuing toward the near-right player before the later 22122-22139 scoop; no Wave C contact record is emitted for 21604.",
+  "history": [{ "revision": 1, "savedAtIso": "2026-08-29T06:45:00.000Z" }],
+  "eventLabels": [
+    {
+      "eventStartMs": 20125,
+      "contactMs": 20354,
+      "eventEndMs": 20700,
+      "owner": "other",
+      "annotator": "devin-visual-v2-waveC",
+      "note": "forehand scoop dink; direct ball-paddle adjacency; source frames n1219-n1221, 20337-20370ms; contact window 20337-20370ms (2 frames), midpoint label 20354ms"
+    },
+    {
+      "eventStartMs": 20700,
+      "contactMs": 20804,
+      "eventEndMs": 20950,
+      "owner": "other",
+      "annotator": "devin-visual-v2-waveC",
+      "note": "far-player forehand dink; direct at small scale; source frames n1246-n1248, 20787-20821ms; contact window 20787-20821ms (2 frames), midpoint label 20804ms"
+    },
+    {
+      "eventStartMs": 20950,
+      "contactMs": 21121,
+      "eventEndMs": 21500,
+      "owner": "target",
+      "annotator": "devin-visual-v2-waveC",
+      "note": "forehand drive; inferred from ball transit through partially occluded paddle zone; source frames n1265-n1267, 21104-21138ms; contact window 21104-21138ms (2 frames), midpoint label 21121ms"
+    },
+    {
+      "eventStartMs": 22000,
+      "contactMs": 22131,
+      "eventEndMs": 22333,
+      "owner": "other",
+      "annotator": "devin-visual-v2-waveC",
+      "note": "forehand scramble lob/scoop; direct ball on low blue paddle; source frames n1326-n1327, 22122-22139ms; contact window 22122-22139ms (1 frame), midpoint label 22131ms"
+    }
+  ]
+}

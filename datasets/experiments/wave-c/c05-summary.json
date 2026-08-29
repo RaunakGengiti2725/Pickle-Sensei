@@ -1,0 +1,266 @@
+{
+  "workstream": "C05",
+  "annotatorId": "devin-visual-v2-waveC",
+  "createdAtIso": "2026-08-29T06:55:00.000Z",
+  "scope": {
+    "includedBundles": [
+      "wavea-944403-dink",
+      "wavea-944403-smash",
+      "wavea-faead-feed",
+      "wavea-faead-rally",
+      "wavea-marne-dig",
+      "wavea-marne-serve",
+      "wavea-wgm-wheelchair",
+      "wm-volley-02"
+    ],
+    "excludedHeldOutBundles": ["wm-dink-01", "afn-vic-rally1"],
+    "heldOutFilesTouched": 0
+  },
+  "countReconciliation": {
+    "historicalWaveBReportContactCount": 7,
+    "historicalSource": "datasets/experiments/wave-b/W13-data-report.md",
+    "preWaveCCurrentFileContactRecords": 28,
+    "preWaveCDevelopmentTargetOwnerContactRecords": 18,
+    "waveCNewContactAnnotationRecords": 13,
+    "postWaveCContactAnnotationRecordsIncludingIndependentRelabels": 41,
+    "postWaveCUniqueContactEvents": 28,
+    "explanation": "The historical 7-contact report predates Wave A annotation files already present on this branch. Wave C therefore adds 13 append-only independent contact observations over existing development events; it does not claim 13 newly discovered unique strokes. Unique-event count remains 28. One prior contact is disputed below and was not copied into Wave C."
+  },
+  "method": {
+    "frameExtraction": "CFR source-frame extraction with ffmpeg select by absolute decoded frame n; timestamp computed as round(n*1000*fps_den/fps_num)",
+    "contactLabelRule": "midpoint of the smallest visually defensible source-frame window",
+    "observabilityValues": ["direct", "inferred_ball_direction_change"],
+    "eventBounds": "Existing eventStartMs/eventEndMs were retained only to identify the event; Wave C independently reviewed contact frames and did not re-annotate phase bounds.",
+    "sourceRecordings": [
+      { "recording": "rec-916657917f2b", "sha256Prefix": "916657917f2b", "fps": "60000/1001" },
+      { "recording": "rec-faead33a362c", "sha256Prefix": "faead33a362c", "fps": "24/1" },
+      { "recording": "rec-96ae65019c30", "sha256Prefix": "96ae65019c30", "fps": "60000/1001" },
+      { "recording": "rec-960a1a200d6d", "sha256Prefix": "960a1a200d6d", "fps": "30/1" },
+      { "recording": "wm-volley-02 committed clip", "fps": "25/1" }
+    ]
+  },
+  "contactAnnotations": [
+    {
+      "id": "dink-near-right-1",
+      "bundle": "wavea-944403-dink",
+      "owner": "other",
+      "strokeFamily": "forehand scoop dink",
+      "contactMs": 20354,
+      "windowFrames": [1219, 1221],
+      "windowMs": [20337, 20370],
+      "observability": "direct",
+      "priorContactMs": 20354,
+      "deltaFromPriorMs": 0
+    },
+    {
+      "id": "dink-far-return",
+      "bundle": "wavea-944403-dink",
+      "owner": "other",
+      "strokeFamily": "forehand dink",
+      "contactMs": 20804,
+      "windowFrames": [1246, 1248],
+      "windowMs": [20787, 20821],
+      "observability": "direct",
+      "priorContactMs": 20804,
+      "deltaFromPriorMs": 0
+    },
+    {
+      "id": "dink-target-drive",
+      "bundle": "wavea-944403-dink",
+      "owner": "target",
+      "strokeFamily": "forehand drive",
+      "contactMs": 21121,
+      "windowFrames": [1265, 1267],
+      "windowMs": [21104, 21138],
+      "observability": "inferred_ball_direction_change",
+      "priorContactMs": 21117,
+      "deltaFromPriorMs": 4
+    },
+    {
+      "id": "dink-near-right-scramble",
+      "bundle": "wavea-944403-dink",
+      "owner": "other",
+      "strokeFamily": "forehand scramble lob",
+      "contactMs": 22131,
+      "windowFrames": [1326, 1327],
+      "windowMs": [22122, 22139],
+      "observability": "direct",
+      "priorContactMs": 22125,
+      "deltaFromPriorMs": 6
+    },
+    {
+      "id": "smash-far-overhead",
+      "bundle": "wavea-944403-smash",
+      "owner": "other",
+      "strokeFamily": "forehand overhead",
+      "contactMs": 3946,
+      "windowFrames": [236, 237],
+      "windowMs": [3937, 3954],
+      "observability": "direct",
+      "priorContactMs": 3950,
+      "deltaFromPriorMs": -4
+    },
+    {
+      "id": "smash-target-block",
+      "bundle": "wavea-944403-smash",
+      "owner": "target",
+      "strokeFamily": "backhand block volley",
+      "contactMs": 4379,
+      "windowFrames": [262, 263],
+      "windowMs": [4371, 4388],
+      "observability": "inferred_ball_direction_change",
+      "priorContactMs": 4379,
+      "deltaFromPriorMs": 0
+    },
+    {
+      "id": "feed-target",
+      "bundle": "wavea-faead-feed",
+      "owner": "target",
+      "strokeFamily": "informal forehand feed",
+      "contactMs": 33438,
+      "windowFrames": [802, 803],
+      "windowMs": [33417, 33458],
+      "observability": "direct",
+      "priorContactMs": 33442,
+      "deltaFromPriorMs": -4
+    },
+    {
+      "id": "rally-target-high-volley",
+      "bundle": "wavea-faead-rally",
+      "owner": "target",
+      "strokeFamily": "high forehand volley",
+      "contactMs": 14021,
+      "windowFrames": [336, 337],
+      "windowMs": [14000, 14042],
+      "observability": "direct",
+      "priorContactMs": 14042,
+      "deltaFromPriorMs": -21
+    },
+    {
+      "id": "dig-target",
+      "bundle": "wavea-marne-dig",
+      "owner": "target",
+      "strokeFamily": "defensive forehand overhead dig",
+      "contactMs": 14188,
+      "windowFrames": [849, 852],
+      "windowMs": [14164, 14214],
+      "observability": "inferred_ball_direction_change",
+      "priorContactMs": 14188,
+      "deltaFromPriorMs": 0
+    },
+    {
+      "id": "serve-target",
+      "bundle": "wavea-marne-serve",
+      "owner": "target",
+      "strokeFamily": "forehand drop serve",
+      "contactMs": 34693,
+      "windowFrames": [2079, 2080],
+      "windowMs": [34685, 34701],
+      "observability": "direct",
+      "priorContactMs": 34689,
+      "deltaFromPriorMs": 4
+    },
+    {
+      "id": "wheelchair-target",
+      "bundle": "wavea-wgm-wheelchair",
+      "owner": "target",
+      "strokeFamily": "wheelchair backhand lift/dink",
+      "contactMs": 182584,
+      "windowFrames": [5477, 5478],
+      "windowMs": [182567, 182600],
+      "observability": "direct",
+      "priorContactMs": 182583,
+      "deltaFromPriorMs": 1
+    },
+    {
+      "id": "wm-far-dink",
+      "bundle": "wm-volley-02",
+      "owner": "other",
+      "strokeFamily": "forehand dink",
+      "contactMs": 6420,
+      "windowFrames": [160, 161],
+      "windowMs": [6400, 6440],
+      "observability": "inferred_ball_direction_change",
+      "priorContactMs": 6400,
+      "deltaFromPriorMs": 20
+    },
+    {
+      "id": "wm-target-volley",
+      "bundle": "wm-volley-02",
+      "owner": "target",
+      "strokeFamily": "forehand volley",
+      "contactMs": 6680,
+      "windowFrames": [167, 167],
+      "windowMs": [6680, 6680],
+      "observability": "direct",
+      "priorContactMs": 6680,
+      "deltaFromPriorMs": 0
+    }
+  ],
+  "annotationStats": {
+    "newRecords": 13,
+    "targetOwner": 8,
+    "otherOwner": 5,
+    "directlyObservable": 9,
+    "inferredFromBallDirectionChange": 4,
+    "meanAbsoluteDeltaFromPriorMs": 4.923,
+    "medianAbsoluteDeltaFromPriorMs": 4,
+    "maxAbsoluteDeltaFromPriorMs": 21
+  },
+  "blindDoubleAnnotation": {
+    "protocol": "Same annotator completed pass B from shuffled CFR sheets after intervening review of unrelated contacts, without opening the recorded pass A values. This measures intra-annotator repeatability, not inter-annotator agreement.",
+    "count": 5,
+    "records": [
+      {
+        "id": "dink-near-right-scramble",
+        "passAContactMs": 22131,
+        "passBContactMs": 22122,
+        "signedDeltaMs": -9,
+        "absoluteDeltaMs": 9
+      },
+      {
+        "id": "smash-far-overhead",
+        "passAContactMs": 3946,
+        "passBContactMs": 3954,
+        "signedDeltaMs": 8,
+        "absoluteDeltaMs": 8
+      },
+      {
+        "id": "rally-target-high-volley",
+        "passAContactMs": 14021,
+        "passBContactMs": 14042,
+        "signedDeltaMs": 21,
+        "absoluteDeltaMs": 21
+      },
+      {
+        "id": "wheelchair-target",
+        "passAContactMs": 182584,
+        "passBContactMs": 182600,
+        "signedDeltaMs": 16,
+        "absoluteDeltaMs": 16
+      },
+      {
+        "id": "wm-target-volley",
+        "passAContactMs": 6680,
+        "passBContactMs": 6680,
+        "signedDeltaMs": 0,
+        "absoluteDeltaMs": 0
+      }
+    ],
+    "meanAbsoluteDeltaMs": 10.8,
+    "medianAbsoluteDeltaMs": 9,
+    "maxAbsoluteDeltaMs": 21
+  },
+  "honestNegatives": [
+    "No held-out bundle was viewed for iteration, labeled, or modified.",
+    "No cascade was run because canonical run directories and Apple Vision pose extraction are unavailable on Linux.",
+    "The historical 7-contact baseline is stale relative to the checked-out files; Wave C does not present the existing Wave A growth as its own work.",
+    "Wave C found no defensible new unique stroke among the already reviewed windows; its 13 additions are independent contact observations on existing events.",
+    "The prior wavea-944403-dink 21604ms contact was not reproduced. CFR frames show the inbound ball continuing until the later 22122-22139ms scoop, so Wave C abstains rather than copying that label. The prior append-only record remains untouched.",
+    "Blind double annotation is intra-annotator only; independent second-person disagreement remains unmeasured."
+  ],
+  "remainingBlocked": [
+    "Full cascade regeneration requires macOS Apple Vision outputs and absent canonical run directories.",
+    "Inter-annotator agreement requires a second independent human annotator."
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wm-volley-02",
+  "annotatorId": "devin-visual-v2-waveC",
+  "createdAtIso": "2026-08-29T06:45:00.000Z",
+  "revision": 1,
+  "stroke": "volley",
+  "annotatedStrokeV3": "FOREHAND_VOLLEY",
+  "handedness": "right",
+  "analyzable": true,
+  "notAnalyzableReason": null,
+  "phases": {
+    "preparationStartMs": 5800,
+    "accelerationStartMs": 6440,
+    "contactMs": 6680,
+    "followThroughEndMs": 7050,
+    "recoveryEndMs": 7500
+  },
+  "contactUncertainty": "exact",
+  "faults": [],
+  "checkpointScores": {},
+  "overallScore": null,
+  "annotatorConfidence": 0.78,
+  "notes": "Wave C contact-only independent frame pass; event bounds identify prior events and were not re-annotated.",
+  "history": [{ "revision": 1, "savedAtIso": "2026-08-29T06:45:00.000Z" }],
+  "eventLabels": [
+    {
+      "eventStartMs": 6240,
+      "contactMs": 6420,
+      "eventEndMs": 6560,
+      "owner": "other",
+      "annotator": "devin-visual-v2-waveC",
+      "note": "far-player forehand dink; inferred through net-tape occlusion from last approach to first outgoing frame; clip frames n160-n161, 6400-6440ms; contact window 6400-6440ms (1 frame at 25fps), midpoint label 6420ms"
+    },
+    {
+      "eventStartMs": 6300,
+      "contactMs": 6680,
+      "eventEndMs": 7100,
+      "owner": "target",
+      "annotator": "devin-visual-v2-waveC",
+      "note": "near-player forehand volley; direct ball visibly on paddle face; clip frame n167 at 6680ms; contact window 6680-6680ms (exact frame), label 6680ms"
+    }
+  ]
+}
