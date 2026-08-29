@@ -176,7 +176,10 @@ def frame_iter(
             # frames here because the pipe closed before the first frame).
             args += ["-vf", ",".join(vf), "-vsync", "vfr"]
     args += ["-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
-    proc = subprocess.Popen(args, stdout=subprocess.PIPE)
+    # stdin=DEVNULL: ffmpeg reads inherited stdin for interactive commands and
+    # would otherwise consume queued serve-mode request lines off the shared
+    # protocol stdin (losing the request and hanging its client).
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL)
     frame_bytes = out_w * out_h * 3
     index = 0
     assert proc.stdout is not None
@@ -428,7 +431,9 @@ def decode_frames_at(video: str, frame_indices: list[int], width: int, height: i
         "-frames:v", str(len(wanted)),
         "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
     ]
-    proc = subprocess.Popen(args, stdout=subprocess.PIPE)
+    # stdin=DEVNULL: see decode path above — never let ffmpeg read the
+    # serve-mode protocol stdin.
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stdin=subprocess.DEVNULL)
     frame_bytes = width * height * 3
     assert proc.stdout is not None
     position = 0
