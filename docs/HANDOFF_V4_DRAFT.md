@@ -111,8 +111,9 @@ run end:     5/5    3/5    5/5     5/5    2/5      4/5    3/5      2/5      2/5
   (`datasets/experiments/wave-b/W9-summary.json`, `W9-cascade-stroke-verdict.json`).
   Mobile port `strokeHeuristicLite` still v1 — sync follow-up open (D-036 text).
 - Stroke taxonomy bench (`pickleball-taxonomy-v2` gold contract, L1/L2/L3 scoring)
-  shipped; **22 stroke gold labels** committed in `datasets/paddle-bench/stroke-gold.json`
-  (recounted); further gold BLOCKED_EXTERNAL on footage/Mac loop
+  shipped; **29 stroke gold labels / 11 cases** committed in
+  `datasets/paddle-bench/stroke-gold.json` (e25 recount at head, post D13; was 22 at
+  d4-12); further gold BLOCKED_EXTERNAL on footage/Mac loop
   (`datasets/experiments/wave-c/c18-stroke-taxonomy-labels-summary.json`).
 
 ### 2.7 Product (mobile)
@@ -159,7 +160,9 @@ run end:     5/5    3/5    5/5     5/5    2/5      4/5    3/5      2/5      2/5
 - Footage: 6 new rights-cleared 60s clips committed under
   `datasets/pickleball/fresh-candidates/` (label-blind fresh holdout candidates), 4
   unknown-rights items quarantined (`datasets/experiments/wave-c/c16-data-acquisition-summary.json`).
-  NOTE: `docs/STATUS_BOARD.md` Wave C addendum says "1 new CC-licensed candidate" — see §7.
+  NOTE: `docs/STATUS_BOARD.md` Wave C row C16 has been corrected to the 6-clip count
+  (e25 SUSPECT-3); fresh-candidate pool at head is 8 clips (C16's 6 + wave-d2's 2 voa-\*),
+  plus 7 more acquired in wave-e e22 pending intake.
 - Coach program: infra 100% complete, 0 real reviews, recruitment BLOCKED_EXTERNAL
   (`datasets/experiments/wave-c/c14-coach-portal-summary.json`, `docs/COACHING.md`).
 - Claim gate: FAIL — approved external language unchanged: "Pickle Sensei is still
@@ -202,26 +205,32 @@ From `docs/STATUS_BOARD.md` Wave C addendum blocker 4 + per-summary notes:
 
 ## 5. LABEL INVENTORY (RECOUNTED PROGRAMMATICALLY, 2026-08-29)
 
-Recount script output committed at `datasets/experiments/wave-d4/d4-12-summary.json`.
+Recount script output committed at `datasets/experiments/wave-d4/d4-12-summary.json`
+(valid at commit 19561b0, pre-wave-D-integration merge order). A post-integration
+recount at head is committed at `datasets/experiments/wave-e/e25-docs-evidence-pack.json`;
+its values are shown in the "at head (e25)" column and supersede the d4-12 column
+where they differ.
 Counted from `datasets/ta-bench/cases.json`,
 `datasets/paddle-bench/bundles/*/annotation/*.json`,
 `datasets/paddle-bench/stroke-gold.json`,
 `datasets/paddle-bench/ownership-review/ownership-review.json`.
 
-| inventory                                       | recounted value                                                                        |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------- |
-| TA cases (total pool / verified / dev / locked) | 301 / **59** / 54 / 5                                                                  |
-| Event label records (all annotation files)      | **47** (29 target / 18 other); 44 carry contactMs                                      |
-| Unique contact events (per c05 reconciliation)  | 28 (41 contact annotation records incl. independent relabels)                          |
-| Ball gold frame labels                          | **60** (47 visible / 4 uncertain / 5 not_visible / 4 occluded); 37 with occlusionState |
-| Paddle frames: target / other                   | 102 / 142                                                                              |
-| Ownership sidecar verdict entries               | 100 (`ownership-review/README.md`: dual frames 30→50 pre/post Wave C)                  |
-| Same-tMs target+other dual frames (recount)     | 50                                                                                     |
-| Stroke gold labels (pickleball-taxonomy-v2)     | 22                                                                                     |
+| inventory                                       | d4-12 (pre-D merge)                                                                    | at head (e25)                                                                 |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| TA cases (total pool / verified / dev / locked) | 301 / **59** / 54 / 5                                                                  | 301 / 59 / 54 / 5                                                             |
+| Event label records (all annotation files)      | **47** (29 target / 18 other); 44 carry contactMs                                      | **62** (39 target / 23 other); 59 with contactMs; 57 excluding held-out       |
+| Unique contact events (per c05 reconciliation)  | 28 (41 contact annotation records incl. independent relabels)                          | 28 + D04 additions (see `wave-d/d04-contact-gold-scale-summary.json`)         |
+| Ball gold frame labels                          | **60** (47 visible / 4 uncertain / 5 not_visible / 4 occluded); 37 with occlusionState | **103** (86 / 6 / 5 / 6); 78 with occlusionState                              |
+| Paddle frames: target / other                   | 102 / 142                                                                              | 102 / 142 (records); visible-point basis 85 / 140 per ownership-review README |
+| Ownership sidecar verdict entries               | 100 (`ownership-review/README.md`: dual frames 30→50 pre/post Wave C)                  | 100; dual frames 50                                                           |
+| Same-tMs target+other dual frames (recount)     | 50                                                                                     | 50                                                                            |
+| Stroke gold labels (pickleball-taxonomy-v2)     | 22                                                                                     | **29** labels / 11 cases (post D13)                                           |
 
 Denominator warning (from `datasets/paddle-bench/ownership-review/README.md`):
-HANDOFF_V3 §3's "target boxes 78, other 83" uses a different counting basis than either
-the annotation-file point counts or the sidecar verdict counts — never conflate them.
+HANDOFF_V3 §3's "target boxes 78, other 83" matches no committed artifact at head and is
+retired (e25 SUSPECT-2). Use the visible-point basis (85/140) as the primary ownership
+basis and cite the record basis (102/142) and sidecar verdicts (100) only as
+cross-references — never conflate the bases.
 
 ## 6. CONTRACT VERSIONS CURRENTLY LIVE (grep-verified on this branch)
 

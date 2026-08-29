@@ -61,8 +61,8 @@ invariant-repair regen of wm-dink-01 with unchanged verdict).
 
 # WAVE C ADDENDUM (2026-08-29, Linux integration)
 
-18 parallel workstreams (C01–C18) ran on Linux boxes; 17 branches merged into one
-integration branch (C03 ownership-label scaling still in flight — lands separately).
+18 parallel workstreams (C01–C18) ran on Linux boxes; 18/18 branches merged into one
+integration branch.
 Per-workstream evidence: `datasets/experiments/wave-c/*-summary.json`.
 
 MEASUREMENT BOUNDARY (unchanged): canonical run dirs are gitignored/absent on Linux and pose
@@ -76,7 +76,7 @@ this fleet. The cascade table above remains the latest measured truth (Mac, 2026
 | --- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
 | C01 | detector timestamp alignment fix                                               | root cause + alignment test suite (`tools/paddle-lab/test_timestamp_alignment.py`)                | GREEN (fix) · cascade effect unmeasured (Mac)      |
 | C02 | edge-on crop recovery productionized                                           | behind `--crop-recovery` (OFF); FP-family admission gates; 264-line test file                     | GREEN (flagged) · held-out effect unmeasured       |
-| C03 | ownership label scaling                                                        | still running                                                                                     | IN FLIGHT                                          |
+| C03 | ownership label scaling                                                        | 30 multi-paddle ownership frames across 6 bundles (20 visible target / 59 other / 6 ambiguous / 4 occluded-target); dual frames 30→50; `wave-c/c03-summary.json` | GREEN (labels)                                     |
 | C04 | ball gold 22→60 (+38 labels, occlusion states)                                 | visually verified, append-only; `occlusionState` added to schema                                  | GREEN (labels)                                     |
 | C05 | contact gold +13 independent contact observations                              | intra-annotator blind double pass; 1 prior contact disputed (disclosed, not deleted)              | GREEN (labels)                                     |
 | C06 | event taxonomy: 5/5 W14 adjudications closed, guide v1, 34/34 QA (1 flag)      | `ml/annotations/ta-ownership-annotation-guide-v1.md`                                              | GREEN                                              |
@@ -89,7 +89,7 @@ this fleet. The cascade table above remains the latest measured truth (Mac, 2026
 | C13 | capture guidance + uncertainty UX                                              | mobile screens + tests; Mobbin MCP unavailable (disclosed, no fabricated research)                | GREEN (UI)                                         |
 | C14 | coach portal completion audit                                                  | 50/50 tests, typecheck clean                                                                      | GREEN (infra) · BLOCKED_EXTERNAL (0 coach reviews) |
 | C15 | OOD gates + property/fuzz tests + corpus invariant check                       | fuzz found 1 real bug (fixed); corpus check 299 files, 0 violations                               | GREEN                                              |
-| C16 | rights-cleared footage acquisition                                             | 1 new CC-licensed candidate accepted; search log kept; DVIDS remains exhausted                    | ORANGE (supply still thin)                         |
+| C16 | rights-cleared footage acquisition                                             | 6 accepted CC BY 3.0 clips (181.08 MB, 360 s) committed + 4 unknown-rights items quarantined; DVIDS remains exhausted | ORANGE (supply still thin)                         |
 | C17 | acquire-v4 tap instrumentation                                                 | capture.ts tap plumbing + tests; D-027 gate still not decidable here                              | GREEN (instrument)                                 |
 | C18 | stroke taxonomy bench + gold scaling                                           | bench harness + tests; new stroke gold requires footage/Mac loop                                  | GREEN (harness) · BLOCKED_EXTERNAL (labels)        |
 
@@ -104,5 +104,87 @@ from pnpm workspace test run here) — re-verify with the mobile suite on Mac.
 
 1. Physical iPhone hardware (all latency numbers are Mac).
 2. Qualified coach recruitment (0 real reviews; infrastructure complete).
-3. Footage supply: one new CC candidate (C16), otherwise exhausted.
+3. Footage supply: 6 CC clips accepted in C16 (+2 in Wave D2, +7 in Wave E e22), otherwise exhausted.
 4. Mac re-measure required to claim any cascade movement from C01/C02/C07/C08/C09.
+
+---
+
+# WAVES D / D2 / D3 / D4 ADDENDUM (2026-08-29, Linux, 50 workstreams)
+
+Four concurrent waves ran after Wave C integration. Per-workstream evidence:
+`datasets/experiments/wave-d/*.json`, `wave-d2/*.json`, `wave-d3/*.json`, `wave-d4/*.json`.
+MEASUREMENT BOUNDARY unchanged: no Mac/Apple Vision/iPhone; no cascade re-measure claimed.
+
+Highlights (all artifact-backed, dated 2026-08-29):
+
+- Wave D (14): D04 contact gold +15 eventLabel records; D08 real-OOD corpus grown and
+  measured; D09 warm-worker hardening (crash/restart/fallback, LINUX-CPU only); D10
+  single-command Mac bench harness prepared (BLOCKED_EXTERNAL to run); D13 stroke gold
+  29 labels / 11 cases.
+- Wave D2 (12): lawful acquisition from NARA/Commons/.mil-gov (2 voa clips accepted;
+  unknown-rights quarantined); D2-04 blind ownership audit; D2-05 blind contact audit
+  (6/7 re-derivable labels within 0.5 frame, median Δ 0.1 frame, 4 disputes preserved);
+  D2-09 data-integrity audit.
+- Wave D3 (12): red teams across target, ownership, phase, session, OOD gate, API errors;
+  D3-05 phase red team measured anchor-free coverage; findings preserved as pinned tests.
+- Wave D4 (12): S4 stress replay, modality learning curves, ROI bench, pose-derivative
+  cache (D4-05, byte-equal), result/try-again state audit, HANDOFF_V4 draft + decision-log
+  reconciliation (D4-12).
+
+Event-label denominators at head (e25 recount): 62 annotation records (39 target; 59 with
+contactMs; 57 excluding the 2 held-out cases' 5 pre-existing records); unique contact
+events are a separate denominator (28 per c05 reconciliation + D04 additions). The bare
+"34" from Wave B is retired. Ball gold: 103 frames (86 visible / 6 uncertain / 5 not
+visible / 6 occluded), 78 with occlusionState. Ownership bases: annotation records
+102 target / 142 other; visible points 85/140 (README basis); sidecar verdicts 100;
+dual frames 50. The old "78/83" matches no committed artifact and is retired.
+
+---
+
+# WAVE E ADDENDUM (2026-08-29, Linux, 26 workflow workstreams)
+
+All 26 branches merged into the integration branch. Per-workstream evidence:
+`datasets/experiments/wave-e/*-summary.json`. Same measurement boundary (no Mac/iPhone).
+
+| ID  | Workstream                       | Result (Linux, artifact-backed)                                                                    | State             |
+| --- | -------------------------------- | --------------------------------------------------------------------------------------------------- | ----------------- |
+| e01 | event recall                     | 12/16 recall; mean successful overlap .839; no false proposals in explicit non-event spans          | GREEN (measured)  |
+| e02 | contact transfer                 | committed-gold replay metrics                                                                        | GREEN             |
+| e03 | stroke L1/L2                     | stroke-heuristic-4 absence-of-measurement gates; resolved E10-F3 (near-profile now abstains)        | GREEN             |
+| e04 | phase anchor-free                | committed-gold coverage 8/18 → 12/18 (v2.2 → v2.3), invariants intact                              | GREEN             |
+| e05 | ownership adjudication           | D2-04 auditor-upheld corrections applied as versioned appends                                        | GREEN             |
+| e06 | cascade replay                   | canonical strict-cascade replay needs Mac run dirs                                                   | BLOCKED_EXTERNAL  |
+| e07 | silent failure                   | retro + coverage/risk artifacts                                                                      | GREEN             |
+| e08 | rt target fresh                  | fresh-holdout guard added; attack did not find a new break                                          | SCIENTIFIC_NEG.   |
+| e09 | rt contact adversarial           | adversarial findings preserved                                                                       | ORANGE            |
+| e10 | rt stroke ambiguous              | 5 confidently-wrong findings pinned (F3 since resolved by e03); defenses regression-guarded         | GREEN (findings)  |
+| e11 | OOD expansion                    | corpus 9 → 20 items (squash, racquetball, derived probes); frame-analyzability-3                   | GREEN             |
+| e12 | ball hard slices                 | hard-slice labels + findings                                                                         | ORANGE            |
+| e13 | event bounds eval                | bounds evaluation report                                                                             | GREEN             |
+| e14 | learning curves                  | first curves for ball + target-acquisition; deterministic refresh script                             | GREEN             |
+| e15 | envelope thresholds              | corpus re-derivation could not validate v0.1 thresholds — negative preserved                        | SCIENTIFIC_NEG.   |
+| e16 | session scheduler                | scheduler + sim + 47 tests (drain, retry, suspend semantics)                                        | GREEN             |
+| e17 | latency e2e                      | 96 Linux CPU runs; iPhone latency remains BLOCKED_EXTERNAL                                          | GREEN (Linux)     |
+| e18 | warm worker soak                 | committed soak harness + real/fake soak reports (LINUX-CPU NOT-MAC)                                 | GREEN (Linux)     |
+| e19 | result state props               | property tests over Result state machine                                                             | GREEN             |
+| e20 | voice robustness                 | 73-utterance bounded eval; v2 accuracy 100%, false activation 0% (bounded scope stated)             | GREEN (bounded)   |
+| e21 | consent e2e                      | full Postgres lifecycle; append-only enforcement verified via rejected mutations                    | GREEN             |
+| e22 | acquisition wave2                | 7 lawful clips acquired with rights/provenance; AP-watermarked footage excluded                     | GREEN             |
+| e23 | active learning queue            | label queue v3                                                                                       | GREEN             |
+| e24 | data integrity                   | corpus integrity audit                                                                               | GREEN             |
+| e25 | docs evidence pack               | claim→artifact reconciliation; corrections applied to this board (see above)                       | GREEN             |
+| e26 | dead code audit                  | dead-code findings with regression coverage                                                          | GREEN             |
+
+## GATES AT WAVE E INTEGRATION (Linux, commit cd4c0bb)
+
+typecheck all packages green · root test suite green (swing-lab 536 passed | 4 skipped,
+analysis-pipeline 47, all other packages green) · lint 0 errors · format:check clean ·
+mobile tsc 0 errors · PR #1 CI verify + mobile green.
+
+## EXTERNAL BLOCKERS (unchanged)
+
+1. Physical iPhone hardware (latency evidence).
+2. Mac/Apple Vision (pose extraction, canonical strict-cascade re-measure, Swift builds).
+3. Qualified coach recruitment (0 real reviews; technique/fault/severity/drill stay locked).
+4. Additional lawful footage beyond the acquired CC/gov pool.
+5. Mobbin MCP unavailable in this environment (disclosed; no fabricated research).
