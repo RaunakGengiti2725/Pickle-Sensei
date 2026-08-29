@@ -56,8 +56,8 @@ import type { TrackedPaddleObservation } from "./paddleTracker.js";
  *     (dev failure: the visible non-striking arm was committed as a
  *     forehand while the actual striking arm was never measured).
  *
- * stroke-heuristic-5 (this file) closes the ball-less-swing hole found by
- * red-teaming ambiguous motion (E10-F1, strokeHeuristicAmbiguous.redteam):
+ * stroke-heuristic-5 (this file) closes two holes found by red-teaming
+ * ambiguous motion (E10-F1 and E10-F2, strokeHeuristicAmbiguous.redteam):
  *
  *  7. CONTACT-EVIDENCE CAP — when the reference is only the isolated
  *     event's motion peak (no contact event was ever measured) AND no
@@ -67,7 +67,14 @@ import type { TrackedPaddleObservation } from "./paddleTracker.js";
  *     the commitment is treated as degraded-trust — the degraded
  *     abstention band applies and the confidence is capped at
  *     DEGRADED_CONFIDENCE_CAP instead of the 0.8 ceiling.
- *
+ *  8. HANDEDNESS CROSS-CHECK — the side decision assumes the paddle is in
+ *     the declared hand, but the declaration is player-supplied context,
+ *     not evidence. When the wrist measured to carry the swing sits on the
+ *     OPPOSITE side and the travel comparison is verifiable and decisive,
+ *     the declaration is contradicted by measurement and the side call
+ *     would be mirrored — abstain. A non-decisive contradiction (sparse
+ *     rival measurement or comparable travels, e.g. a two-handed backhand)
+ *     degrades the side confidence instead.
  * declared / annotated / predicted stroke stay separate records everywhere.
  */
 
@@ -147,6 +154,15 @@ export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-5 (uncalibrated)";
  *   produced a wrong side commit; the smallest legitimate reference in the
  *   same bench measured 65%. 0.6 separates them; the median needs ≥5
  *   measured torso frames to be meaningful.
+ * HANDEDNESS_CONTRADICTION_TRAVEL_RATIO (stroke-heuristic-5) — a declared-
+ *   handedness contradiction is DECISIVE only when the off-declaration
+ *   wrist's ±200ms travel is at least this multiple of the declared wrist's
+ *   travel, with both wrists measured in ≥MIN_TRAVEL_SAMPLE_FRAMES frames.
+ *   One-armed swings measure extreme ratios (the E10-F2 fixture measures
+ *   0.471u vs 0.000u rival over 25 frames each; wave-a bench L1/L2 outcomes
+ *   are unchanged by this gate); a two-handed backhand moves both wrists
+ *   together (ratio ≈1) and must NOT abstain. 1.5 is a conservative
+ *   red-team floor, not a calibrated statistic.
  * TORSO_MIN_EXTENT — normalized image units. Real torsos measure ≈0.12–0.24
  *   (synthetic default 0.2); below 0.04 the hip line has collapsed onto the
  *   shoulder line (e.g. chair-back occlusion) and every torso-normalized
@@ -172,6 +188,7 @@ const MIN_TRAVEL_SAMPLE_FRAMES = 5;
 const TORSO_MIN_EXTENT = 0.04;
 const TORSO_COLLAPSE_MEDIAN_RATIO = 0.6;
 const TORSO_MEDIAN_MIN_FRAMES = 5;
+const HANDEDNESS_CONTRADICTION_TRAVEL_RATIO = 1.5;
 
 export interface StrokePrediction {
   taxonomyVersion: string;
@@ -521,6 +538,33 @@ export function classifyStroke(input: {
     limitingFactors.push("ambidextrous_declared_side_unresolvable");
     return unknown(null, evidence, limitingFactors, contactPointSource, contactPointReliability);
   }
+  // ── Cross-check: declared handedness vs dominant-motion wrist (v5) ────
+  // The forehand/backhand decision below assumes the paddle is in the
+  // DECLARED hand. Declared handedness is context, not evidence: when the
+  // measured dominant-motion wrist sits on the opposite side, the premise
+  // is contradicted by measurement and the side call would be mirrored.
+  const declaredWristSide: "left" | "right" = input.handedness === "right" ? "right" : "left";
+  let handednessContradicted = false;
+  if (wristInfo.side !== declaredWristSide) {
+    evidence.push(
+      `dominant-motion wrist is ${wristInfo.side} (travel ${wristInfo.travel.toFixed(3)}u over ${wristInfo.measuredFrames} frames vs rival ${wristInfo.rivalTravel.toFixed(3)}u over ${wristInfo.rivalMeasuredFrames}) — declared ${input.handedness}-handed`,
+    );
+    const decisive =
+      wristInfo.measuredFrames >= MIN_TRAVEL_SAMPLE_FRAMES &&
+      wristInfo.rivalMeasuredFrames >= MIN_TRAVEL_SAMPLE_FRAMES &&
+      wristInfo.travel >= HANDEDNESS_CONTRADICTION_TRAVEL_RATIO * wristInfo.rivalTravel;
+    if (decisive) {
+      return unknown(
+        "declared_handedness_contradicted_by_dominant_motion_wrist",
+        evidence,
+        limitingFactors,
+        contactPointSource,
+        contactPointReliability,
+      );
+    }
+    handednessContradicted = true;
+    limitingFactors.push("declared_handedness_unconfirmed_by_dominant_motion_wrist");
+  }
   // Facing sign: rear view keeps anatomical right on image right (+1);
   // front view mirrors it (-1).
   const facing = rightShoulder.x >= leftShoulder.x ? 1 : -1;
@@ -558,7 +602,8 @@ export function classifyStroke(input: {
     );
     return unknown(null, evidence, limitingFactors, contactPointSource, contactPointReliability);
   }
-  const sideConfidenceCap = sideTrustDegraded ? DEGRADED_CONFIDENCE_CAP : 0.8;
+  const sideConfidenceCap =
+    sideTrustDegraded || handednessContradicted ? DEGRADED_CONFIDENCE_CAP : 0.8;
   if (contactPointReliability === "degraded") {
     limitingFactors.push("contact_point_degraded_confidence_capped");
   }
@@ -677,6 +722,7 @@ function dominantWristInfo(
   visibility: number;
   travel: number;
   measuredFrames: number;
+  rivalTravel: number;
   rivalMeasuredFrames: number;
 } {
   const nearby = frames.filter((frame) => Math.abs(frame.timestampMs - contactMs) <= 200);
@@ -707,6 +753,7 @@ function dominantWristInfo(
     visibility: mark?.visibility ?? 0,
     travel: travel[chosen],
     measuredFrames: measured[chosen],
+    rivalTravel: travel[rival],
     rivalMeasuredFrames: measured[rival],
   };
 }

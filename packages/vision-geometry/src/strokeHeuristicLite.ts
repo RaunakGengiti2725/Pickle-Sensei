@@ -32,14 +32,21 @@ import { toLegacyPoseFrames, type PoseSequence } from "@pickle/swing-domain";
  * (a walk-through, an aborted/checked swing, a static reach) and degenerate
  * torso normalization must abstain instead of committing an identity.
  *
- * stroke-heuristic-3.1 ports swing-lab's stroke-heuristic-5 CONTACT-EVIDENCE
- * CAP (E10-F1): when the reference is only the isolated event's motion peak
- * (no contact event was ever measured) AND no plausible paddle point
- * corroborates a contact, nothing in the input distinguishes the motion
- * from a ball-less swing — the side commitment is treated as degraded-trust
- * (degraded abstention band + DEGRADED_CONFIDENCE_CAP instead of the 0.8
- * ceiling). The swing-lab stroke-heuristic-4 absence-of-measurement gates
- * are still NOT ported (tracked separately).
+ * stroke-heuristic-3.1 ports swing-lab's stroke-heuristic-5 additions in
+ * lockstep:
+ *  - CONTACT-EVIDENCE CAP (E10-F1): when the reference is only the isolated
+ *    event's motion peak (no contact event was ever measured) AND no
+ *    plausible paddle point corroborates a contact, nothing in the input
+ *    distinguishes the motion from a ball-less swing — the side commitment
+ *    is treated as degraded-trust (degraded abstention band +
+ *    DEGRADED_CONFIDENCE_CAP instead of the 0.8 ceiling).
+ *  - HANDEDNESS CROSS-CHECK (E10-F2): the side decision assumes the paddle
+ *    is in the declared hand, but the declaration is player-supplied
+ *    context, not evidence. A verifiable, decisive contradiction between
+ *    the measured dominant-motion wrist and the declared side abstains; a
+ *    non-decisive contradiction degrades the side confidence instead.
+ * The swing-lab stroke-heuristic-4 absence-of-measurement gates are still
+ * NOT ported (tracked separately).
  *
  * declared / annotated / predicted stroke stay separate records everywhere.
  */
@@ -113,6 +120,16 @@ export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-3.1 (uncalibrated)";
  *   measures ≈0. The gate fires only below 0.05u AND when the wrist was
  *   actually measured in ≥5 nearby frames — sparse visibility must never
  *   masquerade as stillness.
+ * HANDEDNESS_CONTRADICTION_TRAVEL_RATIO (stroke-heuristic-3.1) — a
+ *   declared-handedness contradiction is DECISIVE only when the
+ *   off-declaration wrist's ±200ms travel is at least this multiple of the
+ *   declared wrist's travel, with both wrists measured in
+ *   ≥MIN_TRAVEL_SAMPLE_FRAMES frames. One-armed swings measure extreme
+ *   ratios (the E10-F2 fixture measures 0.471u vs 0.000u rival over 25
+ *   frames each; the swing-lab wave-a bench L1/L2 outcomes are unchanged by
+ *   this gate); a two-handed backhand moves both wrists together (ratio ≈1)
+ *   and must NOT abstain. 1.5 is a conservative red-team floor, not a
+ *   calibrated statistic.
  * TORSO_MIN_EXTENT — normalized image units. Real torsos measure ≈0.12–0.24
  *   (synthetic default 0.2); below 0.04 the hip line has collapsed onto the
  *   shoulder line (e.g. chair-back occlusion) and every torso-normalized
@@ -135,6 +152,7 @@ const NON_SWING_SPEED_FLOOR = 0.25;
 const NON_SWING_TRAVEL_FLOOR = 0.05;
 const MIN_TRAVEL_SAMPLE_FRAMES = 5;
 const TORSO_MIN_EXTENT = 0.04;
+const HANDEDNESS_CONTRADICTION_TRAVEL_RATIO = 1.5;
 
 /**
  * Minimal paddle observation the heuristic actually reads. swing-lab's
@@ -471,6 +489,33 @@ export function classifyStroke(input: {
     limitingFactors.push("ambidextrous_declared_side_unresolvable");
     return unknown(null, evidence, limitingFactors, contactPointSource, contactPointReliability);
   }
+  // ── Cross-check: declared handedness vs dominant-motion wrist (3.1) ───
+  // The forehand/backhand decision below assumes the paddle is in the
+  // DECLARED hand. Declared handedness is context, not evidence: when the
+  // measured dominant-motion wrist sits on the opposite side, the premise
+  // is contradicted by measurement and the side call would be mirrored.
+  const declaredWristSide: "left" | "right" = input.handedness === "right" ? "right" : "left";
+  let handednessContradicted = false;
+  if (wristInfo.side !== declaredWristSide) {
+    evidence.push(
+      `dominant-motion wrist is ${wristInfo.side} (travel ${wristInfo.travel.toFixed(3)}u over ${wristInfo.measuredFrames} frames vs rival ${wristInfo.rivalTravel.toFixed(3)}u over ${wristInfo.rivalMeasuredFrames}) — declared ${input.handedness}-handed`,
+    );
+    const decisive =
+      wristInfo.measuredFrames >= MIN_TRAVEL_SAMPLE_FRAMES &&
+      wristInfo.rivalMeasuredFrames >= MIN_TRAVEL_SAMPLE_FRAMES &&
+      wristInfo.travel >= HANDEDNESS_CONTRADICTION_TRAVEL_RATIO * wristInfo.rivalTravel;
+    if (decisive) {
+      return unknown(
+        "declared_handedness_contradicted_by_dominant_motion_wrist",
+        evidence,
+        limitingFactors,
+        contactPointSource,
+        contactPointReliability,
+      );
+    }
+    handednessContradicted = true;
+    limitingFactors.push("declared_handedness_unconfirmed_by_dominant_motion_wrist");
+  }
   // Facing sign: rear view keeps anatomical right on image right (+1);
   // front view mirrors it (-1).
   const facing = rightShoulder.x >= leftShoulder.x ? 1 : -1;
@@ -508,7 +553,8 @@ export function classifyStroke(input: {
     );
     return unknown(null, evidence, limitingFactors, contactPointSource, contactPointReliability);
   }
-  const sideConfidenceCap = sideTrustDegraded ? DEGRADED_CONFIDENCE_CAP : 0.8;
+  const sideConfidenceCap =
+    sideTrustDegraded || handednessContradicted ? DEGRADED_CONFIDENCE_CAP : 0.8;
   if (contactPointReliability === "degraded") {
     limitingFactors.push("contact_point_degraded_confidence_capped");
   }
@@ -609,6 +655,8 @@ function dominantWristInfo(
   visibility: number;
   travel: number;
   measuredFrames: number;
+  rivalTravel: number;
+  rivalMeasuredFrames: number;
 } {
   const nearby = frames.filter((frame) => Math.abs(frame.timestampMs - contactMs) <= 200);
   const travel = { left: 0, right: 0 };
@@ -631,12 +679,15 @@ function dominantWristInfo(
   const mark = frame?.landmarks.find(
     (landmark) => landmark.name === `${chosen}_wrist` && landmark.visibility >= 0.25,
   );
+  const rival = chosen === "right" ? "left" : "right";
   return {
     side: chosen,
     point: mark ? { x: mark.x, y: mark.y } : null,
     visibility: mark?.visibility ?? 0,
     travel: travel[chosen],
     measuredFrames: measured[chosen],
+    rivalTravel: travel[rival],
+    rivalMeasuredFrames: measured[rival],
   };
 }
 
