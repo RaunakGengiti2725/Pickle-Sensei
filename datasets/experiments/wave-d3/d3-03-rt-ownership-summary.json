@@ -1,0 +1,71 @@
+{
+  "workstream": "d3-03-rt-ownership",
+  "wave": "D3 (red team)",
+  "subsystem": "paddle ownership (packages/swing-lab/src/paddleTracker.ts)",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "branch": "devin/wave-d3/d3-03-rt-ownership",
+  "createdAtIso": "2026-08-29T09:30:00Z",
+  "flag": {
+    "name": "ownershipGuard (PaddleSelectionOptions.ownershipGuard)",
+    "version": "ownership-guard-v1",
+    "default": false,
+    "note": "Default OFF preserves existing behavior exactly; all behavior changes are behind the flag."
+  },
+  "fixtures": "All adversarial fixtures are SYNTHETIC geometry (clearly labeled in packages/swing-lab/test/paddleOwnershipRedTeam.test.ts); gold replay threads synthetic tracks through COMMITTED wave-C ownership label points with REAL people.json wrist series (src/ownershipGuardBench.ts).",
+  "breaks": [
+    {
+      "id": "RT-A",
+      "scenario": "partner paddle closer than own (non-decisive margin)",
+      "break": "Other wrist ~0.89x of target wrist distance sits inside the dead zone of the decisive otherOwnershipFactor=0.85 gate; selector returns confident 'tracked' with zero risks.",
+      "status": "FIXED (behind flag)",
+      "fix": "ownership-guard-v1 abstains ('paddle_ownership_ambiguous_other_wrist_closer') whenever the other wrist is strictly closer than the target wrist but the decisive gate did not fire.",
+      "regressionTests": [
+        "RT-A cases in paddleOwnershipRedTeam.test.ts (default break locked + guarded abstention)"
+      ]
+    },
+    {
+      "id": "RT-B",
+      "scenario": "paddle handoff between players with missing other-wrist evidence",
+      "break": "Track leaves the target's hand and travels 41 observations of other-player geometry, but with no other-wrist measurements the flip segmentation cannot fire; all 41 post-handoff observations are kept as target-owned.",
+      "status": "FIXED (behind flag)",
+      "fix": "ownership-guard-v1 drops sustained (>=3) out-of-hand runs that have zero other-wrist evidence, keeping the verified 40-observation in-hand head.",
+      "regressionTests": ["RT-B cases in paddleOwnershipRedTeam.test.ts"]
+    },
+    {
+      "id": "RT-C",
+      "scenario": "target paddle fully occluded; other paddle visible in target's zone",
+      "break": "With the other player's wrists unmeasured, an other-owned paddle sitting near the target wrist is selected as confident 'tracked' with zero risks — geometrically indistinguishable from a true target paddle.",
+      "status": "OPEN (mitigated, flagged risk only)",
+      "fix": "ownership-guard-v1 attaches PADDLE_OWNERSHIP_UNVERIFIED when other players are present in the scene but other-wrist evidence covers <35% of the selected track. Full abstention here would be blanket abstention (it would also kill every true in-hand track under the same evidence conditions), which the red-team rules forbid; downstream confidence handling must consume the risk.",
+      "regressionTests": ["RT-C cases in paddleOwnershipRedTeam.test.ts"]
+    },
+    {
+      "id": "RT-D",
+      "scenario": "two paddles crossing mid-swing (straight-through and bounce)",
+      "break": "NONE FOUND — existing association follows each paddle through a straight-through crossing, and the bounce crossing produces switch events with no wrong-owner tail.",
+      "status": "NO BREAK (behavior locked with regression tests)",
+      "regressionTests": ["crossing cases in paddleOwnershipRedTeam.test.ts"]
+    }
+  ],
+  "goldCoverage": {
+    "method": "src/ownershipGuardBench.ts — dev wave-a bundles with committed devin-visual-v2-waveC-ownership.json labels; synthetic candidate tracks threaded through committed label points; real people.json wrists; hit = kept observation within 60ms and 0.05 of a label.",
+    "cases": [
+      "wavea-944403-dink",
+      "wavea-944403-smash",
+      "wavea-faead-feed",
+      "wavea-faead-rally",
+      "wavea-marne-dig"
+    ],
+    "positiveGoldTotal": 18,
+    "guardOff": { "goldKept": 14, "wrongOwnerKept": 0 },
+    "guardOn": { "goldKept": 14, "wrongOwnerKept": 0 },
+    "delta": 0,
+    "note": "Zero positive-coverage regression from the guard (no blanket abstention). The 4 uncovered gold labels fail identically with the guard OFF (sparse single/duplet labels below track eligibility; pre-existing, not guard-induced)."
+  },
+  "measurementBoundary": "Linux fleet: Apple Vision pose extraction and canonical detector cascade runs are unavailable; no cascade numbers are claimed. Gold replay uses committed labels + committed people.json only.",
+  "heldOut": "wm-dink-01 and afn-vic-rally1 were not read or used.",
+  "verification": {
+    "typecheck": "pnpm typecheck",
+    "tests": "packages/swing-lab vitest (paddleOwnershipRedTeam.test.ts 11 tests + paddleTracker.test.ts 15 tests, all green; full package suite green)"
+  }
+}

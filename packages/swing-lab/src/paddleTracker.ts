@@ -26,6 +26,33 @@ import { toLegacyPoseFrames } from "@pickle/swing-domain";
 
 export const PADDLE_TRACKER_VERSION = "paddle-track-2";
 
+/** ownership-guard-v1 (wave-D3 red team, OFF by default): tightens the
+ *  ownership verdict in three measured wrong-owner families —
+ *  (A) NEAR-OWNERSHIP DEAD ZONE: the other player's wrist is strictly
+ *      closer to the winning track than the target's, but not decisively
+ *      (otherOwnershipFactor..1.0). The un-guarded selector confidently
+ *      claims the track for the target; the guard abstains as ambiguous.
+ *  (B) EVIDENCE-GAP HANDOFF: a paddle handoff into a stretch where the
+ *      receiving player's wrists are unmeasured (occlusion/pose dropout)
+ *      cannot flip-segment — flips need other-wrist data. The guard drops
+ *      sustained no-other-evidence runs whose observations are not in the
+ *      target's hand (> handAffinityRadius) instead of claiming them.
+ *  (C) UNVERIFIED OWNERSHIP: a multi-player scene where the winning track
+ *      has (almost) no other-wrist measurements at all — ownership was
+ *      never actually tested. The verdict stands but carries a risk flag.
+ */
+export interface PaddleSelectionOptions {
+  ownershipGuard?: boolean;
+}
+export const OWNERSHIP_GUARD_VERSION = "ownership-guard-v1";
+export const OWNERSHIP_GUARD_GATES = {
+  /** (B) minimum run length of no-other-evidence observations to drop
+   *  (mirrors TRACKER_GATES.sustainedFlipRunLength). */
+  minEvidenceGapRun: 3,
+  /** (C) other-evidence coverage below this is "unverified". */
+  minOtherEvidenceCoverage: 0.35,
+} as const;
+
 /** Provenance of a paddle detection/observation. Crop-sourced detections
  *  (wrist-conditioned re-detect, crop-recovery-v1) may only EXTEND existing
  *  tracks — never start them — so they never enter selection as raw
@@ -407,7 +434,10 @@ export function selectPrimaryPaddleTrack(
   window: { startMs: number; endMs: number },
   /** Wrists of NON-target players; a paddle nearer to them is not ours. */
   otherWrists: ReturnType<typeof wristSeries> = [],
+  options: PaddleSelectionOptions = {},
 ): PaddleTrackingOutcome {
+  const guard = options.ownershipGuard === true;
+  const sceneHasOtherPlayers = otherWrists.some((entry) => entry.wrists.length > 0);
   if (candidates.length === 0) {
     return { status: "untracked", reason: "no_tracks_formed", allTracks: [], association: null };
   }
@@ -451,6 +481,24 @@ export function selectPrimaryPaddleTrack(
       // Mixed but NOTHING decisively target-owned → keep the full list and
       // let the track-level ownership test below decide (a wholly-other
       // track is rejected with the same accounting as before).
+    }
+    let evidenceGapDropped = 0;
+    if (guard && sceneHasOtherPlayers) {
+      // (B) EVIDENCE-GAP HANDOFF: flip-segmentation is blind wherever the
+      // other player's wrists are unmeasured. Sustained runs with no
+      // other-wrist evidence whose observations are NOT in the target's
+      // hand are unverifiable — drop them rather than claim them.
+      const guarded: TrackedPaddleObservation[][] = [];
+      for (const segment of keptSegments) {
+        const { kept, dropped } = dropUnverifiableRuns(segment, wrists, otherWrists);
+        evidenceGapDropped += dropped.length;
+        for (const run of dropped) {
+          switchEvents.push({ atMs: run[0]!.timestampMs, kind: "PADDLE_ASSOCIATION_SWITCH" });
+        }
+        guarded.push(...kept);
+      }
+      keptSegments = guarded.filter((segment) => segment.length > 0);
+      if (keptSegments.length === 0) keptSegments = [[]];
     }
     const observations = keptSegments.flat();
     // Wrist proximity is judged over the stroke window (falling back to the
@@ -535,6 +583,8 @@ export function selectPrimaryPaddleTrack(
       meanOtherDistance,
       otherPlayers,
       handAffinity,
+      otherEvidenceCoverage: judged.length > 0 ? otherDistances.length / judged.length : 0,
+      evidenceGapDropped,
       // FROZEN selection OBJECTIVE (an affinity-dominant rescoring was tried
       // and measured WORSE: S4 recall 0.22 -> 0.04; see
       // datasets/experiments/EXP-2026-08-28-paddle-waterfall.json). Only the
@@ -576,6 +626,28 @@ export function selectPrimaryPaddleTrack(
   association.meanOtherWristDistance = best.meanOtherDistance;
   association.selectionMargin = runnerUp && runnerUp.score > 0 ? best.score / runnerUp.score : null;
 
+  // (A) NEAR-OWNERSHIP DEAD ZONE (ownership-guard-v1): the other player's
+  // wrist is strictly closer than the target's, yet the decisive test above
+  // did not reject (margin inside otherOwnershipFactor..1.0). Confidently
+  // claiming this track picks the wrong owner in exactly the measured
+  // partner-paddle-closer-than-own family — abstain as ambiguous instead.
+  if (
+    guard &&
+    best.meanOtherDistance !== null &&
+    best.candidate.meanWristDistance !== null &&
+    best.meanOtherDistance < best.candidate.meanWristDistance
+  ) {
+    risks.push(
+      "PADDLE_OWNERSHIP_AMBIGUOUS: other player's wrist closer than target's (non-decisive margin)",
+    );
+    return {
+      status: "untracked",
+      reason: "paddle_ownership_ambiguous_other_wrist_closer (abstaining rather than guessing)",
+      allTracks: scored.map((entry) => entry.candidate),
+      association,
+    };
+  }
+
   // Ambiguity: two comparable candidates near DIFFERENT hands → abstain.
   if (
     runnerUp &&
@@ -615,6 +687,26 @@ export function selectPrimaryPaddleTrack(
       allTracks: scored.map((entry) => entry.candidate),
       association,
     };
+  }
+
+  // (C) UNVERIFIED OWNERSHIP (ownership-guard-v1): a multi-player scene in
+  // which the winning track has (almost) no other-wrist measurements —
+  // the ownership test never actually ran. The verdict stands (a paddle in
+  // the target's hand is plausibly theirs) but carries an explicit risk so
+  // downstream consumers never read it as a verified-ownership claim.
+  if (
+    guard &&
+    sceneHasOtherPlayers &&
+    best.otherEvidenceCoverage < OWNERSHIP_GUARD_GATES.minOtherEvidenceCoverage
+  ) {
+    risks.push(
+      "PADDLE_OWNERSHIP_UNVERIFIED: other players present but (almost) no other-wrist evidence over the selected track",
+    );
+  }
+  if (guard && best.evidenceGapDropped > 0) {
+    risks.push(
+      "PADDLE_OWNERSHIP_EVIDENCE_GAP: dropped sustained out-of-hand runs with no other-wrist evidence",
+    );
   }
 
   // Final per-observation heuristic confidence + nearWrist flags.
@@ -675,6 +767,55 @@ export function selectPrimaryPaddleTrack(
     allTracks: scored.map((entry) => entry.candidate),
     association,
   };
+}
+
+/** (B) helper for ownership-guard-v1: split a segment into maximal runs by
+ *  other-wrist-evidence presence; sustained no-evidence runs whose
+ *  observations are not in the target's hand are unverifiable → dropped. */
+function dropUnverifiableRuns(
+  segment: TrackedPaddleObservation[],
+  wrists: ReturnType<typeof wristSeries>,
+  otherWrists: ReturnType<typeof wristSeries>,
+): { kept: TrackedPaddleObservation[][]; dropped: TrackedPaddleObservation[][] } {
+  const kept: TrackedPaddleObservation[][] = [];
+  const dropped: TrackedPaddleObservation[][] = [];
+  let run: TrackedPaddleObservation[] = [];
+  let runHasEvidence: boolean | null = null;
+  const flush = () => {
+    if (run.length === 0) return;
+    if (runHasEvidence === false && run.length >= OWNERSHIP_GUARD_GATES.minEvidenceGapRun) {
+      const targetDistances = run.map((observation) => {
+        const nearest = nearestWrists(wrists, observation.timestampMs);
+        return nearest
+          ? Math.min(
+              ...nearest.map((wrist) =>
+                Math.hypot(wrist.x - observation.center.x, wrist.y - observation.center.y),
+              ),
+            )
+          : Infinity;
+      });
+      const meanTarget = mean(targetDistances.filter((distance) => Number.isFinite(distance)));
+      const inHand =
+        targetDistances.some((distance) => Number.isFinite(distance)) &&
+        meanTarget <= TRACKER_GATES.handAffinityRadius;
+      (inHand ? kept : dropped).push(run);
+    } else {
+      kept.push(run);
+    }
+    run = [];
+  };
+  for (const observation of segment) {
+    const hasEvidence = nearestWrists(otherWrists, observation.timestampMs) !== null;
+    if (runHasEvidence === null || hasEvidence === runHasEvidence) {
+      run.push(observation);
+    } else {
+      flush();
+      run = [observation];
+    }
+    runHasEvidence = hasEvidence;
+  }
+  flush();
+  return { kept, dropped };
 }
 
 /** A contiguous run of track observations with one wrist-ownership verdict. */

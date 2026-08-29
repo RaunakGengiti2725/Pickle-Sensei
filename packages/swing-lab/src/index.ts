@@ -37,6 +37,8 @@ export {
 } from "./playerTracker.js";
 export {
   buildPaddleTracks,
+  OWNERSHIP_GUARD_GATES,
+  OWNERSHIP_GUARD_VERSION,
   PADDLE_CONFIDENCE_MODEL,
   PADDLE_TRACKER_VERSION,
   mergePaddleTracklets,
@@ -45,6 +47,7 @@ export {
   TRACKER_GATES,
   wristSeries,
   type NormalizedBox,
+  type PaddleSelectionOptions,
   type PaddleTrackCandidate,
   type PaddleTrackingOutcome,
   type RawPaddleDetectionFile,
