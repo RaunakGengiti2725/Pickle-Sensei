@@ -4,6 +4,7 @@
   "branch": "devin/wave-f/f07-phase-remaining-six",
   "baseBranch": "devin/1787988068-wave-c-integration",
   "baseCommit": "8588ddd",
+  "commit": "d2139c4",
   "mission": "Forensically examine the 6 anchor-free phase abstentions remaining after E04 (v2.3, 12/18) and convert to answers ONLY where evidence genuinely supports it, as a versioned v2.4 contract.",
   "datasetScope": {
     "goldCases": "the 18 committed wave-a gold phase cases used by E04 / d3-05 (datasets/experiments/wave-d3/d3-05-measure-gold.ts); grouped by source clip (faead, 944403, wgm-wheelchair, sasebo, marne, dense-dink), never random-frame splits",
