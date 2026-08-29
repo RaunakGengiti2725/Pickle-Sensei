@@ -25,6 +25,13 @@ import { toLegacyPoseFrames } from "@pickle/swing-domain";
  */
 
 export const PADDLE_TRACKER_VERSION = "paddle-track-2";
+
+/** Provenance of a paddle detection/observation. Crop-sourced detections
+ *  (wrist-conditioned re-detect, crop-recovery-v1) may only EXTEND existing
+ *  tracks — never start them — so they never enter selection as raw
+ *  candidates. TRACKED_ESTIMATE marks bridge interpolations that must never
+ *  be presented as detections. Absent means full_frame. */
+export type PaddleDetectionSource = "full_frame" | "crop" | "tracked_estimate";
 export const PADDLE_CONFIDENCE_MODEL = "heuristic-v1 (uncalibrated)";
 
 export interface RawPaddleDetectionFile {
@@ -49,7 +56,12 @@ export interface RawPaddleDetectionFile {
   };
   frames: Array<{
     tMs: number;
-    detections: Array<{ box: [number, number, number, number]; score: number; label: string }>;
+    detections: Array<{
+      box: [number, number, number, number];
+      score: number;
+      label: string;
+      source?: PaddleDetectionSource;
+    }>;
     extras: Array<{ box: [number, number, number, number]; score: number; label: string }>;
   }>;
 }
@@ -70,6 +82,8 @@ export interface TrackedPaddleObservation {
   /** heuristic-v1 (uncalibrated) — see PADDLE_CONFIDENCE_MODEL. */
   confidence: number;
   nearWrist: boolean;
+  /** Detection provenance; absent means full_frame. */
+  source?: PaddleDetectionSource;
 }
 
 export interface PaddleTrackCandidate {
@@ -170,6 +184,7 @@ export function buildPaddleTracks(
       .map((detection) => ({
         score: detection.score,
         box: normalizeBox(detection.box, width, height),
+        source: detection.source,
       }))
       .filter(
         (candidate) =>
@@ -198,13 +213,17 @@ export function buildPaddleTracks(
         }
       }
       if (best && bestDistance <= TRACKER_GATES.matchRadius) {
-        appendObservation(best, frame.tMs, candidate.box, candidate.score);
+        appendObservation(best, frame.tMs, candidate.box, candidate.score, candidate.source);
         usedTracks.add(best.trackId);
       } else {
         unmatched.push(candidate);
       }
     }
     for (const candidate of unmatched) {
+      // Crop-sourced detections may only EXTEND tracks (matched above):
+      // an unmatched crop box never seeds a track, so it can never reach
+      // selection as a raw candidate no matter its score.
+      if (candidate.source === "crop") continue;
       if (candidate.score < TRACKER_GATES.startScore) continue;
       const track: ActiveTrack = {
         trackId: nextId++,
@@ -212,7 +231,7 @@ export function buildPaddleTracks(
         lastMs: frame.tMs,
         velocity: { x: 0, y: 0 },
       };
-      appendObservation(track, frame.tMs, candidate.box, candidate.score);
+      appendObservation(track, frame.tMs, candidate.box, candidate.score, candidate.source);
       tracks.push(track);
     }
   }
@@ -810,6 +829,7 @@ function appendObservation(
   timestampMs: number,
   box: NormalizedBox,
   score: number,
+  source?: PaddleDetectionSource,
 ): void {
   const center = boxCenter(box);
   const previous = track.observations[track.observations.length - 1];
@@ -833,6 +853,7 @@ function appendObservation(
     trackId: track.trackId,
     confidence: score, // provisional; finalized during selection
     nearWrist: false,
+    ...(source ? { source } : {}),
   });
   track.lastMs = timestampMs;
 }

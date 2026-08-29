@@ -45,8 +45,23 @@ export {
   type PaddleTrackCandidate,
   type PaddleTrackingOutcome,
   type RawPaddleDetectionFile,
+  type PaddleDetectionSource,
   type TrackedPaddleObservation,
 } from "./paddleTracker.js";
+export {
+  admitCropDetections,
+  bridgeTrackedEstimates,
+  CROP_RECOVERY_GATES,
+  isFpFamily,
+  mergeCropDetectionsIntoFile,
+  PADDLE_CROP_RECOVERY_VERSION,
+  paddleLostFrameTimes,
+  planWristCropRects,
+  type CropAdmissionResult,
+  type CropDetectionFrame,
+  type CropPlanFrame,
+  type CropRect,
+} from "./paddleCropRecovery.js";
 export {
   proposeStrokeEvents,
   selectTargetEvent,
