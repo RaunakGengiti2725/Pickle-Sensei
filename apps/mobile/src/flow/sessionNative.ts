@@ -96,12 +96,18 @@ export function connectNativeSessionMotionFeed(
     ) {
       return;
     }
+    if (flow.ended()) {
+      // Queued native emissions delivered after stop: expected, disconnect.
+      connected = false;
+      unsubscribe();
+      return;
+    }
     try {
       flow.pushSample({ tMs: raw.tMs, v: raw.v });
     } catch {
-      // The flow has ended (flush() already ran); no samples may follow.
-      connected = false;
-      unsubscribe();
+      // A push failure on a still-running flow is unexpected; drop the
+      // sample and count it rather than silently killing the whole feed.
+      droppedInvalid += 1;
     }
   });
   return {
