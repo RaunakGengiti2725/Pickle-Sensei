@@ -1,0 +1,43 @@
+{
+  "workstream": "h25-release-cert",
+  "wave": "wave-h",
+  "date": "2026-08-29",
+  "gate": "GATE 16 — release-candidate discipline: pinned RC record, release plan, and the consolidated P0/P1 remaining register",
+  "baseline": "104ea0f6383f5573ddc9393401700c7ecc163436 (devin/1787988068-wave-c-integration head)",
+  "excludedHeldOutBundles": ["wm-dink-01", "afn-vic-rally1"],
+  "method": [
+    "Read docs/STATUS_BOARD.md and docs/HANDOFF_V4_DRAFT.md; grep-verified every contract/flag/version claim in the RC record against the RC tree (strokeHeuristic.ts, consent.ts, thresholds.ts, analyzeVideo.ts flag defaults, detect_paddle.py DETECTOR_VERSION, migrations dir, StrokeCompletionMonitor.swift default, package.json engines/packageManager).",
+    "Fetched all origin branches (re-fetched before finalizing, picking up late-pushed g12/g18/h07); extracted every datasets/experiments/wave-g*|wave-h/*summary*.json from devin/wave-g/* (24 workstreams) and devin/wave-g2/* (9 workstreams) — 35 summary files. No other devin/wave-h/* branch existed on origin at collection time (2026-08-29 ~18:20 UTC); noted in the register.",
+    "Classified every open finding P0/P1/P2 per the wave-h triage taxonomy, distinguishing UNRESOLVED-at-RC from FIXED-on-unmerged-branch; produced a suggested merge queue for an RC v2.",
+    "Wrote the release plan (staged rollout internal→canary→broader, app rollback, DB forward-fix-only strategy honoring the append-only consent ledger, known limitations, support notes, monitoring plan, exact GO steps). No irreversible production/App Store action was performed; no tags pushed, no deploys, no store submissions."
+  ],
+  "artifacts": {
+    "releaseCandidateRecord": "datasets/experiments/wave-h/h25-release-candidate-record.json (rc-record-v1)",
+    "releasePlan": "docs/RELEASE_PLAN_V1.md",
+    "p0p1Register": "datasets/experiments/wave-h/h25-p0p1-remaining-register.json (v1)"
+  },
+  "measuredResults": {
+    "summariesConsumed": { "waveG": 24, "waveG2": 9, "waveH": 0, "files": 35 },
+    "registerCounts": { "p0": 4, "p1": 12, "p2": 4, "blockedExternal": 5 },
+    "p0Disposition": { "unresolvedAtRC": 1, "fixedOnUnmergedBranch": 3 },
+    "p1Disposition": { "unresolvedAtRC_or_open": 8, "fixedOnUnmergedBranch": 4 },
+    "rcRecordFacts": { "migrationsAtRC": 17, "analyzeVideoDefaultOnFlags": 1, "analyzeVideoDefaultOffFlags": 5, "consentVersionsPinned": 4, "heldOutCasesExcluded": 2 }
+  },
+  "p0Findings": [
+    "P0-1 TARGET silent failures (g16: 17/54 wrong, 0 abstentions) — UNRESOLVED at RC; remedy (acquire-v4) externally gated on live captures + one-shot locked_test",
+    "P0-2 ready-analysis unreachable after session end — FIXED on g21 branch, NOT in RC",
+    "P0-3 stale envelope evidence stamped into new clip — FIXED on g22 branch, NOT in RC",
+    "P0-4 noise-decided confident FOREHAND↔BACKHAND flips — FIXED as stroke-heuristic-7 on g14 branch, NOT in RC"
+  ],
+  "p1Findings": "12 entries — see h25-p0p1-remaining-register.json (envelope non-monotonicity g09; noise-manufactured stroke commits g14; stroke risk/recall g20/g15/g16/g13; ball worst slices g16/g17; contact frontier g16/g19/g20; ownership confidence/F09 g20/g01/g02/g05; pose-free OOD gate passes non-play footage g18; LiveSummary late-outcome subscription g21; DB roles g10/g11 unmerged; classifier dedup g25/g26 unmerged; mac-harness bit-rot fixes g24 unmerged; abstention-reason instability g14)",
+  "unresolvedInternallySolvable": "P0-2/P0-3/P0-4 and P1-8/P1-9/P1-10 are solved on unmerged wave-g branches; the internally-solvable remaining work is INTEGRATION (merge queue in the register), which is the integrator's call, not this workstream's — h25 deliberately did not merge peer branches into the shared baseline.",
+  "gatesRun": {
+    "note": "This workstream adds only documentation/JSON evidence artifacts (no product code changed).",
+    "pnpm typecheck": "PASS (exit 0, all packages)",
+    "pnpm test": "PASS (593 passed | 4 skipped of 597, exit 0)",
+    "pnpm lint": "PASS (exit 0)",
+    "pnpm format:check": "PASS (exit 0, after prettier --write on the new artifacts)"
+  },
+  "verdict": "FAIL (for GO at this RC) — honest reading: the RC baseline 104ea0f cannot ship as-is. 3 P0-class defects are fixed only on unmerged wave-g branches, 1 P0 (TARGET silent failure) is unresolved and externally gated, the capture-envelope verdict is non-monotone, all coach-validated surfaces are correctly RELEASE_BLOCKED with N=0 coach reviews, and the mandatory Mac/device evidence (cascade re-measure, iPhone latency) does not exist. GATE 16 itself (RC pinning + release plan + register) is COMPLETE; the release decision it feeds is NO-GO for anything beyond Stage 0 internal testing until the merge queue lands, Mac re-measures run, and the remaining P0 is accepted-by-decision or fixed.",
+  "irreversibleActionsTaken": "NONE"
+}
