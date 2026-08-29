@@ -1,0 +1,233 @@
+{
+  "workstreamId": "g16-gen-matrix",
+  "wave": "G",
+  "title": "GENERALIZATION_MATRIX: subsystem x slice N/coverage/success/abstention/silent-failure with counts, worst meaningful slice per subsystem",
+  "branch": "devin/wave-g/g16-gen-matrix",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "baseCommit": "104ea0f6383f5573ddc9393401700c7ecc163436",
+  "generatedAtIso": "2026-08-29T18:10:00Z",
+  "environment": "Linux Ubuntu, Node 20.18.1, pnpm 10.15.1, LINUX-CPU (no Apple Vision, no Mac, no iPhone)",
+  "verdict": "ORANGE",
+  "verdictRationale": "The matrix itself is complete and honest (GREEN as a deliverable), but what it MEASURES is ORANGE: TARGET has 17/54 silent wrong locks with the worst session at 1/4 correct (3 silent failures); CONTACT has 3/11 estimated markers wrong >132ms with volley at 0/3; BALL fastBlur is 0/6 with 3 wrong-location silent failures; STROKE trades to 5 correct / 12 abstained / 2 confidently-wrong under heuristic-6 (coverage cost of the Wave-F gates now measured); CAPTURE_ENVELOPE and AUTO_DETECT have effectively no measurable generalization data (n=2 clips with unvalidated thresholds; n=0). Slice coverage is thin everywhere: 2-5 independent sources per subsystem.",
+  "mission": "For each subsystem (TARGET, EVENT, PADDLE, BALL, CONTACT, PHASE, STROKE, CAPTURE ENVELOPE, AUTO DETECT) x each slice available in existing labeled/replayable data, report N, coverage, success, abstention, silent failure, and calibration where applicable; identify the worst meaningful slice per subsystem; group by independent source/session; no percentages without counts.",
+  "method": "Reused existing harnesses only (no production code changed): re-ran the f16 Linux-proxy replay set at head into wave-g artifacts (eventRecallBench, ownershipBench +/- corrections, ballHardSliceEval, e02 contactGoldReplay wrapper, d3-05 phase measure, strokeHeuristicBench); joined per-row outputs to committed slice metadata (ta-bench cases.json sessionKey/situation, paddle-bench.json + registry.json source/session/camera, harness-internal buckets/groups); reused COMMITTED Mac artifacts for the two Linux-unreplayable stages (TARGET: ta-bench-1787969692752.json shipped D-027 variant; PADDLE detector: paddle-bench-1787968828222.json) with provenance labeled; CAPTURE_ENVELOPE from committed c12 measurements; AUTO_DETECT honestly reported as N=0 replayable. Matrix built by committed script g16-build-matrix.py.",
+  "datasetScopeAndGrouping": {
+    "TARGET": "54 verified dev TA cases across 5 sessions (dvids-marne-2024 17, dvids-warriorgames-2026 15, wm-tournament-2014 11, afn-sasebo-2025-06 7, afn-sigonella-2025 4); grouped by sessionKey and situation tags",
+    "EVENT": "14 non-held-out gold target events across 8 bundles / 6 sources; grouped by bundle -> source/session",
+    "PADDLE_detector": "5 dev bundles (Mac artifact), 91 labeled frames; PADDLE ownership proxy: 39 dual frames across 5 session groups and 6 difficulty buckets (Linux replay)",
+    "BALL": "43 D2-06 hard-slice gold labels across 4 bundles / 3 sources; occlusion buckets + hard-slice types",
+    "CONTACT": "15 gold contact events across 7 bundles / 5 sources; sliced by source, bundle, owner, stroke family",
+    "PHASE": "17 anchored / 18 anchor-free gold events across 7 bundles; segmentation coverage only (per-boundary correctness not scored by this harness)",
+    "STROKE": "18 evaluable of 29 stroke gold labels across 3 session groups; L1 OVERHEAD-vs-SWING",
+    "CAPTURE_ENVELOPE": "2 non-held-out committed clips; thresholds unvalidated (e15/f18 negatives)",
+    "AUTO_DETECT": "0 replayable measured items (fixture-level tests only)"
+  },
+  "holdoutStatement": "Held-out cases wm-dink-01 and afn-vic-rally1 were never read, listed, or analyzed; rows bearing their caseIds inside committed Mac artifacts (paddle-bench results, c12 perClip) were dropped by caseId match before any metric was computed. The fresh-candidate pool was untouched. No locked_test was run.",
+  "configuration": {
+    "replaysRerunAtHead": [
+      "eventRecallBench.ts",
+      "ownershipBench.ts (+ --apply-corrections)",
+      "ballHardSliceEval.ts",
+      "e02 contactGoldReplay via g16-contact-replay-run.ts",
+      "d3-05-measure-gold.ts",
+      "strokeHeuristicBench via g16-stroke-bench-run.ts"
+    ],
+    "committedMacArtifactsReused": [
+      "datasets/ta-bench/results/ta-bench-1787969692752.json (variant shipped=true)",
+      "datasets/paddle-bench/results/paddle-bench-1787968828222.json"
+    ],
+    "builder": "datasets/experiments/wave-g/g16-build-matrix.py",
+    "acceptableContactErrorMs": 132
+  },
+  "measuredResults": {
+    "TARGET": {
+      "n": 54,
+      "lockCorrect": 37,
+      "locked": 54,
+      "abstained": 0,
+      "silentWrongLocks": 17,
+      "worstSlice": {
+        "session": "afn-sigonella-2025",
+        "n": 4,
+        "correct": 1,
+        "silentFailures": 3
+      },
+      "calibration": "TA ECE .121 (n=12, agreement proxy, c11)"
+    },
+    "EVENT": {
+      "n": 14,
+      "proposedOk": 11,
+      "misBounded": 1,
+      "missed": 2,
+      "falseProposalsInNonEventSpans": 0,
+      "nonEventSpans": 5,
+      "worstSlice": {
+        "bundle": "wavea-sasebo-volleys",
+        "n": 3,
+        "proposedOk": 1,
+        "misBounded": 1,
+        "missed": 1
+      }
+    },
+    "PADDLE_detector_macArtifact": {
+      "labeledFrames": 91,
+      "visibleFrames": 62,
+      "hits": 25,
+      "misses": 24,
+      "wrongLocation": 13,
+      "falsePositives": 7,
+      "worstSlice": {
+        "bundle": "afn-sasebo-rally2",
+        "visibleFrames": 3,
+        "hits": 1,
+        "wrongLocation": 2,
+        "falsePositives": 2
+      }
+    },
+    "PADDLE_ownership_linuxReplay": {
+      "n": 39,
+      "correct": 13,
+      "abstained": 22,
+      "wrong": 4,
+      "poseSubset": {
+        "n": 18,
+        "correct": 13,
+        "abstained": 1
+      },
+      "worstSlice": {
+        "bucket": "blur",
+        "n": 4,
+        "correct": 1,
+        "abstained": 3
+      },
+      "calibration": "ownership ECE .098 (n=31, agreement proxy, c11)"
+    },
+    "BALL": {
+      "n": 43,
+      "hits": 10,
+      "misses": 18,
+      "wrongLocation": 11,
+      "abstained": 2,
+      "abstentionViolations": 2,
+      "worstSlice": {
+        "hardSliceType": "fastBlur",
+        "n": 6,
+        "hits": 0,
+        "wrongLocation": 3
+      }
+    },
+    "CONTACT": {
+      "n": 15,
+      "estimated": 11,
+      "abstained": 4,
+      "acceptable132ms": 8,
+      "wrongMarkers": 3,
+      "medianErrorMsOfEstimated": 103,
+      "worstSlice": {
+        "strokeFamily": "volley",
+        "n": 3,
+        "acceptable": 0,
+        "wrongMarkers": 2,
+        "abstained": 1
+      },
+      "calibrationBins": [
+        {
+          "conf": "[0,0.55)",
+          "n": 3,
+          "acceptable": 2
+        },
+        {
+          "conf": "[0.55,0.7)",
+          "n": 6,
+          "acceptable": 4
+        },
+        {
+          "conf": "[0.7,1]",
+          "n": 2,
+          "acceptable": 2
+        }
+      ]
+    },
+    "PHASE": {
+      "anchored": {
+        "n": 17,
+        "segmented": 15,
+        "abstained": 2
+      },
+      "anchorFree": {
+        "n": 18,
+        "segmented": 13,
+        "abstained": 5
+      },
+      "worstSlice": {
+        "mode": "anchor-free",
+        "bundle": "wavea-sasebo-volleys",
+        "n": 5,
+        "segmented": 3,
+        "abstained": 2
+      },
+      "note": "coverage only; per-boundary correctness not scored by this harness"
+    },
+    "STROKE": {
+      "n": 18,
+      "l1Correct": 5,
+      "l1Wrong": 0,
+      "l1Abstained": 12,
+      "l1GoldUnknown": 1,
+      "confidentlyWrong": 2,
+      "l2Correct": 2,
+      "l2Wrong": 2,
+      "worstSlice": {
+        "sessionGroup": "afn-sasebo-2025-06",
+        "n": 5,
+        "l1Correct": 0,
+        "l1Abstained": 5
+      },
+      "driftVsF16": "heuristic-4 -> heuristic-6: l1Correct 9->5, abstained 8->12, confidentlyWrong 3->2 (Wave-F abstention gates' coverage cost, now measured)"
+    },
+    "CAPTURE_ENVELOPE": {
+      "clipsMeasurable": 2,
+      "bundlesWithoutCommittedMedia": 10,
+      "thresholdValidation": "FAILED twice (e15, f18) \u2014 verdicts are v0.1-provisional hypotheses, not truth"
+    },
+    "AUTO_DETECT": {
+      "n": 0,
+      "note": "no replayable per-slice measured dataset exists; fixture-level tests only"
+    }
+  },
+  "findings": [
+    "TARGET never abstains (54/54 locked): every one of its 17 errors is a silent failure. Worst sessions: afn-sigonella-2025 1/4 correct (3 silent), afn-sasebo-2025-06 3/7 correct (4 silent). contested_region situation: 23/36 correct, 13 silent.",
+    "CONTACT's worst family is volley (0/3 acceptable, 2 wrong markers >132ms); dvids-sasebo source is 1/3 with 2 wrong markers. The estimator at head is contact-evidence-4.3 and the f16 high-conf violation is gone (highConfViolations: []), but wrong-marker count is 3/11 estimated.",
+    "BALL fastBlur is a zero-success slice (0/6, 3 wrong-location) and the 2 abstention violations from e12 persist on afn-sasebo-rally2 (occlusionCycle).",
+    "STROKE heuristic-6's honesty gates carry a measured coverage cost vs f16's heuristic-4 (5 vs 9 L1 correct; 12 vs 8 abstained; confidently-wrong 3->2). afn-sasebo-2025-06 is now a zero-coverage session (0 answered / 5).",
+    "PADDLE ownership answers nothing on the 'clean' bucket (0 correct / 10 abstained / 10 n) while answering on harder buckets \u2014 the incumbent method's evidence gates are inverted relative to human difficulty. On frames WITH pose it is 13/18 correct with 1 abstention.",
+    "CAPTURE_ENVELOPE and AUTO_DETECT are generalization blind spots: n=2 clips against unvalidated thresholds, and n=0 replayable items respectively.",
+    "Independent-source breadth is the binding constraint everywhere: 2-6 sources per subsystem, and several worst slices have n=3-6 (small-n, flagged in the matrix)."
+  ],
+  "artifacts": [
+    "datasets/experiments/wave-g/g16-generalization-matrix.json",
+    "datasets/experiments/wave-g/g16-generalization-matrix.md",
+    "datasets/experiments/wave-g/g16-build-matrix.py",
+    "datasets/experiments/wave-g/g16-event-recall-replay.json",
+    "datasets/experiments/wave-g/g16-ownership-eval-replay.json",
+    "datasets/experiments/wave-g/g16-ownership-eval-corrected-replay.json",
+    "datasets/experiments/wave-g/g16-ball-hardslice-replay.json",
+    "datasets/experiments/wave-g/g16-contact-replay.json + g16-contact-replay-run.ts",
+    "datasets/experiments/wave-g/g16-phase-gold-replay.txt",
+    "datasets/experiments/wave-g/g16-stroke-bench-replay.json + g16-stroke-bench-run.ts"
+  ],
+  "honestyNotes": [
+    "No production code, migrations, or integrator-owned docs were modified; all new files live under datasets/experiments/wave-g/.",
+    "TARGET and PADDLE detector tables are COMMITTED Mac artifacts reused as-is (labeled); they were not and cannot be re-run on this box.",
+    "PHASE reports segmentation coverage only \u2014 the harness does not score per-boundary correctness, so no success/silent-failure numbers were invented for it.",
+    "Calibration numbers cited from c11 are agreement proxies with stated caveats; contact calibration bins have tiny n and are labeled indicative only.",
+    "Slice dimensions that exist only as free text (lighting, player count, apparent scale, player identity) were declared NOT AVAILABLE rather than converted into invented categories."
+  ],
+  "gates": {
+    "typecheck": "pnpm typecheck exit 0 (all packages)",
+    "test": "pnpm test exit 0 (51 files, 593 passed | 4 skipped at tail package; all workspace packages green)",
+    "lint": "pnpm lint exit 0",
+    "formatCheck": "pnpm format:check exit 0",
+    "mobile": "not run \u2014 no production code changed (research-only workstream; new files under datasets/experiments/wave-g/ only)"
+  }
+}
