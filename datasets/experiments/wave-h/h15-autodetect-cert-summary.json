@@ -1,0 +1,107 @@
+{
+  "gate": "h15-autodetect-cert — Auto Detect (stroke auto-selection vs declared separation, ambiguous/practice-swing/miss/unsupported handling) + adaptive completion adequacy",
+  "waveId": "wave-h",
+  "workstreamId": "h15-autodetect-cert",
+  "generatedAtIso": "2026-08-29T18:20:00Z",
+  "baseline": {
+    "branch": "devin/1787988068-wave-c-integration",
+    "commit": "104ea0f",
+    "certBranch": "devin/wave-h/h15-autodetect-cert"
+  },
+  "method": {
+    "harness": "datasets/experiments/wave-h/h15-autodetect-cert.ts (deterministic, run via tsx from packages/swing-lab); full machine-readable results in datasets/experiments/wave-h/h15-cert-report.json",
+    "replay": "All 29 committed stroke-gold labels replayed through the production AUTO route: classifyStroke (stroke-heuristic-6, uncalibrated) → resolvePredictedProfile ladder; 18 evaluable on Linux (committed pose exists only for the 8 wave-a corpus windows; afn-sasebo-rally1×7, afn-sasebo-rally2×2, wm-volley-02×2 unevaluable — no fabricated numbers). paddle=null everywhere (no committed paddle tracks). Grouped by corpus sessionKey, never by frame.",
+    "syntheticAdversarial": "10 deterministic synthetic pose cases (practice swing/no contact, whiff with estimated contact, static reach, walk-through, wheelchair rim propulsion, near-profile shoulders, transient torso collapse, midline-ambiguous contact, no reference, ambidextrous handedness) + 5 hostile-provider ladder predictions + 3 declared-slug resolution checks + declared-vs-predicted separation checks on every committed replay side read.",
+    "completion": "D-029 constant parity verified across 4 copies (sessionEngine SESSION_COMPLETION, eventCompletionBench literals, mobile CAPTURE_COMPLETION_PARAMS_V1, native StrokeCompletionMonitor.swift); live SessionEventEngine synthetic closure runs (settle/valley/safety/flush) + append-only late-sample check; replay completion bench (pnpm --filter @pickle/swing-lab exec tsx src/eventCompletionBench.ts) on the 11 target-owner gold events with committed pose.",
+    "holdouts": "wm-dink-01 and afn-vic-rally1 never read or touched (absent from stroke-gold by construction; verified untouched).",
+    "limits": "Linux CPU replay only — no iPhone/Mac measurements exist or are claimed. stroke-heuristic-6 confidences are uncalibrated heuristic floors, not calibrated probabilities."
+  },
+  "measuredResults": {
+    "replayAutoRoute": {
+      "goldLabelsTotal": 29,
+      "evaluableLabels": 18,
+      "unevaluable": { "afn-sasebo-rally1": 7, "afn-sasebo-rally2": 2, "wm-volley-02": 2 },
+      "ladderRouting": { "leaf": 1, "familySide": 4, "abstain": 13 },
+      "leafCommits": { "n": 1, "correct": 1, "wrong": 0, "note": "single leaf commit is OVERHEAD on wavea-944403-smash, correct at conf 0.85" },
+      "familySideCommits": {
+        "n": 4,
+        "goldSideKnown": 3,
+        "correct": 1,
+        "wrong": 2,
+        "goldSideUnknown": 1,
+        "wrongDetail": [
+          "wavea-faead-rally@13417: FOREHAND vs gold groundstroke/backhand, conf 0.60 (degraded: event-peak reference, no contact evidence — E10-F1 cap route)",
+          "wavea-wgm-wheelchair@182400: FOREHAND vs gold dink/backhand, conf 0.80 (seated/wheelchair player, gold contact)"
+        ]
+      },
+      "confidentWrongBySessionGroup": { "dvids-marne-2024": 1, "dvids-warriorgames-2026": 1, "afn-sasebo-2025-06": 0 },
+      "groupsRepresented": { "dvids-marne-2024": 12, "dvids-warriorgames-2026": 1, "afn-sasebo-2025-06": 5 }
+    },
+    "declaredSeparation": {
+      "committedSideReadsChecked": 4,
+      "contradictionSurfaced": 4,
+      "contradictionMissed": 0,
+      "agreementFalseAlarm": 0,
+      "sideAgnosticDeclarationFalseAlarm": 0,
+      "declaredProfileUnchangedUnderContradiction": 4,
+      "declaredProfileChangedByPrediction": 0,
+      "noFalseDisagreementOnUnknownPrediction": true,
+      "note": "Declared intent is never overwritten by the prediction; disagreement is surfaced exactly and only when structurally demonstrable."
+    },
+    "syntheticAdversarial": {
+      "cases": 10,
+      "passed": 10,
+      "abstainedAsRequired": 8,
+      "committedFamilySideOnly": 2,
+      "leafCommits": 0,
+      "note": "Practice swing (no contact) and whiff (estimated contact, no paddle evidence) commit at most a depth-2 family side with disclosed limiting factors and produce result:null downstream (partialAutoRecord) — never a scored stroke Result. All 8 ambiguity/unsupported cases (static reach, walk-through, rim propulsion, near-profile, torso collapse, midline contact, no reference, ambidextrous) abstain outright."
+    },
+    "hostileProviderLadder": {
+      "cases": 5,
+      "passed": 5,
+      "note": "Sub-floor confidence, unregistered leaf, unresolvable depth-2 label, and UNKNOWN leaf marker all abstain; a depth-2 side is never promoted to a leaf."
+    },
+    "slugResolution": { "cases": 3, "passed": 3, "note": "Ambiguous multi-canonical slug without canonical resolves to no profile; contradicting canonical is ignored, never trusted." },
+    "adaptiveCompletion": {
+      "constantParity": { "fieldsChecked": 8, "mismatches": 0, "copies": ["sessionEngine.SESSION_COMPLETION", "eventCompletionBench literals", "mobile CAPTURE_COMPLETION_PARAMS_V1", "native StrokeCompletionMonitor.swift"] },
+      "shippedDefaultStrategy": "fixed (adaptive is an explicit runtime switch, shadow-instrumented, not promoted — matches D-043)",
+      "liveEngineChecks": { "settleClose": "pass", "valleyCloseFirstOfTwo": "pass", "safetyMaxClose": "pass", "flushNeverSilent": "pass", "appendOnlyLateSamplesDropped": "pass (droppedLateSamples=1, closed events byte-identical)" },
+      "replayBenchTargetEvents": {
+        "n": 11,
+        "fixed15s": { "medianAbsEndErrMs": 1334, "medianAbsRecoveryErrMs": 1371, "earlyStops": 0, "contactLost": 0, "followThroughLost": 0, "recoveryLost": 0, "meanTrailingExcessMs": 1270, "meanPostTriggerMs": 1500 },
+        "adaptive": { "medianAbsEndErrMs": 292, "medianAbsRecoveryErrMs": 292, "earlyStops": 1, "contactLost": 0, "followThroughLost": 0, "recoveryLost": 1, "meanTrailingExcessMs": 582, "meanPostTriggerMs": 809 },
+        "adaptiveEarlyStopDetail": "wavea-wgm-wheelchair: adaptive closed 34ms before labeled recovery end (recoveryLost=1)",
+        "note": "n=11 is the Linux-evaluable subset; the committed 20-event gate artifact is datasets/experiments/EXP-2026-08-28-adaptive-completion.json. Both support keeping FIXED as the shipped default: fixed loses nothing (0 early stops / 0 content lost), adaptive still has a replay-only early-stop risk."
+      }
+    },
+    "rootGates": "pnpm typecheck && pnpm test && pnpm lint && pnpm format:check — all exit 0 on this branch (no production code changed; evidence + harness only)."
+  },
+  "findings": {
+    "p0": [],
+    "p1": [
+      {
+        "id": "H15-P1-1",
+        "status": "unresolved_external",
+        "finding": "Confident-wrong family-side reads on replay: of 3 committed side reads with gold-known side, 2 are wrong (wavea-faead-rally@13417 FOREHAND conf 0.60 vs gold backhand; wavea-wgm-wheelchair@182400 FOREHAND conf 0.80 vs gold backhand dink, seated player). Wrong reads span 2 of 3 session groups. These surface as an 'Auto-detected: Forehand (family)' style read with result:null — no scored Result, no fault/drill output, but the family tag itself is user-visible and wrong.",
+        "whyNotFixedHere": "Not internally solvable without violating wave rules: the only available levers are uncalibrated threshold surgery (raising the side-commit floor or making the degraded event-peak route abstain), which on this 18-label bench would be tuning denominators/thresholds to pass and would silently flip the locked mobile-reality wrist-fallback behavior (W4) that intentionally commits degraded sides at ≥0.525. Known LABEL_STARVED since Wave E (e03: candidate kept 3 confident-wrong); needs new gold labels (esp. seated/adaptive players and rotated-torso rallies) before any recalibration is honest.",
+        "releaseImpact": "Must be weighed by the release gate owner: family reads are precision-poor on side-known replay data (1/3 correct). Mitigations already shipped: depth-2 reads never produce a scored Result, limiting factors are disclosed on-device, declared intent is never overwritten."
+      }
+    ],
+    "p2": [
+      {
+        "id": "H15-P2-1",
+        "status": "documented",
+        "finding": "Native StrokeCompletionMonitor has a disclosed reset-adjacent divergence vs the TS engine (detector clears wrist priors on reset; monitor uses only the 250ms gap gate). Shadow-only today since adaptive is not the shipped default."
+      },
+      {
+        "id": "H15-P2-2",
+        "status": "documented",
+        "finding": "11 of 29 stroke-gold labels are unevaluable on Linux (no committed pose for afn-sasebo-rally1/2, wm-volley-02), so replay certification covers 18 labels across 3 session groups; wheelchair/adaptive play is represented by a single label."
+      }
+    ]
+  },
+  "verdict": {
+    "gate": "PASS_WITH_DISCLOSED_P1",
+    "rationale": "PASS on every safety-critical property this gate certifies: practice swings / whiffs / unsupported and ambiguous movements never produce a confident stroke Result (0 wrong leaf commits anywhere; 10/10 synthetic adversarial, 5/5 hostile-ladder, 3/3 slug checks pass); declared intent is fully separated from prediction (4/4 contradictions surfaced, 0 silent overwrites, 0 false alarms); adaptive completion is adequate as shipped (FIXED default loses no content on replay, 8/8 constant parity, all live-engine closure paths verified, append-only holds). NOT certified as accurate: the depth-2 family side read is confidently wrong on 2 of 3 gold-side-known replay commits (P1, unresolved-external, label-starved) — if the release bar requires accurate family auto-reads rather than safe ones, treat that single component as NO-GO until new gold labels allow honest recalibration."
+  }
+}
