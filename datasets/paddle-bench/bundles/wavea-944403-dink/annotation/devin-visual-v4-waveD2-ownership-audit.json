@@ -1,0 +1,933 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "wavea-944403-dink",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "auditOf": "datasets/paddle-bench/bundles/wavea-944403-dink/annotation/devin-visual-v2-waveC-ownership.json",
+  "createdAtIso": "2026-08-29T08:20:00.000Z",
+  "appendOnly": true,
+  "method": "Blind multi-annotator ownership audit. 20 frames sampled deterministically: bundles sorted by name, then evenly spaced indices over each bundle's sorted union of existing waveC-labeled timestamps (11 dink / 4 smash / 5 rally, proportional to label counts). Frames extracted independently BEFORE reading any waveC coordinate values, via ffmpeg -i <video> -vf \"select=eq(n\\,IDX)\" -vsync 0 -frames:v 1 (absolute CFR indexing). Every audit value comes from directly viewing the extracted frame plus 0.01-grid overlaid crops; no interpolation. Points are normalized paddle-blade-center estimates. After freezing blind observations, waveC values were unblinded and compared; every disagreement was adjudicated by targeted re-viewing of the same extracted frame (adjudication records below).",
+  "source": {
+    "video": "datasets/corpus/media/dvids-944403-916657917f2b.mp4",
+    "sha256": "916657917f2be72f67717b35bdc0f163915c48a1126731c25f0ae1364121ad13",
+    "fps": "60000/1001",
+    "clock": "RECORDING clock, absolute CFR frame index"
+  },
+  "heldOutUntouched": ["wm-dink-01", "afn-vic-rally1"],
+  "frames": [
+    {
+      "tMs": 20003.32,
+      "frameIdx": 1199,
+      "role": "near-left-target",
+      "audit": {
+        "cls": "visible",
+        "point": [0.34, 0.615],
+        "conf": 0.9,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.338, 0.6194]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0048,
+      "classAgreement": true
+    },
+    {
+      "tMs": 20003.32,
+      "frameIdx": 1199,
+      "role": "near-right",
+      "audit": {
+        "cls": "visible",
+        "point": [0.742, 0.558],
+        "conf": 0.9,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.7393, 0.5653]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0078,
+      "classAgreement": true
+    },
+    {
+      "tMs": 20003.32,
+      "frameIdx": 1199,
+      "role": "far-left",
+      "audit": {
+        "cls": "visible",
+        "point": [0.287, 0.375],
+        "conf": 0.85,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.3052, 0.3611]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0229,
+      "classAgreement": true
+    },
+    {
+      "tMs": 20003.32,
+      "frameIdx": 1199,
+      "role": "far-center",
+      "audit": {
+        "cls": "visible",
+        "point": [0.497, 0.432],
+        "conf": 0.6,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "ambiguous",
+        "point": null
+      },
+      "adjudicationId": "ADJ-D1",
+      "note": null,
+      "classAgreement": false
+    },
+    {
+      "tMs": 20253.57,
+      "frameIdx": 1214,
+      "role": "near-left-target",
+      "audit": {
+        "cls": "visible",
+        "point": [0.31, 0.59],
+        "conf": 0.9,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.3133, 0.5995]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0101,
+      "classAgreement": true
+    },
+    {
+      "tMs": 20253.57,
+      "frameIdx": 1214,
+      "role": "near-right",
+      "audit": {
+        "cls": "visible",
+        "point": [0.712, 0.597],
+        "conf": 0.9,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.737, 0.5898]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.026,
+      "classAgreement": true
+    },
+    {
+      "tMs": 20253.57,
+      "frameIdx": 1214,
+      "role": "far-left",
+      "audit": {
+        "cls": "visible",
+        "point": [0.297, 0.365],
+        "conf": 0.85,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.324, 0.3472]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0323,
+      "classAgreement": true
+    },
+    {
+      "tMs": 20253.57,
+      "frameIdx": 1214,
+      "role": "far-center",
+      "audit": {
+        "cls": "visible",
+        "point": [0.467, 0.42],
+        "conf": 0.8,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.4766, 0.4546]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0359,
+      "classAgreement": true
+    },
+    {
+      "tMs": 20503.82,
+      "frameIdx": 1229,
+      "role": "near-left-target",
+      "audit": {
+        "cls": "visible",
+        "point": [0.257, 0.54],
+        "conf": 0.9,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.2552, 0.5398]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0018,
+      "classAgreement": true
+    },
+    {
+      "tMs": 20503.82,
+      "frameIdx": 1229,
+      "role": "near-right",
+      "audit": {
+        "cls": "visible",
+        "point": [0.63, 0.537],
+        "conf": 0.9,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.6052, 0.563]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0359,
+      "classAgreement": true
+    },
+    {
+      "tMs": 20503.82,
+      "frameIdx": 1229,
+      "role": "far-center",
+      "audit": {
+        "cls": "visible",
+        "point": [0.452, 0.437],
+        "conf": 0.7,
+        "visibility": "partial"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.4534, 0.4546]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0177,
+      "classAgreement": true
+    },
+    {
+      "tMs": 20503.82,
+      "frameIdx": 1229,
+      "role": "far-left",
+      "audit": {
+        "cls": "visible",
+        "point": [0.312, 0.375],
+        "conf": 0.85,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.3052, 0.3713]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0077,
+      "classAgreement": true
+    },
+    {
+      "tMs": 20754.07,
+      "frameIdx": 1244,
+      "role": "near-left-target",
+      "audit": {
+        "cls": "visible",
+        "point": [0.213, 0.52],
+        "conf": 0.75,
+        "visibility": "visible-edge-on"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.2188, 0.5139]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0084,
+      "classAgreement": true
+    },
+    {
+      "tMs": 20754.07,
+      "frameIdx": 1244,
+      "role": "near-right",
+      "audit": {
+        "cls": "visible",
+        "point": [0.728, 0.567],
+        "conf": 0.85,
+        "visibility": "partial"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.7323, 0.587]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0205,
+      "classAgreement": true
+    },
+    {
+      "tMs": 20754.07,
+      "frameIdx": 1244,
+      "role": "far-left",
+      "audit": {
+        "cls": "visible",
+        "point": [0.312, 0.32],
+        "conf": 0.85,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.3247, 0.3532]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0355,
+      "classAgreement": true
+    },
+    {
+      "tMs": 20754.07,
+      "frameIdx": 1244,
+      "role": "far-center",
+      "audit": {
+        "cls": "visible",
+        "point": [0.432, 0.393],
+        "conf": 0.75,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.4318, 0.3981]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0051,
+      "classAgreement": true
+    },
+    {
+      "tMs": 21087.73,
+      "frameIdx": 1264,
+      "role": "near-left-target",
+      "audit": {
+        "cls": "visible",
+        "point": [0.288, 0.445],
+        "conf": 0.9,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.3021, 0.5407]
+      },
+      "adjudicationId": "ADJ-D2",
+      "note": null,
+      "centerDelta": 0.0967,
+      "classAgreement": true
+    },
+    {
+      "tMs": 21087.73,
+      "frameIdx": 1264,
+      "role": "near-right",
+      "audit": {
+        "cls": "not-visible",
+        "point": null,
+        "conf": 0.4,
+        "visibility": "occluded-behind-body"
+      },
+      "waveC": {
+        "cls": "not-visible",
+        "point": null
+      },
+      "adjudicationId": null,
+      "note": null,
+      "classAgreement": true
+    },
+    {
+      "tMs": 21087.73,
+      "frameIdx": 1264,
+      "role": "far-center",
+      "audit": {
+        "cls": "visible",
+        "point": [0.412, 0.285],
+        "conf": 0.85,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "ambiguous",
+        "point": [0.406, 0.286]
+      },
+      "adjudicationId": "ADJ-D3",
+      "note": null,
+      "classAgreement": false
+    },
+    {
+      "tMs": 21087.73,
+      "frameIdx": 1264,
+      "role": "far-left",
+      "audit": {
+        "cls": "visible",
+        "point": [0.312, 0.372],
+        "conf": 0.85,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.3021, 0.3639]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0128,
+      "classAgreement": true
+    },
+    {
+      "tMs": 21337.98,
+      "frameIdx": 1279,
+      "role": "near-left-target",
+      "audit": {
+        "cls": "visible",
+        "point": [0.3, 0.455],
+        "conf": 0.75,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "not-visible",
+        "point": null
+      },
+      "adjudicationId": "ADJ-D4",
+      "note": null,
+      "classAgreement": false
+    },
+    {
+      "tMs": 21337.98,
+      "frameIdx": 1279,
+      "role": "near-right",
+      "audit": {
+        "cls": "not-visible",
+        "point": null,
+        "conf": 0.35,
+        "visibility": "occluded-behind-body"
+      },
+      "waveC": {
+        "cls": "not-visible",
+        "point": null
+      },
+      "adjudicationId": null,
+      "note": null,
+      "classAgreement": true
+    },
+    {
+      "tMs": 21337.98,
+      "frameIdx": 1279,
+      "role": "far-center",
+      "audit": {
+        "cls": "visible",
+        "point": [0.467, 0.4],
+        "conf": 0.5,
+        "visibility": "partial-behind-net"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.4635, 0.4324]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0326,
+      "classAgreement": true
+    },
+    {
+      "tMs": 21337.98,
+      "frameIdx": 1279,
+      "role": "far-left",
+      "audit": {
+        "cls": "visible",
+        "point": [0.31, 0.372],
+        "conf": 0.9,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.3164, 0.3611]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0126,
+      "classAgreement": true
+    },
+    {
+      "tMs": 21588.23,
+      "frameIdx": 1294,
+      "role": "near-left-target",
+      "audit": {
+        "cls": "visible",
+        "point": [0.315, 0.555],
+        "conf": 0.95,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.2812, 0.5565]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0338,
+      "classAgreement": true
+    },
+    {
+      "tMs": 21588.23,
+      "frameIdx": 1294,
+      "role": "far-left",
+      "audit": {
+        "cls": "visible",
+        "point": [0.295, 0.355],
+        "conf": 0.85,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.3151, 0.3458]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0221,
+      "classAgreement": true
+    },
+    {
+      "tMs": 21588.23,
+      "frameIdx": 1294,
+      "role": "far-center",
+      "audit": {
+        "cls": "visible",
+        "point": [0.46, 0.462],
+        "conf": 0.85,
+        "visibility": "visible-behind-net-mesh"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.4695, 0.4551]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0117,
+      "classAgreement": true
+    },
+    {
+      "tMs": 21588.23,
+      "frameIdx": 1294,
+      "role": "near-right",
+      "audit": {
+        "cls": "visible",
+        "point": [0.822, 0.565],
+        "conf": 0.95,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.8289, 0.5676]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0074,
+      "classAgreement": true
+    },
+    {
+      "tMs": 21838.48,
+      "frameIdx": 1309,
+      "role": "near-left-target",
+      "audit": {
+        "cls": "visible",
+        "point": [0.35, 0.56],
+        "conf": 0.95,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.3333, 0.5602]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0167,
+      "classAgreement": true
+    },
+    {
+      "tMs": 21838.48,
+      "frameIdx": 1309,
+      "role": "far-center",
+      "audit": {
+        "cls": "visible",
+        "point": [0.437, 0.445],
+        "conf": 0.8,
+        "visibility": "visible-behind-net-mesh"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.4419, 0.463]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0187,
+      "classAgreement": true
+    },
+    {
+      "tMs": 21838.48,
+      "frameIdx": 1309,
+      "role": "near-right",
+      "audit": {
+        "cls": "visible",
+        "point": [0.8, 0.565],
+        "conf": 0.95,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.8151, 0.5694]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0157,
+      "classAgreement": true
+    },
+    {
+      "tMs": 21838.48,
+      "frameIdx": 1309,
+      "role": "far-left",
+      "audit": {
+        "cls": "not-visible",
+        "point": null,
+        "conf": 0.9,
+        "visibility": "judged-out-of-frame"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.3135, 0.3671]
+      },
+      "adjudicationId": "ADJ-D5",
+      "note": null,
+      "classAgreement": false
+    },
+    {
+      "tMs": 22088.73,
+      "frameIdx": 1324,
+      "role": "near-left-target",
+      "audit": {
+        "cls": "visible",
+        "point": [0.34, 0.5],
+        "conf": 0.95,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.349, 0.5167]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.019,
+      "classAgreement": true
+    },
+    {
+      "tMs": 22088.73,
+      "frameIdx": 1324,
+      "role": "near-right",
+      "audit": {
+        "cls": "visible",
+        "point": [0.72, 0.645],
+        "conf": 0.9,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.7161, 0.6093]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0359,
+      "classAgreement": true
+    },
+    {
+      "tMs": 22088.73,
+      "frameIdx": 1324,
+      "role": "far-left",
+      "audit": {
+        "cls": "visible",
+        "point": [0.305, 0.37],
+        "conf": 0.6,
+        "visibility": "partial-occluded"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.3255, 0.3773]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0218,
+      "classAgreement": true
+    },
+    {
+      "tMs": 22088.73,
+      "frameIdx": 1324,
+      "role": "far-center",
+      "audit": {
+        "cls": "visible",
+        "point": [0.443, 0.45],
+        "conf": 0.85,
+        "visibility": "visible-behind-net-mesh"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.4479, 0.4477]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0054,
+      "classAgreement": true
+    },
+    {
+      "tMs": 22338.98,
+      "frameIdx": 1339,
+      "role": "near-left-target",
+      "audit": {
+        "cls": "visible",
+        "point": [0.34, 0.455],
+        "conf": 0.95,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.3417, 0.4556]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0018,
+      "classAgreement": true
+    },
+    {
+      "tMs": 22338.98,
+      "frameIdx": 1339,
+      "role": "far-center",
+      "audit": {
+        "cls": "visible",
+        "point": [0.452, 0.445],
+        "conf": 0.8,
+        "visibility": "visible-behind-net-mesh"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.4536, 0.4491]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0044,
+      "classAgreement": true
+    },
+    {
+      "tMs": 22338.98,
+      "frameIdx": 1339,
+      "role": "far-left",
+      "audit": {
+        "cls": "visible",
+        "point": [0.303, 0.367],
+        "conf": 0.85,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.3141, 0.3815]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0183,
+      "classAgreement": true
+    },
+    {
+      "tMs": 22338.98,
+      "frameIdx": 1339,
+      "role": "near-right",
+      "audit": {
+        "cls": "visible",
+        "point": [0.65, 0.51],
+        "conf": 0.95,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "not-visible",
+        "point": null
+      },
+      "adjudicationId": "ADJ-D6",
+      "note": null,
+      "classAgreement": false
+    },
+    {
+      "tMs": 22589.23,
+      "frameIdx": 1354,
+      "role": "near-left-target",
+      "audit": {
+        "cls": "visible",
+        "point": [0.35, 0.462],
+        "conf": 0.95,
+        "visibility": "visible"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.3469, 0.462]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "centerDelta": 0.0031,
+      "classAgreement": true
+    },
+    {
+      "tMs": 22589.23,
+      "frameIdx": 1354,
+      "role": "far-left",
+      "audit": {
+        "cls": "visible",
+        "point": [0.293, 0.388],
+        "conf": 0.5,
+        "visibility": "partial-occluded"
+      },
+      "waveC": {
+        "cls": "visible",
+        "point": [0.3547, 0.3843]
+      },
+      "adjudicationId": "ADJ-D7",
+      "note": null,
+      "centerDelta": 0.0618,
+      "classAgreement": true
+    },
+    {
+      "tMs": 22589.23,
+      "frameIdx": 1354,
+      "role": "far-center",
+      "audit": {
+        "cls": "ambiguous",
+        "point": [0.447, 0.427],
+        "conf": 0.6,
+        "visibility": "mostly-hidden-behind-net"
+      },
+      "waveC": {
+        "cls": "ambiguous",
+        "point": [0.447, 0.428]
+      },
+      "adjudicationId": null,
+      "note": null,
+      "classAgreement": true
+    },
+    {
+      "tMs": 22589.23,
+      "frameIdx": 1354,
+      "role": "near-right",
+      "audit": {
+        "cls": "visible",
+        "point": [0.67, 0.59],
+        "conf": 0.9,
+        "visibility": "partial-behind-leg"
+      },
+      "waveC": {
+        "cls": "not-visible",
+        "point": null
+      },
+      "adjudicationId": "ADJ-D8",
+      "note": null,
+      "classAgreement": false
+    }
+  ],
+  "metrics": {
+    "slots": 44,
+    "classAgree": 38,
+    "classAgreementPct": 86.4,
+    "bothVisiblePairs": 35,
+    "meanCenterDelta": 0.0207,
+    "meanCenterDeltaExclOutliers": 0.0172,
+    "coordinateOutliersOver0p05": [
+      {
+        "tMs": 21087.73,
+        "role": "near-left-target",
+        "delta": 0.0967
+      },
+      {
+        "tMs": 22589.23,
+        "role": "far-left",
+        "delta": 0.0618
+      }
+    ],
+    "ambiguousUnionSlots": 3,
+    "ambiguousBothSlots": 1,
+    "ambiguousAgreementPct": 33.3,
+    "confusionMatrixRowsAuditColsWaveC": [
+      [35, 2, 3],
+      [0, 1, 0],
+      [1, 0, 2]
+    ],
+    "cohenKappa": 0.4477,
+    "kappaNote": "3-class (visible/ambiguous/not-visible) visibility-classification kappa; ownership role identity agreed on every slot where both annotators placed a box"
+  },
+  "adjudications": [
+    {
+      "id": "ADJ-D1",
+      "kind": "class",
+      "blind": "audit=visible(0.497,0.432) vs waveC=ambiguous-omit ('present but not certifiably boxed')",
+      "reReview": "re-viewed crop: dark blade hanging from far-center player's hand at (0.443,0.435); my blind x was off (read shorts region); paddle presence confirmed, boundary genuinely low-contrast behind net mesh",
+      "resolution": "partial: presence agreed by both; certifiability contested; audit final = visible-low-conf point [0.443,0.435] conf 0.6; waveC conservative omission defensible"
+    },
+    {
+      "id": "ADJ-D2",
+      "kind": "coordinate",
+      "blind": "both visible; delta (0.014,0.096) exceeds threshold; waveC=[0.3021,0.5407] audit=[0.288,0.445]",
+      "reReview": "re-viewed 0.23-0.36 x 0.38-0.60: grey blade face unambiguously spans x0.27-0.315 y0.435-0.475 extended over net; waveC box px[500,558,660,610] (y0.517-0.565) covers legs/net mesh, no blade there",
+      "resolution": "auditor-upheld: audit final [0.293,0.455]; waveC y-coordinate contested (likely grid misread)"
+    },
+    {
+      "id": "ADJ-D3",
+      "kind": "class",
+      "blind": "audit=visible(0.412,0.285) conf 0.85 vs waveC=ambiguous same location (0.406,0.286)",
+      "reReview": "locations agree within 0.006; waveC could not certify face vs dark clothing/fence; audit read it as far-center paddle held up near ball",
+      "resolution": "unresolved-classification: coordinates concordant, certifiability threshold differs; retained as class disagreement"
+    },
+    {
+      "id": "ADJ-D4",
+      "kind": "visibility",
+      "blind": "waveC=occluded(no point) vs audit=visible(0.30,0.455) conf 0.75",
+      "reReview": "re-viewed 0.23-0.37 x 0.34-0.58: elongated grey blade edge-on clearly visible from (0.295,0.33) to (0.34,0.46) in target's extended hand",
+      "resolution": "auditor-upheld: target paddle visible edge-on, final point [0.315,0.40] +/-0.03; waveC 'occluded' contested"
+    },
+    {
+      "id": "ADJ-D5",
+      "kind": "visibility",
+      "blind": "audit=judged far-left player out-of-frame vs waveC=visible edge-on [0.3135,0.3671]",
+      "reReview": "re-viewed 0.245-0.385 x 0.26-0.50: far-left red player IS in frame with dark blade edge-on at (0.30-0.325, 0.31-0.39), center ~(0.312,0.35)",
+      "resolution": "resolved-to-waveC: auditor blind pass missed dark-on-dark edge-on blade; corrected observation agrees with waveC within 0.017"
+    },
+    {
+      "id": "ADJ-D6",
+      "kind": "visibility",
+      "blind": "waveC=3 boxes only, near-right not labeled vs audit=visible(0.65,0.51) conf 0.95",
+      "reReview": "re-viewed 0.59-0.71 x 0.40-0.62: light-blue paddle blade with hand at grip unambiguously visible, center (0.645,0.512)",
+      "resolution": "auditor-upheld: waveC under-labeled a clearly visible near-right paddle at t=22338.98"
+    },
+    {
+      "id": "ADJ-D7",
+      "kind": "coordinate",
+      "blind": "both visible; x delta 0.062; waveC=[0.3547,0.3843] audit=[0.293,0.388]",
+      "reReview": "re-viewed 0.26-0.40 x 0.26-0.51: far-left cap player's dark blade w/ X logo at (0.28-0.31, 0.365-0.40) center (0.295,0.385); waveC px[658,393,704,437] (x0.343-0.367) covers forearm/background right of the blade",
+      "resolution": "auditor-upheld: audit final [0.295,0.385]; waveC x-coordinate contested (+0.06 shift)"
+    },
+    {
+      "id": "ADJ-D8",
+      "kind": "visibility",
+      "blind": "waveC note says near-right paddle not visible vs audit=visible(0.67,0.59) conf 0.9",
+      "reReview": "re-viewed 0.60-0.74 x 0.44-0.72: blue blade with white logo clearly visible partially behind near-right player's leg, center (0.693,0.588)",
+      "resolution": "auditor-upheld: waveC under-labeled; audit final [0.693,0.588]"
+    }
+  ]
+}
