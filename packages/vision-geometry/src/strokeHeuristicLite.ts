@@ -3,7 +3,9 @@ import { toLegacyPoseFrames, type PoseSequence } from "@pickle/swing-domain";
 
 /**
  * Stroke recognition taxonomy v3 + the hierarchical HEURISTIC baseline —
- * PORT of packages/swing-lab/src/strokeHeuristic.ts (stroke-heuristic-4).
+ * PORT of packages/swing-lab/src/strokeHeuristic.ts, kept in version lockstep
+ * (see STROKE_HEURISTIC_VERSION below; parity pinned by
+ * swing-lab/test/strokeHeuristicParity.test.ts).
  *
  * WHY THIS FILE EXISTS: the mobile app wires AUTO DETECT (declared-null
  * stroke routing, see analysis-pipeline/strokeAutoResolution.ts) and must not
@@ -50,8 +52,6 @@ import { toLegacyPoseFrames, type PoseSequence } from "@pickle/swing-domain";
  *    context, not evidence. A verifiable, decisive contradiction between
  *    the measured dominant-motion wrist and the declared side abstains; a
  *    non-decisive contradiction degrades the side confidence instead.
- * The swing-lab stroke-heuristic-4 absence-of-measurement gates are still
- * NOT ported (tracked separately).
  *
  * stroke-heuristic-3.1 adds the SYMMETRIC BIMANUAL gate (E10-F5, ported in
  * lockstep with swing-lab's stroke-heuristic-5): wheelchair rim propulsion
@@ -61,9 +61,7 @@ import { toLegacyPoseFrames, type PoseSequence } from "@pickle/swing-domain";
  * AND the wrists stay far apart (each hand on its own wheel rim), no
  * single-arm stroke identity is attributable — abstain. Genuine two-handed
  * backhands keep BOTH hands on ONE grip, so their wrist separation stays
- * small and the gate does not fire. (swing-lab's stroke-heuristic-4
- * absence-of-measurement gates are NOT yet ported here — that dedup/port
- * remains a follow-up.)
+ * small and the gate does not fire.
  *
  * stroke-heuristic-4 closes three absence-of-measurement holes found by
  * benchmarking against the wave-c/d stroke gold on committed wave-a pose
