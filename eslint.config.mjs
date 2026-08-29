@@ -92,6 +92,8 @@ export default tseslint.config(
       "datasets/experiments/**/*.ts",
       // data-engine CLIs (acquire/factory/status/import/failure-mine) print reports.
       "packages/swing-lab/src/engine/**/*.ts",
+      // release-manifest generator CLI prints its summary.
+      "packages/release-ops/src/generateManifestCli.ts",
     ],
     rules: {
       "no-console": "off",

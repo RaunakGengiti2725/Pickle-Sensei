@@ -227,6 +227,43 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@26.3.0)(tsx@4.23.12)
 
+  packages/release-ops:
+    dependencies:
+      '@pickle/capture-envelope':
+        specifier: workspace:*
+        version: link:../capture-envelope
+      '@pickle/database':
+        specifier: workspace:*
+        version: link:../database
+      '@pickle/model-registry':
+        specifier: workspace:*
+        version: link:../model-registry
+      '@pickle/scoring':
+        specifier: workspace:*
+        version: link:../scoring
+      '@pickle/shared-types':
+        specifier: workspace:*
+        version: link:../shared-types
+      '@pickle/swing-lab':
+        specifier: workspace:*
+        version: link:../swing-lab
+      '@pickle/vision-geometry':
+        specifier: workspace:*
+        version: link:../vision-geometry
+    devDependencies:
+      '@types/node':
+        specifier: ^20.17.0
+        version: 20.19.43
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.12
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@20.19.43)(tsx@4.23.12)
+
   packages/scoring:
     dependencies:
       '@pickle/shared-types':
