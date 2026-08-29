@@ -136,6 +136,7 @@ describe.skipIf(!testUrl)("migration certification (real PostgreSQL)", () => {
         "0018_consent_role_separation.sql",
         "0018_deletion_task_retry.sql",
         "0018_evaluation_telemetry.sql",
+        "0019_hard_case_queue.sql",
       ]);
 
       const after = await pool.query(
