@@ -61,7 +61,9 @@ export function toSyncPayload(
   };
 }
 
-const MAX_ATTEMPTS = 8;
+/** Bounded attempt budget for permanent failures; transient failures never
+ * consume it (see isPermanentSyncFailure). */
+export const OUTBOX_MAX_ATTEMPTS = 8;
 
 /**
  * Only failures that can never succeed on retry consume the bounded attempt
@@ -113,7 +115,7 @@ export async function drainOutbox(
   const { rows } = await db.execute(
     `SELECT id, kind, payload, attempts FROM outbox
      WHERE owner_key = ? AND attempts < ? ORDER BY id ASC LIMIT 50`,
-    [owner, MAX_ATTEMPTS],
+    [owner, OUTBOX_MAX_ATTEMPTS],
   );
   let synced = 0;
   let failed = 0;
