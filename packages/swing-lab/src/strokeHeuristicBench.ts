@@ -317,10 +317,13 @@ function accumulate(counts: SliceCounts, row: BenchRow): void {
   }
 }
 
+export type StrokeClassifier = (input: Parameters<typeof classifyStroke>[0]) => StrokePrediction;
+
 export function evaluateGoldLabel(
   gold: StrokeGoldLabel,
   pose: BenchPose,
   handedness: "right" | "left",
+  classifier: StrokeClassifier = classifyStroke,
 ): BenchRow {
   const info = STROKE_BENCH_POSE_CASES[gold.caseId]!;
   const window = { startMs: gold.eventStartMs, endMs: gold.eventEndMs };
@@ -375,7 +378,7 @@ export function evaluateGoldLabel(
     eventPeakMs = peak?.timestampMs ?? null;
     referenceUsed = eventPeakMs !== null ? "wrist_speed_peak" : "none";
   }
-  const prediction = classifyStroke({
+  const prediction = classifier({
     sequence,
     window,
     contactMs: gold.contactMs,

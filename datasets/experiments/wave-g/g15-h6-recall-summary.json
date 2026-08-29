@@ -1,0 +1,70 @@
+{
+  "workstreamId": "g15-h6-recall",
+  "wave": "wave-g",
+  "dateIso": "2026-08-29",
+  "mission": "Measure whether the v6 abstention gates (92e0c2c sparse-declared-wrist, 629a9fc median-normalization OVERHEAD cross-check) destroy true OVERHEAD recall: run stroke-heuristic-6 over ALL labeled stroke gold and compare against stroke-heuristic-5 on identical inputs.",
+  "method": "New comparison harness packages/swing-lab/src/strokeHeuristicRecallBench.ts pairs stroke-heuristic-6 (HEAD) with a frozen byte-for-byte snapshot of stroke-heuristic-5 (packages/swing-lab/src/strokeHeuristicV5Frozen.ts, extracted via git show d6f951f:packages/swing-lab/src/strokeHeuristic.ts — the last pre-v6 commit). Both classifiers receive IDENTICAL inputs per gold row: the same track selection, pose sequence, wrist-speed series, handedness, and contact reference, built by the existing e03 bench loader (strokeHeuristicBench.ts, evaluateGoldLabel now parameterized by classifier with classifyStroke as the default — zero behavior change for existing callers).",
+  "datasetScopeAndGrouping": "ALL committed stroke gold in datasets/paddle-bench/stroke-gold.json: 29 labels across 11 cases, dev tier only. 18 labels are evaluable on this Linux box — pose is committed only for the 8 wave-a corpus windows (runs-wave-a/*/people.json); the 11 labels on afn-sasebo-rally1 (7), wm-volley-02 (2), afn-sasebo-rally2 (2) have no committed pose and are reported as unevaluable, never fabricated. Grouping is by corpus sessionKey (dvids-marne-2024 n=12 rows, afn-sasebo-2025-06 n=5, dvids-warriorgames-2026 n=1), never a random frame split.",
+  "holdoutStatement": "Held-out cases wm-dink-01 and afn-vic-rally1 were never read, listed, or evaluated: they have no rows in stroke-gold.json and no committed pose in runs-wave-a, and the harness touches neither.",
+  "configuration": {
+    "v6": "stroke-heuristic-6 (uncalibrated) at integration head 104ea0f",
+    "v5": "stroke-heuristic-5 (uncalibrated) frozen from git d6f951f",
+    "paddle": "null for both versions (no committed paddle track on Linux); contact points are wrist-derived identically",
+    "handedness": "majority of explicit right/left bundle-annotation votes, default right when no vote exists",
+    "reference": "gold contactMs when present, else measured wrist-speed peak inside the event window",
+    "harnessCommand": "pnpm --filter @pickle/swing-lab exec tsx src/strokeHeuristicRecallBench.ts"
+  },
+  "measuredResults": {
+    "evaluableLabels": 18,
+    "goldKnownL1Rows": 17,
+    "overheadRecall": {
+      "v6": { "predictedOverhead": 1, "goldOverheadRows": 3, "abstained": 2, "committedWrongFamily": 0 },
+      "v5": { "predictedOverhead": 1, "goldOverheadRows": 3, "abstained": 2, "committedWrongFamily": 0 },
+      "delta": "IDENTICAL — v6 gates removed zero true OVERHEAD detections on the evaluable gold (N=3, honest small-N)"
+    },
+    "overheadPrecision": {
+      "v6": { "goldOverhead": 1, "totalOverheadClaims": 1, "goldUnknownClaims": 0 },
+      "v5": { "goldOverhead": 1, "totalOverheadClaims": 1, "goldUnknownClaims": 0 },
+      "delta": "IDENTICAL (1/1 both; N=1 committed OVERHEAD claim)"
+    },
+    "perFamilyL1AccuracyCounts": {
+      "serve": { "v6": "1 correct / 0 wrong / 0 abstained of 1", "v5": "1 correct / 0 wrong / 0 abstained of 1" },
+      "overhead_lob": { "v6": "1 correct / 0 wrong / 2 abstained of 3", "v5": "1 correct / 0 wrong / 2 abstained of 3" },
+      "groundstroke": { "v6": "1 correct / 0 wrong / 1 abstained of 2", "v5": "1 correct / 0 wrong / 1 abstained of 2" },
+      "volley": { "v6": "0 correct / 0 wrong / 7 abstained of 7", "v5": "1 correct / 0 wrong / 6 abstained of 7" },
+      "dink": { "v6": "2 correct / 0 wrong / 2 abstained of 4", "v5": "2 correct / 0 wrong / 2 abstained of 4" }
+    },
+    "abstentionRate": {
+      "v6": { "l1Abstained": 12, "goldKnownRows": 17 },
+      "v5": { "l1Abstained": 11, "goldKnownRows": 17 }
+    },
+    "silentWrongRate": {
+      "v6": { "silentWrong": 2, "committedPredictions": 5 },
+      "v5": { "silentWrong": 2, "committedPredictions": 6 },
+      "note": "Both silent-wrong rows (wavea-faead-rally@13417 L2 side, wavea-wgm-wheelchair@182400 L2 side) predate v6 and are unchanged by it."
+    },
+    "changedRows": [
+      {
+        "row": "wavea-sasebo-volleys @52434 [target] gold volley/backhand",
+        "v5": "BACKHAND — L1 correct, L2 correct",
+        "v6": "UNKNOWN — abstained (declared_wrist_too_sparsely_measured_under_handedness_contradiction)",
+        "interpretation": "The ONLY behavior difference on 18 evaluable rows: the sparse-declared-wrist gate (92e0c2c) converts one fully-correct v5 commit into an abstention. This is a real (non-OVERHEAD) recall cost of the v6 gates: 1 row."
+      }
+    ],
+    "medianNormalizationGate": "The 629a9fc median-normalization OVERHEAD cross-check changed ZERO rows on this gold: the two abstained overhead_lob rows (wavea-marne-dig@14042, wavea-944403-dink@22000) abstain identically under v5 (dominant-wrist attribution and torso-extent-collapse gates that predate v6)."
+  },
+  "findings": [
+    "The v6 abstention gates do NOT destroy true OVERHEAD recall on the evaluable dev gold: OVERHEAD recall is 1/3 under both v5 and v6, and OVERHEAD precision is 1/1 under both. Zero OVERHEAD rows changed.",
+    "The low OVERHEAD recall (1 of 3) predates v6 entirely: both missed overheads abstain under pre-v6 gates (dominant_wrist_attribution_unverifiable_rival_unmeasured; torso_extent_collapsed_vs_sequence_median).",
+    "The measured cost of v6 is one true volley/backhand commit (wavea-sasebo-volleys@52434) that v5 classified fully correctly and v6 abstains on via the sparse-declared-wrist gate — L1 volley-family committed predictions drop 1→0 of 7.",
+    "v6 buys no silent-wrong reduction on this gold (2 under both versions; both are pre-existing L2 side errors), so on THIS dataset the v6 gates are recall-negative and precision-neutral. The gates' target failure modes (F20-F1 wrong-arm commit, F20-F2 manufactured OVERHEAD) do not occur in the evaluable gold, so their defensive value is not measurable here.",
+    "11 of 29 gold labels (afn-sasebo-rally1/2, wm-volley-02) remain unevaluable on Linux — no committed pose. Any claim about those slices needs a Mac pose-extraction run."
+  ],
+  "verdict": "YELLOW",
+  "verdictRationale": "The mission's hypothesis (v6 destroys true OVERHEAD recall) is NOT supported: OVERHEAD metrics are bit-identical v5 vs v6 on all evaluable gold. But GREEN is not claimable: the OVERHEAD gold slice is N=3 (honest small-N), 11/29 labels are unevaluable without Mac pose, and v6 does measurably cost one true non-OVERHEAD commit (volley family 1→0 correct of 7) while reducing silent-wrongs by zero on this dataset.",
+  "artifacts": [
+    "packages/swing-lab/src/strokeHeuristicRecallBench.ts (harness)",
+    "packages/swing-lab/src/strokeHeuristicV5Frozen.ts (frozen v5 baseline, provenance in header)",
+    "datasets/experiments/wave-g/g15-h6-recall-results.json (full per-row + per-slice counts)"
+  ]
+}
