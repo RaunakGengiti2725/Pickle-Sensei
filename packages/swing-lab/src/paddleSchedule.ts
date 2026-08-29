@@ -50,8 +50,7 @@ export const DEFAULT_TWO_PASS_CONFIG: TwoPassScheduleConfig = {
   missingGapFactor: 2.5,
 };
 
-export type DenseReason =
-  "event_peak" | "track_uncertainty" | "paddle_speed_change" | "missing_frames";
+type DenseReason = "event_peak" | "track_uncertainty" | "paddle_speed_change" | "missing_frames";
 
 export interface DenseRegion {
   startMs: number;
@@ -275,12 +274,12 @@ function sparseFramesInside(
 }
 
 /** Which pass produced each merged frame — the provenance record. */
-export interface SchedulePassRecord {
+interface SchedulePassRecord {
   tMs: number;
   pass: "sparse" | "dense";
 }
 
-export interface MergedDetectionResult {
+interface MergedDetectionResult {
   file: RawPaddleDetectionFile;
   passes: SchedulePassRecord[];
 }

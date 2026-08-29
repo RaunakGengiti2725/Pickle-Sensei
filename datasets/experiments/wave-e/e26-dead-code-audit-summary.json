@@ -1,0 +1,50 @@
+{
+  "workstream": "e26-dead-code-audit",
+  "branch": "devin/wave-e/e26-dead-code-audit",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "baseCommit": "8fc388e",
+  "preWaveCDBoundary": "52ba173",
+  "date": "2026-08-29",
+  "mission": "post-integration hygiene audit: dead code, duplicate implementations, stale feature flags, unused exports across packages/ and services/ introduced during waves C/D",
+  "method": {
+    "tools": [
+      "knip@5 full pnpm-workspace scan (28 unused-file, 35 unused-export, 56 unused-type candidates)",
+      "per-symbol whole-repo grep including npm-managed apps/mobile, tools/, native/, ml/ (knip cannot see apps/mobile — excluded from pnpm workspace per D-013)",
+      "git log -S provenance per candidate against the 52ba173 pre-wave-C boundary"
+    ],
+    "note": "no candidate was acted on from knip output alone; every removal is grep-verified repo-wide and provenance-dated to waves C/D"
+  },
+  "removed": {
+    "kind": "export-surface only (unexport of internal-only symbols); zero runtime/behavior change",
+    "count": 14,
+    "symbols": {
+      "packages/swing-lab/src/calibration.ts": ["ReliabilityBin", "CoverageRiskPoint"],
+      "packages/swing-lab/src/paddleSchedule.ts": [
+        "DenseReason",
+        "SchedulePassRecord",
+        "MergedDetectionResult"
+      ],
+      "packages/swing-lab/src/paddleWorker.ts": [
+        "PaddleDetectRequest",
+        "PaddleReadyEvent",
+        "PaddleDetectResponse",
+        "PaddleServeWorkerOptions",
+        "PaddleWorkerSupervisorOptions",
+        "PaddleDetectHandle"
+      ],
+      "packages/swing-lab/src/silentFailure.ts": ["ClaimStatus"],
+      "packages/swing-lab/src/eventFailureOracle.ts": ["smooth"],
+      "services/media-worker/src/trainingConsent.ts": ["TrainingEligibleSelection"]
+    }
+  },
+  "notRemoved": "see e26-dead-code-audit.md — intentional drift-guarded mirrors (analysis-pipeline strokeEvents mirror, strokeHeuristicLite port), semantically-divergent near-duplicates (dominantWristSpeeds x5, sha256Hex, calibrationReport), research/provenance CLIs kept per mandate, knip false positives (capture-envelope core.ts RN entry, vision-geometry vitest files), and pre-C/D dead code outside this workstream's boundary (services/api entitlements.ts module, flags/tokens/objectStore exports)",
+  "staleFeatureFlags": "none found — every wave C/D flag (--crop-recovery, --two-pass, --sparse-stride, --no-paddle-worker, --tight-window, --serve, --merge-tracklets) is parsed and consumed; deliberately-OFF flags are documented decisions (D-042, C02, C08), not stale",
+  "gates": {
+    "typecheck": "pnpm typecheck — exit 0 (all packages)",
+    "test": "pnpm test — exit 0 full workspace (swing-lab 459 passed | 4 skipped; media-worker consent suites green/skipped-without-DB per policy)",
+    "lint": "pnpm lint — exit 0, 0 problems",
+    "format": "pnpm format:check — exit 0"
+  },
+  "heldOut": "wm-dink-01 and afn-vic-rally1 untouched; no runs/ directories touched; datasets append-only respected",
+  "verdict": "GREEN"
+}

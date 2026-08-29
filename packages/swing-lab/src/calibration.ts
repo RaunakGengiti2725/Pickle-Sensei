@@ -20,7 +20,7 @@ function assertValidConfidence(confidence: number): void {
   }
 }
 
-export interface ReliabilityBin {
+interface ReliabilityBin {
   /** Inclusive lower edge; upper edge exclusive except the last bin. */
   lower: number;
   upper: number;
@@ -133,7 +133,7 @@ export function calibrationReport(
   };
 }
 
-export interface CoverageRiskPoint {
+interface CoverageRiskPoint {
   /** Answer iff confidence >= threshold. */
   threshold: number;
   /** Fraction of all samples answered at this threshold. */
