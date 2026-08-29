@@ -25,6 +25,7 @@ import { registerLibraryRoutes } from "./modules/library/routes.js";
 import { registerProgressRoutes } from "./modules/progress/routes.js";
 import { registerMediaRoutes } from "./modules/media/routes.js";
 import { registerAnalysisRoutes } from "./modules/analysis/routes.js";
+import { registerAnalysisReportRoutes } from "./modules/analysis/reportRoutes.js";
 import { registerBillingRoutes } from "./modules/billing/routes.js";
 import { registerSocialRoutes } from "./modules/social/routes.js";
 import { registerPrivacyRoutes } from "./modules/privacy/routes.js";
@@ -302,6 +303,7 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
   registerProgressRoutes(app, context);
   registerMediaRoutes(app, context);
   registerAnalysisRoutes(app, context);
+  registerAnalysisReportRoutes(app, context);
   registerBillingRoutes(app, context);
   registerSocialRoutes(app, context);
   registerPrivacyRoutes(app, context);
