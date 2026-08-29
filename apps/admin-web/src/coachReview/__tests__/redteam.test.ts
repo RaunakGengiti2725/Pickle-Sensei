@@ -34,6 +34,14 @@ function review(coachId: string): CoachReview {
     coachId,
     coachCredentialRef: `cred-${coachId}`,
     reviewId: `wm-dink-01-E1.${coachId}`,
+    provenance: {
+      ...fixture!.provenance,
+      coachQualificationSnapshot: {
+        ...fixture!.provenance.coachQualificationSnapshot,
+        coachId,
+        credentialRef: `cred-${coachId}`,
+      },
+    },
   };
 }
 
@@ -52,7 +60,7 @@ describe("validateReview rejects non-finite numbers", () => {
     bad.faults = [
       {
         ...bad.faults[0]!,
-        evidence: { timestampsMs: [100], region: { x: NaN, y: 0, w: 0.5, h: 0.5 } },
+        evidence: { timestampsMs: [100], frames: [], region: { x: NaN, y: 0, w: 0.5, h: 0.5 } },
       },
     ];
     expect(validateReview(bad, context)).toContain(

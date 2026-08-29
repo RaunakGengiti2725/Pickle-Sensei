@@ -30,6 +30,14 @@ function realReview(): CoachReview {
     coachId: "coach-01",
     coachCredentialRef: "cred-2026-001",
     reviewId: "wm-dink-01-E1.coach-01",
+    provenance: {
+      ...fixture!.provenance,
+      coachQualificationSnapshot: {
+        ...fixture!.provenance.coachQualificationSnapshot,
+        coachId: "coach-01",
+        credentialRef: "cred-2026-001",
+      },
+    },
   };
 }
 

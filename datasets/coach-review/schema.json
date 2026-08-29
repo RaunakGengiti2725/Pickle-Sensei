@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 2,
-  "generatedAtIso": "2026-08-29T01:51:06.841Z",
+  "schemaVersion": 3,
+  "generatedAtIso": "2026-08-29T17:45:58.176Z",
   "reviewRecord": {
     "typescriptSource": "packages/swing-lab/src/coachReview.ts (interface CoachReview + validateCoachReview)",
     "storage": "datasets/coach-review/reviews/<reviewId>.json — append-only; one file per review; never edited in place",
@@ -17,15 +17,51 @@
       "drillLibraryVersion",
       "strokeConfirmation",
       "overallQuality",
+      "phaseEvaluations",
+      "primaryFaultId",
       "faults",
       "drillSuggestions",
       "confidence",
       "cannotEvaluate",
       "rationale",
+      "provenance",
       "createdAtIso",
       "submittedAtIso"
+    ],
+    "amendments": "datasets/coach-review/amendments/<reviewId>.r<N>.json — append-only full-replacement records; the base review file is NEVER overwritten",
+    "adjudication": "datasets/coach-review/adjudications/<queueItemId>.json — separate append-only record; disagreement preserved, never averaged away"
+  },
+  "strokePhases": {
+    "version": "stroke-phases-v1",
+    "phases": [
+      {
+        "id": "preparation",
+        "name": "Preparation / ready position"
+      },
+      {
+        "id": "backswing",
+        "name": "Backswing / take-back"
+      },
+      {
+        "id": "contact",
+        "name": "Contact"
+      },
+      {
+        "id": "follow_through",
+        "name": "Follow-through"
+      },
+      {
+        "id": "recovery",
+        "name": "Recovery to ready"
+      }
     ]
   },
+  "skillLevelRelevance": [
+    "beginner",
+    "intermediate",
+    "advanced",
+    "all"
+  ],
   "strokeTaxonomy": {
     "version": "pickleball-stroke-taxonomy-v3",
     "labels": [

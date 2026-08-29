@@ -1,4 +1,13 @@
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -115,6 +124,16 @@ function testReview(coachIndex: number, queueItemId = "wm-dink-01-E1"): CoachRev
     queueItemId,
     eventRef: { caseId, eventIndex },
     reviewId: `${queueItemId}.${coach.coachId}`,
+    provenance: {
+      ...fixture!.provenance,
+      coachQualificationSnapshot: {
+        ...fixture!.provenance.coachQualificationSnapshot,
+        coachId: coach.coachId,
+        credentialRef: coach.credentialRef,
+        provisionedAtIso: "2026-08-29T00:00:00.000Z",
+        provisionedBy: "d3-09-redteam-test",
+      },
+    },
   };
 }
 
@@ -265,6 +284,14 @@ describe("amendment gates (real middleware, throwaway root)", () => {
         ...original,
         coachId: impostor.coachId,
         coachCredentialRef: impostor.credentialRef,
+        provenance: {
+          ...original.provenance,
+          coachQualificationSnapshot: {
+            ...original.provenance.coachQualificationSnapshot,
+            coachId: impostor.coachId,
+            credentialRef: impostor.credentialRef,
+          },
+        },
       },
       createdAtIso: "2026-08-29T00:00:00.000Z",
     };
@@ -287,6 +314,50 @@ describe("amendment gates (real middleware, throwaway root)", () => {
     const result = await post("/api/coach-review-amendments", JSON.stringify(amendment));
     expect(result.status).toBe(409);
     expect(result.body).toContain("revision must be 2");
+  });
+
+  it("refuses a fabricated qualification snapshot (registry mismatch) with 422", async () => {
+    const review = testReview(2);
+    review.provenance = {
+      ...review.provenance,
+      coachQualificationSnapshot: {
+        ...review.provenance.coachQualificationSnapshot,
+        provisionedBy: "someone-else-entirely",
+      },
+    };
+    const result = await post("/api/coach-reviews", JSON.stringify(review));
+    expect(result.status).toBe(422);
+    expect(result.body).toContain("cannot be fabricated");
+  });
+
+  it("persists an amendment as a NEW file and never rewrites the base review", async () => {
+    const original = testReview(0);
+    const basePath = join(tmpRoot, "datasets/coach-review/reviews", `${original.reviewId}.json`);
+    const baseBytesBefore = readFileSync(basePath, "utf8");
+    const amendment = {
+      schemaVersion: 1,
+      amendmentId: `${original.reviewId}.r2`,
+      reviewId: original.reviewId,
+      revision: 2,
+      reason: "rewatched at quarter speed — confidence revised",
+      review: { ...original, confidence: 0.55 },
+      createdAtIso: "2026-08-29T00:00:00.000Z",
+    };
+    const result = await post("/api/coach-review-amendments", JSON.stringify(amendment));
+    expect(result.status).toBe(201);
+    expect(readFileSync(basePath, "utf8")).toBe(baseBytesBefore);
+    const amendmentPath = join(
+      tmpRoot,
+      "datasets/coach-review/amendments",
+      `${original.reviewId}.r2.json`,
+    );
+    expect(existsSync(amendmentPath)).toBe(true);
+    const duplicate = await post("/api/coach-review-amendments", JSON.stringify(amendment));
+    expect(duplicate.status).toBe(409);
+    expect(readFileSync(basePath, "utf8")).toBe(baseBytesBefore);
+    expect(
+      (JSON.parse(readFileSync(amendmentPath, "utf8")) as typeof amendment).review.confidence,
+    ).toBe(0.55);
   });
 });
 

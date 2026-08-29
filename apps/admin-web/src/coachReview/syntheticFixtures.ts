@@ -1,4 +1,4 @@
-import type { CoachReview, LoadedReview } from "./types";
+import type { CoachReview, LoadedReview, ReviewProvenance } from "./types";
 
 /**
  * SYNTHETIC DEV FIXTURES — NOT REVIEWS.
@@ -17,8 +17,25 @@ import type { CoachReview, LoadedReview } from "./types";
 export const SYNTHETIC_BANNER =
   "SYNTHETIC DEV FIXTURE — these are NOT coach reviews. Real review count is unchanged (see queue.json). Remove ?synthetic=1 to return to the truthful empty state.";
 
+function syntheticProvenance(coachId: string, videoPath: string): ReviewProvenance {
+  return {
+    coachQualificationSnapshot: {
+      coachId,
+      credentialRef: "SYNTHETIC-NO-CREDENTIAL",
+      registryStatus: "active",
+      provisionedAtIso: "2026-08-28T00:00:00.000Z",
+      provisionedBy: "SYNTHETIC-FIXTURE",
+      snapshotAtIso: "2026-08-28T00:00:00.000Z",
+    },
+    videoRef: { path: videoPath, annotatorId: null, annotationRevision: null },
+    analysisVersions: {},
+    rawLabelsShown: null,
+    adjudicationState: "unadjudicated",
+  };
+}
+
 const BASE = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   strokeTaxonomyVersion: "pickleball-stroke-taxonomy-v3",
   faultTaxonomyVersion: "fault-taxonomy-v0-draft",
   drillLibraryVersion: "drill-library-v0",
@@ -38,24 +55,41 @@ export function syntheticAgreeingPair(): CoachReview[] {
       eventRef: { caseId: "wm-dink-01", eventIndex: 0 },
       strokeConfirmation: { kind: "confirmed", stroke: "BACKHAND_DINK" },
       overallQuality: { scaleId: "technique-quality-5pt-v1", value: 3 },
+      phaseEvaluations: [
+        { phaseId: "contact", assessment: "minor_issue", note: "synthetic: face flips" },
+        { phaseId: "recovery", assessment: "minor_issue", note: "synthetic: slow reset" },
+      ],
+      primaryFaultId: "dink.wristy_flick",
       faults: [
         {
           faultId: "dink.wristy_flick",
           severity: 2,
-          evidence: { timestampsMs: [1240, 1300], region: null },
+          evidence: { timestampsMs: [1240, 1300], frames: [], region: null },
           rationale: "synthetic fixture rationale — face flips through contact",
         },
         {
           faultId: "global.no_recovery_to_ready",
           severity: 1,
-          evidence: { timestampsMs: [1600], region: null },
+          evidence: { timestampsMs: [1600], frames: [], region: null },
           rationale: "synthetic fixture rationale — paddle hangs after contact",
         },
       ],
-      drillSuggestions: [{ drillId: "drill.wall-dink-rally", freeText: "synthetic suggestion" }],
+      drillSuggestions: [
+        {
+          drillId: "drill.wall-dink-rally",
+          freeText: "synthetic suggestion",
+          whyApplies: "synthetic fixture — why-applies text",
+          role: "recommended",
+          progressionNote: null,
+          regressionNote: null,
+          equipmentNote: null,
+          skillLevelRelevance: "all",
+        },
+      ],
       confidence: 0.8,
       cannotEvaluate: null,
       rationale: "synthetic fixture — agreement-path development data only",
+      provenance: syntheticProvenance("SYNTHETIC-COACH-A", "SYNTHETIC-FIXTURE-VIDEO"),
     },
     {
       ...BASE,
@@ -65,11 +99,15 @@ export function syntheticAgreeingPair(): CoachReview[] {
       eventRef: { caseId: "wm-dink-01", eventIndex: 0 },
       strokeConfirmation: { kind: "confirmed", stroke: "BACKHAND_DINK" },
       overallQuality: { scaleId: "technique-quality-5pt-v1", value: 3 },
+      phaseEvaluations: [
+        { phaseId: "contact", assessment: "major_issue", note: "synthetic: wristy push" },
+      ],
+      primaryFaultId: "dink.wristy_flick",
       faults: [
         {
           faultId: "dink.wristy_flick",
           severity: 3,
-          evidence: { timestampsMs: [1260], region: null },
+          evidence: { timestampsMs: [1260], frames: [], region: null },
           rationale: "synthetic fixture rationale — wrist dominates the push",
         },
       ],
@@ -77,6 +115,7 @@ export function syntheticAgreeingPair(): CoachReview[] {
       confidence: 0.7,
       cannotEvaluate: null,
       rationale: "synthetic fixture — agreement-path development data only",
+      provenance: syntheticProvenance("SYNTHETIC-COACH-B", "SYNTHETIC-FIXTURE-VIDEO"),
     },
   ];
 }
@@ -92,11 +131,15 @@ export function syntheticDisagreeingPair(): CoachReview[] {
       eventRef: { caseId: "afn-vic-rally1", eventIndex: 0 },
       strokeConfirmation: { kind: "confirmed", stroke: "FOREHAND_DRIVE" },
       overallQuality: { scaleId: "technique-quality-5pt-v1", value: 4 },
+      phaseEvaluations: [
+        { phaseId: "backswing", assessment: "minor_issue", note: "synthetic: late take-back" },
+      ],
+      primaryFaultId: "drive.late_preparation",
       faults: [
         {
           faultId: "drive.late_preparation",
           severity: 1,
-          evidence: { timestampsMs: [520], region: null },
+          evidence: { timestampsMs: [520], frames: [], region: null },
           rationale: "synthetic fixture rationale — slightly late take-back",
         },
       ],
@@ -104,6 +147,7 @@ export function syntheticDisagreeingPair(): CoachReview[] {
       confidence: 0.75,
       cannotEvaluate: null,
       rationale: "synthetic fixture — disagreement-path development data only",
+      provenance: syntheticProvenance("SYNTHETIC-COACH-A", "SYNTHETIC-FIXTURE-VIDEO"),
     },
     {
       ...BASE,
@@ -117,11 +161,15 @@ export function syntheticDisagreeingPair(): CoachReview[] {
         note: "synthetic: taken out of the air",
       },
       overallQuality: { scaleId: "technique-quality-5pt-v1", value: 2 },
+      phaseEvaluations: [
+        { phaseId: "contact", assessment: "major_issue", note: "synthetic: arm-only power" },
+      ],
+      primaryFaultId: "drive.arm_only_power",
       faults: [
         {
           faultId: "drive.arm_only_power",
           severity: 3,
-          evidence: { timestampsMs: [640], region: null },
+          evidence: { timestampsMs: [640], frames: [], region: null },
           rationale: "synthetic fixture rationale — no hip rotation into contact",
         },
       ],
@@ -129,6 +177,7 @@ export function syntheticDisagreeingPair(): CoachReview[] {
       confidence: 0.65,
       cannotEvaluate: null,
       rationale: "synthetic fixture — disagreement-path development data only",
+      provenance: syntheticProvenance("SYNTHETIC-COACH-B", "SYNTHETIC-FIXTURE-VIDEO"),
     },
   ];
 }
@@ -143,11 +192,14 @@ export function syntheticCannotEvaluate(): CoachReview {
     eventRef: { caseId: "wm-volley-02", eventIndex: 0 },
     strokeConfirmation: { kind: "cannot_judge", reason: "synthetic: cannot see paddle face" },
     overallQuality: null,
+    phaseEvaluations: [],
+    primaryFaultId: null,
     faults: [],
     drillSuggestions: [],
     confidence: 0.2,
     cannotEvaluate: { reason: "synthetic fixture — cannot-evaluate path" },
     rationale: "",
+    provenance: syntheticProvenance("SYNTHETIC-COACH-C", "SYNTHETIC-FIXTURE-VIDEO"),
   };
 }
 

@@ -1,4 +1,11 @@
-import { EXPECTED_SCHEMA_VERSION, queueItemIdFor, reviewIdFor, type CoachReview } from "./types";
+import {
+  EXPECTED_SCHEMA_VERSION,
+  SKILL_LEVEL_RELEVANCE,
+  STROKE_PHASES,
+  queueItemIdFor,
+  reviewIdFor,
+  type CoachReview,
+} from "./types";
 
 /**
  * Structural validator for coach review records.
@@ -103,6 +110,41 @@ export function validateReview(raw: unknown, context: ValidationContext): string
   if (!cannotEvaluate && quality === null && (review.faults?.length ?? 0) === 0) {
     problems.push("a review without cannotEvaluate must carry overallQuality and/or faults");
   }
+  const knownPhaseIds = STROKE_PHASES.map((phase) => phase.id) as string[];
+  if (!Array.isArray(review.phaseEvaluations)) {
+    problems.push("phaseEvaluations[] required (may be empty only with cannotEvaluate)");
+  } else {
+    if (!cannotEvaluate && review.phaseEvaluations.length === 0) {
+      problems.push(
+        "phaseEvaluations requires ≥1 entry unless cannotEvaluate (use not_observable per phase)",
+      );
+    }
+    const seenPhases = new Set<string>();
+    for (const [index, evaluation] of review.phaseEvaluations.entries()) {
+      if (!knownPhaseIds.includes(evaluation.phaseId)) {
+        problems.push(`phaseEvaluations[${index}].phaseId ${evaluation.phaseId} unknown`);
+      } else if (seenPhases.has(evaluation.phaseId)) {
+        problems.push(`phaseEvaluations[${index}] duplicates phase ${evaluation.phaseId}`);
+      } else {
+        seenPhases.add(evaluation.phaseId);
+      }
+      if (
+        !["good", "minor_issue", "major_issue", "not_observable"].includes(evaluation.assessment)
+      ) {
+        problems.push(
+          `phaseEvaluations[${index}].assessment must be good|minor_issue|major_issue|not_observable`,
+        );
+      }
+      if (typeof evaluation.note !== "string") {
+        problems.push(`phaseEvaluations[${index}].note must be a string (may be empty)`);
+      } else if (
+        (evaluation.assessment === "minor_issue" || evaluation.assessment === "major_issue") &&
+        evaluation.note.trim().length < 5
+      ) {
+        problems.push(`phaseEvaluations[${index}].note required (≥5 chars) when flagging an issue`);
+      }
+    }
+  }
   if (!Array.isArray(review.faults)) problems.push("faults[] required (may be empty)");
   else {
     for (const [index, fault] of review.faults.entries()) {
@@ -134,9 +176,31 @@ export function validateReview(raw: unknown, context: ValidationContext): string
           problems.push(`faults[${index}].evidence.region must be normalized 0..1 {x,y,w,h}`);
         }
       }
+      const frames = fault.evidence?.frames;
+      if (!Array.isArray(frames)) {
+        problems.push(`faults[${index}].evidence.frames must be an array (may be empty)`);
+      } else if (frames.some((f) => !Number.isInteger(f) || f < 0)) {
+        problems.push(`faults[${index}].evidence.frames must be non-negative frame indices`);
+      }
       if (!fault.rationale || fault.rationale.trim().length < 10) {
         problems.push(`faults[${index}].rationale required (≥10 chars)`);
       }
+    }
+  }
+  if (review.primaryFaultId === undefined) {
+    problems.push("primaryFaultId must be present (null only when faults is empty)");
+  } else if (Array.isArray(review.faults)) {
+    if (review.faults.length === 0 && review.primaryFaultId !== null) {
+      problems.push("primaryFaultId must be null when faults is empty");
+    }
+    if (review.faults.length > 0 && review.primaryFaultId === null) {
+      problems.push("primaryFaultId required when faults are present");
+    }
+    if (
+      review.primaryFaultId !== null &&
+      !review.faults.some((fault) => fault.faultId === review.primaryFaultId)
+    ) {
+      problems.push("primaryFaultId must be one of faults[].faultId");
     }
   }
   if (!Array.isArray(review.drillSuggestions))
@@ -154,6 +218,29 @@ export function validateReview(raw: unknown, context: ValidationContext): string
       ) {
         problems.push(`drillSuggestions[${index}] needs a drillId or free text`);
       }
+      if (!suggestion.whyApplies || suggestion.whyApplies.trim().length < 10) {
+        problems.push(`drillSuggestions[${index}].whyApplies required (≥10 chars)`);
+      }
+      if (suggestion.role !== "recommended" && suggestion.role !== "alternative") {
+        problems.push(`drillSuggestions[${index}].role must be recommended|alternative`);
+      }
+      for (const field of ["progressionNote", "regressionNote", "equipmentNote"] as const) {
+        const value = suggestion[field];
+        if (value !== null && (typeof value !== "string" || value.trim().length === 0)) {
+          problems.push(`drillSuggestions[${index}].${field} must be null or non-empty text`);
+        }
+      }
+      if (!SKILL_LEVEL_RELEVANCE.includes(suggestion.skillLevelRelevance)) {
+        problems.push(
+          `drillSuggestions[${index}].skillLevelRelevance must be one of ${SKILL_LEVEL_RELEVANCE.join("|")}`,
+        );
+      }
+    }
+    if (
+      review.drillSuggestions.some((s) => s.role === "alternative") &&
+      !review.drillSuggestions.some((s) => s.role === "recommended")
+    ) {
+      problems.push("an alternative drill requires at least one recommended drill");
     }
   }
   if (
@@ -175,6 +262,89 @@ export function validateReview(raw: unknown, context: ValidationContext): string
     if (typeof value !== "string" || Number.isNaN(Date.parse(value))) {
       problems.push(`${field} must be an ISO timestamp`);
     }
+  }
+  problems.push(...validateProvenance(review));
+  return problems;
+}
+
+function validateProvenance(review: Partial<CoachReview>): string[] {
+  const problems: string[] = [];
+  const provenance = review.provenance;
+  if (!provenance || typeof provenance !== "object") {
+    return [
+      "provenance required (qualification snapshot, videoRef, analysisVersions, rawLabelsShown, adjudicationState)",
+    ];
+  }
+  const snapshot = provenance.coachQualificationSnapshot;
+  if (!snapshot || typeof snapshot !== "object") {
+    problems.push("provenance.coachQualificationSnapshot required");
+  } else {
+    if (review.coachId && snapshot.coachId !== review.coachId) {
+      problems.push("provenance.coachQualificationSnapshot.coachId must match review.coachId");
+    }
+    if (review.coachCredentialRef && snapshot.credentialRef !== review.coachCredentialRef) {
+      problems.push(
+        "provenance.coachQualificationSnapshot.credentialRef must match review.coachCredentialRef",
+      );
+    }
+    if (snapshot.registryStatus !== "active") {
+      problems.push("provenance.coachQualificationSnapshot.registryStatus must be 'active'");
+    }
+    for (const field of ["provisionedAtIso", "snapshotAtIso"] as const) {
+      const value = snapshot[field];
+      if (typeof value !== "string" || Number.isNaN(Date.parse(value))) {
+        problems.push(`provenance.coachQualificationSnapshot.${field} must be an ISO timestamp`);
+      }
+    }
+    if (typeof snapshot.provisionedBy !== "string" || snapshot.provisionedBy.trim().length === 0) {
+      problems.push("provenance.coachQualificationSnapshot.provisionedBy required");
+    }
+  }
+  const videoRef = provenance.videoRef;
+  if (!videoRef || typeof videoRef !== "object") {
+    problems.push("provenance.videoRef required");
+  } else {
+    if (typeof videoRef.path !== "string" || videoRef.path.trim().length === 0) {
+      problems.push("provenance.videoRef.path required");
+    }
+    if (videoRef.annotatorId !== null && typeof videoRef.annotatorId !== "string") {
+      problems.push("provenance.videoRef.annotatorId must be null or a string");
+    }
+    if (videoRef.annotationRevision !== null && !Number.isInteger(videoRef.annotationRevision)) {
+      problems.push("provenance.videoRef.annotationRevision must be null or an integer");
+    }
+  }
+  const analysisVersions = provenance.analysisVersions;
+  if (
+    !analysisVersions ||
+    typeof analysisVersions !== "object" ||
+    Array.isArray(analysisVersions)
+  ) {
+    problems.push("provenance.analysisVersions required (record of tool → version; may be empty)");
+  } else if (Object.values(analysisVersions).some((v) => typeof v !== "string" || v.length === 0)) {
+    problems.push("provenance.analysisVersions values must be non-empty strings");
+  }
+  const rawLabels = provenance.rawLabelsShown;
+  if (rawLabels === undefined) {
+    problems.push("provenance.rawLabelsShown must be present (null when the coach saw no labels)");
+  } else if (rawLabels !== null) {
+    if (rawLabels.annotatedStrokeV3 !== null && typeof rawLabels.annotatedStrokeV3 !== "string") {
+      problems.push("provenance.rawLabelsShown.annotatedStrokeV3 must be null or a string");
+    }
+    if (rawLabels.contactMs !== null && typeof rawLabels.contactMs !== "number") {
+      problems.push("provenance.rawLabelsShown.contactMs must be null or a number");
+    }
+    if (
+      rawLabels.windowMs !== null &&
+      (typeof rawLabels.windowMs?.start !== "number" || typeof rawLabels.windowMs?.end !== "number")
+    ) {
+      problems.push("provenance.rawLabelsShown.windowMs must be null or {start, end} in ms");
+    }
+  }
+  if (provenance.adjudicationState !== "unadjudicated") {
+    problems.push(
+      "provenance.adjudicationState must be 'unadjudicated' at submission — adjudication is a separate append-only record",
+    );
   }
   return problems;
 }

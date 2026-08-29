@@ -317,7 +317,26 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
     }
     const amendment = await readJsonBody<ReviewAmendment>(req, res, 1_000_000);
     if (amendment === null) return;
-    if (!gateIdentity(res, amendment.review?.coachId, amendment.review?.coachCredentialRef)) return;
+    const activeCoach = gateIdentity(
+      res,
+      amendment.review?.coachId,
+      amendment.review?.coachCredentialRef,
+    );
+    if (!activeCoach) return;
+    const snapshot = amendment.review?.provenance?.coachQualificationSnapshot;
+    if (
+      !snapshot ||
+      snapshot.coachId !== activeCoach.coachId ||
+      snapshot.credentialRef !== activeCoach.credentialRef ||
+      snapshot.provisionedAtIso !== activeCoach.provisionedAtIso ||
+      snapshot.provisionedBy !== activeCoach.provisionedBy
+    ) {
+      sendJson(res, 422, {
+        message:
+          "provenance.coachQualificationSnapshot must exactly match the provisioned registry entry — qualification metadata cannot be fabricated client-side",
+      });
+      return;
+    }
     const basePath = join(REVIEWS_DIR, `${amendment.reviewId}.json`);
     if (!existsSync(basePath)) {
       sendJson(res, 404, {
@@ -563,7 +582,22 @@ export function createLabApiMiddleware(repoRoot: string): LabApiMiddleware {
       }
       const review = await readJsonBody<CoachReview>(req, res, 1_000_000);
       if (review === null) return;
-      if (!gateIdentity(res, review.coachId, review.coachCredentialRef)) return;
+      const activeCoach = gateIdentity(res, review.coachId, review.coachCredentialRef);
+      if (!activeCoach) return;
+      const snapshot = review.provenance?.coachQualificationSnapshot;
+      if (
+        !snapshot ||
+        snapshot.coachId !== activeCoach.coachId ||
+        snapshot.credentialRef !== activeCoach.credentialRef ||
+        snapshot.provisionedAtIso !== activeCoach.provisionedAtIso ||
+        snapshot.provisionedBy !== activeCoach.provisionedBy
+      ) {
+        sendJson(res, 422, {
+          message:
+            "provenance.coachQualificationSnapshot must exactly match the provisioned registry entry — qualification metadata cannot be fabricated client-side",
+        });
+        return;
+      }
       const problems = validateReview(review, loadValidationContext());
       if (problems.length > 0) {
         sendJson(res, 422, { message: "review failed schema validation", problems });

@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 2,
-  "generatedAtIso": "2026-08-29T01:51:06.841Z",
+  "schemaVersion": 3,
+  "generatedAtIso": "2026-08-29T17:45:58.176Z",
   "status": "AWAITING QUALIFIED COACHES — 0 reviews exist; technique scoring stays BLOCKED_ON_VALIDATION until real coach labels arrive and agree",
   "program": {
     "reviewersPerStroke": "≥2 independent qualified coaches for important strokes",
@@ -39,7 +39,7 @@
       "bundle": {
         "role": "held_out",
         "annotatorId": "devin-visual-v1",
-        "revision": 6,
+        "revision": 8,
         "analyzable": false,
         "notAnalyzableReason": "rear tournament view; body partially cropped; labels are for paddle perception only",
         "annotatorConfidence": 0.6,
@@ -79,7 +79,7 @@
       "bundle": {
         "role": "development",
         "annotatorId": "devin-visual-v1",
-        "revision": 7,
+        "revision": 9,
         "analyzable": true,
         "notAnalyzableReason": null,
         "annotatorConfidence": 0.7,
@@ -119,7 +119,7 @@
       "bundle": {
         "role": "development",
         "annotatorId": "devin-visual-v1",
-        "revision": 3,
+        "revision": 6,
         "analyzable": true,
         "notAnalyzableReason": null,
         "annotatorConfidence": 0.65,
@@ -135,6 +135,166 @@
       },
       "replayCommand": "ffplay -ss 1.80 -t 2.60 datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
       "reviewTemplate": "datasets/coach-review/reviews/afn-sasebo-rally1-E1.<coachId>.json",
+      "requiredReviewsTarget": 2,
+      "existingReviews": []
+    },
+    {
+      "queueItemId": "afn-sasebo-rally1-E3",
+      "eventRef": {
+        "caseId": "afn-sasebo-rally1",
+        "eventIndex": 2
+      },
+      "video": "datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "windowMs": {
+        "start": 233,
+        "end": 500
+      },
+      "contactMs": 317,
+      "annotatedStrokeV3": "BACKHAND_VOLLEY",
+      "strokeFamily": "volley",
+      "relevantFaultFamilies": [
+        "global",
+        "volley"
+      ],
+      "bundle": {
+        "role": "development",
+        "annotatorId": "devin-visual-v1",
+        "revision": 6,
+        "analyzable": true,
+        "notAnalyzableReason": null,
+        "annotatorConfidence": 0.65,
+        "contactUncertainty": "plus_minus_1",
+        "phases": {
+          "preparationStartMs": 2600,
+          "accelerationStartMs": 2830,
+          "contactMs": 2900,
+          "followThroughEndMs": 3200,
+          "recoveryEndMs": 3600
+        },
+        "eventNote": "wave-a: backhand punch volley at face height - paddle already raised at clip start, stroke-directed motion from 233; contact bracketed 300 (ball at paddle) / 334 (struck) at 29.97fps -> 317 +-1 frame; punch recovered to ready 500"
+      },
+      "replayCommand": "ffplay -ss 0.00 -t 1.87 datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "reviewTemplate": "datasets/coach-review/reviews/afn-sasebo-rally1-E3.<coachId>.json",
+      "requiredReviewsTarget": 2,
+      "existingReviews": []
+    },
+    {
+      "queueItemId": "afn-sasebo-rally1-E4",
+      "eventRef": {
+        "caseId": "afn-sasebo-rally1",
+        "eventIndex": 3
+      },
+      "video": "datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "windowMs": {
+        "start": 1017,
+        "end": 1284
+      },
+      "contactMs": 1117,
+      "annotatedStrokeV3": "BACKHAND_VOLLEY",
+      "strokeFamily": "volley",
+      "relevantFaultFamilies": [
+        "global",
+        "volley"
+      ],
+      "bundle": {
+        "role": "development",
+        "annotatorId": "devin-visual-v1",
+        "revision": 6,
+        "analyzable": true,
+        "notAnalyzableReason": null,
+        "annotatorConfidence": 0.65,
+        "contactUncertainty": "plus_minus_1",
+        "phases": {
+          "preparationStartMs": 2600,
+          "accelerationStartMs": 2830,
+          "contactMs": 2900,
+          "followThroughEndMs": 3200,
+          "recoveryEndMs": 3600
+        },
+        "eventNote": "wave-a: low backhand dink at knee height - turn-down 1017, contact 1117 (ball ON paddle at 29.97fps, bracket 1083/1150), re-centered ready 1284"
+      },
+      "replayCommand": "ffplay -ss 0.22 -t 1.87 datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "reviewTemplate": "datasets/coach-review/reviews/afn-sasebo-rally1-E4.<coachId>.json",
+      "requiredReviewsTarget": 2,
+      "existingReviews": []
+    },
+    {
+      "queueItemId": "afn-sasebo-rally1-E5",
+      "eventRef": {
+        "caseId": "afn-sasebo-rally1",
+        "eventIndex": 4
+      },
+      "video": "datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "windowMs": {
+        "start": 1417,
+        "end": 1617
+      },
+      "contactMs": 1484,
+      "annotatedStrokeV3": "BACKHAND_VOLLEY",
+      "strokeFamily": "volley",
+      "relevantFaultFamilies": [
+        "global",
+        "volley"
+      ],
+      "bundle": {
+        "role": "development",
+        "annotatorId": "devin-visual-v1",
+        "revision": 6,
+        "analyzable": true,
+        "notAnalyzableReason": null,
+        "annotatorConfidence": 0.65,
+        "contactUncertainty": "plus_minus_1",
+        "phases": {
+          "preparationStartMs": 2600,
+          "accelerationStartMs": 2830,
+          "contactMs": 2900,
+          "followThroughEndMs": 3200,
+          "recoveryEndMs": 3600
+        },
+        "eventNote": "wave-a: low backhand dig #2 - reach-down 1417, contact 1484 (ball ON paddle at shin height), paddle back up at chest-ready 1617; flows into next dig"
+      },
+      "replayCommand": "ffplay -ss 0.62 -t 1.80 datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "reviewTemplate": "datasets/coach-review/reviews/afn-sasebo-rally1-E5.<coachId>.json",
+      "requiredReviewsTarget": 2,
+      "existingReviews": []
+    },
+    {
+      "queueItemId": "afn-sasebo-rally1-E6",
+      "eventRef": {
+        "caseId": "afn-sasebo-rally1",
+        "eventIndex": 5
+      },
+      "video": "datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "windowMs": {
+        "start": 1651,
+        "end": 1818
+      },
+      "contactMs": 1717,
+      "annotatedStrokeV3": "BACKHAND_VOLLEY",
+      "strokeFamily": "volley",
+      "relevantFaultFamilies": [
+        "global",
+        "volley"
+      ],
+      "bundle": {
+        "role": "development",
+        "annotatorId": "devin-visual-v1",
+        "revision": 6,
+        "analyzable": true,
+        "notAnalyzableReason": null,
+        "annotatorConfidence": 0.65,
+        "contactUncertainty": "plus_minus_1",
+        "phases": {
+          "preparationStartMs": 2600,
+          "accelerationStartMs": 2830,
+          "contactMs": 2900,
+          "followThroughEndMs": 3200,
+          "recoveryEndMs": 3600
+        },
+        "eventNote": "wave-a: low backhand dig #3 - turn-down 1651, contact 1717 (ball at paddle face, knee height), chest-ready 1818; fast dink battle, no settle between digs"
+      },
+      "replayCommand": "ffplay -ss 0.85 -t 1.77 datasets/paddle-bench/videos/afn-sasebo-rally1.mp4",
+      "reviewTemplate": "datasets/coach-review/reviews/afn-sasebo-rally1-E6.<coachId>.json",
       "requiredReviewsTarget": 2,
       "existingReviews": []
     },
@@ -159,7 +319,7 @@
       "bundle": {
         "role": "development",
         "annotatorId": "devin-visual-v1",
-        "revision": 4,
+        "revision": 6,
         "analyzable": true,
         "notAnalyzableReason": null,
         "annotatorConfidence": 0.6,
@@ -175,6 +335,46 @@
       },
       "replayCommand": "ffplay -ss 1.58 -t 2.27 datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
       "reviewTemplate": "datasets/coach-review/reviews/afn-sasebo-rally2-E1.<coachId>.json",
+      "requiredReviewsTarget": 2,
+      "existingReviews": []
+    },
+    {
+      "queueItemId": "afn-sasebo-rally2-E2",
+      "eventRef": {
+        "caseId": "afn-sasebo-rally2",
+        "eventIndex": 1
+      },
+      "video": "datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "windowMs": {
+        "start": 3600,
+        "end": 4233
+      },
+      "contactMs": 3834,
+      "annotatedStrokeV3": "OVERHEAD",
+      "strokeFamily": "overhead",
+      "relevantFaultFamilies": [
+        "global",
+        "overhead"
+      ],
+      "bundle": {
+        "role": "development",
+        "annotatorId": "devin-visual-v1",
+        "revision": 6,
+        "analyzable": true,
+        "notAnalyzableReason": null,
+        "annotatorConfidence": 0.6,
+        "contactUncertainty": "plus_minus_2",
+        "phases": {
+          "preparationStartMs": 2350,
+          "accelerationStartMs": 2480,
+          "contactMs": 2620,
+          "followThroughEndMs": 2950,
+          "recoveryEndMs": 3100
+        },
+        "eventNote": "wave-a: second target overhead smash - lob incoming, turn+raise underway at 3600 (begins 3567-3633), contact 3834 (ball at paddle bracketed 3800/3867 at 29.97fps), follow-through 3867-4067, paddle settles at side 4233; walk to net after (4317+) = locomotion, excluded; point ends (no far return)"
+      },
+      "replayCommand": "ffplay -ss 2.80 -t 2.23 datasets/paddle-bench/videos/afn-sasebo-rally2.mp4",
+      "reviewTemplate": "datasets/coach-review/reviews/afn-sasebo-rally2-E2.<coachId>.json",
       "requiredReviewsTarget": 2,
       "existingReviews": []
     },
