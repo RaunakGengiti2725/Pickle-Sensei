@@ -1,0 +1,105 @@
+{
+  "id": "g19-oracle-waterfall",
+  "wave": "G",
+  "date": "2026-08-29",
+  "head": "104ea0f (devin/1787988068-wave-c-integration)",
+  "mission": "Re-run the oracle waterfall on the current head: for every failed/abstained usable Result in the replayable evaluation set, substitute a perfect oracle for one stage at a time (TARGET / EVENT / PADDLE / OWNERSHIP / BALL / CONTACT / STROKE) using construction truth or committed labels, and rank which single-oracle substitution recovers the most usable Results.",
+  "method": {
+    "harness": "datasets/experiments/wave-g/g19-oracle-waterfall.ts (new research harness, run via tsx from packages/swing-lab; no production code changed)",
+    "pipeline": "Linux replayable proxy of the strict cascade: proposeStrokeEventsV2 event proposal → segmentPhasesTemporalV2 → estimateContact (with committed gold ball observations where they exist) → classifyStroke, evaluated per gold target event against the usable-result-v1 contract (contact |err| ≤ 66ms, or 66–132ms with ball/paddle confirmation, or honest contact abstention with validly ordered phases; estimated contact with err > 132ms is a fabricated-evidence veto).",
+    "oracleSubstitution": "One oracle at a time on ALL 16 events (recovery counted only on the 6 baseline-failed): EVENT = gold event bounds as the selected window; BALL = synthetic perfect ball track through gold contact; CONTACT = gold contactMs (where labeled) injected as the contact estimate; STROKE = gold L1 label substituted for the classifier output.",
+    "structuralOracles": {
+      "TARGET": "NO-OP: every replayable case is single-target by construction (windowed wave-a artifacts and the rally1 target-wrist fixture); target identity cannot fail on this set, so a TARGET oracle cannot recover anything here. Not a claim about full-product target resolution.",
+      "OWNERSHIP": "NO-OP: same reason — the replayable artifacts are already target-owned; ownership is fixed by construction.",
+      "PADDLE": "NOT CONSTRUCTIBLE: no committed paddle truth series exists on Linux (paddle detection runs on-device); a perfect-paddle counterfactual cannot be built without fabricating data, so it is reported as unmeasurable rather than zero."
+    },
+    "existingHarnessesReused": "eventRecallBench-style gold loading (event-bounds-wave-a.json + rally1 replay fixture), contactGoldReplay loadBallObservations, strokeHeuristicBench gold-L1 mapping."
+  },
+  "datasetScopeAndGrouping": {
+    "scope": "n=16 replayable DEV gold target events across 8 source clips: afn-sasebo-rally1 (5 events, wrist-only replay fixture) and 7 wave-a windowed pose artifacts (11 events).",
+    "grouping": "Grouped by source session/clip; no random frame splits. All 16 events are DEV; no locked/held-out data is used.",
+    "denominators": "Baseline usable 10/16. Recovery denominator = 6 baseline failed/abstained events. Denominators unchanged from the committed gold files; no examples deleted."
+  },
+  "holdoutStatement": "The two held-out cases were not read, listed, replayed, or referenced. The harness loads only DEV wave-a event bounds and the rally1 DEV replay fixture, and excludes held-out roles by the same role filter as eventRecallBench.",
+  "configuration": {
+    "node": "v20.18.1",
+    "runner": "npx tsx from packages/swing-lab",
+    "usableContract": "usable-result-v1 (thresholds unchanged: 66ms / 132ms-with-confirmation / honest-abstention-with-valid-phases; >132ms veto)",
+    "eventPassCriterion": "best proposal overlap ≥ 0.5 of gold span OR gold contact inside proposal (proposal-level, matching eventRecallBench; NOT selectTargetEventV2 selection — see limitations)"
+  },
+  "measuredResults": {
+    "baselineUsable": { "usable": 10, "n": 16, "failedOrAbstained": 6 },
+    "baselineEventRecallCrossCheck": "13/16 event-stage passes, matching the f06/f16 measured recall on the same set",
+    "rankedFrontier": [
+      {
+        "rank": 1,
+        "oracle": "CONTACT",
+        "usableWithOracle": 13,
+        "n": 16,
+        "recovered": 3,
+        "recoveryDenominator": 6,
+        "broke": 0,
+        "recoveredEvents": ["wavea-marne-dig#1", "wavea-wgm-wheelchair#1", "wavea-sasebo-volleys#3"]
+      },
+      {
+        "rank": 2,
+        "oracle": "EVENT",
+        "usableWithOracle": 7,
+        "n": 16,
+        "recovered": 1,
+        "recoveryDenominator": 6,
+        "broke": 4,
+        "recoveredEvents": ["wavea-wgm-wheelchair#1"],
+        "brokeEvents": ["afn-sasebo-rally1#4", "afn-sasebo-rally1#6", "wavea-faead-feed#1", "wavea-faead-rally#1"]
+      },
+      {
+        "rank": 3,
+        "oracle": "BALL",
+        "usableWithOracle": 10,
+        "n": 16,
+        "recovered": 1,
+        "recoveryDenominator": 6,
+        "broke": 1,
+        "recoveredEvents": ["wavea-wgm-wheelchair#1"],
+        "brokeEvents": ["wavea-faead-rally#1"]
+      },
+      {
+        "rank": 4,
+        "oracle": "STROKE",
+        "usableWithOracle": 10,
+        "n": 16,
+        "recovered": 0,
+        "recoveryDenominator": 6,
+        "broke": 0
+      },
+      { "oracle": "TARGET", "status": "NO_OP_ON_THIS_SET" },
+      { "oracle": "OWNERSHIP", "status": "NO_OP_ON_THIS_SET" },
+      { "oracle": "PADDLE", "status": "NOT_CONSTRUCTIBLE_ON_LINUX" }
+    ],
+    "unrecoveredByAnySingleOracle": [
+      "wavea-faead-rally#2 (no proposal overlaps gold; contact not runnable)",
+      "wavea-sasebo-volleys#1 (event fail + 515ms contact fabrication veto)",
+      "wavea-sasebo-volleys#5 (no proposal overlaps gold; contact not runnable)"
+    ]
+  },
+  "findings": [
+    "CONTACT is the current single-stage frontier on the replayable set: a perfect contact oracle recovers 3/6 failed Results (10/16 → 13/16), the most of any single oracle, by fixing an 82ms near-miss (marne-dig#1), a 168ms fabrication veto (sasebo-volleys#3), and a dual contact+phase abstention (wgm-wheelchair#1).",
+    "EVENT oracle is net-NEGATIVE on this set (10/16 → 7/16): substituting gold event bounds recovers 1 but breaks 4 baseline-usable Results — gold windows on the rally1 wrist fixture are too narrow for phase segmentation (PHASE_NO_MOTION_EVIDENCE on #4/#6), and on faead-feed#1 the narrower correct window pushes the contact estimator from an honest multimodal abstention to a confident 313ms-wrong estimate (fabrication veto). Yesterday's bottleneck (EVENT, per d06/EXP-2026-08-28) is NOT today's on this proxy set.",
+    "faead-rally#1 breaks under EVENT and BALL oracles for a contract reason: its gold contactMs is null, so once contact flips from abstained to estimated, the error is unverifiable and neither the ≤66ms clause nor the abstention clause applies. This is a label-coverage gap (missing gold contact), not a pipeline regression.",
+    "STROKE oracle recovers nothing: every stroke-blocked case is also blocked upstream by contact/phase evidence; stroke is never the frontier stage alone.",
+    "3/6 failures (faead-rally#2, sasebo-volleys#1, sasebo-volleys#5) are multi-stage: no single oracle recovers them; volleys clips fail event proposal AND contact simultaneously.",
+    "5/10 baseline-usable Results are usable via the honest-abstention clause on the rally1 wrist-only fixture (contact not runnable without pose); this proxy therefore leans generous on rally1 and cannot observe target-selection ambiguity (MULTI_STROKE_AMBIGUOUS) that blocked rally1 on the canonical Mac cascade."
+  ],
+  "limitations": [
+    "Linux proxy, not the canonical Mac strict cascade: Apple Vision pose extraction and selectTargetEventV2 target-event SELECTION are not exercised; the EVENT stage here is proposal-overlap only. Selection-level failures (e.g. rally1 MULTI_STROKE_AMBIGUOUS on Mac) are invisible to this measurement.",
+    "TARGET and OWNERSHIP oracles are structural no-ops on this set (single-target-by-construction artifacts), and PADDLE truth does not exist on Linux — their contribution to the full-product frontier is unmeasured here, not zero.",
+    "No Mac/iPhone/Swift numbers were produced or fabricated."
+  ],
+  "verdict": "YELLOW",
+  "rationale": "Measurement completed honestly on the full replayable DEV set with counts and a ranked frontier: CONTACT (recovers 3/6) has overtaken EVENT (recovers 1/6, net-negative) as the single-oracle frontier on the current head. Not PROVISIONAL_GREEN because 3 of 7 requested oracles (TARGET/OWNERSHIP/PADDLE) are structurally unmeasurable on this Linux proxy set and the canonical Mac selection path is not exercised, so the full-product frontier attribution is only partially covered. Not RED/ORANGE: the harness ran cleanly, cross-checks against f06 recall (13/16) reproduce, and every counterintuitive result (EVENT oracle breaking usable Results) was traced to a concrete verified mechanism.",
+  "artifacts": [
+    "datasets/experiments/wave-g/g19-oracle-waterfall.ts",
+    "datasets/experiments/wave-g/g19-oracle-waterfall-results.json",
+    "datasets/experiments/wave-g/g19-oracle-waterfall-summary.json"
+  ]
+}
