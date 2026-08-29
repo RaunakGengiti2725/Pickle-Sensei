@@ -1,0 +1,335 @@
+{
+  "experiment": "wave-g g05-f09-posterior before/after",
+  "dateUtc": "2026-08-29T17:39:57.707Z",
+  "estimatorVersion": "contact-evidence-4.3",
+  "posteriorVersion": "ownership-posterior-v1",
+  "condition": "LINUX-CPU; gold: committed pose + ORACLE-BALL, no paddle track (paddle-conditioned path cannot fire on gold — regression guard only); fixtures: synthetic",
+  "thresholds": {
+    "confidentWrongErrorMs": 150,
+    "confidentWrongConfidence": 0.6,
+    "goldStrictMs": 66,
+    "goldAcceptMs": 132
+  },
+  "adversarialFixtures": {
+    "before": {
+      "fixtures": 10,
+      "estimated": 8,
+      "abstained": 2,
+      "confidentWrong": 0,
+      "nearTruth66": 8,
+      "medianErrorMs": 5,
+      "p90ErrorMs": 11.5
+    },
+    "after": {
+      "fixtures": 10,
+      "estimated": 8,
+      "abstained": 2,
+      "confidentWrong": 0,
+      "nearTruth66": 8,
+      "medianErrorMs": 5,
+      "p90ErrorMs": 11.5
+    },
+    "rowsBefore": [
+      {
+        "id": "fast-30fps-pose-only",
+        "family": "fast_swing",
+        "expectation": "estimate_near_truth",
+        "ownershipConfidence": null,
+        "status": "estimated",
+        "errorMs": 15,
+        "confidence": 0.55,
+        "paddleConfirmed": false,
+        "confidentWrong": false
+      },
+      {
+        "id": "fast-24fps-with-ball",
+        "family": "fast_swing",
+        "expectation": "estimate_near_truth",
+        "ownershipConfidence": null,
+        "status": "estimated",
+        "errorMs": 5,
+        "confidence": 0.95,
+        "paddleConfirmed": false,
+        "confidentWrong": false
+      },
+      {
+        "id": "occluded-ball-at-contact",
+        "family": "occluded_ball",
+        "expectation": "estimate_near_truth",
+        "ownershipConfidence": null,
+        "status": "estimated",
+        "errorMs": 5,
+        "confidence": 0.55,
+        "paddleConfirmed": false,
+        "confidentWrong": false
+      },
+      {
+        "id": "occluded-ball-bounce-decoy",
+        "family": "occluded_ball",
+        "expectation": "must_not_confirm_wrong",
+        "ownershipConfidence": null,
+        "status": "estimated",
+        "errorMs": 0,
+        "confidence": 0.55,
+        "paddleConfirmed": false,
+        "confidentWrong": false
+      },
+      {
+        "id": "edge-on-paddle-reacquire-jump",
+        "family": "edge_on_paddle",
+        "expectation": "estimate_near_truth",
+        "ownershipConfidence": null,
+        "status": "abstained",
+        "errorMs": null,
+        "confidence": null,
+        "paddleConfirmed": null,
+        "confidentWrong": false
+      },
+      {
+        "id": "edge-on-paddle-lost-early",
+        "family": "edge_on_paddle",
+        "expectation": "estimate_near_truth",
+        "ownershipConfidence": null,
+        "status": "estimated",
+        "errorMs": 10,
+        "confidence": 0.55,
+        "paddleConfirmed": false,
+        "confidentWrong": false
+      },
+      {
+        "id": "no-pose-in-window",
+        "family": "missing_modality",
+        "expectation": "abstain_or_near_truth",
+        "ownershipConfidence": null,
+        "status": "estimated",
+        "errorMs": 10,
+        "confidence": 0.891,
+        "paddleConfirmed": true,
+        "confidentWrong": false
+      },
+      {
+        "id": "ball-plus-wrists-only",
+        "family": "missing_modality",
+        "expectation": "abstain_or_near_truth",
+        "ownershipConfidence": null,
+        "status": "estimated",
+        "errorMs": 0,
+        "confidence": 0.93,
+        "paddleConfirmed": false,
+        "confidentWrong": false
+      },
+      {
+        "id": "identity-swap-second-swing",
+        "family": "degenerate_pose",
+        "expectation": "must_not_confirm_wrong",
+        "ownershipConfidence": null,
+        "status": "abstained",
+        "errorMs": null,
+        "confidence": null,
+        "paddleConfirmed": null,
+        "confidentWrong": false
+      },
+      {
+        "id": "degenerate-torso-tiny-player",
+        "family": "degenerate_pose",
+        "expectation": "abstain_or_near_truth",
+        "ownershipConfidence": null,
+        "status": "estimated",
+        "errorMs": 0,
+        "confidence": 0.927,
+        "paddleConfirmed": false,
+        "confidentWrong": false
+      }
+    ],
+    "rowsAfter": [
+      {
+        "id": "fast-30fps-pose-only",
+        "family": "fast_swing",
+        "expectation": "estimate_near_truth",
+        "ownershipConfidence": null,
+        "status": "estimated",
+        "errorMs": 15,
+        "confidence": 0.55,
+        "paddleConfirmed": false,
+        "confidentWrong": false
+      },
+      {
+        "id": "fast-24fps-with-ball",
+        "family": "fast_swing",
+        "expectation": "estimate_near_truth",
+        "ownershipConfidence": null,
+        "status": "estimated",
+        "errorMs": 5,
+        "confidence": 0.95,
+        "paddleConfirmed": false,
+        "confidentWrong": false
+      },
+      {
+        "id": "occluded-ball-at-contact",
+        "family": "occluded_ball",
+        "expectation": "estimate_near_truth",
+        "ownershipConfidence": null,
+        "status": "estimated",
+        "errorMs": 5,
+        "confidence": 0.55,
+        "paddleConfirmed": false,
+        "confidentWrong": false
+      },
+      {
+        "id": "occluded-ball-bounce-decoy",
+        "family": "occluded_ball",
+        "expectation": "must_not_confirm_wrong",
+        "ownershipConfidence": null,
+        "status": "estimated",
+        "errorMs": 0,
+        "confidence": 0.55,
+        "paddleConfirmed": false,
+        "confidentWrong": false
+      },
+      {
+        "id": "edge-on-paddle-reacquire-jump",
+        "family": "edge_on_paddle",
+        "expectation": "estimate_near_truth",
+        "ownershipConfidence": 0.904,
+        "status": "abstained",
+        "errorMs": null,
+        "confidence": null,
+        "paddleConfirmed": null,
+        "confidentWrong": false
+      },
+      {
+        "id": "edge-on-paddle-lost-early",
+        "family": "edge_on_paddle",
+        "expectation": "estimate_near_truth",
+        "ownershipConfidence": 0.231,
+        "status": "estimated",
+        "errorMs": 10,
+        "confidence": 0.55,
+        "paddleConfirmed": false,
+        "confidentWrong": false
+      },
+      {
+        "id": "no-pose-in-window",
+        "family": "missing_modality",
+        "expectation": "abstain_or_near_truth",
+        "ownershipConfidence": null,
+        "status": "estimated",
+        "errorMs": 10,
+        "confidence": 0.891,
+        "paddleConfirmed": true,
+        "confidentWrong": false
+      },
+      {
+        "id": "ball-plus-wrists-only",
+        "family": "missing_modality",
+        "expectation": "abstain_or_near_truth",
+        "ownershipConfidence": null,
+        "status": "estimated",
+        "errorMs": 0,
+        "confidence": 0.93,
+        "paddleConfirmed": false,
+        "confidentWrong": false
+      },
+      {
+        "id": "identity-swap-second-swing",
+        "family": "degenerate_pose",
+        "expectation": "must_not_confirm_wrong",
+        "ownershipConfidence": null,
+        "status": "abstained",
+        "errorMs": null,
+        "confidence": null,
+        "paddleConfirmed": null,
+        "confidentWrong": false
+      },
+      {
+        "id": "degenerate-torso-tiny-player",
+        "family": "degenerate_pose",
+        "expectation": "abstain_or_near_truth",
+        "ownershipConfidence": null,
+        "status": "estimated",
+        "errorMs": 0,
+        "confidence": 0.927,
+        "paddleConfirmed": false,
+        "confidentWrong": false
+      }
+    ]
+  },
+  "committedGold": {
+    "before": {
+      "targetEvents": 10,
+      "estimated": 7,
+      "abstained": 3,
+      "wrongMarkers": 1,
+      "confidentWrong": 0,
+      "strictHits66": 4,
+      "acceptableHits132": 6,
+      "medianErrorMs": 27,
+      "p90ErrorMs": 127.80000000000001
+    },
+    "after": {
+      "targetEvents": 10,
+      "estimated": 7,
+      "abstained": 3,
+      "wrongMarkers": 1,
+      "confidentWrong": 0,
+      "strictHits66": 4,
+      "acceptableHits132": 6,
+      "medianErrorMs": 27,
+      "p90ErrorMs": 127.80000000000001
+    }
+  },
+  "redTeamScenes": {
+    "note": "e09/f09 F3 residual (foreign paddle WITHIN reach of idle target wrist) + genuine-paddle positive guard; synthetic, outside the fixture generator",
+    "foreignPaddleWithinReach": {
+      "before": {
+        "ownershipConfidence": null,
+        "status": "estimated",
+        "errorMs": 590,
+        "confidence": 0.778,
+        "ballConfirmed": true,
+        "paddleConfirmed": true,
+        "confidentWrong": true,
+        "limitingFactors": []
+      },
+      "after": {
+        "ownershipConfidence": 0,
+        "status": "abstained",
+        "errorMs": null,
+        "confidence": null,
+        "ballConfirmed": null,
+        "paddleConfirmed": null,
+        "confidentWrong": false,
+        "limitingFactors": [
+          "paddle_ownership_uncertain",
+          "contact_evidence_multimodal"
+        ]
+      }
+    },
+    "genuinePaddle": {
+      "before": {
+        "ownershipConfidence": null,
+        "status": "estimated",
+        "errorMs": 5,
+        "confidence": 0.7,
+        "ballConfirmed": false,
+        "paddleConfirmed": true,
+        "confidentWrong": false,
+        "limitingFactors": [
+          "no_ball_evidence"
+        ]
+      },
+      "after": {
+        "ownershipConfidence": 0.818,
+        "status": "estimated",
+        "errorMs": 5,
+        "confidence": 0.7,
+        "ballConfirmed": false,
+        "paddleConfirmed": true,
+        "confidentWrong": false,
+        "limitingFactors": [
+          "no_ball_evidence"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "workstream": "g05-f09-posterior",
+  "wave": "wave-g",
+  "dateUtc": "2026-08-29",
+  "branch": "devin/wave-g/g05-f09-posterior",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "mission": "Design and implement (behind a default-OFF flag) a contact posterior conditioned on ownership uncertainty: when the paddle track's ownership evidence for the target is weak/contradicted, degrade paddle-derived confirmation instead of treating the track as fully target-owned. No F09-specific rule: conditioning flows from a general ownership-confidence input. Evaluate on ALL adversarial contact fixtures + replayable committed contact gold, before/after with counts.",
+  "method": {
+    "implementation": "estimateContact gains two optional inputs: ownershipConditionedPosterior (feature flag, default OFF — omitted/false is byte-identical to contact-evidence-4.3) and paddleOwnershipConfidence (GENERAL [0,1] confidence that the paddle track is target-owned; null/undefined = unmeasured = no conditioning, absence of measurement is never counter-evidence). When ON with a measured confidence: (1) paddle_speed_peak and ball_paddle_proximity kernel mass scales by an ownership factor (linear ramp: 0 at confidence <=0.15, 1 at >=0.7) while the PRE-scale mass stays in the confidence denominator as dissent, so ownership doubt can only lower confidence, never raise it; (2) a ball direction-change gated only by a doubted paddle reference degrades to max(paddle gate x factor, measured wrist gate); (3) paddleConfirmed additionally requires ownership factor >= 0.5 — an unestablished track cannot CONFIRM. New limiting factors: paddle_ownership_uncertain, paddle_ownership_unconfirmed.",
+    "derivedConfidenceSource": "paddleOwnershipFromHandAffinity: one possible generic SOURCE for the confidence input (upstream trackers with real ownership verdicts should supply their own). Combines (a) sustained hand affinity — mean per-sample affinity of the paddle track to the nearest measured target wrist, ramp 0.45..1.2 torso spans — and (b) kinematic coherence — during fast paddle motion (>=0.6 torso/s) a held paddle's distance to the holding wrist changes far less than the paddle moves; distance-change/movement ratio ramp 0.25..0.8, movement-weighted. Returns null (unmeasured) when no paddle sample has a measured wrist near it.",
+    "noF09SpecificRule": "The estimator consumes only the scalar confidence; the F3 scene is never referenced in production code. The derived source uses only generic held-paddle physics (hand proximity + motion coherence), not any fixture-specific geometry.",
+    "evaluation": "vitest eval g05OwnershipPosterior.eval.ts runs BEFORE (flag OFF) and AFTER (flag ON + derived confidence) on: all 10 synthetic adversarial contact fixtures; the replayable committed contact gold via the existing replayAll harness (extended with a flag-ON option); and the two pinned red-team paddle-identity scenes (F3 foreign-paddle-within-reach residual + genuine-paddle positive guard) which live outside the fixture generator. Raw artifact: datasets/experiments/wave-g/g05-f09-posterior-eval.json."
+  },
+  "datasetScope": {
+    "adversarialFixtures": "All 10 synthetic adversarial contact fixtures (generateAdversarialContactFixtures): synthetic math tests with constructed truth, NOT human truth.",
+    "committedGold": "Replayable Wave D contact gold, 8 bundles / 6 source sessions, target-owner events N=10. Condition: LINUX-CPU, committed pose (runs-wave-a people.json), ORACLE-BALL sidecars, NO paddle track on Linux — the paddle-conditioned path cannot fire on this slice; it is measured as a regression guard, not as evidence of improvement.",
+    "redTeamScenes": "The pinned e09/f09 F3 residual scene (foreign paddle WITHIN reach of the target's idle off-hand wrist, arcing at the opponent's hit at truth+600ms) and the genuine-paddle positive guard; synthetic.",
+    "grouping": "Gold grouped by bundle/session (never random-frame splits), identical to the existing contactGold eval."
+  },
+  "holdoutStatement": "The two held-out cases were never read, listed, or referenced; the replay harness excludes them by construction. No thresholds, denominators, or gold labels were changed; the existing red-team and gold eval thresholds (150ms/0.6 confident-wrong, 66ms strict, 132ms acceptable) were reused as-is. The derived-source constants were set from held-paddle physics reasoning and the two pinned red-team scenes (both synthetic, both committed dev assets); no tuning against committed gold or held-out data.",
+  "configuration": {
+    "flag": "ownershipConditionedPosterior (default OFF)",
+    "posteriorVersion": "ownership-posterior-v1",
+    "estimatorVersion": "contact-evidence-4.3 (unchanged when flag OFF)",
+    "ownershipRamp": { "rejectConfidence": 0.15, "fullConfidence": 0.7 },
+    "paddleConfirmMinFactor": 0.5,
+    "handAffinityTorsoRamp": [0.45, 1.2],
+    "coherence": { "speedFloorTorsoPerS": 0.6, "ratioRamp": [0.25, 0.8] }
+  },
+  "measuredResults": {
+    "adversarialFixtures": {
+      "before_flagOff": {
+        "fixtures": 10,
+        "estimated": 8,
+        "abstained": 2,
+        "confidentWrong": 0,
+        "nearTruth66": 8,
+        "medianErrorMs": 5,
+        "p90ErrorMs": 11.5
+      },
+      "after_flagOn_derivedConfidence": {
+        "fixtures": 10,
+        "estimated": 8,
+        "abstained": 2,
+        "confidentWrong": 0,
+        "nearTruth66": 8,
+        "medianErrorMs": 5,
+        "p90ErrorMs": 11.5
+      },
+      "note": "Identical outcomes on all 10 fixtures (0/10 confident-wrong both arms — the fixture generator's confident-wrong failures were already fixed in f09). One fixture (edge-on-paddle-lost-early) receives derived ownership 0.231 (a false doubt on a genuine-but-early-lost paddle) yet its outcome is unchanged: 10ms error at confidence 0.55, paddleConfirmed already false before. No regression."
+    },
+    "committedGold_targetEvents": {
+      "before_flagOff": {
+        "targetEvents": 10,
+        "estimated": 7,
+        "abstained": 3,
+        "wrongMarkers_gt132ms": 1,
+        "confidentWrong_150ms_0p6": 0,
+        "strictHits66": 4,
+        "acceptableHits132": 6,
+        "medianErrorMs": 27,
+        "p90ErrorMs": 127.8
+      },
+      "after_flagOn": {
+        "targetEvents": 10,
+        "estimated": 7,
+        "abstained": 3,
+        "wrongMarkers_gt132ms": 1,
+        "confidentWrong_150ms_0p6": 0,
+        "strictHits66": 4,
+        "acceptableHits132": 6,
+        "medianErrorMs": 27,
+        "p90ErrorMs": 127.8
+      },
+      "note": "Byte-identical (asserted in the eval): no paddle track exists on Linux gold, so the derived confidence is null (unmeasured) and no conditioning applies. This slice proves non-regression only — it CANNOT show the improvement, because the paddle modality is absent."
+    },
+    "redTeamScenes": {
+      "foreignPaddleWithinReach_F3residual": {
+        "before_flagOff": {
+          "status": "estimated",
+          "errorMs": 590,
+          "confidence": 0.778,
+          "ballConfirmed": true,
+          "paddleConfirmed": true,
+          "confidentWrong": true
+        },
+        "after_flagOn": {
+          "derivedOwnershipConfidence": 0.0,
+          "status": "abstained",
+          "limitingFactors": ["paddle_ownership_uncertain", "contact_evidence_multimodal"],
+          "confidentWrong": false
+        }
+      },
+      "genuinePaddle_positiveGuard": {
+        "before_flagOff": {
+          "status": "estimated",
+          "errorMs": 5,
+          "confidence": 0.7,
+          "paddleConfirmed": true,
+          "confidentWrong": false
+        },
+        "after_flagOn": {
+          "derivedOwnershipConfidence": 0.818,
+          "status": "estimated",
+          "errorMs": 5,
+          "confidence": 0.7,
+          "paddleConfirmed": true,
+          "confidentWrong": false
+        }
+      }
+    },
+    "gates": {
+      "root": "pnpm typecheck && pnpm test && pnpm lint && pnpm format:check — ALL PASS (593 passed / 4 skipped workspace tests incl. 85 vision-geometry)",
+      "mobile": "apps/mobile npm ci && npx tsc --noEmit && npm test — ALL PASS (397 tests, 40 suites)",
+      "swiftMacIphone": "UNAVAILABLE on Linux; not measured, not claimed."
+    }
+  },
+  "findings": [
+    "The e09/f09 F3 residual — the documented confident-wrong contact from a foreign paddle hovering within reach of the target's idle wrist — becomes an honest abstention under the flag: before 590ms error at confidence 0.778 with BOTH modalities confirming; after, derived ownership confidence 0.0 (the paddle arcs while every measured target wrist is still — zero kinematic coherence), the paddle kernels carry no mass but still dissent in the confidence denominator, and the remaining ball-vs-wrist evidence is honestly multimodal, so the estimator abstains.",
+    "The genuine-paddle positive guard is unchanged under the flag (5ms error, confidence 0.7, paddleConfirmed) with derived ownership 0.818: conditioning does not tax established ownership.",
+    "All 10 adversarial fixtures are outcome-identical before/after (0 confident-wrong in both arms; 8 estimated / 2 abstained; median error 5ms). The one false-doubt case (derived confidence 0.231 on a genuine paddle that is lost early) changes nothing because that fixture's paddle carried no confirming role anyway — but it shows the derived hand-affinity source is conservative and imperfect; a real upstream ownership verdict is the intended production input.",
+    "Committed gold (N=10 target events) is byte-identical before/after — asserted in the eval — because Linux gold has NO paddle track: the conditioned path cannot fire. This means the improvement is currently only measurable on synthetic scenes; no real-video evidence of the improvement exists on this machine.",
+    "Default-OFF parity is pinned by tests: flag omitted, flag false, and flag ON with unmeasured confidence are deep-equal on every adversarial fixture; confidence is monotone non-increasing in ownership doubt; a contradicted paddle cannot CONFIRM.",
+    "The pinned F3 red-team test (which documents the residual as default behavior) still passes unchanged, since the default path is untouched."
+  ],
+  "verdict": "YELLOW",
+  "rationale": "The mechanism does exactly what the mission asked — general ownership-confidence input, default-OFF flag, paddle-derived confirmation degrades under weak/contradicted ownership, honest abstention instead of a confident-wrong marker on the known residual, zero regression on the broad slice (10/10 fixtures identical, gold byte-identical, genuine-paddle guard identical). But the ONLY slice where the improvement is visible is synthetic: committed gold has no paddle track on Linux, so no real-video before/after evidence of the benefit exists. Recommend integrating the flag-gated code (it is inert by default and unblocks upstream ownership work), but NOT enabling the flag in production until a real paddle-track + ownership source exists and the benefit is measured on real gold with paddle data — that measurement is the promotion gate, and it needs assets this environment does not have.",
+  "integrationRecommendation": "Merge the default-OFF implementation (inert without the flag; all gates green; parity pinned by tests). Do not enable the flag anywhere yet. Follow-up for promotion: wire a real upstream ownership confidence (track-identity or user-seed based), capture gold with a real paddle track, and re-measure confident-wrong/coverage/abstention/timing on that slice before turning the flag on."
+}

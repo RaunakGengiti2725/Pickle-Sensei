@@ -32,7 +32,9 @@ export {
 export {
   detectOfflineStrokeWindow,
   estimateContact,
+  paddleOwnershipFromHandAffinity,
   CONTACT_ESTIMATOR_VERSION,
+  CONTACT_OWNERSHIP_POSTERIOR_VERSION,
   OFFLINE_TRIGGER_VERSION,
   type ContactDistributionPoint,
   type ContactEstimate,
