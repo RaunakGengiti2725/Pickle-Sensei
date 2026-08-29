@@ -1,0 +1,135 @@
+{
+  "workstream": "d4-07-clip-trim",
+  "branch": "devin/wave-d4/d4-07-clip-trim",
+  "createdAtIso": "2026-08-29T09:20:00Z",
+  "environment": "LINUX-CPU (no macOS pose extraction; tools/paddle-lab/.venv ABSENT on this box, so the CPU paddle detector could not be executed \u2014 no detector runtime numbers are claimed)",
+  "change": {
+    "flag": "--tight-window (OFF by default; ignored under --full-scan/--two-pass with a console notice)",
+    "files": [
+      "packages/swing-lab/src/detectSpanPlan.ts (new: legacy hull math extracted verbatim + tight per-event segment planner + dominantWristSpeeds moved verbatim from analyzeVideo.ts)",
+      "packages/swing-lab/src/analyzeVideo.ts (flag parsing, segment plan, per-segment detector invocation with halo-overlap frame dedupe, report fields, reuse gate restricted to single-segment plans)",
+      "packages/swing-lab/src/report.ts (detectSpan mode 'event-gated-tight' + optional segments/coveredMs/savedMs)",
+      "packages/swing-lab/src/detectSpanAudit.ts (new: deterministic replay of the pose pre-pass on committed wave-a dev cases)",
+      "packages/swing-lab/test/detectSpanPlan.test.ts (new: 15 tests)"
+    ],
+    "designInvariant": "tight segments = pad(600ms)+floor(1500ms)+clamp per pre-pass event, merged when touching, each clamped to the legacy hull; union is a subset of the hull by construction, so only inter-event dead time can ever be skipped \u2014 an event's own padded neighborhood is always fully covered"
+  },
+  "audit": {
+    "method": "deterministic replay of the exact pipeline pre-pass (committed people.json -> auto target -> detectOfflineStrokeWindow -> dominantWristSpeeds -> proposeStrokeEventsV2 -> span plans) on all 8 committed wave-a development cases; held-out wm-dink-01 / afn-vic-rally1 untouched",
+    "perCase": [
+      {
+        "caseId": "wavea-marne-serve",
+        "fps": 59.94,
+        "strokeWindowMs": 2067,
+        "prePassEvents": 1,
+        "hullSpanMs": 2067,
+        "tightSegments": 1,
+        "tightCoveredMs": 2067,
+        "savedMs": 0,
+        "hullInvocationFrames": 154,
+        "tightInvocationFrames": 154,
+        "framesSaved": 0,
+        "identicalPlan": true
+      },
+      {
+        "caseId": "wavea-marne-dig",
+        "strokeWindow": null,
+        "note": "Wrist motion has no distinct stroke peak; the video looks like idle movement."
+      },
+      {
+        "caseId": "wavea-faead-feed",
+        "fps": 24,
+        "strokeWindowMs": 1608,
+        "prePassEvents": 1,
+        "hullSpanMs": 1166,
+        "tightSegments": 1,
+        "tightCoveredMs": 1166,
+        "savedMs": 0,
+        "hullInvocationFrames": 40,
+        "tightInvocationFrames": 40,
+        "framesSaved": 0,
+        "identicalPlan": true
+      },
+      {
+        "caseId": "wavea-faead-rally",
+        "fps": 24,
+        "strokeWindowMs": 2375,
+        "prePassEvents": 0,
+        "hullSpanMs": 2375,
+        "tightSegments": 1,
+        "tightCoveredMs": 2375,
+        "savedMs": 0,
+        "hullInvocationFrames": 69,
+        "tightInvocationFrames": 69,
+        "framesSaved": 0,
+        "identicalPlan": true
+      },
+      {
+        "caseId": "wavea-944403-dink",
+        "fps": 59.94,
+        "strokeWindowMs": 3387,
+        "prePassEvents": 1,
+        "hullSpanMs": 1751,
+        "tightSegments": 1,
+        "tightCoveredMs": 1751,
+        "savedMs": 0,
+        "hullInvocationFrames": 135,
+        "tightInvocationFrames": 135,
+        "framesSaved": 0,
+        "identicalPlan": true
+      },
+      {
+        "caseId": "wavea-944403-smash",
+        "fps": 59.94,
+        "strokeWindowMs": 1050,
+        "prePassEvents": 0,
+        "hullSpanMs": 1050,
+        "tightSegments": 1,
+        "tightCoveredMs": 1050,
+        "savedMs": 0,
+        "hullInvocationFrames": 93,
+        "tightInvocationFrames": 93,
+        "framesSaved": 0,
+        "identicalPlan": true
+      },
+      {
+        "caseId": "wavea-wgm-wheelchair",
+        "fps": 30,
+        "strokeWindowMs": 1033,
+        "prePassEvents": 1,
+        "hullSpanMs": 1033,
+        "tightSegments": 1,
+        "tightCoveredMs": 1033,
+        "savedMs": 0,
+        "hullInvocationFrames": 46,
+        "tightInvocationFrames": 46,
+        "framesSaved": 0,
+        "identicalPlan": true
+      },
+      {
+        "caseId": "wavea-sasebo-volleys",
+        "fps": 29.97,
+        "strokeWindowMs": 2869,
+        "prePassEvents": 1,
+        "hullSpanMs": 1902,
+        "tightSegments": 1,
+        "tightCoveredMs": 1902,
+        "savedMs": 0,
+        "hullInvocationFrames": 72,
+        "tightInvocationFrames": 72,
+        "framesSaved": 0,
+        "identicalPlan": true
+      }
+    ],
+    "finding": "on every committed wave-a dev case the pre-pass yields 0-1 events, so the tight plan is IDENTICAL to the legacy hull (identicalPlan=true on all 7 cases with a stroke window; wavea-marne-dig has no stroke window so the detector never runs). framesSaved on committed cases = 0; with identical plans the detector CLI invocation (start/end/stride) is byte-identical, so ALL downstream stage outputs are unchanged by construction. Savings only arise for clips with >=2 well-separated events: unit test quantifies >19,000ms (~475 frames at 24fps, ~1,150 at 59.94fps) of inter-event dead time skipped for two events 22s apart in a 30s window"
+  },
+  "tests": {
+    "command": "pnpm --filter @pickle/swing-lab test",
+    "result": "246 passed | 4 skipped (20 files) \u2014 includes new detectSpanPlan.test.ts: legacy-hull regression oracle (6 event-set cases incl. clamps/floor), no-event fallback, single-event hull identity, close-event merge identity, distant-event disjoint segments + quantified savings, per-event pad coverage, and the GOLD-BOUNDARY CLIP GATE: on every wave-a dev case, any gold eventStartMs/eventEndMs covered by the legacy hull MUST be covered by the tight segments (automatic fail otherwise) \u2014 all pass",
+    "typecheck": "pnpm typecheck green (workspace)"
+  },
+  "limitations": [
+    "CPU paddle detector not runnable here (tools/paddle-lab/.venv absent), so identical stage outputs are proven by identical detector invocations (identicalPlan) and plan math, not by detector re-execution",
+    "no Mac/iPhone/cascade/canonical-run numbers claimed; all measurements above are LINUX-CPU deterministic replays of committed artifacts"
+  ]
+}
