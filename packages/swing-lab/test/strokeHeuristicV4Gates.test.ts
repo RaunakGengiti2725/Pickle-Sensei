@@ -16,11 +16,15 @@ function frame(
   tMs: number,
   overrides: {
     hipY?: number;
+    leftShoulderX?: number;
+    rightShoulderX?: number;
     rightWrist?: { x: number; y: number; visibility: number } | null;
     leftWrist?: { x: number; y: number; visibility: number } | null;
   } = {},
 ) {
   const hipY = overrides.hipY ?? HIP_Y;
+  const leftShoulderX = overrides.leftShoulderX ?? 0.62;
+  const rightShoulderX = overrides.rightShoulderX ?? 0.78;
   const rightWrist =
     overrides.rightWrist === undefined
       ? { x: 0.85 + (tMs % 200) / 4000, y: 0.55, visibility: 0.9 }
@@ -28,8 +32,8 @@ function frame(
   const leftWrist =
     overrides.leftWrist === undefined ? { x: 0.6, y: 0.55, visibility: 0.8 } : overrides.leftWrist;
   const landmarks = [
-    { name: "left_shoulder", x: 0.62, y: SHOULDER_Y, visibility: 0.9 },
-    { name: "right_shoulder", x: 0.78, y: SHOULDER_Y, visibility: 0.9 },
+    { name: "left_shoulder", x: leftShoulderX, y: SHOULDER_Y, visibility: 0.9 },
+    { name: "right_shoulder", x: rightShoulderX, y: SHOULDER_Y, visibility: 0.9 },
     { name: "left_hip", x: 0.63, y: hipY, visibility: 0.9 },
     { name: "right_hip", x: 0.77, y: hipY, visibility: 0.9 },
     { name: "right_elbow", x: 0.82, y: 0.48, visibility: 0.9 },
@@ -140,6 +144,48 @@ describe("v4 gate: dominant-wrist attribution requires a measured rival wrist", 
     const prediction = classify(swingFrames());
     expect(prediction.limitingFactors).not.toContain(
       "dominant_wrist_attribution_unverifiable_rival_unmeasured",
+    );
+    expect(prediction.label).toBe("FOREHAND");
+  });
+});
+
+describe("gate: degenerate shoulder separation abstains the side decision (E10-F3 root cause)", () => {
+  // Collapsed image-plane shoulders (0.02u, below the 0.04 floor) with a
+  // MEASURED rival wrist, so the rival-wrist attribution gate cannot mask
+  // the degeneracy. Torso extent stays normal (0.2u): the fixture reaches
+  // the side decision, where the 0.02-clamped shoulderWidth would otherwise
+  // read the wrist's 0.14u offset as 7 shoulder-widths of margin.
+  const collapsed = () =>
+    swingFrames((t) => frame(t, { leftShoulderX: 0.7, rightShoulderX: 0.72 }));
+
+  it("abstains with collapsed shoulders even though the rival wrist is measured", () => {
+    const prediction = classify(collapsed());
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.leaf).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain(
+      "shoulder_separation_degenerate_side_decision_unreliable",
+    );
+    // The rival gate must NOT be what fired — the abstention is the
+    // shoulder gate's own.
+    expect(prediction.limitingFactors).not.toContain(
+      "dominant_wrist_attribution_unverifiable_rival_unmeasured",
+    );
+    expect(prediction.evidence.some((entry) => entry.includes("shoulder separation"))).toBe(true);
+  });
+
+  it("a separation exactly at the 0.04 floor does not trip the gate (E10-F4 boundary)", () => {
+    const prediction = classify(
+      swingFrames((t) => frame(t, { leftShoulderX: 0.7, rightShoulderX: 0.74 })),
+    );
+    expect(prediction.limitingFactors).not.toContain(
+      "shoulder_separation_degenerate_side_decision_unreliable",
+    );
+  });
+
+  it("normal shoulders do not trip the gate", () => {
+    const prediction = classify(swingFrames());
+    expect(prediction.limitingFactors).not.toContain(
+      "shoulder_separation_degenerate_side_decision_unreliable",
     );
     expect(prediction.label).toBe("FOREHAND");
   });

@@ -171,3 +171,59 @@ describe("classifyStroke (ported heuristic, hierarchical)", () => {
     expect(prediction.limitingFactors).toContain("ambidextrous_declared_side_unresolvable");
   });
 });
+
+describe("gate: degenerate shoulder separation abstains the side decision (E10-F3 root cause)", () => {
+  // Hand-built frames: collapsed image-plane shoulders (below the 0.04
+  // floor) with a MEASURED rival (left) wrist, so the fixture reaches the
+  // side decision and the degeneracy cannot be masked by any earlier gate.
+  // Torso extent stays normal (0.2u).
+  type LiteSequence = Parameters<typeof classifyStroke>[0]["sequence"];
+
+  function collapsedShoulderFrames(shoulderSeparation: number) {
+    const frames = [];
+    for (let t = 1500; t <= 2500; t += 33) {
+      const landmarks = [
+        { name: "left_shoulder", x: 0.7, y: 0.4, visibility: 0.9 },
+        { name: "right_shoulder", x: 0.7 + shoulderSeparation, y: 0.4, visibility: 0.9 },
+        { name: "left_hip", x: 0.68, y: 0.6, visibility: 0.9 },
+        { name: "right_hip", x: 0.73, y: 0.6, visibility: 0.9 },
+        { name: "right_elbow", x: 0.8, y: 0.48, visibility: 0.9 },
+        { name: "left_elbow", x: 0.62, y: 0.48, visibility: 0.8 },
+        { name: "right_wrist", x: 0.85 + (t % 200) / 4000, y: 0.55, visibility: 0.9 },
+        { name: "left_wrist", x: 0.6, y: 0.55, visibility: 0.8 },
+      ];
+      frames.push({ timestampMs: t, landmarks });
+    }
+    return { fps: 30, frames } as unknown as LiteSequence;
+  }
+
+  function classifyCollapsed(shoulderSeparation: number) {
+    return classifyStroke({
+      sequence: collapsedShoulderFrames(shoulderSeparation),
+      window: { startMs: 1700, endMs: 2300 },
+      contactMs: 2000,
+      handedness: "right",
+      paddle: null,
+      paddleSpeeds: null,
+      wristSpeeds: null,
+    });
+  }
+
+  it("abstains with collapsed shoulders even though the rival wrist is measured", () => {
+    const prediction = classifyCollapsed(0.02);
+    expect(prediction.label).toBe("UNKNOWN");
+    expect(prediction.leaf).toBe("UNKNOWN");
+    expect(prediction.limitingFactors).toContain(
+      "shoulder_separation_degenerate_side_decision_unreliable",
+    );
+    expect(prediction.evidence.some((entry) => entry.includes("shoulder separation"))).toBe(true);
+  });
+
+  it("normal shoulders do not trip the gate", () => {
+    const prediction = classifyCollapsed(0.16);
+    expect(prediction.limitingFactors).not.toContain(
+      "shoulder_separation_degenerate_side_decision_unreliable",
+    );
+    expect(prediction.label).toBe("FOREHAND");
+  });
+});

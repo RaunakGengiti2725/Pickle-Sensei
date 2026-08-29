@@ -85,8 +85,11 @@ describe("classifyStroke ambiguous-motion OPEN FINDINGS (pinned confidently-wron
     // gate, so a noise-scale 0.0075u offset cleared SIDE_MARGIN_FLOOR.
     // stroke-heuristic-4's absence-of-measurement gate now abstains because
     // the rival wrist has zero measured frames near the reference, so
-    // dominant-wrist attribution is unverifiable. Note the shoulder-width
-    // degeneracy itself is still ungated; only this fixture's path is closed.
+    // dominant-wrist attribution is unverifiable. The shoulder-width
+    // degeneracy itself is gated at the side decision (wave-f f05,
+    // SHOULDER_MIN_SEPARATION); this fixture never reaches it because the
+    // rival-wrist gate fires first — the gate's own regression fixtures
+    // (measured rival wrist) live in strokeHeuristicV4Gates.test.ts.
     const fixture = profileViewCollapsedShouldersFixture();
     const prediction = classifyFixture(fixture, { contactMs: fixture.window.peakMs });
     expect(prediction.label).toBe("UNKNOWN");
