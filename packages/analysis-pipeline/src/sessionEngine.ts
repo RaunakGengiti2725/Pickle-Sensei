@@ -64,6 +64,9 @@ export interface StrokeEventProposal {
   prominence: number;
   source: "paddle" | "wrist";
   confidence: number;
+  /** Present when the peak was under the absolute speed floor and was
+   * admitted by the prominence-gated low-amplitude tier (compact strokes). */
+  lowAmplitude?: true;
 }
 
 export type TargetEventSelection =
@@ -88,6 +91,25 @@ const EVENT_GATES = {
   maxBoundaryReachMs: 1200,
   minEventSpanMs: 160,
   ambiguityProminenceRatio: 1.3,
+} as const;
+
+/** Low-amplitude tier (wrist source only): compact strokes — punch volleys,
+ * short smashes — move the wrist far less than full swings in normalized
+ * image units (measured gold compact strokes peak at 0.31–0.46, under the
+ * 0.5 floor). A sub-floor peak is admitted only when it is decisively
+ * distinct from its own local baseline: minProminence 4 is the SAME
+ * boundary the miner already treats as "is this a stroke at all?"
+ * (mineVideo.ts) — below it nothing is admitted here. Measured on the dev
+ * event bench, this tier admits exactly the missed compact stroke and adds
+ * zero proposals inside explicitly labeled non-event spans and zero
+ * unmatched proposals. Tier-2 proposals never alter
+ * tier-1 output: they are added only where no tier-1 event exists and
+ * carry `lowAmplitude` + a confidence penalty so downstream consumers see
+ * the weaker evidence. */
+const LOW_AMPLITUDE_GATES = {
+  minPeakSpeed: 0.3,
+  minProminence: 4,
+  confidencePenalty: 0.15,
 } as const;
 
 /** v2 fragment-glue gates: gluing exists to reunite ONE movement (swing +
@@ -171,8 +193,7 @@ export function proposeStrokeEvents(input: {
     }
   }
 
-  const events: StrokeEventProposal[] = [];
-  for (const peakIndex of merged) {
+  const buildEvent = (peakIndex: number): StrokeEventProposal | null => {
     const peakValue = smoothed[peakIndex]!.value;
     const boundary = peakValue * EVENT_GATES.boundaryFraction;
     const peakMs = smoothed[peakIndex]!.timestampMs;
@@ -194,7 +215,7 @@ export function proposeStrokeEvents(input: {
     }
     const startMs = smoothed[startIndex]!.timestampMs;
     const endMs = smoothed[endIndex]!.timestampMs;
-    if (endMs - startMs < EVENT_GATES.minEventSpanMs) continue;
+    if (endMs - startMs < EVENT_GATES.minEventSpanMs) return null;
     // Local baseline: median outside the event, within ±1.5s context.
     const context = smoothed.filter(
       (sample) =>
@@ -205,7 +226,7 @@ export function proposeStrokeEvents(input: {
     const contextValues = context.map((sample) => sample.value).sort((a, b) => a - b);
     const baseline = contextValues[Math.floor(contextValues.length / 2)] ?? 0.05;
     const prominence = peakValue / Math.max(0.05, baseline);
-    events.push({
+    return {
       eventId: "", // assigned after time-ordering below
       startMs,
       peakMs,
@@ -214,7 +235,13 @@ export function proposeStrokeEvents(input: {
       prominence,
       source,
       confidence: Math.max(0.2, Math.min(0.9, 0.4 + (prominence - 1) * 0.12)),
-    });
+    };
+  };
+
+  const events: StrokeEventProposal[] = [];
+  for (const peakIndex of merged) {
+    const event = buildEvent(peakIndex);
+    if (event) events.push(event);
   }
   events.sort((a, b) => a.startMs - b.startMs);
   // Merge time-overlapping proposals (can occur across shallow valleys).
@@ -226,6 +253,40 @@ export function proposeStrokeEvents(input: {
     } else {
       distinct.push(event);
     }
+  }
+  // Low-amplitude tier (wrist only): admit sub-floor peaks that are
+  // decisively prominent, and only where tier-1 proposed nothing — the
+  // tier-1 output above is never altered (see LOW_AMPLITUDE_GATES).
+  if (source === "wrist") {
+    const lowThreshold = Math.max(
+      LOW_AMPLITUDE_GATES.minPeakSpeed,
+      globalPeak * EVENT_GATES.minPeakFractionOfMax,
+    );
+    const lowEvents: StrokeEventProposal[] = [];
+    for (let index = 1; index < smoothed.length - 1; index += 1) {
+      const value = smoothed[index]!.value;
+      if (value < lowThreshold || value >= threshold) continue;
+      if (value < smoothed[index - 1]!.value || value <= smoothed[index + 1]!.value) continue;
+      const event = buildEvent(index);
+      if (!event || event.prominence < LOW_AMPLITUDE_GATES.minProminence) continue;
+      if (
+        distinct.some(
+          (existing) => event.startMs <= existing.endMs && event.endMs >= existing.startMs,
+        )
+      ) {
+        continue;
+      }
+      event.lowAmplitude = true;
+      event.confidence = Math.max(0.15, event.confidence - LOW_AMPLITUDE_GATES.confidencePenalty);
+      const previous = lowEvents[lowEvents.length - 1];
+      if (previous && event.startMs <= previous.endMs) {
+        if (event.peakSpeed > previous.peakSpeed) lowEvents[lowEvents.length - 1] = event;
+      } else {
+        lowEvents.push(event);
+      }
+    }
+    distinct.push(...lowEvents);
+    distinct.sort((a, b) => a.startMs - b.startMs);
   }
   distinct.forEach((event, index) => {
     event.eventId = `E${index + 1}`;
