@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "afn-sasebo-rally1",
+  "annotatorId": "devin-visual-v5-waveF-f12",
+  "createdAtIso": "2026-08-29T11:18:00.000Z",
+  "revision": 1,
+  "appendOnly": true,
+  "modality": "event_bounds",
+  "queueSource": "datasets/experiments/wave-e/e23-label-queue-v3.json#rank-1",
+  "recordingId": "rec-6e06a3157947",
+  "sessionKey": "afn-sasebo-2025-06",
+  "split": "dev",
+  "clock": "case clip clock; 30000/1001 CFR; tMs=n*1001/30",
+  "source": {"path":"datasets/paddle-bench/bundles/afn-sasebo-rally1/clip.mp4","sha256":"21fb75446a038ed5fb268b4287b7b6b2831d3712cbb05fedb21b97e440ad2daf","fps":"30000/1001","durationMs":4437.767},
+  "method": "Direct full-frame visual pass over every CFR frame (0-131) using numbered 4x4 contact sheets. Bounds mark the observed paddle-action interval, not an inferred model window. Event/contact/stroke records remain separate. Two uncertain candidates are explicitly non-positive or censored rather than promoted.",
+  "records": [
+    {"recordId":"f12-r1-event-01","isEvent":true,"classification":"backhand_punch_volley","actor":"near_white_target","owner":"target","startMs":233,"endMs":400,"boundsUncertaintyMs":{"start":34,"end":67},"observedFrames":{"first":7,"last":12},"contactReference":"f12-r1-contact-01","note":"Raised backhand paddle punches the incoming ball; ball disappears at the face and departs."},
+    {"recordId":"f12-r1-event-02","isEvent":true,"classification":"low_backhand_dink","actor":"near_white_target","owner":"target","startMs":934,"endMs":1301,"boundsUncertaintyMs":{"start":67,"end":67},"observedFrames":{"first":28,"last":39},"contactReference":"f12-r1-contact-02","note":"Target lowers paddle, meets inbound ball near frames 36-37, and recovers."},
+    {"recordId":"f12-r1-event-03","isEvent":true,"classification":"low_backhand_dig","actor":"near_white_target","owner":"target","startMs":1401,"endMs":1602,"boundsUncertaintyMs":{"start":34,"end":67},"observedFrames":{"first":42,"last":48},"contactReference":"f12-r1-contact-03","note":"Compact low backhand redirection visible around frames 44-45."},
+    {"recordId":"f12-r1-event-04","isEvent":false,"classification":"paddle_motion_without_observed_contact","actor":"near_white_target","owner":"target","startMs":1652,"endMs":1818,"boundsUncertaintyMs":{"start":67,"end":67},"observedFrames":{"first":50,"last":54},"contactReference":"f12-r1-contact-04","note":"Prior candidate does not contain a defensible target contact: the tracked ball continues to the partner. Retained as a hard negative, not a stroke event."},
+    {"recordId":"f12-r1-event-05","isEvent":true,"classification":"low_backhand_dig","actor":"near_black_partner","owner":"other","startMs":1818,"endMs":2069,"boundsUncertaintyMs":{"start":67,"end":67},"observedFrames":{"first":54,"last":62},"contactReference":"f12-r1-contact-05","note":"Partner lunges and redirects the low ball near frames 57-59."},
+    {"recordId":"f12-r1-event-06","isEvent":true,"classification":"backhand_volley","actor":"near_white_target","owner":"target","startMs":2603,"endMs":3203,"boundsUncertaintyMs":{"start":67,"end":100},"observedFrames":{"first":78,"last":96},"contactReference":"f12-r1-contact-06","note":"Target drives through the inbound ball with a backhand volley and visible follow-through."},
+    {"recordId":"f12-r1-event-07","isEvent":true,"classification":"partner_swing_right_censored","actor":"near_black_partner","owner":"other","startMs":3504,"endMs":3871,"boundsUncertaintyMs":{"start":67,"end":null},"observedFrames":{"first":105,"last":115},"contactReference":"f12-r1-contact-07","note":"Partner begins a swing behind the target, but the shot cuts to a new camera angle at frame 116; event end/contact are right-censored."}
+  ]
+}
