@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "workstream": "f12-label-queue-execution",
+  "createdAtIso": "2026-08-29T11:22:00.000Z",
+  "appendOnly": true,
+  "modality": "events",
+  "queueSource": "datasets/experiments/wave-e/e23-label-queue-v3.json",
+  "policyReference": "datasets/ood/registry.json",
+  "method": "Verified media hashes and durations, then directly viewed frames from each committed clip. Records are clip-level event-negative annotations only. No stroke, contact, ownership, ball, or target-acquisition labels were created.",
+  "records": [
+    {"recordId":"f12-ood-commons-ronpaul-crowd","queueRank":19,"path":"datasets/ood/negatives/commons-ronpaul-crowd.mp4","sha256":"acf5d2dd7ea36c343f7d84ca79a9a2df91f712570b5e6d2cdfd31e0ec42d6e8f","durationMs":30000,"split":"dev","eventLabel":"NO_PICKLEBALL_EVENT","verifiedNegative":true,"reason":"Outdoor political crowd footage; no pickleball court, net, paddle, ball, or analyzable athlete stroke."},
+    {"recordId":"f12-ood-ia-ProfileJ26-interview","queueRank":20,"path":"datasets/ood/negatives/ia-ProfileJ26-interview.mp4","sha256":"0fe651a49ef6f55129a9aa98ea42b6003bd464e63552526200984e35decfc70a","durationMs":30031,"split":"dev","eventLabel":"NO_PICKLEBALL_EVENT","verifiedNegative":true,"reason":"Monochrome seated talking-head interview; no sport scene or pickleball equipment."},
+    {"recordId":"f12-ood-yt-2wV0Gs9r384-tabletennis","queueRank":21,"path":"datasets/ood/negatives/yt-2wV0Gs9r384-tabletennis.mp4","sha256":"b2cf44b2dd505091c011dcbb167b219919296de071ca4d919a715e1af902f21e","durationMs":30030,"split":"dev","eventLabel":"NO_PICKLEBALL_EVENT","verifiedNegative":true,"reason":"Indoor table-tennis match with table, table-tennis paddles, and table-tennis ball; not a pickleball court or pickleball action."},
+    {"recordId":"f12-ood-yt-BCJGL5E9huM-tabletennis","queueRank":22,"path":"datasets/ood/negatives/yt-BCJGL5E9huM-tabletennis.mp4","sha256":"dbc0e3869643cc27d571bb785f54563de52a3ed8f7377184bbba764b693b3e2f","durationMs":14000,"split":"dev","eventLabel":"NO_PICKLEBALL_EVENT","verifiedNegative":true,"reason":"Indoor table-tennis match; visible table and table-tennis strokes are an adjacent-racket-sport boundary, not pickleball events."}
+  ],
+  "counts":{"eventNegativeRecords":4,"prohibitedModalityLabels":0}
+}

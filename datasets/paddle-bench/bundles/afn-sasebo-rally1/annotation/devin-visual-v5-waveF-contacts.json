@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "captureBundle": "afn-sasebo-rally1",
+  "annotatorId": "devin-visual-v5-waveF-f12",
+  "createdAtIso": "2026-08-29T11:18:00.000Z",
+  "revision": 1,
+  "appendOnly": true,
+  "modality": "contact",
+  "queueSource": "datasets/experiments/wave-e/e23-label-queue-v3.json#rank-12",
+  "source": {"path":"datasets/paddle-bench/bundles/afn-sasebo-rally1/clip.mp4","sha256":"21fb75446a038ed5fb268b4287b7b6b2831d3712cbb05fedb21b97e440ad2daf","fps":"30000/1001"},
+  "method": "Independent direct pass over numbered CFR frames. A positive requires ball/paddle adjacency, occlusion at the blade, or immediate direction reversal. Null values are deliberate verified abstentions. These records adjudicate but do not overwrite prior contact labels.",
+  "records": [
+    {"recordId":"f12-r1-contact-01","eventReference":"f12-r1-event-01","status":"observed","contactMs":317,"contactFrameWindow":[9,10],"uncertaintyMs":17,"owner":"target","evidence":"Ball adjacent to raised target blade at frame 9 and occluded/departing by frame 10.","priorReferences":["devin-visual-v1.json#contactMs=317","devin-visual-v4-waveD2-contact-audit.json#priorContactMs=317"],"adjudication":"confirms prior"},
+    {"recordId":"f12-r1-contact-02","eventReference":"f12-r1-event-02","status":"observed","contactMs":1218,"contactFrameWindow":[36,37],"uncertaintyMs":17,"owner":"target","evidence":"Inbound ball reaches low target blade at frame 36 and reverses by frame 37.","priorReferences":["devin-visual-v1.json#contactMs=1117","devin-visual-v4-waveD2-contact-audit.json#priorContactMs=1117"],"adjudication":"supports Wave D2 audit dispute at 1218ms; prior record retained"},
+    {"recordId":"f12-r1-contact-03","eventReference":"f12-r1-event-03","status":"observed","contactMs":1485,"contactFrameWindow":[44,45],"uncertaintyMs":17,"owner":"target","evidence":"Ball is at the target paddle face at frame 44 and departing at frame 45.","priorReferences":["devin-visual-v1.json#contactMs=1484","devin-visual-v4-waveD2-contact-audit.json#priorContactMs=1484"],"adjudication":"confirms within one frame"},
+    {"recordId":"f12-r1-contact-04","eventReference":"f12-r1-event-04","status":"not-observed","contactMs":null,"contactFrameWindow":null,"uncertaintyMs":null,"owner":"target","evidence":"Across frames 50-54 the ball continues past target toward partner; no target-ball contact occurs.","priorReferences":["devin-visual-v1.json#contactMs=1717","devin-visual-v4-waveD2-contact-audit.json#priorContactMs=1717"],"adjudication":"supports Wave D2 no-contact dispute; positive prior retained only as provenance"},
+    {"recordId":"f12-r1-contact-05","eventReference":"f12-r1-event-05","status":"observed","contactMs":1935,"contactFrameWindow":[57,59],"uncertaintyMs":34,"owner":"other","evidence":"Low ball reaches partner's pink-handle paddle and reverses across frames 57-59.","priorReferences":["devin-visual-v1.json#contactMs=1934","devin-visual-v4-waveD2-contact-audit.json#priorContactMs=1934"],"adjudication":"confirms within one frame"},
+    {"recordId":"f12-r1-contact-06","eventReference":"f12-r1-event-06","status":"observed","contactMs":2886,"contactFrameWindow":[86,87],"uncertaintyMs":17,"owner":"target","evidence":"Inbound ball reaches the target blade at frames 86-87 and departs left thereafter.","priorReferences":["devin-visual-v1.json#contactMs=2900","devin-visual-v4-waveD2-contact-audit.json#priorContactMs=2900"],"adjudication":"confirms prior within one frame"},
+    {"recordId":"f12-r1-contact-07","eventReference":"f12-r1-event-07","status":"censored-unobservable","contactMs":null,"contactFrameWindow":null,"uncertaintyMs":null,"owner":"other","evidence":"Camera cuts between frames 115 and 116 before a defensible contact frame is visible.","priorReferences":["devin-visual-v1.json#contactMs=3870","devin-visual-v4-waveD2-contact-audit.json#priorContactMs=3870"],"adjudication":"supports Wave D2 unobservable dispute; no positive contact promoted"}
+  ],
+  "counts":{"records":7,"observedPositive":5,"verifiedNegative":1,"censoredAbstention":1}
+}
