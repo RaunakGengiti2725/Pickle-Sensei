@@ -19,6 +19,7 @@ import { LiveCourtScreen } from '../screens/LiveCourtScreen';
 import { LiveSummaryScreen } from '../screens/LiveSummaryScreen';
 import { PaywallScreen } from '../screens/PaywallScreen';
 import { SignInScreen } from '../screens/SignInScreen';
+import { ConsentSettingsScreen } from '../screens/ConsentSettingsScreen';
 import { PremiumTabBar } from './PremiumTabBar';
 import { LoadingState } from '../design/components';
 import { useAccessStore } from '../state/accessStore';
@@ -177,6 +178,11 @@ export function RootNavigator() {
             animation: 'slide_from_bottom',
             presentation: 'fullScreenModal',
           }}
+        />
+        <Stack.Screen
+          name="ConsentSettings"
+          component={ConsentSettingsScreen}
+          options={{ title: 'Data & Consent' }}
         />
         <Stack.Screen
           name="ConnectAccount"

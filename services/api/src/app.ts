@@ -21,6 +21,7 @@ import { registerAnalysisRoutes } from "./modules/analysis/routes.js";
 import { registerBillingRoutes } from "./modules/billing/routes.js";
 import { registerSocialRoutes } from "./modules/social/routes.js";
 import { registerPrivacyRoutes } from "./modules/privacy/routes.js";
+import { registerConsentRoutes } from "./modules/consent/routes.js";
 import { registerFlagRoutes } from "./modules/flags/routes.js";
 import { registerAdminRoutes } from "./modules/admin/routes.js";
 import { registerTrainingRoutes } from "./modules/training/routes.js";
@@ -111,6 +112,7 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
   registerBillingRoutes(app, context);
   registerSocialRoutes(app, context);
   registerPrivacyRoutes(app, context);
+  registerConsentRoutes(app, context);
   registerFlagRoutes(app, context);
   registerAdminRoutes(app, context);
   registerTrainingRoutes(app, context);

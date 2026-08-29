@@ -17,6 +17,9 @@ import {
   TrainingPlanResponse,
   TrainingPlanReassessmentRequest,
   DrillCompletionCreateRequest,
+  ConsentGrantRequest,
+  ConsentWithdrawRequest,
+  ConsentStatusResponse,
 } from "./schemas.js";
 
 /**
@@ -187,6 +190,55 @@ export function buildOpenApiDocument(apiVersion: string): Record<string, unknown
             "200": { description: "Persisted completion" },
             "401": errorResponse,
             "404": errorResponse,
+          },
+        },
+      },
+      "/v1/me/consent/grant": {
+        post: {
+          operationId: "grantConsent",
+          summary: "Append a scoped consent grant to the immutable ledger (model_training is explicit opt-in, never a default)",
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: schema(ConsentGrantRequest) } },
+          },
+          responses: {
+            "200": {
+              description: "Updated consent status",
+              content: { "application/json": { schema: schema(ConsentStatusResponse) } },
+            },
+            "400": errorResponse,
+            "401": errorResponse,
+          },
+        },
+      },
+      "/v1/me/consent/withdraw": {
+        post: {
+          operationId: "withdrawConsent",
+          summary: "Append a withdrawal — an append-only state change that never deletes the audit trail",
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: schema(ConsentWithdrawRequest) } },
+          },
+          responses: {
+            "200": {
+              description: "Updated consent status",
+              content: { "application/json": { schema: schema(ConsentStatusResponse) } },
+            },
+            "400": errorResponse,
+            "401": errorResponse,
+          },
+        },
+      },
+      "/v1/me/consent/status": {
+        get: {
+          operationId: "getConsentStatus",
+          summary: "Derived per-scope consent status plus the full ledger",
+          responses: {
+            "200": {
+              description: "Consent status",
+              content: { "application/json": { schema: schema(ConsentStatusResponse) } },
+            },
+            "401": errorResponse,
           },
         },
       },
