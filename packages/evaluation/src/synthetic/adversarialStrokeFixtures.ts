@@ -1,5 +1,6 @@
 import type { PoseFrame, PoseLandmark, PoseLandmarkName } from "@pickle/shared-types";
 import type { PoseSequence } from "@pickle/swing-domain";
+import { generateSwing, generateSwingSequence } from "./swingGenerator.js";
 
 /**
  * SYNTHETIC ADVERSARIAL stroke fixtures — red-team inputs for the
@@ -260,5 +261,173 @@ export function staticReachFixture(peakMs = 2000): AdversarialStrokeFixture {
     sequence: toSequence(frames),
     window: { startMs: peakMs - 300, endMs: peakMs + 300, peakMs },
     wristSpeeds: speedSeries(peakMs, 0.05),
+  };
+}
+
+/* ── wave-e e10: ambiguous-motion fixtures ─────────────────────────────────
+ * Each fixture below realizes an ambiguous or out-of-declaration motion the
+ * AUTO DETECT trigger can hand the stroke hierarchy: a ball-less practice
+ * swing, a non-dominant-hand swing, degenerate camera-facing geometry
+ * (profile view, mid-rotation shoulder crossing), wheelchair rim propulsion,
+ * and an energetic-but-checked swing. Ground truth for each is recorded in
+ * the fixture description; the red-team suites assert either abstention or
+ * (for pinned open findings) the current measured wrong output.
+ */
+
+/**
+ * Practice/shadow swing: kinematically a full genuine forehand swing — but
+ * there is no ball and no contact anywhere; the only reference available is
+ * the motion peak. Ground truth: NOT a stroke (no ball was struck).
+ */
+export function practiceShadowSwingFixture(): AdversarialStrokeFixture {
+  const { sequence, window } = generateSwingSequence();
+  return {
+    id: "practice-shadow-swing",
+    description:
+      "Full-energy shadow swing with no ball and no contact; reference is the motion peak. Not a stroke.",
+    sequence,
+    window,
+    wristSpeeds: speedSeries(window.peakMs, 1.8),
+  };
+}
+
+/**
+ * Non-dominant-hand swing: the player is DECLARED right-handed but swings a
+ * genuine forehand with the LEFT hand (off-hand reach/rally clowning/injury
+ * adaptation). Ground truth: a left-hand forehand — under a right-handed
+ * declaration the side is not decidable from midline geometry alone.
+ */
+export function nonDominantHandSwingFixture(): AdversarialStrokeFixture {
+  const { sequence, window } = generateSwingSequence({ handed: "left" });
+  return {
+    id: "non-dominant-hand-swing",
+    description:
+      "Left-hand forehand by a declared right-handed player; the moving wrist contradicts the declaration.",
+    sequence,
+    window,
+    wristSpeeds: speedSeries(window.peakMs, 1.8),
+  };
+}
+
+/**
+ * Near-profile view: the shoulder line is nearly parallel to the camera
+ * axis, so the image-plane shoulder width collapses to ~0.005u — far below
+ * any usable normalization base. Ground truth: side is NOT measurable; the
+ * wrist's 0.0075u offset from the midline is estimator-noise scale.
+ */
+export function profileViewCollapsedShouldersFixture(peakMs = 2000): AdversarialStrokeFixture {
+  const frames = buildFrames(peakMs, (tMs) => {
+    const phase = Math.min(1, Math.max(-1, (tMs - peakMs) / 250));
+    const wristX = 0.71 + 0.08 * phase;
+    const wristY = 0.6 - 0.03 * Math.max(0, phase);
+    return [
+      mark("left_shoulder", 0.7, 0.4),
+      mark("right_shoulder", 0.705, 0.4),
+      mark("left_hip", 0.7, 0.62),
+      mark("right_hip", 0.704, 0.62),
+      mark("right_wrist", wristX, wristY),
+      mark("right_elbow", (0.705 + wristX) / 2, (0.4 + wristY) / 2),
+    ];
+  });
+  return {
+    id: "profile-view-collapsed-shoulders",
+    description:
+      "Genuine swing seen in near-profile: image-plane shoulder width 0.005u; midline offset at contact 0.0075u (noise scale).",
+    sequence: toSequence(frames),
+    window: { startMs: peakMs - 300, endMs: peakMs + 300, peakMs },
+    wristSpeeds: speedSeries(peakMs, 1.2),
+  };
+}
+
+/**
+ * Facing flip at contact: a genuine rear-view right-handed forehand whose
+ * torso rotation carries the shoulders past profile exactly at the contact
+ * frame (right shoulder momentarily at image-left of the left shoulder).
+ * Every other frame shows the rear view. Ground truth: FOREHAND.
+ */
+export function facingFlipAtContactFixture(): AdversarialStrokeFixture {
+  const swing = generateSwing();
+  const frames = swing.frames.map((frame) => {
+    if (Math.abs(frame.timestampMs - swing.window.peakMs) > 15) return frame;
+    return {
+      ...frame,
+      landmarks: frame.landmarks.map((landmark) => {
+        if (landmark.name === "left_shoulder") return { ...landmark, x: 0.52 };
+        if (landmark.name === "right_shoulder") return { ...landmark, x: 0.48 };
+        return landmark;
+      }),
+    };
+  });
+  return {
+    id: "facing-flip-at-contact",
+    description:
+      "Rear-view forehand with shoulders crossed past profile at the contact frame only. Ground truth: FOREHAND.",
+    sequence: toSequence(frames),
+    window: swing.window,
+    wristSpeeds: speedSeries(swing.window.peakMs, 1.8),
+  };
+}
+
+/**
+ * Wheelchair rim propulsion: both hands sweep down-and-back along the wheel
+ * rims beside the hips — an energetic, symmetric, bimanual push. Ground
+ * truth: NOT a stroke (chair propulsion between shots).
+ */
+export function wheelchairRimPushFixture(peakMs = 2000): AdversarialStrokeFixture {
+  const shoulderY = 0.46;
+  const hipY = 0.58; // compressed-but-real seated torso extent 0.12
+  const frames = buildFrames(peakMs, (tMs) => {
+    const phase = (tMs - peakMs) / 300;
+    const push = Math.sin(phase * Math.PI);
+    const rightWristX = 0.84 + 0.05 * push;
+    const rightWristY = 0.62 + 0.06 * push;
+    const leftWristX = 0.56 - 0.05 * push;
+    const leftWristY = 0.62 + 0.06 * push;
+    return [
+      mark("left_shoulder", 0.6, shoulderY),
+      mark("right_shoulder", 0.8, shoulderY),
+      mark("left_hip", 0.62, hipY),
+      mark("right_hip", 0.78, hipY),
+      mark("right_wrist", rightWristX, rightWristY),
+      mark("right_elbow", (0.8 + rightWristX) / 2, (shoulderY + rightWristY) / 2),
+      mark("left_wrist", leftWristX, leftWristY),
+      mark("left_elbow", (0.6 + leftWristX) / 2, (shoulderY + leftWristY) / 2),
+    ];
+  });
+  return {
+    id: "wheelchair-rim-push",
+    description:
+      "Seated player pushing both wheel rims (symmetric bimanual arc at hip height, ~0.9 u/s). Not a stroke.",
+    sequence: toSequence(frames),
+    window: { startMs: peakMs - 300, endMs: peakMs + 300, peakMs },
+    wristSpeeds: speedSeries(peakMs, 0.9),
+  };
+}
+
+/**
+ * Energetic aborted swing: a FAST backswing pull (1.0 u/s) inside the event
+ * window, then the swing is checked — the wrist freezes well before the
+ * reference instant. Ground truth: NOT a stroke (checked swing, no contact).
+ */
+export function energeticAbortedSwingFixture(peakMs = 2000): AdversarialStrokeFixture {
+  const frames = buildFrames(peakMs, (tMs) => {
+    const early = Math.max(0, Math.min(1, (tMs - (peakMs - 300)) / 150));
+    const wristX = 0.72 - 0.15 * early;
+    return [
+      ...torsoMarks(STANDING),
+      mark("right_wrist", wristX, 0.56),
+      mark("right_elbow", (0.8 + wristX) / 2, 0.48),
+    ];
+  });
+  return {
+    id: "energetic-aborted-swing",
+    description:
+      "Fast backswing pull (1.0 u/s) checked 150ms into the window; wrist frozen at the reference. Not a stroke.",
+    sequence: toSequence(frames),
+    window: { startMs: peakMs - 300, endMs: peakMs + 300, peakMs },
+    wristSpeeds: Array.from({ length: 20 }, (_, index) => ({
+      timestampMs: peakMs - 300 + index * 30,
+      value: index < 5 ? 1.0 : 0.02,
+    })),
   };
 }
