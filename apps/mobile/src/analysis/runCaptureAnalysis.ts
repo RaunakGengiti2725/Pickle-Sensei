@@ -144,7 +144,7 @@ async function runCaptureAnalysisCore(
   if (envelope && envelope.overall === 'UNSUPPORTED') {
     const blocking = envelope.dimensions
       .filter(d => d.status === 'UNSUPPORTED')
-      .map(d => d.dimension)
+      .map(d => d.dimension.replace(/_/g, ' '))
       .join(', ');
     return {
       kind: 'quality_blocked',
