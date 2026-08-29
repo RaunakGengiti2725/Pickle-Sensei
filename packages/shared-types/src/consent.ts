@@ -51,6 +51,12 @@ export interface ConsentRecord {
   /** Declared stroke intent scope for the grant, when narrowed. */
   strokeIntent: string | null;
   recordedAtIso: string;
+  /**
+   * Ledger sequence number (DB identity). Authoritative ordering: ISO
+   * timestamps truncate to milliseconds and can tie, so status derivation
+   * prefers seq whenever it is present.
+   */
+  seq?: number;
 }
 
 export interface ConsentScopeStatus {
@@ -67,7 +73,10 @@ export interface ConsentScopeStatus {
  * means NOT consented — the default is always off.
  */
 export function deriveConsentStatus(records: readonly ConsentRecord[]): ConsentScopeStatus[] {
-  const ordered = [...records].sort((a, b) => a.recordedAtIso.localeCompare(b.recordedAtIso));
+  const ordered = [...records].sort((a, b) => {
+    if (a.seq !== undefined && b.seq !== undefined && a.seq !== b.seq) return a.seq - b.seq;
+    return a.recordedAtIso.localeCompare(b.recordedAtIso);
+  });
   return CONSENT_SCOPES.map((scope) => {
     const last = ordered.filter((r) => r.scope === scope).at(-1) ?? null;
     return {
