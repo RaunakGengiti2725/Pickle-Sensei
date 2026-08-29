@@ -295,50 +295,86 @@ export function wristSeries(
  * Merging concatenates MEASURED observations only; the gap stays a gap. No
  * position is invented, so provenance ("detected") is preserved.
  */
+export const MERGE_LINK_GATES = {
+  maxMergeGapMs: 500,
+  baseRadius: 0.05,
+  radiusPerSec: 0.45,
+  maxScaleRatio: 2.2,
+} as const;
+
+/** Constant-velocity tail of a tracklet (last observation + velocity over
+ *  its final up-to-3 observations). */
+export function trackletTail(candidate: PaddleTrackCandidate): {
+  last: TrackedPaddleObservation;
+  velocity: { x: number; y: number };
+} {
+  const observations = candidate.observations;
+  const last = observations[observations.length - 1]!;
+  const previous = observations[Math.max(0, observations.length - 3)]!;
+  const dtSec = Math.max(0.001, (last.timestampMs - previous.timestampMs) / 1000);
+  return {
+    last,
+    velocity: {
+      x: (last.center.x - previous.center.x) / dtSec,
+      y: (last.center.y - previous.center.y) / dtSec,
+    },
+  };
+}
+
+/** The geometric A→B link gate used by tracklet reconciliation: strict
+ *  temporal ordering inside maxMergeGapMs, B's start inside A's constant-
+ *  velocity corridor, compatible box scale. Shared with the merge-safety
+ *  classifier so "merge candidate pair" means exactly one thing. */
+export function trackletLinkGate(
+  a: PaddleTrackCandidate,
+  b: PaddleTrackCandidate,
+): {
+  linkable: boolean;
+  gapMs: number;
+  miss: number | null;
+  radius: number | null;
+  scaleRatio: number | null;
+} {
+  const { last, velocity } = trackletTail(a);
+  const first = b.observations[0]!;
+  const gapMs = first.timestampMs - last.timestampMs;
+  if (gapMs <= 0 || gapMs > MERGE_LINK_GATES.maxMergeGapMs) {
+    return { linkable: false, gapMs, miss: null, radius: null, scaleRatio: null };
+  }
+  const gapSec = gapMs / 1000;
+  const predicted = {
+    x: last.center.x + velocity.x * gapSec,
+    y: last.center.y + velocity.y * gapSec,
+  };
+  const miss = Math.hypot(first.center.x - predicted.x, first.center.y - predicted.y);
+  const radius = MERGE_LINK_GATES.baseRadius + MERGE_LINK_GATES.radiusPerSec * gapSec;
+  const scaleRatio =
+    Math.max(last.box.width, first.box.width) /
+    Math.max(1e-6, Math.min(last.box.width, first.box.width));
+  const linkable = miss <= radius && scaleRatio <= MERGE_LINK_GATES.maxScaleRatio;
+  return { linkable, gapMs, miss, radius, scaleRatio };
+}
+
 export function mergePaddleTracklets(
   candidates: readonly PaddleTrackCandidate[],
   window: { startMs: number; endMs: number },
 ): { merged: PaddleTrackCandidate[]; links: number } {
-  const GATES = { maxMergeGapMs: 500, baseRadius: 0.05, radiusPerSec: 0.45, maxScaleRatio: 2.2 };
   const sorted = [...candidates].sort(
     (a, b) => a.observations[0]!.timestampMs - b.observations[0]!.timestampMs,
   );
-  const tail = (candidate: PaddleTrackCandidate) => {
-    const observations = candidate.observations;
-    const last = observations[observations.length - 1]!;
-    const previous = observations[Math.max(0, observations.length - 3)]!;
-    const dtSec = Math.max(0.001, (last.timestampMs - previous.timestampMs) / 1000);
-    return {
-      last,
-      velocity: {
-        x: (last.center.x - previous.center.x) / dtSec,
-        y: (last.center.y - previous.center.y) / dtSec,
-      },
-    };
-  };
 
   // Best-first greedy chaining: every tracklet joins at most one successor.
   const links: Array<{ from: number; to: number; cost: number }> = [];
   for (const [indexA, a] of sorted.entries()) {
-    const { last, velocity } = tail(a);
     for (const [indexB, b] of sorted.entries()) {
       if (indexA === indexB) continue;
-      const first = b.observations[0]!;
-      const gapMs = first.timestampMs - last.timestampMs;
-      if (gapMs <= 0 || gapMs > GATES.maxMergeGapMs) continue;
-      const gapSec = gapMs / 1000;
-      const predicted = {
-        x: last.center.x + velocity.x * gapSec,
-        y: last.center.y + velocity.y * gapSec,
-      };
-      const miss = Math.hypot(first.center.x - predicted.x, first.center.y - predicted.y);
-      const radius = GATES.baseRadius + GATES.radiusPerSec * gapSec;
-      if (miss > radius) continue;
-      const scaleRatio =
-        Math.max(last.box.width, first.box.width) /
-        Math.max(1e-6, Math.min(last.box.width, first.box.width));
-      if (scaleRatio > GATES.maxScaleRatio) continue;
-      links.push({ from: indexA, to: indexB, cost: miss / radius + gapSec * 0.3 });
+      const gate = trackletLinkGate(a, b);
+      if (!gate.linkable) continue;
+      links.push({
+        from: indexA,
+        to: indexB,
+        cost: gate.miss! / gate.radius! + (gate.gapMs / 1000) * 0.3,
+      });
     }
   }
   links.sort((a, b) => a.cost - b.cost);
