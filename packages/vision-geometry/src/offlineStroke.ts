@@ -153,7 +153,7 @@ export function detectOfflineStrokeWindow(sequence: PoseSequence): Result<Offlin
  * rally2 whip −383ms) — the uncertainty lives in the kernel widths instead.
  */
 
-export const CONTACT_ESTIMATOR_VERSION = "contact-evidence-4.3";
+export const CONTACT_ESTIMATOR_VERSION = "contact-evidence-4.4";
 
 /**
  * ownership-posterior-v1 (flag-gated, default OFF): the contact posterior
@@ -922,7 +922,7 @@ export function estimateContact(input: {
     (series) => series.length >= 5,
   );
   for (const kernel of ballKernels) {
-    const support = motionSupportAt(kernel.tMs, motionSeries);
+    const support = motionSupportAt(kernel.tMs, motionSeries, torso);
     if (support < 1) {
       kernel.mass *= support;
       kernel.note += `, target motion quiet at this moment ×${support.toFixed(2)}`;
@@ -1344,20 +1344,24 @@ function ballFlightFactor(
 
 /** Best motion support for a moment: the largest interpolated speed at
  * `tMs` across the measured motion series, each relative to a fraction of
- * its own in-window maximum. 1 = at least one series was clearly moving;
- * <1 = every measured series was quiet. No series measured near the moment
- * → 1 (absence of measurement is not counter-evidence). */
+ * its own in-window maximum — floored at the idle-drift speed, so a series
+ * that never exceeded pose jitter (a bystander standing still while the
+ * ball reverses off something else nearby) cannot certify its own noise as
+ * "motion". 1 = at least one series was clearly moving; <1 = every measured
+ * series was quiet. No series measured near the moment → 1 (absence of
+ * measurement is not counter-evidence). */
 function motionSupportAt(
   tMs: number,
   motionSeries: ReadonlyArray<ReadonlyArray<{ timestampMs: number; value: number }>>,
+  torso: number,
 ): number {
   const supports: number[] = [];
+  const idleFloor = FUSION.minWristPeakTorsoPerSec * torso;
   for (const series of motionSeries) {
     const value = interpolateValue(series, tMs, FUSION.motionSupportBandMs);
     if (value === null) continue;
     const max = Math.max(...series.map((sample) => sample.value));
-    if (max <= 1e-6) continue;
-    supports.push(clamp01(value / (FUSION.motionSupportFullFraction * max)));
+    supports.push(clamp01(value / (FUSION.motionSupportFullFraction * Math.max(max, idleFloor))));
   }
   return supports.length === 0 ? 1 : Math.max(...supports);
 }
