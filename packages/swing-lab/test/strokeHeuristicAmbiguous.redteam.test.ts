@@ -52,17 +52,20 @@ function classifyFixture(
 }
 
 describe("classifyStroke ambiguous-motion OPEN FINDINGS (pinned confidently-wrong outputs)", () => {
-  it("E10-F1: ball-less practice swing commits FOREHAND at the 0.8 confidence ceiling", () => {
+  it("E10-F1 RESOLVED (stroke-heuristic-5): ball-less practice swing no longer reaches the 0.8 ceiling — contact-evidence cap applies", () => {
     // Ground truth: NOT a stroke — no ball, no contact; the reference is the
-    // motion peak. ROOT CAUSE: `reference_is_event_peak_not_contact` is
-    // recorded as a limiting factor but never gates commitment or caps the
-    // L2 confidence formula; nothing in the hierarchy requires any
-    // ball/contact evidence to assert a stroke identity.
+    // motion peak. Was pinned confidently-wrong at 0.8: the classifier now
+    // treats an event-peak reference with no plausible paddle point as
+    // degraded trust (no measurement ties the motion to a ball contact), so
+    // the commitment is capped at the degraded ceiling and flagged. The
+    // kinematics alone are indistinguishable from a genuine no-paddle-track
+    // swing, so the side geometry is still reported — at capped confidence.
     const prediction = classifyFixture(practiceShadowSwingFixture());
     expect(prediction.label).toBe("FOREHAND");
     expect(prediction.taxonomyDepth).toBe(2);
-    expect(prediction.confidence).toBeCloseTo(0.8, 5);
+    expect(prediction.confidence).toBeLessThanOrEqual(0.6);
     expect(prediction.limitingFactors).toContain("reference_is_event_peak_not_contact");
+    expect(prediction.limitingFactors).toContain("no_contact_evidence_confidence_capped");
   });
 
   it("E10-F2: left-hand swing under a right-handed declaration commits mirrored BACKHAND at 0.8", () => {
@@ -111,16 +114,20 @@ describe("classifyStroke ambiguous-motion OPEN FINDINGS (pinned confidently-wron
     expect(prediction.evidence).toContain("front-ish view (shoulder order)");
   });
 
-  it("E10-F5: wheelchair rim propulsion commits FOREHAND at 0.8", () => {
+  it("E10-F5: wheelchair rim propulsion commits FOREHAND (now capped at 0.6 by the contact-evidence gate — root cause still open)", () => {
     // Ground truth: NOT a stroke — symmetric bimanual wheel push between
     // shots. ROOT CAUSE: the push (0.9 u/s, large wrist travel) passes both
     // non-stroke gates, which only test energy and travel of the single
     // dominant wrist; there is no discriminator for symmetric two-arm
-    // motion, the signature of rim propulsion.
+    // motion, the signature of rim propulsion. stroke-heuristic-5's
+    // contact-evidence cap now limits this commitment to 0.6 (event-peak
+    // reference, no paddle point), but the identity claim itself remains
+    // wrong — the symmetric-motion discriminator is still missing.
     const prediction = classifyFixture(wheelchairRimPushFixture());
     expect(prediction.label).toBe("FOREHAND");
     expect(prediction.taxonomyDepth).toBe(2);
-    expect(prediction.confidence).toBeCloseTo(0.8, 5);
+    expect(prediction.confidence).toBeCloseTo(0.6, 5);
+    expect(prediction.limitingFactors).toContain("no_contact_evidence_confidence_capped");
   });
 });
 
@@ -139,13 +146,13 @@ describe("classifyStroke ambiguous-motion defenses that held (must keep holding)
     );
   });
 
-  it("open-finding fixtures never silently change shape: the four still-open pins commit a leaf-less depth-2 side", () => {
+  it("open-finding fixtures never silently change shape: the still-open pins commit a leaf-less depth-2 side", () => {
     // Umbrella pin: if any fixture starts abstaining (or committing a leaf),
     // a classifier change touched this surface — re-run the E10 forensics.
-    // F3 (profileViewCollapsedShoulders) was resolved by stroke-heuristic-4
-    // and is covered by its own abstention regression test above.
+    // F3 (profileViewCollapsedShoulders) was resolved by stroke-heuristic-4,
+    // F1 (practiceShadowSwing) by stroke-heuristic-5; both are covered by
+    // their own regression tests above.
     const fixtures = [
-      practiceShadowSwingFixture(),
       nonDominantHandSwingFixture(),
       facingFlipAtContactFixture(),
       wheelchairRimPushFixture(),

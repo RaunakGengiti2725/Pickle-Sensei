@@ -56,6 +56,18 @@ import type { TrackedPaddleObservation } from "./paddleTracker.js";
  *     (dev failure: the visible non-striking arm was committed as a
  *     forehand while the actual striking arm was never measured).
  *
+ * stroke-heuristic-5 (this file) closes the ball-less-swing hole found by
+ * red-teaming ambiguous motion (E10-F1, strokeHeuristicAmbiguous.redteam):
+ *
+ *  7. CONTACT-EVIDENCE CAP — when the reference is only the isolated
+ *     event's motion peak (no contact event was ever measured) AND no
+ *     plausible paddle point corroborates a contact, nothing in the input
+ *     distinguishes the motion from a ball-less swing (practice shadow
+ *     swing, wheelchair rim push): the side geometry is still read, but
+ *     the commitment is treated as degraded-trust — the degraded
+ *     abstention band applies and the confidence is capped at
+ *     DEGRADED_CONFIDENCE_CAP instead of the 0.8 ceiling.
+ *
  * declared / annotated / predicted stroke stay separate records everywhere.
  */
 
@@ -79,7 +91,7 @@ export const STROKE_TAXONOMY_V3 = {
 } as const;
 export type StrokeV3 = (typeof STROKE_TAXONOMY_V3.labels)[number];
 
-export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-4 (uncalibrated)";
+export const STROKE_HEURISTIC_VERSION = "stroke-heuristic-5 (uncalibrated)";
 
 /**
  * Constants derived from the DEV sandbox pose/paddle data (W9-forensics.txt,
@@ -197,10 +209,12 @@ export function classifyStroke(input: {
   const limitingFactors: string[] = [];
   const frames = input.legacyFrames ?? toLegacyPoseFrames(input.sequence);
   let contactMs: number;
+  let referenceIsEventPeak = false;
   if (input.contactMs !== null) {
     contactMs = input.contactMs;
   } else if (input.eventPeakMs !== null && input.eventPeakMs !== undefined) {
     contactMs = input.eventPeakMs;
+    referenceIsEventPeak = true;
     limitingFactors.push("reference_is_event_peak_not_contact");
   } else {
     return unknown("no_contact_and_no_event_peak_reference", evidence, limitingFactors);
@@ -526,16 +540,30 @@ export function classifyStroke(input: {
     limitingFactors.push("contact_too_close_to_midline_for_confident_side");
     return unknown(null, evidence, limitingFactors, contactPointSource, contactPointReliability);
   }
+  // ── Contact-evidence gate (stroke-heuristic-5) ─────────────────────────
+  // An event-peak reference with no plausible paddle point means NO
+  // measurement ties this motion to a ball contact: the side may be read
+  // from geometry, but the identity claim never earns full confidence —
+  // the same degraded-trust band and cap as a low-provenance contact point.
+  const contactEvidenceAbsent = referenceIsEventPeak && contactPointSource !== "paddle";
+  const sideTrustDegraded = contactPointReliability === "degraded" || contactEvidenceAbsent;
   // Abstention band (stroke-heuristic-2): a low-provenance contact point
   // does not earn a low-margin side call — an honest UNKNOWN beats a
   // confidently-wrong guess under the usable-result contract.
-  if (contactPointReliability === "degraded" && sideMargin < SIDE_MARGIN_DEGRADED_BAND) {
-    limitingFactors.push("side_margin_within_degraded_abstention_band");
+  if (sideTrustDegraded && sideMargin < SIDE_MARGIN_DEGRADED_BAND) {
+    limitingFactors.push(
+      contactPointReliability === "degraded"
+        ? "side_margin_within_degraded_abstention_band"
+        : "side_margin_within_no_contact_evidence_abstention_band",
+    );
     return unknown(null, evidence, limitingFactors, contactPointSource, contactPointReliability);
   }
-  const sideConfidenceCap = contactPointReliability === "degraded" ? DEGRADED_CONFIDENCE_CAP : 0.8;
+  const sideConfidenceCap = sideTrustDegraded ? DEGRADED_CONFIDENCE_CAP : 0.8;
   if (contactPointReliability === "degraded") {
     limitingFactors.push("contact_point_degraded_confidence_capped");
+  }
+  if (contactEvidenceAbsent) {
+    limitingFactors.push("no_contact_evidence_confidence_capped");
   }
   const sideConfidence = clamp(0.45 + sideMargin * 0.5, 0.45, sideConfidenceCap);
 
