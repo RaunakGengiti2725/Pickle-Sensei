@@ -1,0 +1,56 @@
+{
+  "workstreamId": "g22-tryagain-audit",
+  "mission": "Result + Try Again reliability audit: stress repeated attempts through the real code paths for stale state, old clip reuse, wrong target inheritance, prior Result contamination, attempt sequencing, and TechniqueIntent preservation across re-arm. Verify every visible Result claim has real backing; fix real defects with regression tests; report honestly what is only verifiable on-device.",
+  "method": "Static code-path audit of the real Result/Try Again production modules (ResultScreen, StrokeResult, strokeResultData, AnalyzeScreen, tryAgainHandoff, captureEnvelope), cross-checked against prior wave-d/d12 and wave-e/e19 evidence artifacts, followed by an executable regression test that mounts the real AnalyzeScreen with a controllable fake native camera layer and runs two capture attempts on one mounted instance, asserting the second attempt's stored capture envelope through the real attemptCaptureEnvelope() evaluator.",
+  "datasetScopeAndGrouping": "No dataset clips, labels, or Gold records were read, touched, or regrouped. The audit operates purely on production code paths and synthetic in-test fixtures (two synthetic guided clips 'one' and 'two' with synthetic readiness/quality events). No per-clip grouping applies.",
+  "holdoutStatement": "The held-out cases were not touched, read, listed, or referenced in any way.",
+  "configuration": {
+    "node": "v20.18.1",
+    "pnpm": "9.15.9",
+    "integrationBranch": "devin/1787988068-wave-c-integration",
+    "integrationHead": "104ea0f",
+    "workstreamBranch": "devin/wave-g/g22-tryagain-audit",
+    "platform": "Linux (jest + jsdom-free react-test-renderer); Swift/Mac/iPhone unavailable"
+  },
+  "auditedCodePaths": [
+    "ResultScreen evidence load + sync-receipt load (cancellation-guarded, reset-on-start) — no defect found",
+    "ResultScreen StrokeResult keyed by analysisId — replay playhead/timer, row expansion, and marker state remount per attempt — no defect found",
+    "strokeResultData loads record/clip/attempts strictly by analysisId and sessionId — no implicit prior-result reuse found",
+    "tryAgainHandoff single-slot single-consumer semantics; canonicalMatchesSlug exact-correspondence guard; AUTO records re-arm as AUTO (never promoted to declarations); declared records preserve the declaration — no defect found",
+    "AnalyzeScreen run(): captureEnvelope + targetSeed reset (pre-existing d12 fix) verified present",
+    "AnalyzeScreen run(): lastReadiness/lastQuality refs — DEFECT FOUND (see findings)",
+    "StrokeResult visible score/fault/drill gating: scoredReal requires source==='real' && resultKind==='scored' && overallScore !== null; abstentions render ledger, not scores — no reachable fake score/fault/drill found in audited paths"
+  ],
+  "measuredResults": {
+    "regressionTest": {
+      "file": "apps/mobile/__tests__/analyzeScreenRearmSignals.test.tsx",
+      "withoutFix": "1 of 1 test FAILED: second attempt's envelope reported player_visibility/brightness/motion_blur/camera_motion as measured using attempt 1's live-window signals",
+      "withFix": "1 of 1 test PASSED: second (silent) attempt reports those dimensions NOT_MEASURED while resolution/frame_rate/clip_duration remain measured from the new clip itself"
+    },
+    "gates": {
+      "root_pnpm_typecheck": "pass (exit 0)",
+      "root_pnpm_test": "pass (exit 0)",
+      "root_pnpm_lint": "pass (exit 0)",
+      "root_pnpm_format_check": "pass (exit 0)",
+      "mobile_npx_tsc_noEmit": "pass (exit 0)",
+      "mobile_npm_test": "41 suites passed, 398 tests passed, 0 failed (previously 40 suites / 397 tests before this workstream's new test)"
+    }
+  },
+  "findings": [
+    {
+      "id": "G22-1",
+      "severity": "real defect (evidence integrity)",
+      "description": "AnalyzeScreen.run() reset captureEnvelope and targetSeed at the start of each attempt (wave-d d12 fix) but did NOT reset lastReadiness.current and lastQuality.current. On a second capture attempt on the same mounted screen whose live window emitted no readiness/quality events (e.g. immediate trigger, native emitter hiccup), attemptCaptureEnvelope() received the PREVIOUS attempt's live-window measurements and stamped them into the new clip's stored EnvelopeVerdict — old-window evidence falsely attributed to a new clip.",
+      "fix": "run() now also nulls lastReadiness.current and lastQuality.current before opening the camera, so each attempt's envelope reflects only its own live window; unmeasured dimensions honestly report NOT_MEASURED.",
+      "regressionTest": "apps/mobile/__tests__/analyzeScreenRearmSignals.test.tsx (fails without fix, passes with fix)"
+    },
+    {
+      "id": "G22-2",
+      "severity": "no defect",
+      "description": "All other audited stale-state / contamination vectors (old clip reuse, target seed inheritance, wrong canonical technique inheritance, prior Result marker/phase/ledger/replay contamination, attempt chip sequencing, TechniqueIntent preservation across re-arm, AUTO-never-becomes-declaration) are already guarded by the wave-d/wave-e fixes and covered by existing tests (resultRearmLoop, analyzeScreenAutoDetect, tryAgainHandoff suites); re-audit of the current integration head found no regressions."
+    }
+  ],
+  "onDeviceOnlyLimitations": "The native camera event emitter, Apple Vision readiness cascade, real clip recording, and actual iOS navigation lifecycle cannot be executed on Linux. The regression test substitutes a controllable fake for the native camera module; the fix's behavior under the real native emitter (event ordering, emitter teardown across attempts) is only verifiable on-device and is NOT claimed here. No Mac/iPhone numbers are reported.",
+  "verdict": "PROVISIONAL_GREEN",
+  "rationale": "One real evidence-integrity defect was found and fixed with a regression test that demonstrably fails without the fix; all root and mobile gates pass on the branch (41 suites / 398 tests mobile). GREEN is withheld because the fixed path's interaction with the real native camera emitter is only verifiable on-device, which is unavailable in this environment."
+}
