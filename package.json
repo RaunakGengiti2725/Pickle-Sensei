@@ -21,6 +21,7 @@
     "eval:scoring": "pnpm --filter @pickle/vision-geometry eval",
     "eval:all": "pnpm --filter @pickle/vision-geometry eval",
     "lab:analyze": "pnpm --filter @pickle/swing-lab analyze:video",
+    "lab:fresh-user-report": "pnpm --filter @pickle/swing-lab fresh-user:report",
     "lab:annotate": "pnpm --filter @pickle/swing-lab annotate",
     "lab:export": "pnpm --filter @pickle/swing-lab dataset:export",
     "lab:paddle-bench": "pnpm --filter @pickle/swing-lab paddle:bench",

@@ -7,7 +7,7 @@
  * or deleted, status is derived by folding the ledger in order.
  */
 
-export const CONSENT_SCOPES = ["video_analysis", "model_training"] as const;
+export const CONSENT_SCOPES = ["video_analysis", "model_training", "evaluation_telemetry"] as const;
 export type ConsentScope = (typeof CONSENT_SCOPES)[number];
 
 export const CONSENT_ACTIONS = ["granted", "withdrawn"] as const;
@@ -31,6 +31,7 @@ export type ConsentCaptureMode = (typeof CONSENT_CAPTURE_MODES)[number];
 /** Current contract versions; changes re-version, never soften in place. */
 export const VIDEO_ANALYSIS_CONSENT_VERSION = "video-analysis-v1";
 export const MODEL_TRAINING_CONSENT_VERSION = "model-training-v1";
+export const EVALUATION_TELEMETRY_CONSENT_VERSION = "evaluation-telemetry-v1";
 
 /**
  * Canonical consent-version naming per scope: `<scope-prefix>-v<major>`.
@@ -41,6 +42,7 @@ export const MODEL_TRAINING_CONSENT_VERSION = "model-training-v1";
 export const CONSENT_VERSION_PREFIX: Record<ConsentScope, string> = {
   video_analysis: "video-analysis",
   model_training: "model-training",
+  evaluation_telemetry: "evaluation-telemetry",
 };
 
 /**
@@ -164,6 +166,12 @@ export function deriveConsentStatus(records: readonly ConsentRecord[]): ConsentS
 
 export function isModelTrainingConsentActive(records: readonly ConsentRecord[]): boolean {
   return deriveConsentStatus(records).find((s) => s.scope === "model_training")?.active ?? false;
+}
+
+export function isEvaluationTelemetryConsentActive(records: readonly ConsentRecord[]): boolean {
+  return (
+    deriveConsentStatus(records).find((s) => s.scope === "evaluation_telemetry")?.active ?? false
+  );
 }
 
 /**

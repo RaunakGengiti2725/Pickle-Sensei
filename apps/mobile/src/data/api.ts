@@ -72,6 +72,9 @@ export function createTransport(config: ApiConfigState): SyncTransport {
     async finalizeSession(id) {
       await request(config, 'POST', `/v1/sessions/${id}/finalize`);
     },
+    async uploadEvaluationTrials(trials) {
+      return request(config, 'POST', '/v1/me/evaluation/trials', { trials });
+    },
   };
 }
 

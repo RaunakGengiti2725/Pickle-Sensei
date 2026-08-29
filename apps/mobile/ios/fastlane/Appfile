@@ -1,0 +1,5 @@
+# Appfile — identity only; NO credentials live here.
+# Apple ID / App Store Connect auth comes from the environment on the Mac
+# that runs the lane (APP_STORE_CONNECT_API_KEY_* or FASTLANE_USER).
+app_identifier("com.picklesensei")
+team_id("H26U6W4K6V")

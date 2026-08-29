@@ -444,3 +444,38 @@ export const ConsentLedgerExportEnvelopeResponse = z.union([
   ConsentLedgerExportResponse,
   ConsentLedgerExportV2Response,
 ]);
+
+/**
+ * Evaluation-trial upload (Wave G2 h07). The envelope is validated here; each
+ * trial record is additionally validated field-by-field on the server with
+ * `validateEvaluationTrial` from @pickle/shared-types — the single source of
+ * truth for the trial contract — so the deep shape is not duplicated in zod.
+ * Trials carry claims and abstentions only; correctness verdicts are never
+ * accepted from devices.
+ */
+export const EvaluationTrialEnvelopeSchema = z.object({
+  schemaVersion: z.literal("evaluation-trial-v1"),
+  trialId: z.uuid(),
+  capturedAtIso: z.iso.datetime(),
+  consent: z.object({
+    scope: z.literal("evaluation_telemetry"),
+    consentVersion: z.string().min(1).max(64),
+  }),
+});
+
+export const EvaluationTrialUploadRequest = z.object({
+  trials: z.array(EvaluationTrialEnvelopeSchema.loose()).min(1).max(50),
+});
+export type EvaluationTrialUploadRequestT = z.infer<typeof EvaluationTrialUploadRequest>;
+
+export const EvaluationTrialUploadResponse = z.object({
+  acceptedTrialIds: z.array(z.uuid()),
+  rejected: z.array(
+    z.object({
+      trialId: z.string(),
+      code: z.string(),
+      message: z.string(),
+    }),
+  ),
+});
+export type EvaluationTrialUploadResponseT = z.infer<typeof EvaluationTrialUploadResponse>;
