@@ -1,0 +1,4 @@
+{
+  "extractor": "mediapipe-pose-landmarker-full-LINUX-BENCH",
+  "video": { "durationMs": 8000.0, "w": 1000, "h": 1080, "fps": 25.0, "frameCount": 200 }
+}
