@@ -1,0 +1,32 @@
+{
+  "workstreamId": "D4-08",
+  "title": "Adjudicated-review import/validation + experiment-artifact bundle export/import CLI (round-trip)",
+  "branch": "devin/wave-d4/d4-08-admin-export",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "generatedAtIso": "2026-08-29T09:15:00Z",
+  "verdict": "GREEN",
+  "built": {
+    "adjudicatedImport": "apps/admin-web/src/coachReview/importExport.ts — import/validation counterpart of C14's buildAdjudicatedExport. parseAdjudicatedExport refuses any exportVersion other than adjudicated-reviews-export-v1 (unknown versions are REFUSED, never best-effort parsed) and refuses SYNTHETIC identities at the boundary. mergeAdjudicatedImport is pure append-only merge: new records listed in toAppend (caller persists via existing append-only endpoints), byte-identical records are idempotent no-ops (unchanged), same-id-different-content is an explicit ImportConflict — local records are never silently overwritten. A latest-revision review whose revision-1 original is neither local nor in the export is flagged as a conflict, never guessed/backfilled.",
+    "experimentBundleCli": "packages/swing-lab/src/experimentBundle.ts (pnpm lab:bundle / bundle:experiments) — experiment-bundle-v1: single JSON carrying exact bytes (base64) + sha256 per file under datasets/experiments/, selectable by --wave (directory) and --workstream (filename prefix, case-insensitive), deterministic (sorted paths, --now override). parseBundle refuses unknown bundleVersion, sha256 mismatches (corruption), and absolute/parent-escaping paths. importBundle is append-only: identical file = no-op, differing file = explicit conflict (existing file kept, exit 1); --dry-run supported."
+  },
+  "measurements": {
+    "admin_web_typecheck": "pnpm --filter @pickle/admin-web typecheck → exit 0",
+    "admin_web_tests": "pnpm --filter @pickle/admin-web test → 6 files, 59 tests passed (was 5/50 on base; +9 importExport tests incl. export→parse→merge→re-export byte-stability)",
+    "swing_lab_typecheck": "pnpm --filter @pickle/swing-lab typecheck → exit 0",
+    "swing_lab_tests": "pnpm --filter @pickle/swing-lab test → 20 files, 238 passed | 4 skipped (was 19/231|4 on base; +7 experimentBundle tests incl. export→import→re-export byte-stability and append-only conflict semantics)",
+    "workspace_typecheck": "pnpm typecheck (all workspace packages) → exit 0",
+    "cli_smoke_real_repo": "export --wave wave-c → 21 files / 124070 bytes; import --dry-run into the live datasets/experiments → written=0 unchanged=21 conflicts=0; import into a clean dir then re-export with the same --now → cmp byte-identical (BYTE-STABLE); export --workstream c14 --workstream C06 → 3 files / 19152 bytes"
+  },
+  "honestNegatives": [
+    "Zero real coach reviews/adjudications exist (recruitment remains BLOCKED_EXTERNAL per C14), so the adjudicated import path is exercised only by unit tests against the same fixture shapes the C14 export uses — no real adjudicated export has ever been produced or imported.",
+    "The import module is pure functions: no UI upload button or write-endpoint wiring was added; persisting toAppend goes through the existing append-only POST endpoints, which still 403 with the empty coach registry.",
+    "adjudicated-reviews-export-v1 does not carry a review's revision-1 original when amendments exist; the importer surfaces this as an explicit conflict rather than reconstructing it. Carrying originals would require re-versioning the export (v2), intentionally not done here.",
+    "All measurements are LINUX-CPU / Linux workspace; no Mac or iPhone execution was performed."
+  ],
+  "constraintsRespected": [
+    "no canonical docs modified (HANDOFF_V3.md, STATUS_BOARD.md, DECISIONS.md untouched)",
+    "held-out cases wm-dink-01 / afn-vic-rally1 untouched; no thresholds/denominators/contracts weakened (import refuses unknown versions instead of accepting them)",
+    "no runs/ artifacts touched or hand-edited; CLI import verified with --dry-run and clean temp dirs only",
+    "apps/mobile untouched"
+  ]
+}
