@@ -71,6 +71,10 @@ enum ClipMediaStore {
     poseModelVersion: String,
     preRollMs: Int,
     postRollMs: Int,
+    /// Guided capture owns its finished recording and discards it after the
+    /// trim; session capture exports from a STILL-ROLLING recording that must
+    /// survive for later events.
+    removeSourceRecording: Bool = true,
     completion: @escaping (Result<[String: Any], Error>) -> Void
   ) {
     let asset = AVURLAsset(url: artifact.url)
@@ -157,7 +161,7 @@ enum ClipMediaStore {
             captureMode: "automatic_pose_trigger",
             additional: additional
           )
-          removeIfPresent(artifact.url)
+          if removeSourceRecording { removeIfPresent(artifact.url) }
           completion(.success(payload))
         } catch {
           removeIfPresent(destination)

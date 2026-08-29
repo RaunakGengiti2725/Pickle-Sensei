@@ -22,6 +22,8 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
   private weak var guidedController: GuidedCaptureViewController?
   private weak var importPicker: PHPickerViewController?
   private var hasEventListeners = false
+  private var sessionCoordinator: SessionCaptureCoordinator?
+  private let motionTimestampFormatter = ISO8601DateFormatter()
 
   @objc override static func requiresMainQueueSetup() -> Bool { true }
 
@@ -184,6 +186,119 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
       return
     }
     resolve(CaptureCompletionStrategyStore.set(parsed).rawValue)
+  }
+
+  /// D-040 Gap 1+2: starts the continuous session capture. Resolves with the
+  /// session receipt once the camera is recording; wrist-motion samples then
+  /// stream as `session_motion_sample` PickleCameraEvents (frozen `{tMs, v}`
+  /// contract) until stopSessionCapture. One session capture at a time —
+  /// concurrent guided capture is allowed to stay independent, but a second
+  /// session capture is rejected.
+  @objc func startSessionCapture(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    DispatchQueue.main.async {
+      guard self.sessionCoordinator == nil else {
+        reject("camera.session_busy", "A session capture is already active.", nil)
+        return
+      }
+      let coordinator = SessionCaptureCoordinator()
+      coordinator.onMotionSample = { [weak self] tMs, v in
+        guard let self else { return }
+        self.emit([
+          "type": "session_motion_sample",
+          "tMs": tMs,
+          "v": v,
+          "captureId": coordinator.captureId,
+          "emittedAtIso": self.motionTimestampFormatter.string(from: Date()),
+        ])
+      }
+      self.sessionCoordinator = coordinator
+      Task {
+        do {
+          try await coordinator.start()
+          await MainActor.run {
+            resolve(["sessionCaptureId": coordinator.captureId])
+          }
+        } catch CameraEngine.EngineError.permissionDenied {
+          await MainActor.run {
+            self.sessionCoordinator = nil
+            reject(
+              "camera.permission_denied",
+              "Allow camera access in Settings to record a session.",
+              nil
+            )
+          }
+        } catch {
+          await MainActor.run {
+            self.sessionCoordinator = nil
+            reject("camera.session_start_failed", error.localizedDescription, error)
+          }
+        }
+      }
+    }
+  }
+
+  @objc func stopSessionCapture(
+    _ sessionCaptureId: String,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    DispatchQueue.main.async {
+      guard let coordinator = self.sessionCoordinator,
+            coordinator.captureId == sessionCaptureId else {
+        reject("camera.session_not_found", "No active session capture matches this id.", nil)
+        return
+      }
+      self.sessionCoordinator = nil
+      coordinator.stop()
+      resolve(true)
+    }
+  }
+
+  /// Cuts one closed event's clip (plus pose sidecar) from the rolling
+  /// session recording. Bounds are the JS session engine's exact proposal
+  /// bounds on the session-relative axis; the receipt is the same measured
+  /// automatic-capture payload guided capture returns.
+  @objc func extractSessionEventClip(
+    _ request: NSDictionary,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    DispatchQueue.main.async {
+      guard
+        let sessionCaptureId = request["sessionCaptureId"] as? String,
+        let startMs = (request["startMs"] as? NSNumber)?.intValue,
+        let endMs = (request["endMs"] as? NSNumber)?.intValue,
+        let confidence = (request["confidence"] as? NSNumber)?.doubleValue,
+        let detectionModelVersion = request["detectionModelVersion"] as? String
+      else {
+        reject("camera.invalid_extraction_request", "The event clip request is malformed.", nil)
+        return
+      }
+      let peakMs = (request["peakMs"] as? NSNumber)?.intValue
+      guard let coordinator = self.sessionCoordinator,
+            coordinator.captureId == sessionCaptureId else {
+        reject("camera.session_not_found", "No active session capture matches this id.", nil)
+        return
+      }
+      coordinator.extract(
+        eventStartMs: startMs,
+        eventEndMs: endMs,
+        peakMs: peakMs,
+        confidence: confidence,
+        detectionModelVersion: detectionModelVersion
+      ) { result in
+        DispatchQueue.main.async {
+          switch result {
+          case .success(let payload): resolve(payload)
+          case .failure(let error):
+            reject("camera.extraction_failed", error.localizedDescription, error)
+          }
+        }
+      }
+    }
   }
 
   @objc func cancel() {

@@ -304,6 +304,16 @@ interface NativeVideoCapture {
   importVideo(): Promise<unknown>;
   readTextFile?(uri: string): Promise<string>;
   setCompletionStrategy?(strategy: string): Promise<string>;
+  startSessionCapture?(): Promise<unknown>;
+  stopSessionCapture?(sessionCaptureId: string): Promise<unknown>;
+  extractSessionEventClip?(request: {
+    sessionCaptureId: string;
+    startMs: number;
+    endMs: number;
+    peakMs: number | null;
+    confidence: number;
+    detectionModelVersion: string;
+  }): Promise<unknown>;
   cancel(): void;
   addListener(eventType: string): void;
   removeListeners(count: number): void;
@@ -317,6 +327,82 @@ export function cameraAvailable(): boolean {
     (Platform.OS === 'ios' || Platform.OS === 'android') &&
     typeof native?.capture === 'function'
   );
+}
+
+/** All three session-capture bridge methods must exist: continuous motion
+ * streaming without per-event clip extraction (or vice versa) is not a
+ * usable session capture, so partial builds honestly report unavailable. */
+export function sessionCaptureAvailable(): boolean {
+  return (
+    (Platform.OS === 'ios' || Platform.OS === 'android') &&
+    typeof native?.startSessionCapture === 'function' &&
+    typeof native?.stopSessionCapture === 'function' &&
+    typeof native?.extractSessionEventClip === 'function'
+  );
+}
+
+export interface SessionCaptureReceipt {
+  sessionCaptureId: string;
+}
+
+export interface SessionEventClipBounds {
+  /** Exact closed-event bounds on the session time axis (ms since the first
+   * streamed motion sample — the same axis those samples use). */
+  startMs: number;
+  endMs: number;
+  peakMs: number | null;
+  /** The frozen proposal's segmentation confidence, carried verbatim. */
+  confidence: number;
+  /** The JS session engine version that proposed the event bounds. */
+  detectionModelVersion: string;
+}
+
+export async function startSessionCapture(): Promise<SessionCaptureReceipt> {
+  if (!native?.startSessionCapture) {
+    throw new Error('Native session capture is not available on this device.');
+  }
+  const receipt = await native.startSessionCapture();
+  if (
+    !isRecord(receipt) ||
+    typeof receipt.sessionCaptureId !== 'string' ||
+    receipt.sessionCaptureId.length === 0
+  ) {
+    throw new Error('The native camera returned an invalid session receipt.');
+  }
+  return { sessionCaptureId: receipt.sessionCaptureId };
+}
+
+export async function stopSessionCapture(
+  sessionCaptureId: string,
+): Promise<void> {
+  if (!native?.stopSessionCapture) {
+    throw new Error('Native session capture is not available on this device.');
+  }
+  await native.stopSessionCapture(sessionCaptureId);
+}
+
+/** Requests a clip cut from the rolling session recording for one closed
+ * event, plus the pose sidecar sliced to the same window. The receipt is the
+ * SAME validated CapturedClip contract guided capture returns — a session
+ * event clip that cannot pass validation is rejected, never repaired. */
+export async function extractSessionEventClip(
+  sessionCaptureId: string,
+  bounds: SessionEventClipBounds,
+): Promise<CapturedClip> {
+  if (!native?.extractSessionEventClip) {
+    throw new Error(
+      'Native session clip extraction is not available on this device.',
+    );
+  }
+  const payload = await native.extractSessionEventClip({
+    sessionCaptureId,
+    startMs: bounds.startMs,
+    endMs: bounds.endMs,
+    peakMs: bounds.peakMs,
+    confidence: bounds.confidence,
+    detectionModelVersion: bounds.detectionModelVersion,
+  });
+  return assertCapturedClip(payload, 'automatic_pose_trigger');
 }
 
 export function videoImportAvailable(): boolean {
