@@ -244,6 +244,22 @@ export function registerCatalogExtraRoutes(app: FastifyInstance, context: AppCon
       if (!owned)
         return sendFailure(reply, request, 404, "permanent", "shot.not_found", "Shot not found.");
     }
+    if (b.sessionId) {
+      const ownedSession = await one(
+        context.pool!,
+        "SELECT id FROM practice_session WHERE id = $1 AND user_id = $2",
+        [b.sessionId, request.user!.id],
+      );
+      if (!ownedSession)
+        return sendFailure(
+          reply,
+          request,
+          404,
+          "permanent",
+          "session.not_found",
+          "Session not found.",
+        );
+    }
     const card = await one<{ id: string; status: string }>(
       context.pool!,
       `INSERT INTO share_card (user_id, shot_id, session_id, template_key, privacy_options, expires_at)

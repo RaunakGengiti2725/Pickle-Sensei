@@ -1,6 +1,7 @@
 import pg from "pg";
 import { InMemoryJobQueue, SqsJobQueue } from "@pickle/queue";
 import { runOnce, type WorkerDeps } from "./worker.js";
+import { buildObjectDeleter } from "./objectStore.js";
 
 // Worker runtime role (DATABASE_URL_WORKER) with DATABASE_URL fallback for
 // single-credential local setups; migrations use owner credentials via the
@@ -20,7 +21,9 @@ const deps: WorkerDeps = {
         ...(process.env["SQS_ENDPOINT"] ? { endpoint: process.env["SQS_ENDPOINT"] } : {}),
       })
     : new InMemoryJobQueue(),
-  objectStore: null, // wired to S3ObjectStore in deployment
+  // Built from configuration: without it purge and account deletion stall
+  // (the worker refuses to claim an erasure it cannot perform).
+  objectStore: buildObjectDeleter(process.env),
   transcoder: null, // ffmpeg pipeline wired in deployment image
   log: (line) => console.error(`[media-worker] ${line}`),
 };

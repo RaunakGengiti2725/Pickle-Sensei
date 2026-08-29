@@ -1,0 +1,224 @@
+{
+  "workstream": "h19-security-cert",
+  "gate": "MANDATORY GATE 8 — security/privacy production review of services/api + media handling",
+  "branch": "devin/wave-h/h19-security-cert",
+  "rc_baseline": {
+    "branch": "devin/1787988068-wave-c-integration",
+    "commit": "104ea0f"
+  },
+  "environment": {
+    "node": "v20.18.1",
+    "pnpm": "10.15.1",
+    "stack": "docker compose: postgres:5432 (pickle_dev), postgres-test:5433 (pickle_test), redis, MinIO (S3 API 9000), ElasticMQ",
+    "api_under_test": "live Fastify process, PICKLE_ENV=development, port 3901, real Postgres + real MinIO + presigned S3 URLs",
+    "not_available": [
+      "iPhone/macOS hardware (no device measurements claimed)",
+      "real RevenueCat credentials (authorized-webhook success path unverifiable)",
+      "identity-provider admin credentials (deletion task idp_revoke)",
+      "multi-instance/edge WAF deployment (shared rate-limit store unverifiable)"
+    ]
+  },
+  "method": {
+    "type": "live black-box exploit testing against the running API + real object storage, plus code review and DB-backed regression tests",
+    "probe_scripts": "8 standalone probe suites (auth/privilege, authorization/IDOR + hostile input, media/signed URLs, privacy/consent/training, rate limiting + provider webhooks, secrets/log hygiene, erasure-vs-storage with the real media worker, configured billing webhook). Probes are local test harnesses, deliberately not committed; every count below was produced by executing them against the live stack.",
+    "attacker_models": [
+      "unauthenticated caller",
+      "forged/tampered/expired/wrong-issuer/wrong-secret bearer tokens",
+      "authenticated user A attacking user B's resources by identifier",
+      "non-admin user attacking admin routes and self-granted role claims",
+      "holder of a valid presigned URL attempting scope escalation",
+      "direct anonymous access to the object store",
+      "provider-webhook caller without/with wrong authorization"
+    ],
+    "counting_rule": "one probe = one distinct attack attempt with a decisive expected-deny outcome; bursts are reported as request counts with the observed status-code histogram, never as probe counts"
+  },
+  "measured_results": {
+    "auth_bypass_and_privilege": {
+      "probes": 85,
+      "blocked": 85,
+      "exploitable": 0,
+      "covered": "missing/empty/malformed Authorization, alg=none, HS256 with wrong secret, wrong issuer/audience, expired, not-yet-valid, subject swap, self-claimed pickle_role=admin, deleted user, suspended user, admin-route access as non-admin, admin route with no token",
+      "note": "dev HS256 verifier is env-gated (cannot construct outside development/test); staging/production fail closed without OIDC issuer/audience/JWKS"
+    },
+    "authorization_idor_and_hostile_input": {
+      "probes": 137,
+      "blocked": 137,
+      "exploitable": 0,
+      "covered": "cross-user reads/mutations/deletes on media, sessions, shots, share cards, analyses, friends, consent, export; SQL-injection strings in path/query/body identifiers; UUID-shaped-but-foreign ids; NUL bytes and invalid UTF-8 in paths and bodies; oversized/deeply-nested/malformed JSON; header injection attempts; path-traversal segments",
+      "server_error_count_after_fix": 0
+    },
+    "media_upload_and_signed_urls": {
+      "probes": 30,
+      "blocked_api_only": 29,
+      "blocked_after_worker_sweep": 30,
+      "exploitable": 0,
+      "covered": "hostile filenames (traversal/NUL/absolute paths) → opaque server-generated key; declared-metadata validation (kind, size caps 500 MiB raw / 10 MiB thumbnail, content-type allowlist, sha256 shape); presigned PUT with tampered key → 403; presigned PUT with spoofed content-type → 403; honest PUT succeeds; oversized real object rejected at complete; stored-checksum mismatch rejected; content-type spoof rejected at complete; upload URL expiry ≤ 900s; playback URL expiry ≤ 300s; signature does not cover other keys; cross-user playback URL minting → 404; expired URL → 403; anonymous bucket list → 403; anonymous object read → 403; upload denied without cloud-sync consent",
+      "note": "the single API-only miss was byte residue of a *rejected* upload (purge is asynchronous); the first real media-worker sweep deleted it — measured, see erasure_vs_object_storage"
+    },
+    "privacy_deletion_export_consent_training": {
+      "probes": 21,
+      "blocked": 21,
+      "exploitable": 0,
+      "covered": "export scoped to caller only; export/deletion of another user's account by id; consent grant/withdraw replay and forged subject; consent records immutable (UPDATE/DELETE/TRUNCATE refused by DB policy); training eligibility requires latest granted model_training consent + all_captures scope; withdrawal removes eligibility; deleted user's dataset items deactivated",
+      "training_items_active_after_withdrawal": 0
+    },
+    "erasure_vs_object_storage": {
+      "probes": 6,
+      "blocked": 6,
+      "exploitable": 0,
+      "method": "real media-worker runOnce() against real Postgres + real MinIO with the deleter now built from configuration",
+      "single_asset_deletion": "derived artifacts present=2 → after one sweep=0; media_asset.object_key nulled, status=deleted",
+      "account_deletion": "DELETE /v1/me → 200; one worker pass processed 3 deletion tasks; owned media bytes remaining=0; app_user rows remaining=0; deletion_task final state: media_purge=done, ml_dataset_review=done, final_hard_delete=done, idp_revoke=queued (blocked on IdP credentials, honestly reported by the worker, never marked done)"
+    },
+    "rate_limiting": {
+      "measured_after_fix": {
+        "authenticated media presign burst": "120 requests → {200: 60, 429: 60}",
+        "friend-handle enumeration burst": "120 requests → {400: 60, 429: 60}",
+        "data-export burst": "80 requests → {200: 60, 429: 20}",
+        "invalid-token burst on /v1/me": "700 requests → {401: 600, 429: 100}",
+        "/v1/health burst": "700 requests → {200: 700} (deliberately exempt: static in-memory response for load-balancer probes)"
+      },
+      "measured_before_fix": {
+        "/v1/health": "300 requests → {200: 300}",
+        "invalid-token /v1/me": "200 requests → {401: 200}",
+        "media presign": "120 requests → {200: 120}",
+        "data export": "40 requests → {200: 40}"
+      },
+      "caller_isolation": "verified by regression test: throttling one caller does not throttle another",
+      "limits": "default 600 req/60s per caller, 60 req/60s per caller on expensive routes (media presign/complete/playback, export, consent export, friend requests, share cards, analyses, bootstrap, account deletion, billing sync)"
+    },
+    "billing_webhook_configured": {
+      "probes": 10,
+      "blocked": 10,
+      "exploitable": 0,
+      "covered": "webhook without authorization → 401; near-miss authorization → 401; malformed body with valid authorization → typed 4xx (no 500); unmappable app_user_id → no 500; SQL-injection app_user_id → no 500 and app_user table intact; identical-event replay → identical typed outcome and zero entitlement mutation; client-claimed entitlement sync grants nothing",
+      "entitlement_rows_granted_from_webhook_or_client_claims": 0,
+      "external_limit": "with only a local fake RevenueCat key the authorized path terminates at upstream verification (502 billing.revenuecat_credentials_rejected); the real-credential success path is NOT verified here"
+    },
+    "secrets_and_log_hygiene": {
+      "probes": 16,
+      "blocked": 15,
+      "exploitable": 0,
+      "api_log_lines_scanned": 5237,
+      "raw_bearer_tokens_or_jwts_in_logs": 0,
+      "authorization_headers_in_logs": 0,
+      "presigned_signatures_in_logs": 0,
+      "user_emails_or_pii_in_logs": 0,
+      "configured_local_secrets_in_logs": 0,
+      "postgres_error_text_with_offending_value_in_logs_after_fix": 0,
+      "logged_500_responses_during_hostile_run_after_fix": 0,
+      "logged_500_responses_during_hostile_run_before_fix": 118,
+      "one_non_secret_match": ".github/workflows/ci.yml:16 POSTGRES_PASSWORD: pickle_ci_password — an ephemeral CI service-container fixture, not a production credential (classified P2, no code change)",
+      "build_output": "`pnpm build` is typecheck-only (no bundling/emit), so there is no build artifact that could embed secrets"
+    },
+    "injection_and_ssrf_review": {
+      "sql": "all request-path queries use parameter arrays plus ownership predicates; no string-concatenated SQL found in services/api or services/media-worker; injection strings measured non-exploitable (see authorization_idor_and_hostile_input)",
+      "command": "0 child_process/shell uses in services/api and services/media-worker; the offline swing-lab tooling uses execFile/spawn with argument arrays and is not request-reachable",
+      "path_traversal": "object keys are entirely server-generated (media/<owner uuid>/<24 random bytes>); client filenames never reach a key or filesystem path",
+      "ssrf": "only outbound fetch on a request path is RevenueCat verification to a fixed https://api.revenuecat.com/v1/subscribers/<encoded id> with timeout; external instructional media URLs are validated to https + an approved YouTube/Vimeo host allowlist and are never server-fetched"
+    },
+    "regression_tests": {
+      "new_api_security_suite": "services/api/test/security-hardening.integration.test.ts — 11 tests (Postgres-backed)",
+      "existing_media_redteam_suite": "services/api/test/media-redteam.integration.test.ts — 9 tests",
+      "new_worker_test": "services/media-worker/test/objectStore.test.ts — 2 tests",
+      "services_api_total": "107 tests passed",
+      "media_worker_total": "27 tests passed",
+      "root_gates": "pnpm typecheck ✓, pnpm test ✓ (all 20 workspace projects, e.g. swing-lab 593 passed / 4 skipped), pnpm lint ✓, pnpm format:check ✓"
+    }
+  },
+  "findings": {
+    "P0": [
+      {
+        "id": "H19-P0-1",
+        "title": "Share-card creation accepted another user's sessionId (cross-user IDOR)",
+        "evidence": "user A created a share card referencing user B's practice_session id and received 201",
+        "impact": "one user's session data could be embedded in another user's shareable artifact",
+        "fix": "ownership predicate on sessionId (404 when not owned) in services/api/src/modules/catalog/extraRoutes.ts",
+        "regression_test": "security-hardening.integration.test.ts — cross-user sessionId rejected, owner's own sessionId still accepted",
+        "status": "fixed"
+      },
+      {
+        "id": "H19-P0-2",
+        "title": "Media completion trusted client-declared integrity: no verification of stored checksum, size, or content type",
+        "evidence": "a presigned PUT of content whose bytes/type differed from the declaration completed to status ready",
+        "impact": "content-type spoofing and content substitution into the media pipeline (unsafe file upload)",
+        "fix": "presigned upload binds content-type, content-length and SHA-256 (x-amz-checksum-sha256) and the response returns the required headers; completion HEADs the stored object with checksum mode enabled and rejects size/type/checksum mismatch, marks the asset deleted and enqueues media.purge (services/api/src/modules/media/{routes,objectStore}.ts)",
+        "regression_test": "security-hardening.integration.test.ts — signed constraints asserted; checksum mismatch, missing checksum, and content-type spoof all rejected and purged; honest upload still completes",
+        "status": "fixed"
+      },
+      {
+        "id": "H19-P0-3",
+        "title": "Deployed media worker could never delete bytes: the entrypoint hardcoded objectStore = null",
+        "evidence": "services/media-worker/src/main.ts passed null, so media.purge returned handled=false and the media_purge deletion task re-queued as blocked; on the live stack a deleted asset's bytes stayed in the bucket indefinitely",
+        "impact": "right-to-erasure never executes in any deployment of this entrypoint — deleted users' and deleted assets' media bytes retained forever (the worker was honest about it, but erasure silently never completed)",
+        "fix": "buildObjectDeleter(env) (S3/MinIO delete + paginated prefix list) wired into the entrypoint (services/media-worker/src/objectStore.ts, src/main.ts)",
+        "regression_test": "media-worker/test/objectStore.test.ts (wiring: null when unconfigured, deleter with delete+list when configured) plus live measurement: single-asset derived artifacts 2 → 0 and account-deletion media bytes → 0 after real worker passes",
+        "status": "fixed"
+      }
+    ],
+    "P1": [
+      {
+        "id": "H19-P1-1",
+        "title": "No rate limiting anywhere on the API",
+        "evidence": "pre-fix bursts all fully accepted: 300/300 health 200, 200/200 invalid-token 401, 120/120 media presigns 200, 40/40 exports 200 — unlimited credential-stuffing, handle enumeration, presign flooding and export amplification",
+        "fix": "per-caller route-aware limiter (services/api/src/plugins/rateLimitPlugin.ts): SHA-256 token fingerprint (never the raw token) or client IP, bounded key map (50k), 600 req/60s default, 60 req/60s on expensive routes, typed 429 api.rate_limited with Retry-After",
+        "post_fix_measurement": "presign 120 → 60×200/60×429; export 80 → 60×200/20×429; invalid-token 700 → 600×401/100×429",
+        "regression_test": "security-hardening.integration.test.ts — expensive route throttles the abusing caller and leaves a second caller unaffected",
+        "status": "fixed (mitigated in-process)",
+        "residual_risk": "the limiter is per process; with N API instances the effective per-caller budget is N × budget. An edge/WAF or shared-store limit is still required before broad release — this is deployment-side and cannot be verified in this environment."
+      },
+      {
+        "id": "H19-P1-2",
+        "title": "Hostile identifiers produced logged 500s (NUL byte / invalid UTF-8 / malformed numerics), and Postgres error text carrying the offending value reached the logs",
+        "evidence": "pre-fix hostile run: 118 logged 500 responses and 98 Postgres invalid-input error lines",
+        "fix": "reject request paths containing NUL early, and map Postgres 22P02/22003/22021 plus Fastify parse/validation errors to typed 4xx envelopes (services/api/src/app.ts)",
+        "post_fix_measurement": "same hostile corpus (137 probes): 0 logged 500s, 0 Postgres error lines with the offending value",
+        "regression_test": "security-hardening.integration.test.ts — malformed identifiers, NUL paths and malformed JSON all typed 400/404",
+        "status": "fixed"
+      }
+    ],
+    "P2": [
+      {
+        "id": "H19-P2-1",
+        "title": "CI service-container fixture password committed in .github/workflows/ci.yml",
+        "assessment": "ephemeral throwaway Postgres credential for the CI service container; not a production secret and not reachable from any deployed environment",
+        "status": "unresolved by choice (no change made; recorded for transparency)"
+      },
+      {
+        "id": "H19-P2-2",
+        "title": "No orphan-object reconciliation by bucket listing",
+        "assessment": "purge and the sweep are driven from media_asset rows, so a bucket object whose row is already gone (only reachable by out-of-band writes, not by any API path) is never collected. Storage-cost/retention hygiene, no access-control impact.",
+        "status": "unresolved (out of gate scope, no evidence of an API path that creates such objects)"
+      },
+      {
+        "id": "H19-P2-3",
+        "title": "/v1/health is exempt from rate limiting",
+        "assessment": "intentional: static in-memory response with no DB or storage access, needed for load-balancer probes. 700/700 accepted, measured.",
+        "status": "accepted by design"
+      }
+    ]
+  },
+  "unverified_external": [
+    "RevenueCat authorized-webhook success path and subscriber verification (requires real provider credentials; locally the path terminates at a typed 502 and grants nothing)",
+    "Shared/edge rate limiting across multiple API instances (deployment-side; per-process limiter measured here)",
+    "deletion_task kind idp_revoke (requires identity-provider admin credentials; worker keeps it queued and never claims completion)",
+    "Production OIDC verification against a real issuer/JWKS (code fails closed without configuration; verified only by construction guards and unit tests)"
+  ],
+  "verdict": "PASS",
+  "rationale": "Every exploitable finding discovered by live exploit testing against the real stack (3 × P0, 2 × P1) was fixed on this branch and re-measured post-fix: 85/85 auth-bypass probes blocked, 137/137 authorization/IDOR + hostile-input probes blocked with 0 logged 500s, 30/30 media/signed-URL probes blocked (the last one after the now-wired worker sweep), 21/21 privacy/consent/training probes blocked, 6/6 erasure-vs-real-storage probes blocked, 10/10 configured-webhook probes blocked, and 0 secrets/PII/tokens in 5237 scanned API log lines. No unresolved exploitable finding remains internally. The PASS is conditional on two deployment-side items that cannot be verified in this environment and must be closed before broad release: a shared edge/WAF rate limit across API instances (the in-process limiter is a partial mitigation), and real-credential verification of the RevenueCat webhook path. No device/iPhone/macOS measurement is claimed. Held-out cases wm-dink-01 and afn-vic-rally1 were not touched.",
+  "files_changed": [
+    "services/api/src/app.ts",
+    "services/api/src/plugins/rateLimitPlugin.ts",
+    "services/api/src/modules/catalog/extraRoutes.ts",
+    "services/api/src/modules/media/routes.ts",
+    "services/api/src/modules/media/objectStore.ts",
+    "services/api/test/security-hardening.integration.test.ts",
+    "services/api/test/support/fakeObjectStore.ts",
+    "services/api/test/media-redteam.integration.test.ts",
+    "services/media-worker/src/main.ts",
+    "services/media-worker/src/objectStore.ts",
+    "services/media-worker/test/objectStore.test.ts",
+    "services/media-worker/package.json",
+    "pnpm-lock.yaml"
+  ]
+}

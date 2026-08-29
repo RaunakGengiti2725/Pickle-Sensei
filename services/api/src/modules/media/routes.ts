@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { AppContext } from "../../context.js";
 import { sendFailure } from "../../lib/replies.js";
 import { audit, one } from "../../lib/db.js";
+import { sha256HexToBase64, uploadRequiredHeaders } from "./objectStore.js";
 
 /**
  * Media module (spec p. 38): presigned direct-to-S3 uploads, private storage,
@@ -106,15 +107,32 @@ export function registerMediaRoutes(app: FastifyInstance, context: AppContext): 
         body.sha256,
       ],
     );
-    const uploadUrl = await context.objectStore.presignUpload(objectKey, body.contentType, 900);
-    return { mediaAssetId: asset!.id, uploadUrl, expiresSeconds: 900 };
+    const constraints = {
+      contentType: body.contentType,
+      sizeBytes: body.bytes,
+      sha256Hex: body.sha256,
+    };
+    const uploadUrl = await context.objectStore.presignUpload(objectKey, 900, constraints);
+    return {
+      mediaAssetId: asset!.id,
+      uploadUrl,
+      expiresSeconds: 900,
+      // The signature covers these headers; a client that changes any of them
+      // (spoofed type, larger body, other bytes) is rejected by storage.
+      requiredHeaders: uploadRequiredHeaders(constraints),
+    };
   });
 
   app.post("/v1/media/:id/complete", { preHandler: app.authenticate }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const pending = await one<{ object_key: string; size_bytes: string | number }>(
+    const pending = await one<{
+      object_key: string;
+      size_bytes: string | number;
+      content_type: string;
+      sha256: string;
+    }>(
       context.pool!,
-      "SELECT object_key, size_bytes FROM media_asset WHERE id = $1 AND owner_user_id = $2 AND status = 'uploading' AND deleted_at IS NULL",
+      "SELECT object_key, size_bytes, content_type, sha256 FROM media_asset WHERE id = $1 AND owner_user_id = $2 AND status = 'uploading' AND deleted_at IS NULL",
       [id, request.user!.id],
     );
     if (!pending)
@@ -138,8 +156,10 @@ export function registerMediaRoutes(app: FastifyInstance, context: AppContext): 
           "No uploaded object was found for this asset.",
         );
       }
-      if (head.sizeBytes > Number(pending.size_bytes) || head.sizeBytes > MAX_UPLOAD_BYTES) {
-        // Reject and queue purge of the offending object — never keep it.
+      // The stored bytes must match everything that was declared and signed:
+      // size, content type, and content hash. Anything else is a spoofed
+      // upload and is purged rather than promoted to 'ready'.
+      const reject = async (code: string, message: string) => {
         await context.pool!.query(
           "UPDATE media_asset SET status = 'deleted', deleted_at = now() WHERE id = $1",
           [id],
@@ -150,13 +170,24 @@ export function registerMediaRoutes(app: FastifyInstance, context: AppContext): 
           // Asset is marked deleted; the worker sweep will purge the object.
           request.log.error({ err: error }, "media.purge dispatch failed; sweep will purge");
         }
-        return sendFailure(
-          reply,
-          request,
-          422,
-          "corrupted_media",
+        return sendFailure(reply, request, 422, "corrupted_media", code, message);
+      };
+      if (head.sizeBytes > Number(pending.size_bytes) || head.sizeBytes > MAX_UPLOAD_BYTES) {
+        return reject(
           "media.size_exceeded",
           `Uploaded object is ${head.sizeBytes} bytes, larger than the declared/allowed size.`,
+        );
+      }
+      if (head.contentType !== null && head.contentType !== pending.content_type) {
+        return reject(
+          "media.content_type_mismatch",
+          "Stored object content type does not match the declared type.",
+        );
+      }
+      if (head.checksumSha256 !== sha256HexToBase64(pending.sha256)) {
+        return reject(
+          "media.checksum_mismatch",
+          "Stored object does not match the declared SHA-256 checksum.",
         );
       }
     }

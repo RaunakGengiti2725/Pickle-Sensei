@@ -8,6 +8,11 @@ import type { AppContext } from "./context.js";
 import { sendFailure } from "./lib/replies.js";
 import { buildVerifier } from "./auth/tokens.js";
 import { registerAuth } from "./plugins/authPlugin.js";
+import {
+  registerRateLimit,
+  DEFAULT_RATE_LIMIT,
+  type RateLimitConfig,
+} from "./plugins/rateLimitPlugin.js";
 import { buildObjectStore, type IObjectStore } from "./modules/media/objectStore.js";
 import { registerCatalogRoutes } from "./modules/catalog/routes.js";
 import { registerCatalogExtraRoutes } from "./modules/catalog/extraRoutes.js";
@@ -36,6 +41,7 @@ import { registerTrainingRoutes } from "./modules/training/routes.js";
 export interface BuildAppOptions {
   queue?: IJobQueue;
   objectStore?: IObjectStore | null;
+  rateLimit?: Partial<RateLimitConfig>;
 }
 
 export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): FastifyInstance {
@@ -62,6 +68,24 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
   };
   app.decorate("appContext", context);
 
+  registerRateLimit(app, { ...DEFAULT_RATE_LIMIT, ...options.rateLimit });
+
+  // NUL bytes are never valid in an identifier and cannot round-trip through
+  // PostgreSQL text; they are rejected before any handler or log sees them.
+  app.addHook("onRequest", async (request, reply) => {
+    const rawUrl = request.raw.url ?? "";
+    if (rawUrl.includes("%00") || rawUrl.includes("\u0000")) {
+      return sendFailure(
+        reply,
+        request,
+        400,
+        "permanent",
+        "validation.identifier",
+        "Request path contains an illegal character.",
+      );
+    }
+  });
+
   app.addHook("onSend", async (request, reply) => {
     reply.header("x-request-id", request.id);
   });
@@ -78,6 +102,35 @@ export function buildApp(config: ApiConfig, options: BuildAppOptions = {}): Fast
         "permanent",
         "account.deleted",
         "This account was deleted.",
+      );
+    }
+    // Client-shaped failures must stay typed 4xx: a malformed identifier or an
+    // unparseable body is never an internal error, and its raw value is never
+    // logged. PostgreSQL 22P02/22003/22021 = invalid text, numeric, or encoding
+    // input.
+    const errorCode = (error as { code?: string }).code ?? "";
+    if (errorCode === "22P02" || errorCode === "22003" || errorCode === "22021") {
+      return sendFailure(
+        reply,
+        request,
+        400,
+        "permanent",
+        "validation.identifier",
+        "A request parameter is not a valid identifier or number.",
+      );
+    }
+    if (
+      errorCode.startsWith("FST_ERR_CTP_") ||
+      errorCode === "FST_ERR_VALIDATION" ||
+      (statusCode !== undefined && statusCode >= 400 && statusCode < 500)
+    ) {
+      return sendFailure(
+        reply,
+        request,
+        statusCode !== undefined && statusCode >= 400 && statusCode < 500 ? statusCode : 400,
+        "permanent",
+        "validation.request",
+        "Request could not be parsed.",
       );
     }
     request.log.error({ err: error }, "unhandled error");

@@ -403,6 +403,9 @@ importers:
 
   services/media-worker:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: ^3.1119.0
+        version: 3.1119.0
       '@pickle/database':
         specifier: workspace:*
         version: link:../../packages/database
