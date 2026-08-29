@@ -1,0 +1,83 @@
+{
+  "workstream": "d3-09-rt-coach-portal",
+  "wave": "D3 (red team)",
+  "subsystem": "apps/admin-web coach review lab (portal + data layer + dev API)",
+  "branch": "devin/wave-d3/d3-09-rt-coach-portal",
+  "date": "2026-08-29",
+  "method": "Vitest against the real validators/data layer plus endpoint-level tests against the REAL dev-API middleware (extracted from vite.config.ts into src/coachReview/labApi.ts and mounted unchanged), pointed at a throwaway tmpdir root with a clearly-labeled TEST-ONLY registry. No real-coach reviews were seeded anywhere; the repo's human-managed coaches.json remains empty and untouched; held-out cases wm-dink-01 / afn-vic-rally1 untouched.",
+  "counts": { "breaks_found": 7, "fixed": 7, "open": 0 },
+  "breaks": [
+    {
+      "id": "B1-nonfinite-numbers",
+      "severity": "medium",
+      "found": "validateReview accepted NaN/Infinity for confidence and NaN region coordinates (range checks like `v < 0 || v > 1` are false for NaN). JSON cannot carry NaN, but in-process callers (form logic, amendments embedding reviews) can.",
+      "fix": "validate.ts now requires Number.isFinite for confidence and region {x,y,w,h}.",
+      "tests": ["redteam.test.ts: validateReview rejects non-finite numbers"],
+      "status": "FIXED"
+    },
+    {
+      "id": "B2-adjudication-duplicate-reviewids",
+      "severity": "high",
+      "found": "validateAdjudication accepted reviewedReviewIds = [r1, r1]: one review duplicated passed the ≥2 length check, so an adjudication could be recorded with only ONE review actually present.",
+      "fix": "records.ts requires ≥2 DISTINCT reviewedReviewIds (Set-based).",
+      "tests": [
+        "redteam.test.ts: rejects the same reviewId listed twice",
+        "labApi.test.ts: rejects an adjudication with only ONE review present / duplicated ids (HTTP 422)"
+      ],
+      "status": "FIXED"
+    },
+    {
+      "id": "B3-adjudication-cross-item-review",
+      "severity": "high",
+      "found": "An adjudication for item X could cite a persisted review of item Y in reviewedReviewIds — it existed and had a different reviewer, so all checks passed; the ≥2-reviews requirement could be satisfied by borrowing reviews from other items.",
+      "fix": "labApi.ts builds reviewId→queueItemId from the persisted reviews and validateAdjudication rejects any reviewed review that does not belong to the adjudicated item.",
+      "tests": [
+        "redteam.test.ts: rejects a reviewedReviewId belonging to a different queue item",
+        "labApi.test.ts: rejects a reviewedReviewId that belongs to a DIFFERENT queue item (HTTP 422)"
+      ],
+      "status": "FIXED"
+    },
+    {
+      "id": "B4-blind-leakage-agreement-table",
+      "severity": "high",
+      "found": "ReviewsPanel gated review CONTENT behind canSeeOtherReviews, but AgreementView showed per-item agreement rates, mismatch details and included in-progress items' reviews in the cross-item kappas. With n=2 targets, a coach who knows their own answers can reconstruct the other coach's in-progress review from the aggregates.",
+      "fix": "blind.ts adds isBlindInProgress; AgreementView withholds all review-derived metric cells and the adjudication editor for items still collecting real reviews, and excludes those items' real reviews from the pair-kappa inputs (synthetic dev fixtures unaffected).",
+      "tests": ["redteam.test.ts: isBlindInProgress (agreement-surface leakage gate)"],
+      "status": "FIXED"
+    },
+    {
+      "id": "B5-stale-revision-agreement",
+      "severity": "medium",
+      "found": "AgreementView computed agreement and kappa from the original revision-1 reviews even when append-only amendments superseded them, so metrics could contradict the coaches' current judgments (export already used latest revisions — the two surfaces disagreed).",
+      "fix": "data.ts adds latestReviewVersions(reviews, amendments); AgreementView resolves reviews through it before computing agreement/kappa.",
+      "tests": ["redteam.test.ts: latestReviewVersions (amendment-aware agreement inputs)"],
+      "status": "FIXED"
+    },
+    {
+      "id": "B6-dev-api-untestable-and-500-on-bad-json",
+      "severity": "medium",
+      "found": "The entire write-gate middleware lived inline in vite.config.ts, untested; and all non-review POST endpoints (adjudications, amendments, assignments, drill mappings) returned HTTP 500 on malformed JSON bodies instead of 400.",
+      "fix": "Middleware extracted verbatim into src/coachReview/labApi.ts (vite.config.ts mounts it unchanged) and all POST bodies parse through a shared readJsonBody that answers 400. 14 endpoint tests now run against the real middleware.",
+      "tests": ["labApi.test.ts (whole file, 14 tests)"],
+      "status": "FIXED"
+    },
+    {
+      "id": "B7-degenerate-kappa-and-empty-export",
+      "severity": "low",
+      "found": "Probed kappa with n=1 and all-same labels, export with zero reviews/adjudications, duplicate review submission, nonexistent queue item/event, unprovisioned coach, credential mismatch, impostor amendment, revision skip. All already behaved correctly (nulls, empty export, 409/422/403) — no defect; pinned as regression tests so they stay correct.",
+      "fix": "Regression tests only (no code change needed).",
+      "tests": [
+        "redteam.test.ts: kappa degenerate inputs",
+        "labApi.test.ts: review submission gates",
+        "portal.test.ts (pre-existing): export empty with zero adjudications"
+      ],
+      "status": "FIXED (behavior verified, regression-pinned)"
+    }
+  ],
+  "verification": {
+    "tests": "apps/admin-web: 7 files, 74 tests passed (was 5 files / 50 before this workstream)",
+    "typecheck": "pnpm typecheck green",
+    "no_data_pollution": "git status clean under datasets/ after test runs; endpoint tests write only under a tmpdir root that is removed in afterAll"
+  },
+  "notes": "No real coach, Mac, or iPhone evidence exists or is claimed. The production registry remains empty, so every real write path still refuses with 403 until a human provisions a coach per docs/COACHING.md."
+}

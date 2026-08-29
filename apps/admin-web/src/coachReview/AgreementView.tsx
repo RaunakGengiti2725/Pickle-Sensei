@@ -9,10 +9,12 @@ import {
 import {
   buildAdjudicatedExport,
   downloadJson,
+  latestReviewVersions,
   submitAdjudication,
   type CoachReviewData,
   type SubmitResult,
 } from "./data";
+import { isBlindInProgress } from "./blind";
 import type { AdjudicationOutcome, AdjudicationRecord } from "./records";
 import type { QualityValue } from "./types";
 import { labBox, mono } from "./CoachReviewLab";
@@ -243,11 +245,30 @@ function AdjudicationEditor({ data, queueItemId }: { data: CoachReviewData; queu
  * the computed/adjudication states against the flagged dev fixtures.
  */
 export function AgreementView({ data }: { data: CoachReviewData }) {
-  const reviews = data.reviews.map((entry) => entry.review);
+  const resolved = latestReviewVersions(data.reviews, data.amendments);
+  const reviews = resolved.map((entry) => entry.review);
+  const realCountByItem = new Map<string, number>();
+  for (const entry of resolved) {
+    if (entry.synthetic) continue;
+    const id = entry.review.queueItemId;
+    realCountByItem.set(id, (realCountByItem.get(id) ?? 0) + 1);
+  }
+  const blindItems = new Set(
+    data.queue.queue
+      .filter((item) =>
+        isBlindInProgress(item.requiredReviewsTarget, realCountByItem.get(item.queueItemId) ?? 0),
+      )
+      .map((item) => item.queueItemId),
+  );
   const agreements = computeAllAgreements(data.queue.queue, reviews);
   const anyComputed = agreements.some((agreement) => agreement.status === "computed");
-  const strokeKappas = computePairKappas(reviews, strokeLabelExtractor);
-  const faultKappas = computePairKappas(reviews, primaryFaultLabelExtractor);
+  // Real reviews on items still collecting stay OUT of the cross-item kappas:
+  // their labels are blind content until the item reaches its target.
+  const kappaInput = resolved
+    .filter((entry) => entry.synthetic || !blindItems.has(entry.review.queueItemId))
+    .map((entry) => entry.review);
+  const strokeKappas = computePairKappas(kappaInput, strokeLabelExtractor);
+  const faultKappas = computePairKappas(kappaInput, primaryFaultLabelExtractor);
   const adjudicationByItem = new Map(
     data.adjudications.map((record) => [record.queueItemId, record]),
   );
@@ -286,69 +307,90 @@ export function AgreementView({ data }: { data: CoachReviewData }) {
             </tr>
           </thead>
           <tbody>
-            {agreements.map((agreement) => (
-              <tr
-                key={agreement.queueItemId}
-                style={{ borderBottom: "1px solid #eef2f0", verticalAlign: "top" }}
-              >
-                <td>
-                  <a href={`#/coach/item/${agreement.queueItemId}`}>{agreement.queueItemId}</a>
-                </td>
-                <td>
-                  {agreement.reviewCount}/{agreement.requiredReviewsTarget}
-                  {agreement.cannotEvaluateCount > 0 && (
-                    <div style={{ color: "#6b7a75", fontSize: 11 }}>
-                      {agreement.cannotEvaluateCount} cannot-evaluate
-                    </div>
-                  )}
-                </td>
-                <td style={{ color: agreement.status === "computed" ? "#15803d" : "#b45309" }}>
-                  {agreement.status === "computed" ? "computed" : "awaiting reviews"}
-                </td>
-                <td>{formatRate(agreement.stroke.rate)}</td>
-                <td>
-                  {formatRate(agreement.rating.exactMatchRate)} /{" "}
-                  {formatNumber(agreement.rating.meanAbsDiff)}
-                </td>
-                <td>{formatRate(agreement.primaryFault.rate)}</td>
-                <td>
-                  {formatRate(agreement.severity.exactRate)} /{" "}
-                  {formatNumber(agreement.severity.meanAbsDiff)}
-                </td>
-                <td>{formatNumber(agreement.faultOverlap.meanJaccard)}</td>
-                <td>
-                  {agreement.adjudication.required ? (
-                    adjudicationByItem.has(agreement.queueItemId) ? (
-                      <details style={{ color: "#15803d" }}>
-                        <summary>
-                          RECORDED ({adjudicationByItem.get(agreement.queueItemId)!.outcome.kind})
-                        </summary>
-                        <div style={{ ...mono, fontSize: 11 }}>
-                          by {adjudicationByItem.get(agreement.queueItemId)!.adjudicatorId} ·{" "}
-                          {adjudicationByItem.get(agreement.queueItemId)!.rationale}
-                        </div>
-                      </details>
+            {agreements.map((agreement) => {
+              const blind = blindItems.has(agreement.queueItemId);
+              return (
+                <tr
+                  key={agreement.queueItemId}
+                  style={{ borderBottom: "1px solid #eef2f0", verticalAlign: "top" }}
+                >
+                  <td>
+                    <a href={`#/coach/item/${agreement.queueItemId}`}>{agreement.queueItemId}</a>
+                  </td>
+                  <td>
+                    {agreement.reviewCount}/{agreement.requiredReviewsTarget}
+                    {agreement.cannotEvaluateCount > 0 && (
+                      <div style={{ color: "#6b7a75", fontSize: 11 }}>
+                        {agreement.cannotEvaluateCount} cannot-evaluate
+                      </div>
+                    )}
+                  </td>
+                  <td
+                    style={{
+                      color: agreement.status === "computed" && !blind ? "#15803d" : "#b45309",
+                    }}
+                  >
+                    {blind
+                      ? "blind (collecting)"
+                      : agreement.status === "computed"
+                        ? "computed"
+                        : "awaiting reviews"}
+                    {blind && (
+                      <div style={{ color: "#6b7a75", fontSize: 11, maxWidth: 160 }}>
+                        review-derived metrics withheld until {agreement.requiredReviewsTarget} real
+                        reviews exist
+                      </div>
+                    )}
+                  </td>
+                  <td>{blind ? "withheld" : formatRate(agreement.stroke.rate)}</td>
+                  <td>
+                    {blind
+                      ? "withheld"
+                      : `${formatRate(agreement.rating.exactMatchRate)} / ${formatNumber(agreement.rating.meanAbsDiff)}`}
+                  </td>
+                  <td>{blind ? "withheld" : formatRate(agreement.primaryFault.rate)}</td>
+                  <td>
+                    {blind
+                      ? "withheld"
+                      : `${formatRate(agreement.severity.exactRate)} / ${formatNumber(agreement.severity.meanAbsDiff)}`}
+                  </td>
+                  <td>{blind ? "withheld" : formatNumber(agreement.faultOverlap.meanJaccard)}</td>
+                  <td>
+                    {blind ? (
+                      "\u2014"
+                    ) : agreement.adjudication.required ? (
+                      adjudicationByItem.has(agreement.queueItemId) ? (
+                        <details style={{ color: "#15803d" }}>
+                          <summary>
+                            RECORDED ({adjudicationByItem.get(agreement.queueItemId)!.outcome.kind})
+                          </summary>
+                          <div style={{ ...mono, fontSize: 11 }}>
+                            by {adjudicationByItem.get(agreement.queueItemId)!.adjudicatorId} ·{" "}
+                            {adjudicationByItem.get(agreement.queueItemId)!.rationale}
+                          </div>
+                        </details>
+                      ) : (
+                        <details style={{ color: "#b91c1c" }}>
+                          <summary>REQUIRED ({agreement.adjudication.reasons.length})</summary>
+                          <ul>
+                            {agreement.adjudication.reasons.map((reason) => (
+                              <li key={reason} style={{ fontSize: 11 }}>
+                                {reason}
+                              </li>
+                            ))}
+                          </ul>
+                          <AdjudicationEditor data={data} queueItemId={agreement.queueItemId} />
+                        </details>
+                      )
+                    ) : agreement.status === "computed" ? (
+                      "not required"
                     ) : (
-                      <details style={{ color: "#b91c1c" }}>
-                        <summary>REQUIRED ({agreement.adjudication.reasons.length})</summary>
-                        <ul>
-                          {agreement.adjudication.reasons.map((reason) => (
-                            <li key={reason} style={{ fontSize: 11 }}>
-                              {reason}
-                            </li>
-                          ))}
-                        </ul>
-                        <AdjudicationEditor data={data} queueItemId={agreement.queueItemId} />
-                      </details>
-                    )
-                  ) : agreement.status === "computed" ? (
-                    "not required"
-                  ) : (
-                    "—"
-                  )}
-                </td>
-              </tr>
-            ))}
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </section>

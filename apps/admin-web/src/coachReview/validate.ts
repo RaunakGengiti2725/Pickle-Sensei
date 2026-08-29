@@ -1,9 +1,4 @@
-import {
-  EXPECTED_SCHEMA_VERSION,
-  queueItemIdFor,
-  reviewIdFor,
-  type CoachReview,
-} from "./types";
+import { EXPECTED_SCHEMA_VERSION, queueItemIdFor, reviewIdFor, type CoachReview } from "./types";
 
 /**
  * Structural validator for coach review records.
@@ -47,7 +42,11 @@ export function validateReview(raw: unknown, context: ValidationContext): string
   if (review.queueItemId && !context.knownQueueItemIds.includes(review.queueItemId)) {
     problems.push(`queueItemId ${review.queueItemId} not in the current queue`);
   }
-  if (review.queueItemId && review.coachId && review.reviewId !== reviewIdFor(review.queueItemId, review.coachId)) {
+  if (
+    review.queueItemId &&
+    review.coachId &&
+    review.reviewId !== reviewIdFor(review.queueItemId, review.coachId)
+  ) {
     problems.push("reviewId must equal `${queueItemId}.${coachId}`");
   }
   if (!review.eventRef?.caseId || typeof review.eventRef.eventIndex !== "number") {
@@ -74,7 +73,10 @@ export function validateReview(raw: unknown, context: ValidationContext): string
     if (!context.strokeLabels.includes(confirmation.stroke)) {
       problems.push(`stroke ${confirmation.stroke} not in ${context.strokeTaxonomyVersion}`);
     }
-    if (confirmation.kind === "corrected" && (!confirmation.note || confirmation.note.trim().length < 5)) {
+    if (
+      confirmation.kind === "corrected" &&
+      (!confirmation.note || confirmation.note.trim().length < 5)
+    ) {
       problems.push("corrected stroke requires a note");
     }
   }
@@ -84,14 +86,17 @@ export function validateReview(raw: unknown, context: ValidationContext): string
       problems.push("cannotEvaluate.reason required (≥10 chars)");
     }
   } else if (cannotEvaluate === undefined) {
-    problems.push("cannotEvaluate must be present (null or {reason}) — it is a first-class outcome");
+    problems.push(
+      "cannotEvaluate must be present (null or {reason}) — it is a first-class outcome",
+    );
   }
   const quality = review.overallQuality;
   if (quality !== null && quality !== undefined) {
     if (quality.scaleId !== context.qualityScaleId) {
       problems.push(`overallQuality.scaleId must be ${context.qualityScaleId}`);
     }
-    if (![1, 2, 3, 4, 5].includes(quality.value)) problems.push("overallQuality.value must be 1..5");
+    if (![1, 2, 3, 4, 5].includes(quality.value))
+      problems.push("overallQuality.value must be 1..5");
   } else if (quality === undefined) {
     problems.push("overallQuality must be present (null or anchored value)");
   }
@@ -103,18 +108,29 @@ export function validateReview(raw: unknown, context: ValidationContext): string
     for (const [index, fault] of review.faults.entries()) {
       if (!fault.faultId) problems.push(`faults[${index}].faultId required`);
       else if (!context.knownFaultIds.includes(fault.faultId)) {
-        problems.push(`faults[${index}].faultId ${fault.faultId} not in ${context.faultTaxonomyVersion}`);
+        problems.push(
+          `faults[${index}].faultId ${fault.faultId} not in ${context.faultTaxonomyVersion}`,
+        );
       }
-      if (![1, 2, 3].includes(fault.severity as number)) problems.push(`faults[${index}].severity must be 1..3`);
-      if (!fault.evidence || !Array.isArray(fault.evidence.timestampsMs) || fault.evidence.timestampsMs.length === 0) {
+      if (![1, 2, 3].includes(fault.severity as number))
+        problems.push(`faults[${index}].severity must be 1..3`);
+      if (
+        !fault.evidence ||
+        !Array.isArray(fault.evidence.timestampsMs) ||
+        fault.evidence.timestampsMs.length === 0
+      ) {
         problems.push(`faults[${index}].evidence.timestampsMs requires ≥1 video timestamp`);
-      } else if (fault.evidence.timestampsMs.some((t) => typeof t !== "number" || !Number.isFinite(t) || t < 0)) {
+      } else if (
+        fault.evidence.timestampsMs.some(
+          (t) => typeof t !== "number" || !Number.isFinite(t) || t < 0,
+        )
+      ) {
         problems.push(`faults[${index}].evidence.timestampsMs must be non-negative ms numbers`);
       }
       const region = fault.evidence?.region;
       if (region !== null && region !== undefined) {
         const values = [region.x, region.y, region.w, region.h];
-        if (values.some((v) => typeof v !== "number" || v < 0 || v > 1)) {
+        if (values.some((v) => typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 1)) {
           problems.push(`faults[${index}].evidence.region must be normalized 0..1 {x,y,w,h}`);
         }
       }
@@ -123,21 +139,35 @@ export function validateReview(raw: unknown, context: ValidationContext): string
       }
     }
   }
-  if (!Array.isArray(review.drillSuggestions)) problems.push("drillSuggestions[] required (may be empty)");
+  if (!Array.isArray(review.drillSuggestions))
+    problems.push("drillSuggestions[] required (may be empty)");
   else {
     for (const [index, suggestion] of review.drillSuggestions.entries()) {
       if (suggestion.drillId !== null && !context.knownDrillIds.includes(suggestion.drillId)) {
-        problems.push(`drillSuggestions[${index}].drillId ${suggestion.drillId} not in the drill library`);
+        problems.push(
+          `drillSuggestions[${index}].drillId ${suggestion.drillId} not in the drill library`,
+        );
       }
-      if (suggestion.drillId === null && (!suggestion.freeText || suggestion.freeText.trim().length < 5)) {
+      if (
+        suggestion.drillId === null &&
+        (!suggestion.freeText || suggestion.freeText.trim().length < 5)
+      ) {
         problems.push(`drillSuggestions[${index}] needs a drillId or free text`);
       }
     }
   }
-  if (typeof review.confidence !== "number" || review.confidence < 0 || review.confidence > 1) {
+  if (
+    typeof review.confidence !== "number" ||
+    !Number.isFinite(review.confidence) ||
+    review.confidence < 0 ||
+    review.confidence > 1
+  ) {
     problems.push("confidence must be 0..1");
   }
-  if (!cannotEvaluate && (typeof review.rationale !== "string" || review.rationale.trim().length < 20)) {
+  if (
+    !cannotEvaluate &&
+    (typeof review.rationale !== "string" || review.rationale.trim().length < 20)
+  ) {
     problems.push("rationale required (≥20 chars — the prose is the signal)");
   }
   for (const field of ["createdAtIso", "submittedAtIso"] as const) {
