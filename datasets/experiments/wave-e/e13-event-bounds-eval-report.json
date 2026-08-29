@@ -1,0 +1,305 @@
+{
+  "evalVersion": "e13-event-bounds-eval-1",
+  "generatedAtIso": "2026-08-29T09:51:22.848Z",
+  "gold": "D2-07 devin-visual-v4-waveD2-events.json sidecars (3 bundles, 12 records: 7 events / 5 non-events)",
+  "proposer": "proposeStrokeEventsV2 on runs-wave-a windowed auto-target wrist series (paddle series not committed → confirmation structurally absent)",
+  "passCriterion": "overlap ≥ 0.5 of gold span OR gold contact inside proposal ±60ms (D06 oracle criterion); one-to-one greedy matching, reuse disclosed",
+  "summary": {
+    "target": {
+      "n": 5,
+      "proposedOk": 3,
+      "misBounded": 0,
+      "missed": 2,
+      "medianStartErrMs": 167,
+      "medianEndErrMs": 100,
+      "contactInside": "3/3"
+    },
+    "other": {
+      "n": 2,
+      "proposedOk": 0,
+      "misBounded": 0,
+      "missed": 2,
+      "medianStartErrMs": null,
+      "medianEndErrMs": null,
+      "contactInside": "0/0"
+    },
+    "falsePositives": {
+      "nonEvents": 5,
+      "falsePositiveNonEvents": 0,
+      "unmatchedProposals": 0,
+      "totalProposals": 3
+    }
+  },
+  "perBundle": [
+    {
+      "bundle": "wavea-marne-serve",
+      "proposalSource": "wrist",
+      "wristSamples": 373,
+      "proposals": [
+        {
+          "eventId": "E1",
+          "startMs": 34117,
+          "peakMs": 34801,
+          "endMs": 35335,
+          "peakSpeed": 2.75,
+          "prominence": 11.57
+        }
+      ]
+    },
+    {
+      "bundle": "wavea-wgm-wheelchair",
+      "proposalSource": "wrist",
+      "wristSamples": 28,
+      "proposals": [
+        {
+          "eventId": "E1",
+          "startMs": 182567,
+          "peakMs": 183233,
+          "endMs": 183300,
+          "peakSpeed": 1.79,
+          "prominence": 4.03
+        }
+      ]
+    },
+    {
+      "bundle": "wavea-sasebo-volleys",
+      "proposalSource": "wrist",
+      "wristSamples": 89,
+      "proposals": [
+        {
+          "eventId": "E1",
+          "startMs": 52152,
+          "peakMs": 52553,
+          "endMs": 52920,
+          "peakSpeed": 0.69,
+          "prominence": 5.49
+        }
+      ]
+    }
+  ],
+  "eventRows": [
+    {
+      "recordId": "wavea-marne-serve-drop-serve-1",
+      "bundle": "wavea-marne-serve",
+      "owner": "target",
+      "classification": "serve",
+      "goldSpanMs": [
+        34021,
+        35435
+      ],
+      "goldContactMs": 34689,
+      "outcome": "PROPOSED_OK",
+      "matchedProposal": {
+        "eventId": "E1",
+        "startMs": 34117,
+        "endMs": 35335,
+        "peakMs": 34801,
+        "overlapOfGold": 0.86,
+        "reused": false
+      },
+      "startErrMs": 96,
+      "endErrMs": 100,
+      "contactInside": true,
+      "forensics": null
+    },
+    {
+      "recordId": "wavea-wgm-wheelchair-backhand-lift-1",
+      "bundle": "wavea-wgm-wheelchair",
+      "owner": "target",
+      "classification": "backhand_dink",
+      "goldSpanMs": [
+        182400,
+        183067
+      ],
+      "goldContactMs": 182583,
+      "outcome": "PROPOSED_OK",
+      "matchedProposal": {
+        "eventId": "E1",
+        "startMs": 182567,
+        "endMs": 183300,
+        "peakMs": 183233,
+        "overlapOfGold": 0.75,
+        "reused": false
+      },
+      "startErrMs": 167,
+      "endErrMs": 233,
+      "contactInside": true,
+      "forensics": null
+    },
+    {
+      "recordId": "wavea-sasebo-volleys-far-black-1",
+      "bundle": "wavea-sasebo-volleys",
+      "owner": "target",
+      "classification": "volley",
+      "goldSpanMs": [
+        51900,
+        52300
+      ],
+      "goldContactMs": 52000,
+      "outcome": "MISSED",
+      "matchedProposal": {
+        "eventId": "E1",
+        "startMs": 52152,
+        "endMs": 52920,
+        "peakMs": 52553,
+        "overlapOfGold": 0.37,
+        "reused": true
+      },
+      "startErrMs": null,
+      "endErrMs": null,
+      "contactInside": null,
+      "forensics": {
+        "attribution": "WRIST_SIGNAL_QUALITY",
+        "evidence": "in-span smoothed wrist peak 0.31 is below the proposal gate 0.5 (max(0.5, 30% of global peak)): the recorded signal never reads as a swing here REUSE: proposal E1 (52152–52920ms, overlap 0.37) covers this gold span but was already assigned to another gold event — the proposer emitted one span for several rapid consecutive strokes."
+      }
+    },
+    {
+      "recordId": "wavea-sasebo-volleys-near-camo-1",
+      "bundle": "wavea-sasebo-volleys",
+      "owner": "other",
+      "classification": "counter_volley",
+      "goldSpanMs": [
+        52267,
+        52600
+      ],
+      "goldContactMs": 52367,
+      "outcome": "MISSED",
+      "matchedProposal": {
+        "eventId": "E1",
+        "startMs": 52152,
+        "endMs": 52920,
+        "peakMs": 52553,
+        "overlapOfGold": 1,
+        "reused": true
+      },
+      "startErrMs": null,
+      "endErrMs": null,
+      "contactInside": null,
+      "forensics": {
+        "attribution": "EVENT_LOGIC",
+        "evidence": "no proposal overlaps gold despite an above-gate in-span peak; wrist signal supports the event (peak 0.692 ≥ gate 0.5, coverage 0.9, maxGap 34ms) — the proposal/merge/boundary logic is the cause REUSE: proposal E1 (52152–52920ms, overlap 1.00) covers this gold span but was already assigned to another gold event — the proposer emitted one span for several rapid consecutive strokes. OWNER=other: the replayed series is the AUTO-TARGET's wrist, so this attribution describes target-signal overlap with the opponent's stroke span, not opponent-motion detection — an other-owner miss is the expected proposer behavior, recorded as contamination context."
+      }
+    },
+    {
+      "recordId": "wavea-sasebo-volleys-far-black-2",
+      "bundle": "wavea-sasebo-volleys",
+      "owner": "target",
+      "classification": "volley",
+      "goldSpanMs": [
+        52434,
+        52900
+      ],
+      "goldContactMs": 52683,
+      "outcome": "PROPOSED_OK",
+      "matchedProposal": {
+        "eventId": "E1",
+        "startMs": 52152,
+        "endMs": 52920,
+        "peakMs": 52553,
+        "overlapOfGold": 1,
+        "reused": false
+      },
+      "startErrMs": 282,
+      "endErrMs": 20,
+      "contactInside": true,
+      "forensics": null
+    },
+    {
+      "recordId": "wavea-sasebo-volleys-near-camo-2",
+      "bundle": "wavea-sasebo-volleys",
+      "owner": "other",
+      "classification": "counter_volley",
+      "goldSpanMs": [
+        52867,
+        53201
+      ],
+      "goldContactMs": 52967,
+      "outcome": "MISSED",
+      "matchedProposal": null,
+      "startErrMs": null,
+      "endErrMs": null,
+      "contactInside": null,
+      "forensics": {
+        "attribution": "WRIST_SIGNAL_QUALITY",
+        "evidence": "in-span smoothed wrist peak 0.287 is below the proposal gate 0.5 (max(0.5, 30% of global peak)): the recorded signal never reads as a swing here OWNER=other: the replayed series is the AUTO-TARGET's wrist, so this attribution describes target-signal overlap with the opponent's stroke span, not opponent-motion detection — an other-owner miss is the expected proposer behavior, recorded as contamination context."
+      }
+    },
+    {
+      "recordId": "wavea-sasebo-volleys-far-black-3",
+      "bundle": "wavea-sasebo-volleys",
+      "owner": "target",
+      "classification": "volley",
+      "goldSpanMs": [
+        52934,
+        53234
+      ],
+      "goldContactMs": 53067,
+      "outcome": "MISSED",
+      "matchedProposal": null,
+      "startErrMs": null,
+      "endErrMs": null,
+      "contactInside": null,
+      "forensics": {
+        "attribution": "WRIST_SIGNAL_QUALITY",
+        "evidence": "in-span smoothed wrist peak 0.344 is below the proposal gate 0.5 (max(0.5, 30% of global peak)): the recorded signal never reads as a swing here"
+      }
+    }
+  ],
+  "nonEventRows": [
+    {
+      "recordId": "wavea-marne-serve-setup-address",
+      "bundle": "wavea-marne-serve",
+      "classification": "setup_motion",
+      "spanMs": [
+        33367,
+        34004
+      ],
+      "falsePositive": false,
+      "overlappingUnmatchedProposals": []
+    },
+    {
+      "recordId": "wavea-marne-serve-reset-feed",
+      "bundle": "wavea-marne-serve",
+      "classification": "setup_motion",
+      "spanMs": [
+        35452,
+        39640
+      ],
+      "falsePositive": false,
+      "overlappingUnmatchedProposals": []
+    },
+    {
+      "recordId": "wavea-wgm-wheelchair-ready-track",
+      "bundle": "wavea-wgm-wheelchair",
+      "classification": "setup_motion",
+      "spanMs": [
+        182267,
+        182367
+      ],
+      "falsePositive": false,
+      "overlappingUnmatchedProposals": []
+    },
+    {
+      "recordId": "wavea-wgm-wheelchair-wheel-push",
+      "bundle": "wavea-wgm-wheelchair",
+      "classification": "locomotion",
+      "spanMs": [
+        183100,
+        183300
+      ],
+      "falsePositive": false,
+      "overlappingUnmatchedProposals": []
+    },
+    {
+      "recordId": "wavea-sasebo-volleys-post-rally-retrieval",
+      "bundle": "wavea-sasebo-volleys",
+      "classification": "ball_retrieval_setup_motion",
+      "spanMs": [
+        53267,
+        54600
+      ],
+      "falsePositive": false,
+      "overlappingUnmatchedProposals": []
+    }
+  ]
+}
