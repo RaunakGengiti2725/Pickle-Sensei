@@ -1,0 +1,47 @@
+# Fastfile — TestFlight internal distribution for PickleSensei.
+#
+# HONESTY BOUNDARY: every lane here requires a Mac with Xcode and Apple
+# credentials. None of it can run — or be claimed to have run — on Linux.
+# What IS validated on Linux: the static distribution preconditions
+# (`npm run check:distribution` in apps/mobile) and the JS/TS gates.
+#
+# Prerequisites on the Mac (see docs/DISTRIBUTION.md at the repo root):
+#   - Xcode installed, `bundle install` done in apps/mobile
+#   - `bundle exec pod install` done in apps/mobile/ios
+#   - App Store Connect API key exported as
+#     APP_STORE_CONNECT_API_KEY_KEY_ID / _ISSUER_ID / _KEY (or fastlane's
+#     app_store_connect_api_key file); never committed.
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Build a signed release archive (Mac-only)"
+  lane :build do
+    build_app(
+      workspace: "PickleSensei.xcworkspace",
+      scheme: "PickleSensei",
+      configuration: "Release",
+      export_method: "app-store",
+      output_directory: "build",
+    )
+  end
+
+  desc "Bump build number, build, and upload to TestFlight internal testing (Mac-only)"
+  lane :beta do
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_KEY_ID"),
+      issuer_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ISSUER_ID"),
+      key_content: ENV.fetch("APP_STORE_CONNECT_API_KEY_KEY"),
+    )
+    increment_build_number(
+      xcodeproj: "PickleSensei.xcodeproj",
+      build_number: latest_testflight_build_number(api_key: api_key) + 1,
+    )
+    build
+    upload_to_testflight(
+      api_key: api_key,
+      skip_waiting_for_build_processing: true,
+      distribute_external: false, # internal testers only; external needs App Review
+    )
+  end
+end

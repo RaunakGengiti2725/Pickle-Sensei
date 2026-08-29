@@ -147,3 +147,18 @@ export {
   type KineticEvent,
   type StrokeSequence,
 } from "./strokeSequence.js";
+export {
+  buildFreshUserReport,
+  CLAIM_TO_EVENT,
+  countSilentFailures,
+  independenceCoverage,
+  ingestTrials,
+  LABELABLE_CLAIMS,
+  type FreshUserReport,
+  type IndependenceCoverage,
+  type LabelableClaim,
+  type SilentFailureCounts,
+  type TrialClaimLabel,
+  type TrialIngestResult,
+  type TrialLabel,
+} from "./freshUserTrials.js";

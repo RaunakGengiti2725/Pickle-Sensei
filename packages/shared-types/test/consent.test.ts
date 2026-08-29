@@ -24,7 +24,7 @@ function record(overrides: Partial<ConsentRecord>): ConsentRecord {
 describe("consent ledger fold", () => {
   it("defaults every scope to NOT consented with an empty ledger", () => {
     const status = deriveConsentStatus([]);
-    expect(status).toHaveLength(2);
+    expect(status).toHaveLength(3);
     for (const s of status) {
       expect(s.active).toBe(false);
       expect(s.lastAction).toBeNull();

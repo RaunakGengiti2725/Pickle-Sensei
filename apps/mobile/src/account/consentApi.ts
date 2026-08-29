@@ -7,10 +7,12 @@ import type { ApiSession } from './apiSession';
  * this client never sends a grant the user did not tap.
  */
 
-export type ConsentScope = 'video_analysis' | 'model_training';
+export type ConsentScope =
+  'video_analysis' | 'model_training' | 'evaluation_telemetry';
 export type ConsentAction = 'granted' | 'withdrawn';
 
 export const MODEL_TRAINING_CONSENT_VERSION = 'model-training-v1';
+export const EVALUATION_TELEMETRY_CONSENT_VERSION = 'evaluation-telemetry-v1';
 
 export interface ConsentScopeStatus {
   scope: ConsentScope;
@@ -42,7 +44,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isScope(value: unknown): value is ConsentScope {
-  return value === 'video_analysis' || value === 'model_training';
+  return (
+    value === 'video_analysis' ||
+    value === 'model_training' ||
+    value === 'evaluation_telemetry'
+  );
 }
 
 function parseStatus(payload: unknown): ConsentStatus {
@@ -151,6 +157,37 @@ export async function withdrawModelTrainingConsent(
 ): Promise<ConsentStatus> {
   return consentRequest(session, fetchFn, 'POST', '/v1/me/consent/withdraw', {
     scope: 'model_training',
+    source: 'mobile_settings',
+    device,
+  });
+}
+
+/**
+ * `evaluation_telemetry` ("record my analysis attempts for evaluation") is a
+ * scope of its own: independent of video_analysis and model_training, granted
+ * only by an explicit user action, off by default.
+ */
+export async function grantEvaluationTelemetryConsent(
+  session: ApiSession,
+  device: string,
+  fetchFn: ConsentFetch = globalThis.fetch,
+): Promise<ConsentStatus> {
+  return consentRequest(session, fetchFn, 'POST', '/v1/me/consent/grant', {
+    scope: 'evaluation_telemetry',
+    consentVersion: EVALUATION_TELEMETRY_CONSENT_VERSION,
+    source: 'mobile_settings',
+    device,
+    captureMode: 'all_captures',
+  });
+}
+
+export async function withdrawEvaluationTelemetryConsent(
+  session: ApiSession,
+  device: string,
+  fetchFn: ConsentFetch = globalThis.fetch,
+): Promise<ConsentStatus> {
+  return consentRequest(session, fetchFn, 'POST', '/v1/me/consent/withdraw', {
+    scope: 'evaluation_telemetry',
     source: 'mobile_settings',
     device,
   });

@@ -15,6 +15,15 @@ export interface SyncTransport {
   }>;
   createSession(session: unknown): Promise<void>;
   finalizeSession(id: string): Promise<void>;
+  /**
+   * Consent-gated evaluation-trial upload (POST /v1/me/evaluation/trials).
+   * Optional: a transport without it leaves 'evaluation.trial' rows queued
+   * (no attempts burned) rather than dropping evidence.
+   */
+  uploadEvaluationTrials?(trials: unknown[]): Promise<{
+    acceptedTrialIds: string[];
+    rejected: Array<{ trialId: string; code: string; message: string }>;
+  }>;
 }
 
 /** Convert a persisted ShotAnalysis into the canonical sync payload (spec p. 21). */
@@ -140,7 +149,58 @@ export async function drainOutbox(
     }
   }
 
-  for (const r of rows.filter(row => row['kind'] !== 'shot.sync')) {
+  const trialRows = rows.filter(r => r['kind'] === 'evaluation.trial');
+  if (trialRows.length > 0 && transport.uploadEvaluationTrials) {
+    try {
+      const entries = trialRows.map(r => ({
+        row: r,
+        trial: JSON.parse(String(r['payload'])) as { trialId: string },
+      }));
+      const response = await transport.uploadEvaluationTrials(
+        entries.map(entry => entry.trial),
+      );
+      const accepted = new Set(response.acceptedTrialIds);
+      const rejected = new Map(
+        response.rejected.map(item => [item.trialId, item] as const),
+      );
+      for (const entry of entries) {
+        if (accepted.has(entry.trial.trialId)) {
+          await db.execute(
+            `DELETE FROM outbox WHERE owner_key = ? AND id = ?`,
+            [owner, entry.row['id']],
+          );
+          synced++;
+          continue;
+        }
+        const rejection = rejected.get(entry.trial.trialId);
+        await db.execute(
+          `UPDATE outbox SET attempts = attempts + 1, last_error = ?
+           WHERE owner_key = ? AND id = ?`,
+          [
+            rejection
+              ? `${rejection.code}: ${rejection.message}`
+              : 'evaluation.trial_unacknowledged',
+            owner,
+            entry.row['id'],
+          ],
+        );
+        failed++;
+      }
+    } catch (error) {
+      for (const r of trialRows) {
+        await db.execute(
+          `UPDATE outbox SET attempts = attempts + 1, last_error = ?
+           WHERE owner_key = ? AND id = ?`,
+          [String(error), owner, r['id']],
+        );
+        failed++;
+      }
+    }
+  }
+
+  for (const r of rows.filter(
+    row => row['kind'] !== 'shot.sync' && row['kind'] !== 'evaluation.trial',
+  )) {
     try {
       const payload = JSON.parse(String(r['payload'])) as Record<
         string,

@@ -24,6 +24,10 @@ import {
   type ApiConfigState,
 } from '../data/api';
 import { makeUuid } from '../util/uuid';
+import {
+  recordEvaluationTrial,
+  type EvaluationTelemetryContext,
+} from '../evaluation/trialCapture';
 
 /**
  * Capture → canonical observations → fusion analysis → durable records.
@@ -97,9 +101,41 @@ export interface RunCaptureAnalysisRequest {
    * measured — the run proceeds exactly as before.
    */
   captureEnvelope?: EnvelopeVerdict | null;
+  /**
+   * Evaluation-trial capture context (Wave G2 fresh-user loop). Present and
+   * consentActive only when the server ledger shows an active
+   * `evaluation_telemetry` grant; absent or inactive → no trial is recorded.
+   * Telemetry never alters or blocks the analysis outcome.
+   */
+  evaluationTelemetry?: EvaluationTelemetryContext | null;
 }
 
 export async function runCaptureAnalysis(
+  request: RunCaptureAnalysisRequest,
+): Promise<CaptureAnalysisOutcome> {
+  const startedAt = Date.now();
+  const outcome = await runCaptureAnalysisCore(request);
+  const telemetry = request.evaluationTelemetry ?? null;
+  if (telemetry && telemetry.consentActive) {
+    try {
+      await recordEvaluationTrial(request.db, {
+        outcome,
+        captureId: request.captureId,
+        capturedAtIso: request.clip.capturedAtIso,
+        declaredStroke: request.declaredStroke,
+        latencyMs: Date.now() - startedAt,
+        appVersion: request.appVersion,
+        context: telemetry,
+      });
+    } catch {
+      // Telemetry is best-effort evidence collection: a failed queue write
+      // must never surface as an analysis failure to the user.
+    }
+  }
+  return outcome;
+}
+
+async function runCaptureAnalysisCore(
   request: RunCaptureAnalysisRequest,
 ): Promise<CaptureAnalysisOutcome> {
   const { clip } = request;

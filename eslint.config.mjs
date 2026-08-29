@@ -77,6 +77,7 @@ export default tseslint.config(
       "packages/swing-lab/src/ownershipGuardBench.ts",
       "packages/swing-lab/src/paddleS4StressReplay.ts",
       "packages/swing-lab/src/strokeHeuristicBench.ts",
+      "packages/swing-lab/src/freshUserReport.ts",
       // mac-bench is a terminal benchmark harness; its CLIs print reports.
       "tools/mac-bench/src/**/*.ts",
       // One-off research scripts committed as per-workstream experiment evidence;

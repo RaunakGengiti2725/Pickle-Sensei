@@ -1,0 +1,59 @@
+{
+  "workstream": "h07-distribution-telemetry",
+  "mission": "Build the distribution + evidence-collection path: TestFlight/internal distribution preparation, consent-gated on-device evaluation telemetry with explicit silent-failure events, an upload/export path into the evaluation pipeline, the fresh-user loop runbook, and learning-curve independence tracking.",
+  "method": [
+    "Added an independent evaluation_telemetry consent scope (shared-types + mobile consent API + DB scope constraint) — append-only ledger, inactive by default, separate from model_training.",
+    "Defined a shared evaluation-trial contract (packages/shared-types/src/evaluationTrial.ts): per-trial CLAIMS and abstentions only (target lock, event selection, stroke label, contact marker, phase render, result score) with structural validation; the device never asserts correctness and never ships raw video.",
+    "Wired trial capture into apps/mobile runCaptureAnalysis for every outcome (scored, quality_blocked, unavailable); trials queue in the SQLite outbox and drain via the existing sync loop to POST /v1/me/evaluation/trials.",
+    "Server route re-verifies active evaluation_telemetry consent from the ledger, validates each trial structurally, and stores append-only (trigger-protected evaluation_trial table, idempotent on trialId, cross-subject reuse rejected).",
+    "Evaluation-pipeline side (packages/swing-lab/src/freshUserTrials.ts + fresh-user:report CLI): ingest, human labels (labelerId required), explicit per-kind silent-failure counts (WRONG_TARGET, WRONG_EVENT, WRONG_STROKE, FALSE_CONTACT, IMPOSSIBLE_PHASE, FALSE_HIGH_CONFIDENCE_RESULT) with per-claim denominators — no aggregate accuracy anywhere — plus independence coverage over users/sessions/courts/devices/events with unknowns counted, never inferred.",
+    "Distribution prep: fastlane Appfile/Fastfile (TestFlight internal-only lane, credentials from env, Mac-only clearly marked), fastlane gem in the mobile Gemfile, docs/DISTRIBUTION.md signing docs, and a Linux-validatable precondition checker (apps/mobile npm run check:distribution) covering pbxproj signing settings, Info.plist usage strings/ATS/versions, privacy manifest, Podfile.lock, and no-credentials assertions.",
+    "Runbook docs/FRESH_USER_LOOP.md documents build→fresh users→failures→label/review→root cause→improve→frozen test→NEW fresh users, GATE A/B boundaries, Tier-C machine-proposal rule, and held-out case protection."
+  ],
+  "deliverables": {
+    "consent": [
+      "packages/shared-types/src/consent.ts",
+      "apps/mobile/src/account/consentApi.ts",
+      "packages/database/migrations/0018_evaluation_telemetry.sql"
+    ],
+    "telemetry_capture": [
+      "packages/shared-types/src/evaluationTrial.ts",
+      "apps/mobile/src/evaluation/trialCapture.ts",
+      "apps/mobile/src/analysis/runCaptureAnalysis.ts",
+      "apps/mobile/src/data/sync.ts",
+      "apps/mobile/src/data/api.ts"
+    ],
+    "upload_export": [
+      "packages/api-contracts/src/schemas.ts",
+      "services/api/src/modules/evaluation/routes.ts",
+      "packages/swing-lab/src/freshUserTrials.ts",
+      "packages/swing-lab/src/freshUserReport.ts"
+    ],
+    "distribution": [
+      "apps/mobile/ios/fastlane/Fastfile",
+      "apps/mobile/ios/fastlane/Appfile",
+      "apps/mobile/Gemfile",
+      "apps/mobile/scripts/check-ios-distribution.mjs",
+      "docs/DISTRIBUTION.md"
+    ],
+    "runbook": ["docs/FRESH_USER_LOOP.md"],
+    "tests": [
+      "packages/shared-types/test/evaluationTrial.test.ts",
+      "packages/swing-lab/test/freshUserTrials.test.ts",
+      "apps/mobile/__tests__/evaluationTrialCapture.test.ts",
+      "services/api/test/evaluation.test.ts"
+    ]
+  },
+  "gates": {
+    "root": "pnpm typecheck && pnpm test && pnpm lint && pnpm format:check — all pass",
+    "mobile": "npm ci && npx tsc --noEmit && npm test (41 suites, 403 tests) — all pass",
+    "distribution_static": "apps/mobile npm run check:distribution — 16/16 Linux-validatable preconditions pass"
+  },
+  "irreducibly_external": [
+    "Mac + Xcode: pod install, archive, code signing, and TestFlight upload cannot run or be verified on Linux; the fastlane lanes are prepared but unexecuted.",
+    "Physical iPhone + real fresh users (GATE B): no on-device run, no real trial data exists; the telemetry path is exercised only by unit tests.",
+    "Qualified coach labels (GATE A): technique score / fault diagnosis / drill recommendation remain BLOCKED_ON_VALIDATION; the label schema deliberately restricts engineer labeling to mechanical claims.",
+    "Apple Developer account state (App ID, App Store Connect record, API key) is assumed, not verified."
+  ],
+  "verdict": "READY_PENDING_EXTERNAL_EVIDENCE: the distribution and evidence-collection path is architecturally complete and gate-green on Linux; only Mac/device execution and human evidence remain external. No coach, device, or user data was fabricated."
+}
