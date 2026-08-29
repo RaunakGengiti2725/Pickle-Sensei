@@ -1,0 +1,96 @@
+{
+  "workstream": "e15-envelope-thresholds",
+  "branch": "devin/wave-e/e15-envelope-thresholds",
+  "baseCommit": "8fc388ee1625b0aaa7e16cb7da93cd3feb1c9c84",
+  "date": "2026-08-29",
+  "mission": "Validate capture-envelope thresholds against the real corpus: run the envelope evaluator over every usable-rights clip, check that clips that failed downstream analysis would have been flagged DEGRADED/UNSUPPORTED and good clips pass; report the confusion matrix; adjust thresholds only with this evidence, versioned.",
+  "verdict": "SCIENTIFIC_NEGATIVE",
+  "headline": "The capture envelope cannot predict most downstream analysis failures in this corpus, because 51 of 57 failure-queue kinds attached to labeled failed units are content/scene failures (CROWDED_SCENE 32, TRACK_FRAGMENTATION 17) that no capture-quality dimension measures. Recalibrated v0.3 thresholds fix the v0.2 miscalibration that flagged 9/9 downstream-good units, but envelope sensitivity to downstream failure remains 8/41 (20%).",
+  "datasetScope": {
+    "unitsMeasured": 71,
+    "labeledUnits": 50,
+    "unlabeledUnits": 21,
+    "byKind": {
+      "bundle_clip": 2,
+      "corpus_scene": 48,
+      "corpus_recording": 4,
+      "fresh_candidate": 8,
+      "ood_negative": 9
+    },
+    "heldOutExcluded": ["wm-dink-01 (rec-7d396a6d6566)", "afn-vic-rally1 (rec-024decaeb66e)"],
+    "mediaRederivation": "gitignored corpus media re-downloaded from recorded acquisition mediaUrl provenance with SHA-256 verification (tools/e15_download.py); see datasets/experiments/wave-e/e15-media-rederivation.json",
+    "grouping": "units carry independent source/session keys; corpus scenes grouped by recording session, no random-frame splits"
+  },
+  "groundTruth": {
+    "bundleClips": "latest cascade run datasets/cascade/cascade-1787971753680.json (COMPLETE = GOOD, else FAILED)",
+    "corpusScenes": "datasets/corpus/failure-queue.json entry = FAILED; mined events with no failure = GOOD; otherwise UNLABELED (excluded from matrix)",
+    "failureKindDistributionOnLabeledFailedUnits": {
+      "CROWDED_SCENE": 32,
+      "TRACK_FRAGMENTATION": 17,
+      "NO_PEOPLE": 3,
+      "SCENE_CHURN": 2,
+      "SPARSE_WRIST_SUSPECT": 1,
+      "STATIC_HUMAN_GRAPHIC": 1
+    }
+  },
+  "confusionMatrices": {
+    "definition": "predictedFlagged = overall DEGRADED or UNSUPPORTED; predictedPass = overall SUPPORTED; actual from downstream ground truth; 50 labeled units (41 FAILED, 9 GOOD)",
+    "v0.2-provisional (pre-existing thresholds)": {
+      "allLabeledUnits": {
+        "predictedFlagged_actualFailed": 40,
+        "predictedFlagged_actualGood": 9,
+        "predictedPass_actualFailed": 1,
+        "predictedPass_actualGood": 0
+      },
+      "excludingContentOnlyFailures": {
+        "predictedFlagged_actualFailed": 34,
+        "predictedFlagged_actualGood": 9,
+        "predictedPass_actualFailed": 1,
+        "predictedPass_actualGood": 0
+      },
+      "reading": "v0.2 flagged 49/50 units including 9/9 downstream-good ones (specificity 0/9). frame_rate min 29 flagged all 24fps footage that completed analysis; camera_motion supported max 6 was below the 7.8-32.7 range measured on every downstream-good unit."
+    },
+    "v0.3-provisional (this workstream)": {
+      "allLabeledUnits": {
+        "predictedFlagged_actualFailed": 8,
+        "predictedFlagged_actualGood": 1,
+        "predictedPass_actualFailed": 33,
+        "predictedPass_actualGood": 8
+      },
+      "excludingContentOnlyFailures": {
+        "predictedFlagged_actualFailed": 4,
+        "predictedFlagged_actualGood": 1,
+        "predictedPass_actualFailed": 31,
+        "predictedPass_actualGood": 8
+      },
+      "reading": "Specificity 8/9 (89%), sensitivity 8/41 (20%). The 33 missed failures are dominated by CROWDED_SCENE / TRACK_FRAGMENTATION: scene-content and tracking problems invisible to resolution/fps/brightness/blur/motion/timing dimensions. Pose dimensions (player_pixel_height, player_visibility) that could catch some of these are NOT_MEASURED on Linux (Apple Vision required: BLOCKED_EXTERNAL)."
+    }
+  },
+  "thresholdChanges": {
+    "version": "capture-envelope-thresholds-v0.2-provisional -> capture-envelope-thresholds-v0.3-provisional",
+    "frame_rate": {
+      "old": { "id": "frame-rate-avg-v0.1", "supportedMin": 29, "degradedMin": 24 },
+      "new": { "id": "frame-rate-avg-v0.2", "supportedMin": 24, "degradedMin": 15 },
+      "evidence": "7 of 9 downstream-good corpus units measured 24fps; 29fps minimum flagged all of them. No labeled evidence between 8fps (synthetic UNSUPPORTED, D3-07) and 24fps, so degraded floor 15 remains a hypothesis."
+    },
+    "camera_motion": {
+      "old": { "id": "global-frame-diff-320w-v0.1", "supportedMax": 6, "degradedMax": 14 },
+      "new": { "id": "global-frame-diff-320w-v0.2", "supportedMax": 33, "degradedMax": 46 },
+      "evidence": "Downstream-good units measured 7.8-32.7 mean abs luma diff @320w; v0.1 supported max 6 flagged 9/9 of them (the bands flagged the wrong side). The proxy conflates subject motion with camera motion. New bands: supported covers observed good range (p100=32.7 -> 33), degraded covers rest of observed corpus range (max 45.6 -> 46). n=9 good units; provisional."
+    },
+    "unchanged": "resolution, brightness, motion_blur, timing_stability, clip_duration, pose dimensions: no labeled evidence justified changes."
+  },
+  "artifacts": [
+    "datasets/experiments/wave-e/e15-envelope-corpus-measurements-v0.2.json",
+    "datasets/experiments/wave-e/e15-envelope-corpus-measurements-v0.3.json",
+    "datasets/experiments/wave-e/e15-media-rederivation.json",
+    "packages/capture-envelope/src/evalCorpus.ts (evaluator, pnpm --filter @pickle/capture-envelope eval:corpus)",
+    "tools/e15_download.py (media re-derivation from recorded provenance)"
+  ],
+  "limitations": [
+    "9 downstream-good units only; v0.3 supported bands are p100-calibrated on that sample and remain provisional.",
+    "Pose-based dimensions NOT_MEASURED on Linux (Apple Vision): BLOCKED_EXTERNAL, so player-size/visibility screening is unvalidated.",
+    "Corpus-scene ground truth conflates capture and content failures; a content-aware pre-screen (person detection / scene crowding), not capture thresholds, is what the failure distribution points to.",
+    "Fresh candidates and OOD negatives were never analyzed downstream, so they stay out of the confusion matrix denominators."
+  ]
+}

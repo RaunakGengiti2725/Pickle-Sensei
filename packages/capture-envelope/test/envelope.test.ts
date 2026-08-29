@@ -47,7 +47,7 @@ describe("evaluateCaptureEnvelope", () => {
     const verdict = evaluateCaptureEnvelope({
       ...supportedMeasurements,
       brightnessMeanLuma: 20, // below degraded floor of 40
-      avgFrameRateFps: 25, // degraded
+      avgFrameRateFps: 18, // degraded
     });
     expect(verdict.overall).toBe("UNSUPPORTED");
     expect(verdict.dimensions.find((d) => d.dimension === "brightness")?.status).toBe(
@@ -89,9 +89,9 @@ describe("evaluateCaptureEnvelope", () => {
   });
 
   it("camera motion is a max-bounded band: excessive global diff is UNSUPPORTED", () => {
-    expect(classifyDimension(20, CAPTURE_ENVELOPE_THRESHOLDS.camera_motion)).toBe("UNSUPPORTED");
-    expect(classifyDimension(10, CAPTURE_ENVELOPE_THRESHOLDS.camera_motion)).toBe("DEGRADED");
-    expect(classifyDimension(2, CAPTURE_ENVELOPE_THRESHOLDS.camera_motion)).toBe("SUPPORTED");
+    expect(classifyDimension(50, CAPTURE_ENVELOPE_THRESHOLDS.camera_motion)).toBe("UNSUPPORTED");
+    expect(classifyDimension(40, CAPTURE_ENVELOPE_THRESHOLDS.camera_motion)).toBe("DEGRADED");
+    expect(classifyDimension(20, CAPTURE_ENVELOPE_THRESHOLDS.camera_motion)).toBe("SUPPORTED");
   });
 
   it("VFR timestamp jitter is flagged via timing_stability even when avg fps passes", () => {
