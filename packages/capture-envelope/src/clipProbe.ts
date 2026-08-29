@@ -7,13 +7,15 @@ import type { CaptureEnvelopeMeasurements } from "./envelope.js";
  * prober never fabricates pose signals.
  *
  * Normalization contract (must match thresholds.ts ids): sampled frames are
- * decoded at SAMPLE_FPS, downscaled to 320px width (aspect preserved),
- * grayscale. Laplacian variance and frame diffs are computed on those
- * normalized frames.
+ * decoded at SAMPLE_FPS, downscaled so the LONG side is 320px (aspect
+ * preserved), grayscale. Long-side normalization makes the sampling scale
+ * orientation-invariant: rotation metadata swaps display width/height but
+ * cannot change the effective downscale factor. Laplacian variance and
+ * frame diffs are computed on those normalized frames.
  */
 
 export const SAMPLE_FPS = 4;
-export const SAMPLE_WIDTH = 320;
+export const SAMPLE_LONG_SIDE = 320;
 
 export interface ClipStreamInfo {
   /** Stored (pre-rotation) dimensions. */
@@ -150,18 +152,32 @@ export interface SampledGrayFrames {
  * when decoding, so callers must pass DISPLAY dimensions (post-rotation) —
  * passing stored dimensions for a 90°/270°-rotated clip silently distorts
  * the aspect ratio and corrupts the Laplacian/frame-diff normalization.
+ * The LONG side is normalized to SAMPLE_LONG_SIDE so the effective
+ * downscale factor is identical for landscape and portrait orientations.
+ * An optional ffmpeg filter (e.g. a median denoise) can be applied before
+ * grayscale conversion.
  */
 export function extractSampledGrayFrames(
   clipPath: string,
   sourceWidth: number,
   sourceHeight: number,
   window?: MeasureWindow,
+  preGrayFilter?: string,
 ): SampledGrayFrames {
-  const width = SAMPLE_WIDTH;
-  const height = Math.round((sourceHeight * width) / sourceWidth / 2) * 2;
+  const landscape = sourceWidth >= sourceHeight;
+  const long = SAMPLE_LONG_SIDE;
+  const short =
+    Math.round(
+      ((landscape ? sourceHeight : sourceWidth) * long) /
+        (landscape ? sourceWidth : sourceHeight) /
+        2,
+    ) * 2;
+  const width = landscape ? long : short;
+  const height = landscape ? short : long;
   const windowArgs = window
     ? ["-ss", (window.startMs / 1000).toFixed(3), "-t", (window.durationMs / 1000).toFixed(3)]
     : [];
+  const filterSuffix = preGrayFilter ? `,${preGrayFilter}` : "";
   const raw = run("ffmpeg", [
     "-v",
     "error",
@@ -169,7 +185,7 @@ export function extractSampledGrayFrames(
     "-i",
     clipPath,
     "-vf",
-    `fps=${SAMPLE_FPS},scale=${width}:${height},format=gray`,
+    `fps=${SAMPLE_FPS},scale=${width}:${height}${filterSuffix},format=gray`,
     "-f",
     "rawvideo",
     "-",
@@ -215,6 +231,32 @@ export function meanAbsDiff(a: Uint8Array, b: Uint8Array): number {
   return a.length > 0 ? sum / a.length : 0;
 }
 
+/** Std dev of pixel luma within one frame (spatial contrast). */
+export function spatialStd(frame: Uint8Array): number {
+  if (frame.length === 0) return 0;
+  const mean = meanLuma(frame);
+  let sumSq = 0;
+  for (let index = 0; index < frame.length; index += 1) {
+    const d = frame[index]! - mean;
+    sumSq += d * d;
+  }
+  return Math.sqrt(sumSq / frame.length);
+}
+
+/** Fraction of pixels at or beyond the luma clipping points (<=16, >=235). */
+export function clippedPixelFraction(frames: Uint8Array[]): number | null {
+  let clipped = 0;
+  let total = 0;
+  for (const frame of frames) {
+    for (let index = 0; index < frame.length; index += 1) {
+      const v = frame[index]!;
+      if (v <= 16 || v >= 235) clipped += 1;
+    }
+    total += frame.length;
+  }
+  return total > 0 ? clipped / total : null;
+}
+
 function median(values: number[]): number | null {
   if (values.length === 0) return null;
   const sorted = [...values].sort((left, right) => left - right);
@@ -249,15 +291,44 @@ export function measureClip(clipPath: string, window?: MeasureWindow): CaptureEn
       ? lumaMeans.reduce((acc, value) => acc + value, 0) / lumaMeans.length
       : null;
 
+  const rawLapMedian = median(lapVars);
+  let denoiseSurvivalRatio: number | null = null;
+  if (rawLapMedian !== null && rawLapMedian > 0) {
+    const denoised = extractSampledGrayFrames(
+      clipPath,
+      info.displayWidth,
+      info.displayHeight,
+      window,
+      "median=radius=1",
+    );
+    const denoisedLapMedian = median(
+      denoised.frames.map((frame) => laplacianVariance(frame, denoised.width, denoised.height)),
+    );
+    denoiseSurvivalRatio = denoisedLapMedian !== null ? denoisedLapMedian / rawLapMedian : null;
+  }
+
+  const meanDiff =
+    diffs.length > 0 ? diffs.reduce((acc, value) => acc + value, 0) / diffs.length : null;
+  const meanSpatialStd =
+    sampled.frames.length > 0
+      ? sampled.frames.reduce((acc, frame) => acc + spatialStd(frame), 0) / sampled.frames.length
+      : null;
+  const contrastNormalizedFrameDiff =
+    meanDiff !== null && meanSpatialStd !== null && meanSpatialStd > 0
+      ? meanDiff / meanSpatialStd
+      : null;
+
   return {
     frameWidthPx: info.displayWidth,
     frameHeightPx: info.displayHeight,
     avgFrameRateFps: info.avgFrameRateFps,
     brightnessMeanLuma: brightnessMean,
     brightnessStdLuma: stdDev(lumaMeans),
-    laplacianVarianceMedian: median(lapVars),
-    meanAbsFrameDiff:
-      diffs.length > 0 ? diffs.reduce((acc, value) => acc + value, 0) / diffs.length : null,
+    laplacianVarianceMedian: rawLapMedian,
+    meanAbsFrameDiff: meanDiff,
+    denoiseSurvivalRatio,
+    clippedPixelFraction: clippedPixelFraction(sampled.frames),
+    contrastNormalizedFrameDiff,
     frameIntervalCv: probeFrameIntervalCv(clipPath, window),
     clipDurationMs: window ? Math.round(window.durationMs) : info.durationMs,
     playerPixelHeightFraction: null,

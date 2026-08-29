@@ -177,6 +177,7 @@ describe('uncertaintyNotes', () => {
         },
       ],
       overall: 'DEGRADED' as const,
+      overallWithCoverage: 'DEGRADED' as const,
       notMeasured: [],
     };
     // Score withheld + degraded envelope → quality note explains it.

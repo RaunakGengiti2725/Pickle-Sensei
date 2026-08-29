@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { evaluateCaptureEnvelope, type CaptureEnvelopeMeasurements } from "./envelope.js";
-import { measureClip, SAMPLE_FPS, SAMPLE_WIDTH } from "./clipProbe.js";
+import { measureClip, SAMPLE_FPS, SAMPLE_LONG_SIDE } from "./clipProbe.js";
 import { CAPTURE_ENVELOPE_THRESHOLDS_VERSION } from "./thresholds.js";
 
 /**
@@ -31,6 +31,9 @@ function roundMeasurements(m: CaptureEnvelopeMeasurements): CaptureEnvelopeMeasu
     brightnessStdLuma: round(m.brightnessStdLuma, 2),
     laplacianVarianceMedian: round(m.laplacianVarianceMedian, 2),
     meanAbsFrameDiff: round(m.meanAbsFrameDiff, 3),
+    denoiseSurvivalRatio: round(m.denoiseSurvivalRatio, 4),
+    clippedPixelFraction: round(m.clippedPixelFraction, 4),
+    contrastNormalizedFrameDiff: round(m.contrastNormalizedFrameDiff, 4),
     frameIntervalCv: round(m.frameIntervalCv, 4),
   };
 }
@@ -67,7 +70,7 @@ const report = {
   method: {
     tooling: ffmpegVersion,
     videoStats: "ffprobe stream width/height/avg_frame_rate/duration",
-    sampling: `ffmpeg fps=${SAMPLE_FPS}, scale=${SAMPLE_WIDTH}:-2, format=gray, rawvideo`,
+    sampling: `ffmpeg fps=${SAMPLE_FPS}, scale long side to ${SAMPLE_LONG_SIDE} (aspect preserved), format=gray, rawvideo`,
     motionBlurProxy: "median per-frame variance of 4-neighbor Laplacian on sampled frames",
     cameraMotionProxy: "mean absolute per-pixel luma diff between consecutive sampled frames",
     poseDimensions:

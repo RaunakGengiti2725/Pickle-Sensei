@@ -7,8 +7,9 @@ import type { ConsentRecord } from "@pickle/shared-types";
 import { checkConsentForSubject, intakeClip, loadConsentLedger } from "../src/index.js";
 
 /**
- * ALL fixtures in this file are SYNTHETIC. Clips are ffmpeg lavfi noise
- * (no camera, no athlete, no court); consent rows use pseudonyms prefixed
+ * ALL fixtures in this file are SYNTHETIC. Clips are ffmpeg lavfi testsrc2
+ * patterns (no camera, no athlete, no court); consent rows use pseudonyms
+ * prefixed
  * `SYNTHETIC-TEST-FIXTURE`. Nothing here is corpus data and nothing here
  * may ever be copied under datasets/.
  */
@@ -30,7 +31,7 @@ function makeClip(path: string, size: string, fps: number, seconds: number): voi
     "-f",
     "lavfi",
     "-i",
-    `color=c=gray:s=${size}:r=${fps},noise=alls=60:allf=u`,
+    `testsrc2=size=${size}:rate=${fps}`,
     "-t",
     String(seconds),
     "-pix_fmt",

@@ -56,7 +56,7 @@ describe('liveCaptureEnvelope', () => {
       CAPTURE_ENVELOPE_THRESHOLDS_VERSION,
     );
     expect(verdict!.provisional).toBe(true);
-    expect(verdict!.dimensions).toHaveLength(9);
+    expect(verdict!.dimensions).toHaveLength(13);
   });
 
   it('reports unmeasured dimensions NOT_MEASURED, never SUPPORTED', () => {
@@ -144,7 +144,10 @@ describe('captureGuidanceLines', () => {
       brightnessMeanLuma: 10, // UNSUPPORTED (too dark)
       brightnessStdLuma: null,
       laplacianVarianceMedian: null,
+      denoiseSurvivalRatio: null,
+      clippedPixelFraction: null,
       meanAbsFrameDiff: null,
+      contrastNormalizedFrameDiff: null,
       clipDurationMs: null,
       playerPixelHeightFraction: null,
       playerMeanJointVisibility: null,

@@ -78,6 +78,9 @@ export function liveCaptureEnvelope(
     ...qualityMeasurements(quality),
     frameIntervalCv: null,
     brightnessStdLuma: null,
+    denoiseSurvivalRatio: null,
+    clippedPixelFraction: null,
+    contrastNormalizedFrameDiff: null,
     clipDurationMs: null,
     playerPixelHeightFraction: null,
     playerMeanJointVisibility: readinessVisibility(readiness),
@@ -103,6 +106,9 @@ export function attemptCaptureEnvelope(
     avgFrameRateFps: clip.fps,
     frameIntervalCv: null,
     brightnessStdLuma: null,
+    denoiseSurvivalRatio: null,
+    clippedPixelFraction: null,
+    contrastNormalizedFrameDiff: null,
     clipDurationMs: clip.durationMs,
     playerPixelHeightFraction: null,
     playerMeanJointVisibility: readinessVisibility(readiness),
@@ -136,15 +142,38 @@ const GUIDANCE_COPY: Record<
     UNSUPPORTED:
       'The scene is too dark or too bright to read — adjust the lighting.',
   },
+  exposure_clipping: {
+    DEGRADED:
+      'Parts of the scene are fully dark or blown out — more even light helps.',
+    UNSUPPORTED:
+      'Too much of the scene is fully dark or blown out to read — fix the exposure.',
+  },
+  exposure_stability: {
+    DEGRADED:
+      'The exposure keeps changing — steadier lighting improves the read.',
+    UNSUPPORTED:
+      'The exposure is flickering too much to read — avoid flashing or pulsing light.',
+  },
   motion_blur: {
     DEGRADED: 'The image is a bit soft — more light or a cleaner lens helps.',
     UNSUPPORTED:
       'The image is too blurry to read — add light and steady the phone.',
   },
+  sensor_noise: {
+    DEGRADED: 'The image looks grainy — more light reduces sensor noise.',
+    UNSUPPORTED:
+      'The image is too noisy to read — add light or lower the camera ISO.',
+  },
   camera_motion: {
     DEGRADED:
       'The camera is moving a little — a steadier mount improves the read.',
     UNSUPPORTED: 'The camera is moving too much — prop it on something stable.',
+  },
+  camera_shake: {
+    DEGRADED:
+      'The camera is shaking a little — a steadier mount improves the read.',
+    UNSUPPORTED:
+      'The camera is shaking too much — prop it on something stable.',
   },
   timing_stability: {
     DEGRADED:

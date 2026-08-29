@@ -1,0 +1,59 @@
+{
+  "workstream": "g07-f22-fixes",
+  "date": "2026-08-29",
+  "baseBranch": "devin/1787988068-wave-c-integration",
+  "branch": "devin/wave-g/g07-f22-fixes",
+  "mission": "Consume the g06 F22 forensic dossier classifications and fix every bypass classified A (logic bug), B (normalization bug), or C (missing pre-capture signal computable today) internally in packages/capture-envelope, flipping the corresponding KNOWN-GAP pins in redteamBypassF22.test.ts to FIXED regressions and updating the wave-f attack findings JSON. Leave D items pinned without inventing thresholds.",
+  "method": "Verified each g06 classification against the g06 dossier artifacts on branch devin/wave-g/g06-f22-dossiers (commit 2dd5286), then implemented: (A/B5) a coverage-aware verdict field; (B/B6) long-side sampling normalization with threshold-id re-versioning; (C/B1,B2,B3,B7) four new envelope dimensions computed from already-sampled grayscale frames. Every fix carries a regression test that synthesizes the exact pinned attack construction with ffmpeg at test time and asserts the attack is now detected; the two D items keep their KNOWN-GAP pins asserting current bypassed behavior. F18 validation criteria were extended to state, per new dimension, what evidence would validate or refute each provisional band.",
+  "datasetScope": "No corpus clips were read or written. All regression clips are synthesized locally with ffmpeg at test time (testsrc2/lavfi constructions replicating the wave-f attacks). Threshold placement for the new dimensions uses only the g06-measured separations: attack values vs 3 real non-held-out clips (incl. afn-sasebo-rally1) already measured in g06/wave-f artifacts. Grouping: synthetic attacks vs real-footage controls, as in g06.",
+  "holdoutStatement": "Held-out cases wm-dink-01 and afn-vic-rally1 were not touched, read, listed, or referenced.",
+  "configuration": {
+    "thresholdsVersion": "capture-envelope-thresholds-v0.4-provisional",
+    "samplingContract": "4fps grayscale, LONG side normalized to 320px (orientation-invariant), aspect-preserving, display-oriented dimensions after rotation metadata",
+    "newDimensions": {
+      "sensor_noise": "denoise-survival-ratio-v0.1: median lapVar after 3x3 median denoise / raw; supported >=0.25, degraded >=0.15 (g06: attack 0.126, real clips 0.339-0.357)",
+      "exposure_clipping": "clipped-pixel-fraction-v0.1: fraction of pixels <=16 or >=235; supported <=0.3, degraded <=0.6 (g06: attack 0.997, real clips <=0.051)",
+      "exposure_stability": "brightness-std-luma-v0.1: std of per-frame mean luma; supported <=40, degraded <=80 (g06: attack 109, real clips <=2.3)",
+      "camera_shake": "contrast-normalized-frame-diff-v0.1: mean abs frame diff / mean spatial std; supported <=0.18, degraded <=0.45 (g06: shaken 0.201/0.634, unshaken 0.054/0.164)"
+    },
+    "reversionedThresholdIds": [
+      "laplacian-variance-320long-median-v0.2 (was 320w v0.1)",
+      "global-frame-diff-320long-v0.3 (was 320w v0.2)"
+    ],
+    "verdictContract": "EnvelopeVerdict gains overallWithCoverage: SUPPORTED only when every dimension was measured and supported; SUPPORTED_UNMEASURED when measured dimensions pass but any dimension is NOT_MEASURED; DEGRADED/UNSUPPORTED unchanged. overall keeps its existing measured-only semantics for backward compatibility."
+  },
+  "measuredResults": {
+    "fixedBypasses": {
+      "count": 6,
+      "of": 8,
+      "items": {
+        "B1 (C, a1-blur-plus-noise)": "sensor_noise UNSUPPORTED on the exact pinned construction; overall no longer SUPPORTED (regression test passing)",
+        "B2 (C, a2-bimodal-exposure)": "exposure_clipping UNSUPPORTED; overall UNSUPPORTED (regression test passing)",
+        "B3 (C, a3-strobe-exposure)": "exposure_stability UNSUPPORTED on the true condition (std 109 > 80), no longer only incidentally caught (regression test passing)",
+        "B5 (A, a5-tiny-subject-no-pose)": "overallWithCoverage = SUPPORTED_UNMEASURED with pose dims NOT_MEASURED; partially observed envelope can no longer read as fully verified (regression test passing)",
+        "B6 (B, a9-rotation-tag-normalization)": "rotate-tag Laplacian shift < 5% (was ~30%) under long-side normalization (regression test passing)",
+        "B7 (C, a11-synthetic-shake)": "camera_shake not SUPPORTED on the low-contrast crop-jitter construction previously passed (regression test passing)"
+      }
+    },
+    "stillPinned": {
+      "count": 2,
+      "items": {
+        "B4 (D, a4-upscale)": "left pinned; no threshold invented — detail-ratio band placement needs labeled real footage",
+        "FR1 (D, f1-low-texture-sharp)": "left pinned; edge-conditional sharpness margin needs labels. Under v0.4 this clip additionally measures camera_shake DEGRADED (~0.19 normalized diff on a near-zero-contrast scene) — a recorded content-sensitivity of the new signal, not a fix"
+      }
+    },
+    "gates": {
+      "root": "pnpm typecheck PASS; pnpm test PASS (all workspaces, capture-envelope 44/44 incl. 8 f22 regressions); pnpm lint PASS; pnpm format:check PASS",
+      "mobile": "npm ci PASS; npx tsc --noEmit PASS; npm test 397/397 PASS (40 suites)"
+    },
+    "testFixtureChange": "first-party-intake's 'good' fixture was pure uniform noise on flat gray (color=gray + noise=alls=60) — v0.4's sensor_noise dimension correctly rejects it as the exact B1 attack signature. The fixture was changed to structured testsrc2 content so it remains a genuinely in-envelope clip; the test's assertions are unchanged."
+  },
+  "findings": [
+    "All 6 A/B/C bypasses from the g06 classification are now detected by internal capture-envelope changes with regression coverage; the 2 D items remain honestly pinned.",
+    "The new-dimension bands are provisional by construction: each rests on the g06-measured separation between synthetic attacks and only 3 real non-held-out clips. Wide margins were chosen (e.g. supported sensor_noise floor 0.25 vs real minimum 0.339 vs attack 0.126), but predictive validity still needs labeled footage — recorded per-dimension in f18ValidationCriteria.",
+    "camera_shake is content-sensitive at near-zero spatial contrast (FR1's flat-gray scene measures 0.19 unshaken, inside the degraded band); this false-reject risk is recorded in the criteria and the FR1 pin rather than hidden.",
+    "The B5 fix is additive (new overallWithCoverage field) so existing consumers of overall keep their semantics; downstream consumers that need 'fully verified' must migrate to overallWithCoverage === 'SUPPORTED'."
+  ],
+  "verdict": "YELLOW",
+  "rationale": "All mandated fixes are implemented, regression-tested against the exact pinned attack constructions, and all root + mobile gates pass (593+ root tests, 397 mobile tests, 44 capture-envelope tests). Not PROVISIONAL_GREEN because the four new dimension bands are placed from g06's synthetic-attack vs 3-real-clip separations only — construct validity is demonstrated, predictive validity on labeled real footage is not, and one known content-sensitivity (camera_shake at near-zero contrast) is recorded. Not ORANGE because nothing rests on undocumented or fabricated evidence and the D items were left honestly pinned."
+}
