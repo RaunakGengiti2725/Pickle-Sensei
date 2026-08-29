@@ -186,6 +186,7 @@ function syntheticTrack(kind: "live" | "rigid_pan" | "frozen"): PlayerTrack {
     meanTorsoSpan: 0.12,
     lossPeriods: [],
     identityContests: [],
+    occlusionResumes: [],
   };
 }
 

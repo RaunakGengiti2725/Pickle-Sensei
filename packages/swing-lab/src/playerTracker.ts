@@ -64,6 +64,14 @@ export interface PlayerTrack {
    * which greedy geometric assignment can silently switch humans.
    */
   identityContests: Array<{ timestampMs: number; rivalCostRatio: number }>;
+  /**
+   * Loss periods whose RESUME position deviates from the pre-gap motion
+   * extrapolation beyond tolerance. Across an occlusion gap geometry cannot
+   * verify the resumed detection is the same human (a different person
+   * standing inside the match radius re-acquires the track with zero
+   * contests), so these are disclosed instead of trusted.
+   */
+  occlusionResumes: Array<{ fromMs: number; toMs: number; deviation: number }>;
 }
 
 export interface TargetSelection {
@@ -170,13 +178,41 @@ export function buildPlayerTracks(file: PeopleFile): PlayerTrack[] {
     .filter((track) => track.frames.length >= GATES.minFrames)
     .map((track) => {
       const lossPeriods: Array<{ fromMs: number; toMs: number }> = [];
+      const occlusionResumes: Array<{ fromMs: number; toMs: number; deviation: number }> = [];
       for (let index = 1; index < track.frames.length; index += 1) {
-        const gap = track.frames[index]!.timestampMs - track.frames[index - 1]!.timestampMs;
+        const previous = track.frames[index - 1]!;
+        const current = track.frames[index]!;
+        const gap = current.timestampMs - previous.timestampMs;
         if (gap > frameIntervalMs * 1.9) {
-          lossPeriods.push({
-            fromMs: track.frames[index - 1]!.timestampMs,
-            toMs: track.frames[index]!.timestampMs,
-          });
+          lossPeriods.push({ fromMs: previous.timestampMs, toMs: current.timestampMs });
+          // Extrapolate pre-gap motion; a resume far from where the person was
+          // heading is geometrically unverifiable identity.
+          const before = track.frames[index - 2];
+          const dtMs = before ? previous.timestampMs - before.timestampMs : 0;
+          const velocity =
+            before && dtMs > 0
+              ? {
+                  x: (previous.torsoMid.x - before.torsoMid.x) / dtMs,
+                  y: (previous.torsoMid.y - before.torsoMid.y) / dtMs,
+                }
+              : { x: 0, y: 0 };
+          const predicted = {
+            x: previous.torsoMid.x + velocity.x * gap,
+            y: previous.torsoMid.y + velocity.y * gap,
+          };
+          const deviation = Math.hypot(
+            current.torsoMid.x - predicted.x,
+            current.torsoMid.y - predicted.y,
+          );
+          const speed = Math.hypot(velocity.x, velocity.y);
+          const tolerance = Math.max(0.03, speed * gap * 1.5);
+          if (deviation > tolerance) {
+            occlusionResumes.push({
+              fromMs: previous.timestampMs,
+              toMs: current.timestampMs,
+              deviation: Number(deviation.toFixed(4)),
+            });
+          }
         }
       }
       return {
@@ -187,6 +223,7 @@ export function buildPlayerTracks(file: PeopleFile): PlayerTrack[] {
           track.frames.reduce((total, frame) => total + frame.torsoSpan, 0) / track.frames.length,
         lossPeriods,
         identityContests: track.contests,
+        occlusionResumes,
       };
     })
     .sort((a, b) => b.coverage * b.meanTorsoSpan - a.coverage * a.meanTorsoSpan);
@@ -356,6 +393,12 @@ export function initializeTargetFromSeed(
     );
     confidence = Math.min(confidence, 0.5);
   }
+  if (chosen.occlusionResumes.length > 0) {
+    risks.push(
+      `TARGET_OCCLUSION_RESUME_UNVERIFIED: ${chosen.occlusionResumes.length} loss period(s) resumed off the pre-gap motion path — the resumed detection may be a different person`,
+    );
+    confidence = Math.min(confidence, 0.5);
+  }
   const contests = chosen.identityContests;
   if (contests.length > 0) {
     risks.push(
@@ -366,7 +409,10 @@ export function initializeTargetFromSeed(
   return ok({
     identity: {
       trackId: chosen.trackId,
-      aliasTrackIds,
+      // Only TIGHT aliases are the same human; a loose coincident track may
+      // be a distinct adjacent person and must stay on the other-player side
+      // of every downstream comparison (ownership, opponent wrists).
+      aliasTrackIds: tightAliasIds,
       seedMode: seed.mode,
       lockedAtMs: chosen.frames[0]?.timestampMs ?? null,
       confidence,
@@ -520,6 +566,15 @@ export function selectTargetPlayer(
     );
     confidence = Math.min(confidence, 0.5);
   }
+  const resumes = window
+    ? target.occlusionResumes.filter((resume) => resume.toMs <= window.endMs)
+    : target.occlusionResumes;
+  if (resumes.length > 0) {
+    risks.push(
+      `TARGET_OCCLUSION_RESUME_UNVERIFIED: ${resumes.length} loss period(s) resumed off the pre-gap motion path — the resumed detection may be a different person`,
+    );
+    confidence = Math.min(confidence, 0.5);
+  }
   if (options.policy === "auto" && confidence < 0.5) {
     risks.push("TARGET_SELECTION_AMBIGUOUS: runner-up player is nearly as prominent");
   }
@@ -601,9 +656,15 @@ export function otherPlayersWrists(
   const byTime = new Map<number, Array<{ x: number; y: number }>>();
   for (const track of tracks) {
     if (track.trackId === targetId || aliasTrackIds.includes(track.trackId)) continue;
-    // (1) Is this track a duplicate detection of the target person?
+    // (1) Is this track a duplicate detection of the target person? A
+    // majority-coincident track counts as the same human only when its
+    // coincident frames sit at TRUE-duplicate distance (the same tight
+    // criterion as alias absorption); an adjacent body hovering at
+    // 0.08–0.12 torso distance may be a distinct person and must remain
+    // on the other-player side.
     let coincident = 0;
     let compared = 0;
+    const coincidentDistances: number[] = [];
     for (const frame of track.frames) {
       const targetFrame = nearestTargetFrame(frame.timestampMs);
       if (!targetFrame) continue;
@@ -612,9 +673,28 @@ export function otherPlayersWrists(
         frame.torsoMid.x - targetFrame.torsoMid.x,
         frame.torsoMid.y - targetFrame.torsoMid.y,
       );
-      if (distance < DUPLICATE_TORSO_DISTANCE) coincident += 1;
+      if (distance < DUPLICATE_TORSO_DISTANCE) {
+        coincident += 1;
+        coincidentDistances.push(distance);
+      }
     }
-    if (compared > 0 && coincident / compared > 0.5) continue; // same person
+    const medianCoincident =
+      coincidentDistances.length > 0
+        ? coincidentDistances.sort((a, b) => a - b)[Math.floor(coincidentDistances.length / 2)]!
+        : null;
+    if (
+      compared > 0 &&
+      coincident / compared > 0.5 &&
+      medianCoincident !== null &&
+      medianCoincident <= ALIAS_TIGHT_MEDIAN_DISTANCE
+    ) {
+      continue; // same person
+    }
+    // Wrist-level dedup only applies to tracks with SOME torso coincidence
+    // (partial duplicates). A track whose torso is always clearly distinct is
+    // a real other player, and its wrist reaching near the target's wrist is
+    // exactly the ownership evidence this function exists to provide.
+    const partialDuplicate = coincident > 0;
 
     for (const frame of track.frames) {
       const targetFrame = nearestTargetFrame(frame.timestampMs);
@@ -623,9 +703,11 @@ export function otherPlayersWrists(
       );
       const wrists = frame.joints
         .filter((joint) => joint.n.endsWith("wrist") && joint.v >= 0.2)
-        // (2) Drop wrists that coincide with a target wrist (same hand).
+        // (2) Drop wrists that coincide with a target wrist (same hand) —
+        // only for partial-duplicate tracks of the target person.
         .filter(
           (joint) =>
+            !partialDuplicate ||
             !targetWrists.some(
               (targetJoint) =>
                 Math.hypot(joint.x - targetJoint.x, joint.y - targetJoint.y) <
