@@ -99,7 +99,7 @@ export function registerPrivacyRoutes(app: FastifyInstance, context: AppContext)
   app.post("/v1/me/export", { preHandler: app.authenticate }, async (request) => {
     const userId = request.user!.id;
     const pool = context.pool!;
-    const [user, profile, settings, consents, goals, sessions, shots, achievements] =
+    const [user, profile, settings, consents, consentLedger, goals, sessions, shots, achievements] =
       await Promise.all([
         one(pool, "SELECT id, email, locale, timezone, created_at FROM app_user WHERE id = $1", [
           userId,
@@ -117,6 +117,17 @@ export function registerPrivacyRoutes(app: FastifyInstance, context: AppContext)
         many(
           pool,
           "SELECT consent_type, version, granted, created_at FROM user_consent WHERE user_id = $1 ORDER BY created_at",
+          [userId],
+        ),
+        // First-party consent ledger (consent_record is pseudonymous; the
+        // subject mapping scopes the export to the requesting user's rows).
+        many(
+          pool,
+          `SELECT cr.id, cr.seq, cr.subject_pseudonym, cr.scope, cr.action, cr.consent_version,
+                  cr.source, cr.device, cr.capture_mode, cr.stroke_intent, cr.recorded_at
+           FROM consent_record cr
+           JOIN consent_subject cs ON cs.pseudonym = cr.subject_pseudonym
+           WHERE cs.user_id = $1 ORDER BY cr.seq`,
           [userId],
         ),
         many(
@@ -145,7 +156,17 @@ export function registerPrivacyRoutes(app: FastifyInstance, context: AppContext)
       requestId: request.id,
       status: "complete",
       exportedAt: new Date().toISOString(),
-      data: { user, profile, settings, consents, goals, sessions, shots, achievements },
+      data: {
+        user,
+        profile,
+        settings,
+        consents,
+        consentLedger,
+        goals,
+        sessions,
+        shots,
+        achievements,
+      },
     };
   });
 
