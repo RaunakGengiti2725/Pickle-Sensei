@@ -1,0 +1,51 @@
+{
+  "workstream": "D11",
+  "title": "Red-team AUTO DETECT + stroke hierarchy on adversarial synthetic fixtures",
+  "branch": "devin/wave-d/d11-redteam-autodetect",
+  "baseBranch": "origin/devin/1787988068-wave-c-integration",
+  "whatWasBuilt": [
+    "packages/evaluation/src/synthetic/adversarialStrokeFixtures.ts: deterministic, clearly-labeled SYNTHETIC adversarial pose fixtures (producer 'synthetic-adversarial-fixture-v1'): aborted/checked swing, walk-through motion, wheelchair kinematics with chair-back-occluded (degenerate) torso, wheelchair seated genuine stroke, static non-stroke reach/stretch. Practice-swing-without-ball and ambiguous edge-angle cases reuse the committed generateSwingSequence generator inside the red-team suites.",
+    "packages/vision-geometry/test/strokeHeuristicLite.redteam.test.ts (11 tests) and packages/swing-lab/test/strokeHeuristic.redteam.test.ts (9 tests): mirrored suites asserting non-strokes abstain, ambiguous edge angles abstain or degrade to UNKNOWN, no fixture yields a confident exact identity (leaf committed AND confidence >= 0.5, the AUTO_RESOLUTION_MIN_CONFIDENCE gate), and hierarchy degrades L1->L2->ABSTAIN gracefully.",
+    "Fixes, re-versioned as stroke-heuristic-3 (uncalibrated) in BOTH copies: (a) ported swing-lab's stroke-heuristic-2 contact-point provenance / paddle-plausibility / overhead-corroboration / degraded-abstention logic into the stale vision-geometry strokeHeuristicLite port (mobile AUTO DETECT path), which was still stroke-heuristic-1; (b) added measured non-motion gates (window speed peak < 0.25 u/s on a MEASURED series -> no_swing_energy_in_window; dominant-wrist travel < 0.05u across >=5 measured frames within +/-200ms -> no_swing_motion_near_reference); (c) degenerate-torso gate (hip-shoulder extent < 0.04u -> torso_extent_degenerate_normalization_unreliable), also applied per-frame inside the raise-corroboration scan. Absent measurements never fire any gate."
+  ],
+  "exactNumbers": {
+    "redTeamBaselineViolations": {
+      "visionGeometryLite": "8 of 11 red-team tests failed on the pre-fix implementation (measured via git stash of the two source files, same test code)",
+      "swingLab": "6 of 9 red-team tests failed on the pre-fix implementation (same method)"
+    },
+    "redTeamAfterFix": {
+      "visionGeometryLite": "11 of 11 pass",
+      "swingLab": "9 of 9 pass"
+    },
+    "baselineViolationExamples": [
+      "lite: zero-motion walk-through returned BACKHAND (confident side from a stationary body)",
+      "lite: static high reach/stretch returned OVERHEAD leaf at confidence >= 0.5",
+      "lite: degenerate (chair-back occluded) torso returned OVERHEAD from a meaningless torso-normalized ratio",
+      "lite: floating high paddle box the wrist never reached returned OVERHEAD (stroke-heuristic-1 defect already fixed in swing-lab v2, still live on the mobile path)",
+      "lite: rock-bottom-confidence (0.08) paddle point returned FOREHAND with uncapped confidence",
+      "swing-lab: aborted swing / walk-through / static reach returned committed sides or OVERHEAD before the non-motion and torso gates"
+    ],
+    "coverageOnGenuinePositives": {
+      "method": "existing behavior-lock suites re-run after the fix (synthetic dev swing locks: side commitment at depth 2, wrist fallback, corroborated OVERHEAD, degraded rally2-shape OVERHEAD, ambidextrous refusal, midline abstention)",
+      "visionGeometryTests": "59 passed / 59 (0 failed)",
+      "swingLabTests": "240 passed, 4 skipped / 244 (0 failed)",
+      "evaluationTests": "13 passed / 13",
+      "analysisPipelineTests": "34 passed / 34",
+      "wheelchairSeatedGenuineStroke": "still classifies a committed side (not blanket abstention): asserted in both red-team suites",
+      "note": "No blanket abstention: gates fire only on measured non-motion or measured degenerate torso; all pre-existing positive commitments unchanged."
+    },
+    "testLockUpdates": "2 pre-existing locks updated to the re-versioned behavior: swing-lab version-string lock stroke-heuristic-2 -> stroke-heuristic-3; the lite 'OVERHEAD from a floating high paddle box' lock replaced with the swing-lab v2 pair (corroborated OVERHEAD passes, floating box rejected) because that stroke-heuristic-1 behavior was itself a D11 violation."
+  },
+  "honestNegatives": [
+    "New gate thresholds (0.25 u/s speed floor, 0.05u wrist travel, 0.04u torso extent, 5-frame minimum) are conservative red-team-derived floors, NOT calibrated statistics: real committed pose data could not be run (see blocked). They sit far below the existing 0.9 u/s slow-swing anchor and far below real synthetic torso extents (0.12-0.24u), but field calibration is outstanding.",
+    "Ambiguous forehand/backhand edge-angle coverage relies on the midline abstention band already in the heuristic; no new geometry was added for it, only assertions that it holds at the edge.",
+    "Practice swing with no ball context is indistinguishable from a real swing by this classifier by design (it never observes the ball); the suites assert it cannot yield a confident exact L3 leaf (bounce unobserved -> leaf null), which is the honest ceiling, not that it abstains entirely."
+  ],
+  "blocked": [
+    "Before/after coverage on COMMITTED stroke gold (datasets/paddle-bench/stroke-gold.json, n=13 labels excluding held-out wm-dink-01 / afn-vic-rally1) could not be executed: prediction-side scoring requires canonical run dirs (datasets/paddle-bench/runs/) which are gitignored, absent, and regenerable only via macOS Apple Vision (pnpm lab:regen forbidden here). Coverage preservation is therefore evidenced by the full existing behavior-lock suites (0 regressions across 346 passing tests) instead of gold-run deltas.",
+    "apps/mobile consumes strokeHeuristicLite; only an optional field (paddle observation confidence) was added to its input interface, and apps/mobile was not modified, so the mobile-specific test/typecheck gauntlet was not run."
+  ],
+  "heldOutCasesUntouched": ["wm-dink-01", "afn-vic-rally1"],
+  "producer": "devin D11 wave-d",
+  "createdAtIso": "2026-08-29T09:05:00.000Z"
+}
