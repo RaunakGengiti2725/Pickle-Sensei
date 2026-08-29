@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "workstream": "D2-05",
+  "annotatorId": "devin-visual-v4-waveD2",
+  "createdAtIso": "2026-08-29T10:25:00.000Z",
+  "title": "Multi-annotator contact audit: blind second pass on 10 committed contact labels",
+  "sampling": {
+    "method": "Deterministic: bundles sorted ascending (afn-sasebo-rally1, afn-sasebo-rally2, wavea-faead-feed, wavea-marne-dig), events earliest-first within each bundle, first 10 committed contact labels taken.",
+    "sampled": [
+      {
+        "bundle": "afn-sasebo-rally1",
+        "priorContactMs": [317, 1117, 1484, 1717, 1934, 2900, 3870]
+      },
+      { "bundle": "afn-sasebo-rally2", "priorContactMs": [2620, 3834] },
+      { "bundle": "wavea-faead-feed", "priorContactMs": [33442] }
+    ],
+    "note": "wavea-marne-dig sorts last and was not reached by the 10-event cap; it has no audit records."
+  },
+  "provenance": {
+    "sources": [
+      {
+        "recordingId": "rec-aba9629c681d",
+        "path": "datasets/corpus/media/dvids-967848-aba9629c681d.mp4",
+        "sha256": "aba9629c681d159e0560583865085b8bcceaaa850f9d81f5b26832a86fc90e3c",
+        "sha256VerifiedLocally": true,
+        "fps": 29.97,
+        "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)",
+        "clipOffsets": {
+          "afn-sasebo-rally1": "clip frame n = source frame n+779 (registry trim 26.0-30.4s; visual align of clip f0 vs source frames 778-782)",
+          "afn-sasebo-rally2": "clip frame n = source frame n+917 (registry trim 30.6-36.0s)"
+        }
+      },
+      {
+        "recordingId": "rec-faead33a362c",
+        "path": "datasets/corpus/media/dvids-944209-faead33a362c.mp4",
+        "sha256": "faead33a362caba7ce422d052e49290522b96bd514993a0070a802c7c3679cbf",
+        "sha256VerifiedLocally": true,
+        "fps": 24,
+        "license": "Public domain (U.S. federal government work, PD-USGov; DVIDS)"
+      }
+    ],
+    "frameExtraction": "ffmpeg select=eq(n,IDX) absolute CFR indexing; local extraction to /tmp only, no media committed; gitignored media re-downloaded from registered rights-cleared sources and hash-verified."
+  },
+  "blindProtocol": "Contact windows re-derived from direct inspection of extracted frames (ball-at-paddle adjacency or ball direction reversal across adjacent frames). Prior event times were used only to select which frame ranges to extract; prior contact values were compared only after each blind window was fixed. A green-pixel cluster tracker was used solely to locate candidate ball regions across frames; every accepted window was confirmed by eye on the frames/crops. No interpolation is reported as observation.",
+  "results": {
+    "audited": 10,
+    "withAuditValue": 7,
+    "notObserved": 3,
+    "frameDeltas": {
+      "perEvent": [
+        {
+          "bundle": "afn-sasebo-rally1",
+          "priorMs": 317,
+          "auditMs": 317,
+          "frameDelta": 0.0,
+          "overlap": true
+        },
+        {
+          "bundle": "afn-sasebo-rally1",
+          "priorMs": 1117,
+          "auditMs": 1218,
+          "frameDelta": 3.0,
+          "overlap": false
+        },
+        {
+          "bundle": "afn-sasebo-rally1",
+          "priorMs": 1484,
+          "auditMs": 1485,
+          "frameDelta": 0.03,
+          "overlap": true
+        },
+        {
+          "bundle": "afn-sasebo-rally1",
+          "priorMs": 1717,
+          "auditMs": null,
+          "frameDelta": null,
+          "overlap": false
+        },
+        {
+          "bundle": "afn-sasebo-rally1",
+          "priorMs": 1934,
+          "auditMs": 1935,
+          "frameDelta": 0.03,
+          "overlap": true
+        },
+        {
+          "bundle": "afn-sasebo-rally1",
+          "priorMs": 2900,
+          "auditMs": 2886,
+          "frameDelta": 0.42,
+          "overlap": true
+        },
+        {
+          "bundle": "afn-sasebo-rally1",
+          "priorMs": 3870,
+          "auditMs": null,
+          "frameDelta": null,
+          "overlap": false
+        },
+        {
+          "bundle": "afn-sasebo-rally2",
+          "priorMs": 2620,
+          "auditMs": null,
+          "frameDelta": null,
+          "overlap": false
+        },
+        {
+          "bundle": "afn-sasebo-rally2",
+          "priorMs": 3834,
+          "auditMs": 3851,
+          "frameDelta": 0.5,
+          "overlap": true
+        },
+        {
+          "bundle": "wavea-faead-feed",
+          "priorMs": 33442,
+          "auditMs": 33438,
+          "frameDelta": 0.1,
+          "overlap": true
+        }
+      ],
+      "medianFrameDelta": 0.1,
+      "maxFrameDelta": 3.0,
+      "deltaBasis": "source-frame units at each recording's native fps, over the 7 events with an audit value"
+    },
+    "disputes": [
+      {
+        "bundle": "afn-sasebo-rally1",
+        "priorMs": 1117,
+        "type": "window_non_overlap",
+        "detail": "Audit reversal window n36-37 (1201-1235ms) vs prior bracket 1083-1150ms; 3.0 frame delta."
+      },
+      {
+        "bundle": "afn-sasebo-rally1",
+        "priorMs": 1717,
+        "type": "no_contact_observed",
+        "detail": "Ball tracked in continuous free flight ~900px from target at prior contact time; no paddle near ball, no direction change between the n44-45 and n57-59 contacts. Possible double-count of the 1484ms contact."
+      },
+      {
+        "bundle": "afn-sasebo-rally1",
+        "priorMs": 3870,
+        "type": "not_observable_camera_cut",
+        "detail": "Source video cuts to a different camera between clip n115 and n116; prior contact time is exactly n116.0. Registry describes rally1 as a single continuous shot, but a cut exists at clip ~3.85s."
+      },
+      {
+        "bundle": "afn-sasebo-rally2",
+        "priorMs": 2620,
+        "type": "no_contact_observed",
+        "detail": "Ball descends in smooth ballistic path past the player's overhead reach with no direction change across source frames 987-1002; prior note itself marks the contact as interpolated."
+      }
+    ],
+    "agreements": "6 of 7 events with an audit value agree within 0.5 frames and overlapping windows (317, 1484, 1934, 2900, 3834, 33442). The faead audit value matches the independent Wave C pass (33438ms) exactly."
+  },
+  "constraints": {
+    "heldOutFilesTouched": 0,
+    "existingAnnotationFilesModified": 0,
+    "mediaCommitted": 0,
+    "mediaDownloadedMB": "~65 (local only, gitignored paths, rights-cleared PD-USGov sources already registered in datasets/corpus/sources.json)"
+  },
+  "artifacts": [
+    "datasets/paddle-bench/bundles/afn-sasebo-rally1/annotation/devin-visual-v4-waveD2-contact-audit.json",
+    "datasets/paddle-bench/bundles/afn-sasebo-rally2/annotation/devin-visual-v4-waveD2-contact-audit.json",
+    "datasets/paddle-bench/bundles/wavea-faead-feed/annotation/devin-visual-v4-waveD2-contact-audit.json"
+  ]
+}
