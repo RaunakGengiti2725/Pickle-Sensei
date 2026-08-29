@@ -1,0 +1,162 @@
+{
+  "workstream": "g06-f22-dossiers",
+  "mission": "Produce a forensic dossier for each of the 8 pinned capture-envelope bypasses in packages/capture-envelope/test/redteamBypassF22.test.ts (B1 blur+grain, B2 bimodal exposure, B3 strobing, B4 upscale, B5 tiny subject, B6 rotate-tag normalization, FR1 low-texture false reject, B7 crop-jitter shake): measure current signals, actually run Linux-runnable downstream pipeline stages on each bypass clip, identify the observable signal that would have prevented the failure, and classify each bypass as A logic bug / B normalization bug / C missing pre-capture signal computable today / D threshold needs real labels / E fundamentally unobservable pre-capture.",
+  "method": "Harness packages/swing-lab/src/g06F22Dossiers.ts synthesizes each pinned bypass clip with ffmpeg using the exact recipes pinned in redteamBypassF22.test.ts (plus realism variants where the exact pinned construction confounds the intended failure mode with a frozen background), then for each clip measures: (1) the full capture-envelope verdict via measureClip + evaluateCaptureEnvelope (thresholds v0.3-provisional); (2) the pose-free downstream OOD gate extractFrameStats -> evaluateFrameAnalyzability; (3) downstream ball-candidate generation via tools/paddle-lab/ball_candidates.py (candidates/frame, chronic-cell fraction, zero-candidate frames); (4) a panel of candidate preventive signals computable pre-capture with the same 4fps/320px grayscale sampling used by clipProbe (denoise-survival ratio of Laplacian variance, multi-scale detail ratio 640/320, clipped-pixel fraction, per-frame off-band luma fraction, top-1% edge gradient, contrast-normalized frame diff, moving-subject height fraction from frame-diff bounding box). Pose-gated stages (Apple Vision pose, canonical cascade) are unavailable on Linux and are reported as NOT MEASURED, not fabricated.",
+  "dataset_scope_and_grouping": "17 clips total: 8 exact pinned bypass constructions, 2 moving realism variants (b2_bimodal_moving, b5_tiny_subject_moving_bg), and 7 controls (control_base synthetic scene, control_b1_blur_only, control_b4_true240, control_b5_big_subject, control_fr1_blurred, control_b7_real_shake and control_b7_real_unshaken derived from non-held-out real clip afn-sasebo-rally1). All synthetic clips are 4s @ 30fps 1280x720 (or as pinned). Grouping is per-bypass: each bypass clip is compared against its matched control.",
+  "holdout_statement": "Held-out cases wm-dink-01 and afn-vic-rally1 were not read, listed, referenced, or used in any way. The only real footage used is afn-sasebo-rally1 (non-held-out).",
+  "configuration": {
+    "thresholds_version": "capture-envelope-thresholds-v0.3-provisional",
+    "envelope_sampling": "4 fps, grayscale, 320px wide aspect-preserving (clipProbe defaults)",
+    "downstream_stages_measured": [
+      "frame analyzability OOD gate (extractFrameStats -> evaluateFrameAnalyzability)",
+      "ball candidate generation (tools/paddle-lab/ball_candidates.py)"
+    ],
+    "downstream_stages_not_measured": [
+      "Apple Vision pose extraction (macOS-only)",
+      "canonical stroke cascade (pose-gated)",
+      "iPhone capture path"
+    ],
+    "node": "v20.18.1",
+    "ffmpeg": "4.4.2",
+    "harness": "packages/swing-lab/src/g06F22Dossiers.ts",
+    "raw_measurements_artifact": "datasets/experiments/wave-g/g06-f22-dossiers.json"
+  },
+  "measured_results": {
+    "counts": {
+      "clips_measured": 17,
+      "pinned_bypasses": 8,
+      "realism_variants": 2,
+      "controls": 7,
+      "frames_processed_per_clip_ball_stage": 118,
+      "envelope_dimensions_evaluated_per_clip": 9,
+      "pose_dimensions_not_measured_per_clip": 2
+    },
+    "per_clip_summary": [
+      {"clip": "control_base", "envelope": "SUPPORTED", "ood": "ANALYZABLE", "ball_candidates_per_frame": 16.53},
+      {"clip": "b1_blur_grain", "envelope": "SUPPORTED", "ood": "ANALYZABLE", "ball_candidates_per_frame": 39.93, "chronic_cell_fraction": 0.988},
+      {"clip": "control_b1_blur_only", "envelope": "UNSUPPORTED", "ood": "ANALYZABLE", "ball_candidates_per_frame": 17.53},
+      {"clip": "b2_bimodal_exposure", "envelope": "SUPPORTED", "ood": "still_image_video", "ball_candidates_per_frame": 0.0},
+      {"clip": "b2_bimodal_moving", "envelope": "SUPPORTED", "ood": "ANALYZABLE", "ball_candidates_per_frame": 0.03},
+      {"clip": "b3_strobing_exposure", "envelope": "UNSUPPORTED (brightness dimension SUPPORTED)", "ood": "solid_color_frames", "ball_candidates_per_frame": 0.0},
+      {"clip": "b4_upscaled_240p", "envelope": "SUPPORTED", "ood": "ANALYZABLE", "ball_candidates_per_frame": 40.0},
+      {"clip": "control_b4_true240", "envelope": "UNSUPPORTED", "ood": "ANALYZABLE", "ball_candidates_per_frame": 15.17},
+      {"clip": "b5_tiny_subject", "envelope": "SUPPORTED", "ood": "still_image_video", "ball_candidates_per_frame": 0.01},
+      {"clip": "control_b5_big_subject", "envelope": "SUPPORTED", "ood": "ANALYZABLE", "ball_candidates_per_frame": 19.69},
+      {"clip": "b5_tiny_subject_moving_bg", "envelope": "SUPPORTED", "ood": "ANALYZABLE", "ball_candidates_per_frame": 16.5},
+      {"clip": "b6_rotate_tag", "envelope": "SUPPORTED", "ood": "ANALYZABLE", "ball_candidates_per_frame": 34.99},
+      {"clip": "fr1_low_texture_sharp", "envelope": "DEGRADED", "ood": "ANALYZABLE", "ball_candidates_per_frame": 0.02},
+      {"clip": "control_fr1_blurred", "envelope": "UNSUPPORTED", "ood": "ANALYZABLE", "ball_candidates_per_frame": 0.0},
+      {"clip": "b7_synthetic_shake", "envelope": "SUPPORTED", "ood": "ANALYZABLE", "ball_candidates_per_frame": 24.12},
+      {"clip": "control_b7_real_shake", "envelope": "DEGRADED", "ood": "ANALYZABLE", "ball_candidates_per_frame": 39.48},
+      {"clip": "control_b7_real_unshaken", "envelope": "SUPPORTED", "ood": "ANALYZABLE", "ball_candidates_per_frame": 40.0}
+    ]
+  },
+  "dossiers": {
+    "B1_blur_plus_grain": {
+      "input_condition": "Heavily Gaussian-blurred scene (sigma large enough that blur-only fails) with synthetic film grain overlaid; grain restores high-frequency energy.",
+      "current_signals_measured": "laplacianVarianceMedian 173.8 (>= 100 threshold, SUPPORTED); control_b1_blur_only without grain measures 5.1 (UNSUPPORTED). All other dimensions SUPPORTED.",
+      "why_envelope_passes": "Raw Laplacian variance measures total high-frequency energy and cannot distinguish sensor/overlay noise from real scene detail; grain alone lifts 5.1 -> 173.8.",
+      "downstream_failure_measured": "Ball candidate stage floods: 39.93 candidates/frame (vs 16.53 control_base) with chronicCellFraction 0.988 (vs 0.014 control) — 98.8% of grid cells show chronic false motion activity, drowning real ball candidates in grain-induced noise. OOD gate does not catch it (ANALYZABLE).",
+      "preventive_signal": "Denoise-survival ratio: Laplacian variance after light temporal/spatial denoise divided by raw. Measured 0.126 for b1_blur_grain vs 0.792-1.089 for all genuine-content clips (min genuine 0.339 on real footage) — a >2.6x separation gap.",
+      "signal_exists_pre_capture": true,
+      "needs_learned_calibration": "Threshold placement (e.g. 0.126 vs 0.339) has a wide gap on this data but should be calibrated on labeled real noisy-phone footage before locking.",
+      "current_threshold_identifiable_from_data": "The lapVar>=100 threshold is v0.3-provisional and is not identifiable as a noise-robust boundary from current data; it conflates blur and grain.",
+      "classification": "C",
+      "classification_rationale": "A concrete pre-capture signal (denoise-survival ratio) computable today with existing ffmpeg sampling cleanly separates the bypass from all 9 genuine-content clips measured; calibration refinement is secondary (D)."
+    },
+    "B2_bimodal_exposure": {
+      "input_condition": "Half the frame crushed to near-black (luma ~ val/16), half blown to near-white (luma ~ 220+val/16); spatial mean lands mid-band.",
+      "current_signals_measured": "brightnessMeanLuma 122.4 (in 60-200 band, SUPPORTED) despite clippedPixelFraction 0.997 (99.7% of pixels outside [16,235] usable range). Exact pinned clip: envelope SUPPORTED overall.",
+      "why_envelope_passes": "Brightness check uses only the spatial mean; a bimodal histogram with almost no mid-tone pixels averages into the supported band.",
+      "downstream_failure_measured": "Exact pinned clip is additionally frozen, so the OOD gate rejects it as still_image_video (confounder). Realism variant b2_bimodal_moving (same lut, moving scene) passes the envelope (SUPPORTED), passes the OOD gate (ANALYZABLE), and starves the ball stage: 0.03 candidates/frame with 115/118 zero-candidate frames vs 16.53/frame and 0 zero frames on control_base — near-total tracking starvation with no gate firing.",
+      "preventive_signal": "Clipped-pixel fraction (pixels outside [16,235]): 0.997 on both B2 clips vs <= 0.051 on all 15 other clips.",
+      "signal_exists_pre_capture": true,
+      "needs_learned_calibration": "Minimal — the measured separation is 0.997 vs 0.051; a conservative bound (e.g. reject > 0.5) is defensible, but band edges should be confirmed on real backlit footage.",
+      "current_threshold_identifiable_from_data": "The mean-luma 60-200 band cannot express this failure at all; no setting of the existing threshold fixes it.",
+      "classification": "C",
+      "classification_rationale": "Histogram-shape signal computable today from the same sampled frames; the existing mean-based check is structurally blind to it."
+    },
+    "B3_strobing_exposure": {
+      "input_condition": "Frames alternate between near-black and near-white; temporal mean luma lands mid-band.",
+      "current_signals_measured": "brightnessMeanLuma in-band -> brightness dimension SUPPORTED despite offBandFrameFraction 1.0 (100% of individual frames outside the band) and brightnessStdLuma 109.0. Overall envelope happens to be UNSUPPORTED, but only via side-effects: laplacianVarianceMedian 0.0 (solid frames) and meanAbsFrameDiff 101.7 (camera_motion).",
+      "why_envelope_passes": "The brightness dimension itself passes because it averages luma over time; the clip is only rejected by dimensions that measure something else. A milder strobe that keeps some texture and lower flicker amplitude would evade all dimensions.",
+      "downstream_failure_measured": "OOD gate rejects with solid_color_frames; ball candidates 0.0/frame. For this exact construction downstream gates do fire, but for the wrong reasons — the brightness gate never sees the strobe.",
+      "preventive_signal": "Per-frame off-band fraction: fraction of sampled frames whose per-frame mean luma is outside [60,200]. Measured 1.0 for B3 vs 0.0 for all 16 other clips. brightnessStdLuma (109.0 vs <= 2.32 elsewhere) is an equivalent already-computed signal that is currently unused by evaluateCaptureEnvelope.",
+      "signal_exists_pre_capture": true,
+      "needs_learned_calibration": "Off-band-fraction threshold is near-trivial (1.0 vs 0.0 measured); a flicker-amplitude threshold for milder strobes would need labeled real footage.",
+      "current_threshold_identifiable_from_data": "The mean-based band is identifiable for static lighting but structurally cannot encode temporal exposure instability.",
+      "classification": "C",
+      "classification_rationale": "The clip already carries brightnessStdLuma in measurements — the signal exists and is computed today but is never evaluated; adding a per-frame/temporal-variance check is a pre-capture-computable fix. (Borders on A since the measured std is silently discarded.)"
+    },
+    "B4_upscale": {
+      "input_condition": "True 240p content upscaled to 1280x720; container metadata reports 720p short side.",
+      "current_signals_measured": "shortSidePx 720 (SUPPORTED); laplacianVarianceMedian 608.0 (SUPPORTED). control_b4_true240 (same content at native 240p) is UNSUPPORTED purely on resolution metadata.",
+      "why_envelope_passes": "Resolution check trusts container dimensions; upscaling preserves enough low-frequency edge energy at the 320px sampling width that Laplacian variance stays high.",
+      "downstream_failure_measured": "OOD gate ANALYZABLE; ball stage saturates at 40.0 candidates/frame (vs 16.53 control_base, 15.17 true-240p control) with chronicCellFraction 0.061 — upscaling ringing/aliasing inflates false candidates ~2.4x while genuinely carrying only 240p of information for any later fine-grained stage.",
+      "preventive_signal": "Multi-scale detail ratio (lapVar at 640px sampling / lapVar at 320px): 0.318 for b4_upscaled_240p vs 0.742 for native-720p control_base and 0.756/0.759 for other native clips. Caveat: control_b4_true240 measures 0.333 — the ratio measures effective detail, not the upscale operation itself, so it detects 'content has less detail than claimed resolution' rather than 'was upscaled'.",
+      "signal_exists_pre_capture": true,
+      "needs_learned_calibration": "Yes. The 0.32-vs-0.74 gap is clean on synthetic clips, but real phone footage spans a continuum of optics/compression detail; the reject boundary needs labeled real captures at known native resolutions.",
+      "current_threshold_identifiable_from_data": "The 720p metadata threshold is identifiable as a metadata check but cannot be made robust to upscaling at any setting.",
+      "classification": "D",
+      "classification_rationale": "The preventive signal is computable today (C-eligible), but unlike B1/B2 the safe threshold genuinely depends on the real-footage detail distribution; setting it from synthetic data alone would risk false rejects of soft-optics genuine 720p+."
+    },
+    "B5_tiny_subject": {
+      "input_condition": "Subject occupies ~0.6-12.5% of frame height (far below the 25% pose pixel-height threshold); video-only statistics are all healthy.",
+      "current_signals_measured": "All 7 video dimensions SUPPORTED; player_pixel_height and player_visibility are NOT_MEASURED because no pose pass has run. evaluateCaptureEnvelope reports overall SUPPORTED with notMeasured [player_pixel_height, player_visibility].",
+      "why_envelope_passes": "Overall status is the worst of measured dimensions; NOT_MEASURED dimensions cannot worsen it. Callers that treat overall SUPPORTED as a full green light (without checking notMeasured) admit clips the pose dimensions were designed to reject.",
+      "downstream_failure_measured": "Exact pinned clip is frozen and caught as still_image_video (confounder). Realism variant b5_tiny_subject_moving_bg (moving 64x36 subject on the moving base scene) passes envelope (SUPPORTED) and OOD gate (ANALYZABLE) and produces a normal-looking 16.5 candidates/frame — nothing downstream on Linux flags it. The actual failure (pose extraction on a 36px-tall subject) is pose-gated and could not be measured on Linux; it is the documented rationale for the 0.25 pixel-height threshold, not remeasured here.",
+      "preventive_signal": "Two-layer: (1) contract fix — overall verdict must distinguish SUPPORTED from SUPPORTED_WITH_UNMEASURED_DIMENSIONS or callers must be required to consume notMeasured; (2) a pose-free proxy exists: moving-subject height fraction from frame-diff bounding boxes measures 0.006-0.125 on B5 clips vs 0.229-1.0 on adequate-subject clips (control_b5_big_subject measures 0.061 due to slow motion, so this proxy is noisy and needs calibration).",
+      "signal_exists_pre_capture": "The contract fix requires no new signal. The motion-based subject-size proxy is computable pre-capture but noisy; the true signal (pose bbox) exists on-device pre-capture on iPhone (Vision runs live) but not in this Linux pipeline.",
+      "needs_learned_calibration": "Contract fix: no. Motion-proxy threshold: yes, on labeled real footage.",
+      "current_threshold_identifiable_from_data": "The 0.25 pose-height threshold itself is documented as provisional from Wave-earlier pose failure analysis; it is not re-derivable from this experiment.",
+      "classification": "A",
+      "classification_rationale": "The primary defect is the verdict contract: a clip with the critical dimensions unmeasured is reported with the same overall status as a fully-verified clip. That is a logic/contract bug independent of any new signal."
+    },
+    "B6_rotate_tag_normalization": {
+      "input_condition": "Identical pixel content delivered with a rotation metadata tag (portrait container + rotate tag) instead of baked-in orientation.",
+      "current_signals_measured": "laplacianVarianceMedian drops from 376.4 (untagged control_base) to 266.0 (rotate-tagged) — a 29% change from metadata alone, because sampling scales to a fixed 320px width of the display-rotated frame, changing the effective sampling resolution per axis.",
+      "why_envelope_passes": "Both sides of this construction currently pass (266 >= 100), but the same normalization inconsistency moves clips near the threshold across the boundary in either direction depending on orientation tagging — the measurement is not rotation-invariant.",
+      "downstream_failure_measured": "OOD gate ANALYZABLE; ball candidates 34.99/frame vs 16.53 on the untagged identical content — the different effective sampling scale materially changes downstream candidate statistics for identical pixels.",
+      "preventive_signal": "Normalize sampling by the long side (or by total pixel count) of the display-oriented frame instead of fixed width. Verified: long-side-normalized Laplacian variance measures 377 on the rotate-tagged clip vs 376.4 untagged (<0.2% difference), restoring rotation invariance.",
+      "signal_exists_pre_capture": true,
+      "needs_learned_calibration": "No. This is a deterministic normalization fix; existing thresholds keep their meaning for landscape content.",
+      "current_threshold_identifiable_from_data": "The threshold is fine; the measurement feeding it is orientation-dependent.",
+      "classification": "B",
+      "classification_rationale": "Pure normalization bug: identical pixels yield different measurements depending on container rotation metadata; a long-side normalization verified in this experiment removes the discrepancy."
+    },
+    "FR1_low_texture_false_reject": {
+      "input_condition": "Perfectly sharp but low-texture scene (flat walls/court, few edges); genuinely analyzable footage.",
+      "current_signals_measured": "laplacianVarianceMedian 78.6 < 100 -> motion_blur DEGRADED (false reject). control_fr1_blurred (actually blurred version) measures 5.8 (correct reject).",
+      "why_envelope_fails_here": "Laplacian variance conflates 'sharp but textureless' with 'blurred': it measures texture quantity, not focus quality.",
+      "downstream_failure_measured": "OOD gate: ANALYZABLE. Ball candidates: 0.02/frame — with this synthetic low-texture construction the ball stage also starves, so on THIS clip the reject is arguably beneficial for ball tracking; but the pose/form-analysis path (not measurable on Linux) does not require background texture, so the false reject remains real for pose-only use. Honest note: this experiment cannot quantify the pose-path cost on Linux.",
+      "preventive_signal": "Sharpness measured on detected edges only, e.g. top-1% edge gradient magnitude: 89.0 for sharp low-texture vs 66.3 for its blurred control (separates within the pair), while texture-rich sharp clips measure 148-239. A ratio-based or edge-conditional sharpness metric decouples focus from texture quantity.",
+      "signal_exists_pre_capture": true,
+      "needs_learned_calibration": "Yes. The sharp-vs-blurred separation within low-texture content (89 vs 66) is much narrower than across texture levels; a robust boundary requires labeled real low-texture captures.",
+      "current_threshold_identifiable_from_data": "The lapVar>=100 threshold cannot be set anywhere that both accepts sharp low-texture and rejects blurred textured footage — the metric is one-dimensional over a two-dimensional (focus x texture) space.",
+      "classification": "D",
+      "classification_rationale": "An edge-conditional sharpness signal is computable today, but its measured margin on low-texture content is narrow (89 vs 66); locking a threshold without labeled real footage would be threshold-gaming. Needs real labels."
+    },
+    "B7_crop_jitter_shake": {
+      "input_condition": "Handheld-shake simulation via crop-window jitter on synthetic low-contrast content; nominally equivalent shake applied to real footage is rejected.",
+      "current_signals_measured": "b7_synthetic_shake: meanAbsFrameDiff 13.05 <= 33 -> SUPPORTED. control_b7_real_shake (same nominal jitter on real afn-sasebo-rally1 footage): 35.51 -> DEGRADED. control_b7_real_unshaken: 8.97 -> SUPPORTED.",
+      "why_envelope_passes": "meanAbsFrameDiff measures shake x scene contrast, not shake magnitude: the same geometric camera motion produces 13.05 on low-contrast synthetic content and 35.51 on real content. Low-contrast shaky footage passes; the threshold is content-dependent.",
+      "downstream_failure_measured": "b7_synthetic_shake: OOD ANALYZABLE, 24.12 candidates/frame vs 16.53 unshaken control — shake inflates false motion candidates ~1.5x while passing all gates. control_b7_real_shake inflates to 39.48/frame with chronicCellFraction 0.146 (vs 0.196 unshaken real, 0.014 synthetic base).",
+      "preventive_signal": "Contrast-normalized frame difference (meanAbsFrameDiff / spatial luma std): 0.201 for synthetic shake vs 0.054 unshaken synthetic; 0.634 for real shake vs 0.164 unshaken real — a consistent ~3.7-3.9x shaken/unshaken ratio across content types, unlike the raw diff whose absolute value is content-dependent. Full fix is block-motion/global-registration estimation, also computable on the same sampled frames.",
+      "signal_exists_pre_capture": true,
+      "needs_learned_calibration": "Yes for the normalized-diff threshold (the shaken/unshaken ratio is stable but absolute band placement needs real labeled handheld footage); a registration-based pixel-displacement estimate could use a physically-motivated threshold with less calibration.",
+      "current_threshold_identifiable_from_data": "The <=33 raw-diff threshold is not identifiable as a shake threshold from data because the quantity it bounds is not shake.",
+      "classification": "C",
+      "classification_rationale": "Contrast-normalized (or registration-based) motion is computable today from the same sampling and, in this experiment, gives consistent shaken/unshaken separation across synthetic and real content where the raw metric contradicts itself; final band placement is a secondary D."
+    }
+  },
+  "findings": [
+    "Counts: of 8 pinned bypasses, 5 exact constructions pass the envelope overall (B1, B2, B4, B5, B6), 1 falsely rejects (FR1), 1 passes only its targeted dimension while other dimensions incidentally reject (B3), and 1 passes while its real-footage equivalent is rejected (B7).",
+    "Downstream (Linux-measurable, 118 frames/clip): 3 bypasses cause ball-candidate flooding (B1 39.93/frame with 98.8% chronic cells; B4 40.0/frame; B7 24.12/frame vs 16.53 baseline) and 2 cause near-total candidate starvation (B2-moving 0.03/frame with 115/118 empty frames; FR1 0.02/frame). B5-moving and B6 pass all Linux-measurable downstream stages; their real failure surface (pose extraction / threshold-boundary drift) is pose-gated or boundary-dependent.",
+    "Confounder found and controlled: the exact pinned B2 and B5 constructions freeze the background and are caught by the OOD still-image check for the wrong reason; moving realism variants confirm the intended bypass survives all gates.",
+    "The envelope already computes brightnessStdLuma but never evaluates it (B3); and the overall verdict silently equates 'all dimensions pass' with 'all measured dimensions pass' (B5) — two defects fixable without any new signal.",
+    "Classification tally: A=1 (B5), B=1 (B6), C=4 (B1, B2, B3, B7), D=2 (B4, FR1), E=0. No bypass is fundamentally unobservable pre-capture.",
+    "Not measured (honest gaps): Apple Vision pose, canonical stroke cascade, and iPhone capture behavior — all pose-gated or platform-gated off Linux. B5's and FR1's pose-path consequences are therefore documented from prior-wave rationale, not remeasured."
+  ],
+  "verdict": "ORANGE",
+  "verdict_rationale": "All 8 dossiers are complete with measured envelope signals, actually-executed Linux downstream stages (OOD gate + ball candidates, 118 frames/clip, 17 clips), matched controls, and verified preventive signals (including a verified normalization fix for B6 and >2x measured separations for B1/B2/B3/B7 candidate signals). ORANGE rather than GREEN because: (a) the pose-gated downstream stages could not be run on Linux, so B5/FR1 downstream costs rest partly on prior-wave documentation; (b) all preventive-signal separations were measured on synthetic constructions plus one real clip (afn-sasebo-rally1) — threshold placement for the C/D items still requires labeled real footage; (c) classifications are evidence-backed but the D items are explicitly not resolvable without new labels."
+}
