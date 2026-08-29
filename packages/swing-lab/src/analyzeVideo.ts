@@ -98,7 +98,11 @@ import {
   type TwoPassSchedule,
 } from "./paddleSchedule.js";
 import { renderReport, type LabRunReport, type PlayerStageReport } from "./report.js";
-import { detectPaddleWindow, startPaddleWorker, type PaddleServeWorker } from "./paddleWorker.js";
+import {
+  detectPaddleWindow,
+  startPaddleWorker,
+  type PaddleWorkerSupervisor,
+} from "./paddleWorker.js";
 
 /**
  * swing-lab analyze-video — the offline research pipeline, end to end:
@@ -252,7 +256,7 @@ async function main(): Promise<void> {
   }
 }
 
-async function run(args: CliArgs, paddleWorker: PaddleServeWorker | null): Promise<void> {
+async function run(args: CliArgs, paddleWorker: PaddleWorkerSupervisor | null): Promise<void> {
   // ── 1. Native extraction (measured pose + ball candidates) ─────────────
   const timings: Record<string, number> = {};
   const posePath = join(args.outDir, "pose.json");
@@ -982,7 +986,7 @@ async function preparePaddleDetections(input: {
   eventPeaksMs: readonly number[];
   timings: Record<string, number>;
   /** Warm detector worker; null → one-shot path. Worker failures fall back. */
-  worker: PaddleServeWorker | null;
+  worker: PaddleWorkerSupervisor | null;
 }): Promise<PaddleDetectionPrep> {
   const python = join(REPO_ROOT, "tools/paddle-lab/.venv/bin/python");
   const script = join(REPO_ROOT, "tools/paddle-lab/detect_paddle.py");
