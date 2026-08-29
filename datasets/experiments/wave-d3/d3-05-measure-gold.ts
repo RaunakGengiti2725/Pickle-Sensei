@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 // D3-05 positive-gold coverage: run segmentPhasesTemporalV2 on the COMMITTED
 // wave-a event-bounds gold (datasets/paddle-bench/stroke-gold.json) against
 // wrist speeds derived from the committed windowed people.json bundles

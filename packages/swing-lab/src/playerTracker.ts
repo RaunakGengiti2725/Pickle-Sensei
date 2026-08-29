@@ -254,7 +254,7 @@ export function initializeTargetFromSeed(
   };
 
   const risks: string[] = [];
-  let chosen: PlayerTrack | undefined; // eslint-disable-line prefer-const
+  let chosen: PlayerTrack | undefined;
   let confidence = 0.5;
 
   if (seed.mode === "user_tapped_person") {

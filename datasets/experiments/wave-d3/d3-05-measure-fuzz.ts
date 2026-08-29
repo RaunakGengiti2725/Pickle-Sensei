@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 // Coverage measurement for D3-05: segmentation counts over the SAME fuzz
 // corpus used by test/propertyInvariants.test.ts (300 seeds).
 // Run from packages/swing-lab (its tsx + deps):
