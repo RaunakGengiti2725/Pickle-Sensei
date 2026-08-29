@@ -10,11 +10,20 @@ import type pg from "pg";
  */
 
 const LATEST_TRAINING_CONSENT = `
-  SELECT DISTINCT ON (cs.user_id) cs.user_id, cr.action
+  SELECT DISTINCT ON (cs.user_id) cs.user_id, cr.action, cr.capture_mode
   FROM consent_subject cs
   JOIN consent_record cr ON cr.subject_pseudonym = cs.pseudonym
   WHERE cr.scope = 'model_training'
   ORDER BY cs.user_id, cr.seq DESC`;
+
+/**
+ * Capture-mode narrowing is enforced fail-closed: a grant scoped to a single
+ * capture mode authorizes only clips of that mode, but ml_dataset_item rows
+ * carry no capture-mode provenance, so mode-narrowed (or mode-less) grants
+ * cannot be matched to items and authorize none of them. Only an explicit
+ * 'all_captures' grant covers items regardless of how they were captured.
+ */
+const GRANT_COVERS_ALL_ITEMS = "latest.capture_mode = 'all_captures'";
 
 export async function hasActiveModelTrainingConsent(
   pool: pg.Pool | pg.PoolClient,
@@ -28,7 +37,8 @@ export async function hasActiveModelTrainingConsent(
 }
 
 const LATEST_TRAINING_CONSENT_WITH_VERSION = `
-  SELECT DISTINCT ON (cs.user_id) cs.user_id, cr.action, cr.consent_version AS grant_consent_version
+  SELECT DISTINCT ON (cs.user_id)
+    cs.user_id, cr.action, cr.capture_mode, cr.consent_version AS grant_consent_version
   FROM consent_subject cs
   JOIN consent_record cr ON cr.subject_pseudonym = cs.pseudonym
   WHERE cr.scope = 'model_training'
@@ -63,7 +73,8 @@ export async function selectTrainingEligibleItems(
      FROM ml_dataset_item i
      JOIN (${LATEST_TRAINING_CONSENT_WITH_VERSION}) latest
        ON latest.user_id = i.source_user_id AND latest.action = 'granted'
-     WHERE i.removed_at IS NULL AND i.source_user_id IS NOT NULL`,
+     WHERE i.removed_at IS NULL AND i.source_user_id IS NOT NULL
+       AND ${GRANT_COVERS_ALL_ITEMS}`,
   );
   return rows as TrainingEligibleItem[];
 }
@@ -95,7 +106,8 @@ export async function verifyTrainingEligibility(
      FROM ml_dataset_item i
      JOIN (${LATEST_TRAINING_CONSENT}) latest
        ON latest.user_id = i.source_user_id AND latest.action = 'granted'
-     WHERE i.removed_at IS NULL AND i.source_user_id IS NOT NULL AND i.id = ANY($1::uuid[])`,
+     WHERE i.removed_at IS NULL AND i.source_user_id IS NOT NULL
+       AND ${GRANT_COVERS_ALL_ITEMS} AND i.id = ANY($1::uuid[])`,
     [items.map((i) => i.id)],
   );
   const stillEligible = new Set(rows.map((r) => (r as { id: string }).id));

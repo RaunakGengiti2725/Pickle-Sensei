@@ -101,6 +101,8 @@ describe.skipIf(!testUrl)("media error taxonomy red team (isolated PostgreSQL sc
       oidcAudience: undefined,
       oidcJwksUrl: undefined,
       sqsQueueUrl: undefined,
+      consentExportSigningKey: undefined,
+      consentExportSigningKeyId: "consent-export-k1",
       appleIapConfigured: false,
       googlePlayConfigured: false,
     };

@@ -1,0 +1,166 @@
+{
+  "id": "f23-rt-consent-abuse",
+  "wave": "F",
+  "mission": "Attack the consent system beyond e21's happy-path lifecycle: concurrent grant/withdraw races, replayed consent decisions, version-downgrade attempts, training-eligibility leaks after withdrawal across every selection code path, ledger export tampering detection, SQL-level append-only bypass via the service layer.",
+  "verdict": "ORANGE",
+  "verdict_rationale": "6 of 7 confirmed abuses are fixed with regression tests running against real PostgreSQL. The 7th (a superuser/table-owner DB role can disable the append-only triggers) is unfixable inside the service layer and is recorded as a proven negative requiring a role-separation change outside this workstream's ownership.",
+  "branch": "devin/wave-f/f23-rt-consent-abuse",
+  "base_branch": "origin/devin/1787988068-wave-c-integration",
+  "base_commit": "8588ddd7a6d04890c354f2e5ffc433ad903454dc",
+  "dataset_scope": {
+    "labelled_media_used": "none",
+    "holdout_cases_touched": "none (wm-dink-01 and afn-vic-rally1 not read, listed, or referenced)",
+    "fresh_candidate_pool_touched": "none",
+    "fixtures": "All consent fixtures are synthetic: DB rows created inside a throwaway PostgreSQL schema, and file fixtures whose subject pseudonyms are prefixed SYNTHETIC-TEST-FIXTURE. No dataset records were added or rewritten.",
+    "evaluation_grouping": "n/a — this is an adversarial correctness workstream, not a model evaluation. Every case is grouped by an independent synthetic consent subject (one app_user + one pseudonymous ledger per case); no per-frame or per-clip splits are involved."
+  },
+  "configuration": {
+    "os": "Ubuntu",
+    "node": "v20.18.1",
+    "pnpm": "9.15.9",
+    "postgres": "docker compose service postgres_test, DATABASE_URL_TEST=postgres://pickle:***@localhost:5433/pickle_test",
+    "test_runner": "vitest 3.2.7",
+    "new_env_vars": [
+      "CONSENT_EXPORT_SIGNING_KEY (unset => unsigned v1 export, current behaviour preserved)",
+      "CONSENT_EXPORT_SIGNING_KEY_ID (default consent-export-k1)"
+    ]
+  },
+  "attack_surface_enumerated": {
+    "training_eligible_media_selection_paths": [
+      "services/media-worker/src/trainingConsent.ts selectTrainingEligibleItems (sanctioned selector)",
+      "services/media-worker/src/trainingConsent.ts selectTrainingEligibleItemsWithWatermark",
+      "services/media-worker/src/trainingConsent.ts verifyTrainingEligibility (pre-use re-check)",
+      "services/media-worker/src/trainingConsent.ts hasActiveModelTrainingConsent",
+      "services/api/src/modules/privacy/routes.ts legacy ml_training_consent read/write (does not select media; ledger is authoritative)",
+      "services/media-worker/src/worker.ts deletion path (sets removed_at, never selects for training)",
+      "packages/first-party-intake/src/intake.ts + consentRef.ts (export-envelope gate at intake time)",
+      "packages/swing-lab/src/exportDataset.ts (per-capture consent.state gate, no ledger read)"
+    ],
+    "conclusion": "All user-sourced training selection flows through trainingConsent.ts; no unguarded SELECT of ml_dataset_item for training use exists elsewhere in the repo (grep of ml_dataset_item / ml_training_consent across all *.ts and *.sql)."
+  },
+  "findings": [
+    {
+      "id": "F23-1",
+      "severity": "high",
+      "title": "Replayed consent decision resurrects consent after withdrawal",
+      "observed": "POST /v1/me/consent/grant carried no decision identity, so a captured or offline-queued grant re-delivered after a withdrawal appended a fresh 'granted' row and made the subject training-eligible again. Reproduced against real Fastify + PostgreSQL.",
+      "fix": "Optional single-use decisionId (partial unique index ux_consent_record_decision_id, INSERT ... ON CONFLICT DO NOTHING => 409 consent.decision_replayed) plus decidedAtIso staleness check: a decision stamped before the scope's seq-latest ledger action is rejected 409 consent.decision_stale.",
+      "regression_tests": [
+        "services/api/test/consent.abuse.integration.test.ts F23-1a",
+        "services/api/test/consent.abuse.integration.test.ts F23-1b",
+        "services/api/test/consent.abuse.integration.test.ts F23-1c"
+      ],
+      "status": "fixed"
+    },
+    {
+      "id": "F23-2",
+      "severity": "high",
+      "title": "consent_subject pseudonym repointing re-attributes an append-only ledger",
+      "observed": "The service role could UPDATE consent_subject.pseudonym (or user_id), aiming one account at another subject's ledger — inheriting that subject's grants, i.e. a training-eligibility leak — while consent_record itself stayed untouched and 'append-only'.",
+      "fix": "0017 BEFORE UPDATE trigger consent_subject_pseudonym_immutable makes both pseudonym and user_id immutable.",
+      "regression_tests": ["services/api/test/consent.abuse.integration.test.ts F23-2"],
+      "status": "fixed"
+    },
+    {
+      "id": "F23-3",
+      "severity": "medium",
+      "title": "Silent attribution erasure by deleting the mapping row",
+      "observed": "consent_record has no FK to consent_subject (by design), so DELETE FROM consent_subject orphaned the ledger: /status and /export reported an empty history while the rows survived, and the erasure left no trace.",
+      "fix": "0017 tombstones every mapping deletion into append-only consent_subject_erasure (BEFORE DELETE trigger; erasure table itself rejects UPDATE/DELETE/TRUNCATE). findOrphanedLedgerSubjects (services/api/src/modules/consent/integrity.ts) surfaces ledger subjects orphaned WITHOUT a tombstone.",
+      "regression_tests": ["services/api/test/consent.abuse.integration.test.ts F23-3"],
+      "status": "fixed"
+    },
+    {
+      "id": "F23-4",
+      "severity": "medium",
+      "title": "Arbitrary and downgraded consent versions accepted",
+      "observed": "consentVersion was any 1..64-char string: 'totally-made-up-v9' was accepted and recorded as the authorizing contract, and a re-grant under model-training-v1 while model-training-v2 was on record silently downgraded the authorizing contract (including through a withdraw/regrant cycle).",
+      "fix": "checkConsentVersionAcceptable in packages/shared-types/src/consent.ts (scope-canonical <prefix>-v<major>, numeric major comparison, upgrades allowed, downgrades rejected) wired into the grant route => 400 consent.version_rejected. Contract shape versioned, not softened.",
+      "regression_tests": [
+        "services/api/test/consent.abuse.integration.test.ts F23-4a",
+        "services/api/test/consent.abuse.integration.test.ts F23-4b",
+        "packages/shared-types/test/consent.redteam.test.ts 'consent version acceptance (f23)' (5 cases)"
+      ],
+      "status": "fixed"
+    },
+    {
+      "id": "F23-5",
+      "severity": "high",
+      "title": "Export tampering and stale-export replay were undetectable",
+      "observed": "The v1 export envelope's integrity fields (recordCount, maxSeq, recordsSha256) are all recomputable by whoever holds the file: dropping the trailing withdrawal and rehashing produced an envelope that passed every check and authorized intake (demonstrated in F23-5a). A genuine older export taken before a withdrawal also authorized intake indefinitely.",
+      "fix": "Export contract v2 (consent-ledger-export-v2): HMAC-SHA256 signature over the canonical envelope header, emitted when CONSENT_EXPORT_SIGNING_KEY is set. Intake verifies it via loadConsentLedger(path, { signingKey, minMaxSeq }); a configured host refuses unsigned v1 envelopes and bare arrays (no signature downgrade), and rejects an envelope whose maxSeq is behind the subject's already-seen watermark (stale replay). v1 is left intact and unsoftened for keyless consumers.",
+      "regression_tests": [
+        "services/api/test/consent.abuse.integration.test.ts F23-5",
+        "packages/first-party-intake/test/consentExport.redteam.test.ts F23-5a..F23-5e"
+      ],
+      "status": "fixed"
+    },
+    {
+      "id": "F23-6",
+      "severity": "high",
+      "title": "Capture-mode narrowing was unenforced — a narrowed grant authorized every clip",
+      "observed": "consent_record.capture_mode was recorded on grants but read by no selector. A grant scoped to 'imported_video' therefore authorized the user's automatic-trigger captures too: a training-eligibility leak wider than the consent given.",
+      "fix": "trainingConsent.ts now requires the authorizing grant to be capture_mode = 'all_captures' in selectTrainingEligibleItems and verifyTrainingEligibility. ml_dataset_item carries no capture-mode provenance, so narrowed (or mode-less) grants authorize nothing — fail closed rather than over-select.",
+      "regression_tests": ["services/media-worker/test/trainingConsent.redteam.test.ts F23-6"],
+      "status": "fixed"
+    },
+    {
+      "id": "F23-7",
+      "severity": "high",
+      "title": "PROVEN NEGATIVE: append-only is only as strong as the DB role",
+      "observed": "Through the service connection every mutation is blocked: UPDATE, DELETE and TRUNCATE on consent_record all raise 'consent_record is append-only' (verified). But the test/dev connection owns the tables, and an owner/superuser role can ALTER TABLE consent_record DISABLE TRIGGER ALL and then rewrite or delete history — reproduced during probing. No service-layer code change can prevent this.",
+      "fix": "Not fixable within this ownership boundary. Requires role separation: the application connects as a non-owner role holding INSERT/SELECT only, with table ownership and trigger rights held by a migration role, plus an out-of-band ledger digest witness. Left as an honest negative rather than a weakened claim; migrations 0015/0016 remain unmodified.",
+      "regression_tests": ["services/api/test/consent.abuse.integration.test.ts F23-6 (service-role bypass attempts all rejected)"],
+      "status": "open_external_to_ownership"
+    }
+  ],
+  "non_findings": [
+    "Concurrent grant/withdraw: 12 interleaved requests (6 grants + 6 withdrawals) all returned 200, produced exactly 12 append-only rows in monotonically increasing seq order, and derived status matched the seq-latest row and the training gate exactly. Per-subject pg_advisory_xact_lock was added so the version and staleness checks resolve against committed state rather than a stale read.",
+    "Withdrawal always flags dataset items (removed_at) and a re-grant never un-removes them (existing RT-3 still passes).",
+    "Legacy privacy-center revoke still reaches the ledger (RT-1 unchanged); the legacy ml_training_consent table is not consulted by any training selector.",
+    "SQL-like payloads in consentVersion/device/strokeIntent are inert: every query is parameterized (probed with quote/comment/DROP payloads; now additionally rejected by the version contract).",
+    "Default-deny holds: no records, mapping row without records, and orphaned ledgers all deny."
+  ],
+  "metrics": {
+    "attack_scenarios_executed": 22,
+    "confirmed_leaks": 7,
+    "leaks_fixed": 6,
+    "proven_negatives": 1,
+    "new_regression_tests": 19,
+    "test_files_added": 2,
+    "test_files_extended": 2,
+    "migrations_added": 1,
+    "concurrent_requests_in_race_test": 12,
+    "suites_green": {
+      "services/api": "96 tests, 10 files",
+      "services/media-worker": "25 tests, 4 files",
+      "packages/first-party-intake": "26 tests, 3 files",
+      "packages/shared-types": "38 tests, 6 files",
+      "packages/database": "7 tests, 1 file"
+    }
+  },
+  "artifacts": {
+    "code": [
+      "packages/shared-types/src/consent.ts (version contract helpers, export contract v2 + canonical signing payload)",
+      "packages/api-contracts/src/schemas.ts (decisionId/decidedAtIso, v2 export envelope schema)",
+      "packages/database/migrations/0017_consent_abuse_hardening.sql",
+      "services/api/src/modules/consent/routes.ts (version gate, replay/staleness gate, advisory lock, signed export)",
+      "services/api/src/modules/consent/integrity.ts (findOrphanedLedgerSubjects)",
+      "services/api/src/config.ts (export signing key config)",
+      "services/media-worker/src/trainingConsent.ts (capture-mode enforcement)",
+      "packages/first-party-intake/src/consentRef.ts (signature verification, downgrade refusal, stale-replay watermark)"
+    ],
+    "tests": [
+      "services/api/test/consent.abuse.integration.test.ts (10 cases, real Fastify + PostgreSQL)",
+      "packages/first-party-intake/test/consentExport.redteam.test.ts (5 cases)",
+      "services/media-worker/test/trainingConsent.redteam.test.ts (F23-6 added)",
+      "packages/shared-types/test/consent.redteam.test.ts (f23 version-acceptance block added)"
+    ]
+  },
+  "blocked_external": [],
+  "honesty_notes": [
+    "No Mac/iPhone/Apple Vision measurements, coach reviews, or Mobbin research are claimed — none were performed.",
+    "F23-5a is deliberately kept as a passing test that DEMONSTRATES the v1 forgery succeeding; the fix is the v2 contract, not a claim that v1 is safe.",
+    "F23-7 is reported as an unresolved architectural weakness rather than closed."
+  ]
+}

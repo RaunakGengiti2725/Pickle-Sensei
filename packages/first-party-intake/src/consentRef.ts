@@ -1,10 +1,12 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import {
   CONSENT_ACTIONS,
   CONSENT_LEDGER_EXPORT_VERSION,
+  CONSENT_LEDGER_EXPORT_VERSION_V2,
   CONSENT_SCOPES,
   CONSENT_SOURCES,
+  canonicalConsentExportSigningPayload,
   canonicalConsentRecordsJson,
   deriveConsentStatus,
   type ConsentRecord,
@@ -87,12 +89,14 @@ function verifyExportEnvelope(
   envelope: Record<string, unknown>,
   records: ConsentRecord[],
   ledgerPath: string,
+  options?: ConsentLedgerVerifyOptions,
 ): void {
   const problems: string[] = [];
-  if (envelope.exportVersion !== CONSENT_LEDGER_EXPORT_VERSION) {
+  const version = envelope.exportVersion;
+  if (version !== CONSENT_LEDGER_EXPORT_VERSION && version !== CONSENT_LEDGER_EXPORT_VERSION_V2) {
     problems.push(
-      `unknown exportVersion ${String(envelope.exportVersion)} ` +
-        `(expected ${CONSENT_LEDGER_EXPORT_VERSION})`,
+      `unknown exportVersion ${String(version)} ` +
+        `(expected ${CONSENT_LEDGER_EXPORT_VERSION} or ${CONSENT_LEDGER_EXPORT_VERSION_V2})`,
     );
   }
   if (envelope.recordCount !== records.length) {
@@ -125,6 +129,51 @@ function verifyExportEnvelope(
   } else if (subjects.size > 0 && (subjects.size > 1 || !subjects.has(envelope.subjectPseudonym))) {
     problems.push("records reference a subject other than the envelope's subjectPseudonym");
   }
+  if (options?.signingKey !== undefined) {
+    // A host provisioned with the signing key never accepts an unsigned
+    // envelope: stripping the signature (serving v1 instead of v2) would
+    // otherwise be a silent downgrade to hash-only integrity, which anyone
+    // who can edit the file can recompute.
+    if (version !== CONSENT_LEDGER_EXPORT_VERSION_V2) {
+      problems.push(
+        "signing key is configured but the export is unsigned " +
+          `(${String(version)}); refusing signature downgrade`,
+      );
+    } else {
+      const signature = envelope.signature as Record<string, unknown> | undefined;
+      const value = typeof signature?.value === "string" ? signature.value : "";
+      const expected = createHmac("sha256", options.signingKey)
+        .update(
+          canonicalConsentExportSigningPayload({
+            exportVersion: CONSENT_LEDGER_EXPORT_VERSION_V2,
+            exportedAtIso: String(envelope.exportedAtIso),
+            subjectPseudonym: String(envelope.subjectPseudonym),
+            recordCount: Number(envelope.recordCount),
+            maxSeq: envelope.maxSeq === null ? null : Number(envelope.maxSeq),
+            recordsSha256: String(envelope.recordsSha256),
+          }),
+        )
+        .digest("hex");
+      const valueBuf = Buffer.from(value, "utf8");
+      const expectedBuf = Buffer.from(expected, "utf8");
+      if (valueBuf.length !== expectedBuf.length || !timingSafeEqual(valueBuf, expectedBuf)) {
+        problems.push("export signature does not verify against the configured signing key");
+      }
+    }
+  }
+  if (options?.minMaxSeq !== undefined) {
+    // Replay/rollback detection: an export is a snapshot, so an attacker can
+    // present an old-but-internally-valid envelope taken before a withdrawal.
+    // The host pins the highest maxSeq it has already accepted for the
+    // subject; the ledger is append-only, so maxSeq may only move forward.
+    const maxSeq = envelope.maxSeq === null ? 0 : Number(envelope.maxSeq);
+    if (!Number.isFinite(maxSeq) || maxSeq < options.minMaxSeq) {
+      problems.push(
+        `export maxSeq ${String(envelope.maxSeq)} is behind the already-seen ` +
+          `ledger watermark ${options.minMaxSeq}; stale export replay`,
+      );
+    }
+  }
   if (problems.length > 0) {
     throw new Error(
       `consent ledger export ${ledgerPath} failed integrity verification:\n${problems.join("\n")}`,
@@ -132,22 +181,40 @@ function verifyExportEnvelope(
   }
 }
 
+export interface ConsentLedgerVerifyOptions {
+  /** HMAC key for export contract v2. When set, unsigned (v1) envelopes and
+   * bad signatures are rejected outright. */
+  signingKey?: string;
+  /** Highest export maxSeq this host has previously accepted for the
+   * subject. Envelopes behind it are stale replays and are rejected. */
+  minMaxSeq?: number;
+}
+
 /**
  * Parse an exported consent ledger file: an export envelope (integrity
  * verified) or a bare JSON array of rows. Throws on malformed JSON/shape
  * and on any envelope integrity failure.
  */
-export function loadConsentLedger(ledgerPath: string): ConsentRecord[] {
+export function loadConsentLedger(
+  ledgerPath: string,
+  options?: ConsentLedgerVerifyOptions,
+): ConsentRecord[] {
   const raw = readFileSync(ledgerPath, "utf8");
   const parsed: unknown = JSON.parse(raw);
   if (Array.isArray(parsed)) {
+    if (options?.signingKey !== undefined) {
+      throw new Error(
+        `consent ledger ${ledgerPath} is a bare record array but a signing key ` +
+          "is configured; only signed export envelopes are accepted",
+      );
+    }
     return parseRecords(parsed, ledgerPath);
   }
   if (typeof parsed === "object" && parsed !== null) {
     const envelope = parsed as Record<string, unknown>;
     if (Array.isArray(envelope.records)) {
       const records = parseRecords(envelope.records, ledgerPath);
-      verifyExportEnvelope(envelope, records, ledgerPath);
+      verifyExportEnvelope(envelope, records, ledgerPath, options);
       return records;
     }
   }

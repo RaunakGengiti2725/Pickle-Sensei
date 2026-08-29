@@ -23,6 +23,13 @@ import {
  * RT-9  The selection reports the ledger grant's consent version alongside
  *       the version stamped on the item at ingest, so a version upgrade
  *       mid-session is visible to training consumers.
+ *
+ * Wave F f23 additions:
+ * F23-6 BREAK (fixed): a grant narrowed to one capture mode
+ *       (capture_mode = 'imported_video') authorized every item of the user,
+ *       including automatic-trigger captures, because no selector read
+ *       capture_mode. ml_dataset_item carries no capture-mode provenance, so
+ *       narrowed grants now authorize nothing (fail-closed).
  */
 
 const testUrl = process.env["DATABASE_URL_TEST"];
@@ -53,6 +60,7 @@ describe.skipIf(!testUrl)("training consent withdrawal race (real PostgreSQL)", 
     userId: string,
     action: "granted" | "withdrawn",
     version = "model-training-v1",
+    captureMode = "all_captures",
   ): Promise<void> {
     const subject = await pool.query(
       `INSERT INTO consent_subject (user_id) VALUES ($1)
@@ -63,8 +71,8 @@ describe.skipIf(!testUrl)("training consent withdrawal race (real PostgreSQL)", 
     await pool.query(
       `INSERT INTO consent_record
          (subject_pseudonym, scope, action, consent_version, source, capture_mode)
-       VALUES ($1, 'model_training', $2, $3, 'mobile_settings', 'all_captures')`,
-      [subject.rows[0].pseudonym, action, version],
+       VALUES ($1, 'model_training', $2, $3, 'mobile_settings', $4)`,
+      [subject.rows[0].pseudonym, action, version, captureMode],
     );
   }
 
@@ -145,6 +153,31 @@ describe.skipIf(!testUrl)("training consent withdrawal race (real PostgreSQL)", 
     expect(items).toHaveLength(1);
     expect(items[0]!.consent_version).toBe("model-training-v1"); // stamped at ingest
     expect(items[0]!.grant_consent_version).toBe("model-training-v2"); // current authority
+  });
+
+  it("F23-6: a capture-mode-narrowed grant authorizes no items, and re-verification agrees", async () => {
+    const narrowedUser = await createUser("auth0|f23-narrowed");
+    await addDatasetItem(narrowedUser);
+    await appendConsent(narrowedUser, "granted", "model-training-v1", "all_captures");
+    const broad = (await selectTrainingEligibleItems(pool)).filter(
+      (i) => i.source_user_id === narrowedUser,
+    );
+    expect(broad).toHaveLength(1);
+
+    // The user narrows consent to imported video only. The dataset item has no
+    // capture-mode provenance, so it can no longer be shown to be covered.
+    await appendConsent(narrowedUser, "granted", "model-training-v1", "imported_video");
+    const narrowed = (await selectTrainingEligibleItems(pool)).filter(
+      (i) => i.source_user_id === narrowedUser,
+    );
+    expect(narrowed).toHaveLength(0);
+    expect(await verifyTrainingEligibility(pool, broad)).toHaveLength(0);
+
+    // Widening back to all_captures restores eligibility.
+    await appendConsent(narrowedUser, "granted", "model-training-v1", "all_captures");
+    expect(
+      (await selectTrainingEligibleItems(pool)).filter((i) => i.source_user_id === narrowedUser),
+    ).toHaveLength(1);
   });
 
   it("RT: verifyTrainingEligibility keeps consented items and is a no-op on empty batches", async () => {

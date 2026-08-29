@@ -33,6 +33,79 @@ export const VIDEO_ANALYSIS_CONSENT_VERSION = "video-analysis-v1";
 export const MODEL_TRAINING_CONSENT_VERSION = "model-training-v1";
 
 /**
+ * Canonical consent-version naming per scope: `<scope-prefix>-v<major>`.
+ * A version string is a contract reference, not free text — a grant that
+ * names a string outside this shape references no contract at all and is
+ * therefore not a consent decision the ledger can represent.
+ */
+export const CONSENT_VERSION_PREFIX: Record<ConsentScope, string> = {
+  video_analysis: "video-analysis",
+  model_training: "model-training",
+};
+
+/**
+ * Parse the major number out of a scope-canonical consent version.
+ * Returns null when the string does not name a contract for that scope
+ * (wrong scope prefix, free text, padded/absent major).
+ */
+export function parseConsentVersionMajor(scope: ConsentScope, version: string): number | null {
+  const match = new RegExp(`^${CONSENT_VERSION_PREFIX[scope]}-v(0|[1-9][0-9]*)$`).exec(version);
+  if (match === null) return null;
+  return Number(match[1]);
+}
+
+export type ConsentVersionRejection = "malformed" | "downgrade";
+
+export interface ConsentVersionCheck {
+  ok: boolean;
+  rejection: ConsentVersionRejection | null;
+  message: string | null;
+  major: number | null;
+}
+
+/**
+ * Gate a requested grant version against the scope's naming contract and
+ * against the version already granted for that scope.
+ *
+ * Two rules, neither of which softens an existing contract:
+ *  1. the version must name a contract for the scope;
+ *  2. a grant may not move the authorizing version DOWN — re-granting under
+ *     a superseded (weaker) contract while a higher one is on record is a
+ *     downgrade attack, not a consent decision. Upgrades stay open: that is
+ *     how re-versioning is supposed to work.
+ */
+export function checkConsentVersionAcceptable(
+  scope: ConsentScope,
+  requestedVersion: string,
+  latestGrantedVersion: string | null,
+): ConsentVersionCheck {
+  const major = parseConsentVersionMajor(scope, requestedVersion);
+  if (major === null) {
+    return {
+      ok: false,
+      rejection: "malformed",
+      message:
+        `consentVersion "${requestedVersion}" does not name a ${scope} contract ` +
+        `(expected ${CONSENT_VERSION_PREFIX[scope]}-v<major>)`,
+      major: null,
+    };
+  }
+  const previous =
+    latestGrantedVersion === null ? null : parseConsentVersionMajor(scope, latestGrantedVersion);
+  if (previous !== null && major < previous) {
+    return {
+      ok: false,
+      rejection: "downgrade",
+      message:
+        `consentVersion ${requestedVersion} is a downgrade from the granted ` +
+        `${latestGrantedVersion}; consent contracts are re-versioned upward, never downward`,
+      major,
+    };
+  }
+  return { ok: true, rejection: null, message: null, major };
+}
+
+/**
  * One immutable ledger entry. `subjectPseudonym` is the only identity the
  * ledger carries — the user-id mapping lives in a separate table so the
  * audit trail survives account deletion without remaining identifying.
@@ -134,4 +207,54 @@ export function canonicalConsentRecordsJson(records: readonly ConsentRecord[]): 
       seq: r.seq ?? null,
     })),
   );
+}
+
+/**
+ * Export contract v2. v1's integrity fields (recordCount / maxSeq /
+ * recordsSha256) are *corruption*-evident only: anyone who can edit the file
+ * can drop a trailing withdrawal and recompute all three. v2 adds a keyed
+ * signature over the envelope header so an export is *tamper*-evident; v1 is
+ * kept intact and unsoftened for consumers that have no key material.
+ */
+export const CONSENT_LEDGER_EXPORT_VERSION_V2 = "consent-ledger-export-v2";
+
+export const CONSENT_LEDGER_EXPORT_VERSIONS = [
+  CONSENT_LEDGER_EXPORT_VERSION,
+  CONSENT_LEDGER_EXPORT_VERSION_V2,
+] as const;
+
+export interface ConsentLedgerExportSignature {
+  alg: "HMAC-SHA256";
+  keyId: string;
+  /** Hex HMAC over canonicalConsentExportSigningPayload(envelope). */
+  value: string;
+}
+
+export interface ConsentLedgerExportV2 extends Omit<ConsentLedgerExport, "exportVersion"> {
+  exportVersion: typeof CONSENT_LEDGER_EXPORT_VERSION_V2;
+  signature: ConsentLedgerExportSignature;
+}
+
+/**
+ * Deterministic signing payload: the envelope header, which already binds the
+ * records through recordsSha256. Signer and verifier must build exactly this
+ * string. Key material never appears here — HMAC computation lives in the
+ * Node-only consumers (API export route, intake host).
+ */
+export function canonicalConsentExportSigningPayload(header: {
+  exportVersion: string;
+  exportedAtIso: string;
+  subjectPseudonym: string;
+  recordCount: number;
+  maxSeq: number | null;
+  recordsSha256: string;
+}): string {
+  return JSON.stringify({
+    exportVersion: header.exportVersion,
+    exportedAtIso: header.exportedAtIso,
+    subjectPseudonym: header.subjectPseudonym,
+    recordCount: header.recordCount,
+    maxSeq: header.maxSeq,
+    recordsSha256: header.recordsSha256,
+  });
 }

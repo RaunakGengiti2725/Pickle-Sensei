@@ -1,12 +1,16 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type pg from "pg";
 import { ConsentGrantRequest, ConsentWithdrawRequest } from "@pickle/api-contracts";
 import {
   CONSENT_LEDGER_EXPORT_VERSION,
+  CONSENT_LEDGER_EXPORT_VERSION_V2,
+  canonicalConsentExportSigningPayload,
   canonicalConsentRecordsJson,
+  checkConsentVersionAcceptable,
   deriveConsentStatus,
   type ConsentLedgerExport,
+  type ConsentLedgerExportV2,
   type ConsentRecord,
 } from "@pickle/shared-types";
 import type { AppContext } from "../../context.js";
@@ -130,15 +134,65 @@ export function registerConsentRoutes(app: FastifyInstance, context: AppContext)
         parsed.error.message,
       );
     const { scope, consentVersion, source, device, captureMode, strokeIntent } = parsed.data;
+    const { decisionId, decidedAtIso } = parsed.data;
     const userId = request.user!.id;
-    const pseudonym = await withTransaction(pool, async (tx) => {
+    const outcome = await withTransaction(pool, async (tx) => {
       const p = await pseudonymFor(tx, userId);
-      await tx.query(
-        `INSERT INTO consent_record
-           (subject_pseudonym, scope, action, consent_version, source, device, capture_mode, stroke_intent)
-         VALUES ($1, $2, 'granted', $3, $4, $5, $6, $7)`,
-        [p, scope, consentVersion, source, device ?? null, captureMode, strokeIntent ?? null],
+      // Serialize per-subject writers so a concurrent grant/withdraw pair
+      // resolves against the row the other one appended, not a stale read.
+      await tx.query("SELECT pg_advisory_xact_lock(hashtext($1))", [p]);
+      const latest = await one<{ action: ConsentRecord["action"]; recorded_at: Date }>(
+        tx,
+        `SELECT action, recorded_at FROM consent_record
+         WHERE subject_pseudonym = $1 AND scope = $2
+         ORDER BY seq DESC LIMIT 1`,
+        [p, scope],
       );
+      const latestGrant = await one<{ consent_version: string }>(
+        tx,
+        `SELECT consent_version FROM consent_record
+         WHERE subject_pseudonym = $1 AND scope = $2 AND action = 'granted'
+         ORDER BY seq DESC LIMIT 1`,
+        [p, scope],
+      );
+      const versionCheck = checkConsentVersionAcceptable(
+        scope,
+        consentVersion,
+        latestGrant?.consent_version ?? null,
+      );
+      if (!versionCheck.ok) {
+        return { rejected: "version" as const, message: versionCheck.message! };
+      }
+      // A decision stamped before the scope's latest ledger action is a
+      // replay of an old decision, not a new one: the later action (e.g. a
+      // withdrawal) supersedes it and it must not resurrect consent.
+      if (
+        decidedAtIso !== undefined &&
+        latest !== null &&
+        Date.parse(decidedAtIso) < latest.recorded_at.getTime()
+      ) {
+        return { rejected: "stale" as const };
+      }
+      const inserted = await tx.query(
+        `INSERT INTO consent_record
+           (subject_pseudonym, scope, action, consent_version, source, device, capture_mode, stroke_intent, decision_id, decided_at)
+         VALUES ($1, $2, 'granted', $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (decision_id) WHERE decision_id IS NOT NULL DO NOTHING`,
+        [
+          p,
+          scope,
+          consentVersion,
+          source,
+          device ?? null,
+          captureMode,
+          strokeIntent ?? null,
+          decisionId ?? null,
+          decidedAtIso ?? null,
+        ],
+      );
+      if (inserted.rowCount === 0) {
+        return { rejected: "replayed" as const };
+      }
       await audit(tx, {
         actorUserId: userId,
         action: `consent.${scope}.granted`,
@@ -147,9 +201,39 @@ export function registerConsentRoutes(app: FastifyInstance, context: AppContext)
         requestId: request.id,
         metadata: { consentVersion, source },
       });
-      return p;
+      return { rejected: null, pseudonym: p };
     });
-    return statusPayload(pool, pseudonym);
+    if (outcome.rejected === "version") {
+      return sendFailure(
+        reply,
+        request,
+        400,
+        "permanent",
+        "consent.version_rejected",
+        outcome.message,
+      );
+    }
+    if (outcome.rejected === "stale") {
+      return sendFailure(
+        reply,
+        request,
+        409,
+        "permanent",
+        "consent.decision_stale",
+        "This consent decision predates a later ledger action and cannot be applied.",
+      );
+    }
+    if (outcome.rejected === "replayed") {
+      return sendFailure(
+        reply,
+        request,
+        409,
+        "permanent",
+        "consent.decision_replayed",
+        "This consent decision was already recorded; a decisionId is single-use.",
+      );
+    }
+    return statusPayload(pool, outcome.pseudonym);
   });
 
   app.post("/v1/me/consent/withdraw", { preHandler: app.authenticate }, async (request, reply) => {
@@ -169,6 +253,7 @@ export function registerConsentRoutes(app: FastifyInstance, context: AppContext)
     const userId = request.user!.id;
     const pseudonym = await withTransaction(pool, async (tx) => {
       const p = await pseudonymFor(tx, userId);
+      await tx.query("SELECT pg_advisory_xact_lock(hashtext($1))", [p]);
       const active = await one<{ consent_version: string }>(
         tx,
         `SELECT consent_version FROM consent_record
@@ -256,8 +341,7 @@ export function registerConsentRoutes(app: FastifyInstance, context: AppContext)
       requestId: request.id,
       metadata: { recordCount: records.length },
     });
-    const payload: ConsentLedgerExport = {
-      exportVersion: CONSENT_LEDGER_EXPORT_VERSION,
+    const header = {
       exportedAtIso: new Date().toISOString(),
       subjectPseudonym: row.pseudonym,
       recordCount: records.length,
@@ -265,6 +349,31 @@ export function registerConsentRoutes(app: FastifyInstance, context: AppContext)
       recordsSha256: createHash("sha256")
         .update(canonicalConsentRecordsJson(records))
         .digest("hex"),
+    };
+    const signingKey = context.config.consentExportSigningKey;
+    if (signingKey !== undefined) {
+      const payload: ConsentLedgerExportV2 = {
+        exportVersion: CONSENT_LEDGER_EXPORT_VERSION_V2,
+        ...header,
+        signature: {
+          alg: "HMAC-SHA256",
+          keyId: context.config.consentExportSigningKeyId,
+          value: createHmac("sha256", signingKey)
+            .update(
+              canonicalConsentExportSigningPayload({
+                exportVersion: CONSENT_LEDGER_EXPORT_VERSION_V2,
+                ...header,
+              }),
+            )
+            .digest("hex"),
+        },
+        records,
+      };
+      return payload;
+    }
+    const payload: ConsentLedgerExport = {
+      exportVersion: CONSENT_LEDGER_EXPORT_VERSION,
+      ...header,
       records,
     };
     return payload;

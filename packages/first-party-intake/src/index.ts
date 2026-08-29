@@ -13,6 +13,7 @@ export {
   loadConsentLedger,
   checkConsentForSubject,
   type ConsentCheckResult,
+  type ConsentLedgerVerifyOptions,
 } from "./consentRef.js";
 export {
   loadCaptureMeta,

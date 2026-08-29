@@ -10,6 +10,10 @@ export interface ApiConfig {
   oidcAudience: string | undefined;
   oidcJwksUrl: string | undefined;
   sqsQueueUrl: string | undefined;
+  /** HMAC key for signing consent ledger exports (export contract v2).
+   * When unset the export route serves the unsigned v1 envelope. */
+  consentExportSigningKey: string | undefined;
+  consentExportSigningKeyId: string;
   appleIapConfigured: boolean;
   googlePlayConfigured: boolean;
 }
@@ -32,6 +36,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     oidcAudience: env["OIDC_AUDIENCE"],
     oidcJwksUrl: env["OIDC_JWKS_URL"],
     sqsQueueUrl: env["SQS_QUEUE_URL"],
+    consentExportSigningKey: env["CONSENT_EXPORT_SIGNING_KEY"],
+    consentExportSigningKeyId: env["CONSENT_EXPORT_SIGNING_KEY_ID"] ?? "consent-export-k1",
     appleIapConfigured: Boolean(env["APPLE_IAP_PRIVATE_KEY"]),
     googlePlayConfigured: Boolean(env["GOOGLE_PLAY_SERVICE_ACCOUNT"]),
   };
