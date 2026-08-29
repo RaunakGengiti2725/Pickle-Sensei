@@ -1,0 +1,412 @@
+{
+  "generatedAt": "2026-08-29T18:04:17.512Z",
+  "platform": "LINUX-CPU",
+  "versions": {
+    "frameAnalyzability": "frame-analyzability-3",
+    "preAnalysisGate": "pre-analysis-gate-1",
+    "captureEnvelopeThresholds": "capture-envelope-thresholds-v0.3-provisional"
+  },
+  "labelsCreated": 0,
+  "rows": [
+    {
+      "id": "yt-tJuJ4MQdYy0",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UCoRUrqRSyLdZrph7rDF8lHw",
+      "durationSeconds": 60,
+      "fps": 60,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailure": null,
+      "envelopeOverall": "SUPPORTED",
+      "envelopeDimensions": [
+        {
+          "dimension": "player_pixel_height",
+          "status": "NOT_MEASURED",
+          "measured": null
+        },
+        {
+          "dimension": "player_visibility",
+          "status": "NOT_MEASURED",
+          "measured": null
+        }
+      ]
+    },
+    {
+      "id": "yt-I5wYCXCL4dY",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UCQn04yJl81xKf7qvJ_V4DGg",
+      "durationSeconds": 60,
+      "fps": 60,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailure": null,
+      "envelopeOverall": "SUPPORTED",
+      "envelopeDimensions": [
+        {
+          "dimension": "player_pixel_height",
+          "status": "NOT_MEASURED",
+          "measured": null
+        },
+        {
+          "dimension": "player_visibility",
+          "status": "NOT_MEASURED",
+          "measured": null
+        }
+      ]
+    },
+    {
+      "id": "yt-hktiyFnghIw",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UC83z_qzETSgcemFzZdtmFvw",
+      "durationSeconds": 60,
+      "fps": 29.97,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailure": null,
+      "envelopeOverall": "SUPPORTED",
+      "envelopeDimensions": [
+        {
+          "dimension": "player_pixel_height",
+          "status": "NOT_MEASURED",
+          "measured": null
+        },
+        {
+          "dimension": "player_visibility",
+          "status": "NOT_MEASURED",
+          "measured": null
+        }
+      ]
+    },
+    {
+      "id": "yt-Y7DOO0j_1P4",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UC83z_qzETSgcemFzZdtmFvw",
+      "durationSeconds": 60,
+      "fps": 29.97,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailure": null,
+      "envelopeOverall": "SUPPORTED",
+      "envelopeDimensions": [
+        {
+          "dimension": "player_pixel_height",
+          "status": "NOT_MEASURED",
+          "measured": null
+        },
+        {
+          "dimension": "player_visibility",
+          "status": "NOT_MEASURED",
+          "measured": null
+        }
+      ]
+    },
+    {
+      "id": "yt-iuVdtmGoTbo",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UCCCCsr1yhR9G_6MyJcuisxA",
+      "durationSeconds": 60,
+      "fps": 60,
+      "frameAnalyzable": false,
+      "frameReasons": [
+        "static_overlay_suspected"
+      ],
+      "gateOk": false,
+      "gateFailure": {
+        "code": "capture.not_analyzable.static_overlay_suspected",
+        "message": "Capture is not analyzable: static_overlay_suspected."
+      },
+      "envelopeOverall": "SUPPORTED",
+      "envelopeDimensions": [
+        {
+          "dimension": "player_pixel_height",
+          "status": "NOT_MEASURED",
+          "measured": null
+        },
+        {
+          "dimension": "player_visibility",
+          "status": "NOT_MEASURED",
+          "measured": null
+        }
+      ]
+    },
+    {
+      "id": "yt-eK-iPN2XAJQ",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UCZPhq0QqV1DWsN1D8E6jfCA",
+      "durationSeconds": 60,
+      "fps": 29.97,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailure": null,
+      "envelopeOverall": "SUPPORTED",
+      "envelopeDimensions": [
+        {
+          "dimension": "player_pixel_height",
+          "status": "NOT_MEASURED",
+          "measured": null
+        },
+        {
+          "dimension": "player_visibility",
+          "status": "NOT_MEASURED",
+          "measured": null
+        }
+      ]
+    },
+    {
+      "id": "voa-6108955",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "Voice of America (VOA News)",
+      "durationSeconds": 196.8,
+      "fps": 29.97,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailure": null,
+      "envelopeOverall": "UNSUPPORTED",
+      "envelopeDimensions": [
+        {
+          "dimension": "clip_duration",
+          "status": "UNSUPPORTED",
+          "measured": 196830
+        },
+        {
+          "dimension": "player_pixel_height",
+          "status": "NOT_MEASURED",
+          "measured": null
+        },
+        {
+          "dimension": "player_visibility",
+          "status": "NOT_MEASURED",
+          "measured": null
+        }
+      ]
+    },
+    {
+      "id": "voa-6115790",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "Voice of America (VOA News)",
+      "durationSeconds": 184.1,
+      "fps": 29.97,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailure": null,
+      "envelopeOverall": "UNSUPPORTED",
+      "envelopeDimensions": [
+        {
+          "dimension": "clip_duration",
+          "status": "UNSUPPORTED",
+          "measured": 184117
+        },
+        {
+          "dimension": "player_pixel_height",
+          "status": "NOT_MEASURED",
+          "measured": null
+        },
+        {
+          "dimension": "player_visibility",
+          "status": "NOT_MEASURED",
+          "measured": null
+        }
+      ]
+    },
+    {
+      "id": "yt-n-QrBfQVK_w",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UCyZVHLo8WdO5AQNN9hXoWWw",
+      "durationSeconds": 60,
+      "fps": 30,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailure": null,
+      "envelopeOverall": "SUPPORTED",
+      "envelopeDimensions": [
+        {
+          "dimension": "player_pixel_height",
+          "status": "NOT_MEASURED",
+          "measured": null
+        },
+        {
+          "dimension": "player_visibility",
+          "status": "NOT_MEASURED",
+          "measured": null
+        }
+      ]
+    },
+    {
+      "id": "yt-9ru97zKV8mk",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UCc-3aqtNBIyB7eJwW1etyMA",
+      "durationSeconds": 60,
+      "fps": 30,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailure": null,
+      "envelopeOverall": "SUPPORTED",
+      "envelopeDimensions": [
+        {
+          "dimension": "player_pixel_height",
+          "status": "NOT_MEASURED",
+          "measured": null
+        },
+        {
+          "dimension": "player_visibility",
+          "status": "NOT_MEASURED",
+          "measured": null
+        }
+      ]
+    },
+    {
+      "id": "yt-6r4fOxRuKmM",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "UCFR0jUjwRW0A2V-Jr0ajBdQ",
+      "durationSeconds": 60.01,
+      "fps": 59.94,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailure": null,
+      "envelopeOverall": "SUPPORTED",
+      "envelopeDimensions": [
+        {
+          "dimension": "player_pixel_height",
+          "status": "NOT_MEASURED",
+          "measured": null
+        },
+        {
+          "dimension": "player_visibility",
+          "status": "NOT_MEASURED",
+          "measured": null
+        }
+      ]
+    },
+    {
+      "id": "va-O1dLhGGPErc",
+      "role": "fresh_candidate",
+      "labelBlind": true,
+      "session": "U.S. Dept. of Veterans Affairs (official YouTube channel)",
+      "durationSeconds": 60.88,
+      "fps": 24,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailure": null,
+      "envelopeOverall": "DEGRADED",
+      "envelopeDimensions": [
+        {
+          "dimension": "resolution",
+          "status": "DEGRADED",
+          "measured": 608
+        },
+        {
+          "dimension": "player_pixel_height",
+          "status": "NOT_MEASURED",
+          "measured": null
+        },
+        {
+          "dimension": "player_visibility",
+          "status": "NOT_MEASURED",
+          "measured": null
+        }
+      ]
+    },
+    {
+      "id": "yt-o_NeuHjTEVE",
+      "role": "dev_label_eligible",
+      "labelBlind": false,
+      "session": "UCSUhWFY9_gvq3C4eBLWjppg",
+      "durationSeconds": 60.027,
+      "fps": 29.97,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailure": null,
+      "envelopeOverall": "SUPPORTED",
+      "envelopeDimensions": [
+        {
+          "dimension": "player_pixel_height",
+          "status": "NOT_MEASURED",
+          "measured": null
+        },
+        {
+          "dimension": "player_visibility",
+          "status": "NOT_MEASURED",
+          "measured": null
+        }
+      ]
+    },
+    {
+      "id": "yt-94KNxpNTyCw",
+      "role": "dev_label_eligible",
+      "labelBlind": false,
+      "session": "UCqnYQvrNoCCUpYQdVdatP-g",
+      "durationSeconds": 60,
+      "fps": 30,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailure": null,
+      "envelopeOverall": "SUPPORTED",
+      "envelopeDimensions": [
+        {
+          "dimension": "player_pixel_height",
+          "status": "NOT_MEASURED",
+          "measured": null
+        },
+        {
+          "dimension": "player_visibility",
+          "status": "NOT_MEASURED",
+          "measured": null
+        }
+      ]
+    },
+    {
+      "id": "va-6N3Yc184a_c",
+      "role": "dev_label_eligible",
+      "labelBlind": false,
+      "session": "U.S. Dept. of Veterans Affairs (official YouTube channel)",
+      "durationSeconds": 171.67,
+      "fps": 29.97,
+      "frameAnalyzable": true,
+      "frameReasons": [],
+      "gateOk": true,
+      "gateFailure": null,
+      "envelopeOverall": "DEGRADED",
+      "envelopeDimensions": [
+        {
+          "dimension": "clip_duration",
+          "status": "DEGRADED",
+          "measured": 171672
+        },
+        {
+          "dimension": "player_pixel_height",
+          "status": "NOT_MEASURED",
+          "measured": null
+        },
+        {
+          "dimension": "player_visibility",
+          "status": "NOT_MEASURED",
+          "measured": null
+        }
+      ]
+    }
+  ]
+}

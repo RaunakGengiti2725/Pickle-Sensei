@@ -68,6 +68,21 @@ describe("planDetectSpanHull — legacy regression", () => {
   });
 });
 
+describe("planDetectSpanHull — event hull outside the stroke window", () => {
+  const strokeWindow = { startMs: 36971, endMs: 39005 };
+  it("falls back to the whole stroke window instead of an inverted span", () => {
+    // Observed on yt-o_NeuHjTEVE: pre-pass event ends before the stroke
+    // window starts; clamping produced startMs=36971 > endMs=35869 and the
+    // detector decoded zero frames.
+    const events = [{ startMs: 34800, endMs: 35100 }];
+    expect(planDetectSpanHull(strokeWindow, events)).toEqual(strokeWindow);
+  });
+  it("event after the window end also falls back to the window", () => {
+    const events = [{ startMs: 41000, endMs: 41300 }];
+    expect(planDetectSpanHull(strokeWindow, events)).toEqual(strokeWindow);
+  });
+});
+
 describe("planDetectSpanSegments — tight windowing", () => {
   const strokeWindow = { startMs: 0, endMs: 30000 };
 
