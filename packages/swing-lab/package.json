@@ -45,6 +45,7 @@
     "coach:queue": "tsx src/coachReview.ts",
     "coach:agreement": "tsx src/coachAgreement.ts",
     "coach:gates": "tsx src/coachGates.ts",
+    "coach:program-ops": "tsx src/coachProgramOps.ts",
     "score:stability": "tsx src/scoreStability.ts",
     "coach:drills": "tsx src/drillLibrary.ts",
     "regen": "tsx src/benchRegen.ts",
