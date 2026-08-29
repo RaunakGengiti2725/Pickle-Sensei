@@ -2,6 +2,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { REPO_ROOT } from "./engine/corpus.js";
 import type { StrokeEventLabel, SwingAnnotation } from "./annotationSchema.js";
+import { SILENT_FAILURE_CONTRACT, SILENT_FAILURE_CLAIMS, evaluateSilentFailure } from "./silentFailure.js";
+import type { SilentFailureVerdict } from "./silentFailure.js";
 
 /**
  * END-TO-END CASCADE WATERFALL — where does the PRODUCT lose each stroke?
@@ -185,6 +187,7 @@ if (isMain) {
     stages: Record<StageName, StageOutcome>;
     conditionalReached: string;
     usable: UsableVerdict;
+    silent: SilentFailureVerdict;
   }> = [];
 
   for (const benchCase of bench) {
@@ -263,7 +266,13 @@ if (isMain) {
       }
     }
     const usable = evaluateUsableResult(stages, report, gold.contactMs);
-    rows.push({ caseId: benchCase.id, split: benchCase.role ?? "unassigned", stroke: goldStroke, stages, conditionalReached: reached, usable });
+    const silent = evaluateSilentFailure(report, {
+      eventStartMs: gold.eventStartMs,
+      eventEndMs: gold.eventEndMs,
+      contactMs: gold.contactMs,
+      strokeLabel: goldStroke,
+    });
+    rows.push({ caseId: benchCase.id, split: benchCase.role ?? "unassigned", stroke: goldStroke, stages, conditionalReached: reached, usable, silent });
   }
 
   const unconditional = Object.fromEntries(
@@ -278,6 +287,8 @@ if (isMain) {
 
   const strictSurvived = conditional.STROKE ?? 0;
   const usableCount = rows.filter((row) => row.usable.usable).length;
+  const answeredCount = rows.filter((row) => row.silent.answered).length;
+  const silentFailureCount = rows.filter((row) => row.silent.silentFailure).length;
 
   const result = {
     generatedAtIso: new Date().toISOString(),
@@ -291,6 +302,13 @@ if (isMain) {
       usable: usableCount,
       total: rows.length,
       note: "second north-star: complements strict survival, never replaces it; per-case verdicts in rows[].usable",
+    },
+    silentFailure: {
+      contract: SILENT_FAILURE_CONTRACT,
+      silentFailures: silentFailureCount,
+      answeredTrials: answeredCount,
+      allTrials: rows.length,
+      note: "third north-star: confident wrongness only; abstentions never count; per-case verdicts in rows[].silent",
     },
     rows,
   };
@@ -321,6 +339,20 @@ if (isMain) {
     console.log(`  ${row.usable.usable ? "✓ USABLE    " : "✗ NOT USABLE"} ${row.caseId.padEnd(20)}`);
     for (const reason of row.usable.reasons) {
       console.log(`        ${reason}`);
+    }
+  }
+  console.log("═".repeat(74));
+  console.log(`SILENT FAILURE RATE — contract ${SILENT_FAILURE_CONTRACT.version} (defined before measuring)`);
+  console.log("third north-star: confident material claims gold says are wrong; abstentions are NOT silent failures");
+  console.log(
+    `  SILENT FAILURES ${silentFailureCount}/${rows.length} ALL TRIALS · ${silentFailureCount}/${answeredCount} ANSWERED TRIALS`,
+  );
+  for (const row of rows) {
+    const tag = row.silent.silentFailure ? "✗ SILENT FAIL" : row.silent.answered ? "✓ ANSWERED   " : "○ ABSTAINED  ";
+    console.log(`  ${tag} ${row.caseId.padEnd(20)}`);
+    for (const claim of SILENT_FAILURE_CLAIMS) {
+      const verdict = row.silent.claims[claim];
+      console.log(`        ${claim.padEnd(15)} ${verdict.status.padEnd(14)} ${verdict.detail}`);
     }
   }
   console.log(`written: ${outPath.replace(`${REPO_ROOT}/`, "")}`);

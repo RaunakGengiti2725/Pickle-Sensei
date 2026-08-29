@@ -50,6 +50,7 @@ export default tseslint.config(
       "packages/swing-lab/src/ownershipAnnotate.ts",
       "packages/swing-lab/src/eventCompletionBench.ts",
       "packages/swing-lab/src/cascadeWaterfall.ts",
+      "packages/swing-lab/src/coverageRisk.ts",
       "packages/swing-lab/src/coachReview.ts",
       // data-engine CLIs (acquire/factory/status/import/failure-mine) print reports.
       "packages/swing-lab/src/engine/**/*.ts",
