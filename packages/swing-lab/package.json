@@ -30,6 +30,7 @@
     "factory": "tsx src/engine/factory.ts",
     "ta:bench": "tsx src/targetAcquisitionBench.ts",
     "learning:curve": "tsx src/learningCurve.ts",
+    "learning:curve-modality": "tsx src/learningCurveModality.ts",
     "corpus:sessions": "tsx src/engine/sessionGroup.ts",
     "failure:mine": "tsx src/engine/failureMine.ts",
     "own": "tsx src/ownershipAnnotate.ts",
