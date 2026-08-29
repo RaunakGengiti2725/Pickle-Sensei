@@ -88,6 +88,25 @@ export {
   type StrokeV3,
 } from "./strokeHeuristic.js";
 export {
+  applyDeclaredIntentPrior,
+  benchStrokeGold,
+  compatibleTechniques,
+  evaluatePrediction,
+  formatConfusion,
+  STROKE_GOLD_SCHEMA_VERSION,
+  STROKE_GOLD_TAXONOMY_VERSION,
+  V3_LEAF_FAMILY,
+  validateStrokeGoldFile,
+  type BenchReport,
+  type BenchRow,
+  type DeclaredIntentLike,
+  type IntentPriorOutcome,
+  type LevelVerdicts,
+  type StrokeGoldFile,
+  type StrokeGoldLabel,
+  type StrokePredictionLike,
+} from "./strokeTaxonomyBench.js";
+export {
   buildStrokeSequence,
   KINETIC_MEASUREMENT_STATUS,
   SEQUENCE_SCHEMA_VERSION,
