@@ -45,6 +45,29 @@ export function registerPrivacyRoutes(app: FastifyInstance, context: AppContext)
           [userId, termsVersion, granted],
         );
         if (!granted) {
+          // Revocation must also reach the first-party consent ledger: the
+          // training-eligibility gate reads consent_record, so a privacy-center
+          // revoke appends a model_training withdrawal there. The reverse is
+          // intentionally NOT mirrored — a ledger grant only ever comes from
+          // an explicit request to the consent module.
+          const subject = await tx.query(
+            `INSERT INTO consent_subject (user_id) VALUES ($1)
+             ON CONFLICT (user_id) DO UPDATE SET user_id = consent_subject.user_id
+             RETURNING pseudonym`,
+            [userId],
+          );
+          const latest = await tx.query(
+            `SELECT consent_version FROM consent_record
+             WHERE subject_pseudonym = $1 AND scope = 'model_training'
+             ORDER BY seq DESC LIMIT 1`,
+            [subject.rows[0].pseudonym],
+          );
+          await tx.query(
+            `INSERT INTO consent_record
+               (subject_pseudonym, scope, action, consent_version, source)
+             VALUES ($1, 'model_training', 'withdrawn', $2, 'privacy_center')`,
+            [subject.rows[0].pseudonym, latest.rows[0]?.consent_version ?? "never_granted"],
+          );
           // Revocation flags dataset items for removal review (provenance-aware).
           await tx.query(
             "UPDATE ml_dataset_item SET removed_at = now() WHERE source_user_id = $1 AND removed_at IS NULL",

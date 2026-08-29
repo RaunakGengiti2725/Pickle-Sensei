@@ -18,6 +18,7 @@ import { audit, many, one, withTransaction } from "../../lib/db.js";
 
 interface ConsentRow extends Record<string, unknown> {
   id: string;
+  seq: string;
   subject_pseudonym: string;
   scope: ConsentRecord["scope"];
   action: ConsentRecord["action"];
@@ -41,6 +42,7 @@ function toRecord(row: ConsentRow): ConsentRecord {
     captureMode: row.capture_mode,
     strokeIntent: row.stroke_intent,
     recordedAtIso: row.recorded_at.toISOString(),
+    seq: Number(row.seq),
   };
 }
 
@@ -86,6 +88,7 @@ async function statusPayload(db: pg.Pool | pg.PoolClient, pseudonym: string | nu
       captureMode: r.captureMode,
       strokeIntent: r.strokeIntent,
       recordedAt: r.recordedAtIso,
+      seq: r.seq,
     })),
   };
 }

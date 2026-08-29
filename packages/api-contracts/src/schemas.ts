@@ -371,6 +371,7 @@ export const ConsentRecordSchema = z.object({
   captureMode: z.enum(CONSENT_CAPTURE_MODES).nullable(),
   strokeIntent: z.string().nullable(),
   recordedAt: z.iso.datetime(),
+  seq: z.number().int().positive().optional(),
 });
 
 export const ConsentScopeStatusSchema = z.object({

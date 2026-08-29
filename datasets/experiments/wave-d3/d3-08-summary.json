@@ -1,0 +1,81 @@
+{
+  "id": "d3-08-rt-consent",
+  "wave": "D3",
+  "subsystem": "C10 consent architecture (API + DB)",
+  "branch": "devin/wave-d3/d3-08-rt-consent",
+  "base": "origin/devin/1787988068-wave-c-integration",
+  "date": "2026-08-29",
+  "verdict": "ORANGE",
+  "breaks": [
+    {
+      "id": "RT-B1",
+      "title": "Legacy privacy-center revoke bypassed the consent ledger",
+      "severity": "high",
+      "status": "FIXED",
+      "detail": "PUT /v1/me/ml-training-consent {granted:false} updated only the legacy ml_training_consent table and never appended a withdrawal to consent_record. The training gate (services/media-worker/src/trainingConsent.ts) reads only consent_record, so a user who granted via the ledger and revoked via the privacy center remained training-consented: any ml_dataset_item added AFTER the revoke was training-eligible. Demonstrated: RT-1 in services/api/test/consent.redteam.integration.test.ts fails with the fix reverted (gate still says consented after revoke).",
+      "fix": "Privacy route revoke now appends a model_training 'withdrawn' consent_record (source privacy_center) in the same transaction. Grants are intentionally NOT mirrored: a ledger grant only ever comes from the explicit consent endpoint (default-deny direction preserved).",
+      "regression_test": "services/api/test/consent.redteam.integration.test.ts RT-1"
+    },
+    {
+      "id": "RT-B2",
+      "title": "Status derivation ordered by millisecond-truncated timestamp, not ledger seq",
+      "severity": "medium",
+      "status": "FIXED",
+      "detail": "deriveConsentStatus sorted records by recordedAtIso (Date.toISOString truncates to ms). A withdraw recorded in the same millisecond as a grant, handed over in adversarial array order, derived active=true after withdrawal. Demonstrated: first test in packages/shared-types/test/consent.redteam.test.ts failed (active=true) before the fix. The API route was partially shielded (ORDER BY seq + stable sort) but the shared contract function was not.",
+      "fix": "ConsentRecord gains optional seq (DB identity); deriveConsentStatus orders by seq when present, timestamp fallback for legacy payloads. API responses now expose seq (additive contract change; ConsentRecordSchema seq optional).",
+      "regression_test": "packages/shared-types/test/consent.redteam.test.ts; services/api/test/consent.redteam.integration.test.ts (seq exposure + RT-6 concurrency)"
+    },
+    {
+      "id": "RT-B3",
+      "title": "Withdrawal race with in-flight training-eligibility selection (TOCTOU)",
+      "severity": "high",
+      "status": "FIXED (hardened; snapshot race is inherent, mitigated by mandatory re-verification)",
+      "detail": "selectTrainingEligibleItems taken inside a transaction snapshot opened before a withdrawal commits still returns the withdrawn user's items; nothing forced consumers to re-check before training use. Demonstrated live against PostgreSQL: RT-7 in services/media-worker/test/trainingConsent.redteam.test.ts opens a REPEATABLE READ snapshot, commits a withdrawal on another connection, and the stale snapshot still selects the item.",
+      "fix": "Added verifyTrainingEligibility(pool, items) — fresh-connection recheck that drops items whose users' latest ledger action is no longer 'granted' — plus selectTrainingEligibleItemsWithWatermark exposing the max consent_record.seq at selection time so consumers can detect stale selections. RT-7 proves the recheck excludes the withdrawn user's items.",
+      "regression_test": "services/media-worker/test/trainingConsent.redteam.test.ts RT-7, RT-8"
+    },
+    {
+      "id": "RT-B4",
+      "title": "Grant consent version invisible to training consumers across mid-session version upgrades",
+      "severity": "low",
+      "status": "FIXED",
+      "detail": "TrainingEligibleItem exposed only ml_dataset_item.consent_version (stamped at ingest), not the version of the ledger grant currently authorizing the item. After a mid-session upgrade (re-grant under model-training-v2) consumers could not tell which contract version authorizes use.",
+      "fix": "Selection now also returns grant_consent_version from the seq-latest ledger grant. No filtering was added by default (no blanket abstention): eligible-item coverage for existing v1 grants is unchanged — RT-9 and the pre-existing trainingConsent tests (12/12 green) confirm identical eligibility counts.",
+      "regression_test": "services/media-worker/test/trainingConsent.redteam.test.ts RT-9"
+    }
+  ],
+  "probed_no_break": [
+    {
+      "id": "RT-2",
+      "title": "Duplicate grants",
+      "result": "PASS — duplicates append (ledger is append-only by design), derived status stays consistent, every row audited (3 grants -> 3 audit_log rows)."
+    },
+    {
+      "id": "RT-3",
+      "title": "Withdraw-then-regrant audit trail",
+      "result": "PASS — trail granted->withdrawn->granted preserved; regrant does NOT resurrect ml_dataset_item rows flagged for removal review."
+    },
+    {
+      "id": "RT-5",
+      "title": "Missing consent record treated as consent",
+      "result": "PASS — default deny holds everywhere probed: empty ledger, consent_subject row with zero model_training records, and the media-worker gate (absence never opt-in)."
+    },
+    {
+      "id": "RT-6",
+      "title": "Concurrent grant/withdraw",
+      "result": "PASS — concurrent requests append monotonically increasing seq; derived status matches the seq-latest record; DB append-only trigger intact."
+    }
+  ],
+  "open": [
+    {
+      "id": "RT-O1",
+      "title": "Legacy privacy-center GRANT does not reach the ledger (fail-safe divergence)",
+      "status": "OPEN (intentional, documented)",
+      "detail": "PUT /v1/me/ml-training-consent {granted:true} still writes only the legacy tables; the ledger gate continues to deny. This is the fail-safe direction (user believes they opted in but no training use happens). Unifying grant surfaces needs a product decision on which endpoint owns model_training opt-in; mirroring grants automatically would contradict the consent module's explicit-opt-in contract."
+    }
+  ],
+  "coverage_note": "No abstention-based fixes: no eligibility was removed for validly consented users. Pre-existing gate tests (services/media-worker, 12/12) and consent ledger tests (services/api consent.integration, 8/8) green after fixes.",
+  "test_note": "services/api test/training.integration.test.ts 'derives streaks...' fails identically on the unmodified base branch (training.completion_in_future — date-dependent, unrelated subsystem, untouched).",
+  "synthetic_fixtures": "All red-team fixtures are synthetic and labeled as such in the test files; no held-out cases touched.",
+  "contracts": "usable-result-v1 / silent-failure-v1 untouched. Consent contract change is additive only (optional seq field on ConsentRecord)."
+}
