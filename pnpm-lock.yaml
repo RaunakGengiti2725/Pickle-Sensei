@@ -421,6 +421,9 @@ importers:
       '@pickle/queue':
         specifier: workspace:*
         version: link:../../packages/queue
+      '@pickle/shared-types':
+        specifier: workspace:*
+        version: link:../../packages/shared-types
       pg:
         specifier: ^8.16.3
         version: 8.23.0
