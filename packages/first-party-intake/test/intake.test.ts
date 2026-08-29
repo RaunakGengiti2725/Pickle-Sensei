@@ -38,6 +38,7 @@ function makeClip(path: string, size: string, fps: number, seconds: number): voi
     "-y",
     path,
   ]);
+  if (res.error) throw new Error(`ffmpeg unavailable: ${res.error.message}`);
   if (res.status !== 0) throw new Error(`ffmpeg fixture failed: ${res.stderr.toString()}`);
 }
 
