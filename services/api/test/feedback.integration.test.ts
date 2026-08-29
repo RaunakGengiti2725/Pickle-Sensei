@@ -64,11 +64,22 @@ describe.skipIf(!testUrl)("analysis feedback (real PostgreSQL)", () => {
   async function insertShot(ownerId: string): Promise<string> {
     const shotId = randomUUID();
     const shotType = await pool.query("SELECT id FROM shot_type LIMIT 1");
+    const scoringModel = await pool.query(
+      "SELECT id FROM scoring_model WHERE shot_type_id = $1 LIMIT 1",
+      [shotType.rows[0].id],
+    );
     await pool.query(
-      `INSERT INTO shot (id, user_id, shot_type_id, captured_at, start_ms, contact_ms, end_ms,
+      `INSERT INTO shot (id, user_id, shot_type_id, scoring_model_id, captured_at, start_ms, contact_ms, end_ms,
          overall_score, confidence, result_kind, source, model_bundle_version, version_vector)
-       VALUES ($1,$2,$3,now(),0,450,900,7.2,0.91,'scored','real',$4,$5)`,
-      [shotId, ownerId, shotType.rows[0].id, VERSION_VECTOR.modelBundleVersion, VERSION_VECTOR],
+       VALUES ($1,$2,$3,$4,now(),0,450,900,7.2,0.91,'scored','real',$5,$6)`,
+      [
+        shotId,
+        ownerId,
+        shotType.rows[0].id,
+        scoringModel.rows[0].id,
+        VERSION_VECTOR.modelBundleVersion,
+        VERSION_VECTOR,
+      ],
     );
     return shotId;
   }
