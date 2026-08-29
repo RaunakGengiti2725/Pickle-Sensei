@@ -471,6 +471,7 @@ export function AnalyzeScreen() {
   const attemptEvidence = useRef(createAttemptEvidenceBuffer());
   const profile = useAppStore(s => s.profile);
   const operationActive = useRef(false);
+  const scoringActive = useRef(false);
   const autoLaunchStarted = useRef(false);
 
   useEffect(
@@ -544,6 +545,10 @@ export function AnalyzeScreen() {
       ) {
         return;
       }
+      // One capture, one analysis: a second tap while a run is in flight is
+      // ignored rather than reserving a second permit for the same clip.
+      if (scoringActive.current) return;
+      scoringActive.current = true;
       const session = getApiSession();
       usabilityFunnel.log('analysis_started', declaredStroke ?? 'auto');
       setPhase({
@@ -622,6 +627,8 @@ export function AnalyzeScreen() {
         const message = error instanceof Error ? error.message : String(error);
         usabilityFunnel.log('error_shown', message);
         setPhase({ kind: 'error', message });
+      } finally {
+        scoringActive.current = false;
       }
     },
     [declaredStroke, navigation, profile, techniqueIntent],

@@ -66,7 +66,7 @@ function fakeDb() {
           r => r.owner_key === params[1] && r.id === params[2],
         );
         if (row) {
-          row.attempts += 1;
+          if (sql.includes('attempts = attempts + 1')) row.attempts += 1;
           row.last_error = String(params[0]);
         }
         return { rows: [] };
@@ -179,7 +179,7 @@ describe('drainOutbox', () => {
     ]);
   });
 
-  it('keeps failed items with an attempt count — retries never duplicate', async () => {
+  it('keeps offline failures durable and retryable forever — transient errors never consume the attempt budget', async () => {
     const { db, push, outbox } = fakeDb();
     push('shot.sync', permittedAnalysis);
     const failing = {
@@ -192,10 +192,11 @@ describe('drainOutbox', () => {
     const first = await drainOutbox(db, failing);
     expect(first.failed).toBe(1);
     expect(first.remaining).toBe(1);
-    expect(outbox[0]!.attempts).toBe(1);
+    expect(outbox[0]!.attempts).toBe(0);
+    expect(outbox[0]!.last_error).toContain('offline');
     const second = await drainOutbox(db, failing);
     expect(second.remaining).toBe(1);
-    expect(outbox[0]!.attempts).toBe(2);
+    expect(outbox[0]!.attempts).toBe(0);
   });
 
   it('keeps server-rejected shots queued with the typed rejection', async () => {
