@@ -1,6 +1,7 @@
 export * from "./analyzeClip.js";
 export * from "./analyzeCapture.js";
 export * from "./strokeAutoResolution.js";
+export * from "./preAnalysisGate.js";
 // Session multi-event engine (moved from swing-lab in Wave B/W6 so mobile can
 // consume it). Deliberately explicit — the in-module stroke-event-2 proposer
 // mirror stays package-private; swing-lab's strokeEvents.ts remains the

@@ -1,0 +1,57 @@
+{
+  "workstream": "C15 — OOD gating + temporal-invariant property/fuzz suite",
+  "branch": "devin/wave-c/c15-ood-property-tests",
+  "date": "2026-08-29",
+  "environment": "Linux (no Apple Vision pose extraction; ffmpeg/ffprobe available); canonical runs/ absent as expected",
+  "built": {
+    "frame_analyzability": "packages/vision-geometry/src/frameAnalyzability.ts — pose-free gate over decoded frame stats: single_frame_clip, duration_too_short (<500ms), duration_implausibly_long (>10min), still_image_video (mean |inter-frame diff| <= 0.5 on 64x36 grayscale), solid_color_frames (spatial luma std <= 2), letterbox_dominant (>40% near-black uniform rows). Reports notEvaluated for signals it cannot measure (camera motion, scene cuts, exposure flicker).",
+    "pre_analysis_gate": "packages/analysis-pipeline/src/preAnalysisGate.ts (pre-analysis-gate-1) — combines FrameAnalyzabilityReport + pose-conditioned contract (no_person_found when pose sequence is empty; person_implausible_scale reusing evaluateCaptureQuality's player_too_small_in_frame / player_too_close_or_cropped). Typed abstention via existing Result/OperationFailure taxonomy: media failures -> corrupted_media, person/scale failures -> low_confidence. Null reports are recorded in notEvaluated, never treated as pass or fail.",
+    "frame_stats_extractor": "packages/swing-lab/src/frameStats.ts — ffmpeg (scale=64:36, gray rawvideo) + ffprobe duration; feeds evaluateFrameAnalyzability.",
+    "invariant_checker": "packages/swing-lab/src/invariants.ts — recursive artifact checker: negative_duration, contact_outside_event, phase_ordering_invalid, phase_spans_unordered, non_finite_confidence, confidence_out_of_unit_range, provenance_missing, predicted_declared_conflation, anchor_free_contact_conflation.",
+    "corpus_checker": "packages/swing-lab/src/corpusCheck.ts — scans every .json under datasets/, reports parse failures + violations, never modifies artifacts. Script: pnpm -F @pickle/swing-lab invariants:corpus."
+  },
+  "synthetic_negative_fixtures": {
+    "note": "SYNTHETIC NEGATIVES built locally with ffmpeg for OOD unit tests (packages/swing-lab/test/oodGate.test.ts); not real captures.",
+    "solid_color_2s_30fps": { "frameCount": 60, "durationMs": 2000, "meanInterFrameDiff": 0.0, "meanSpatialLumaStd": 0.164, "reasons": ["still_image_video", "solid_color_frames"], "analyzable": false },
+    "still_image_2s_30fps": { "frameCount": 60, "durationMs": 2000, "meanInterFrameDiff": 0.002, "meanSpatialLumaStd": 79.552, "reasons": ["still_image_video"], "analyzable": false },
+    "one_frame_clip": { "frameCount": 1, "durationMs": 34, "reasons": ["single_frame_clip"], "analyzable": false },
+    "letterboxed_title_card": { "frameCount": 60, "durationMs": 2000, "meanInterFrameDiff": 0.1407, "letterboxRowFraction": 0.611, "reasons": ["still_image_video", "letterbox_dominant"], "analyzable": false },
+    "positive_control_wm_volley_02_clip": { "frameCount": 200, "durationMs": 8000, "meanInterFrameDiff": 1.7002, "meanSpatialLumaStd": 49.588, "letterboxRowFraction": 0.0, "reasons": [], "analyzable": true }
+  },
+  "fuzz_suite": {
+    "file": "packages/swing-lab/test/propertyInvariants.test.ts",
+    "seeded_lcg": "deterministic; every failure replayable from the seed",
+    "stroke_event_proposals": "300 seeds x (v1 + v2): endMs>=startMs, startMs<=peakMs<=endMs, finite confidence in [0,1], time-ordered events, artifact-invariant clean",
+    "temporal_phase_v2": "300 seeds: ordering, finite confidence, version present, anchor-free (anchorBasis=event_peak) must carry NaN contact (null in JSON) — never a fabricated numeric contact",
+    "frame_analyzability": "500 random FrameStats: total function, only registered reason codes, finite stats",
+    "seeded_violation_families": "each invariant rule verified to fire on a seeded bad artifact"
+  },
+  "real_bug_found_by_fuzz": {
+    "what": "proposeStrokeEventsV2 paddle-peak refinement could move peakMs OUTSIDE the event span: paddle confirmation searches an [startMs-80, endMs+80] halo and assigned the raw paddle timestamp as refinedPeakMs.",
+    "repro": "seed 31 of the stroke-event fuzz (LCG state seed*2654435761): v2 produced E1 startMs=6648, peakMs=8091, endMs=8088 (peak 3ms past end).",
+    "fix": "clamp refinedPeakMs into [event.startMs, event.endMs] in packages/swing-lab/src/strokeEvents.ts and its byte-mirrored copy in packages/analysis-pipeline/src/sessionEngine.ts (mirror-guard test enforces identical sources). Boundaries and event identity unchanged; only the interior peak is clamped.",
+    "provenance": "discovered 2026-08-29 by the new property test; reproduced standalone before fixing"
+  },
+  "corpus_check": {
+    "root": "datasets/",
+    "files_checked": 262,
+    "parse_failures": 0,
+    "violations_final": 0,
+    "checker_false_positives_fixed_during_development": [
+      "nested anchor-relative timing copies (TemporalPhaseBoundaries.relative) were demanded provenance they intentionally do not carry",
+      "human visual-annotation phases objects (devin-visual-v1/v2, coach-review/queue.json bundle.phases; 46 hits across 19 files) were demanded machine provenance (version/source) — their provenance lives on the enclosing annotation (schemaVersion/annotatorId). Checker now requires version/source only on machine-produced boundaries (identified by confidence/anchorBasis/relative fields)."
+    ],
+    "honest_note": "0 violations is AFTER scoping the provenance rule to machine-produced boundaries; no dataset file was modified. Ordering / finiteness / conflation rules apply to all objects and found no violations."
+  },
+  "verification": {
+    "typecheck": "pnpm -F @pickle/vision-geometry|@pickle/analysis-pipeline|@pickle/swing-lab typecheck — all pass",
+    "tests": { "vision-geometry": "47 passed", "analysis-pipeline": "34 passed", "swing-lab": "159 passed, 4 skipped" }
+  },
+  "honest_negatives_and_blocked": [
+    "Pose-conditioned checks are contract-level only on Linux: no real pose sequences can be generated here (Apple Vision is macOS-only), so no_person_found / person_implausible_scale are exercised with constructed PoseSequence/CaptureQualityReport inputs, not real extractions.",
+    "The letterboxed title-card fixture also trips still_image_video (mean inter-frame diff 0.1407 < 0.5) because black letterbox rows dampen the downscaled diff; letterbox_dominant still fires independently.",
+    "The gate is exported from @pickle/analysis-pipeline but not yet wired into analyzeClip/analyzeCapture call sites — integration into the mobile capture flow is out of C15 scope and left to the integrator.",
+    "Thresholds (stillImageMaxDiff=0.5, solidColorMaxStd=2, letterboxMaxFraction=0.4) are set from the synthetic negatives plus one committed positive control (wm-volley-02); they are NOT calibrated against a real negative corpus.",
+    "Cascade impact of the peak-clamp fix cannot be measured here (pnpm lab:regen requires macOS pose runs); committed artifacts show no contact_outside_event violations, so no committed number changes."
+  ]
+}

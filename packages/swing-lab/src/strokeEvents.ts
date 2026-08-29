@@ -335,9 +335,11 @@ export function proposeStrokeEventsV2(input: {
     const paddleConfirmed = decisive;
     // Refine the interior peak toward the paddle peak (contact vicinity) —
     // boundaries stay body-defined so the movement identity cannot shift.
+    // The peak stays interior: paddle samples come from an ±80ms halo
+    // around the event, so an unclamped refinement could leave the span.
     const refinedPeakMs =
       paddleConfirmed && paddlePeakMs !== null && Math.abs(paddlePeakMs - event.peakMs) <= 250
-        ? paddlePeakMs
+        ? Math.min(Math.max(paddlePeakMs, event.startMs), event.endMs)
         : event.peakMs;
     const confidence = Math.max(
       0.15,

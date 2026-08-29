@@ -1,3 +1,6 @@
+export { extractFrameStats } from "./frameStats.js";
+export { checkArtifactInvariants, type InvariantViolation } from "./invariants.js";
+export { runCorpusCheck, type CorpusCheckReport, type CorpusViolation } from "./corpusCheck.js";
 export {
   BALL_CANDIDATE_GATE_VERSION,
   BALL_GATES,

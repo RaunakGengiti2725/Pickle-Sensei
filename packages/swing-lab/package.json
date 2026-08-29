@@ -34,7 +34,8 @@
     "completion:bench": "tsx src/eventCompletionBench.ts",
     "cascade": "tsx src/cascadeWaterfall.ts",
     "coach:queue": "tsx src/coachReview.ts",
-    "regen": "tsx src/benchRegen.ts"
+    "regen": "tsx src/benchRegen.ts",
+    "invariants:corpus": "tsx src/corpusCheck.ts"
   },
   "dependencies": {
     "@pickle/analysis-pipeline": "workspace:*",
