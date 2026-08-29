@@ -171,7 +171,10 @@ def frame_iter(
             out_w, out_h = decode_size
             vf.append(f"scale={out_w}:{out_h}:flags=bilinear")
         if vf:
-            args += ["-vf", ",".join(vf), "-fps_mode", "vfr"]
+            # -vsync vfr rather than -fps_mode: same semantics, also on ffmpeg < 5.1
+            # (ffmpeg 4.4 rejects -fps_mode outright, which silently yielded zero
+            # frames here because the pipe closed before the first frame).
+            args += ["-vf", ",".join(vf), "-vsync", "vfr"]
     args += ["-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
     proc = subprocess.Popen(args, stdout=subprocess.PIPE)
     frame_bytes = out_w * out_h * 3
@@ -193,7 +196,8 @@ def frame_iter(
             t_ms = start_time_ms + (first_index + source_index) * 1000.0 / fps
             yield source_index, t_ms, np.frombuffer(chunk, dtype=np.uint8).reshape(out_h, out_w, 3)
         index += 1
-    proc.wait()
+    if proc.wait() != 0:
+        raise RuntimeError(f"ffmpeg decode failed (exit {proc.returncode}) for {video}")
 
 
 def load_model() -> tuple[object, object, float]:
@@ -397,15 +401,31 @@ def nms_union(entries: list[dict], iou_threshold: float = 0.55) -> list[dict]:
 
 
 def decode_frames_at(video: str, frame_indices: list[int], width: int, height: int, fps: float):
-    """Decode exactly the requested source frames (absolute CFR indexing from
-    t=0 — deliberately NOT -ss seek, which is one frame early; W12
-    timestampDiscovery). Yields (frame_index, rgb)."""
+    """Decode exactly the requested source frames under absolute CFR indexing
+    (frame k at start_time + k/fps). Yields (frame_index, rgb).
+
+    Seek strategy: input `-ss` at the first wanted frame's exact pts (the
+    plan_window_seek arithmetic frame_iter already uses — floored to ffmpeg's
+    millisecond CLI precision so the seek never lands past the frame; the
+    naive `-ss <tMs>` one-frame-early defect from W12 does not apply because
+    the seek target is derived FROM the frame index, not from an annotation
+    timestamp). The select expression is rebased to post-seek output ordinals,
+    and `-frames:v` stops the decode right after the last wanted frame instead
+    of draining the rest of the clip."""
     wanted = sorted(set(frame_indices))
-    select = "+".join(f"eq(n\\,{idx})" for idx in wanted)
-    args = [
-        "ffmpeg", "-v", "error", "-i", video,
+    if not wanted:
+        return
+    first_index = wanted[0]
+    seek_sec = math.floor(first_index / fps * 1000.0) / 1000.0
+    args = ["ffmpeg", "-v", "error"]
+    if first_index > 0:
+        args += ["-ss", f"{seek_sec:.3f}"]
+    select = "+".join(f"eq(n\\,{idx - first_index})" for idx in wanted)
+    args += [
+        "-i", video,
         # -vsync vfr rather than -fps_mode: same semantics, also on ffmpeg < 5.1
         "-vf", f"select={select}", "-vsync", "vfr",
+        "-frames:v", str(len(wanted)),
         "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
     ]
     proc = subprocess.Popen(args, stdout=subprocess.PIPE)
@@ -418,7 +438,8 @@ def decode_frames_at(video: str, frame_indices: list[int], width: int, height: i
             break
         yield wanted[position], np.frombuffer(chunk, dtype=np.uint8).reshape(height, width, 3)
         position += 1
-    proc.wait()
+    if proc.wait() != 0:
+        raise RuntimeError(f"ffmpeg decode failed (exit {proc.returncode}) for {video}")
 
 
 def run_crops(
@@ -434,7 +455,7 @@ def run_crops(
     """Crop-mode inference (crop-recovery-v1): detect on explicit rectangles,
     map boxes back to full-frame pixels, tag every detection source="crop"
     with its cropRect, and NMS-union across the rects of each frame."""
-    width, height, fps, duration_ms = ffprobe_meta(video)
+    width, height, fps, duration_ms, _start_time_ms = ffprobe_meta(video)
     plan = json.loads(Path(crops_path).read_text())["crops"]
     by_frame: dict[int, dict] = {}
     for entry in plan:
