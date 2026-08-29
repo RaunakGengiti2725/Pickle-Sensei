@@ -1,0 +1,1072 @@
+{
+  "schemaVersion": "pickle.ios-compat-matrix.v1",
+  "entries": [
+    {
+      "deviceId": "iphone-se-3",
+      "iosMajor": 16,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-se-3",
+      "iosMajor": 17,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-se-3",
+      "iosMajor": 18,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-12",
+      "iosMajor": 16,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-12",
+      "iosMajor": 17,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-12",
+      "iosMajor": 18,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-13",
+      "iosMajor": 16,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-13",
+      "iosMajor": 17,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-13",
+      "iosMajor": 18,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-14",
+      "iosMajor": 16,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-14",
+      "iosMajor": 17,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-14",
+      "iosMajor": 18,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-15",
+      "iosMajor": 17,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-15",
+      "iosMajor": 18,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-16",
+      "iosMajor": 18,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-15-pro",
+      "iosMajor": 17,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-15-pro",
+      "iosMajor": 18,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-16-pro",
+      "iosMajor": 18,
+      "admittedAtIso": "2026-08-29T00:00:00.000Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
+        }
+      }
+    }
+  ],
+  "notes": [
+    "Every cell is YELLOW: no physical iPhone exists in this program, so no device/OS/capability combination has been validated (BLOCKED_EXTERNAL).",
+    "Rule: a new device or iOS major enters this matrix ALL-YELLOW via admitDeviceOs and stays YELLOW until validated with DEVICE_MEASUREMENT trial evidence.",
+    "GREEN/RED transitions require evidenceTrialIds resolving to valid DEVICE_MEASUREMENT trials for the same device and iOS major; the checklist harness fails the report on unresolved evidence."
+  ]
+}
