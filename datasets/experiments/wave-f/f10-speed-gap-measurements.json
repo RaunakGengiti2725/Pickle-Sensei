@@ -1,0 +1,648 @@
+{
+  "measurements": [
+    {
+      "id": "afn-sasebo-rally1",
+      "group": "tune_positive",
+      "speedFactor": null,
+      "sourceId": null,
+      "frameCount": 132,
+      "fps": 29.97002997002997,
+      "diff": {
+        "mean": 1.6422385231128074,
+        "p50": 1.2313368055555556,
+        "p90": 1.84765625,
+        "p99": 2.736111111111111
+      },
+      "lag2OverLag1MedianDiffRatio": 1.7137821642580189,
+      "diffAlternationIndex": 0.48072989760029644,
+      "timing": {
+        "meanDeltaMs": 33.366664122137415,
+        "stdDeltaMs": 0.0004722964365834542,
+        "cv": 0.000014154739438579503
+      },
+      "flow": {
+        "matchedBlocks": 18506,
+        "p50": 0,
+        "p90": 0,
+        "p99": 3,
+        "saturatedFraction": 0.004701177996325516
+      }
+    },
+    {
+      "id": "afn-sasebo-rally1-x1.5",
+      "group": "speed_variant",
+      "speedFactor": 1.5,
+      "sourceId": "afn-sasebo-rally1",
+      "frameCount": 90,
+      "fps": 30,
+      "diff": {
+        "mean": 2.1954197877652937,
+        "p50": 1.5416666666666667,
+        "p90": 2.8059895833333335,
+        "p99": 45.74956597222222
+      },
+      "lag2OverLag1MedianDiffRatio": 1.7522522522522521,
+      "diffAlternationIndex": 0.835339221901994,
+      "timing": {
+        "meanDeltaMs": 33.333337078651645,
+        "stdDeltaMs": 0.0004727119992689605,
+        "cv": 0.000014181358384657778
+      },
+      "flow": {
+        "matchedBlocks": 12555,
+        "p50": 0,
+        "p90": 0,
+        "p99": 6,
+        "saturatedFraction": 0.007407407407407408
+      }
+    },
+    {
+      "id": "afn-sasebo-rally1-x2",
+      "group": "speed_variant",
+      "speedFactor": 2,
+      "sourceId": "afn-sasebo-rally1",
+      "frameCount": 68,
+      "fps": 30,
+      "diff": {
+        "mean": 2.7615956674958535,
+        "p50": 1.9700520833333333,
+        "p90": 3.0047743055555554,
+        "p99": 45.75
+      },
+      "lag2OverLag1MedianDiffRatio": 1.6184181537783653,
+      "diffAlternationIndex": 0.572456565504921,
+      "timing": {
+        "meanDeltaMs": 33.333328358208966,
+        "stdDeltaMs": 0.00046961590215917136,
+        "cv": 0.00001408847916753322
+      },
+      "flow": {
+        "matchedBlocks": 9457,
+        "p50": 0,
+        "p90": 0,
+        "p99": 7,
+        "saturatedFraction": 0.010151210743364704
+      }
+    },
+    {
+      "id": "afn-sasebo-rally1-x3",
+      "group": "speed_variant",
+      "speedFactor": 3,
+      "sourceId": "afn-sasebo-rally1",
+      "frameCount": 46,
+      "fps": 30,
+      "diff": {
+        "mean": 3.6816840277777776,
+        "p50": 2.69140625,
+        "p90": 3.8111979166666665,
+        "p99": 45.821614583333336
+      },
+      "lag2OverLag1MedianDiffRatio": 1.5476536042573776,
+      "diffAlternationIndex": 0.649377442165031,
+      "timing": {
+        "meanDeltaMs": 33.33333333333335,
+        "stdDeltaMs": 0.00047140452078970983,
+        "cv": 0.000014142135623691288
+      },
+      "flow": {
+        "matchedBlocks": 6347,
+        "p50": 0,
+        "p90": 1,
+        "p99": 7.615773105863909,
+        "saturatedFraction": 0.016543248778950685
+      }
+    },
+    {
+      "id": "wm-volley-02",
+      "group": "tune_positive",
+      "speedFactor": null,
+      "sourceId": null,
+      "frameCount": 200,
+      "fps": 25,
+      "diff": {
+        "mean": 1.7002351165549956,
+        "p50": 1.5707465277777777,
+        "p90": 2.849826388888889,
+        "p99": 4.114149305555555
+      },
+      "lag2OverLag1MedianDiffRatio": 1.786128764852169,
+      "diffAlternationIndex": 0.34429655952301724,
+      "timing": {
+        "meanDeltaMs": 39.999999999999964,
+        "stdDeltaMs": 1.4554996468423718e-13,
+        "cv": 3.6387491171059324e-15
+      },
+      "flow": {
+        "matchedBlocks": 26445,
+        "p50": 0,
+        "p90": 0,
+        "p99": 2,
+        "saturatedFraction": 0.0009831726224238987
+      }
+    },
+    {
+      "id": "wm-volley-02-x1.5",
+      "group": "speed_variant",
+      "speedFactor": 1.5,
+      "sourceId": "wm-volley-02",
+      "frameCount": 162,
+      "fps": 30,
+      "diff": {
+        "mean": 1.9672834713595577,
+        "p50": 1.5967881944444444,
+        "p90": 3.8489583333333335,
+        "p99": 5.151475694444445
+      },
+      "lag2OverLag1MedianDiffRatio": 1.9853220983963034,
+      "diffAlternationIndex": 0.5523266637158929,
+      "timing": {
+        "meanDeltaMs": 33.3333354037266,
+        "stdDeltaMs": 0.00047213140840997845,
+        "cv": 0.000014163941372551488
+      },
+      "flow": {
+        "matchedBlocks": 21385,
+        "p50": 0,
+        "p90": 0,
+        "p99": 3,
+        "saturatedFraction": 0.001917231704465747
+      }
+    },
+    {
+      "id": "wm-volley-02-x2",
+      "group": "speed_variant",
+      "speedFactor": 2,
+      "sourceId": "wm-volley-02",
+      "frameCount": 122,
+      "fps": 30,
+      "diff": {
+        "mean": 2.5005846820477506,
+        "p50": 2.2938368055555554,
+        "p90": 3.9973958333333335,
+        "p99": 5.14453125
+      },
+      "lag2OverLag1MedianDiffRatio": 1.775023651844844,
+      "diffAlternationIndex": 0.5393617051797168,
+      "timing": {
+        "meanDeltaMs": 33.33333057851232,
+        "stdDeltaMs": 0.0004704214700968245,
+        "cv": 0.000014112645269239088
+      },
+      "flow": {
+        "matchedBlocks": 16078,
+        "p50": 0,
+        "p90": 1,
+        "p99": 4,
+        "saturatedFraction": 0.003172036322925737
+      }
+    },
+    {
+      "id": "wm-volley-02-x3",
+      "group": "speed_variant",
+      "speedFactor": 3,
+      "sourceId": "wm-volley-02",
+      "frameCount": 82,
+      "fps": 30,
+      "diff": {
+        "mean": 3.3650280778463646,
+        "p50": 3.0160590277777777,
+        "p90": 5.260416666666667,
+        "p99": 6.189670138888889
+      },
+      "lag2OverLag1MedianDiffRatio": 1.815800834652468,
+      "diffAlternationIndex": 0.47014876710801834,
+      "timing": {
+        "meanDeltaMs": 33.333333333333314,
+        "stdDeltaMs": 0.00047140452078075286,
+        "cv": 0.000014142135623422594
+      },
+      "flow": {
+        "matchedBlocks": 10760,
+        "p50": 0,
+        "p90": 1,
+        "p99": 5.385164807134505,
+        "saturatedFraction": 0.005947955390334572
+      }
+    },
+    {
+      "id": "va-6N3Yc184a_c",
+      "group": "fresh_candidate",
+      "speedFactor": null,
+      "sourceId": null,
+      "frameCount": 1799,
+      "fps": 29.97002997002997,
+      "diff": {
+        "mean": 2.288258896845265,
+        "p50": 1.3129340277777777,
+        "p90": 3.98828125,
+        "p99": 22.32986111111111
+      },
+      "lag2OverLag1MedianDiffRatio": 1.827107438016529,
+      "diffAlternationIndex": 0.527070529625509,
+      "timing": {
+        "meanDeltaMs": 33.366666852058096,
+        "stdDeltaMs": 0.0004713389340454234,
+        "cv": 0.000014126041900896393
+      },
+      "flow": {
+        "matchedBlocks": 233011,
+        "p50": 0,
+        "p90": 0,
+        "p99": 5,
+        "saturatedFraction": 0.006282965181901284
+      }
+    },
+    {
+      "id": "va-O1dLhGGPErc",
+      "group": "fresh_candidate",
+      "speedFactor": null,
+      "sourceId": null,
+      "frameCount": 1440,
+      "fps": 24,
+      "diff": {
+        "mean": 6.414586409833218,
+        "p50": 3.2786458333333335,
+        "p90": 15.442274305555555,
+        "p99": 46.56727430555556
+      },
+      "lag2OverLag1MedianDiffRatio": 1.792030712205454,
+      "diffAlternationIndex": 0.5608407536122122,
+      "timing": {
+        "meanDeltaMs": 41.66666643502346,
+        "stdDeltaMs": 0.00047148635281240095,
+        "cv": 0.000011315672530406391
+      },
+      "flow": {
+        "matchedBlocks": 176770,
+        "p50": 0,
+        "p90": 4.123105625617661,
+        "p99": 8.602325267042627,
+        "saturatedFraction": 0.053266957062850034
+      }
+    },
+    {
+      "id": "voa-6108955",
+      "group": "fresh_candidate",
+      "speedFactor": null,
+      "sourceId": null,
+      "frameCount": 1799,
+      "fps": 29.97,
+      "diff": {
+        "mean": 1.6538891592510183,
+        "p50": 0.7217881944444444,
+        "p90": 3.107204861111111,
+        "p99": 11.039930555555555
+      },
+      "lag2OverLag1MedianDiffRatio": 1.8190018039687312,
+      "diffAlternationIndex": 0.45293814162138857,
+      "timing": {
+        "meanDeltaMs": 33.366699666296114,
+        "stdDeltaMs": 0.0004584030653097855,
+        "cv": 0.000013738340018471198
+      },
+      "flow": {
+        "matchedBlocks": 218226,
+        "p50": 0,
+        "p90": 1,
+        "p99": 7,
+        "saturatedFraction": 0.009439755116255624
+      }
+    },
+    {
+      "id": "voa-6115790",
+      "group": "fresh_candidate",
+      "speedFactor": null,
+      "sourceId": null,
+      "frameCount": 1799,
+      "fps": 29.97,
+      "diff": {
+        "mean": 1.0884132446545531,
+        "p50": 0.3802083333333333,
+        "p90": 2.2061631944444446,
+        "p99": 8.64236111111111
+      },
+      "lag2OverLag1MedianDiffRatio": 2.1358447488584478,
+      "diffAlternationIndex": 1.0677761582475254,
+      "timing": {
+        "meanDeltaMs": 33.366699666296114,
+        "stdDeltaMs": 0.0004584030653097855,
+        "cv": 0.000013738340018471198
+      },
+      "flow": {
+        "matchedBlocks": 214616,
+        "p50": 0,
+        "p90": 0,
+        "p99": 3,
+        "saturatedFraction": 0.0047573340291497375
+      }
+    },
+    {
+      "id": "yt-6r4fOxRuKmM",
+      "group": "fresh_candidate",
+      "speedFactor": null,
+      "sourceId": null,
+      "frameCount": 3596,
+      "fps": 59.94005994005994,
+      "diff": {
+        "mean": 0.30769249343223665,
+        "p50": 0.23350694444444445,
+        "p90": 0.6124131944444444,
+        "p99": 1.2287326388888888
+      },
+      "lag2OverLag1MedianDiffRatio": 1.828996282527881,
+      "diffAlternationIndex": 0.10991019231052294,
+      "timing": {
+        "meanDeltaMs": 16.68333324061155,
+        "stdDeltaMs": 0.0004713717286230741,
+        "cv": 0.000028254049824745655
+      },
+      "flow": {
+        "matchedBlocks": 505013,
+        "p50": 0,
+        "p90": 0,
+        "p99": 0,
+        "saturatedFraction": 0.000017821323411476535
+      }
+    },
+    {
+      "id": "yt-94KNxpNTyCw",
+      "group": "fresh_candidate",
+      "speedFactor": null,
+      "sourceId": null,
+      "frameCount": 1800,
+      "fps": 30,
+      "diff": {
+        "mean": 0.5328859879717124,
+        "p50": 0.43359375,
+        "p90": 1.03125,
+        "p99": 1.7118055555555556
+      },
+      "lag2OverLag1MedianDiffRatio": 1.7687687687687688,
+      "diffAlternationIndex": 0.1059224932335684,
+      "timing": {
+        "meanDeltaMs": 33.3333335186211,
+        "stdDeltaMs": 0.0004714699889564252,
+        "cv": 0.000014144099590070896
+      },
+      "flow": {
+        "matchedBlocks": 203582,
+        "p50": 0,
+        "p90": 0,
+        "p99": 1,
+        "saturatedFraction": 0.00018174494798164868
+      }
+    },
+    {
+      "id": "yt-9ru97zKV8mk",
+      "group": "fresh_candidate",
+      "speedFactor": null,
+      "sourceId": null,
+      "frameCount": 1800,
+      "fps": 30,
+      "diff": {
+        "mean": 0.9736415581959093,
+        "p50": 0.5889756944444444,
+        "p90": 1.6770833333333333,
+        "p99": 10.74435763888889
+      },
+      "lag2OverLag1MedianDiffRatio": 1.797347089167281,
+      "diffAlternationIndex": 0.34940747121348237,
+      "timing": {
+        "meanDeltaMs": 33.3333335186211,
+        "stdDeltaMs": 0.0004714699889564252,
+        "cv": 0.000014144099590070896
+      },
+      "flow": {
+        "matchedBlocks": 205668,
+        "p50": 0,
+        "p90": 0,
+        "p99": 2,
+        "saturatedFraction": 0.0026693506038858745
+      }
+    },
+    {
+      "id": "yt-I5wYCXCL4dY",
+      "group": "fresh_candidate",
+      "speedFactor": null,
+      "sourceId": null,
+      "frameCount": 3600,
+      "fps": 60,
+      "diff": {
+        "mean": 0.25122610736778656,
+        "p50": 0.19661458333333334,
+        "p90": 0.40234375,
+        "p99": 1.08203125
+      },
+      "lag2OverLag1MedianDiffRatio": 1.770419426048565,
+      "diffAlternationIndex": 0.14122216489641604,
+      "timing": {
+        "meanDeltaMs": 16.66666657404871,
+        "stdDeltaMs": 0.00047143725595936656,
+        "cv": 0.000028286235514750795
+      },
+      "flow": {
+        "matchedBlocks": 378883,
+        "p50": 0,
+        "p90": 0,
+        "p99": 0,
+        "saturatedFraction": 0.00007654077907955754
+      }
+    },
+    {
+      "id": "yt-Y7DOO0j_1P4",
+      "group": "fresh_candidate",
+      "speedFactor": null,
+      "sourceId": null,
+      "frameCount": 1798,
+      "fps": 29.97002997002997,
+      "diff": {
+        "mean": 1.021643421906881,
+        "p50": 0.4683159722222222,
+        "p90": 2.7825520833333335,
+        "p99": 5.131076388888889
+      },
+      "lag2OverLag1MedianDiffRatio": 1.607970342910102,
+      "diffAlternationIndex": 0.10082141937131876,
+      "timing": {
+        "meanDeltaMs": 33.36666666666694,
+        "stdDeltaMs": 0.00047140452073934013,
+        "cv": 0.000014128007614565524
+      },
+      "flow": {
+        "matchedBlocks": 196698,
+        "p50": 0,
+        "p90": 0,
+        "p99": 3,
+        "saturatedFraction": 0.001235396394472745
+      }
+    },
+    {
+      "id": "yt-eK-iPN2XAJQ",
+      "group": "fresh_candidate",
+      "speedFactor": null,
+      "sourceId": null,
+      "frameCount": 1798,
+      "fps": 29.97002997002997,
+      "diff": {
+        "mean": 1.1588230094138385,
+        "p50": 0.7769097222222222,
+        "p90": 2.037326388888889,
+        "p99": 8.465277777777779
+      },
+      "lag2OverLag1MedianDiffRatio": 1.682122905027933,
+      "diffAlternationIndex": 0.5099853089042812,
+      "timing": {
+        "meanDeltaMs": 33.36666666666694,
+        "stdDeltaMs": 0.00047140452073934013,
+        "cv": 0.000014128007614565524
+      },
+      "flow": {
+        "matchedBlocks": 245033,
+        "p50": 0,
+        "p90": 0,
+        "p99": 2.23606797749979,
+        "saturatedFraction": 0.0013916492880550783
+      }
+    },
+    {
+      "id": "yt-hktiyFnghIw",
+      "group": "fresh_candidate",
+      "speedFactor": null,
+      "sourceId": null,
+      "frameCount": 1798,
+      "fps": 29.97002997002997,
+      "diff": {
+        "mean": 0.5517430188431334,
+        "p50": 0.4262152777777778,
+        "p90": 1.2009548611111112,
+        "p99": 1.9292534722222223
+      },
+      "lag2OverLag1MedianDiffRatio": 1.7739307535641546,
+      "diffAlternationIndex": 0.09720495474058481,
+      "timing": {
+        "meanDeltaMs": 33.36666666666694,
+        "stdDeltaMs": 0.00047140452073934013,
+        "cv": 0.000014128007614565524
+      },
+      "flow": {
+        "matchedBlocks": 206495,
+        "p50": 0,
+        "p90": 0,
+        "p99": 1,
+        "saturatedFraction": 0.0002469793457468704
+      }
+    },
+    {
+      "id": "yt-iuVdtmGoTbo",
+      "group": "fresh_candidate",
+      "speedFactor": null,
+      "sourceId": null,
+      "frameCount": 3600,
+      "fps": 60,
+      "diff": {
+        "mean": 0.20294398424716734,
+        "p50": 0.16927083333333334,
+        "p90": 0.35546875,
+        "p99": 0.7222222222222222
+      },
+      "lag2OverLag1MedianDiffRatio": 1.7999999999999998,
+      "diffAlternationIndex": 0.13801120355179375,
+      "timing": {
+        "meanDeltaMs": 16.66666657404871,
+        "stdDeltaMs": 0.00047143725595936656,
+        "cv": 0.000028286235514750795
+      },
+      "flow": {
+        "matchedBlocks": 510637,
+        "p50": 0,
+        "p90": 0,
+        "p99": 0,
+        "saturatedFraction": 0.000003916676621553079
+      }
+    },
+    {
+      "id": "yt-n-QrBfQVK_w",
+      "group": "fresh_candidate",
+      "speedFactor": null,
+      "sourceId": null,
+      "frameCount": 1800,
+      "fps": 30,
+      "diff": {
+        "mean": 0.5668093964239387,
+        "p50": 0.4822048611111111,
+        "p90": 0.9700520833333334,
+        "p99": 1.9865451388888888
+      },
+      "lag2OverLag1MedianDiffRatio": 1.7731773177317731,
+      "diffAlternationIndex": 0.12006933019470961,
+      "timing": {
+        "meanDeltaMs": 33.3333335186211,
+        "stdDeltaMs": 0.0004714699889564252,
+        "cv": 0.000014144099590070896
+      },
+      "flow": {
+        "matchedBlocks": 217890,
+        "p50": 0,
+        "p90": 0,
+        "p99": 1,
+        "saturatedFraction": 0.00016063151131304787
+      }
+    },
+    {
+      "id": "yt-o_NeuHjTEVE",
+      "group": "fresh_candidate",
+      "speedFactor": null,
+      "sourceId": null,
+      "frameCount": 1798,
+      "fps": 29.97002997002997,
+      "diff": {
+        "mean": 0.5425895493260378,
+        "p50": 0.45703125,
+        "p90": 0.8888888888888888,
+        "p99": 2.3828125
+      },
+      "lag2OverLag1MedianDiffRatio": 1.6752136752136753,
+      "diffAlternationIndex": 0.10340825807933958,
+      "timing": {
+        "meanDeltaMs": 33.36666666666694,
+        "stdDeltaMs": 0.00047140452073934013,
+        "cv": 0.000014128007614565524
+      },
+      "flow": {
+        "matchedBlocks": 220111,
+        "p50": 0,
+        "p90": 0,
+        "p99": 1,
+        "saturatedFraction": 0.00009086324627119953
+      }
+    },
+    {
+      "id": "yt-tJuJ4MQdYy0",
+      "group": "fresh_candidate",
+      "speedFactor": null,
+      "sourceId": null,
+      "frameCount": 3600,
+      "fps": 60,
+      "diff": {
+        "mean": 0.32276917681609013,
+        "p50": 0.0954861111111111,
+        "p90": 0.9466145833333334,
+        "p99": 2.3138020833333335
+      },
+      "lag2OverLag1MedianDiffRatio": 4.372727272727273,
+      "diffAlternationIndex": 1.6337389901548183,
+      "timing": {
+        "meanDeltaMs": 16.66666657404871,
+        "stdDeltaMs": 0.00047143725595936656,
+        "cv": 0.000028286235514750795
+      },
+      "flow": {
+        "matchedBlocks": 465156,
+        "p50": 0,
+        "p90": 0,
+        "p99": 1,
+        "saturatedFraction": 0.0002730266835212273
+      }
+    }
+  ]
+}
