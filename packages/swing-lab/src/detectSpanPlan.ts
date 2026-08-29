@@ -105,7 +105,14 @@ export function planDetectSpanHull(
     startMs: Math.min(...events.map((event) => event.startMs)),
     endMs: Math.max(...events.map((event) => event.endMs)),
   };
-  return padFloorClamp(hull, strokeWindow);
+  const clamped = padFloorClamp(hull, strokeWindow);
+  // An event hull entirely outside the stroke window clamps to an inverted
+  // (empty) span, starving the detector of every frame. Fall back to the
+  // whole stroke window, exactly as when no events were proposed.
+  if (clamped.endMs <= clamped.startMs) {
+    return { startMs: strokeWindow.startMs, endMs: strokeWindow.endMs };
+  }
+  return clamped;
 }
 
 /**
