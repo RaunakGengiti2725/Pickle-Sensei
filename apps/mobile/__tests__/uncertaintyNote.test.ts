@@ -163,6 +163,53 @@ describe('uncertaintyNotes', () => {
     ]);
   });
 
+  it('adds a capture-quality note ONLY when something was withheld AND the measured envelope was not SUPPORTED', () => {
+    const degradedEnvelope = {
+      thresholdsVersion: 'capture-envelope-thresholds-v0.1-provisional',
+      provisional: true,
+      dimensions: [
+        {
+          dimension: 'resolution' as const,
+          status: 'DEGRADED' as const,
+          measured: 640,
+          unit: 'px_short_side',
+          thresholdId: 'resolution.short_side.v0.1',
+        },
+      ],
+      overall: 'DEGRADED' as const,
+      notMeasured: [],
+    };
+    // Score withheld + degraded envelope → quality note explains it.
+    const withheld: StrokeResultEvidenceRecord = {
+      id: 'r1',
+      result: null,
+      captureEnvelope: degradedEnvelope,
+    };
+    expect(
+      uncertaintyNotes({ record: withheld, analysis: null }).map(n => n.kind),
+    ).toContain('capture_quality');
+
+    // Nothing withheld → no quality hedge on a rendered result.
+    const clean: StrokeResultEvidenceRecord = {
+      id: 'r2',
+      result: analysisFixture(),
+      contact: confirmedContact,
+      temporalPhasesV2: segmentedPhases,
+      captureEnvelope: degradedEnvelope,
+    };
+    expect(
+      uncertaintyNotes({ record: clean, analysis: analysisFixture() }).map(
+        n => n.kind,
+      ),
+    ).toEqual([]);
+
+    // Withheld but NO measured envelope → no quality claim is invented.
+    const noEnvelope: StrokeResultEvidenceRecord = { id: 'r3', result: null };
+    expect(
+      uncertaintyNotes({ record: noEnvelope, analysis: null }).map(n => n.kind),
+    ).not.toContain('capture_quality');
+  });
+
   it('never adds a stroke-identity note when the classifier committed', () => {
     const record: StrokeResultEvidenceRecord = {
       id: 'r1',

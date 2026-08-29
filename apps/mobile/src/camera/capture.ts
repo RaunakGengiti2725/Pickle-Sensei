@@ -304,6 +304,36 @@ interface CameraEventBase {
   emittedAtIso: string;
 }
 
+/**
+ * Typed native contract for on-device-computable capture-envelope signals.
+ * Resolution/fps come from the configured camera format; brightness, blur
+ * and camera-motion proxies are computed over sampled preview frames using
+ * the SAME normalization the offline prober uses (grayscale, 320px-wide
+ * downscale) so `capture-envelope-thresholds-v0.1-provisional` applies.
+ *
+ * The Swift side of this contract is CONTRACT-ONLY and UNVERIFIED-ON-DEVICE
+ * (native/vision-core/Sources/CaptureQualitySignals.swift): no emitter is
+ * wired in this build, so no `capture_quality` event fires yet. A field the
+ * emitter cannot compute is null — the envelope checker reports that
+ * dimension NOT_MEASURED rather than guessing.
+ */
+export interface CaptureQualitySignalsV1 {
+  schemaVersion: 1;
+  /** Configured capture format, physical pixels. */
+  frameWidthPx: number | null;
+  frameHeightPx: number | null;
+  /** Configured (or measured over the sample window) capture frame rate. */
+  avgFrameRateFps: number | null;
+  /** Mean luma (0–255) over sampled normalized preview frames. */
+  brightnessMeanLuma: number | null;
+  /** Median Laplacian variance over sampled normalized preview frames. */
+  laplacianVarianceMedian: number | null;
+  /** Mean abs per-pixel luma diff between consecutive sampled frames. */
+  meanAbsFrameDiff: number | null;
+  /** Number of preview frames the proxies were computed over. */
+  sampledFrameCount: number;
+}
+
 export type CameraEvent =
   | (CameraEventBase & {
       type: 'permission';
@@ -340,6 +370,10 @@ export type CameraEvent =
       confidence: number;
       detectionModelVersion: string;
       recognition: StrokeRecognition;
+    })
+  | (CameraEventBase & {
+      type: 'capture_quality';
+      signals: CaptureQualitySignalsV1;
     })
   | (CameraEventBase & {
       type: 'processing';

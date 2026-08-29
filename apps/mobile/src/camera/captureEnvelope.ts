@@ -1,100 +1,185 @@
-import type { CameraEvent } from './capture';
+import type {
+  EnvelopeDimension,
+  EnvelopeStatus,
+  EnvelopeVerdict,
+} from '@pickle/shared-types';
+import { ENVELOPE_DIMENSIONS } from '@pickle/shared-types';
+import {
+  evaluateCaptureEnvelope,
+  type CaptureEnvelopeMeasurements,
+} from '@pickle/capture-envelope';
+import type { CapturedClip, CaptureQualitySignalsV1 } from './capture';
 
 /**
- * Pre-Ready capture envelope — a typed verdict over the capture conditions
- * the live pipeline can actually measure, surfaced BEFORE the user swings.
+ * Capture envelope — the canonical EnvelopeVerdict from @pickle/shared-types
+ * (C12), evaluated on-device by the shared checker in
+ * @pickle/capture-envelope with its versioned provisional thresholds.
  *
- * `@pickle/shared-types` does not export an EnvelopeVerdict contract today,
- * so this module defines a minimal local interface with 'capture envelope
- * checker' semantics (SUPPORTED / DEGRADED / UNSUPPORTED per dimension).
- * When a shared contract lands, this shape is additive-mergeable: same
- * per-dimension verdict vocabulary, dimensions optional so unmeasured
- * conditions stay honestly absent rather than fabricated.
+ * Two evaluation points, both honest about what was actually measured:
+ *  - LIVE (pre-Ready): readiness events supply player visibility; the typed
+ *    native quality contract (CaptureQualitySignalsV1) supplies resolution,
+ *    fps, brightness, blur and camera-motion proxies when an emitter exists.
+ *    Everything else is NOT_MEASURED — never guessed.
+ *  - ATTEMPT (at analysis time): the recorded clip's configured
+ *    resolution/fps/duration are real capture-config values; preview-derived
+ *    proxies and readiness visibility carry over from the live window.
  *
+ * Ready gating blocks ONLY on UNSUPPORTED; DEGRADED guides but permits.
  * All functions are pure (no React, no IO) so jest pins them directly.
  */
 
-export const ENVELOPE_DIMENSION_VERDICTS = [
-  'SUPPORTED',
-  'DEGRADED',
-  'UNSUPPORTED',
-] as const;
-export type EnvelopeDimensionVerdict =
-  (typeof ENVELOPE_DIMENSION_VERDICTS)[number];
+/** Live readiness snapshot the envelope consumes (subset of the event). */
+export interface ReadinessSnapshot {
+  state: string;
+  jointCoverage: number;
+}
 
-export const CAPTURE_ENVELOPE_DIMENSIONS = [
-  'subject_visibility',
-  'subject_distance',
-  'stability',
-  'lighting',
-] as const;
-export type CaptureEnvelopeDimension =
-  (typeof CAPTURE_ENVELOPE_DIMENSIONS)[number];
+function readinessVisibility(
+  readiness: ReadinessSnapshot | null,
+): number | null {
+  if (!readiness) return null;
+  // no_person is an observed zero-visibility read, not an absence of data.
+  if (readiness.state === 'no_person') return 0;
+  return readiness.jointCoverage;
+}
 
-export interface EnvelopeDimensionRead {
-  verdict: EnvelopeDimensionVerdict;
-  /** Machine reason token recorded with the read (never shown raw). */
-  reason?: string;
+function qualityMeasurements(
+  quality: CaptureQualitySignalsV1 | null,
+): Pick<
+  CaptureEnvelopeMeasurements,
+  | 'frameWidthPx'
+  | 'frameHeightPx'
+  | 'avgFrameRateFps'
+  | 'brightnessMeanLuma'
+  | 'laplacianVarianceMedian'
+  | 'meanAbsFrameDiff'
+> {
+  return {
+    frameWidthPx: quality?.frameWidthPx ?? null,
+    frameHeightPx: quality?.frameHeightPx ?? null,
+    avgFrameRateFps: quality?.avgFrameRateFps ?? null,
+    brightnessMeanLuma: quality?.brightnessMeanLuma ?? null,
+    laplacianVarianceMedian: quality?.laplacianVarianceMedian ?? null,
+    meanAbsFrameDiff: quality?.meanAbsFrameDiff ?? null,
+  };
 }
 
 /**
- * A dimension absent from `dimensions` was NOT measured — its guidance is
- * never shown and it never blocks Ready. Absence is honest, not SUPPORTED.
+ * Live pre-Ready envelope. Returns null when NOTHING has been measured yet
+ * (no readiness event and no native quality signals) — no verdict is
+ * fabricated from silence.
  */
-export interface EnvelopeVerdict {
-  schemaVersion: 1;
-  source: 'live_readiness_events';
-  dimensions: Partial<Record<CaptureEnvelopeDimension, EnvelopeDimensionRead>>;
+export function liveCaptureEnvelope(
+  readiness: ReadinessSnapshot | null,
+  quality: CaptureQualitySignalsV1 | null,
+): EnvelopeVerdict | null {
+  if (!readiness && !quality) return null;
+  return evaluateCaptureEnvelope({
+    ...qualityMeasurements(quality),
+    brightnessStdLuma: null,
+    clipDurationMs: null,
+    playerPixelHeightFraction: null,
+    playerMeanJointVisibility: readinessVisibility(readiness),
+  });
+}
+
+/**
+ * Attempt envelope evaluated when a recorded clip enters analysis.
+ * Resolution, frame rate and duration come from the clip's real capture
+ * configuration; preview-derived proxies and readiness visibility carry
+ * over from the live window (null when never emitted/observed).
+ */
+export function attemptCaptureEnvelope(
+  clip: Pick<CapturedClip, 'width' | 'height' | 'fps' | 'durationMs'>,
+  quality: CaptureQualitySignalsV1 | null,
+  readiness: ReadinessSnapshot | null,
+): EnvelopeVerdict {
+  const proxies = qualityMeasurements(quality);
+  return evaluateCaptureEnvelope({
+    ...proxies,
+    frameWidthPx: clip.width,
+    frameHeightPx: clip.height,
+    avgFrameRateFps: clip.fps,
+    brightnessStdLuma: null,
+    clipDurationMs: clip.durationMs,
+    playerPixelHeightFraction: null,
+    playerMeanJointVisibility: readinessVisibility(readiness),
+  });
 }
 
 export interface CaptureGuidanceLine {
-  dimension: CaptureEnvelopeDimension;
-  verdict: Exclude<EnvelopeDimensionVerdict, 'SUPPORTED'>;
+  dimension: EnvelopeDimension;
+  status: Exclude<EnvelopeStatus, 'SUPPORTED' | 'NOT_MEASURED'>;
   /** Actionable instruction — tells the player what to change, not what failed. */
   text: string;
 }
 
 const GUIDANCE_COPY: Record<
-  CaptureEnvelopeDimension,
-  Record<Exclude<EnvelopeDimensionVerdict, 'SUPPORTED'>, string>
+  EnvelopeDimension,
+  Record<'DEGRADED' | 'UNSUPPORTED', string>
 > = {
-  subject_visibility: {
+  resolution: {
+    DEGRADED:
+      'Video resolution is low — a higher-quality setting sharpens the read.',
+    UNSUPPORTED:
+      'Video resolution is too low for analysis — raise the camera quality setting.',
+  },
+  frame_rate: {
+    DEGRADED: 'Frame rate is a little low — 30fps or higher improves the read.',
+    UNSUPPORTED:
+      'Frame rate is too low to follow a swing — use 30fps or higher.',
+  },
+  brightness: {
+    DEGRADED: 'It looks dim or washed out — better light sharpens the read.',
+    UNSUPPORTED:
+      'The scene is too dark or too bright to read — adjust the lighting.',
+  },
+  motion_blur: {
+    DEGRADED: 'The image is a bit soft — more light or a cleaner lens helps.',
+    UNSUPPORTED:
+      'The image is too blurry to read — add light and steady the phone.',
+  },
+  camera_motion: {
+    DEGRADED:
+      'The camera is moving a little — a steadier mount improves the read.',
+    UNSUPPORTED: 'The camera is moving too much — prop it on something stable.',
+  },
+  clip_duration: {
+    DEGRADED: 'The clip length is outside the ideal range for a clean read.',
+    UNSUPPORTED: 'The clip is too short or too long to analyze a single swing.',
+  },
+  player_pixel_height: {
+    DEGRADED: 'You look small in frame — moving closer improves the read.',
+    UNSUPPORTED:
+      'You are too small in frame to analyze — move the phone closer.',
+  },
+  player_visibility: {
     DEGRADED: 'Keep your full body visible — a joint keeps leaving the frame.',
     UNSUPPORTED: 'Keep your full body visible inside the corners.',
   },
-  subject_distance: {
-    DEGRADED: 'Adjust your distance until your whole body fits comfortably.',
-    UNSUPPORTED: 'Move the phone closer or step back until you fill the frame.',
-  },
-  stability: {
-    DEGRADED: 'Hold still for a moment so the camera can lock on.',
-    UNSUPPORTED: 'Hold still — the camera has not locked onto you yet.',
-  },
-  lighting: {
-    DEGRADED: 'It looks dim — more light will sharpen the read.',
-    UNSUPPORTED: 'Too dark — add light or move somewhere brighter.',
-  },
 };
 
-const DIMENSION_ORDER = CAPTURE_ENVELOPE_DIMENSIONS;
-
 /**
- * Actionable guidance lines for every MEASURED dimension that is not
- * SUPPORTED, in fixed dimension order. Unmeasured dimensions produce
- * nothing: guidance is never invented for a condition nobody read.
+ * Actionable guidance lines for every MEASURED dimension that is DEGRADED
+ * or UNSUPPORTED, in canonical dimension order. NOT_MEASURED dimensions
+ * produce nothing: guidance is never invented for a condition nobody read.
  */
 export function captureGuidanceLines(
   envelope: EnvelopeVerdict | null,
 ): CaptureGuidanceLine[] {
   if (!envelope) return [];
+  const byDimension = new Map(envelope.dimensions.map(d => [d.dimension, d]));
   const lines: CaptureGuidanceLine[] = [];
-  for (const dimension of DIMENSION_ORDER) {
-    const read = envelope.dimensions[dimension];
-    if (!read || read.verdict === 'SUPPORTED') continue;
+  for (const dimension of ENVELOPE_DIMENSIONS) {
+    const verdict = byDimension.get(dimension);
+    if (!verdict) continue;
+    if (verdict.status !== 'DEGRADED' && verdict.status !== 'UNSUPPORTED') {
+      continue;
+    }
     lines.push({
       dimension,
-      verdict: read.verdict,
-      text: GUIDANCE_COPY[dimension][read.verdict],
+      status: verdict.status,
+      text: GUIDANCE_COPY[dimension][verdict.status],
     });
   }
   return lines;
@@ -103,74 +188,14 @@ export function captureGuidanceLines(
 export interface ReadyGate {
   blocked: boolean;
   /** The UNSUPPORTED dimensions that block Ready (DEGRADED never blocks). */
-  blockingDimensions: CaptureEnvelopeDimension[];
+  blockingDimensions: EnvelopeDimension[];
 }
 
 /** Ready is blocked ONLY by UNSUPPORTED dimensions; DEGRADED guides but permits. */
 export function readyGate(envelope: EnvelopeVerdict | null): ReadyGate {
   if (!envelope) return { blocked: false, blockingDimensions: [] };
-  const blockingDimensions = DIMENSION_ORDER.filter(
-    dimension => envelope.dimensions[dimension]?.verdict === 'UNSUPPORTED',
-  );
+  const blockingDimensions = envelope.dimensions
+    .filter(d => d.status === 'UNSUPPORTED')
+    .map(d => d.dimension);
   return { blocked: blockingDimensions.length > 0, blockingDimensions };
-}
-
-/** Full-body joint coverage below this reads as DEGRADED visibility. */
-export const DEGRADED_JOINT_COVERAGE = 0.85;
-/** Stability holds shorter than this read as DEGRADED (not yet settled). */
-export const DEGRADED_STABILITY_MS = 500;
-
-/**
- * Derives an envelope verdict from a live readiness event — the only live
- * capture-condition signal this build emits. Mapping claims exactly what
- * the event measured:
- *  - `no_person` / `full_body_required` → subject_visibility UNSUPPORTED;
- *    otherwise jointCoverage < 0.85 → DEGRADED, else SUPPORTED.
- *  - `move_closer` / `move_farther` → subject_distance UNSUPPORTED; any
- *    other person-visible state → SUPPORTED (distance passed native checks).
- *  - `hold_still` → stability UNSUPPORTED; `ready` with a short stable hold
- *    → DEGRADED, else SUPPORTED.
- *  - lighting: NOT measured by readiness events — always absent here, so
- *    no lighting guidance can be fabricated from this source.
- * Non-readiness events return null (no verdict, nothing to show).
- */
-export function envelopeFromReadinessEvent(
-  event: CameraEvent,
-): EnvelopeVerdict | null {
-  if (event.type !== 'readiness') return null;
-  const dimensions: EnvelopeVerdict['dimensions'] = {};
-
-  if (event.state === 'no_person' || event.state === 'full_body_required') {
-    dimensions.subject_visibility = {
-      verdict: 'UNSUPPORTED',
-      reason: event.state,
-    };
-  } else if (event.jointCoverage < DEGRADED_JOINT_COVERAGE) {
-    dimensions.subject_visibility = {
-      verdict: 'DEGRADED',
-      reason: 'partial_joint_coverage',
-    };
-  } else {
-    dimensions.subject_visibility = { verdict: 'SUPPORTED' };
-  }
-
-  if (event.state === 'move_closer' || event.state === 'move_farther') {
-    dimensions.subject_distance = {
-      verdict: 'UNSUPPORTED',
-      reason: event.state,
-    };
-  } else if (event.state !== 'no_person') {
-    dimensions.subject_distance = { verdict: 'SUPPORTED' };
-  }
-
-  if (event.state === 'hold_still') {
-    dimensions.stability = { verdict: 'UNSUPPORTED', reason: event.state };
-  } else if (event.state === 'ready') {
-    dimensions.stability =
-      event.stableForMs < DEGRADED_STABILITY_MS
-        ? { verdict: 'DEGRADED', reason: 'short_stable_hold' }
-        : { verdict: 'SUPPORTED' };
-  }
-
-  return { schemaVersion: 1, source: 'live_readiness_events', dimensions };
 }

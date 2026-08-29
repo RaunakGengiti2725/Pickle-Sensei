@@ -42,6 +42,12 @@ const pickleAliases = {
     monorepoRoot,
     'packages/analysis-pipeline/src/index.ts',
   ),
+  // RN-safe entry: the package's main index also exports the node-only
+  // ffmpeg clip prober, which cannot bundle for the app.
+  '@pickle/capture-envelope': path.join(
+    monorepoRoot,
+    'packages/capture-envelope/src/core.ts',
+  ),
 };
 
 const config = {
