@@ -1,0 +1,79 @@
+{
+  "id": "f06-event-recall-misses",
+  "wave": "F",
+  "mission": "Root-cause the 4 remaining E01 event-recall misses (12/16, mean successful overlap 0.839, zero false proposals); oracle-test each miss and implement the smallest defensible fix or record a proven negative per miss.",
+  "commit": "6e7dc11347a5ef6b562b07800685590fed42444e",
+  "baseCommit": "8588ddd (origin/devin/1787988068-wave-c-integration)",
+  "datasetScope": {
+    "corpus": "committed replayable E01 event-recall corpus (wave-e), 16 gold events across committed clips",
+    "nonEventSpans": 5,
+    "heldOut": ["wm-dink-01", "afn-vic-rally1"],
+    "heldOutTouched": false,
+    "freshCandidatePoolTouched": false,
+    "grouping": "grouped by independent source clip/session; no random-frame splits"
+  },
+  "configuration": {
+    "criterion": "PROPOSED_OK if best proposal overlap >= 0.5 of gold span OR gold contact inside proposal +/- 60ms",
+    "thresholdsChanged": false,
+    "tier1ProposalFloor": 0.5,
+    "lowAmplitudeTier": "unchanged (peak >= 0.3, local prominence >= 4, flagged + penalized)",
+    "fix": "packages/swing-lab/src/engine/minerCore.ts dominantWristSpeeds: velocity is now computed against the timestamp of the previous actual visible wrist observation (last = {x, y, timestampMs}) instead of the previous emitted speed sample; the 150ms max-gap reliability cap is retained (a gap > 150ms emits no sample), but the series now RESUMES after visibility dropouts instead of terminating."
+  },
+  "metrics": {
+    "before": {
+      "recall": "12/16 (0.750)",
+      "meanSuccessfulOverlap": 0.839,
+      "falseProposalsInNonEventSpans": 0,
+      "unmatchedProposals": 0
+    },
+    "after": {
+      "recall": "13/16 (0.813)",
+      "meanSuccessfulOverlap": 0.875,
+      "falseProposalsInNonEventSpans": 0,
+      "unmatchedProposals": 0
+    }
+  },
+  "perMissFindings": [
+    {
+      "event": "wavea-faead-rally#1",
+      "before": "MISSED",
+      "after": "PROPOSED_OK (recovered)",
+      "rootCause": "dominant-wrist speed series terminated at 13708ms after a visibility dropout because dominantWristSpeeds anchored velocity to the previous emitted sample instead of the previous observation; gold event span extended to 14500ms with no wrist signal available to the proposer.",
+      "fixClass": "SIGNAL_EXTRACTION_BUG (code fix, no threshold change)"
+    },
+    {
+      "event": "wavea-faead-rally#2",
+      "before": "MISSED",
+      "after": "MISSED (proven negative)",
+      "rootCause": "SAMPLING: max inter-frame gap 292ms inside the gold span, span coverage 0.67; denser sampling would be required. No denser committed capture exists; regenerating capture is out of scope and no fabrication permitted.",
+      "oracle": "denser sampling would plausibly fix; unprovable with committed data"
+    },
+    {
+      "event": "wavea-sasebo-volleys#1",
+      "before": "MISSED (best overlap 0.37)",
+      "after": "MISSED (proven negative)",
+      "rootCause": "WRIST_SIGNAL_QUALITY: smoothed dominant-wrist peak 0.31 < 0.5 tier-1 floor; low-amplitude tier prominence gate also not met. No committed paddle/ball series exists to confirm a paddle-based recovery. Lowering the floor/prominence to admit this event would weaken the evidence contract and risk false proposals; not done.",
+      "oracle": "perfect wrist or paddle signal would fix; unavailable in committed data"
+    },
+    {
+      "event": "wavea-sasebo-volleys#5",
+      "before": "MISSED",
+      "after": "MISSED (proven negative)",
+      "rootCause": "WRIST_SIGNAL_QUALITY: smoothed dominant-wrist peak 0.344 < 0.5 tier-1 floor. Same contract reasoning as sasebo-volleys#1; no threshold weakening.",
+      "oracle": "perfect wrist or paddle signal would fix; unavailable in committed data"
+    }
+  ],
+  "artifacts": [
+    "datasets/experiments/wave-f/f06-event-recall-after.json (eventRecallBench replay, after fix)",
+    "datasets/experiments/wave-f/f06-oracle-after.json (eventFailureOracle attribution, after fix)",
+    "packages/swing-lab/test/wristSeriesGapResume.test.ts (3 regression tests for dropout resume)"
+  ],
+  "gates": {
+    "pnpm typecheck": "pass",
+    "pnpm lint": "pass",
+    "pnpm test": "pass (root; swing-lab 536 passed 4 skipped incl. new tests; final package 539 passed 4 skipped)",
+    "pnpm format:check": "pass"
+  },
+  "verdict": "GREEN",
+  "notes": "No Mac/iPhone/Apple Vision reruns performed (not available; not needed for this workstream). Held-out cases untouched. Predictions/observations kept separate; no contract, threshold, or denominator weakened."
+}
