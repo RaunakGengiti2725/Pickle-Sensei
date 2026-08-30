@@ -14,6 +14,7 @@ import { LibraryScreen } from '../screens/LibraryScreen';
 import { ProgressScreen } from '../screens/ProgressScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { AnalyzeScreen } from '../screens/AnalyzeScreen';
+import { DrillLibraryScreen } from '../screens/DrillLibraryScreen';
 import { ResultScreen } from '../screens/ResultScreen';
 import { LiveCourtScreen } from '../screens/LiveCourtScreen';
 import { LiveSummaryScreen } from '../screens/LiveSummaryScreen';
@@ -160,6 +161,11 @@ export function RootNavigator() {
           name="Result"
           component={ResultScreen}
           options={{ title: 'Result' }}
+        />
+        <Stack.Screen
+          name="DrillLibrary"
+          component={DrillLibraryScreen}
+          options={{ title: 'Drill Library' }}
         />
         <Stack.Screen
           name="LiveCourt"

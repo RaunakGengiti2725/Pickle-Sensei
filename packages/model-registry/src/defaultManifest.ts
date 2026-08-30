@@ -356,9 +356,9 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
       executionTarget: "on_device",
       deploymentStatus: "production",
       supportedPlatforms: ["ios", "android", "server"],
-      supportedStrokes: ["forehand_drive", "dink", "third_shot_drop", "serve"],
+      supportedStrokes: "all",
       notes:
-        "Deterministic checkpoint scoring over measured biomechanics. Targets are blueprint hypotheses pending coach-panel calibration; replaceable by a learned scorer under the same contract.",
+        "Deterministic checkpoint scoring over measured biomechanics for every ShotTypeSlug. Targets are blueprint hypotheses pending coach-panel calibration; replaceable by a learned scorer under the same contract.",
     },
     {
       ...CODE_PROVIDER_LINEAGE,

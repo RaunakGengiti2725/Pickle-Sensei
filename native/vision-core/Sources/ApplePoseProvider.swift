@@ -32,9 +32,22 @@ public final class ApplePoseProvider: PoseProviding, @unchecked Sendable {
 
   public init() {}
 
+  /// PoseProviding witness: live capture vends upright buffers.
   public func extractPose(pixelBuffer: CVPixelBuffer, timestampMs: Int) throws -> PoseFrame {
+    try extractPose(pixelBuffer: pixelBuffer, timestampMs: timestampMs, orientation: .up)
+  }
+
+  /// `orientation` maps sensor/buffer space to display space. Live capture
+  /// vends upright buffers (.up); IMPORTED videos carry a rotation in their
+  /// track's preferredTransform and must pass it here so landmarks land in
+  /// display-normalized coordinates (the space taps and width/height use).
+  public func extractPose(
+    pixelBuffer: CVPixelBuffer,
+    timestampMs: Int,
+    orientation: CGImagePropertyOrientation
+  ) throws -> PoseFrame {
     let request = VNDetectHumanBodyPoseRequest()
-    let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up, options: [:])
+    let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: orientation, options: [:])
     try handler.perform([request])
     // Multi-person scenes: the PRIMARY subject is the largest person in
     // frame (max shoulder-to-hip span), with temporal stickiness so the

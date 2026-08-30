@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import {
+  Modal,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Line, Path, Rect } from 'react-native-svg';
 import {
@@ -14,6 +21,8 @@ import { color, radius, shadow, space, type } from '../design/tokens';
 import {
   cancelCameraOperation,
   captureStrokeVideo,
+  extractImportedPoseSequence,
+  importedPoseExtractionAvailable,
   importStrokeVideo,
   subscribeToCameraEvents,
   type CameraEvent,
@@ -41,14 +50,21 @@ import { getApiSession } from '../account/apiSession';
 import { useAppStore } from '../state/appStore';
 import { makeUuid } from '../util/uuid';
 import {
-  MVP_SHOT_TYPES,
-  type MvpShotTypeSlug,
+  SHOT_TYPES,
+  type ShotTypeSlug,
   type TechniqueIntent,
 } from '@pickle/shared-types';
 import type { CaptureAnalysisRecord } from '@pickle/analysis-pipeline';
 import { TechniqueIntentPicker } from '../flow/TechniqueIntentPicker';
 import type { RootStackParams } from '../navigation/params';
 import { StrokeResultAnalyzing } from '../components/StrokeResult';
+import {
+  analysisStageProgress,
+  extractionProgress,
+  observeExtractionProgress,
+  type AnalysisProgressUi,
+  type ExtractionEtaState,
+} from '../components/AnalysisProgress';
 import {
   clearTryAgainHandoff,
   consumeTryAgainHandoff,
@@ -65,6 +81,11 @@ type Phase =
       kind: 'analyzed';
       analysisId: string;
       presentation: StrokeIntentPresentation;
+    }
+  | {
+      /** Scored run that consumed the LAST free rating: upgrade prompt. */
+      kind: 'free_limit';
+      analysisId: string;
     }
   | { kind: 'error'; message: string };
 
@@ -163,11 +184,11 @@ function FramingPreview() {
           <Icon name="camera" color={color.onVolt} size={25} />
         </View>
         <Text style={[type.h3, { color: color.onDark, marginTop: 12 }]}>
-          Live pose guide
+          Live body heat map
         </Text>
         <Text style={[type.caption, styles.previewCopy]}>
-          Your skeleton and motion glow appear only when the camera actually
-          sees you.
+          Your body lights up with measured motion heat only when the camera
+          actually sees you — cool at rest, blazing at full swing speed.
         </Text>
       </View>
       <View style={styles.previewBadge}>
@@ -220,21 +241,24 @@ export const ANALYZE_STEPS: ReadonlyArray<{
   },
 ];
 
-const STROKE_LABELS: Record<MvpShotTypeSlug, string> = {
-  forehand_drive: 'Forehand drive',
-  dink: 'Dink',
-  third_shot_drop: 'Third-shot drop',
+const STROKE_LABELS: Record<ShotTypeSlug, string> = {
   serve: 'Serve',
+  return: 'Return',
+  forehand_drive: 'Forehand drive',
+  backhand_drive: 'Backhand drive',
+  third_shot_drop: 'Third-shot drop',
+  dink: 'Dink',
+  volley: 'Volley',
+  overhead: 'Overhead',
 };
 
 /**
  * Stroke declaration — the user's statement of intent, stored separately
- * from any model prediction. A validated classifier will later make this
- * optional without changing anything downstream.
+ * from any model prediction. Every ShotTypeSlug is selectable and scoreable.
  */
 function StrokeDeclaration(props: {
-  value: MvpShotTypeSlug | null;
-  onChange: (value: MvpShotTypeSlug) => void;
+  value: ShotTypeSlug | null;
+  onChange: (value: ShotTypeSlug) => void;
   dark?: boolean;
 }) {
   return (
@@ -243,7 +267,7 @@ function StrokeDeclaration(props: {
       accessibilityLabel="Which stroke are you practicing?"
       style={styles.strokeChips}
     >
-      {MVP_SHOT_TYPES.map(slug => {
+      {SHOT_TYPES.map(slug => {
         const selected = props.value === slug;
         return (
           <PressableScale
@@ -298,7 +322,7 @@ export function clipSupportsScoring(clip: CapturedClip): boolean {
  */
 export function importedClipNeedsTargetTap(
   clip: CapturedClip,
-  declaredStroke: MvpShotTypeSlug | null,
+  declaredStroke: ShotTypeSlug | null,
   targetSeed: TargetSelection | null,
 ): boolean {
   return (
@@ -312,9 +336,9 @@ export function importedClipNeedsTargetTap(
  * AUTO DETECT admission gate. A declared-null analysis is allowed ONLY when
  * the user explicitly armed Auto Detect ({source:'auto'} — distinguishable
  * from "nothing selected") AND the clip is a guided capture with a recorded
- * pose sequence. Imported videos stay declared-only: runCaptureAnalysis
- * honestly rejects them before stroke routing (no recorded pose sequence),
- * so offering AUTO there would promise a read that cannot happen.
+ * pose sequence. Imported videos stay declared-only: their pose sequence
+ * exists only after the on-demand extraction pass, so offering AUTO there
+ * would promise a read this flow cannot guarantee before it starts.
  */
 export function canAutoScoreWithoutDeclaration(
   clip: CapturedClip,
@@ -371,11 +395,11 @@ export function strokeIntentPresentation(
         tone: 'good',
         title: `Auto-detected: ${side} (family)`,
         body:
-          `The classifier committed to the ${side.toLowerCase()} swing family, ` +
-          'not to an exact stroke — separating a drive from a dink or volley ' +
-          'needs ball-bounce data this build doesn’t measure. The family-level ' +
-          'read is saved with your capture; no per-technique score was ' +
-          'invented and this did not use a rating.',
+          `The camera committed to the ${side.toLowerCase()} swing family, ` +
+          'not to an exact stroke — but this attempt couldn’t be measured ' +
+          'cleanly enough to score, so no score was invented and this did ' +
+          'not use a rating. Re-record with your full body in frame, or ' +
+          'declare the technique for the most precise read.',
         showResult: hasResult,
       };
     }
@@ -412,6 +436,34 @@ export function strokeIntentPresentation(
   }
 }
 
+/**
+ * Honest copy for a failed imported-video pose extraction. The two frozen
+ * native rejection codes get actionable product copy; anything else surfaces
+ * its real message rather than an invented cause. Nothing is rated on any of
+ * these paths.
+ */
+export function importedPoseExtractionFailureMessage(error: unknown): string {
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code ?? '')
+      : '';
+  if (code === 'camera.import_too_long') {
+    return (
+      'This video is too long to analyze. Trim it to the single stroke — ' +
+      'a few seconds around the swing — and import it again.'
+    );
+  }
+  if (code === 'camera.import_no_person') {
+    return (
+      'No person could be tracked in this video, so it cannot be scored. ' +
+      'Use a clip where the player is clearly visible for the whole swing.'
+    );
+  }
+  return error instanceof Error && error.message.trim().length > 0
+    ? error.message
+    : 'Reading player movement from this video failed.';
+}
+
 /** Start-region lock outcome for the funnel's T4 (select starting location). */
 export function captureSavedDetail(clip: CapturedClip): string {
   if (clip.captureMode !== 'automatic_pose_trigger') return 'imported';
@@ -427,11 +479,10 @@ function clipTitle(clip: CapturedClip) {
 
 function clipExplanation(clip: CapturedClip) {
   if (clip.recognition.status === 'recognized') {
-    return `Recognized at ${Math.round(
-      clip.recognition.confidence * 100,
-    )}% confidence by ${
-      clip.recognition.modelVersion
-    }. Technique scoring will run only when its validated model bundle is available.`;
+    return (
+      'Recognized by the on-device camera. Get your score to see the full ' +
+      'technique read.'
+    );
   }
   return (
     UNKNOWN_REASON_COPY[clip.recognition.reason] ??
@@ -459,8 +510,8 @@ export function AnalyzeScreen() {
     return null;
   });
   const [phase, setPhase] = useState<Phase>({ kind: 'ready' });
-  const [declaredStroke, setDeclared] = useState<MvpShotTypeSlug | null>(
-    (rearm?.declaredStroke as MvpShotTypeSlug | null) ?? null,
+  const [declaredStroke, setDeclared] = useState<ShotTypeSlug | null>(
+    rearm?.declaredStroke ?? null,
   );
   const [techniqueIntent, setTechniqueIntent] =
     useState<TechniqueIntent | null>(
@@ -479,6 +530,19 @@ export function AnalyzeScreen() {
   const operationActive = useRef(false);
   const scoringActive = useRef(false);
   const autoLaunchStarted = useRef(false);
+  // Honest progress surface for the scoring flow (parallel to `phase`, so
+  // every existing message/transition stays byte-identical). Non-null only
+  // while scoreCapture is in flight.
+  const [analysisProgress, setAnalysisProgress] =
+    useState<AnalysisProgressUi | null>(null);
+  // The in-flight imported-video pose extraction, when one exists. The
+  // native captureId is latched from its first event so a stale pass can
+  // never drive this run's bar; the ETA state folds every REAL native
+  // progress event (never a synthesized fraction).
+  const extractionRun = useRef<{
+    nativeCaptureId: string | null;
+    eta: ExtractionEtaState | null;
+  } | null>(null);
 
   useEffect(
     () =>
@@ -524,6 +588,42 @@ export function AnalyzeScreen() {
             completed: 'Video secured on this device.',
           } as const;
           setPhase({ kind: 'working', message: messages[event.state] });
+        } else if (event.type === 'import_pose_extraction') {
+          // Native progress for the offline pose pass. Only the active state
+          // updates the caption — completion/failure surfaces come from the
+          // extraction promise itself, never from a racing event.
+          const run = extractionRun.current;
+          if (run) {
+            if (
+              run.nativeCaptureId === null &&
+              typeof event.captureId === 'string'
+            ) {
+              run.nativeCaptureId = event.captureId;
+            }
+            const matchesRun =
+              event.captureId === undefined ||
+              event.captureId === run.nativeCaptureId;
+            // Real measured fraction only: 'extracting' events carry the
+            // native pass's progress; 'completed' IS the measured 1.0.
+            const fraction =
+              event.state === 'completed'
+                ? 1
+                : event.state === 'extracting'
+                  ? event.progress
+                  : undefined;
+            if (matchesRun && typeof fraction === 'number') {
+              const emittedAtMs = Date.parse(event.emittedAtIso);
+              run.eta = observeExtractionProgress(
+                run.eta,
+                Number.isFinite(emittedAtMs) ? emittedAtMs : Date.now(),
+                fraction,
+              );
+              setAnalysisProgress(extractionProgress(run.eta));
+            }
+          }
+          if (event.state === 'extracting') {
+            setPhase({ kind: 'working', message: 'Reading player movement…' });
+          }
         }
       }),
     [],
@@ -556,13 +656,29 @@ export function AnalyzeScreen() {
       if (scoringActive.current) return;
       scoringActive.current = true;
       const session = getApiSession();
+      // Imported clips carry no recorded pose sequence until the explicit
+      // native extraction pass runs. When the bridge method exists, this run
+      // measures the sequence now (seeded by the user's tap when there is
+      // one); when it doesn't, the clip proceeds unchanged and
+      // runCaptureAnalysis keeps its honest unavailable message.
+      const needsPoseExtraction =
+        clip.captureMode === 'imported_video' &&
+        clip.poseSequence === undefined &&
+        importedPoseExtractionAvailable();
       usabilityFunnel.log('analysis_started', declaredStroke ?? 'auto');
       setPhase({
         kind: 'working',
-        message: declaredStroke
-          ? 'Measuring your swing…'
-          : 'Measuring your swing and reading the stroke…',
+        message: needsPoseExtraction
+          ? 'Reading player movement…'
+          : declaredStroke
+            ? 'Measuring your swing…'
+            : 'Measuring your swing and reading the stroke…',
       });
+      // Stage model for the progress bar (parallel to the caption above,
+      // which keeps its exact strings): stages advance only at boundaries
+      // this screen actually observes, and only the extraction stage ever
+      // shows a percentage — the one place a real fraction is measured.
+      setAnalysisProgress(analysisStageProgress('verifying'));
       try {
         // The declaration column records USER statements only — an AUTO run
         // writes nothing there; the prediction lives in the analysis record.
@@ -575,10 +691,42 @@ export function AnalyzeScreen() {
         if (targetSeed) {
           await setCaptureTargetSeed(getDb(), captureId, targetSeed);
         }
+        let analysisClip = clip;
+        if (needsPoseExtraction && clip.captureMode === 'imported_video') {
+          // Arm the extraction progress surface BEFORE the native pass
+          // starts so its very first event finds the active run. The bar
+          // stays indeterminate until native reports a real fraction.
+          extractionRun.current = { nativeCaptureId: null, eta: null };
+          setAnalysisProgress(extractionProgress(null));
+          try {
+            const extraction = await extractImportedPoseSequence(
+              clip,
+              targetSeed?.point ?? null,
+            );
+            // A NEW clip object for this run only — the saved capture row
+            // keeps the original import payload untouched.
+            analysisClip = {
+              ...clip,
+              poseSequence: extraction.poseSequence,
+              ...(extraction.posterUri !== undefined
+                ? { posterUri: extraction.posterUri }
+                : {}),
+            };
+          } catch (error) {
+            const message = importedPoseExtractionFailureMessage(error);
+            usabilityFunnel.log('error_shown', message);
+            setPhase({ kind: 'error', message });
+            return;
+          } finally {
+            extractionRun.current = null;
+          }
+          setPhase({ kind: 'working', message: 'Measuring your swing…' });
+        }
+        setAnalysisProgress(analysisStageProgress('measuring'));
         const outcome = await runCaptureAnalysis({
           db: getDb(),
           captureId,
-          clip,
+          clip: analysisClip,
           declaredStroke,
           declaredCanonical: techniqueIntent?.canonical ?? null,
           handedness: profile?.handedness ?? 'right',
@@ -599,6 +747,10 @@ export function AnalyzeScreen() {
                 )
               : null,
         });
+        // The measured/saved boundary lives inside runCaptureAnalysis (no
+        // incremental signal is exposed); once it returns, the remaining
+        // work is routing the already-persisted outcome.
+        setAnalysisProgress(analysisStageProgress('saving'));
         if (outcome.kind === 'unavailable') {
           usabilityFunnel.log('error_shown', outcome.reason);
           setPhase({ kind: 'error', message: outcome.reason });
@@ -614,9 +766,21 @@ export function AnalyzeScreen() {
           });
           return;
         }
-        // Auto-detected outcomes (family-level reads, honest abstentions)
-        // and declared-vs-predicted disagreements are surfaced here; the
-        // clean declared path keeps its straight hop to the Result screen.
+        if (outcome.kind === 'scored') {
+          // Score first: every scored run goes straight to the Result
+          // screen. When this run consumed the account's FINAL free
+          // rating, the upgrade prompt is surfaced once, on top of it.
+          if (outcome.freeLimitReached) {
+            usabilityFunnel.log('free_limit_prompt_shown');
+            setPhase({ kind: 'free_limit', analysisId: outcome.analysisId });
+            return;
+          }
+          usabilityFunnel.log('result_opened');
+          navigation.replace('Result', { analysisId: outcome.analysisId });
+          return;
+        }
+        // Non-scored outcomes (family-level low reads, honest abstentions,
+        // disagreement-only records) are surfaced with actionable guidance.
         const presentation = strokeIntentPresentation(outcome.record);
         if (presentation) {
           usabilityFunnel.log('intent_outcome_shown', presentation.eyebrow);
@@ -635,6 +799,10 @@ export function AnalyzeScreen() {
         setPhase({ kind: 'error', message });
       } finally {
         scoringActive.current = false;
+        // The progress surface describes ONE scoring run; it never outlives
+        // it (error surfaces and the next run start clean).
+        extractionRun.current = null;
+        setAnalysisProgress(null);
       }
     },
     [declaredStroke, navigation, profile, techniqueIntent],
@@ -759,11 +927,18 @@ export function AnalyzeScreen() {
             navigation.goBack();
           }}
         />
-        {phase.message.startsWith('Measuring') ? (
+        {phase.message.startsWith('Measuring') ||
+        phase.message.startsWith('Reading player movement') ? (
           // ANALYZING state (MOBBIN brief §1): single-state arc with the
-          // honest stage caption scoreCapture set — captions are stages,
-          // never fake progress percentages.
-          <StrokeResultAnalyzing dark caption={phase.message} />
+          // honest stage caption scoreCapture set, plus the progress bar —
+          // determinate ONLY for the natively-measured extraction pass,
+          // indeterminate stage pulses everywhere else. Never a fake
+          // percentage.
+          <StrokeResultAnalyzing
+            dark
+            caption={phase.message}
+            progress={analysisProgress}
+          />
         ) : (
           <View style={styles.workingBody} accessibilityLiveRegion="polite">
             <View style={styles.processingOrb}>
@@ -886,6 +1061,62 @@ export function AnalyzeScreen() {
     );
   }
 
+  if (phase.kind === 'free_limit') {
+    // The scored result is saved and one tap away — this popup only tells
+    // the player their two free analyses are used up and Pro unlocks more.
+    const { analysisId } = phase;
+    const seeScore = () => {
+      usabilityFunnel.log('result_opened');
+      navigation.replace('Result', { analysisId });
+    };
+    return (
+      <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
+        <StatusBar barStyle="dark-content" />
+        <ScreenHeader title="Stroke analysis" onClose={seeScore} />
+        <Modal
+          visible
+          transparent
+          animationType="fade"
+          onRequestClose={seeScore}
+        >
+          <View style={styles.freeLimitRoot}>
+            <View
+              accessibilityViewIsModal
+              accessibilityLabel="You've used both free analyses"
+              style={styles.freeLimitDialog}
+            >
+              <View style={styles.freeLimitIcon}>
+                <Icon name="spark" color={color.court} size={24} />
+              </View>
+              <Text style={[type.h2, styles.freeLimitTitle]}>
+                That was your last free analysis.
+              </Text>
+              <Text style={[type.body, styles.freeLimitBody]}>
+                Your score is saved. You’ve used both free analyses — upgrade
+                to Pickle Sensei Pro to keep rating every swing.
+              </Text>
+              <View style={styles.freeLimitActions}>
+                <Button
+                  label="Upgrade to Pro"
+                  variant="volt"
+                  onPress={() => {
+                    navigation.replace('Result', { analysisId });
+                    navigation.navigate('Paywall', { source: 'rating' });
+                  }}
+                />
+                <Button
+                  label="See my score"
+                  variant="ghost"
+                  onPress={seeScore}
+                />
+              </View>
+            </View>
+          </View>
+        </Modal>
+      </SafeAreaView>
+    );
+  }
+
   if (phase.kind === 'saved') {
     const { clip } = phase;
     return (
@@ -968,6 +1199,9 @@ export function AnalyzeScreen() {
               {importedClipNeedsTargetTap(clip, declaredStroke, targetSeed) ? (
                 <TargetSelector
                   frameUri={clip.uri}
+                  posterUri={clip.posterUri}
+                  sourceWidth={clip.width}
+                  sourceHeight={clip.height}
                   onConfirm={selection => {
                     setTargetSeed(selection);
                     void scoreCapture(phase.captureId, clip, selection);
@@ -1066,7 +1300,7 @@ export function AnalyzeScreen() {
             setTechniqueIntent(intent);
             // The legacy capture/analysis chain consumes the slug; the
             // canonical intent (incl. voice provenance) rides alongside.
-            setDeclared((intent?.legacySlug as MvpShotTypeSlug | null) ?? null);
+            setDeclared(intent?.legacySlug ?? null);
           }}
         />
 
@@ -1115,6 +1349,44 @@ export function AnalyzeScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.surface },
   darkScreen: { flex: 1, backgroundColor: color.surfaceDark },
+  freeLimitRoot: {
+    flex: 1,
+    backgroundColor: color.overlayStrong,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: space.lg,
+  },
+  freeLimitDialog: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: color.surface,
+    borderRadius: radius.xl,
+    padding: space.lg,
+    alignItems: 'center',
+  },
+  freeLimitIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: color.goodSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  freeLimitTitle: {
+    color: color.ink,
+    marginTop: space.md,
+    textAlign: 'center',
+  },
+  freeLimitBody: {
+    color: color.inkSoft,
+    marginTop: space.sm,
+    textAlign: 'center',
+  },
+  freeLimitActions: {
+    alignSelf: 'stretch',
+    marginTop: space.lg,
+    gap: space.sm,
+  },
   declareEyebrow: { color: color.onDarkSubtle, marginTop: space.xl },
   strokeChips: {
     flexDirection: 'row',

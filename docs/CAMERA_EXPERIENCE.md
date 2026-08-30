@@ -30,18 +30,26 @@ after the underlying evidence is lost.
 - The camera preview is full-bleed. A centered status pill, matched 48-point
   close target, restrained framing corners, and one bottom evidence label are
   the only persistent chrome.
-- Skeleton segments and joint markers are drawn only for landmarks returned by
-  the current pose observation at visibility `>= 0.35`.
+- The athlete renders as a BODY HEAT MAP instead of a stick figure: soft
+  additive glows are drawn only at landmarks returned by the current pose
+  observation at visibility `>= 0.35`, and along the straight line between
+  two such observed landmarks (intensity linearly interpolated between the
+  endpoints' measured values). Glow color and size follow each joint's
+  measured normalized movement speed on a fixed cool-to-hot ramp (teal at
+  rest → mint → volt → flame at the display ceiling). The heat is a MOTION
+  visualization; it must not imply muscle activation, injury risk, power,
+  form quality, paddle speed, or ball speed.
 - Joint trails are short, bounded histories of timestamped observed positions.
   Missing or stale landmarks break a trail. Trail opacity, width, and color may
-  respond to measured camera-relative displacement; they must not imply muscle
-  activation, injury risk, power, form quality, paddle speed, or ball speed.
+  respond to measured camera-relative displacement, under the same
+  no-implied-diagnosis rule as the heat map.
 - Framing progress comes from canonical-joint coverage and the real stability
   interval. It is not a simulated loading indicator.
-- There is no looping scan line, glowing mannequin, ambient celebration, or
-  infinite success animation. Lock and capture transitions are finite and
-  reversible.
-- A missing pose clears the skeleton and motion history. The overlay must not
+- There is no looping scan line, ambient celebration, or infinite success
+  animation. The heat map is never a free-running effect: with no fresh
+  measured movement it settles to the cool observed-presence base, and lock
+  and capture transitions stay finite and reversible.
+- A missing pose clears the heat map and motion history. The overlay must not
   reconstruct or interpolate a person the model did not observe.
 
 The persisted measurement rules are defined in
@@ -74,7 +82,13 @@ movement can never be converted to MPH.
 ## Reference decisions
 
 - [Noom full-body lock](https://mobbin.com/screens/047026d6-2957-4053-b44b-a4cab362dfac)
-  informed the evidence-gated skeleton and unmistakable locked state.
+  informed the evidence-gated body rendering and unmistakable locked state.
+- [Equinox+ Focus Areas](https://mobbin.com/screens/c88d72a7-774f-4eed-89ad-cc8623380fab)
+  and [Peloton Strength+ target muscles](https://mobbin.com/screens/fc404a31-09fb-4061-bc52-8fd0096cea8f)
+  informed the premium dark-surface luminous body treatment of the heat map;
+  [Garmin Connect muscle intensity coding](https://mobbin.com/screens/7f48330e-af42-43c3-a208-7fa4e3927c08)
+  informed the cool-to-hot intensity ramp (recolored to this app's tokens and
+  re-grounded in measured motion rather than planned muscle groups).
 - [CLEAR camera alignment](https://mobbin.com/screens/ffed3855-6062-4a43-a98f-f5cc21d7070a)
   informed the sparse framing corners and single corrective instruction.
 - [Pliability out-of-frame state](https://mobbin.com/screens/df180f34-d2f5-4f02-9fad-3e3921b0da70)

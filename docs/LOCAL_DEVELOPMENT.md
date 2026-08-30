@@ -103,11 +103,11 @@ xed apps/mobile/ios/PickleSensei.xcworkspace
   `src/config/authConfig.ts` and add its reversed client id as a URL scheme in
   Info.plist. Until then the button reports "not configured" — by design.
 
-The native camera is wired into the app. On supported iOS devices it uses Apple Vision body pose to draw the live skeleton and measured joint-motion glow, automatically retains a clip around player motion, and returns `unknown`/`awaiting_model`. A simulator can verify navigation and lifecycle, but cannot establish camera/model accuracy; use a physical device for capture QA.
+The native camera is wired into the app. On supported iOS devices it uses Apple Vision body pose to draw the live body heat map (measured joint-motion intensity) and motion trails, automatically retains a clip around player motion, and returns `unknown`/`awaiting_model`. A simulator can verify navigation and lifecycle, but cannot establish camera/model accuracy; use a physical device for capture QA.
 
 ## Mobile (Android)
 
-Build the Android app with JDK 17 and an installed Android SDK. The native path uses CameraX and the bundled MediaPipe pose model for the same live skeleton, motion visualization, and automatic short-clip capture. Physical-device validation remains required.
+Build the Android app with JDK 17 and an installed Android SDK. The native path uses CameraX and the bundled MediaPipe pose model for the same live body heat map, motion visualization, and automatic short-clip capture. Physical-device validation remains required.
 
 Neither platform has a runtime switch that generates a sample score. Test-only doubles are confined to test suites. With no validated classifier/scoring model, captured clips intentionally remain unscored. No speed/MPH appears because calibrated ball tracking is not implemented.
 

@@ -198,7 +198,7 @@ describe('runCaptureAnalysis with AUTO DETECT (declared-null)', () => {
     (globalThis as { fetch?: unknown }).fetch = undefined;
   });
 
-  it('resolves a clear side swing at family depth: durable record, permit released, no invented leaf', async () => {
+  it('scores a clear side swing at family depth with the shared side profile — no invented leaf', async () => {
     const { db, calls } = recordingDb();
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
@@ -206,8 +206,8 @@ describe('runCaptureAnalysis with AUTO DETECT (declared-null)', () => {
     (globalThis as { fetch?: unknown }).fetch = fetchMock;
 
     const outcome = await runCaptureAnalysis(request(db, clip, null));
-    expect(outcome.kind).toBe('low_confidence');
-    if (outcome.kind !== 'low_confidence') return;
+    expect(outcome.kind).toBe('scored');
+    if (outcome.kind !== 'scored') return;
 
     // declared/predicted stay separate; the family read is not a leaf slug.
     const intent = outcome.record.strokeIntent;
@@ -217,8 +217,12 @@ describe('runCaptureAnalysis with AUTO DETECT (declared-null)', () => {
     expect(intent.predictedStroke?.label).toBe('FOREHAND');
     expect(intent.predictedStroke?.leaf).toBeNull();
     expect(intent.disagreement).toBeNull();
-    expect(outcome.record.result).toBeNull(); // no per-technique score invented
-    expect(outcome.record.strokeResolution.kind).toBe('unresolved');
+    // The side's representative swing target set produced a real score
+    // while the provenance stays family-level (no leaf claimed).
+    expect(outcome.record.result).not.toBeNull();
+    expect(outcome.record.result?.shotType).toBe('forehand_drive');
+    expect(outcome.record.result?.resultKind).toBe('scored');
+    expect(outcome.record.strokeResolution.kind).toBe('predicted');
 
     // Provenance: the classifier ran as a registry-governed model run.
     expect(
@@ -229,29 +233,19 @@ describe('runCaptureAnalysis with AUTO DETECT (declared-null)', () => {
       ),
     ).toBe(true);
 
-    // Permit accounting: released, never a rating.
-    expect(finalized).toHaveLength(1);
-    expect(finalized[0]).toMatchObject({
-      outcome: 'low_confidence',
-      ratingId: null,
-    });
+    // Permit accounting: a scored run is consumed by the shot-sync
+    // transaction (never released) and promoted to the product rating.
+    expect(finalized).toHaveLength(0);
     expect(
       calls.filter(call => call.sql.includes('INSERT INTO outbox')),
-    ).toHaveLength(0);
-    expect(calls.filter(call => call.sql.includes('local_shot'))).toHaveLength(
-      0,
-    );
+    ).toHaveLength(1);
+    expect(
+      calls.filter(call => call.sql.includes('local_shot')).length,
+    ).toBeGreaterThan(0);
     // The run is durably recorded for reprocessing history.
     expect(calls.some(call => call.sql.includes('local_analysis_record'))).toBe(
       true,
     );
-
-    // Honest surface copy for the family-level outcome.
-    const presentation = strokeIntentPresentation(outcome.record);
-    expect(presentation?.title).toBe('Auto-detected: FOREHAND (family)');
-    expect(presentation?.body).toContain('not to an exact stroke');
-    expect(presentation?.body).toContain('did not use a rating');
-    expect(presentation?.showResult).toBe(false);
   });
 
   it('abstains honestly on a midline contact: permit released and the result withheld, not guessed', async () => {

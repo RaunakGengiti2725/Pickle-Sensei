@@ -35,7 +35,8 @@ import { stabilitySlo } from './stabilityTelemetry';
  *
  * Honesty and product rules enforced here:
  * - Analysis runs only on the real recorded pose sequence (hash-addressed
- *   sidecar written at capture time). No sequence → no analysis.
+ *   sidecar written at capture time, or by the explicit native extraction
+ *   pass for imported videos). No sequence → no analysis.
  * - A server-reserved analysis permit is consumed exactly as the entitlement
  *   system requires; abstentions release the permit instead of burning it.
  * - Every run appends an immutable AnalysisRecord; scored runs additionally
@@ -43,7 +44,18 @@ import { stabilitySlo } from './stabilityTelemetry';
  */
 
 export type CaptureAnalysisOutcome =
-  | { kind: 'scored'; analysisId: string; record: CaptureAnalysisRecord }
+  | {
+      kind: 'scored';
+      analysisId: string;
+      record: CaptureAnalysisRecord;
+      /**
+       * True when this scored run consumed the account's FINAL free rating
+       * (permit source "free" and the reserve-time access snapshot shows
+       * nothing left to reserve). The UI uses it to surface the upgrade
+       * prompt exactly once, right when the last free analysis completes.
+       */
+      freeLimitReached: boolean;
+    }
   | {
       kind: 'low_confidence';
       analysisId: string;
@@ -173,14 +185,18 @@ async function runCaptureAnalysisCore(
       envelope,
     };
   }
-  if (clip.captureMode !== 'automatic_pose_trigger') {
+  // ── Recorded-pose gate: analysis runs ONLY on a real recorded sequence ──
+  // Imported clips qualify once the explicit native extraction pass has
+  // attached its sidecar ref; without one they stay honestly un-analyzable.
+  if (clip.captureMode === 'imported_video' && !clip.poseSequence) {
     return {
       kind: 'unavailable',
       reason:
         'Imported videos have no recorded pose sequence yet. Record with the guided camera to get a Technique Score.',
     };
   }
-  if (!clip.poseSequence) {
+  const poseSequence = clip.poseSequence;
+  if (!poseSequence) {
     return {
       kind: 'unavailable',
       reason:
@@ -191,7 +207,7 @@ async function runCaptureAnalysisCore(
   // ── Load and validate the canonical temporal record ────────────────────
   let sidecarJson: string;
   try {
-    sidecarJson = await readCaptureArtifact(clip.poseSequence.uri);
+    sidecarJson = await readCaptureArtifact(poseSequence.uri);
   } catch {
     return {
       kind: 'unavailable',
@@ -199,7 +215,7 @@ async function runCaptureAnalysisCore(
     };
   }
   // Integrity: the sidecar must be byte-identical to what capture recorded.
-  if (sha256Hex(sidecarJson) !== clip.poseSequence.sha256) {
+  if (sha256Hex(sidecarJson) !== poseSequence.sha256) {
     return {
       kind: 'unavailable',
       reason:
@@ -228,9 +244,15 @@ async function runCaptureAnalysisCore(
   // ── Entitlement: reserve before inference (spec: permits) ─────────────
   const permits = createAnalysisPermitClient(request.apiConfig);
   let permitId: string;
+  let freeLimitReached = false;
   try {
-    const permit = await permits.reserve(makeUuid());
-    permitId = permit.id;
+    const reserved = await permits.reserve(makeUuid());
+    permitId = reserved.permit.id;
+    freeLimitReached =
+      reserved.permit.accessSource === 'free' &&
+      reserved.access !== null &&
+      !reserved.access.premium &&
+      reserved.access.freeRatings.availableToReserve === 0;
   } catch (error) {
     const message =
       error instanceof ApiError
@@ -238,6 +260,39 @@ async function runCaptureAnalysisCore(
         : 'The rating service could not be reached. Your capture is saved and can be scored later.';
     return { kind: 'unavailable', reason: message };
   }
+
+  // Imported clips carry no measured trigger: the analysis window is
+  // honestly the whole clip, and the provenance says exactly that instead
+  // of impersonating the live temporal-motion detector. Phase segmentation
+  // still finds (or honestly fails to find) the stroke inside that window.
+  const trigger =
+    clip.captureMode === 'automatic_pose_trigger'
+      ? {
+          startMs: clip.trigger.startMs,
+          endMs: clip.trigger.endMs,
+          peakMotionMs: clip.trigger.peakMotionMs ?? null,
+          confidence: clip.trigger.confidence,
+          producedBy: {
+            providerId: 'trigger.temporal-heuristic',
+            modelVersion: clip.trigger.modelVersion,
+            runtime: 'deterministic' as const,
+            executionTarget: 'on_device' as const,
+            artifactHash: null,
+          },
+        }
+      : {
+          startMs: 0,
+          endMs: clip.durationMs,
+          peakMotionMs: null,
+          confidence: 1,
+          producedBy: {
+            providerId: 'trigger.imported-full-clip',
+            modelVersion: 'imported-full-clip-1',
+            runtime: 'deterministic' as const,
+            executionTarget: 'on_device' as const,
+            artifactHash: null,
+          },
+        };
 
   const analysisId = makeUuid();
   const result = await analyzeCapture(
@@ -247,19 +302,7 @@ async function runCaptureAnalysisCore(
       pose: parsed.value,
       paddle: unavailable('paddle_detector_not_installed'),
       ball: unavailable('ball_tracker_not_installed'),
-      trigger: {
-        startMs: clip.trigger.startMs,
-        endMs: clip.trigger.endMs,
-        peakMotionMs: clip.trigger.peakMotionMs ?? null,
-        confidence: clip.trigger.confidence,
-        producedBy: {
-          providerId: 'trigger.temporal-heuristic',
-          modelVersion: clip.trigger.modelVersion,
-          runtime: 'deterministic',
-          executionTarget: 'on_device',
-          artifactHash: null,
-        },
-      },
+      trigger,
       // declared may be null (AUTO DETECT); predicted is filled downstream
       // by the classifier providers, never here.
       stroke: { declared: request.declaredStroke, predicted: null },
@@ -302,13 +345,13 @@ async function runCaptureAnalysisCore(
   if (record.result && record.result.resultKind === 'scored') {
     // Promote to the product rating; the sync transaction consumes the permit.
     await saveAnalysis(request.db, record.result, permitId);
-    return { kind: 'scored', analysisId, record };
+    return { kind: 'scored', analysisId, record, freeLimitReached };
   }
 
   // Permit accounting: EVERY non-scored outcome releases the reservation.
-  // This branch also carries the AUTO DETECT partial records — a
-  // predicted_family (shared side profile) or abstained run has result:null
-  // and must never burn the user's rating allowance.
+  // This branch also carries the AUTO DETECT abstained partial records — an
+  // abstained run has result:null and must never burn the user's rating
+  // allowance.
   await permits.release(permitId, 'low_confidence').catch(() => {
     // Server-side expiry covers a lost release.
   });

@@ -23,6 +23,7 @@ import { color, radius, space, type } from '../design/tokens';
 import { useAppStore } from '../state/appStore';
 import { useAuthStore } from '../auth/authStore';
 import { tts } from '../audio/tts';
+import { nativeSessionMotionFeedAvailability } from '../flow/session';
 import { scoringStackStatus } from '../vision/providers';
 import { useAccessStore } from '../state/accessStore';
 import type { RootStackParams } from '../navigation/params';
@@ -156,7 +157,11 @@ export function SettingsScreen() {
         : (session.displayName ?? session.email ?? session.subject);
   const scoringStack = scoringStackStatus();
   const modelLabel = scoringStack.version;
-  const liveCourtLabel = 'Camera runtime unavailable';
+  // Truthful per-build capability: native continuous session capture exists
+  // on this build or sessions run replay-only — never a hard-coded claim.
+  const liveCourtLabel = nativeSessionMotionFeedAvailability().available
+    ? 'Live session capture ready'
+    : 'Replay demo only on this build';
   const membershipLabel = access?.premium
     ? 'Pro active'
     : access
@@ -259,14 +264,16 @@ export function SettingsScreen() {
 
         <SectionTitle title="Coaching" />
         <Card style={styles.groupCard}>
+          {/* Status readouts, not actions: SettingRow renders no chevron
+              when onPress is absent, so these read as informational. */}
           <SettingRow
             icon="volume"
             label="Audio coach"
-            value={tts.available() ? 'Balanced voice' : 'On-screen only'}
+            value={tts.available() ? 'Balanced voice' : 'On-screen text only'}
           />
           <SettingRow
             icon="court"
-            label="Live Court cues"
+            label="Live Court"
             value={liveCourtLabel}
             last
           />

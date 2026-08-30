@@ -188,7 +188,10 @@ export function LibraryScreen() {
               style={styles.planSummary}
             >
               <View style={styles.planSummaryTop}>
-                <Text style={[type.micro, { color: color.volt }]}>
+                <Text
+                  numberOfLines={2}
+                  style={[type.micro, styles.planSummaryLabel]}
+                >
                   CURRENT PLAN
                 </Text>
                 <Pill
@@ -219,13 +222,38 @@ export function LibraryScreen() {
                 />
               </View>
               <View style={styles.openPlanRow}>
-                <Text style={[type.bodyBold, { color: color.onDark }]}>
+                <Text
+                  numberOfLines={1}
+                  style={[type.bodyBold, styles.openPlanLabel]}
+                >
                   Continue plan
                 </Text>
                 <Icon name="arrow" size={19} color={color.volt} />
               </View>
             </PressableScale>
           ) : null}
+
+          <PressableScale
+            accessibilityLabel="Explore the Drill Library"
+            onPress={() => navigation.navigate('DrillLibrary')}
+            style={styles.exploreCard}
+          >
+            <View style={styles.exploreIcon}>
+              <Icon name="library" size={20} color={color.court} />
+            </View>
+            <View style={styles.flex}>
+              <Text numberOfLines={2} style={[type.h3, { color: color.ink }]}>
+                Explore the Drill Library
+              </Text>
+              <Text
+                numberOfLines={2}
+                style={[type.caption, styles.exploreCopy]}
+              >
+                Search the engineering-draft catalog and bookmark drills.
+              </Text>
+            </View>
+            <Icon name="arrow" size={18} color={color.inkSoft} />
+          </PressableScale>
 
           {savedStatus === 'loading' || savedStatus === 'idle' ? (
             <View style={styles.stateBlock}>
@@ -294,7 +322,10 @@ export function LibraryScreen() {
           ) : (
             <>
               <View style={styles.savedHeading}>
-                <Text style={[type.h3, { color: color.ink }]}>
+                <Text
+                  numberOfLines={2}
+                  style={[type.h3, styles.savedHeadingTitle]}
+                >
                   Saved drills
                 </Text>
                 <Text style={[type.caption, { color: color.inkSoft }]}>
@@ -368,8 +399,11 @@ export function LibraryScreen() {
                   {captures.length ? (
                     <View style={styles.pendingGroup}>
                       <View style={styles.pendingHeader}>
-                        <Text style={[type.micro, { color: color.inkSoft }]}>
-                          SAVED VIDEO · AWAITING VALIDATED MODEL
+                        <Text
+                          numberOfLines={2}
+                          style={[type.micro, styles.pendingHeaderLabel]}
+                        >
+                          SAVED VIDEO · AWAITING MODEL
                         </Text>
                         <Pill label="NO SCORE YET" tone="neutral" />
                       </View>
@@ -387,15 +421,24 @@ export function LibraryScreen() {
                             />
                           </View>
                           <View style={styles.flex}>
-                            <Text style={[type.bodyBold, styles.pendingTitle]}>
+                            <Text
+                              numberOfLines={1}
+                              style={[type.bodyBold, styles.pendingTitle]}
+                            >
                               {capture.shotType === 'unrecognized'
                                 ? 'Automatic capture'
                                 : capture.shotType.replace(/_/g, ' ')}
                             </Text>
-                            <Text style={[type.caption, styles.pendingMeta]}>
+                            <Text
+                              numberOfLines={2}
+                              style={[type.caption, styles.pendingMeta]}
+                            >
                               {pendingEvidenceCopy(capture)}
                             </Text>
-                            <Text style={[type.caption, styles.pendingDate]}>
+                            <Text
+                              numberOfLines={1}
+                              style={[type.caption, styles.pendingDate]}
+                            >
                               {Math.round(capture.durationMs / 1000)}s clip ·{' '}
                               {new Date(
                                 capture.capturedAtIso,
@@ -453,10 +496,10 @@ export function LibraryScreen() {
                 </Text>
               </View>
               <View style={styles.flex}>
-                <Text style={[type.h3, styles.strokeName]}>
+                <Text numberOfLines={2} style={[type.h3, styles.strokeName]}>
                   {item.shotType.replace(/_/g, ' ')}
                 </Text>
-                <Text style={[type.caption, styles.readMeta]}>
+                <Text numberOfLines={1} style={[type.caption, styles.readMeta]}>
                   Read {String(reads.length - index).padStart(2, '0')} ·{' '}
                   {new Date(item.capturedAt).toLocaleTimeString(undefined, {
                     hour: 'numeric',
@@ -508,15 +551,20 @@ const styles = StyleSheet.create({
   segmentSelected: { backgroundColor: color.ink },
   readsContent: {
     paddingHorizontal: space.lg,
-    paddingBottom: space.xl,
+    paddingBottom: space.xxxl + 28,
   },
   savedContent: {
     paddingHorizontal: space.lg,
-    paddingBottom: space.xxl,
+    paddingBottom: space.xxxl + 28,
   },
   emptyContent: { flexGrow: 1 },
   readHeader: { marginBottom: space.lg },
-  filterRow: { flexDirection: 'row', gap: space.sm, marginTop: space.lg },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: space.sm,
+    marginTop: space.lg,
+  },
   pendingGroup: {
     borderRadius: radius.lg,
     backgroundColor: color.surfaceElevated,
@@ -530,6 +578,7 @@ const styles = StyleSheet.create({
     gap: space.sm,
     paddingBottom: space.sm,
   },
+  pendingHeaderLabel: { color: color.inkSoft, flex: 1, flexShrink: 1 },
   pendingRow: {
     minHeight: 82,
     flexDirection: 'row',
@@ -586,7 +635,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: space.sm,
   },
+  planSummaryLabel: { color: color.volt, flex: 1, flexShrink: 1 },
   planTitle: {
     color: color.onDark,
     textTransform: 'capitalize',
@@ -609,8 +660,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: space.sm,
     marginTop: space.lg,
   },
+  openPlanLabel: { color: color.onDark, flex: 1, flexShrink: 1 },
+  exploreCard: {
+    minHeight: 84,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    borderRadius: radius.lg,
+    backgroundColor: color.surfaceElevated,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
+    marginBottom: space.lg,
+  },
+  exploreIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: color.courtSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exploreCopy: { color: color.inkSoft, marginTop: 2 },
   stateBlock: { minHeight: 260 },
   messageCard: { padding: space.lg, marginBottom: space.lg },
   messageIcon: {
@@ -629,8 +702,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: space.sm,
     marginBottom: space.md,
   },
+  savedHeadingTitle: { color: color.ink, flex: 1, flexShrink: 1 },
   inlineError: {
     flexDirection: 'row',
     alignItems: 'flex-start',

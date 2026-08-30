@@ -38,6 +38,8 @@ export const USABILITY_FUNNEL_STEPS = [
   'intent_outcome_shown',
   /** T7 — the Result screen was opened. */
   'result_opened',
+  /** The last-free-rating upgrade prompt was shown after a scored run. */
+  'free_limit_prompt_shown',
   /** An error surface was shown (detail = message). */
   'error_shown',
   /** The camera was cancelled before any capture. */

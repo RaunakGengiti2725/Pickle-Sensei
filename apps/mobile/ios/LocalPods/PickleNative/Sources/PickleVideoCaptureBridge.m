@@ -28,6 +28,10 @@ RCT_EXTERN_METHOD(extractSessionEventClip:(NSDictionary *)request
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 
+RCT_EXTERN_METHOD(extractImportedPoseSequence:(NSDictionary *)request
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+
 RCT_EXTERN_METHOD(cancel)
 
 @end

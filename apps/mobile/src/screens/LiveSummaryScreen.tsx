@@ -302,8 +302,18 @@ export function LiveSummaryScreen() {
     );
   }
 
-  if (summary === undefined)
-    return <LoadingState label="Wrapping up the session…" />;
+  if (summary === undefined) {
+    return (
+      <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
+        <StatusBar barStyle="dark-content" />
+        <ScreenHeader
+          title="Session summary"
+          onClose={() => navigation.popToTop()}
+        />
+        <LoadingState label="Wrapping up the session…" />
+      </SafeAreaView>
+    );
+  }
 
   const focusDelta =
     summary?.focusStart != null && summary?.focusEnd != null

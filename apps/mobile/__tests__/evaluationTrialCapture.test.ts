@@ -125,6 +125,7 @@ const scored: CaptureAnalysisOutcome = {
   kind: 'scored',
   analysisId: 'an-1',
   record,
+  freeLimitReached: false,
 };
 
 const context: EvaluationTelemetryContext = {

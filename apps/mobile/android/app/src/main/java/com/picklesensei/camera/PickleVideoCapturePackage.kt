@@ -11,5 +11,5 @@ class PickleVideoCapturePackage : ReactPackage {
 
   override fun createViewManagers(
     reactContext: ReactApplicationContext,
-  ): List<ViewManager<*, *>> = emptyList()
+  ): List<ViewManager<*, *>> = listOf(ClipPlayerViewManager())
 }

@@ -28,6 +28,24 @@ export interface ReservedAnalysisPermit {
   expiresAt: string;
 }
 
+/** Post-reservation access snapshot returned beside every reserved permit. */
+export interface ReserveAccessSnapshot {
+  premium: boolean;
+  freeRatings: {
+    limit: number;
+    used: number;
+    reserved: number;
+    remaining: number;
+    availableToReserve: number;
+  };
+}
+
+export interface ReservedAnalysisPermitWithAccess {
+  permit: ReservedAnalysisPermit;
+  /** Absent when the server predates the access snapshot in this response. */
+  access: ReserveAccessSnapshot | null;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -118,10 +136,13 @@ export function createAnalysisPermitClient(config: ApiConfigState) {
     }
   };
   return {
-    async reserve(idempotencyKey: string): Promise<ReservedAnalysisPermit> {
+    async reserve(
+      idempotencyKey: string,
+    ): Promise<ReservedAnalysisPermitWithAccess> {
       requireSignedIn();
       const response = await request<{
         permit: ReservedAnalysisPermit;
+        access?: ReserveAccessSnapshot;
       }>(config, 'POST', '/v1/analysis-permits', { idempotencyKey });
       if (response.permit.status !== 'reserved') {
         throw new ApiError(
@@ -130,7 +151,10 @@ export function createAnalysisPermitClient(config: ApiConfigState) {
           'The analysis permit is no longer reserved.',
         );
       }
-      return response.permit;
+      return {
+        permit: response.permit,
+        access: parseReserveAccess(response.access),
+      };
     },
 
     async release(
@@ -144,6 +168,39 @@ export function createAnalysisPermitClient(config: ApiConfigState) {
         `/v1/analysis-permits/${encodeURIComponent(permitId)}/finalize`,
         { outcome, ratingId: null },
       );
+    },
+  };
+}
+
+/** Defensive parse of the reserve-time access snapshot: a malformed or
+ * missing block degrades to null (no popup heuristics run on it) instead of
+ * failing the reservation that gates the user's analysis. */
+function parseReserveAccess(value: unknown): ReserveAccessSnapshot | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const access = value as {
+    premium?: unknown;
+    freeRatings?: Record<string, unknown>;
+  };
+  const ratings = access.freeRatings;
+  if (typeof access.premium !== 'boolean' || !ratings) return null;
+  const numbers = [
+    ratings.limit,
+    ratings.used,
+    ratings.reserved,
+    ratings.remaining,
+    ratings.availableToReserve,
+  ];
+  if (numbers.some(n => typeof n !== 'number' || !Number.isFinite(n))) {
+    return null;
+  }
+  return {
+    premium: access.premium,
+    freeRatings: {
+      limit: ratings.limit as number,
+      used: ratings.used as number,
+      reserved: ratings.reserved as number,
+      remaining: ratings.remaining as number,
+      availableToReserve: ratings.availableToReserve as number,
     },
   };
 }

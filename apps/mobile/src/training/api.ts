@@ -21,6 +21,34 @@ export interface TrainingApiConfig {
   fetchFn?: TrainingFetch;
 }
 
+/**
+ * One drill from the browsable catalog (`GET /v1/catalog/drills`). Today the
+ * catalog is the drill-library-v1 engineering seed: every item arrives with
+ * `validation_state: 'UNVALIDATED'` and no coach endorsement. The raw
+ * validation state is preserved verbatim so the UI can label it honestly; a
+ * value other than 'UNVALIDATED' must still never be presented as validated.
+ */
+export interface CatalogDrill {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  coachName: string;
+  equipment: string[];
+  difficultyMin: string | null;
+  difficultyMax: string | null;
+  families: string[];
+  validationState: string;
+  saved: boolean;
+}
+
+export interface CatalogTrainingApi extends TrainingApi {
+  listCatalogDrills(params: {
+    q?: string;
+    family?: string;
+  }): Promise<CatalogDrill[]>;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -86,6 +114,35 @@ function nullableString(
   const value = record[key];
   if (!isNullableString(value)) throw invalidResponse();
   return value;
+}
+
+function requiredStringArray(
+  record: Record<string, unknown>,
+  key: string,
+): string[] {
+  const value = record[key];
+  if (!Array.isArray(value) || !value.every(isString)) throw invalidResponse();
+  return [...value];
+}
+
+function parseCatalogDrill(value: unknown): CatalogDrill {
+  if (!isRecord(value) || typeof value['saved'] !== 'boolean') {
+    throw invalidResponse();
+  }
+  return {
+    id: requiredUuid(value, 'id'),
+    slug: requiredString(value, 'slug'),
+    title: requiredString(value, 'title'),
+    description: requiredString(value, 'description'),
+    coachName: requiredString(value, 'coach_name'),
+    equipment: requiredStringArray(value, 'equipment'),
+    difficultyMin: nullableString(value, 'difficulty_min'),
+    difficultyMax: nullableString(value, 'difficulty_max'),
+    families: requiredStringArray(value, 'families'),
+    // Kept verbatim ('UNVALIDATED' today). Never mapped to a validated label.
+    validationState: requiredString(value, 'validation_state'),
+    saved: value['saved'],
+  };
 }
 
 function parseSavedDrill(value: unknown): SavedDrill {
@@ -351,7 +408,9 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
-export function createTrainingApi(config: TrainingApiConfig): TrainingApi {
+export function createTrainingApi(
+  config: TrainingApiConfig,
+): CatalogTrainingApi {
   const request = async (
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     path: string,
@@ -401,7 +460,23 @@ export function createTrainingApi(config: TrainingApiConfig): TrainingApi {
   const detailPath = (slug: string) =>
     `/v1/catalog/drills/${encodeURIComponent(slug)}`;
 
+  const catalogListPath = (params: { q?: string; family?: string }) => {
+    const query: string[] = [];
+    const q = params.q?.trim();
+    const family = params.family?.trim();
+    if (q) query.push(`q=${encodeURIComponent(q)}`);
+    if (family) query.push(`family=${encodeURIComponent(family)}`);
+    return `/v1/catalog/drills${query.length > 0 ? `?${query.join('&')}` : ''}`;
+  };
+
   return {
+    listCatalogDrills: async params => {
+      const payload = await request('GET', catalogListPath(params));
+      if (!isRecord(payload) || !Array.isArray(payload['items'])) {
+        throw invalidResponse();
+      }
+      return payload['items'].map(parseCatalogDrill);
+    },
     listSavedDrills: async () => {
       const payload = await request('GET', '/v1/me/saved-drills');
       if (!isRecord(payload) || !Array.isArray(payload['items'])) {

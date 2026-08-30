@@ -51,6 +51,17 @@ describe("retroTrial (synthetic rows)", () => {
     expect(trial.silentFailure).toBe(false);
   });
 
+  it("'predicted UNKNOWN' rows abstain, never silent-fail (2026-08-29 Mac re-measure regression)", () => {
+    const trial = retroTrial(
+      row({
+        ...baseStages,
+        STROKE: { pass: false, detail: "predicted UNKNOWN vs gold FOREHAND_DRIVE" },
+      }),
+    );
+    expect(trial.claims.STROKE_L1.status).toBe("abstained");
+    expect(trial.silentFailure).toBe(false);
+  });
+
   it("unrecognized detail strings throw instead of guessing", () => {
     expect(() =>
       retroTrial(row({ ...baseStages, CONTACT: { pass: true, detail: "something new" } })),

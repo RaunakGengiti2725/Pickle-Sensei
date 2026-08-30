@@ -51,6 +51,21 @@ const POSE_FREE_DETECTED = new Map<string, string[]>([
   ["derived-garbage", ["single_frame_clip", "undecodable_media"]],
 ]);
 /**
+ * How many frames survive a DELIBERATELY CORRUPTED bitstream is a decoder
+ * property, not a gate property: ffmpeg 7 (Linux CI, the pinned expectation)
+ * salvages ≤1 frame → single_frame_clip + undecodable_media, while ffmpeg 9
+ * (macOS, 2026-08-29 Mac re-measure) salvages a few more → decoded_frame_deficit.
+ * For these two probes the invariant locked is FAIL-CLOSED (not analyzable,
+ * only registered corrupt-media reasons); the exact reason list stays pinned
+ * for every structurally-derived probe above.
+ */
+const DECODER_DEPENDENT_CORRUPT_PROBES = new Set(["derived-corrupt-bytes", "derived-garbage"]);
+const CORRUPT_MEDIA_REASONS = new Set([
+  "single_frame_clip",
+  "undecodable_media",
+  "decoded_frame_deficit",
+]);
+/**
  * Animated program-generated graphics carry real motion and texture, so no
  * pose-free frame statistic separates them from real footage; rejecting them
  * is pose/content-level territory (no person will be found on macOS).
@@ -72,7 +87,14 @@ describe("OOD gate on the derived probe corpus (datasets/ood derivedItems)", () 
       it(`abstains (no confident analysis) on ${item.id} via pose-free signals`, () => {
         const frame = evaluateFrameAnalyzability(extractFrameStats(join(root, item.path)));
         expect(frame.analyzable).toBe(false);
-        expect(frame.reasons).toEqual(expectedReasons);
+        if (DECODER_DEPENDENT_CORRUPT_PROBES.has(item.id)) {
+          expect(frame.reasons.length).toBeGreaterThan(0);
+          for (const reason of frame.reasons) {
+            expect(CORRUPT_MEDIA_REASONS.has(reason)).toBe(true);
+          }
+        } else {
+          expect(frame.reasons).toEqual(expectedReasons);
+        }
         const result = preAnalysisGate({ frame, pose: null, poseQuality: null });
         expect(result.ok).toBe(false);
         if (result.ok) return;

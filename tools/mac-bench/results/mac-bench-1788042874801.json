@@ -1,0 +1,1818 @@
+{
+  "schemaVersion": "mac-bench-results-v1",
+  "generatedAtIso": "2026-08-29T22:44:30.110Z",
+  "host": {
+    "platform": "darwin",
+    "osVersion": "26.6",
+    "hardwareModel": "Mac16,1",
+    "nodeVersion": "v20.20.0",
+    "pythonVersion": "Python 3.14.4"
+  },
+  "provenance": {
+    "gitCommit": "c39ae452ad75636d5f3221b07bcfd40ece3d7635",
+    "gitBranch": "main",
+    "dirtyWorkingTree": true
+  },
+  "plan": {
+    "caseIds": [
+      "wm-dink-01",
+      "wm-volley-02",
+      "afn-sasebo-rally1",
+      "afn-sasebo-rally2",
+      "afn-vic-rally1"
+    ],
+    "coldIterations": 1,
+    "warmIterations": 3
+  },
+  "extractor": {
+    "built": true,
+    "buildWallMs": 18990,
+    "binaryPath": "/Users/raunakgengiti/Pickle-Sensei/native/swing-lab/.build/arm64-apple-macosx/release/swing-lab"
+  },
+  "stages": [
+    {
+      "stage": "e2e",
+      "unit": "ms",
+      "cold": {
+        "sampleCount": 5,
+        "minMs": 17464,
+        "maxMs": 51501,
+        "meanMs": 27915.2,
+        "p50Ms": 24311,
+        "p90Ms": 51501,
+        "p95Ms": 51501
+      },
+      "warm": {
+        "sampleCount": 15,
+        "minMs": 13641,
+        "maxMs": 49320,
+        "meanMs": 26157.867,
+        "p50Ms": 21734,
+        "p90Ms": 49158,
+        "p95Ms": 49320
+      },
+      "samples": [
+        {
+          "stage": "e2e",
+          "caseId": "wm-dink-01",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 51501
+        },
+        {
+          "stage": "e2e",
+          "caseId": "wm-volley-02",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 24311
+        },
+        {
+          "stage": "e2e",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 27143
+        },
+        {
+          "stage": "e2e",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 19157
+        },
+        {
+          "stage": "e2e",
+          "caseId": "afn-vic-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 17464
+        },
+        {
+          "stage": "e2e",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 49158
+        },
+        {
+          "stage": "e2e",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 24141
+        },
+        {
+          "stage": "e2e",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 25165
+        },
+        {
+          "stage": "e2e",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 21734
+        },
+        {
+          "stage": "e2e",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 18852
+        },
+        {
+          "stage": "e2e",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 47750
+        },
+        {
+          "stage": "e2e",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 21602
+        },
+        {
+          "stage": "e2e",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 21018
+        },
+        {
+          "stage": "e2e",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 15017
+        },
+        {
+          "stage": "e2e",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 13641
+        },
+        {
+          "stage": "e2e",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 49320
+        },
+        {
+          "stage": "e2e",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 23953
+        },
+        {
+          "stage": "e2e",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 25056
+        },
+        {
+          "stage": "e2e",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 19054
+        },
+        {
+          "stage": "e2e",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 16907
+        }
+      ]
+    },
+    {
+      "stage": "poseExtract",
+      "unit": "ms",
+      "cold": {
+        "sampleCount": 5,
+        "minMs": 4962,
+        "maxMs": 42574,
+        "meanMs": 14620,
+        "p50Ms": 7608,
+        "p90Ms": 42574,
+        "p95Ms": 42574
+      },
+      "warm": {
+        "sampleCount": 15,
+        "minMs": 4473,
+        "maxMs": 39585,
+        "meanMs": 13928.133,
+        "p50Ms": 7245,
+        "p90Ms": 39295,
+        "p95Ms": 39585
+      },
+      "samples": [
+        {
+          "stage": "poseExtract",
+          "caseId": "wm-dink-01",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 42574
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "wm-volley-02",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 12379
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 7608
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 5577
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "afn-vic-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 4962
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 39585
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 12633
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 7250
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 5684
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 5665
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 38630
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 12083
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 6906
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 5164
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 4473
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 39295
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 12475
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 7245
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 6947
+        },
+        {
+          "stage": "poseExtract",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 4887
+        }
+      ]
+    },
+    {
+      "stage": "playerTrack",
+      "unit": "ms",
+      "cold": {
+        "sampleCount": 5,
+        "minMs": 6,
+        "maxMs": 19,
+        "meanMs": 12,
+        "p50Ms": 12,
+        "p90Ms": 19,
+        "p95Ms": 19
+      },
+      "warm": {
+        "sampleCount": 15,
+        "minMs": 9,
+        "maxMs": 29,
+        "meanMs": 17.933,
+        "p50Ms": 18,
+        "p90Ms": 29,
+        "p95Ms": 29
+      },
+      "samples": [
+        {
+          "stage": "playerTrack",
+          "caseId": "wm-dink-01",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 12
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "wm-volley-02",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 19
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 13
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 10
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "afn-vic-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 6
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 13
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 18
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 21
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 9
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 9
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 12
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 29
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 24
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 23
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 11
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 13
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 29
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 25
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 21
+        },
+        {
+          "stage": "playerTrack",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 12
+        }
+      ]
+    },
+    {
+      "stage": "poseDerivatives",
+      "unit": "ms",
+      "cold": {
+        "sampleCount": 5,
+        "minMs": 1,
+        "maxMs": 7,
+        "meanMs": 2.6,
+        "p50Ms": 2,
+        "p90Ms": 7,
+        "p95Ms": 7
+      },
+      "warm": {
+        "sampleCount": 15,
+        "minMs": 1,
+        "maxMs": 2,
+        "meanMs": 1.533,
+        "p50Ms": 2,
+        "p90Ms": 2,
+        "p95Ms": 2
+      },
+      "samples": [
+        {
+          "stage": "poseDerivatives",
+          "caseId": "wm-dink-01",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 2
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "wm-volley-02",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 7
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 1
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 2
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "afn-vic-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 1
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 2
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 2
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 1
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 2
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 2
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 2
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 1
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 1
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 1
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 1
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 2
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 2
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 1
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 2
+        },
+        {
+          "stage": "poseDerivatives",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 1
+        }
+      ]
+    },
+    {
+      "stage": "eventPrePass",
+      "unit": "ms",
+      "cold": {
+        "sampleCount": 5,
+        "minMs": 1,
+        "maxMs": 2,
+        "meanMs": 1.4,
+        "p50Ms": 1,
+        "p90Ms": 2,
+        "p95Ms": 2
+      },
+      "warm": {
+        "sampleCount": 15,
+        "minMs": 1,
+        "maxMs": 3,
+        "meanMs": 1.6,
+        "p50Ms": 2,
+        "p90Ms": 2,
+        "p95Ms": 3
+      },
+      "samples": [
+        {
+          "stage": "eventPrePass",
+          "caseId": "wm-dink-01",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 2
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "wm-volley-02",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 2
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "afn-vic-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 2
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 2
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 2
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 2
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 2
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 2
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 3
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 2
+        },
+        {
+          "stage": "eventPrePass",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 1
+        }
+      ]
+    },
+    {
+      "stage": "paddleDetect",
+      "unit": "ms",
+      "cold": {
+        "sampleCount": 5,
+        "minMs": 6847,
+        "maxMs": 17789,
+        "meanMs": 11568.2,
+        "p50Ms": 10876,
+        "p90Ms": 17789,
+        "p95Ms": 17789
+      },
+      "warm": {
+        "sampleCount": 15,
+        "minMs": 7568,
+        "maxMs": 16323,
+        "meanMs": 10619.733,
+        "p50Ms": 9858,
+        "p90Ms": 16081,
+        "p95Ms": 16323
+      },
+      "samples": [
+        {
+          "stage": "paddleDetect",
+          "caseId": "wm-dink-01",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 6847
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "wm-volley-02",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 10291
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 17789
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 12038
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "afn-vic-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 10876
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 7939
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 9787
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 16323
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 14155
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 11171
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 7568
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 8055
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 12677
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 8448
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 7818
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 8415
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 9858
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 16081
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 10575
+        },
+        {
+          "stage": "paddleDetect",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 10426
+        }
+      ]
+    },
+    {
+      "stage": "paddleTrack",
+      "unit": "ms",
+      "cold": {
+        "sampleCount": 5,
+        "minMs": 15,
+        "maxMs": 30,
+        "meanMs": 23.8,
+        "p50Ms": 23,
+        "p90Ms": 30,
+        "p95Ms": 30
+      },
+      "warm": {
+        "sampleCount": 15,
+        "minMs": 13,
+        "maxMs": 32,
+        "meanMs": 21,
+        "p50Ms": 21,
+        "p90Ms": 29,
+        "p95Ms": 32
+      },
+      "samples": [
+        {
+          "stage": "paddleTrack",
+          "caseId": "wm-dink-01",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 15
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "wm-volley-02",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 30
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 28
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 23
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "afn-vic-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 23
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 25
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 32
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 21
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 26
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 23
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 16
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 17
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 13
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 13
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 15
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 24
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 27
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 20
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 14
+        },
+        {
+          "stage": "paddleTrack",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 29
+        }
+      ]
+    },
+    {
+      "stage": "ballCandidates",
+      "unit": "ms",
+      "cold": {
+        "sampleCount": 5,
+        "minMs": 2023,
+        "maxMs": 4607,
+        "meanMs": 3383,
+        "p50Ms": 3227,
+        "p90Ms": 4607,
+        "p95Ms": 4607
+      },
+      "warm": {
+        "sampleCount": 15,
+        "minMs": 1912,
+        "maxMs": 4421,
+        "meanMs": 3166.467,
+        "p50Ms": 3228,
+        "p90Ms": 4159,
+        "p95Ms": 4421
+      },
+      "samples": [
+        {
+          "stage": "ballCandidates",
+          "caseId": "wm-dink-01",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 4069
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "wm-volley-02",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 2989
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 4607
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 3227
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "afn-vic-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 2023
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 4105
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 2636
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 3943
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 4159
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 2251
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 3437
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 2373
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 3349
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 3228
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 1912
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 4421
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 2678
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 3972
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 2983
+        },
+        {
+          "stage": "ballCandidates",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 2050
+        }
+      ]
+    },
+    {
+      "stage": "ballTrack",
+      "unit": "ms",
+      "cold": {
+        "sampleCount": 5,
+        "minMs": 92,
+        "maxMs": 123,
+        "meanMs": 104,
+        "p50Ms": 100,
+        "p90Ms": 123,
+        "p95Ms": 123
+      },
+      "warm": {
+        "sampleCount": 15,
+        "minMs": 71,
+        "maxMs": 142,
+        "meanMs": 98.8,
+        "p50Ms": 95,
+        "p90Ms": 136,
+        "p95Ms": 142
+      },
+      "samples": [
+        {
+          "stage": "ballTrack",
+          "caseId": "wm-dink-01",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 123
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "wm-volley-02",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 99
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 106
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 100
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "afn-vic-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 92
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 136
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 95
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 97
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 142
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 90
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 122
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 79
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 85
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 84
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 71
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 125
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 97
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 100
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 85
+        },
+        {
+          "stage": "ballTrack",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 74
+        }
+      ]
+    },
+    {
+      "stage": "eventIsolation",
+      "unit": "ms",
+      "cold": {
+        "sampleCount": 5,
+        "minMs": 0,
+        "maxMs": 1,
+        "meanMs": 0.6,
+        "p50Ms": 1,
+        "p90Ms": 1,
+        "p95Ms": 1
+      },
+      "warm": {
+        "sampleCount": 15,
+        "minMs": 0,
+        "maxMs": 1,
+        "meanMs": 0.467,
+        "p50Ms": 0,
+        "p90Ms": 1,
+        "p95Ms": 1
+      },
+      "samples": [
+        {
+          "stage": "eventIsolation",
+          "caseId": "wm-dink-01",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "wm-volley-02",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 0
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "afn-vic-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 0
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 0
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 0
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 0
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 0
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 0
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 0
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 0
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "wm-dink-01",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 0
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "afn-sasebo-rally2",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 1
+        },
+        {
+          "stage": "eventIsolation",
+          "caseId": "afn-vic-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 1
+        }
+      ]
+    },
+    {
+      "stage": "fusionAnalysis",
+      "unit": "ms",
+      "cold": {
+        "sampleCount": 2,
+        "minMs": 33,
+        "maxMs": 35,
+        "meanMs": 34,
+        "p50Ms": 33,
+        "p90Ms": 35,
+        "p95Ms": 35
+      },
+      "warm": {
+        "sampleCount": 6,
+        "minMs": 21,
+        "maxMs": 31,
+        "meanMs": 25,
+        "p50Ms": 23,
+        "p90Ms": 31,
+        "p95Ms": 31
+      },
+      "samples": [
+        {
+          "stage": "fusionAnalysis",
+          "caseId": "wm-volley-02",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 35
+        },
+        {
+          "stage": "fusionAnalysis",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "cold",
+          "iteration": 1,
+          "wallMs": 33
+        },
+        {
+          "stage": "fusionAnalysis",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 23
+        },
+        {
+          "stage": "fusionAnalysis",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 21
+        },
+        {
+          "stage": "fusionAnalysis",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 22
+        },
+        {
+          "stage": "fusionAnalysis",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 2,
+          "wallMs": 29
+        },
+        {
+          "stage": "fusionAnalysis",
+          "caseId": "wm-volley-02",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 24
+        },
+        {
+          "stage": "fusionAnalysis",
+          "caseId": "afn-sasebo-rally1",
+          "phase": "warm",
+          "iteration": 3,
+          "wallMs": 31
+        }
+      ]
+    },
+    {
+      "stage": "cascade",
+      "unit": "ms",
+      "cold": null,
+      "warm": {
+        "sampleCount": 1,
+        "minMs": 1006,
+        "maxMs": 1006,
+        "meanMs": 1006,
+        "p50Ms": 1006,
+        "p90Ms": 1006,
+        "p95Ms": 1006
+      },
+      "samples": [
+        {
+          "stage": "cascade",
+          "caseId": "ALL",
+          "phase": "warm",
+          "iteration": 1,
+          "wallMs": 1006
+        }
+      ]
+    }
+  ],
+  "cascade": {
+    "sourceFile": "/Users/raunakgengiti/Pickle-Sensei/datasets/cascade/cascade-1788043468990.json",
+    "goldEvents": 5,
+    "unconditionalPass": {
+      "TARGET": 5,
+      "EVENT": 3,
+      "PADDLE": 5,
+      "BALL": 5,
+      "CONTACT": 2,
+      "PHASE": 4,
+      "STROKE": 2
+    },
+    "conditionalSurvival": {
+      "TARGET": 5,
+      "EVENT": 3,
+      "PADDLE": 3,
+      "BALL": 3,
+      "CONTACT": 2,
+      "PHASE": 2,
+      "STROKE": 2
+    },
+    "strictSurvival": {
+      "survived": 2,
+      "total": 5
+    },
+    "usableResult": {
+      "usable": 2,
+      "total": 5,
+      "contractVersion": "usable-result-v1"
+    },
+    "silentFailure": {
+      "silentFailures": 2,
+      "answeredTrials": 5,
+      "allTrials": 5,
+      "contractVersion": "silent-failure-v1.1"
+    }
+  },
+  "cascadeUnmeasuredReason": null,
+  "notes": [
+    "cold/warm semantics: src/runCase.ts header"
+  ]
+}

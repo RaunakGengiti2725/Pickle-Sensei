@@ -3,7 +3,15 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/node_modules/**", "**/*.js", "**/*.mjs", "!eslint.config.mjs"],
+    ignores: [
+      "**/dist/**",
+      "**/node_modules/**",
+      // Xcode build output (SwiftPM checkouts ship example .ts files).
+      "apps/mobile/ios/build/**",
+      "**/*.js",
+      "**/*.mjs",
+      "!eslint.config.mjs",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

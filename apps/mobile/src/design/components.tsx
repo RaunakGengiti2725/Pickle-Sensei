@@ -419,7 +419,6 @@ export function CheckpointRow(props: {
   name: string;
   score: number | null;
   band: 'green' | 'yellow' | 'red' | 'unscored';
-  confidence: number;
   onPress?: () => void;
 }) {
   const value =
@@ -441,13 +440,6 @@ export function CheckpointRow(props: {
         <Text style={[type.bodyBold, { color: color.ink, flex: 1 }]}>
           {props.name}
         </Text>
-        {props.confidence < 0.8 && props.score !== null ? (
-          <Text
-            style={[type.micro, { color: color.warn, marginRight: space.sm }]}
-          >
-            LOW READ
-          </Text>
-        ) : null}
         <Text style={[type.h3, { color: bar, fontVariant: ['tabular-nums'] }]}>
           {props.score === null ? '—' : Math.round(props.score)}
         </Text>
@@ -679,7 +671,9 @@ export function Pill(props: {
   }[tone];
   return (
     <View style={[styles.pill, { backgroundColor: palette.bg }]}>
-      <Text style={[type.micro, { color: palette.fg }]}>{props.label}</Text>
+      <Text numberOfLines={1} style={[type.micro, { color: palette.fg }]}>
+        {props.label}
+      </Text>
     </View>
   );
 }
@@ -833,6 +827,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: radius.pill,
     alignSelf: 'flex-start',
+    flexShrink: 1,
   },
   stat: { flex: 1 },
 });

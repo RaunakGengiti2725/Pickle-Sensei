@@ -1062,6 +1062,124 @@
           "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL: no physical iPhone exists in this program)."
         }
       }
+    },
+    {
+      "deviceId": "iphone-17",
+      "iosMajor": 26,
+      "admittedAtIso": "2026-08-29T23:19:17.036Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        }
+      }
+    },
+    {
+      "deviceId": "iphone-17",
+      "iosMajor": 27,
+      "admittedAtIso": "2026-08-29T23:19:17.037Z",
+      "capabilities": {
+        "camera": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "permissions": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "frameTiming": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "thermal": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "memory": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "modelRuntime": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "envelope": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "targetLock": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "eventTrigger": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "result": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "tryAgain": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "session": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        },
+        "import": {
+          "state": "YELLOW",
+          "reason": "New device/OS combination admitted without device validation — enters YELLOW until validated with real device evidence (BLOCKED_EXTERNAL until DEVICE_MEASUREMENT trials exist for iPhone18,3; first physical device acquired 2026-08-29)."
+        }
+      }
     }
   ],
   "notes": [

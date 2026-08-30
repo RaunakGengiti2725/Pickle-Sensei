@@ -89,11 +89,23 @@
         "state": "NOT_ACQUIRED",
         "blockedReason": "No physical iPhone exists in this program (GATE B external blocker)."
       }
+    },
+    {
+      "deviceId": "iphone-17",
+      "tier": "recent",
+      "modelIdentifier": "iPhone18,3",
+      "marketingName": "iPhone 17",
+      "minIosMajor": 26,
+      "acquisition": {
+        "state": "ACQUIRED",
+        "blockedReason": null
+      }
     }
   ],
   "notes": [
     "Coverage plan only — nothing here is evidence. A tier counts as covered only when at least one valid DEVICE_MEASUREMENT trial (pickle.iphone-trial.v1) references one of its deviceIds.",
     "Model identifiers are Apple's public identifiers; substituting a comparable device within the same tier is acceptable if recorded in the manifest first (append a new entry, never edit history).",
-    "requiredDevicesPerTier=1 is the GATE B minimum; broaden only after the first full-matrix pass exists."
+    "requiredDevicesPerTier=1 is the GATE B minimum; broaden only after the first full-matrix pass exists.",
+    "2026-08-29: iphone-17 (iPhone18,3) appended as the first ACQUIRED device — a real, paired physical iPhone 17 on iOS 27.0 (build 24A5418b, udid 00008150-001651D236C0C01C) used for the first local Mac validation session. Appended per the comparable-device substitution rule (recent tier); history above untouched."
   ]
 }

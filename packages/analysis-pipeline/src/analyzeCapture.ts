@@ -254,11 +254,26 @@ export async function analyzeCapture(
         resolutionBasis = "predicted_l3";
         resolvedProfileId = predictedProfile.profileId;
         resolvedProfileVersion = predictedProfile.profileVersion;
+      } else if (predictedProfile.kind === "side") {
+        // Depth-2 side commitment: score with the side's shared swing
+        // profile. The representative target set is the side's drive
+        // configuration — the canonical full swing for that side.
+        // Provenance stays family-level: basis "predicted_family" plus the
+        // shared side profile id, so the record never claims a leaf the
+        // classifier did not commit to.
+        shotType = predictedProfile.side === "FOREHAND" ? "forehand_drive" : "backhand_drive";
+        strokeResolution = {
+          kind: "predicted",
+          shotType,
+          confidence: autoPrediction.confidence,
+        };
+        resolutionBasis = "predicted_family";
+        resolvedProfileId = predictedProfile.profileId;
+        resolvedProfileVersion = predictedProfile.profileVersion;
       } else {
-        // Side-depth resolution or abstention: no leaf technique exists, so
-        // the slug-conditioned stages (biomechanics, scoring, faults,
-        // coaching) cannot run without fabricating one. Return a durable
-        // partial record instead of a score.
+        // Abstention: the classifier would not commit even to a side, so
+        // there is no defensible target set to score against. Return a
+        // durable partial record instead of a score.
         return partialAutoRecord({
           providers,
           input,
@@ -466,12 +481,11 @@ export async function analyzeCapture(
 }
 
 /**
- * AUTO run that could not reach a leaf technique: either a defensible
- * depth-2 side resolution (shared profile, basis "predicted_family") or an
- * explicit abstention (basis "abstained"). Both produce a durable
- * AnalysisRecord with result:null — the classifier's output is preserved
- * for reprocessing history, and nothing slug-conditioned was executed, so
- * no stroke, measurement, or score is invented.
+ * AUTO run that could not reach any scoring route: the classifier abstained
+ * (basis "abstained") — it would not commit even to a side. Produces a
+ * durable AnalysisRecord with result:null — the classifier's output is
+ * preserved for reprocessing history, and nothing slug-conditioned was
+ * executed, so no stroke, measurement, or score is invented.
  */
 async function partialAutoRecord(args: {
   providers: FusionProviders;

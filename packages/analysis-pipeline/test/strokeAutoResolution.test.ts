@@ -115,7 +115,7 @@ function autoClassifier(
 }
 
 describe("AUTO DETECT: declared-null routing", () => {
-  it("depth-2 FOREHAND prediction resolves the shared side profile — no leaf invented", async () => {
+  it("depth-2 FOREHAND prediction scores with the shared side profile — no leaf invented", async () => {
     const result = await analyzeCapture(
       providers({
         autoStrokeClassifier: autoClassifier({ label: "FOREHAND", taxonomyDepth: 2 }),
@@ -132,14 +132,15 @@ describe("AUTO DETECT: declared-null routing", () => {
     expect(record.strokeIntent.resolutionBasis).toBe("predicted_family");
     expect(record.strokeIntent.resolvedProfileId).toBe("SHARED_FOREHAND_SWING");
     expect(record.strokeIntent.disagreement).toBeNull();
-    // No leaf technique exists, so nothing slug-conditioned ran: no result,
-    // no score, no faults — and the abstention is explicit.
-    expect(record.result).toBeNull();
-    expect(record.faults).toEqual([]);
-    expect(record.uncertainty.presentation).toBe("abstain");
-    expect(record.uncertainty.limitingFactors).toContain(
-      "auto_stroke_resolved_at_side_depth_no_leaf_for_scoring",
-    );
+    // The side's representative swing target set scores the run: the user
+    // gets a real technique score while provenance stays family-level.
+    expect(record.result).not.toBeNull();
+    expect(record.result?.shotType).toBe("forehand_drive");
+    expect(record.strokeResolution).toEqual({
+      kind: "predicted",
+      shotType: "forehand_drive",
+      confidence: 0.6,
+    });
     // The classification itself is recorded provenance.
     expect(
       record.modelRuns.some(
@@ -147,10 +148,8 @@ describe("AUTO DETECT: declared-null routing", () => {
           run.task === "stroke_classification" && run.model.providerId === "classifier.hier-test",
       ),
     ).toBe(true);
-    // The side claim is evidence-linked to a real temporal window.
-    const claim = record.evidence.find((entry) => entry.claim === "stroke:predicted_side:FOREHAND");
-    expect(claim).toBeDefined();
-    expect(claim!.window).not.toBeNull();
+    // The full slug-conditioned chain ran and recorded checkpoint evidence.
+    expect(record.evidence.length).toBeGreaterThan(0);
   });
 
   it("UNKNOWN prediction produces a typed abstention — no stroke is invented", async () => {

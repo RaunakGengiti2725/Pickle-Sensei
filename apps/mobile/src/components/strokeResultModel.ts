@@ -624,9 +624,9 @@ export function isAbstainedResult(
 }
 
 /**
- * The technique-score section (score ring, SCORABLE pill, read confidence,
- * priority fix, stroke map, version trace) renders ONLY when a real score
- * exists: `resultKind === "scored"` with a non-null overallScore. A scored
+ * The technique-score section (score ring, priority fix, stroke map,
+ * version trace) renders ONLY when a real score exists:
+ * `resultKind === "scored"` with a non-null overallScore. A scored
  * kind whose score is null is an abstention surface (isAbstainedResult) and
  * must not simultaneously present a score stage.
  */

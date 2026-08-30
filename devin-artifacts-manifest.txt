@@ -1,0 +1,136 @@
+DEVIN ARTIFACTS MANIFEST — Pickle Sensei local (Mac-generated) perception evidence
+Generated: 2026-08-28 · Source machine: macOS (Darwin 25.6.0) · Repo @ commit 52ba173
+Purpose: restore gitignored/local artifacts into a Linux clone at the SAME relative
+paths so the benchmark instruments read existing evidence without regeneration.
+
+════════════════════════════════════════════════════════════════════════════════
+HOW `pnpm lab:cascade` CONSUMES THESE FILES (traced, not assumed)
+════════════════════════════════════════════════════════════════════════════════
+package.json: "lab:cascade" → pnpm --filter @pickle/swing-lab cascade
+packages/swing-lab/package.json: "cascade" → tsx src/cascadeWaterfall.ts
+cascadeWaterfall.ts reads (pure Node JSON reads, no native deps):
+  · datasets/paddle-bench/paddle-bench.json            [TRACKED in git]     (line ~52)
+  · datasets/paddle-bench/bundles/<id>/annotation/devin-visual-v1.json
+                                                        [TRACKED in git]     (line ~66)
+  · datasets/paddle-bench/runs/<id>/report.json         [GITIGNORED — THIS ARCHIVE] (line ~71-73)
+  · writes datasets/cascade/cascade-<ts>.json           (output)
+Other instruments and their gitignored inputs:
+  · lab:stroke-bench / lab:paddle-waterfall / lab:ball-bench →
+    datasets/paddle-bench/runs/<id>/{report,debug,paddle-dets,ball,ball-candidates,
+    people,pose,sequence,extract-meta}.json             [THIS ARCHIVE]
+  · lab:completion-bench → runs/<id>/people.json + runs-wave-a/<id>/people.json
+    (runs-wave-a is ALSO tracked in git; duplicated here for drop-in completeness)
+  · lab:ta-bench run → datasets/corpus/runs/<recordingId>/people.json
+    (targetAcquisitionBench.ts lines 65-68)              [THIS ARCHIVE]
+  · lab:regen / lab:analyze --reuse-extract → runs/<id>/{pose,people,ball}.json
+    (+ video file, MEDIA ARCHIVE; + ball-candidates.json / paddle-dets.json reuse)
+
+════════════════════════════════════════════════════════════════════════════════
+ARCHIVE A — pickle-sensei-evidence.tar.gz (extract at repo root; relative paths)
+════════════════════════════════════════════════════════════════════════════════
+PATH                                          SIZE    KIND             NEEDED BY / WHY
+datasets/paddle-bench/runs/                   64M     DERIVED OUTPUT   lab:cascade (report.json per case) + every
+  ├─ wm-dink-01/          16M                          per-case bench; each dir: report.json,
+  ├─ wm-volley-02/        11M                          pose.json, people.json, ball.json,
+  ├─ afn-sasebo-rally1/   10M                          ball-candidates.json, paddle-dets.json,
+  ├─ afn-sasebo-rally2/   11M                          sequence.json, debug.json, extract-meta.json,
+  ├─ afn-vic-rally1/      7.4M                         overlay.mp4 (derived visualization)
+  └─ wm-far-03/           8.4M                         (excluded-case exhibit, kept for completeness)
+datasets/paddle-bench/runs-wave-a/            3.1M    DERIVED INPUT    lab:completion-bench (windowed people.json
+                                                                       per wave-a event case; ALSO tracked in git)
+datasets/corpus/runs/  (17 of 20 recordings)  416M    DERIVED OUTPUT   lab:ta-bench (people.json per recording),
+                                                                       factory/miner/failure-mine; per dir:
+                                                                       people.json, pose.json, ball.json,
+                                                                       scenes.json, extract-meta.json
+datasets/mining/dvids-marne-outdoor/          21M     DERIVED OUTPUT   miner evidence (pose/people/ball.json)
+  {pose,people,ball}.json
+datasets/mining/dvids-warriorgames-match/     91M     DERIVED OUTPUT   miner evidence (pose/people/ball.json)
+  {pose,people,ball}.json
+datasets/ball-bench/failures/*/overlay.mp4    ~35M    DERIVED OUTPUT   preserved failure exhibits cited in
+  (4 files)                                                            DECISIONS/HANDOFF (not read by benches)
+devin-artifacts-manifest.txt                  <1M     MANIFEST         this file
+
+DELIBERATELY EXCLUDED FROM ARCHIVE A (present locally, with reasons):
+· datasets/corpus/runs/{rec-aaead01533ed,rec-c1b5580db415,rec-d613b17cfef1}  294M
+    SHADOW-split recordings (sessions dvids-906546, dvids-espn-oneyearout-2026).
+    The shadow split is never mined/inspected/tuned against (HANDOFF_V3 rule; 40.1min
+    held for release-candidate evaluation ON THIS MAC). Not shipped to keep the
+    cloud environment physically incapable of shadow contamination.
+· datasets/ta-bench/review/            566M  re-renderable review PNGs (pnpm lab:ta-bench render <caseId>)
+· datasets/paddle-bench/ownership-review/*.png  141M  re-renderable (pnpm lab:own propose); verdict JSONs are tracked
+· datasets/experiments/*/[A-Z]*-runs/<case>/    ~150M  sandbox COPIES of canonical run dirs at various
+    mid-wave code states (A-runs, H-runs, I-runs, P-runs, W1-runs, W1-runs-abcheck,
+    W2-runs, W5-runs, W9-runs, W12-runs, merge-check) — superseded by canonical
+    datasets/paddle-bench/runs/; loose measurement JSONs in those dirs ARE tracked in git
+· datasets/experiments/wave-b/W12-probe/{frames,grids,truthviz}/  179M  re-renderable probe
+    renders (tools/paddle-lab/edge_on_probe.py); probe JSONs/manifest are tracked in git
+
+════════════════════════════════════════════════════════════════════════════════
+ARCHIVE B — pickle-sensei-media.tar.gz (extract at repo root; relative paths)
+════════════════════════════════════════════════════════════════════════════════
+PATH                                          SIZE    KIND         NEEDED BY / WHY
+datasets/paddle-bench/videos/ (6 bench clips) ~18M    RAW MEDIA    lab:regen / lab:analyze rerun of the
+  wm-dink-nearplayer.mp4 3.5M · afn-sasebo-rally2.mp4 3.4M          gold cases (regen-manifest.json refers
+  afn-sasebo-rally1.mp4 3.3M · wm-volley-nearplayer.mp4 2.9M        to exactly these 6 files)
+  wm-farplayer-return.mp4 2.9M · afn-vic-rally1.mp4 2.2M
+datasets/corpus/media/ (10 of 13 files)       547M    RAW MEDIA    corpus tooling: lab:ta-bench render,
+                                                                   lab:factory, miner, wave-a event window
+                                                                   slicing, ownership frame rendering
+
+DELIBERATELY EXCLUDED FROM ARCHIVE B (present locally):
+· datasets/corpus/media/dvids-1019785-aaead01533ed.mp4  964M  SHADOW split — see above
+· datasets/corpus/media/dvids-906546-c1b5580db415.mp4   666M  SHADOW split
+· datasets/corpus/media/dvids-1019773-d613b17cfef1.mp4  433M  SHADOW split
+
+════════════════════════════════════════════════════════════════════════════════
+ARCHIVE C — pickle-sensei-media-sources.tar.gz (extract at repo root)
+════════════════════════════════════════════════════════════════════════════════
+datasets/paddle-bench/videos/ 7 SOURCE videos          797M   RAW MEDIA
+  dvids-warriorgames-match.mp4 275M · wm-pickleball-game.mp4 200M
+  dvids-warriorgames-broll.mp4 131M · dvids-marne-outdoor.mp4 80M
+  afn-provic.mp4 43M · afn-sasebo-indoor.mp4 36M · afn-infocus-pro.mp4 32M
+WHY (corrected after tracing recordings.json): the corpus registry's `path` for
+several DEV/locked_test recordings points DIRECTLY at these files (e.g.
+rec-960a1a200d6d → dvids-warriorgames-match.mp4, rec-96ae65019c30 →
+dvids-marne-outdoor.mp4, rec-6e06a3157947 → afn-sasebo-indoor.mp4,
+rec-b6f280b2900c → wm-pickleball-game.mp4). Any corpus tooling that opens media
+for those recordings (lab:ta-bench render, lab:factory, miner, wave-a event
+window slicing, ownership frame rendering) reads THESE paths — they are the
+corpus media for those sessions, not optional extras. NOT needed by
+lab:cascade / the benches / lab:regen (those need only Archives A + B).
+
+════════════════════════════════════════════════════════════════════════════════
+REQUESTED BUT NOT PRESENT LOCALLY
+════════════════════════════════════════════════════════════════════════════════
+· <repo-root>/runs/, <repo-root>/runs-wave-a/, <repo-root>/videos/ — do not exist;
+  the real locations are datasets/paddle-bench/{runs,runs-wave-a,videos}.
+· No other pose/ball/paddle/people JSON evidence exists outside the paths above
+  (verified against .gitignore and a filename sweep for pose/ball/paddle/people/
+  detect/track/mining/annotation/label/gold/bench/report/manifest/corpus/wave-a).
+· All annotations/labels/gold/manifests (bundles, cases.json, event-bounds-wave-a.json,
+  splits/recordings/sources.json, releases, experiment summaries) are TRACKED in git
+  at commit 52ba173 — Devin already has them via clone; nothing to ship.
+
+════════════════════════════════════════════════════════════════════════════════
+LINUX PORTABILITY (traced from code — see per-claim citations)
+════════════════════════════════════════════════════════════════════════════════
+WORKS with Archive A only (pure Node/tsx JSON reads, no native code):
+  pnpm lab:cascade · lab:stroke-bench · lab:paddle-waterfall · lab:ball-bench ·
+  lab:completion-bench · lab:learning-curve · lab:ta-bench run (all variants/splits
+  present in clone) · lab:corpus-status / failure-mine / data-gaps · coach queue.
+WORKS with A + B + Linux-installable deps:
+  lab:regen / lab:analyze rerun with --reuse-extract: pose/people/ball extraction is
+  SKIPPED when pose.json+people.json exist (analyzeVideo.ts ~line 208 guard), so the
+  Mac-only Swift extractor is never invoked; paddle-dets.json is reused when its
+  window covers detectSpan (runPaddleStage reuse gate); ball-candidates.json is
+  reused when its window covers the request (analyzeVideo.ts ~1084-1089) — BUT the
+  ball stage first checks tools/paddle-lab/.venv/bin/python EXISTS (line ~1068-1078)
+  and returns status "unavailable" without it, even when the cached JSON is present.
+  → To rerun analysis on Linux, rebuild the venv (python3.12 -m venv + torch CPU +
+  transformers + ffmpeg on PATH). Fresh D-FINE inference on CPU is slow but valid;
+  note W2's bit-equality was proven on MPS — CPU results may differ at float level.
+MAC-ONLY (cannot run on Linux, by dependency):
+  · native/swing-lab Swift extractor (`swift build` + Apple Vision / AVFoundation):
+    required ONLY for extracting pose/people/ball from NEW videos.
+  · iOS capture (GuidedCapture), simulator/device work, adaptive-completion live runs.
+  · Shadow-split evaluation (data intentionally not shipped).

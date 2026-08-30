@@ -47,3 +47,7 @@ tools/latency-bench/*.task
 tools/latency-bench/artifacts/f25-seeds/
 tools/latency-bench/artifacts/f25-two-pass/outputs/
 datasets/release/
+
+# mac-bench per-clip scratch intermediates (documented outputs are the
+# results/*.json + *.samples.jsonl files, which ARE committed)
+tools/mac-bench/results/scratch-*/

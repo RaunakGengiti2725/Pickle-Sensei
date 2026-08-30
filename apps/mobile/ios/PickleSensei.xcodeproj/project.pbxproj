@@ -14,12 +14,18 @@
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		8B865F71BADF43608B1F0AEF /* Manrope_600SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 7C8CE1E4C7FA495EB5D8A3E5 /* Manrope_600SemiBold.ttf */; };
+		96AAA20C3043BB590092A50D /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 96AAA20B3043BB590092A50D /* Auth */; };
+		96AAA20E3043BB590092A50D /* Functions in Frameworks */ = {isa = PBXBuildFile; productRef = 96AAA20D3043BB590092A50D /* Functions */; };
+		96AAA2103043BB590092A50D /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = 96AAA20F3043BB590092A50D /* PostgREST */; };
+		96AAA2123043BB590092A50D /* Realtime in Frameworks */ = {isa = PBXBuildFile; productRef = 96AAA2113043BB590092A50D /* Realtime */; };
+		96AAA2143043BB590092A50D /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = 96AAA2133043BB590092A50D /* Storage */; };
+		96AAA2163043BB590092A50D /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 96AAA2153043BB590092A50D /* Supabase */; };
 		977255527D3C40FF8D2FA736 /* Manrope_400Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A2322E717B4E4DE8844CE0D2 /* Manrope_400Regular.ttf */; };
 		9E6182F5C0175ABA960681B5 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		13B07F961A680F5B00A75B9A /* PickleSensei.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PickleSensei.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		13B07F961A680F5B00A75B9A /* picklesensei.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = picklesensei.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = PickleSensei/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = PickleSensei/Info.plist; sourceTree = "<group>"; };
 		13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = PrivacyInfo.xcprivacy; path = PickleSensei/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -40,6 +46,12 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				96AAA2163043BB590092A50D /* Supabase in Frameworks */,
+				96AAA2143043BB590092A50D /* Storage in Frameworks */,
+				96AAA2103043BB590092A50D /* PostgREST in Frameworks */,
+				96AAA20E3043BB590092A50D /* Functions in Frameworks */,
+				96AAA20C3043BB590092A50D /* Auth in Frameworks */,
+				96AAA2123043BB590092A50D /* Realtime in Frameworks */,
 				0C80B921A6F3F58F76C31292 /* libPods-PickleSensei.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -104,7 +116,7 @@
 		83CBBA001A601CBA00E9B192 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				13B07F961A680F5B00A75B9A /* PickleSensei.app */,
+				13B07F961A680F5B00A75B9A /* picklesensei.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -139,7 +151,7 @@
 			);
 			name = PickleSensei;
 			productName = PickleSensei;
-			productReference = 13B07F961A680F5B00A75B9A /* PickleSensei.app */;
+			productReference = 13B07F961A680F5B00A75B9A /* picklesensei.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -169,6 +181,9 @@
 				Base,
 			);
 			mainGroup = 83CBB9F61A601CBA00E9B192;
+			packageReferences = (
+				96AAA20A3043BB590092A50D /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			productRefGroup = 83CBBA001A601CBA00E9B192 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -220,13 +235,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-PickleSensei/Pods-PickleSensei-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-PickleSensei/Pods-PickleSensei-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -263,13 +274,9 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-PickleSensei/Pods-PickleSensei-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
-			inputPaths = (
-			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-PickleSensei/Pods-PickleSensei-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -530,6 +537,50 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		96AAA20A3043BB590092A50D /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		96AAA20B3043BB590092A50D /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 96AAA20A3043BB590092A50D /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
+		};
+		96AAA20D3043BB590092A50D /* Functions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 96AAA20A3043BB590092A50D /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Functions;
+		};
+		96AAA20F3043BB590092A50D /* PostgREST */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 96AAA20A3043BB590092A50D /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = PostgREST;
+		};
+		96AAA2113043BB590092A50D /* Realtime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 96AAA20A3043BB590092A50D /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Realtime;
+		};
+		96AAA2133043BB590092A50D /* Storage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 96AAA20A3043BB590092A50D /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Storage;
+		};
+		96AAA2153043BB590092A50D /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 96AAA20A3043BB590092A50D /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 83CBB9F71A601CBA00E9B192 /* Project object */;
 }

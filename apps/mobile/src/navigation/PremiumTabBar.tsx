@@ -257,6 +257,14 @@ export function PremiumTabBar(props: BottomTabBarProps) {
       accent: color.flame,
       onPress: () => runAction(() => void openRatingFlow('library')),
     },
+    {
+      title: 'Drill Library',
+      detail: 'Guided drills you can search',
+      icon: 'library',
+      accent: color.courtSoft,
+      onPress: () =>
+        runAction(() => rootNavigation?.navigate('DrillLibrary')),
+    },
   ];
 
   return (

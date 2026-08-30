@@ -6,7 +6,7 @@
 Player ── React Native App (product UI, orchestration)
               │
               ├── Native camera capture (AVFoundation on iOS; CameraX on Android)
-              ├── Native pose overlay (Apple Vision / MediaPipe; skeleton,
+              ├── Native pose overlay (Apple Vision / MediaPipe; body heat map,
               │        measured joint-motion intensity, framing, motion trigger)
               ├── Scoring Engine (`packages/scoring`; dormant in the shipping
               │        capture path until validated model measurements exist)
@@ -60,7 +60,7 @@ docs/                  This documentation set
 
 ## Data flow: single-shot analysis
 
-iOS: AVFoundation → Apple Vision body pose → live skeleton + measured joint-motion glow → wrist-motion trigger → retain ~2 seconds before and ~1.5 seconds after the trigger → store a private clip plus the bounded v1 pose-evidence summary → return `unknown`/`awaiting_model`.
+iOS: AVFoundation → Apple Vision body pose → live body heat map + measured joint-motion glow → wrist-motion trigger → retain ~2 seconds before and ~1.5 seconds after the trigger → store a private clip plus the bounded v1 pose-evidence summary → return `unknown`/`awaiting_model`.
 
 Android: CameraX → bundled MediaPipe BlazePose → the same live pose/motion presentation and automatic short-clip capture → store a private clip plus the same evidence contract → return `unknown`/`awaiting_model`.
 

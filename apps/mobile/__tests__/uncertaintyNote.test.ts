@@ -118,7 +118,7 @@ describe('uncertaintyNotes', () => {
       { kind: 'contact', text: UNCERTAINTY_COPY.contact },
     ]);
     expect(notes[0]?.text).toContain(
-      'We couldn’t confidently locate contact on this attempt',
+      'Contact wasn’t located on this attempt',
     );
   });
 

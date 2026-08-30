@@ -95,6 +95,10 @@ export function probeClipStream(clipPath: string): ClipStreamInfo {
  * Coefficient of variation (std dev / mean) of inter-frame presentation
  * intervals, from packet timestamps sorted into presentation order. Returns
  * null when fewer than 3 usable intervals exist (too short to judge timing).
+ *
+ * Zero-length intervals (duplicate PTS — two frames sharing a presentation
+ * time) are stutter evidence and are INCLUDED: dropping them would let a
+ * duplicate-PTS re-timed clip measure as perfectly stable.
  */
 export function probeFrameIntervalCv(clipPath: string, window?: MeasureWindow): number | null {
   const intervalArgs = window
@@ -125,7 +129,7 @@ export function probeFrameIntervalCv(clipPath: string, window?: MeasureWindow): 
   const intervals: number[] = [];
   for (let index = 1; index < times.length; index += 1) {
     const delta = times[index]! - times[index - 1]!;
-    if (delta > 0) intervals.push(delta);
+    if (delta >= 0) intervals.push(delta);
   }
   if (intervals.length < 3) return null;
   const mean = intervals.reduce((acc, value) => acc + value, 0) / intervals.length;

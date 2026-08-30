@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import LinearGradient from 'react-native-linear-gradient';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -37,6 +38,7 @@ import {
 } from '../progress/api';
 import { buildPracticeHistory } from '../progress/practiceHistory';
 import { PracticeVolumeChart } from '../progress/PracticeVolumeChart';
+import { PlayerRankBanner } from '../components/PlayerRankBanner';
 
 function deviceTimeZone() {
   try {
@@ -56,6 +58,7 @@ export function HomeScreen() {
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const profile = useAppStore(s => s.profile);
   const [recent, setRecent] = useState<LocalShotRow[]>([]);
+  const [allShots, setAllShots] = useState<LocalShotRow[]>([]);
   const [latestScored, setLatestScored] = useState<LocalShotRow | null>(null);
   const [captures, setCaptures] = useState<CaptureHistoryEntry[]>([]);
   const [asOfIso, setAsOfIso] = useState(() => new Date().toISOString());
@@ -73,6 +76,7 @@ export function HomeScreen() {
         listCaptureHistory(db, null),
       ]);
       setRecent(shots.slice(0, 5));
+      setAllShots(shots);
       setLatestScored(
         shots.find(
           shot => shot.resultKind === 'scored' && shot.overallScore !== null,
@@ -191,6 +195,12 @@ export function HomeScreen() {
           </View>
         </View>
 
+        <PlayerRankBanner
+          shots={allShots}
+          streakDays={practice.currentStreak}
+          onPress={() => navigation.navigate('Tabs', { screen: 'Performance' })}
+        />
+
         <Text style={[type.h1, styles.welcome]}>Ready when you are.</Text>
 
         {/* Two analysis modes. Stroke Analysis is the flagship: one movement,
@@ -200,34 +210,68 @@ export function HomeScreen() {
           <PressableScale
             accessibilityRole="button"
             accessibilityLabel="Stroke Analysis. Analyze one movement with fast, detailed feedback."
-            style={[styles.modeCard, styles.modeCardPrimary]}
+            containerStyle={styles.modeCardSlot}
+            style={[styles.modeCardShell, styles.modeCardPrimary]}
             onPress={() => navigation.navigate('Analyze', { source: 'camera' })}
           >
-            <Icon name="camera" color={color.onDark} size={22} />
-            <Text style={[type.bodyBold, styles.modeTitleDark]}>
-              Stroke Analysis
-            </Text>
-            <Text style={[type.micro, styles.modeCaptionDark]}>
-              One movement. Fast, detailed feedback.
-            </Text>
+            <LinearGradient
+              colors={[color.courtDeep, color.surfaceDark]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0.9, y: 1 }}
+              pointerEvents="none"
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.modeCardInner}>
+              <View style={styles.modeCardTop}>
+                <View style={[styles.modeIconChip, styles.modeIconChipDark]}>
+                  <Icon name="camera" color={color.volt} size={20} />
+                </View>
+                <Icon name="arrow" color={color.onDarkMuted} size={17} />
+              </View>
+              <View>
+                <Text style={[type.bodyBold, styles.modeTitleDark]}>
+                  Stroke Analysis
+                </Text>
+                <Text style={[type.caption, styles.modeCaptionDark]}>
+                  One movement, deep feedback
+                </Text>
+              </View>
+            </View>
           </PressableScale>
           <PressableScale
             accessibilityRole="button"
             accessibilityLabel="Session Analysis. Follow a live session with multiple strokes."
-            style={[styles.modeCard, styles.modeCardSecondary]}
+            containerStyle={styles.modeCardSlot}
+            style={[styles.modeCardShell, styles.modeCardSecondary]}
             onPress={() => navigation.navigate('LiveCourt')}
           >
-            <Icon name="court" color={color.courtDeep} size={22} />
-            <Text style={[type.bodyBold, styles.modeTitleLight]}>
-              Session Analysis
-            </Text>
-            <Text style={[type.micro, styles.modeCaptionLight]}>
-              Rallies and gameplay, stroke by stroke.
-            </Text>
+            <View style={styles.modeCardInner}>
+              <View style={styles.modeCardTop}>
+                <View style={[styles.modeIconChip, styles.modeIconChipLight]}>
+                  <Icon name="court" color={color.courtDeep} size={20} />
+                </View>
+                <Icon name="arrow" color={color.inkSoft} size={17} />
+              </View>
+              <View>
+                <Text style={[type.bodyBold, styles.modeTitleLight]}>
+                  Session Analysis
+                </Text>
+                <Text style={[type.caption, styles.modeCaptionLight]}>
+                  Rallies, stroke by stroke
+                </Text>
+              </View>
+            </View>
           </PressableScale>
         </View>
 
-        <Card tone="dark" style={styles.practiceCard}>
+        <View style={styles.practiceCard}>
+          <LinearGradient
+            colors={[color.courtDeep, color.surfaceDark]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            pointerEvents="none"
+            style={StyleSheet.absoluteFill}
+          />
           <View style={styles.practiceCardTop}>
             <View style={{ flex: 1 }}>
               <Text style={[type.micro, { color: color.volt }]}>THIS WEEK</Text>
@@ -237,12 +281,28 @@ export function HomeScreen() {
             </View>
             <Pill label="ON DEVICE" tone="dark" />
           </View>
-          <View style={styles.practiceCountRow}>
-            <Text style={styles.practiceCount}>{practice.captureCount}</Text>
-            <Text style={[type.h3, styles.practiceCountLabel]}>
-              camera {practice.captureCount === 1 ? 'capture' : 'captures'}
-            </Text>
-          </View>
+          {practice.captureCount === 0 ? (
+            <View style={styles.practiceZeroStage}>
+              <View style={styles.practiceZeroIcon}>
+                <Icon name="spark" color={color.volt} size={20} />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={[type.h3, styles.practiceZeroTitle]}>
+                  Your court is ready.
+                </Text>
+                <Text style={[type.caption, styles.practiceZeroCopy]}>
+                  The first verified capture starts this record.
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <View style={styles.practiceCountRow}>
+              <Text style={styles.practiceCount}>{practice.captureCount}</Text>
+              <Text style={[type.h3, styles.practiceCountLabel]}>
+                camera {practice.captureCount === 1 ? 'capture' : 'captures'}
+              </Text>
+            </View>
+          )}
           <PracticeVolumeChart
             activeDays={practice.activeDays}
             buckets={practice.buckets}
@@ -270,7 +330,7 @@ export function HomeScreen() {
               <Text style={styles.practiceFooterLabel}>day streak</Text>
             </View>
           </View>
-        </Card>
+        </View>
 
         <SectionTitle title="Latest technique" />
         <Card tone="soft" style={styles.techniqueSummary}>
@@ -418,24 +478,47 @@ export function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  modeRow: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
-  modeCard: {
+  modeRow: { flexDirection: 'row', gap: space.sm + 2, marginTop: space.sm },
+  // Row layout must live on PressableScale's OUTER container (containerStyle):
+  // the inner Pressable's flex cannot size the wrapper, which previously let
+  // the two mode cards overflow the screen edge.
+  modeCardSlot: { flex: 1 },
+  modeCardShell: {
     flex: 1,
     borderRadius: radius.lg,
-    padding: space.md,
-    gap: 6,
-    minHeight: 118,
+    overflow: 'hidden',
   },
   modeCardPrimary: { backgroundColor: color.courtDeep },
   modeCardSecondary: {
-    backgroundColor: color.surface,
-    borderWidth: 1,
+    backgroundColor: color.surfaceElevated,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.line,
   },
+  modeCardInner: {
+    flex: 1,
+    minHeight: 148,
+    padding: space.md,
+    justifyContent: 'space-between',
+    gap: space.md,
+  },
+  modeCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modeIconChip: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modeIconChipDark: { backgroundColor: color.onDarkTint },
+  modeIconChipLight: { backgroundColor: color.courtSoft },
   modeTitleDark: { color: color.onDark },
-  modeCaptionDark: { color: color.onDarkMuted ?? color.onDark },
+  modeCaptionDark: { color: color.onDarkSubtle, marginTop: 2 },
   modeTitleLight: { color: color.ink },
-  modeCaptionLight: { color: color.inkSoft },
+  modeCaptionLight: { color: color.inkSoft, marginTop: 2 },
   screen: { flex: 1, backgroundColor: color.surface },
   content: {
     paddingHorizontal: space.lg,
@@ -463,7 +546,34 @@ const styles = StyleSheet.create({
   },
   streakValue: { color: color.ink, fontVariant: ['tabular-nums'] },
   welcome: { color: color.ink, marginTop: space.xl, marginBottom: space.lg },
-  practiceCard: { padding: space.lg },
+  practiceCard: {
+    marginTop: space.md,
+    borderRadius: radius.xl,
+    padding: space.lg,
+    backgroundColor: color.surfaceDark,
+    overflow: 'hidden',
+  },
+  practiceZeroStage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    marginTop: space.lg,
+    padding: space.md,
+    borderRadius: radius.md,
+    backgroundColor: color.onDarkTint,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineMutedDark,
+  },
+  practiceZeroIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(215,250,69,0.12)',
+  },
+  practiceZeroTitle: { color: color.onDark },
+  practiceZeroCopy: { color: color.onDarkSubtle, marginTop: 2 },
   practiceCardTop: {
     flexDirection: 'row',
     alignItems: 'flex-start',

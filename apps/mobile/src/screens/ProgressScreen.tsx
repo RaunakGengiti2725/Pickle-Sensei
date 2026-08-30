@@ -41,6 +41,7 @@ import {
   type PracticeHistoryRangeKey,
 } from '../progress/practiceHistory';
 import { PracticeVolumeChart } from '../progress/PracticeVolumeChart';
+import { PlayerRankCard } from '../components/PlayerRankCard';
 
 type ProgressSection = 'practice' | 'technique';
 
@@ -399,12 +400,14 @@ export function ProgressScreen() {
 
         {section === 'practice' ? (
           <>
-            <LinearGradient
-              colors={[color.courtDeep, color.surfaceDark]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.practiceHero}
-            >
+            <View style={styles.practiceHero}>
+              <LinearGradient
+                colors={[color.courtDeep, color.surfaceDark]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                pointerEvents="none"
+                style={StyleSheet.absoluteFill}
+              />
               <View style={styles.practiceHeroTop}>
                 <View style={styles.practiceHeroHeading}>
                   <Text style={[type.micro, styles.heroEyebrow]}>
@@ -419,38 +422,59 @@ export function ProgressScreen() {
                 </View>
               </View>
 
-              <View style={styles.captureStage}>
-                <View style={styles.captureCountRow}>
-                  <Text style={styles.captureCount}>
-                    {practice.captureCount}
-                  </Text>
-                  <View style={styles.captureCountCopy}>
+              {practice.captureCount === 0 ? (
+                <View style={styles.captureZeroStage}>
+                  <View style={styles.captureZeroIcon}>
+                    <Icon name="spark" color={color.volt} size={20} />
+                  </View>
+                  <View style={styles.captureZeroCopy}>
                     <Text style={[type.h3, { color: color.onDark }]}>
-                      captured
+                      This chart is waiting on you.
                     </Text>
-                    <Text style={[type.caption, { color: color.onDarkSubtle }]}>
-                      in {selectedDefinition.label.toLowerCase()}
+                    <Text style={[type.caption, styles.captureZeroDetail]}>
+                      Step into frame — verified captures land here
+                      automatically.
                     </Text>
                   </View>
                 </View>
-                <View
-                  accessibilityLabel={`${practice.currentStreak} day automatic capture streak`}
-                  style={styles.streakChip}
-                >
-                  <View style={styles.streakIcon}>
-                    <Icon name="flame" color={color.flame} size={19} />
+              ) : (
+                <>
+                  <View style={styles.captureStage}>
+                    <View style={styles.captureCountRow}>
+                      <Text style={styles.captureCount}>
+                        {practice.captureCount}
+                      </Text>
+                      <View style={styles.captureCountCopy}>
+                        <Text style={[type.h3, { color: color.onDark }]}>
+                          captured
+                        </Text>
+                        <Text
+                          style={[type.caption, { color: color.onDarkSubtle }]}
+                        >
+                          in {selectedDefinition.label.toLowerCase()}
+                        </Text>
+                      </View>
+                    </View>
+                    <View
+                      accessibilityLabel={`${practice.currentStreak} day automatic capture streak`}
+                      style={styles.streakChip}
+                    >
+                      <View style={styles.streakIcon}>
+                        <Icon name="flame" color={color.flame} size={19} />
+                      </View>
+                      <View>
+                        <Text style={styles.streakValue}>
+                          {practice.currentStreak}
+                        </Text>
+                        <Text style={styles.streakLabel}>DAY STREAK</Text>
+                      </View>
+                    </View>
                   </View>
-                  <View>
-                    <Text style={styles.streakValue}>
-                      {practice.currentStreak}
-                    </Text>
-                    <Text style={styles.streakLabel}>DAY STREAK</Text>
-                  </View>
-                </View>
-              </View>
-              <Text style={[type.caption, styles.comparisonCopy]}>
-                {comparisonCopy}
-              </Text>
+                  <Text style={[type.caption, styles.comparisonCopy]}>
+                    {comparisonCopy}
+                  </Text>
+                </>
+              )}
 
               <PracticeVolumeChart
                 activeDays={practice.activeDays}
@@ -478,7 +502,7 @@ export function ProgressScreen() {
                   <Text style={styles.footerLabel}>best streak</Text>
                 </View>
               </View>
-            </LinearGradient>
+            </View>
 
             <SectionTitle title="Capture evidence" />
             <View style={styles.evidenceGrid}>
@@ -566,6 +590,8 @@ export function ProgressScreen() {
           </>
         ) : (
           <>
+            <PlayerRankCard facts={facts} />
+
             <Card tone="dark" style={styles.techniqueHero}>
               <View style={styles.techniqueHeroTop}>
                 <View style={styles.flex}>
@@ -813,6 +839,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.xl,
     padding: space.lg,
     paddingBottom: space.lg + 4,
+    backgroundColor: color.surfaceDark,
+    overflow: 'hidden',
   },
   practiceHeroTop: {
     flexDirection: 'row',
@@ -857,26 +885,50 @@ const styles = StyleSheet.create({
     lineHeight: 12,
     letterSpacing: 0.5,
   },
+  // The count column must own the shrinkable space (flex: 1 + minWidth: 0):
+  // without it the row's intrinsic width pushed the streak chip past the
+  // card edge, clipping "DAY STREAK".
   captureCountRow: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 12,
-    flexShrink: 1,
   },
   captureStage: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    justifyContent: 'space-between',
     gap: 10,
     marginTop: space.xl,
   },
   captureCount: {
     ...type.display,
     color: color.onDark,
-    fontSize: 72,
-    lineHeight: 72,
+    fontSize: 64,
+    lineHeight: 66,
   },
-  captureCountCopy: { paddingBottom: 7 },
+  captureCountCopy: { flexShrink: 1, minWidth: 0, paddingBottom: 7 },
+  captureZeroStage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    marginTop: space.xl,
+    padding: space.md,
+    borderRadius: radius.md,
+    backgroundColor: color.onDarkTint,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineMutedDark,
+  },
+  captureZeroIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(215,250,69,0.12)',
+  },
+  captureZeroCopy: { flex: 1, minWidth: 0 },
+  captureZeroDetail: { color: color.onDarkSubtle, marginTop: 3 },
   comparisonCopy: { color: color.onDarkSubtle, marginTop: 3 },
   practiceFooter: {
     minHeight: 58,

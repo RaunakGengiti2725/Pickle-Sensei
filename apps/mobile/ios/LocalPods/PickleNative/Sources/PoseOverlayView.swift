@@ -1,10 +1,16 @@
 import AVFoundation
 import UIKit
 
-/// Draws only evidence produced by current Apple Vision observations. The
-/// observed skeleton, body-bound lock, and short motion trails disappear when
-/// inference loses the athlete; only the static full-body framing guide stays.
-/// No decorative scanner or synthetic body data is drawn.
+/// Draws only evidence produced by current Apple Vision observations. Instead
+/// of a stick figure, the athlete is rendered as a BODY HEAT MAP: soft
+/// additive glows placed at observed landmarks and along observed limb lines,
+/// whose color and size come from each joint's measured movement speed
+/// (cool teal at rest → mint → volt → flame at full swing speed). The heat
+/// map, body-bound lock, and short motion trails disappear when inference
+/// loses the athlete; only the static full-body framing guide stays. No
+/// decorative scanner or synthetic body data is drawn: every glow center is
+/// an observed landmark or a point on the straight line between two observed
+/// landmarks, and every intensity is a measured speed.
 final class PoseOverlayView: UIView {
   enum CaptureState: Equatable {
     case starting
@@ -27,18 +33,41 @@ final class PoseOverlayView: UIView {
     static let onDark = UIColor(red: 248 / 255, green: 250 / 255, blue: 245 / 255, alpha: 1)
   }
 
-  private let skeletonBackdropLayer = CAShapeLayer()
-  private let skeletonLayer = CAShapeLayer()
-  private let jointLayer = CAShapeLayer()
+  /// Measured-speed heat ramp: deep teal → mint → volt → flame. Values are
+  /// the app's design tokens (color.mint / color.volt / color.flame).
+  private static let heatStops: [(CGFloat, CGFloat, CGFloat, CGFloat)] = [
+    (0.00, 26 / 255, 166 / 255, 138 / 255),
+    (0.35, 83 / 255, 217 / 255, 155 / 255),
+    (0.70, 215 / 255, 250 / 255, 69 / 255),
+    (1.00, 255 / 255, 155 / 255, 66 / 255),
+  ]
+
   private let bodyLockLayer = CAShapeLayer()
   weak var previewLayer: AVCaptureVideoPreviewLayer?
 
   private var landmarks: [String: PoseLandmark] = [:]
-  private var trailBuffer = PoseMotionTrailBuffer()
+  /// Shoulders and knees are tracked in addition to the default joints so the
+  /// whole heat map is backed by per-joint MEASURED speeds — never a guessed
+  /// intensity for an untracked region.
+  private var trailBuffer = PoseMotionTrailBuffer(
+    config: PoseMotionTrailBuffer.Config(
+      trackedJoints: [
+        "left_shoulder", "right_shoulder",
+        "left_elbow", "right_elbow",
+        "left_wrist", "right_wrist",
+        "left_hip", "right_hip",
+        "left_knee", "right_knee",
+        "left_ankle", "right_ankle",
+      ]
+    )
+  )
   private var latestTimestampMs: Int?
   private var readinessState: PoseReadinessEvaluator.State = .noPerson
   private var jointCoverage = 0.0
   private var captureState: CaptureState = .starting
+  /// Quantized-gradient cache so per-frame drawing never re-allocates
+  /// CGGradients (keyed by heat bucket × alpha bucket).
+  private var gradientCache: [Int: CGGradient] = [:]
 
   private static let segments: [(String, String)] = [
     ("left_shoulder", "right_shoulder"),
@@ -54,8 +83,10 @@ final class PoseOverlayView: UIView {
     ("right_hip", "right_knee"),
     ("right_knee", "right_ankle"),
   ]
+  /// The head landmark glows only when Vision actually observed it
+  /// (ApplePoseProvider maps VN `.nose` to "head").
+  private static let headJoints = ["head"]
   private static let minimumTrailSpeed = 0.06
-  private static let minimumHaloSpeed = 0.12
   private static let fullIntensitySpeed = 1.25
 
   override init(frame: CGRect) {
@@ -65,23 +96,6 @@ final class PoseOverlayView: UIView {
     backgroundColor = .clear
     isOpaque = false
     contentMode = .redraw
-
-    skeletonBackdropLayer.fillColor = UIColor.clear.cgColor
-    skeletonBackdropLayer.strokeColor = UIColor.black.withAlphaComponent(0.58).cgColor
-    skeletonBackdropLayer.lineWidth = 6
-    skeletonBackdropLayer.lineCap = .round
-    skeletonBackdropLayer.lineJoin = .round
-    layer.addSublayer(skeletonBackdropLayer)
-
-    skeletonLayer.fillColor = UIColor.clear.cgColor
-    skeletonLayer.strokeColor = Palette.mint.cgColor
-    skeletonLayer.lineWidth = 2.75
-    skeletonLayer.lineCap = .round
-    skeletonLayer.lineJoin = .round
-    layer.addSublayer(skeletonLayer)
-
-    jointLayer.fillColor = Palette.volt.cgColor
-    layer.addSublayer(jointLayer)
 
     bodyLockLayer.fillColor = UIColor.clear.cgColor
     bodyLockLayer.strokeColor = Palette.volt.cgColor
@@ -97,9 +111,6 @@ final class PoseOverlayView: UIView {
     super.layoutSubviews()
     CATransaction.begin()
     CATransaction.setDisableActions(true)
-    skeletonBackdropLayer.frame = bounds
-    skeletonLayer.frame = bounds
-    jointLayer.frame = bounds
     bodyLockLayer.frame = bounds
     CATransaction.commit()
     redraw()
@@ -130,6 +141,7 @@ final class PoseOverlayView: UIView {
     assert(Thread.isMainThread)
     let acquiredLock = nextState == .locked && captureState != .locked
     captureState = nextState
+    setNeedsDisplay()
     redraw()
     if acquiredLock { animateLockAcquired() }
   }
@@ -143,9 +155,6 @@ final class PoseOverlayView: UIView {
     jointCoverage = 0
     CATransaction.begin()
     CATransaction.setDisableActions(true)
-    skeletonBackdropLayer.path = nil
-    skeletonLayer.path = nil
-    jointLayer.path = nil
     bodyLockLayer.path = nil
     CATransaction.commit()
     setNeedsDisplay()
@@ -155,7 +164,8 @@ final class PoseOverlayView: UIView {
   override func draw(_ rect: CGRect) {
     guard let context = UIGraphicsGetCurrentContext(),
           let previewLayer,
-          let latestTimestampMs
+          let latestTimestampMs,
+          !landmarks.isEmpty
     else { return }
 
     context.saveGState()
@@ -172,47 +182,126 @@ final class PoseOverlayView: UIView {
       newestSegmentByJoint[segment.joint] = segment
     }
 
-    // One short-lived halo per tracked joint makes measured movement intensity
-    // legible without leaving a persistent or looping "heat" effect.
-    for segment in newestSegmentByJoint.values {
-      guard segment.normalizedSpeedPerSecond >= Self.minimumHaloSpeed else { continue }
+    // Per-joint heat: the newest measured speed, normalized to the full-swing
+    // ceiling and faded by sample age. A joint with no fresh measurement has
+    // zero heat — it still glows the cool "observed" base, nothing hotter.
+    var heatByJoint: [String: CGFloat] = [:]
+    for (joint, segment) in newestSegmentByJoint {
       let speed = CGFloat(
         min(1, max(0, segment.normalizedSpeedPerSecond / Self.fullIntensitySpeed))
       )
       let freshness = CGFloat(max(0, 1 - segment.ageFraction))
-      let point = previewLayer.layerPointConverted(
-        fromCaptureDevicePoint: CGPoint(x: segment.endX, y: segment.endY)
-      )
-      let color = trailColor(speed: speed)
-      guard let gradient = CGGradient(
-        colorsSpace: CGColorSpaceCreateDeviceRGB(),
-        colors: [
-          color.withAlphaComponent((0.14 + 0.24 * speed) * freshness).cgColor,
-          color.withAlphaComponent(0).cgColor,
-        ] as CFArray,
-        locations: [0, 1]
-      ) else { continue }
-      let radius = 12 + 22 * speed
-      context.drawRadialGradient(
-        gradient,
-        startCenter: point,
-        startRadius: 0,
-        endCenter: point,
-        endRadius: radius,
-        options: .drawsAfterEndLocation
+      heatByJoint[joint] = speed * (0.4 + 0.6 * freshness)
+    }
+    let heat: (String) -> CGFloat = { heatByJoint[$0] ?? 0 }
+
+    let layerPoint: (PoseLandmark) -> CGPoint = { landmark in
+      previewLayer.layerPointConverted(
+        fromCaptureDevicePoint: CGPoint(x: landmark.x, y: landmark.y)
       )
     }
 
-    // At most 8 joints × 7 segments are drawn. Width, color, and opacity come
-    // from observed displacement and timestamp age, not a looping effect.
+    // The glow radius follows the observed body scale (torso extent in layer
+    // points) so the aura hugs the athlete whether near or far.
+    let radiusUnit = glowRadiusUnit(layerPoint: layerPoint)
+
+    // Global brightness: dimmer while positioning, full once locked, calm
+    // while saving; partial joint coverage dims everything proportionally.
+    let stateAlpha: CGFloat
+    switch captureState {
+    case .starting, .positioning: stateAlpha = 0.8
+    case .locked, .capturing: stateAlpha = 1
+    case .saving: stateAlpha = 0.62
+    }
+    let coverageAlpha = CGFloat(min(1, max(0.52, jointCoverage)))
+    let globalAlpha = stateAlpha * coverageAlpha
+
+    // ── Torso mass: observed shoulder/hip corners fill the trunk ─────────
+    if let leftShoulder = visibleLandmark("left_shoulder"),
+       let rightShoulder = visibleLandmark("right_shoulder"),
+       let leftHip = visibleLandmark("left_hip"),
+       let rightHip = visibleLandmark("right_hip") {
+      let corners = [leftShoulder, rightShoulder, leftHip, rightHip]
+      let points = corners.map(layerPoint)
+      let torsoHeat =
+        (heat("left_shoulder") + heat("right_shoulder") + heat("left_hip") + heat("right_hip")) / 4
+      let shoulderMid = midpoint(points[0], points[1])
+      let hipMid = midpoint(points[2], points[3])
+      let centroid = midpoint(shoulderMid, hipMid)
+      for (center, scale) in [(centroid, 2.1), (shoulderMid, 1.5), (hipMid, 1.4)] {
+        drawGlow(
+          context: context,
+          center: center,
+          radius: radiusUnit * scale * (1 + 0.35 * torsoHeat),
+          heat: torsoHeat,
+          alpha: (0.1 + 0.14 * torsoHeat) * globalAlpha
+        )
+      }
+    }
+
+    // ── Limb heat: interpolated between each segment's two OBSERVED ends ──
+    for (startName, endName) in Self.segments {
+      guard let start = visibleLandmark(startName), let end = visibleLandmark(endName) else {
+        continue
+      }
+      let startPoint = layerPoint(start)
+      let endPoint = layerPoint(end)
+      let startHeat = heat(startName)
+      let endHeat = heat(endName)
+      let length = hypot(endPoint.x - startPoint.x, endPoint.y - startPoint.y)
+      let steps = max(2, min(5, Int(length / max(radiusUnit, 1))))
+      for step in 0 ... steps {
+        let t = CGFloat(step) / CGFloat(steps)
+        let pointHeat = startHeat + (endHeat - startHeat) * t
+        drawGlow(
+          context: context,
+          center: CGPoint(
+            x: startPoint.x + (endPoint.x - startPoint.x) * t,
+            y: startPoint.y + (endPoint.y - startPoint.y) * t
+          ),
+          radius: radiusUnit * (0.85 + 1.05 * pointHeat),
+          heat: pointHeat,
+          alpha: (0.09 + 0.15 * pointHeat) * globalAlpha
+        )
+      }
+    }
+
+    // ── Joint cores + observed head: brighter nuclei over the aura ───────
+    for name in Set(Self.segments.flatMap { [$0.0, $0.1] }) {
+      guard let landmark = visibleLandmark(name) else { continue }
+      let visibilityAlpha = CGFloat(0.5 + 0.5 * min(1, max(0, (landmark.visibility - 0.35) / 0.65)))
+      let jointHeat = heat(name)
+      drawGlow(
+        context: context,
+        center: layerPoint(landmark),
+        radius: radiusUnit * (0.55 + 0.95 * jointHeat),
+        heat: jointHeat,
+        alpha: (0.17 + 0.21 * jointHeat) * visibilityAlpha * globalAlpha
+      )
+    }
+    for name in Self.headJoints {
+      guard let landmark = visibleLandmark(name) else { continue }
+      drawGlow(
+        context: context,
+        center: layerPoint(landmark),
+        radius: radiusUnit * 1.1,
+        heat: 0,
+        alpha: 0.12 * globalAlpha
+      )
+    }
+
+    // ── Motion trails: measured displacement streaks ride on the heat ────
+    // At most 12 joints × 7 segments are drawn. Width, color, and opacity
+    // come from observed displacement and timestamp age, not a looping
+    // effect.
     for segment in measuredSegments {
       guard segment.normalizedSpeedPerSecond >= Self.minimumTrailSpeed else { continue }
       let speed = CGFloat(
         min(1, max(0, segment.normalizedSpeedPerSecond / Self.fullIntensitySpeed))
       )
       let freshness = CGFloat(max(0, 1 - segment.ageFraction))
-      let alpha = (0.12 + 0.52 * freshness) * (0.45 + 0.55 * speed)
-      context.setStrokeColor(trailColor(speed: speed).withAlphaComponent(alpha).cgColor)
+      let alpha = (0.12 + 0.52 * freshness) * (0.45 + 0.55 * speed) * stateAlpha
+      context.setStrokeColor(heatColor(speed).withAlphaComponent(alpha).cgColor)
       context.setLineWidth(1.75 + 3.25 * speed)
       context.beginPath()
       context.move(
@@ -230,42 +319,25 @@ final class PoseOverlayView: UIView {
     context.restoreGState()
   }
 
+  /// Only the body-lock brackets remain layer-drawn; the heat map itself is
+  /// rendered in draw(_:) from the same observed landmarks.
   private func redraw() {
-    guard let previewLayer else { return }
-    let skeletonPath = UIBezierPath()
-    for (startName, endName) in Self.segments {
-      guard let start = visiblePoint(startName), let end = visiblePoint(endName) else { continue }
-      skeletonPath.move(to: previewLayer.layerPointConverted(fromCaptureDevicePoint: start))
-      skeletonPath.addLine(to: previewLayer.layerPointConverted(fromCaptureDevicePoint: end))
-    }
-
+    guard previewLayer != nil else { return }
     let visibleLayerPoints = landmarks.values.compactMap { landmark -> CGPoint? in
-      guard landmark.visibility >= 0.35 else { return nil }
+      guard landmark.visibility >= 0.35, let previewLayer else { return nil }
       return previewLayer.layerPointConverted(
         fromCaptureDevicePoint: CGPoint(x: landmark.x, y: landmark.y)
-      )
-    }
-    let jointsPath = UIBezierPath()
-    for point in visibleLayerPoints {
-      jointsPath.append(
-        UIBezierPath(ovalIn: CGRect(x: point.x - 3.5, y: point.y - 3.5, width: 7, height: 7))
       )
     }
 
     CATransaction.begin()
     CATransaction.setDisableActions(true)
-    skeletonBackdropLayer.path = skeletonPath.cgPath
-    skeletonLayer.path = skeletonPath.cgPath
-    jointLayer.path = jointsPath.cgPath
     bodyLockLayer.path = captureState.showsBodyLock
       ? bodyLockPath(around: visibleLayerPoints)?.cgPath
       : fixedFramingGuidePath()?.cgPath
 
-    let coverageAlpha = CGFloat(min(1, max(0.52, jointCoverage)))
     switch captureState {
     case .starting, .positioning:
-      skeletonLayer.strokeColor = Palette.mint.withAlphaComponent(coverageAlpha).cgColor
-      jointLayer.fillColor = Palette.volt.withAlphaComponent(coverageAlpha).cgColor
       let guideAlpha: CGFloat
       switch readinessState {
       case .ready: guideAlpha = 0.94
@@ -274,18 +346,101 @@ final class PoseOverlayView: UIView {
       }
       bodyLockLayer.strokeColor = Palette.mint.withAlphaComponent(guideAlpha).cgColor
     case .locked, .capturing:
-      skeletonLayer.strokeColor = Palette.volt.cgColor
-      jointLayer.fillColor = Palette.volt.cgColor
       bodyLockLayer.strokeColor = Palette.volt.cgColor
     case .saving:
-      skeletonLayer.strokeColor = Palette.onDark.cgColor
-      jointLayer.fillColor = Palette.volt.cgColor
       bodyLockLayer.strokeColor = Palette.onDark.cgColor
     }
     // Readiness remains separately tracked even after lock so a future visual
     // treatment cannot silently reinterpret geometry as evaluator evidence.
     bodyLockLayer.opacity = bodyLockLayer.path == nil ? 0 : 1
     CATransaction.commit()
+  }
+
+  // ── Heat-map drawing helpers ──────────────────────────────────────────────
+
+  private func drawGlow(
+    context: CGContext,
+    center: CGPoint,
+    radius: CGFloat,
+    heat: CGFloat,
+    alpha: CGFloat
+  ) {
+    guard alpha > 0.015, radius > 1 else { return }
+    guard let gradient = cachedGradient(heat: heat, alpha: min(1, alpha)) else { return }
+    context.drawRadialGradient(
+      gradient,
+      startCenter: center,
+      startRadius: 0,
+      endCenter: center,
+      endRadius: radius,
+      options: .drawsAfterEndLocation
+    )
+  }
+
+  /// Gradients are quantized (24 heat × 20 alpha buckets) and cached; per
+  /// frame drawing allocates nothing.
+  private func cachedGradient(heat: CGFloat, alpha: CGFloat) -> CGGradient? {
+    let heatBucket = Int((min(1, max(0, heat)) * 23).rounded())
+    let alphaBucket = Int((min(1, max(0, alpha)) * 19).rounded())
+    let key = heatBucket * 100 + alphaBucket
+    if let cached = gradientCache[key] { return cached }
+    let color = heatColor(CGFloat(heatBucket) / 23)
+    let bucketAlpha = CGFloat(alphaBucket) / 19
+    let gradient = CGGradient(
+      colorsSpace: CGColorSpaceCreateDeviceRGB(),
+      colors: [
+        color.withAlphaComponent(bucketAlpha).cgColor,
+        color.withAlphaComponent(bucketAlpha * 0.42).cgColor,
+        color.withAlphaComponent(0).cgColor,
+      ] as CFArray,
+      locations: [0, 0.55, 1]
+    )
+    if let gradient { gradientCache[key] = gradient }
+    return gradient
+  }
+
+  /// Piecewise-linear ramp over `heatStops` (teal → mint → volt → flame).
+  private func heatColor(_ t: CGFloat) -> UIColor {
+    let clamped = min(1, max(0, t))
+    let stops = Self.heatStops
+    for index in 1 ..< stops.count where clamped <= stops[index].0 {
+      let (fromT, fromR, fromG, fromB) = stops[index - 1]
+      let (toT, toR, toG, toB) = stops[index]
+      let span = max(toT - fromT, 0.0001)
+      let local = (clamped - fromT) / span
+      return UIColor(
+        red: fromR + (toR - fromR) * local,
+        green: fromG + (toG - fromG) * local,
+        blue: fromB + (toB - fromB) * local,
+        alpha: 1
+      )
+    }
+    let last = stops[stops.count - 1]
+    return UIColor(red: last.1, green: last.2, blue: last.3, alpha: 1)
+  }
+
+  /// Base glow radius from the observed torso extent so the aura scales with
+  /// the athlete's on-screen size. Falls back to a fixed unit while the torso
+  /// is not fully observed.
+  private func glowRadiusUnit(layerPoint: (PoseLandmark) -> CGPoint) -> CGFloat {
+    guard let leftShoulder = visibleLandmark("left_shoulder"),
+          let rightShoulder = visibleLandmark("right_shoulder"),
+          let leftHip = visibleLandmark("left_hip"),
+          let rightHip = visibleLandmark("right_hip")
+    else { return 15 }
+    let shoulderMid = midpoint(layerPoint(leftShoulder), layerPoint(rightShoulder))
+    let hipMid = midpoint(layerPoint(leftHip), layerPoint(rightHip))
+    let torsoLength = hypot(hipMid.x - shoulderMid.x, hipMid.y - shoulderMid.y)
+    return min(30, max(9, torsoLength * 0.17))
+  }
+
+  private func midpoint(_ a: CGPoint, _ b: CGPoint) -> CGPoint {
+    CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
+  }
+
+  private func visibleLandmark(_ name: String) -> PoseLandmark? {
+    guard let landmark = landmarks[name], landmark.visibility >= 0.35 else { return nil }
+    return landmark
   }
 
   private func fixedFramingGuidePath() -> UIBezierPath? {
@@ -362,17 +517,5 @@ final class PoseOverlayView: UIView {
     group.duration = 0.24
     group.timingFunction = CAMediaTimingFunction(name: .easeOut)
     bodyLockLayer.add(group, forKey: "bodyLockAcquired")
-  }
-
-  private func visiblePoint(_ name: String) -> CGPoint? {
-    guard let landmark = landmarks[name], landmark.visibility >= 0.35 else { return nil }
-    return CGPoint(x: landmark.x, y: landmark.y)
-  }
-
-  private func trailColor(speed: CGFloat) -> UIColor {
-    let red = (83 + (215 - 83) * speed) / 255
-    let green = (217 + (250 - 217) * speed) / 255
-    let blue = (155 + (69 - 155) * speed) / 255
-    return UIColor(red: red, green: green, blue: blue, alpha: 1)
   }
 }

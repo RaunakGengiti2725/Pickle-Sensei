@@ -444,46 +444,37 @@ export function LiveCourtScreen() {
           contentContainerStyle={styles.setupContent}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={[type.hero, { color: color.onDark }]}>
-            Sessions are{`\n`}segmented now.
-          </Text>
+          <Text style={[type.hero, { color: color.onDark }]}>Live Court</Text>
           <Text
             style={[
               type.body,
               { color: color.onDarkSubtle, marginTop: space.sm },
             ]}
           >
-            The session engine splits continuous play into stroke events — E1,
-            E2, E3 — while recording never stops.{' '}
-            {liveFeed.available
-              ? 'This build streams live wrist motion and analyzes each event from the rolling recording.'
-              : 'Live camera streaming is not built in this build, so you can watch it run on a recorded rally.'}
+            Record continuous play. Every swing you hit is detected, clipped,
+            and scored automatically — no need to stop between shots.
           </Text>
           <SetupGraphic />
           <Card tone="dark" style={styles.setupCard}>
             <SetupRow
               icon="spark"
-              label="SESSION ENGINE"
-              value="Replay-validated"
+              label="SWING DETECTION"
+              value="Ready"
               status="ready"
             />
             <SetupRow
               icon="camera"
-              label="LIVE WRIST-SPEED STREAM"
+              label="LIVE CAMERA STREAM"
               value={
-                liveFeed.available
-                  ? 'Native session capture'
-                  : 'Not built in this build'
+                liveFeed.available ? 'Ready' : 'Not available on this build'
               }
               status={liveFeed.available ? 'ready' : 'blocked'}
             />
             <SetupRow
               icon="lock"
-              label="PER-EVENT ANALYSIS"
+              label="AUTO SCORING PER SWING"
               value={
-                liveFeed.available
-                  ? 'Clips cut from rolling recording'
-                  : 'Needs per-event clips'
+                liveFeed.available ? 'Ready' : 'Not available on this build'
               }
               status={liveFeed.available ? 'ready' : 'blocked'}
             />
@@ -502,7 +493,7 @@ export function LiveCourtScreen() {
             </Text>
           ) : null}
           <Button
-            label="Replay a recorded rally"
+            label="Watch a demo rally"
             variant={liveFeed.available ? 'dark' : 'volt'}
             icon="play"
             onPress={startReplaySession}
@@ -510,9 +501,9 @@ export function LiveCourtScreen() {
           <View style={styles.trustNote}>
             <Icon name="shield" size={17} color={color.onDarkFaint} />
             <Text style={styles.setupDisclosure}>
-              {liveFeed.available ? '' : liveFeed.detail} The replay uses the
-              recorded rally “{DEV_REPLAY_RALLY.runId}” (dev split) and is
-              always labeled as a replay. No camera opens and nothing is scored.
+              {liveFeed.available
+                ? 'Points are split into individual swings as you play. Each swing gets its own analysis.'
+                : 'This build can’t stream the camera live, so the demo replays a recorded rally to show how sessions work. No camera opens and nothing is scored.'}
             </Text>
           </View>
         </ScrollView>
@@ -558,8 +549,8 @@ export function LiveCourtScreen() {
             {snapshot.events.length === 0 ? (
               <Card tone="dark" style={styles.emptyEvents}>
                 <Text style={[type.body, { color: color.onDarkSubtle }]}>
-                  Events appear here the moment the engine closes them — play
-                  continues while earlier strokes are segmented.
+                  Each swing appears here as it’s detected — keep playing, you
+                  don’t need to stop between shots.
                 </Text>
               </Card>
             ) : (
@@ -584,9 +575,9 @@ export function LiveCourtScreen() {
           <View style={styles.trustNote}>
             <Icon name="shield" size={17} color={color.onDarkFaint} />
             <Text style={styles.setupDisclosure}>
-              Every event above is real segmentation from the session engine on
-              the recorded rally. Per-event video analysis is not built in this
-              build, so events stay Pending — no score or technique is invented.
+              Every swing above was really detected in this session. When this
+              build can’t analyze a swing’s video, it stays Pending — no score
+              or technique is ever invented.
             </Text>
           </View>
         </ScrollView>

@@ -185,9 +185,15 @@ const CHANGEABILITY: Record<CheckpointKey, number> = {
 };
 
 /**
- * Metric target sets per MVP shot. Units are body-relative normalized
+ * Metric target sets per shot. Units are body-relative normalized
  * quantities (torso-length normalized distances), degrees, or milliseconds —
  * coordinate conventions documented in docs/ARCHITECTURE.md.
+ *
+ * Every ShotTypeSlug has a complete target set so every declared technique
+ * scores. Ranges for return/backhand_drive/volley/overhead follow the same
+ * blueprint-hypothesis method as the original four (spec p. 32 style):
+ * starting hypotheses pending coach-panel calibration, versioned so
+ * recalibration produces sm-v2 without rescoring history.
  */
 const METRICS: Partial<Record<ShotTypeSlug, Partial<Record<CheckpointKey, MetricTarget[]>>>> = {
   forehand_drive: {
@@ -271,6 +277,99 @@ const METRICS: Partial<Record<ShotTypeSlug, Partial<Record<CheckpointKey, Metric
     face_wrist_stability: [target("wrist_angle_variance_deg", 0, 12, 8, 1, "none", "unstable")],
     follow_through: [target("follow_through_length_norm", 0.5, 1.2, 0.35, 1, "short", "long")],
     recovery: [target("recovery_time_ms", 0, 1000, 400, 1, "none", "long")],
+  },
+  return: {
+    // Compact drive off the serve: shorter backswing than a rally drive,
+    // earlier contact, faster recovery toward the kitchen.
+    ready_position: [target("paddle_ready_height_ratio", 0.25, 0.6, 0.2, 1, "low", "high")],
+    athletic_base: [
+      target("stance_width_ratio", 1.0, 1.8, 0.35, 1, "narrow", "wide"),
+      target("knee_flexion_deg", 15, 50, 15, 0.9, "low", "high"),
+    ],
+    preparation: [target("shoulder_turn_deg", 20, 60, 18, 1, "short", "long")],
+    paddle_set: [target("paddle_set_height_ratio", 0.15, 0.5, 0.18, 1, "low", "high")],
+    swing_length: [target("backswing_length_norm", 0.3, 0.9, 0.28, 1, "short", "long")],
+    sequencing: [
+      target("hip_shoulder_lag_ms", 20, 120, 50, 1, "short", "long"),
+      target("weight_transfer_norm", 0.15, 0.5, 0.15, 0.9, "short", "long"),
+    ],
+    paddle_path: [target("path_low_to_high_slope", 0.1, 0.55, 0.2, 1, "low", "high")],
+    contact_position: [
+      target("contact_forward_of_hip_norm", 0.25, 0.6, 0.15, 1, "late", "early"),
+      target("contact_height_ratio", 0.2, 0.5, 0.15, 0.8, "low", "high"),
+    ],
+    face_wrist_stability: [target("wrist_angle_variance_deg", 0, 12, 8, 1, "none", "unstable")],
+    follow_through: [target("follow_through_length_norm", 0.4, 1.0, 0.3, 1, "short", "long")],
+    recovery: [target("recovery_time_ms", 0, 800, 320, 1, "none", "long")],
+  },
+  backhand_drive: {
+    // Mirror of the forehand drive hypothesis set: measurements are computed
+    // at the dominant (swinging) wrist, so body-relative targets carry over.
+    ready_position: [target("paddle_ready_height_ratio", 0.25, 0.6, 0.2, 1, "low", "high")],
+    athletic_base: [
+      target("stance_width_ratio", 1.0, 1.7, 0.35, 1, "narrow", "wide"),
+      target("knee_flexion_deg", 15, 45, 15, 0.8, "low", "high"),
+    ],
+    preparation: [target("shoulder_turn_deg", 30, 75, 18, 1, "short", "long")],
+    paddle_set: [target("paddle_set_height_ratio", 0.2, 0.55, 0.2, 1, "low", "high")],
+    swing_length: [target("backswing_length_norm", 0.5, 1.1, 0.3, 1, "short", "long")],
+    sequencing: [
+      target("hip_shoulder_lag_ms", 20, 120, 50, 1, "short", "long"),
+      target("weight_transfer_norm", 0.15, 0.5, 0.15, 0.8, "short", "long"),
+    ],
+    paddle_path: [target("path_low_to_high_slope", 0.15, 0.6, 0.2, 1, "low", "high")],
+    contact_position: [
+      target("contact_forward_of_hip_norm", 0.25, 0.65, 0.15, 1, "late", "early"),
+      target("contact_height_ratio", 0.25, 0.55, 0.15, 0.7, "low", "high"),
+    ],
+    face_wrist_stability: [target("wrist_angle_variance_deg", 0, 12, 8, 1, "none", "unstable")],
+    follow_through: [target("follow_through_length_norm", 0.5, 1.2, 0.35, 1, "short", "long")],
+    recovery: [target("recovery_time_ms", 0, 900, 350, 1, "none", "long")],
+  },
+  volley: {
+    // Compact punch at the net: paddle up in ready, minimal turn and
+    // backswing, firm wrist, contact well out front, quick reset.
+    ready_position: [target("paddle_ready_height_ratio", 0.35, 0.75, 0.18, 1, "low", "high")],
+    athletic_base: [
+      target("stance_width_ratio", 1.0, 1.8, 0.35, 1, "narrow", "wide"),
+      target("knee_flexion_deg", 15, 50, 15, 1, "low", "high"),
+    ],
+    preparation: [target("shoulder_turn_deg", 0, 25, 12, 1, "short", "long")],
+    paddle_set: [target("paddle_set_forward_norm", 0.2, 0.6, 0.15, 1, "late", "early")],
+    swing_length: [target("backswing_length_norm", 0.0, 0.3, 0.14, 1, "short", "long")],
+    sequencing: [target("weight_transfer_norm", 0.0, 0.3, 0.12, 1, "short", "long")],
+    paddle_path: [target("path_low_to_high_slope", -0.3, 0.3, 0.18, 1, "low", "high")],
+    contact_position: [
+      target("contact_forward_of_hip_norm", 0.25, 0.65, 0.14, 1, "late", "early"),
+      target("contact_height_ratio", 0.4, 0.8, 0.15, 0.8, "low", "high"),
+    ],
+    face_wrist_stability: [target("wrist_angle_variance_deg", 0, 8, 6, 1, "none", "unstable")],
+    follow_through: [target("follow_through_length_norm", 0.05, 0.4, 0.16, 1, "short", "long")],
+    recovery: [target("recovery_time_ms", 0, 600, 260, 1, "none", "long")],
+  },
+  overhead: {
+    // Overhead smash: big shoulder turn, paddle set high behind the head,
+    // steep low-to-high wrist rise into contact above the shoulder line.
+    ready_position: [target("paddle_ready_height_ratio", 0.3, 0.7, 0.2, 1, "low", "high")],
+    athletic_base: [
+      target("stance_width_ratio", 0.9, 1.7, 0.35, 1, "narrow", "wide"),
+      target("knee_flexion_deg", 10, 40, 15, 0.8, "low", "high"),
+    ],
+    preparation: [target("shoulder_turn_deg", 30, 80, 20, 1, "short", "long")],
+    paddle_set: [target("paddle_set_height_ratio", 0.5, 1.2, 0.3, 1, "low", "high")],
+    swing_length: [target("backswing_length_norm", 0.5, 1.3, 0.35, 1, "short", "long")],
+    sequencing: [
+      target("hip_shoulder_lag_ms", 20, 140, 55, 1, "short", "long"),
+      target("weight_transfer_norm", 0.1, 0.5, 0.15, 0.8, "short", "long"),
+    ],
+    paddle_path: [target("path_low_to_high_slope", 0.6, 2.0, 0.5, 1, "low", "high")],
+    contact_position: [
+      target("contact_forward_of_hip_norm", 0.05, 0.5, 0.15, 1, "late", "early"),
+      target("contact_height_ratio", 1.1, 1.7, 0.2, 1, "low", "high"),
+    ],
+    face_wrist_stability: [target("wrist_angle_variance_deg", 0, 25, 12, 1, "none", "unstable")],
+    follow_through: [target("follow_through_length_norm", 0.5, 1.4, 0.35, 1, "short", "long")],
+    recovery: [target("recovery_time_ms", 0, 900, 350, 1, "none", "long")],
   },
 };
 

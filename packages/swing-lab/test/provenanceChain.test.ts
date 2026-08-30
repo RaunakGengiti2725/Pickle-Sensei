@@ -297,16 +297,23 @@ describe("provenance chain — PREDICTED never surfaces as observation", () => {
 });
 
 describe("provenance chain — corpus integration (C15)", () => {
-  it("runCorpusCheck reports chain violations as an additional invariant class", () => {
-    const report = runCorpusCheck(join(REPO_ROOT, "datasets"));
-    expect(report.filesChecked).toBeGreaterThan(0);
-    expect(report.parseFailures).toEqual([]);
-    // Committed-artifact violations are FINDINGS, reported here and in the
-    // wave-d4 summary — never silently fixed. This assertion pins the
-    // current measured state of the corpus.
-    const chainViolations = report.violations.filter((violation) =>
-      violation.rule.startsWith("chain_"),
-    );
-    expect(chainViolations).toEqual([]);
-  });
+  // 120s: on a Mac with the regenerated canonical run dirs present (gitignored,
+  // absent on Linux CI) the scan covers ~1257 files and takes ~55s — same
+  // no-assertion-change timeout raise as the h17 ffmpeg tests.
+  it(
+    "runCorpusCheck reports chain violations as an additional invariant class",
+    () => {
+      const report = runCorpusCheck(join(REPO_ROOT, "datasets"));
+      expect(report.filesChecked).toBeGreaterThan(0);
+      expect(report.parseFailures).toEqual([]);
+      // Committed-artifact violations are FINDINGS, reported here and in the
+      // wave-d4 summary — never silently fixed. This assertion pins the
+      // current measured state of the corpus.
+      const chainViolations = report.violations.filter((violation) =>
+        violation.rule.startsWith("chain_"),
+      );
+      expect(chainViolations).toEqual([]);
+    },
+    120_000,
+  );
 });

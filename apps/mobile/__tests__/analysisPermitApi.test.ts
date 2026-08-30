@@ -25,7 +25,7 @@ describe('analysis permit API', () => {
 
     await expect(
       client.reserve('11111111-2222-4333-8444-555555555555'),
-    ).resolves.toEqual(permit);
+    ).resolves.toEqual({ permit, access: null });
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.example.test/v1/analysis-permits',
       expect.objectContaining({

@@ -13,9 +13,12 @@ function m(metricKey: string, value: number, confidence = 0.95): Measurement {
   return { metricKey, value, confidence, unit: "normalized", source: "fixture" };
 }
 
-/** Perfect-center measurements for every configured forehand metric. */
-function perfectForehandMeasurements(confidence = 0.95): Measurement[] {
-  const config = getShotScoringConfig("forehand_drive");
+/** Perfect-center measurements for every configured metric of a shot. */
+function perfectMeasurements(
+  shotType: Parameters<typeof getShotScoringConfig>[0],
+  confidence = 0.95,
+): Measurement[] {
+  const config = getShotScoringConfig(shotType);
   const out: Measurement[] = [];
   for (const cp of config.checkpoints) {
     for (const t of cp.metrics) {
@@ -24,6 +27,9 @@ function perfectForehandMeasurements(confidence = 0.95): Measurement[] {
   }
   return out;
 }
+
+const perfectForehandMeasurements = (confidence = 0.95): Measurement[] =>
+  perfectMeasurements("forehand_drive", confidence);
 
 describe("scoreMetric", () => {
   const target = {
@@ -126,10 +132,20 @@ describe("scoreShot", () => {
     expect(outcome.overallScore).toBe(10);
   });
 
-  it("abstains for shot types whose metric config does not exist yet (no fake scores)", () => {
+  it("abstains when no configured metric was actually measured (no fake scores)", () => {
     const outcome = scoreShot(getShotScoringConfig("volley"), [m("anything", 1)]);
     expect(outcome.overallScore).toBeNull();
     expect(outcome.presentation).toBe("abstain");
+  });
+
+  it("scores EVERY shot type with clean measurements — no unreleased techniques", () => {
+    const configs = getAllShotScoringConfigs();
+    expect(configs).toHaveLength(8);
+    for (const config of configs) {
+      const outcome = scoreShot(config, perfectMeasurements(config.shotType));
+      expect(outcome.presentation, `${config.shotType} presentation`).toBe("normal");
+      expect(outcome.overallScore, `${config.shotType} overall score`).toBe(10);
+    }
   });
 });
 
@@ -141,13 +157,42 @@ describe("config integrity", () => {
     }
   });
 
-  it("all eight shot types have configs; four MVP shots have full metric coverage", () => {
+  it("ALL eight shot types have configs with full metric coverage", () => {
     const configs = getAllShotScoringConfigs();
     expect(configs).toHaveLength(8);
-    for (const shotType of ["forehand_drive", "dink", "third_shot_drop", "serve"] as const) {
-      const config = getShotScoringConfig(shotType);
+    for (const config of configs) {
       for (const cp of config.checkpoints) {
-        expect(cp.metrics.length, `${shotType}/${cp.key}`).toBeGreaterThan(0);
+        expect(cp.metrics.length, `${config.shotType}/${cp.key}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("every configured metric key is one the geometry extractor can measure", () => {
+    // The measurable vocabulary of features-geometry-1 (featureExtractor.ts).
+    const measurable = new Set([
+      "stance_width_ratio",
+      "knee_flexion_deg",
+      "paddle_ready_height_ratio",
+      "shoulder_turn_deg",
+      "paddle_set_height_ratio",
+      "paddle_set_forward_norm",
+      "backswing_length_norm",
+      "hip_shoulder_lag_ms",
+      "weight_transfer_norm",
+      "path_low_to_high_slope",
+      "contact_forward_of_hip_norm",
+      "contact_height_ratio",
+      "wrist_angle_variance_deg",
+      "follow_through_length_norm",
+      "recovery_time_ms",
+    ]);
+    for (const config of getAllShotScoringConfigs()) {
+      for (const cp of config.checkpoints) {
+        for (const t of cp.metrics) {
+          expect(measurable.has(t.metricKey), `${config.shotType}/${cp.key}/${t.metricKey}`).toBe(
+            true,
+          );
+        }
       }
     }
   });

@@ -73,6 +73,18 @@ describe("silent-failure-v1 contract", () => {
     expect(verdict.silentFailure).toBe(true);
   });
 
+  it("explicit UNKNOWN label is an abstention, never a silent failure (2026-08-29 Mac re-measure regression)", () => {
+    // stroke-heuristic-7's abstention gates emit the literal taxonomy-v3
+    // "UNKNOWN" label (wm-dink-01 / afn-vic-rally1 on the real Mac cascade);
+    // it claims no L1 side, so it cannot contradict gold.
+    const verdict = evaluateSilentFailure(
+      { ...FIXTURE_ALL_CORRECT, strokePrediction: { label: "UNKNOWN" } },
+      FIXTURE_GOLD,
+    );
+    expect(verdict.claims.STROKE_L1.status).toBe("abstained");
+    expect(verdict.silentFailure).toBe(false);
+  });
+
   it("fabricated contact marker (>132ms) is a silent failure", () => {
     const verdict = evaluateSilentFailure(
       { ...FIXTURE_ALL_CORRECT, contact: { status: "estimated", estimatedContactMs: 1750 } },

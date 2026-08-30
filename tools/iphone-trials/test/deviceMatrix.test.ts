@@ -24,10 +24,19 @@ describe("device-matrix.json", () => {
     expect([...tiers].sort()).toEqual(["flagship", "mid", "older", "recent"]);
   });
 
-  it("honestly records that no device is acquired", () => {
+  it("honestly records acquisition: iphone-17 is the only ACQUIRED device (first hardware, 2026-08-29)", () => {
+    // Until 2026-08-29 this pin asserted every device NOT_ACQUIRED. A real
+    // physical iPhone 17 (iPhone18,3, iOS 27.0) entered the program that day
+    // — the pin now locks the new truth: exactly that entry is ACQUIRED, the
+    // rest of the coverage plan remains honestly blocked.
     for (const device of loadCommittedMatrix().devices) {
-      expect(device.acquisition.state).toBe("NOT_ACQUIRED");
-      expect(device.acquisition.blockedReason).toBeTruthy();
+      if (device.deviceId === "iphone-17") {
+        expect(device.acquisition.state).toBe("ACQUIRED");
+        expect(device.acquisition.blockedReason).toBeNull();
+      } else {
+        expect(device.acquisition.state).toBe("NOT_ACQUIRED");
+        expect(device.acquisition.blockedReason).toBeTruthy();
+      }
     }
   });
 });

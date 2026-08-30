@@ -79,6 +79,19 @@ interface AuthState {
 const LEGACY_SESSION_KV_KEY = 'auth.session';
 const LOCAL_MODE_KV_KEY = 'auth.local-mode';
 const LOCAL_GUEST_VALUE = JSON.stringify({ version: 1, mode: 'guest' });
+/**
+ * Which synced provider signed in last, so the next launch can attempt a
+ * silent restore. Stores ONLY the provider name — never tokens or subjects
+ * (those live in the in-memory ApiSession and are re-earned every launch).
+ * Google is the only value ever written: Apple's AuthenticationServices does
+ * not issue identity tokens silently on the client, so Apple users always
+ * sign in explicitly and no Apple flag is persisted.
+ */
+const LAST_PROVIDER_KV_KEY = 'auth.last-provider';
+const LAST_PROVIDER_GOOGLE_VALUE = JSON.stringify({
+  version: 1,
+  provider: 'google',
+});
 
 function localGuestSession(): AuthSession {
   return {
@@ -114,6 +127,21 @@ async function persistLocalGuest(enabled: boolean): Promise<void> {
   } catch {
     // Guest mode remains in memory for this run. Synced identity material is
     // never sent to this fallback and is never persisted here.
+  }
+}
+
+/** Best-effort, like persistLocalGuest: clearing writes '' rather than
+ * deleting so the same INSERT OR REPLACE path covers both states. */
+async function persistLastProvider(provider: 'google' | null): Promise<void> {
+  try {
+    await setKv(
+      getDb(),
+      LAST_PROVIDER_KV_KEY,
+      provider === 'google' ? LAST_PROVIDER_GOOGLE_VALUE : '',
+    );
+  } catch {
+    // Worst case the next launch simply asks for an explicit sign-in. No
+    // identity material is at stake — this key only names a provider.
   }
 }
 
@@ -165,6 +193,69 @@ async function establishSyncedAccount(input: {
   };
 }
 
+type GoogleSigninModule =
+  typeof import('@react-native-google-signin/google-signin');
+
+/**
+ * Loads the Google Sign-In SDK dynamically at call time, so launches that
+ * never touch Google auth pay no import cost and builds missing the native
+ * module only fail inside these guarded call paths. Metro compiles `import()`
+ * and a lazy `require()` to the same in-bundle module access; the `require`
+ * form is used because jest's CommonJS transform cannot execute a literal
+ * dynamic `import()`.
+ */
+async function loadGoogleSignin(): Promise<GoogleSigninModule> {
+  // jest's CommonJS transform cannot execute a literal dynamic import().
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('@react-native-google-signin/google-signin') as GoogleSigninModule;
+}
+
+/**
+ * Silent Google session restore for hydrate(). Returns the synced session on
+ * success, or null when no silent session is available right now. Clears the
+ * last-provider flag only when the Google SDK definitively reports that no
+ * saved credential exists; every transient failure (offline account
+ * bootstrap, SDK errors) throws instead, and the caller lands signed-out
+ * while KEEPING the flag so the next launch can retry.
+ *
+ * Apple has deliberately no equivalent: AuthenticationServices only issues an
+ * identity token through its interactive credential UI, so there is no
+ * client-side silent Apple token to restore. Apple users re-enter through the
+ * explicit sign-in flow.
+ */
+async function restoreGoogleSessionSilently(
+  webClientId: string,
+): Promise<AuthSession | null> {
+  const { GoogleSignin } = await loadGoogleSignin();
+  GoogleSignin.configure({
+    webClientId,
+    ...(GOOGLE_IOS_CLIENT_ID ? { iosClientId: GOOGLE_IOS_CLIENT_ID } : {}),
+  });
+  if (!GoogleSignin.hasPreviousSignIn()) {
+    return null;
+  }
+  const response = await GoogleSignin.signInSilently();
+  if (response.type !== 'success') {
+    // 'noSavedCredentialFound' is definitive: the SDK holds no credential to
+    // restore, so stop retrying on future launches until the next sign-in.
+    await persistLastProvider(null);
+    return null;
+  }
+  const idToken = response.data.idToken;
+  if (!idToken) {
+    // Signed in on the SDK side but no verifiable token for our backend.
+    // Treat as transient and keep the flag for the next launch.
+    return null;
+  }
+  clearSyncedRuntime();
+  return establishSyncedAccount({
+    provider: 'google',
+    identityToken: idToken,
+    displayName: response.data.user.name ?? null,
+    providerEmail: response.data.user.email ?? null,
+  });
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   hydrated: false,
   session: null,
@@ -181,15 +272,37 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         await setKv(db, LEGACY_SESSION_KV_KEY, '');
       }
       const raw = await getKv(db, LOCAL_MODE_KV_KEY);
-      const localGuest = raw === LOCAL_GUEST_VALUE;
-      setActiveDataOwner(localGuest ? GUEST_DATA_OWNER : SIGNED_OUT_DATA_OWNER);
-      set({
-        session: localGuest ? localGuestSession() : null,
-        hydrated: true,
-      });
+      if (raw === LOCAL_GUEST_VALUE) {
+        setActiveDataOwner(GUEST_DATA_OWNER);
+        set({ session: localGuestSession(), hydrated: true });
+        return;
+      }
+      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+      // Silent restore is Google-only (see restoreGoogleSessionSilently for
+      // why Apple cannot have one) and only worth attempting when the web
+      // client id needed for a backend-verifiable token is configured.
+      const lastProvider = await getKv(db, LAST_PROVIDER_KV_KEY);
+      if (lastProvider === LAST_PROVIDER_GOOGLE_VALUE && GOOGLE_WEB_CLIENT_ID) {
+        try {
+          const session = await restoreGoogleSessionSilently(
+            GOOGLE_WEB_CLIENT_ID,
+          );
+          if (session) {
+            set({ session, hydrated: true });
+            return;
+          }
+        } catch {
+          // Opportunistic restore only: offline bootstrap or SDK failures
+          // land signed-out with no surfaced error. The last-provider flag is
+          // kept so the next launch retries silently.
+          clearSyncedRuntime();
+          setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+        }
+      }
+      set({ session: null, hydrated: true });
     } catch {
       setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-      set({ hydrated: true });
+      set({ session: null, hydrated: true });
     }
   },
 
@@ -219,6 +332,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         displayName: name,
         providerEmail: result.email ?? null,
       });
+      // A stale Google flag (e.g. after a failed silent restore) must never
+      // resurrect the previous Google account over this Apple session on the
+      // next launch. Apple itself gets no silent-restore flag — its identity
+      // tokens are only issued interactively.
+      await persistLastProvider(null);
       set({ session, busy: false });
     } catch (error) {
       clearSyncedRuntime();
@@ -244,8 +362,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return;
     }
     try {
-      const { GoogleSignin } =
-        await import('@react-native-google-signin/google-signin');
+      const { GoogleSignin } = await loadGoogleSignin();
       GoogleSignin.configure({
         webClientId: GOOGLE_WEB_CLIENT_ID,
         ...(GOOGLE_IOS_CLIENT_ID ? { iosClientId: GOOGLE_IOS_CLIENT_ID } : {}),
@@ -269,6 +386,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         displayName: user.name ?? null,
         providerEmail: user.email ?? null,
       });
+      // Only after the canonical account is established: the next launch may
+      // now silently restore this Google session (provider name only — the
+      // token itself is never persisted).
+      await persistLastProvider('google');
       set({ session, busy: false });
     } catch (error) {
       clearSyncedRuntime();
@@ -290,10 +411,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     set({ session: null, error: null, busy: false });
     await persistLocalGuest(false);
+    // Explicit sign-out always disarms the silent restore on the next launch.
+    await persistLastProvider(null);
     if (provider === 'google') {
       try {
-        const { GoogleSignin } =
-          await import('@react-native-google-signin/google-signin');
+        const { GoogleSignin } = await loadGoogleSignin();
         await GoogleSignin.signOut();
       } catch {
         // Local API and billing material is already gone. Provider SDK cleanup

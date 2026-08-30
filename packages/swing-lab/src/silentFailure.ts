@@ -218,6 +218,15 @@ export function evaluateSilentFailure(
   const predicted = report.strokePrediction?.label ?? null;
   if (predicted === null) {
     claims.STROKE_L1 = { status: "abstained", detail: "stroke abstained (null/missing label)" };
+  } else if (predicted === "UNKNOWN") {
+    // taxonomy-v3's explicit uncommitted label: no L1 side is claimed, so none
+    // can contradict gold — "abstentions are NOT silent failures". Found by the
+    // 2026-08-29 Mac re-measure (stroke-heuristic-7 abstention gates emit
+    // UNKNOWN; the old code counted it as a confident wrong claim).
+    claims.STROKE_L1 = {
+      status: "abstained",
+      detail: "stroke abstained (explicit UNKNOWN — honest 'couldn't classify', no L1 claim)",
+    };
   } else if (gold.strokeLabelDisputed === true) {
     claims.STROKE_L1 = {
       status: "excluded_disputed_gold",

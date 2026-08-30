@@ -212,10 +212,6 @@ export function ResultScreen() {
           checkpoint => checkpoint.key === fix.checkpoint,
         )
       : null;
-  const lowerConfidence =
-    analysis !== null &&
-    analysis.resultKind === 'scored' &&
-    analysis.analysisConfidence < 0.8;
   const shotLabel = analysis ? humanize(analysis.shotType) : 'stroke';
   const planForThisRead =
     analysis !== null && currentPlan?.sourceShotId === analysis.id;
@@ -297,26 +293,18 @@ export function ResultScreen() {
           }
           onTryAgain={tryAgain}
           onDone={() => navigation.popToTop()}
-        >
-          {techniqueScoreSectionVisible(analysis) ? (
-            <>
-              <SectionTitle title="Technique score" />
+          scoreSlot={
+            // Score-first: the technique score stage renders at the very
+            // top of the result surface, under the compact header. The
+            // abstained path passes nothing — the ledger explains it.
+            techniqueScoreSectionVisible(analysis) ? (
               <Card tone="dark" style={styles.resultStage}>
-                <View style={styles.resultTop}>
-                  <View>
-                    <Text style={[type.micro, { color: color.volt }]}>
-                      TECHNIQUE SCORE
-                    </Text>
-                    <Text style={[type.caption, styles.shotLabel]}>
-                      {shotLabel}
-                    </Text>
-                  </View>
-                  {lowerConfidence ? (
-                    <Pill label="LOWER READ" tone="warn" />
-                  ) : (
-                    <Pill label="SCORABLE" tone="dark" />
-                  )}
-                </View>
+                <Text style={[type.micro, { color: color.volt }]}>
+                  TECHNIQUE SCORE
+                </Text>
+                <Text style={[type.caption, styles.shotLabel]}>
+                  {shotLabel}
+                </Text>
                 <View style={styles.scoreWrap}>
                   <ScoreRing
                     score={analysis.overallScore}
@@ -325,16 +313,12 @@ export function ResultScreen() {
                     dark
                   />
                 </View>
-                <View style={styles.confidenceLine}>
-                  <Text style={[type.caption, { color: color.onDarkFaint }]}>
-                    Read confidence
-                  </Text>
-                  <Text style={[type.bodyBold, styles.confidenceValue]}>
-                    {Math.round(analysis.analysisConfidence * 100)}%
-                  </Text>
-                </View>
               </Card>
-
+            ) : undefined
+          }
+        >
+          {techniqueScoreSectionVisible(analysis) ? (
+            <>
               {fix ? (
                 <>
                   <SectionTitle title="Measured priority" />
@@ -380,14 +364,6 @@ export function ResultScreen() {
                             : Math.round(priorityCheckpoint.score)}
                         </Text>
                       </View>
-                      <View style={styles.observationCell}>
-                        <Text style={[type.micro, { color: color.inkSoft }]}>
-                          CONFIDENCE
-                        </Text>
-                        <Text style={[type.h3, styles.observationValue]}>
-                          {Math.round(fix.confidence * 100)}%
-                        </Text>
-                      </View>
                     </View>
                   </Card>
                 </>
@@ -415,7 +391,6 @@ export function ResultScreen() {
                       name={CHECKPOINT_NAMES[checkpoint.key] ?? checkpoint.key}
                       score={checkpoint.score}
                       band={checkpoint.band}
-                      confidence={checkpoint.confidence}
                     />
                   ))}
               </Card>
@@ -690,12 +665,7 @@ const styles = StyleSheet.create({
     paddingTop: space.md,
     paddingBottom: space.xl,
   },
-  resultStage: { minHeight: 352, padding: space.lg },
-  resultTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-  },
+  resultStage: { minHeight: 352, marginTop: space.lg, padding: space.lg },
   shotLabel: {
     color: color.onDarkFaint,
     textTransform: 'capitalize',
@@ -706,18 +676,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: space.md,
-  },
-  confidenceLine: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.lineDark,
-    paddingTop: space.md,
-  },
-  confidenceValue: {
-    color: color.onDark,
-    fontVariant: ['tabular-nums'],
   },
   fixCard: { padding: space.lg },
   fixHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },

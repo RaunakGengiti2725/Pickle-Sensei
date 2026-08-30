@@ -97,7 +97,12 @@ export async function loadStrokeResultEvidence(
       () => null,
     );
     if (capture && capture.durationMs > 0) {
-      clip = { uri: capture.uri, durationMs: capture.durationMs };
+      const posterUri = capture.clip?.posterUri;
+      clip = {
+        uri: capture.uri,
+        durationMs: capture.durationMs,
+        ...(posterUri !== undefined ? { posterUri } : {}),
+      };
     }
   }
 

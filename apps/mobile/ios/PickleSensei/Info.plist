@@ -22,6 +22,20 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
+	<!-- Google Sign-In return URL scheme: replace with the REVERSED iOS OAuth
+	     client ID from Google Cloud Console (see supabase/README.md §5).
+	     The placeholder is inert until replaced. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>GoogleSignInReturn</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.278019487172-ku9j3985cijj4e636t7s7efn8r1vsu8m</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>

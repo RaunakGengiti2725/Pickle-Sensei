@@ -113,7 +113,10 @@ export function retroClaims(row: CascadeRow): Record<SilentFailureClaim, RetroCl
 
   const stroke = row.stages.STROKE;
   if (!stroke) throw new Error(`${row.caseId}: missing STROKE stage`);
-  if (stroke.detail.startsWith("predicted none")) {
+  if (stroke.detail.startsWith("predicted none") || stroke.detail.startsWith("predicted UNKNOWN")) {
+    // "predicted UNKNOWN" is taxonomy-v3's explicit uncommitted label — an
+    // abstention, same as "predicted none" (silent-failure contract: no L1
+    // side is claimed, so none can contradict gold).
     claims.STROKE_L1 = { status: "abstained", detail: stroke.detail };
   } else if (stroke.detail.startsWith("predicted ")) {
     claims.STROKE_L1 = {

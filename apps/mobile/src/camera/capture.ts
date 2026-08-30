@@ -126,6 +126,12 @@ interface CapturedClipBase {
   byteSize?: number;
   capturedAtIso: string;
   recognition: StrokeRecognition;
+  /**
+   * Optional still-frame poster written beside the clip (file: URI), used
+   * for tap-target previews. Absent on builds that predate it — the UI must
+   * degrade honestly, never fabricate a frame.
+   */
+  posterUri?: string;
 }
 
 export type CaptureCompletionStrategy = 'fixed' | 'adaptive';
@@ -288,7 +294,10 @@ export type CapturedClip =
       };
       preRollMs?: never;
       postRollMs?: never;
-      poseSequence?: never;
+      /** Real measured pose sequence for the imported file, attached by the
+       * explicit `extractImportedPoseSequence` pass (never by the import
+       * itself). Absent until that pass has actually run and succeeded. */
+      poseSequence?: PoseSequenceSidecarRef;
       completion?: never;
     });
 
@@ -392,6 +401,14 @@ export type CameraEvent =
   | (CameraEventBase & {
       type: 'import';
       state: 'selecting' | 'copying' | 'completed';
+    })
+  | (CameraEventBase & {
+      /** Progress of the offline pose-extraction pass over an imported
+       * file. `progress` is the native pass's real measured fraction when
+       * it reports one — never synthesized on the JS side. */
+      type: 'import_pose_extraction';
+      state: 'extracting' | 'completed' | 'failed';
+      progress?: number;
     });
 
 interface NativeVideoCapture {
@@ -408,6 +425,11 @@ interface NativeVideoCapture {
     peakMs: number | null;
     confidence: number;
     detectionModelVersion: string;
+  }): Promise<unknown>;
+  extractImportedPoseSequence?(request: {
+    uri: string;
+    seedX?: number;
+    seedY?: number;
   }): Promise<unknown>;
   cancel(): void;
   addListener(eventType: string): void;
@@ -541,6 +563,86 @@ export async function importStrokeVideo(): Promise<CapturedClip> {
   return assertCapturedClip(await native.importVideo(), 'imported_video');
 }
 
+/**
+ * Native imported-video pose extraction: an offline Vision/MediaPipe pass
+ * over the copied file that records the SAME hash-addressed
+ * `pickle.pose-sequence.v1` sidecar guided capture writes. Optional bridge
+ * method — builds that predate it honestly report unavailable instead of
+ * pretending a recorded sequence could exist.
+ */
+export function importedPoseExtractionAvailable(): boolean {
+  return (
+    (Platform.OS === 'ios' || Platform.OS === 'android') &&
+    typeof native?.extractImportedPoseSequence === 'function'
+  );
+}
+
+/** Validated receipt of the imported-video pose-extraction pass. */
+export interface ImportedPoseExtraction {
+  poseSequence: PoseSequenceSidecarRef;
+  /** Still-frame poster written during extraction (file: URI), if any. */
+  posterUri?: string;
+  /** Frames in which the tracked person had a measured pose. */
+  framesWithPose: number;
+  /** Total frames the extraction pass analyzed. */
+  framesTotal: number;
+}
+
+/**
+ * Runs the native pose-extraction pass over an imported clip. `seed` is the
+ * user's "tap yourself" point in SOURCE-normalized image coordinates (origin
+ * top-left); omit it when the user skipped the tap. Native rejections keep
+ * their codes (`camera.import_too_long`, `camera.import_no_person`) so the
+ * screen can map them to honest copy. The receipt is validated with the same
+ * strictness as `assertCapturedClip` — an invalid payload is rejected, never
+ * repaired.
+ */
+export async function extractImportedPoseSequence(
+  clip: Extract<CapturedClip, { captureMode: 'imported_video' }>,
+  seed?: { x: number; y: number } | null,
+): Promise<ImportedPoseExtraction> {
+  if (!native?.extractImportedPoseSequence) {
+    throw new Error(
+      'Imported-video pose extraction is not available in this build.',
+    );
+  }
+  if (seed && (!isUnitInterval(seed.x) || !isUnitInterval(seed.y))) {
+    throw new Error(
+      'The target seed must be a normalized point inside the video frame.',
+    );
+  }
+  const payload = await native.extractImportedPoseSequence({
+    uri: clip.uri,
+    ...(seed ? { seedX: seed.x, seedY: seed.y } : {}),
+  });
+  return assertImportedPoseExtraction(payload);
+}
+
+export function assertImportedPoseExtraction(
+  value: unknown,
+): ImportedPoseExtraction {
+  if (
+    !isRecord(value) ||
+    !isPoseSequenceRef(value.poseSequence) ||
+    (value.posterUri !== undefined &&
+      (typeof value.posterUri !== 'string' ||
+        !value.posterUri.startsWith('file:'))) ||
+    !isPositiveInteger(value.framesWithPose) ||
+    !isPositiveInteger(value.framesTotal) ||
+    value.framesWithPose > value.framesTotal
+  ) {
+    throw new Error(
+      'The native importer returned an invalid pose-extraction result.',
+    );
+  }
+  return {
+    poseSequence: value.poseSequence,
+    ...(value.posterUri !== undefined ? { posterUri: value.posterUri } : {}),
+    framesWithPose: value.framesWithPose,
+    framesTotal: value.framesTotal,
+  };
+}
+
 export function cancelCameraOperation(): void {
   native?.cancel?.();
 }
@@ -584,6 +686,9 @@ export function assertCapturedClip(
     (value.byteSize !== undefined && !isPositiveInteger(value.byteSize)) ||
     typeof value.capturedAtIso !== 'string' ||
     Number.isNaN(Date.parse(value.capturedAtIso)) ||
+    (value.posterUri !== undefined &&
+      (typeof value.posterUri !== 'string' ||
+        !value.posterUri.startsWith('file:'))) ||
     !isRecognition(value.recognition)
   ) {
     throw invalidClip();
@@ -613,7 +718,11 @@ export function assertCapturedClip(
     value.captureEvidence !== undefined ||
     value.preRollMs !== undefined ||
     value.postRollMs !== undefined ||
-    value.poseSequence !== undefined ||
+    // A pose sequence on an imported clip is legitimate ONLY as the fully
+    // validated sidecar ref the explicit extraction pass produces; anything
+    // less is rejected, never repaired.
+    (value.poseSequence !== undefined &&
+      !isPoseSequenceRef(value.poseSequence)) ||
     value.completion !== undefined ||
     !isAnalysisNotRunBallSpeed(value.ballSpeed)
   ) {

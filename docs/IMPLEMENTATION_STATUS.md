@@ -51,7 +51,7 @@ Last reviewed: 2026-08-28
 ## Product truth at a glance
 
 - The native camera is wired on iOS and Android. It automatically watches for player motion; there is no manual stroke picker.
-- Live pose is real: Apple Vision on iOS and bundled MediaPipe BlazePose on Android drive the skeleton. The colored joint glow is calculated from successive observed joint positions. The detected interval now persists a cross-platform v1 summary of real pose attempts, visibility, coverage, and sparse per-joint movement. It is a motion visualization, not a muscle map, injury assessment, or coaching diagnosis.
+- Live pose is real: Apple Vision on iOS and bundled MediaPipe BlazePose on Android drive the body heat map. The colored glow is calculated from successive observed joint positions. The detected interval now persists a cross-platform v1 summary of real pose attempts, visibility, coverage, and sparse per-joint movement. It is a motion visualization, not a muscle map, injury assessment, or coaching diagnosis.
 - A short private clip is retained around the motion trigger. Without a validated pickleball classifier and scoring bundle, the capture remains `unknown`/`awaiting_model`; no stroke label, score, drill, or improvement claim is invented.
 - Calibrated ball tracking is not implemented, so the app does not display MPH.
 - Live Court scoring is unavailable. Cue/session logic and native TTS exist, but they are not exposed as a working coaching loop without validated repetitions and scores.

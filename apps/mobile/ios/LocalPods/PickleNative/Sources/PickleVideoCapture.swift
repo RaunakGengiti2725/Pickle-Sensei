@@ -165,6 +165,258 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
     }
   }
 
+  /// Imported clips arrive without the pose sidecar guided capture produces
+  /// live, so they cannot be analyzed. Longer imports would grind through
+  /// tens of thousands of Vision calls, so processing is capped at 60s.
+  private static let importedPoseMaxDurationSeconds = 60.0
+
+  /// Extracts a REAL pose sequence from an already-imported video so imported
+  /// clips become analyzable exactly like guided captures: the sidecar is
+  /// written by the same `pickle.pose-sequence.v1` writer (identical JSON
+  /// schema, sha256 over the exact bytes on disk, same directory
+  /// conventions). Honesty rules: timestamps are true frame presentation
+  /// times rebased so the first decoded frame is 0; frames where Vision finds
+  /// no person are honest gaps — never interpolated or duplicated.
+  ///
+  /// Request: { uri: file:// URL inside the app's Captures dir,
+  ///            seedX?/seedY?: normalized (0..1, top-left origin) "tap
+  ///            yourself" seed applied BEFORE the first frame }.
+  @objc func extractImportedPoseSequence(
+    _ request: NSDictionary,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard let uri = request["uri"] as? String else {
+      reject("camera.invalid_extraction_request", "The pose extraction request is missing 'uri'.", nil)
+      return
+    }
+    let seedX = (request["seedX"] as? NSNumber)?.doubleValue
+    let seedY = (request["seedY"] as? NSNumber)?.doubleValue
+
+    DispatchQueue.global(qos: .userInitiated).async {
+      // Same private-storage guard as readTextFile: this analyzes the app's
+      // own capture artifacts, it is not a general video-processing API.
+      guard let url = URL(string: uri), url.isFileURL else {
+        reject("file.invalid_uri", "Only file:// URIs can be analyzed.", nil)
+        return
+      }
+      let videoURL = url.standardizedFileURL.resolvingSymlinksInPath()
+      guard let support = try? FileManager.default.url(
+        for: .applicationSupportDirectory,
+        in: .userDomainMask,
+        appropriateFor: nil,
+        create: false
+      ) else {
+        reject("file.unavailable", "Private storage is unavailable.", nil)
+        return
+      }
+      let capturesRoot = support
+        .appendingPathComponent("PickleSensei/Captures", isDirectory: true)
+        .standardizedFileURL
+        .resolvingSymlinksInPath()
+      guard videoURL.path.hasPrefix(capturesRoot.path + "/") else {
+        reject("file.outside_captures", "Only private capture videos can be analyzed.", nil)
+        return
+      }
+
+      let captureId = videoURL.deletingPathExtension().lastPathComponent
+      let fail: (String, String, Error?) -> Void = { code, message, error in
+        self.emit([
+          "type": "import_pose_extraction",
+          "state": "failed",
+          "captureId": captureId,
+          "emittedAtIso": ISO8601DateFormatter().string(from: Date()),
+        ])
+        reject(code, message, error)
+      }
+
+      let asset = AVURLAsset(url: videoURL)
+      guard let track = asset.tracks(withMediaType: .video).first else {
+        fail("camera.invalid_media", "The video does not contain a video track.", nil)
+        return
+      }
+      let durationSeconds = CMTimeGetSeconds(asset.duration)
+      guard durationSeconds.isFinite, durationSeconds > 0 else {
+        fail("camera.invalid_media", "The video duration could not be read.", nil)
+        return
+      }
+      guard durationSeconds <= Self.importedPoseMaxDurationSeconds else {
+        fail(
+          "camera.import_too_long",
+          "This video is \(Int(durationSeconds.rounded())) seconds long. Trim it to under 60 seconds and import it again.",
+          nil
+        )
+        return
+      }
+
+      let reader: AVAssetReader
+      do {
+        reader = try AVAssetReader(asset: asset)
+      } catch {
+        fail("camera.import_pose_failed", error.localizedDescription, error)
+        return
+      }
+      // Offline decode: no realtime constraint, same biplanar 4:2:0 format
+      // the live capture pipeline feeds Vision.
+      let output = AVAssetReaderTrackOutput(
+        track: track,
+        outputSettings: [
+          kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
+        ]
+      )
+      output.alwaysCopiesSampleData = false
+      guard reader.canAdd(output) else {
+        fail("camera.import_pose_failed", "The video frames could not be decoded.", nil)
+        return
+      }
+      reader.add(output)
+      guard reader.startReading() else {
+        fail(
+          "camera.import_pose_failed",
+          reader.error?.localizedDescription ?? "The video could not be read.",
+          reader.error
+        )
+        return
+      }
+
+      // FRESH provider per extraction: primary-person stickiness must never
+      // leak across videos. A tap seed initializes WHICH person is primary
+      // before the first frame; temporal stickiness then follows them.
+      let poseProvider = ApplePoseProvider()
+      if let seedX, let seedY {
+        poseProvider.setPrimaryPersonSeed(x: seedX, y: seedY)
+      }
+
+      // ≤61fps processing budget via interval decimation on REAL presentation
+      // timestamps: the epsilon absorbs sub-millisecond PTS jitter so genuine
+      // ≤61fps video is never decimated, while 120/240fps slo-mo settles at
+      // ~60fps. Skipped frames are simply not processed — the kept frames
+      // keep their true PTS, so the timeline is never resampled.
+      let minimumIntervalMs = 1000.0 / 61.0 - 0.51
+      let durationMs = durationSeconds * 1000
+      // Imported files carry their rotation in preferredTransform while the
+      // reader vends UNROTATED buffers. Vision must be told the mapping so
+      // landmarks come back in display-normalized space — the same space the
+      // payload's width/height and the user's player tap use. (Guided capture
+      // is unaffected: its connection delivers upright buffers.)
+      let orientation = Self.imageOrientation(for: track.preferredTransform)
+      var firstFramePTS: CMTime?
+      var lastKeptElapsedMs = -Double.infinity
+      var lastKeptTimestampMs = 0
+      var framesProcessed = 0
+      var poses: [PoseFrame] = []
+      var nextProgressEmission = 0.1
+      var reachedCap = false
+
+      self.emit([
+        "type": "import_pose_extraction",
+        "state": "extracting",
+        "progress": 0.0,
+        "captureId": captureId,
+        "emittedAtIso": ISO8601DateFormatter().string(from: Date()),
+      ])
+
+      while !reachedCap, let sample = output.copyNextSampleBuffer() {
+        autoreleasepool {
+          let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+          guard pts.isNumeric, let pixelBuffer = CMSampleBufferGetImageBuffer(sample) else { return }
+          let anchor: CMTime
+          if let existing = firstFramePTS {
+            anchor = existing
+          } else {
+            firstFramePTS = pts
+            anchor = pts
+          }
+          let elapsedMs = CMTimeGetSeconds(CMTimeSubtract(pts, anchor)) * 1000
+          // REAL frame PTS only: a sample that rewinds time is skipped (an
+          // honest gap) rather than remapped onto a fabricated axis.
+          guard elapsedMs.isFinite, elapsedMs >= 0 else { return }
+          if elapsedMs > Self.importedPoseMaxDurationSeconds * 1000 {
+            reachedCap = true
+            return
+          }
+          guard elapsedMs - lastKeptElapsedMs >= minimumIntervalMs else { return }
+          lastKeptElapsedMs = elapsedMs
+          let timestampMs = Int(elapsedMs.rounded())
+          lastKeptTimestampMs = timestampMs
+          framesProcessed += 1
+          // Extraction failures (no person, no landmarks) leave a gap; the
+          // sequence only ever contains measured poses.
+          if let pose = try? poseProvider.extractPose(
+            pixelBuffer: pixelBuffer,
+            timestampMs: timestampMs,
+            orientation: orientation
+          ) {
+            poses.append(pose)
+          }
+          let progress = min(1.0, elapsedMs / max(durationMs, 1.0))
+          if progress >= nextProgressEmission {
+            nextProgressEmission = progress + 0.1
+            self.emit([
+              "type": "import_pose_extraction",
+              "state": "extracting",
+              "progress": progress,
+              "captureId": captureId,
+              "emittedAtIso": ISO8601DateFormatter().string(from: Date()),
+            ])
+          }
+        }
+      }
+
+      if reachedCap {
+        reader.cancelReading()
+      } else if reader.status == .failed {
+        fail(
+          "camera.import_pose_failed",
+          reader.error?.localizedDescription ?? "The video frames could not be decoded.",
+          reader.error
+        )
+        return
+      }
+      guard framesProcessed > 0 else {
+        fail("camera.invalid_media", "The video does not contain decodable frames.", nil)
+        return
+      }
+      guard !poses.isEmpty else {
+        fail("camera.import_no_person", "No person could be tracked in this video.", nil)
+        return
+      }
+
+      do {
+        guard let poseSequence = try ClipMediaStore.writeImportedPoseSequenceSidecar(
+          besideVideoAt: videoURL,
+          poseHistory: poses,
+          poseModelVersion: poseProvider.modelVersion,
+          windowEndTimestampMs: lastKeptTimestampMs
+        ) else {
+          fail("camera.import_pose_failed", "The pose sequence could not be persisted.", nil)
+          return
+        }
+        // framesTotal counts frames pose extraction actually RAN on (after
+        // fps decimation) so framesWithPose/framesTotal is an honest coverage
+        // ratio of the analyzed timeline.
+        var payload: [String: Any] = [
+          "poseSequence": poseSequence,
+          "framesWithPose": poses.count,
+          "framesTotal": framesProcessed,
+        ]
+        if let posterURL = ClipMediaStore.writePosterFrame(besideVideoAt: videoURL) {
+          payload["posterUri"] = posterURL.absoluteString
+        }
+        self.emit([
+          "type": "import_pose_extraction",
+          "state": "completed",
+          "progress": 1.0,
+          "captureId": captureId,
+          "emittedAtIso": ISO8601DateFormatter().string(from: Date()),
+        ])
+        resolve(payload)
+      } catch {
+        fail("camera.import_pose_failed", error.localizedDescription, error)
+      }
+    }
+  }
+
   /// D-029 instrumentation switch: selects the movement-completion strategy
   /// for FUTURE guided captures ("fixed" | "adaptive"). Process-wide,
   /// non-persistent, and ALWAYS "fixed" at launch — the shipped default never
@@ -454,6 +706,15 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
     operation = nil
     guidedController = nil
     importPicker = nil
+  }
+
+  /// Standard mapping from a video track's preferredTransform to the Vision
+  /// orientation of its buffers (rotation only; recorded video never mirrors).
+  private static func imageOrientation(for transform: CGAffineTransform) -> CGImagePropertyOrientation {
+    if transform.a == 0, transform.b == 1, transform.c == -1, transform.d == 0 { return .right }
+    if transform.a == 0, transform.b == -1, transform.c == 1, transform.d == 0 { return .left }
+    if transform.a == -1, transform.b == 0, transform.c == 0, transform.d == -1 { return .down }
+    return .up
   }
 
   private static func topViewController() -> UIViewController? {

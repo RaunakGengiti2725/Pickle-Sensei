@@ -1,10 +1,18 @@
 /**
- * Auth store behavior. The jest environment has no native modules and no
- * Google client id configured — exactly the states these tests verify:
- * typed not_configured errors, never fake sign-ins.
+ * Auth store behavior with no native modules and no Google client id
+ * configured — exactly the states these tests verify: typed not_configured
+ * errors, never fake sign-ins. The checked-in runtime config now ships real
+ * OAuth client IDs, so the unconfigured state is pinned via this mock.
+ * (Configured-client behavior, including silent restore, lives in
+ * authHydrateRestore.test.ts.)
  */
 import { useAuthStore } from '../src/auth/authStore';
 import { establishApiSession, getApiSession } from '../src/account/apiSession';
+
+jest.mock('../src/config/authConfig', () => ({
+  GOOGLE_WEB_CLIENT_ID: null,
+  GOOGLE_IOS_CLIENT_ID: null,
+}));
 
 // SQLite native module is absent under jest; the store's persistence guard
 // swallows that (session stays in memory), which is what we exercise here.

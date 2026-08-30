@@ -8,11 +8,14 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Card, SectionTitle } from '../design/components';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Card, ScreenHeader, SectionTitle } from '../design/components';
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import { useAuthStore } from '../auth/authStore';
 import { useConsentStore } from '../state/consentStore';
+import type { RootStackParams } from '../navigation/params';
 
 /**
  * First-party consent surface. "Analyze my video" and "use my video to
@@ -23,6 +26,8 @@ import { useConsentStore } from '../state/consentStore';
  */
 
 export function ConsentSettingsScreen() {
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const session = useAuthStore(s => s.session);
   const availability = useConsentStore(s => s.availability);
   const active = useConsentStore(s => s.modelTrainingActive);
@@ -39,16 +44,14 @@ export function ConsentSettingsScreen() {
   const toggleDisabled = busy || availability !== 'ready';
 
   return (
-    <SafeAreaView edges={['top']} style={styles.screen}>
+    <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
       <StatusBar barStyle="dark-content" />
+      <ScreenHeader title="Data & consent" onBack={() => navigation.goBack()} />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={[type.hero, { color: color.ink }]}>Data & consent</Text>
-        <Text
-          style={[type.body, { color: color.inkSoft, marginTop: space.sm }]}
-        >
+        <Text style={[type.body, { color: color.inkSoft }]}>
           Two separate choices. Analyzing your video never opts you into
           anything else.
         </Text>
@@ -112,7 +115,11 @@ export function ConsentSettingsScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.surface },
-  content: { padding: space.xl, paddingBottom: space.xxl },
+  content: {
+    paddingHorizontal: space.xl,
+    paddingTop: space.md,
+    paddingBottom: space.xxl,
+  },
   card: { padding: space.lg, marginTop: space.sm },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   iconWrap: {

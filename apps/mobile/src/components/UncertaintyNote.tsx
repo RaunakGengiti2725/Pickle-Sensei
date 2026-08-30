@@ -31,10 +31,9 @@ export type UncertaintyKind = (typeof UNCERTAINTY_KINDS)[number];
 
 export const UNCERTAINTY_COPY: Record<UncertaintyKind, string> = {
   contact:
-    'We couldn’t confidently locate contact on this attempt, so no contact ' +
-    'marker is shown.',
+    'Contact wasn’t located on this attempt, so no contact marker is shown.',
   stroke_identity:
-    'We couldn’t confidently identify this stroke, so no label was applied.',
+    'This stroke couldn’t be identified, so no label was applied.',
   phase_timing:
     'We couldn’t measure the phase timing of this swing, so no timeline is ' +
     'shown.',

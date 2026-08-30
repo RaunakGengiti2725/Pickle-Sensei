@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { SHOT_TYPES } from "@pickle/shared-types";
 import {
   DEFAULT_MODEL_MANIFEST,
   ModelRegistry,
@@ -70,11 +71,18 @@ describe("ModelRegistry", () => {
     expect(entry?.notes).toContain("L3 needs bounce observation");
   });
 
-  it("respects stroke support boundaries", () => {
+  it("resolves technique scoring for every stroke — no unreleased techniques", () => {
     const registry = new ModelRegistry(DEFAULT_MODEL_MANIFEST);
-    expect(
-      registry.resolve({ task: "technique_scoring", platform: "ios", stroke: "overhead" }),
-    ).toBeNull();
+    for (const stroke of SHOT_TYPES) {
+      expect(
+        registry.resolve({ task: "technique_scoring", platform: "ios", stroke })?.version,
+        `technique_scoring must resolve for "${stroke}"`,
+      ).toBe("sm-v1");
+      expect(
+        registry.resolve({ task: "technique_scoring", platform: "android", stroke })?.version,
+        `technique_scoring must resolve for "${stroke}" on android`,
+      ).toBe("sm-v1");
+    }
   });
 
   it("model replacement is a manifest change, not a code change", () => {

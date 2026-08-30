@@ -31,9 +31,9 @@ import type { ProviderDescriptor } from "@pickle/vision-contracts";
  *        and the leaf's legacy slug drives the existing scoring chain;
  *  - depth-2 side commitment (FOREHAND / BACKHAND)
  *      → SHARED_SIDE_PROFILES_V1 shared profile, basis "predicted_family".
- *        No leaf slug exists, so the slug-conditioned stages (biomechanics,
- *        scoring, faults, coaching) are honestly skipped — running them
- *        would require fabricating a specific technique;
+ *        The run scores against the side's representative swing target set
+ *        (the side's drive configuration) while the record keeps the
+ *        family-level provenance — no leaf technique is ever claimed;
  *  - UNKNOWN or below the confidence floor
  *      → basis "abstained": a durable record of what the classifier said,
  *        with no invented stroke and no score.

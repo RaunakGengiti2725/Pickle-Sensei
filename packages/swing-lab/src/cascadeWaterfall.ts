@@ -45,7 +45,7 @@ import type { SilentFailureVerdict } from "./silentFailure.js";
 
 const PB = join(REPO_ROOT, "datasets/paddle-bench");
 
-interface Report {
+export interface Report {
   player?: { policy?: string; targetCoverage?: number; selectionConfidence?: number };
   targetEvent?: { status?: string; event?: { startMs: number; endMs: number } };
   paddle?: { status?: string; windowCoverage?: number };
@@ -63,13 +63,13 @@ interface Report {
   strokePrediction?: { label?: string | null };
 }
 
-interface StageOutcome {
+export interface StageOutcome {
   pass: boolean;
   detail: string;
 }
 
 const STAGES = ["TARGET", "EVENT", "PADDLE", "BALL", "CONTACT", "PHASE", "STROKE"] as const;
-type StageName = (typeof STAGES)[number];
+export type StageName = (typeof STAGES)[number];
 
 /**
  * USABLE RESULT CONTRACT — usable-result-v1
@@ -103,6 +103,14 @@ type StageName = (typeof STAGES)[number];
  *   - A missing strokePrediction block or a null label is treated as an
  *     explicit abstention (the classifier declined to answer); it is not a
  *     wrong confident prediction.
+ *   - The literal label "UNKNOWN" (pickleball-stroke-taxonomy-v3's explicit
+ *     uncommitted label — the classifier's honest "couldn't classify") is the
+ *     same abstention arm the clause-3 text has always named
+ *     ("explicit abstention/unknown"). First exercised for real by the
+ *     2026-08-29 Mac re-measure: stroke-heuristic-7 emits UNKNOWN where v2
+ *     committed a side, and the implementation was wrongly counting it as a
+ *     wrong CONFIDENT prediction. Note the strict STROKE stage is untouched:
+ *     UNKNOWN still fails L1-match — abstention is honest, not complete.
  *   - contact "estimated" whose error is unverifiable (no gold contact or no
  *     estimate timestamp) satisfies neither (a)/(b) nor the abstention arm of
  *     (c); the fabrication veto (5) is not provable and is not applied.
@@ -123,13 +131,13 @@ const USABLE_RESULT_CONTRACT = {
   },
 } as const;
 
-interface UsableVerdict {
+export interface UsableVerdict {
   usable: boolean;
   replayClause: "a" | "b" | "c" | null;
   reasons: string[];
 }
 
-function evaluateUsableResult(
+export function evaluateUsableResult(
   stages: Record<StageName, StageOutcome>,
   report: Report,
   goldContactMs: number | null,
@@ -140,9 +148,10 @@ function evaluateUsableResult(
       ? Math.abs(report.contact.estimatedContactMs - goldContactMs)
       : null;
 
-  // Clause 3 — honest stroke evidence.
+  // Clause 3 — honest stroke evidence. "UNKNOWN" is taxonomy-v3's explicit
+  // uncommitted label: the contract's "explicit abstention/unknown" arm.
   const predictedLabel = report.strokePrediction?.label ?? null;
-  const strokeAbstained = predictedLabel === null;
+  const strokeAbstained = predictedLabel === null || predictedLabel === "UNKNOWN";
   const strokeHonest = stages.STROKE.pass || strokeAbstained;
 
   // Clause 4 — trustworthy replay artifact.

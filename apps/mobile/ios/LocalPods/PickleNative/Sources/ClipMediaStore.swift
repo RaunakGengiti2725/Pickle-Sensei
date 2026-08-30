@@ -1,6 +1,7 @@
 import AVFoundation
 import CryptoKit
 import Foundation
+import UIKit
 
 enum ClipMediaStoreError: LocalizedError {
   case invalidMedia
@@ -59,6 +60,42 @@ enum ClipMediaStore {
   static func removeIfPresent(_ url: URL?) {
     guard let url, FileManager.default.fileExists(atPath: url.path) else { return }
     try? FileManager.default.removeItem(at: url)
+  }
+
+  /// Renders ONE JPEG poster frame beside the video (`<basename>-poster.jpg`
+  /// in the same Captures directory) so the app can show a real thumbnail
+  /// without decoding video. The frame is sampled at ~25% of the duration —
+  /// past any blurry setup frames, well before the clip ends. Best-effort by
+  /// contract: any failure returns nil and callers must OMIT the key, so a
+  /// payload never carries a broken poster URI. Idempotent: an
+  /// already-rendered poster is reused as-is.
+  static func writePosterFrame(besideVideoAt videoURL: URL) -> URL? {
+    let posterURL = videoURL
+      .deletingLastPathComponent()
+      .appendingPathComponent(videoURL.deletingPathExtension().lastPathComponent + "-poster.jpg")
+    if FileManager.default.fileExists(atPath: posterURL.path) { return posterURL }
+
+    let asset = AVURLAsset(url: videoURL)
+    let durationSeconds = CMTimeGetSeconds(asset.duration)
+    guard durationSeconds.isFinite, durationSeconds > 0 else { return nil }
+
+    let generator = AVAssetImageGenerator(asset: asset)
+    generator.appliesPreferredTrackTransform = true
+    // Caps the LONG side at ~1280px; aspect ratio is preserved by the
+    // generator. Default time tolerances are intentional (nearest keyframe is
+    // fine for a poster and much cheaper than exact decode).
+    generator.maximumSize = CGSize(width: 1280, height: 1280)
+    do {
+      let cgImage = try generator.copyCGImage(
+        at: CMTime(seconds: durationSeconds * 0.25, preferredTimescale: 600),
+        actualTime: nil
+      )
+      guard let jpeg = UIImage(cgImage: cgImage).jpegData(compressionQuality: 0.8) else { return nil }
+      try jpeg.write(to: posterURL, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+      return posterURL
+    } catch {
+      return nil
+    }
   }
 
   static func exportStrokeWindow(
@@ -229,8 +266,35 @@ enum ClipMediaStore {
     if let size = try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber {
       payload["byteSize"] = size.int64Value
     }
+    // Poster covers BOTH guided-capture and imported payloads (they all
+    // assemble here). Best-effort: a thumbnail failure must never block a
+    // real capture, so the key is simply omitted when rendering fails.
+    if let posterURL = writePosterFrame(besideVideoAt: url) {
+      payload["posterUri"] = posterURL.absoluteString
+    }
     additional.forEach { payload[$0.key] = $0.value }
     return payload
+  }
+
+  /// Imported-video entry point to the SAME sidecar writer guided captures
+  /// use: identical `pickle.pose-sequence.v1` JSON schema, identical bytes
+  /// (sha256 is computed over the exact data written to disk), identical
+  /// directory conventions (`<basename>.pose.json` beside the clip). Imported
+  /// pose timestamps are already video-relative (first frame = 0), so the
+  /// window starts at 0 and the rebase is a no-op.
+  static func writeImportedPoseSequenceSidecar(
+    besideVideoAt videoURL: URL,
+    poseHistory: [PoseFrame],
+    poseModelVersion: String,
+    windowEndTimestampMs: Int
+  ) throws -> [String: Any]? {
+    try writePoseSequenceSidecar(
+      besideClipAt: videoURL,
+      poseHistory: poseHistory,
+      poseModelVersion: poseModelVersion,
+      windowStartTimestampMs: 0,
+      windowEndTimestampMs: windowEndTimestampMs
+    )
   }
 
   /// Writes the measured pose sequence beside the clip in the canonical

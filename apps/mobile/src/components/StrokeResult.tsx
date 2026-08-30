@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
-  Image,
   StyleSheet,
   Text,
   View,
@@ -18,6 +17,7 @@ import {
 } from '../design/components';
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
+import { ClipPlayer, clipPlaybackAvailable } from './ClipPlayer';
 import {
   abstentionLedger,
   attemptChips,
@@ -33,6 +33,10 @@ import {
   type StrokeResultEvidenceRecord,
 } from './strokeResultModel';
 import { UncertaintyNotes } from './UncertaintyNote';
+import {
+  AnalysisProgressBar,
+  type AnalysisProgressUi,
+} from './AnalysisProgress';
 
 /**
  * STROKE RESULT — the ONE canonical result surface (MOBBIN brief §1),
@@ -51,6 +55,8 @@ import { UncertaintyNotes } from './UncertaintyNote';
 export interface StrokeResultClip {
   uri: string;
   durationMs: number;
+  /** Poster still captured beside the video, when one was written. */
+  posterUri?: string;
 }
 
 export interface StrokeResultProps {
@@ -65,6 +71,8 @@ export interface StrokeResultProps {
   onOpenAttempt?: (analysisId: string) => void;
   onTryAgain: () => void;
   onDone: () => void;
+  /** Optional score stage rendered first, directly under the header block. */
+  scoreSlot?: React.ReactNode;
   /** Optional sections (e.g. validated training) between rows and the CTAs. */
   children?: React.ReactNode;
 }
@@ -127,7 +135,12 @@ function ReplayCard(props: {
   const [trackWidth, setTrackWidth] = useState(0);
   const [playheadMs, setPlayheadMs] = useState(base?.startMs ?? 0);
   const [playing, setPlaying] = useState(false);
+  // Last explicit scrub request handed to the native player (-1 = none).
+  const [seekMs, setSeekMs] = useState(-1);
   const playTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Real in-app video frames when the native player view exists for this
+  // build; otherwise the card keeps its measured-timeline behavior.
+  const nativePlayback = props.clip !== null && clipPlaybackAvailable();
 
   useEffect(
     () => () => {
@@ -162,14 +175,22 @@ function ReplayCard(props: {
       1,
       Math.max(0, event.nativeEvent.locationX / trackWidth),
     );
-    setPlayheadMs(base.startMs + ratio * span);
+    const next = base.startMs + ratio * span;
+    setPlayheadMs(next);
+    if (nativePlayback) setSeekMs(next - base.startMs);
   };
   const togglePlay = () => {
     if (playing) {
       stopPlayback();
       return;
     }
+    if (playheadMs >= base.endMs - 30) {
+      // Replaying from the end restarts at the top of the clip.
+      setPlayheadMs(base.startMs);
+      if (nativePlayback) setSeekMs(0);
+    }
     setPlaying(true);
+    if (nativePlayback) return; // The native player drives real progress.
     const stepMs = reduced ? 120 : 40;
     playTimer.current = setInterval(() => {
       setPlayheadMs(current => {
@@ -202,14 +223,23 @@ function ReplayCard(props: {
 
       <View style={styles.posterShell}>
         {props.clip ? (
-          // Same degradation contract as TargetSelector: platforms that
-          // cannot rasterize a still from the video URI show the dark
-          // camera surface. The file itself is the real captured clip.
-          <Image
-            source={{ uri: props.clip.uri }}
-            resizeMode="cover"
-            style={StyleSheet.absoluteFill}
-            accessibilityLabel="Captured clip"
+          // Real frames from the real captured file. ClipPlayer degrades to
+          // the recorded poster still on builds without the native player —
+          // never a fabricated frame.
+          <ClipPlayer
+            uri={props.clip.uri}
+            {...(props.clip.posterUri !== undefined
+              ? { posterUri: props.clip.posterUri }
+              : {})}
+            playing={playing}
+            seekMs={seekMs}
+            onProgress={positionMs => {
+              setPlayheadMs(base.startMs + positionMs);
+            }}
+            onEnd={() => {
+              stopPlayback();
+              setPlayheadMs(base.endMs);
+            }}
           />
         ) : null}
         <View style={styles.posterBadge}>
@@ -358,8 +388,11 @@ function ReplayCard(props: {
       ) : null}
 
       <Text style={[type.caption, styles.replayDisclosure]}>
-        Scrubbing moves the measured evidence timeline. This build does not
-        render video frames in-app; the clip file stays on this device.
+        {nativePlayback
+          ? 'Playback and scrubbing stay on this device — the clip is ' +
+            'never uploaded.'
+          : 'Scrubbing moves the measured evidence timeline. The clip file ' +
+            'stays on this device.'}
       </Text>
     </Card>
   );
@@ -404,6 +437,11 @@ export function StrokeResult(props: StrokeResultProps) {
       </Text>
       <Text style={[type.h1, styles.title]}>{header.title}</Text>
       <Text style={[type.body, styles.subtitle]}>{header.subtitle}</Text>
+
+      {/* Score-first: when the caller passes a score stage it renders here,
+          directly under the header, so the score is the first thing seen —
+          before the attempt chips and the replay card. */}
+      {props.scoreSlot}
 
       {/* §2 — attempt chips: navigate between this session's attempts.
           NEVER a ranking: comparisons are blocked until metrics validate. */}
@@ -568,6 +606,12 @@ export function StrokeResultAnalyzing(props: {
   caption: string;
   detail?: string;
   dark?: boolean;
+  /**
+   * Optional honest progress surface: a REAL measured fraction (imported
+   * pose extraction) or an indeterminate stage pulse. Absent → the classic
+   * arc-only state, byte-identical to before this prop existed.
+   */
+  progress?: AnalysisProgressUi | null;
 }) {
   const reduced = useReducedMotion();
   const spin = useRef(new Animated.Value(0)).current;
@@ -633,6 +677,15 @@ export function StrokeResultAnalyzing(props: {
       >
         {props.caption}
       </Text>
+      {props.progress ? (
+        <AnalysisProgressBar
+          dark={props.dark}
+          progress={props.progress.progress}
+          label={props.progress.label}
+          sublabel={props.progress.sublabel}
+          testID="stroke-result-analyzing-progress"
+        />
+      ) : null}
       <Text
         style={[
           type.caption,

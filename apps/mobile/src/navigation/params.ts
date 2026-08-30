@@ -12,6 +12,7 @@ export type RootStackParams = {
   Tabs: NavigatorScreenParams<MainTabParams> | undefined;
   Analyze: { source?: 'camera' | 'library' } | undefined;
   Result: { analysisId: string };
+  DrillLibrary: undefined;
   LiveCourt: undefined;
   LiveSummary: { sessionId: string };
   ConnectAccount: undefined;

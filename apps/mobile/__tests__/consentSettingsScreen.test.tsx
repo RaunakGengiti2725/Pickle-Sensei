@@ -10,6 +10,11 @@ jest.mock('react-native-safe-area-context', () => {
   return { SafeAreaView: View };
 });
 
+const mockGoBack = jest.fn();
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({ goBack: mockGoBack }),
+}));
+
 import { ConsentSettingsScreen } from '../src/screens/ConsentSettingsScreen';
 import { useConsentStore } from '../src/state/consentStore';
 

@@ -113,6 +113,21 @@ final class GuidedCaptureViewController: UIViewController {
   private let captureHaptic = UINotificationFeedbackGenerator()
   private var previewLayer: AVCaptureVideoPreviewLayer!
 
+  // ── User camera controls (zoom / flip / Center Stage) ────────────────────
+  // Visible only while the user is composing (target selection/positioning);
+  // once the body is locked or a stroke is being captured the framing is part
+  // of the evidence chain and the controls disappear.
+  private let flipButton = UIButton(type: .system)
+  private let centerStageButton = UIButton(type: .system)
+  private let zoomContainer = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
+  private let zoomStack = UIStackView()
+  private var zoomPresetButtons: [UIButton] = []
+  private var lastZoomState: CameraEngine.ZoomState?
+  private var pinchBaseDisplayZoom: CGFloat = 1
+  private let controlHaptic = UIImpactFeedbackGenerator(style: .light)
+  private static let controlMint = UIColor(red: 83 / 255, green: 217 / 255, blue: 155 / 255, alpha: 1)
+  private static let controlVolt = UIColor(red: 215 / 255, green: 250 / 255, blue: 69 / 255, alpha: 1)
+
   private var observationURL: URL?
   private var observationTimer: Timer?
   private var visionInFlight = false
@@ -245,6 +260,11 @@ final class GuidedCaptureViewController: UIViewController {
     let tap = UITapGestureRecognizer(target: self, action: #selector(handleTargetTap(_:)))
     view.addGestureRecognizer(tap)
 
+    let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handleZoomPinch(_:)))
+    view.addGestureRecognizer(pinch)
+
+    configureCameraControls()
+
     NSLayoutConstraint.activate([
       overlayView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       overlayView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -288,6 +308,250 @@ final class GuidedCaptureViewController: UIViewController {
       self.emit(type: "session", values: ["state": "observing"])
     }
     engine.onRecordingFinished = { [weak self] result in self?.recordingFinished(result) }
+    engine.onZoomStateChanged = { [weak self] state in
+      DispatchQueue.main.async { self?.renderZoomState(state) }
+    }
+    engine.readZoomState { [weak self] state in
+      DispatchQueue.main.async { self?.renderZoomState(state) }
+    }
+  }
+
+  // ── Camera controls: build / render / interact ────────────────────────────
+
+  private func configureCameraControls() {
+    func capsuleConfig(symbol: String) -> UIButton.Configuration {
+      var config = UIButton.Configuration.filled()
+      config.baseBackgroundColor = UIColor.black.withAlphaComponent(0.55)
+      config.baseForegroundColor = .white
+      config.cornerStyle = .capsule
+      config.contentInsets = .zero
+      config.image = UIImage(
+        systemName: symbol,
+        withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
+      )
+      return config
+    }
+
+    flipButton.configuration = capsuleConfig(symbol: "arrow.triangle.2.circlepath.camera")
+    flipButton.accessibilityLabel = "Flip camera"
+    flipButton.accessibilityHint = "Switches between the rear and front cameras and restarts positioning"
+    flipButton.translatesAutoresizingMaskIntoConstraints = false
+    flipButton.addTarget(self, action: #selector(flipPressed), for: .touchUpInside)
+    view.addSubview(flipButton)
+
+    centerStageButton.configuration = capsuleConfig(symbol: "person.and.background.dotted")
+    centerStageButton.accessibilityLabel = "Center Stage"
+    centerStageButton.accessibilityHint = "Automatically keeps you framed, like FaceTime"
+    centerStageButton.translatesAutoresizingMaskIntoConstraints = false
+    centerStageButton.addTarget(self, action: #selector(centerStagePressed), for: .touchUpInside)
+    centerStageButton.isHidden = true
+    view.addSubview(centerStageButton)
+
+    zoomContainer.layer.cornerRadius = 24
+    zoomContainer.layer.cornerCurve = .continuous
+    zoomContainer.clipsToBounds = true
+    zoomContainer.layer.borderWidth = 1
+    zoomContainer.layer.borderColor = UIColor.white.withAlphaComponent(0.14).cgColor
+    zoomContainer.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(zoomContainer)
+
+    zoomStack.axis = .horizontal
+    zoomStack.alignment = .center
+    zoomStack.spacing = 4
+    zoomStack.translatesAutoresizingMaskIntoConstraints = false
+    zoomContainer.contentView.addSubview(zoomStack)
+
+    NSLayoutConstraint.activate([
+      flipButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -18),
+      flipButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 14),
+      flipButton.widthAnchor.constraint(equalToConstant: 48),
+      flipButton.heightAnchor.constraint(equalToConstant: 48),
+
+      centerStageButton.trailingAnchor.constraint(equalTo: flipButton.trailingAnchor),
+      centerStageButton.topAnchor.constraint(equalTo: flipButton.bottomAnchor, constant: 12),
+      centerStageButton.widthAnchor.constraint(equalToConstant: 48),
+      centerStageButton.heightAnchor.constraint(equalToConstant: 48),
+
+      zoomContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+      zoomContainer.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -18),
+      zoomContainer.heightAnchor.constraint(equalToConstant: 48),
+
+      zoomStack.leadingAnchor.constraint(equalTo: zoomContainer.contentView.leadingAnchor, constant: 7),
+      zoomStack.trailingAnchor.constraint(equalTo: zoomContainer.contentView.trailingAnchor, constant: -7),
+      zoomStack.topAnchor.constraint(equalTo: zoomContainer.contentView.topAnchor),
+      zoomStack.bottomAnchor.constraint(equalTo: zoomContainer.contentView.bottomAnchor),
+    ])
+  }
+
+  private static let zoomPresets: [CGFloat] = [0.5, 1, 2, 3]
+
+  private func renderZoomState(_ state: CameraEngine.ZoomState) {
+    lastZoomState = state
+
+    // Center Stage: rendered wherever the hardware supports it; volt when on.
+    centerStageButton.isHidden = !state.centerStageSupported
+    var centerStageConfig = centerStageButton.configuration
+    centerStageConfig?.baseForegroundColor = state.centerStageEnabled ? Self.controlVolt : .white
+    centerStageConfig?.baseBackgroundColor = state.centerStageEnabled
+      ? UIColor.black.withAlphaComponent(0.78)
+      : UIColor.black.withAlphaComponent(0.55)
+    centerStageButton.configuration = centerStageConfig
+    centerStageButton.accessibilityValue = state.centerStageEnabled ? "On" : "Off"
+
+    // Zoom cluster: presets inside the device's real range. Hidden while
+    // Center Stage owns framing (manual zoom is suspended by the system).
+    zoomPresetButtons.forEach { $0.removeFromSuperview() }
+    zoomPresetButtons = []
+    let presets = Self.zoomPresets.filter {
+      $0 >= state.minDisplayZoom - 0.01 && $0 <= state.maxDisplayZoom + 0.01
+    }
+    let active = Self.nearestPreset(in: presets, to: state.displayZoom)
+    for preset in presets {
+      var config = UIButton.Configuration.filled()
+      let isActive = preset == active
+      config.baseBackgroundColor = isActive ? UIColor.white.withAlphaComponent(0.22) : .clear
+      config.baseForegroundColor = isActive ? Self.controlVolt : UIColor.white.withAlphaComponent(0.82)
+      config.cornerStyle = .capsule
+      config.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 11, bottom: 8, trailing: 11)
+      let title = isActive
+        ? String(format: abs(state.displayZoom.rounded() - state.displayZoom) < 0.05 ? "%.0f×" : "%.1f×", state.displayZoom)
+        : Self.presetLabel(preset)
+      config.attributedTitle = AttributedString(
+        title,
+        attributes: AttributeContainer([
+          .font: UIFont.monospacedDigitSystemFont(ofSize: 13, weight: isActive ? .bold : .semibold),
+        ])
+      )
+      let button = UIButton(configuration: config)
+      button.accessibilityLabel = "Zoom \(Self.presetLabel(preset))"
+      button.addAction(
+        UIAction { [weak self] _ in
+          self?.controlHaptic.impactOccurred(intensity: 0.5)
+          self?.engine.setDisplayZoom(preset, animated: true)
+        },
+        for: .touchUpInside
+      )
+      zoomStack.addArrangedSubview(button)
+      zoomPresetButtons.append(button)
+    }
+    zoomContainer.isHidden = presets.count < 2 || state.centerStageEnabled
+    applyControlAvailability()
+  }
+
+  private static func presetLabel(_ preset: CGFloat) -> String {
+    preset < 1 ? ".5" : String(format: "%.0f×", preset)
+  }
+
+  private static func nearestPreset(in presets: [CGFloat], to value: CGFloat) -> CGFloat? {
+    presets.min(by: { abs($0 - value) < abs($1 - value) })
+  }
+
+  /// Controls stay ON SCREEN the whole session. They only become inert (dimmed)
+  /// for the few seconds a detected stroke's clip is being finalized — a lens
+  /// or framing change mid-write would corrupt the evidence file itself.
+  private var controlsCurrentlyAllowed: Bool {
+    presentedCaptureStage != .capturing && presentedCaptureStage != .saving
+  }
+
+  private func updateControlVisibility() {
+    if let state = lastZoomState {
+      renderZoomState(state)
+    } else {
+      applyControlAvailability()
+    }
+  }
+
+  private func applyControlAvailability() {
+    let allowed = controlsCurrentlyAllowed
+    for control in [flipButton, centerStageButton] {
+      control.isEnabled = allowed
+      control.alpha = allowed ? 1 : 0.45
+    }
+    zoomContainer.alpha = allowed ? 1 : 0.45
+    zoomContainer.isUserInteractionEnabled = allowed
+    zoomPresetButtons.forEach { $0.isEnabled = allowed }
+  }
+
+  @objc private func handleZoomPinch(_ recognizer: UIPinchGestureRecognizer) {
+    guard controlsCurrentlyAllowed, let state = lastZoomState, !state.centerStageEnabled else { return }
+    switch recognizer.state {
+    case .began:
+      pinchBaseDisplayZoom = state.displayZoom
+    case .changed:
+      engine.setDisplayZoom(pinchBaseDisplayZoom * recognizer.scale, animated: false)
+    default:
+      break
+    }
+  }
+
+  @objc private func flipPressed() {
+    guard controlsCurrentlyAllowed, let state = lastZoomState else { return }
+    controlHaptic.impactOccurred(intensity: 0.6)
+    let next: AVCaptureDevice.Position = state.position == .back ? .front : .back
+
+    // A flip restarts composition: the tapped start region, occupancy
+    // evidence, and rolling spool all describe the OLD scene.
+    resetAcquisitionForCameraChange()
+
+    do {
+      let url = try ClipMediaStore.makeObservationURL()
+      stateLock.lock()
+      observationURL = url
+      recordingStarted = false
+      stateLock.unlock()
+      engine.flipCameraRestartingSpool(to: next, nextRecordingURL: url)
+    } catch {
+      finishFailure(
+        code: "camera.storage_failed",
+        message: "A private recording file could not be created.",
+        abstention: "storage_failure"
+      )
+    }
+  }
+
+  @objc private func centerStagePressed() {
+    guard controlsCurrentlyAllowed, let state = lastZoomState else { return }
+    controlHaptic.impactOccurred(intensity: 0.6)
+    engine.setCenterStageEnabled(!state.centerStageEnabled)
+    emit(type: "camera_controls", values: [
+      "centerStage": !state.centerStageEnabled ? "enabled" : "disabled",
+    ])
+  }
+
+  private func resetAcquisitionForCameraChange() {
+    assert(Thread.isMainThread)
+    stateLock.lock()
+    armed = false
+    poseHistory = []
+    stateLock.unlock()
+
+    targetAcquisition = .choosingRegion
+    startRegion = nil
+    occupancyStreak = 0
+    occupantTorso = nil
+    gestureBest = [:]
+    gestureStreaks = [:]
+    ambiguousSinceMs = nil
+    targetSeed = nil
+    targetSeedSource = "start_region_occupancy"
+    lockInstrumentFirstFrameMs = nil
+    lockInstrumentLastFrameMs = nil
+    lockInstrumentAmbiguousEnteredMs = nil
+    lockInstrumentLock = nil
+    targetRing.opacity = 0
+
+    detector.reset()
+    readiness.reset()
+    evidenceAccumulator.reset()
+    poseProvider.resetPrimaryPersonAnchor()
+
+    emit(type: "target", values: ["state": "reset", "reason": "camera_flipped"])
+    updateCapturePresentation(
+      stage: .targetSelection,
+      title: "STEP 1 OF 2 · SET YOUR POSITION",
+      detail: "Tap where you'll be standing",
+      overlayState: .positioning
+    )
   }
 
   private func handleSessionEvent(_ event: CameraEngine.SessionEvent) {
@@ -1044,6 +1308,7 @@ final class GuidedCaptureViewController: UIViewController {
     let hadPresentedStage = presentedCaptureStage != nil
     presentedCaptureStage = stage
     overlayView.setCaptureState(overlayState)
+    if stageChanged { updateControlVisibility() }
 
     if stageChanged {
       switch stage {

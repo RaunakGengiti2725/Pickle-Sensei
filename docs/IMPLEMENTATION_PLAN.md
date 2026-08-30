@@ -8,7 +8,7 @@ This is the forward plan from the current implementation. Completed infrastructu
 - Canonical auth/bootstrap/onboarding/progress APIs and account-scoped local SQLite/outbox data.
 - Permit-bound analysis accounting with exactly two lifetime successful free ratings and an entitlement gate after them.
 - iOS AVFoundation + Apple Vision and Android CameraX + MediaPipe native camera paths.
-- Automatic motion-triggered short-clip capture with live real-pose skeleton and measured joint-motion visualization.
+- Automatic motion-triggered short-clip capture with a live real-pose body heat map and measured joint-motion visualization.
 - Typed `unknown`/`awaiting_model` outcomes instead of sample stroke labels, scores, drills, or speed.
 - v2 consent/provenance schemas, exact 61-technique taxonomy, explicit non-stroke/partial outcomes, and tested release-eligibility gates for future model-data collection.
 - Saved-drill/training-plan persistence that accepts only real catalog records. No placeholder catalog is published.

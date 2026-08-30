@@ -30,6 +30,23 @@ function ffmpeg(args: string[]): void {
   execFileSync("ffmpeg", ["-v", "error", "-y", ...args]);
 }
 
+/**
+ * drawtext needs an ffmpeg built with libfreetype. Linux CI has it; the
+ * 2026-08-29 Mac re-measure found a Homebrew ffmpeg 9 built without it. A
+ * fixture that cannot be constructed is skipped LOUDLY (skip reason names the
+ * missing filter) rather than silently varied — never substitute a different
+ * fixture for a pinned red-team scenario.
+ */
+const ffmpegHasDrawtext = (() => {
+  try {
+    return execFileSync("ffmpeg", ["-hide_banner", "-filters"], { encoding: "utf8" }).includes(
+      " drawtext ",
+    );
+  } catch {
+    return false;
+  }
+})();
+
 function gate(path: string) {
   return evaluateFrameAnalyzability(extractFrameStats(path));
 }
@@ -95,24 +112,27 @@ describe(
       expect(report.reasons).toContain("letterbox_dominant");
     });
 
-    it("rejects a TV-broadcast simulation with a static score graphic", () => {
-      const path = join(dir, "broadcast-scorebug.mp4");
-      ffmpeg([
-        "-i",
-        sourceClip,
-        "-vf",
-        "drawbox=x=40:y=ih-120:w=420:h=80:color=black@0.85:t=fill," +
-          "drawbox=x=44:y=ih-116:w=412:h=72:color=white@0.15:t=2," +
-          "drawtext=text='SMITH 7  -  JONES 5':x=60:y=h-96:fontsize=36:fontcolor=white," +
-          "drawtext=text='LIVE  PICKLEBALL CHAMPIONSHIP':x=60:y=40:fontsize=24:fontcolor=yellow",
-        "-pix_fmt",
-        "yuv420p",
-        path,
-      ]);
-      const report = gate(path);
-      expect(report.analyzable).toBe(false);
-      expect(report.reasons).toContain("static_overlay_suspected");
-    });
+    it.skipIf(!ffmpegHasDrawtext)(
+      "rejects a TV-broadcast simulation with a static score graphic (SKIPPED = local ffmpeg lacks drawtext/libfreetype)",
+      () => {
+        const path = join(dir, "broadcast-scorebug.mp4");
+        ffmpeg([
+          "-i",
+          sourceClip,
+          "-vf",
+          "drawbox=x=40:y=ih-120:w=420:h=80:color=black@0.85:t=fill," +
+            "drawbox=x=44:y=ih-116:w=412:h=72:color=white@0.15:t=2," +
+            "drawtext=text='SMITH 7  -  JONES 5':x=60:y=h-96:fontsize=36:fontcolor=white," +
+            "drawtext=text='LIVE  PICKLEBALL CHAMPIONSHIP':x=60:y=40:fontsize=24:fontcolor=yellow",
+          "-pix_fmt",
+          "yuv420p",
+          path,
+        ]);
+        const report = gate(path);
+        expect(report.analyzable).toBe(false);
+        expect(report.reasons).toContain("static_overlay_suspected");
+      },
+    );
 
     it("rejects a video of a phone screen playing pickleball (dark static bezel)", () => {
       const path = join(dir, "phone-screen.mp4");

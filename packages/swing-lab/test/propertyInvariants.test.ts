@@ -214,19 +214,26 @@ describe("invariant checker detects seeded violations", () => {
 });
 
 describe("corpus check over committed datasets/ artifacts", () => {
-  it("scans the corpus and reports (never repairs) violations", () => {
-    const report = runCorpusCheck(join(ROOT, "datasets"));
-    expect(report.filesChecked).toBeGreaterThan(200);
-    expect(report.parseFailures).toEqual([]);
-    const byRule = new Map<string, number>();
-    for (const violation of report.violations) {
-      byRule.set(violation.rule, (byRule.get(violation.rule) ?? 0) + 1);
-    }
-    // Findings are reported, not asserted away: the count is logged for the
-    // wave-c summary; the check only guarantees the corpus was scanned.
-    console.log(
-      `corpus check: ${report.filesChecked} files, ${report.violations.length} violations`,
-      Object.fromEntries(byRule),
-    );
-  });
+  // 120s: on a Mac with the regenerated canonical run dirs present (gitignored,
+  // absent on Linux CI) the scan covers ~1257 files and takes ~55s — same
+  // no-assertion-change timeout raise as the h17 ffmpeg tests.
+  it(
+    "scans the corpus and reports (never repairs) violations",
+    () => {
+      const report = runCorpusCheck(join(ROOT, "datasets"));
+      expect(report.filesChecked).toBeGreaterThan(200);
+      expect(report.parseFailures).toEqual([]);
+      const byRule = new Map<string, number>();
+      for (const violation of report.violations) {
+        byRule.set(violation.rule, (byRule.get(violation.rule) ?? 0) + 1);
+      }
+      // Findings are reported, not asserted away: the count is logged for the
+      // wave-c summary; the check only guarantees the corpus was scanned.
+      console.log(
+        `corpus check: ${report.filesChecked} files, ${report.violations.length} violations`,
+        Object.fromEntries(byRule),
+      );
+    },
+    120_000,
+  );
 });
