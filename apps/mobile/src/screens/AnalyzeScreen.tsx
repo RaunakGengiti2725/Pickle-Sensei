@@ -1092,8 +1092,8 @@ export function AnalyzeScreen() {
                 That was your last free analysis.
               </Text>
               <Text style={[type.body, styles.freeLimitBody]}>
-                Your score is saved. You’ve used both free analyses — upgrade
-                to Pickle Sensei Pro to keep rating every swing.
+                Your score is saved. You’ve used both free analyses — upgrade to
+                Pickle Sensei Pro to keep rating every swing.
               </Text>
               <View style={styles.freeLimitActions}>
                 <Button

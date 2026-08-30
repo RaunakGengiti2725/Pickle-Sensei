@@ -121,10 +121,7 @@ function isCountable(input: PlayerRankAnalysisInput): boolean {
 export function computePlayerRank(
   analyses: readonly PlayerRankAnalysisInput[],
 ): PlayerRankSummary | null {
-  const latestByTechnique = new Map<
-    string,
-    { input: PlayerRankAnalysisInput; at: number }
-  >();
+  const latestByTechnique = new Map<string, { input: PlayerRankAnalysisInput; at: number }>();
   let scoredAnalysisCount = 0;
   for (const input of analyses) {
     if (!isCountable(input)) continue;
@@ -146,9 +143,7 @@ export function computePlayerRank(
       score: input.overallScore as number,
       capturedAt: input.capturedAt,
     }))
-    .sort(
-      (a, b) => b.score - a.score || a.shotType.localeCompare(b.shotType),
-    );
+    .sort((a, b) => b.score - a.score || a.shotType.localeCompare(b.shotType));
 
   // Average in integer hundredths so one/two-decimal scores stay exact and
   // the result matches Postgres `round(avg(overall_score), 2)`.
@@ -173,8 +168,7 @@ export function computePlayerRank(
           key: next.key,
           label: next.label,
           minRating: next.minRating,
-          pointsNeeded:
-            Math.round(next.minRating * 100 - rating * 100) / 100,
+          pointsNeeded: Math.round(next.minRating * 100 - rating * 100) / 100,
         }
       : null,
   };

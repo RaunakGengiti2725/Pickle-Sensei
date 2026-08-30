@@ -14,8 +14,8 @@ This directory makes Supabase serve that contract:
 
 ## 1. Google Cloud Console (one time)
 
-1. <https://console.cloud.google.com/apis/credentials> → *Create credentials →
-   OAuth client ID*:
+1. <https://console.cloud.google.com/apis/credentials> → _Create credentials →
+   OAuth client ID_:
    - **Web application** → this is `GOOGLE_WEB_CLIENT_ID`
      (also used by Supabase to verify the token audience).
    - **iOS** → bundle ID `com.picklesensei` → this is `GOOGLE_IOS_CLIENT_ID`;
@@ -23,14 +23,14 @@ This directory makes Supabase serve that contract:
 
 ## 2. Supabase Dashboard (one time, not SQL)
 
-1. *Authentication → Sign In / Providers → Google*: toggle **ON**.
+1. _Authentication → Sign In / Providers → Google_: toggle **ON**.
 2. **Client IDs**: paste `GOOGLE_WEB_CLIENT_ID` **and** `GOOGLE_IOS_CLIENT_ID`
    (comma-separated). Both must be listed or `signInWithIdToken` rejects the
    audience of tokens minted for the iOS client.
 3. Client secret: the web client's secret (needed only for browser OAuth;
    harmless to set).
 4. (Apple, optional but recommended since the app ships Apple sign-in:
-   *Providers → Apple* → ON, Client ID = `com.picklesensei`.)
+   _Providers → Apple_ → ON, Client ID = `com.picklesensei`.)
 
 ## 3. SQL
 
@@ -48,7 +48,7 @@ supabase db push
 supabase functions deploy api --no-verify-jwt
 ```
 
-`--no-verify-jwt` is required: the incoming bearer is a *Google/Apple* ID
+`--no-verify-jwt` is required: the incoming bearer is a _Google/Apple_ ID
 token, not a Supabase JWT; verification happens inside the function via
 `auth.signInWithIdToken`.
 
@@ -56,9 +56,9 @@ token, not a Supabase JWT; verification happens inside the function via
 
 1. `apps/mobile/src/config/runtimeConfig.ts`
    ```ts
-   const API_BASE_URL = 'https://<YOUR_PROJECT_REF>.supabase.co/functions/v1/api';
-   const GOOGLE_IOS_CLIENT_ID = '<ios-client-id>.apps.googleusercontent.com';
-   const GOOGLE_WEB_CLIENT_ID = '<web-client-id>.apps.googleusercontent.com';
+   const API_BASE_URL = "https://<YOUR_PROJECT_REF>.supabase.co/functions/v1/api";
+   const GOOGLE_IOS_CLIENT_ID = "<ios-client-id>.apps.googleusercontent.com";
+   const GOOGLE_WEB_CLIENT_ID = "<web-client-id>.apps.googleusercontent.com";
    ```
 2. `apps/mobile/ios/PickleSensei/Info.plist` — the `CFBundleURLTypes` entry
    already contains the placeholder

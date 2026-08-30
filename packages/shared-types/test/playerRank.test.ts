@@ -32,9 +32,7 @@ describe("playerRankTierForRating", () => {
   it("tiers ascend monotonically and start at 0", () => {
     expect(PLAYER_RANK_TIERS[0].minRating).toBe(0);
     for (let i = 1; i < PLAYER_RANK_TIERS.length; i++) {
-      expect(PLAYER_RANK_TIERS[i].minRating).toBeGreaterThan(
-        PLAYER_RANK_TIERS[i - 1].minRating,
-      );
+      expect(PLAYER_RANK_TIERS[i].minRating).toBeGreaterThan(PLAYER_RANK_TIERS[i - 1].minRating);
     }
   });
 });
@@ -141,9 +139,7 @@ describe("computePlayerRank", () => {
   });
 
   it("reports the next tier with the points needed to reach it", () => {
-    const rank = computePlayerRank([
-      scored("dink", 7, "2026-08-01T10:00:00.000Z"),
-    ])!;
+    const rank = computePlayerRank([scored("dink", 7, "2026-08-01T10:00:00.000Z")])!;
     expect(rank.tier).toBe("platinum");
     expect(rank.nextTier).toEqual({
       key: "diamond",
@@ -152,9 +148,7 @@ describe("computePlayerRank", () => {
       pointsNeeded: 0.5,
     });
 
-    const top = computePlayerRank([
-      scored("dink", 9.5, "2026-08-01T10:00:00.000Z"),
-    ])!;
+    const top = computePlayerRank([scored("dink", 9.5, "2026-08-01T10:00:00.000Z")])!;
     expect(top.tier).toBe("diamond");
     expect(top.nextTier).toBeNull();
   });
@@ -165,10 +159,6 @@ describe("computePlayerRank", () => {
       scored("dink", 8, "2026-08-01T11:00:00.000Z"),
       scored("volley", 6, "2026-08-01T12:00:00.000Z"),
     ])!;
-    expect(rank.techniques.map((t) => t.shotType)).toEqual([
-      "dink",
-      "serve",
-      "volley",
-    ]);
+    expect(rank.techniques.map((t) => t.shotType)).toEqual(["dink", "serve", "volley"]);
   });
 });

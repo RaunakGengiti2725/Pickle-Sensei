@@ -241,9 +241,9 @@ describe('authStore hydrate silent restore', () => {
     for (const value of mockKv.values()) {
       expect(value).not.toContain('silent-google-id-token');
     }
-    expect(
-      mockGoogleSignin.configure.mock.calls[0]?.[0],
-    ).toMatchObject({ webClientId: 'test-web-client.apps.googleusercontent.com' });
+    expect(mockGoogleSignin.configure.mock.calls[0]?.[0]).toMatchObject({
+      webClientId: 'test-web-client.apps.googleusercontent.com',
+    });
   });
 
   it('silent noSavedCredentialFound lands signed out AND clears the flag', async () => {

@@ -117,9 +117,7 @@ describe('uncertaintyNotes', () => {
     expect(notes).toEqual([
       { kind: 'contact', text: UNCERTAINTY_COPY.contact },
     ]);
-    expect(notes[0]?.text).toContain(
-      'Contact wasn’t located on this attempt',
-    );
+    expect(notes[0]?.text).toContain('Contact wasn’t located on this attempt');
   });
 
   it('an unconfirmed low-confidence estimate also reads as uncertain contact', () => {

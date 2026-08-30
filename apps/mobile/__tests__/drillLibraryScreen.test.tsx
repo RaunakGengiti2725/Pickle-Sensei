@@ -168,9 +168,9 @@ function allText(renderer: TestRenderer.ReactTestRenderer): string {
 }
 
 function draftPillCount(renderer: TestRenderer.ReactTestRenderer): number {
-  return renderer.root.findAllByType(Text).filter(
-    node => node.props.children === DRAFT_PILL,
-  ).length;
+  return renderer.root
+    .findAllByType(Text)
+    .filter(node => node.props.children === DRAFT_PILL).length;
 }
 
 async function pressByLabel(

@@ -262,8 +262,7 @@ export function PremiumTabBar(props: BottomTabBarProps) {
       detail: 'Guided drills you can search',
       icon: 'library',
       accent: color.courtSoft,
-      onPress: () =>
-        runAction(() => rootNavigation?.navigate('DrillLibrary')),
+      onPress: () => runAction(() => rootNavigation?.navigate('DrillLibrary')),
     },
   ];
 

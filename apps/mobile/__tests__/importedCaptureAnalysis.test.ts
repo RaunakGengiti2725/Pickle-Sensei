@@ -89,7 +89,10 @@ function jsonResponse(body: unknown): Response {
 
 /** An imported clip whose extraction pass already attached a REAL sidecar
  * ref (hash of the actual serialized sequence, exactly as native records). */
-function importedClipWithSidecar(): { clip: CapturedClip; sidecarJson: string } {
+function importedClipWithSidecar(): {
+  clip: CapturedClip;
+  sidecarJson: string;
+} {
   const { sequence, window } = generateSwingSequence();
   const sidecarJson = serializePoseSequence(sequence);
   const clip: CapturedClip = {
@@ -166,9 +169,9 @@ describe('runCaptureAnalysis imported-video gate', () => {
     expect(providerIds).not.toContain('trigger.temporal-heuristic');
 
     // Analysis really ran: durable record + analyzed status + rated shot.
-    expect(
-      calls.some(call => call.sql.includes('local_analysis_record')),
-    ).toBe(true);
+    expect(calls.some(call => call.sql.includes('local_analysis_record'))).toBe(
+      true,
+    );
     expect(
       calls.some(call => call.sql.includes("SET status = 'analyzed'")),
     ).toBe(true);

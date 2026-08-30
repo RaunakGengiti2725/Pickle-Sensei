@@ -284,9 +284,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const lastProvider = await getKv(db, LAST_PROVIDER_KV_KEY);
       if (lastProvider === LAST_PROVIDER_GOOGLE_VALUE && GOOGLE_WEB_CLIENT_ID) {
         try {
-          const session = await restoreGoogleSessionSilently(
-            GOOGLE_WEB_CLIENT_ID,
-          );
+          const session =
+            await restoreGoogleSessionSilently(GOOGLE_WEB_CLIENT_ID);
           if (session) {
             set({ session, hydrated: true });
             return;

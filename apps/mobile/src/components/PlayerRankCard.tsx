@@ -161,8 +161,8 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
       </View>
 
       <Text style={[type.caption, styles.formulaNote]}>
-        Average of your latest score in {summary.techniqueCount}{' '}
-        {techniqueNoun} · every analysis moves it. {sourceNote}
+        Average of your latest score in {summary.techniqueCount} {techniqueNoun}{' '}
+        · every analysis moves it. {sourceNote}
       </Text>
     </Card>
   );

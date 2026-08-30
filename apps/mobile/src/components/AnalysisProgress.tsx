@@ -128,10 +128,7 @@ export function extractionSublabel(
  * - saving: the outcome returned and the result is being routed.
  */
 export type AnalysisStageKey =
-  | 'verifying'
-  | 'extracting'
-  | 'measuring'
-  | 'saving';
+  'verifying' | 'extracting' | 'measuring' | 'saving';
 
 export const ANALYSIS_STAGE_LABELS: Record<AnalysisStageKey, string> = {
   verifying: 'Verifying capture evidence',

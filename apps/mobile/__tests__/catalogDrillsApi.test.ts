@@ -34,8 +34,7 @@ function response(status: number, payload: unknown): Response {
 
 function clientFor(payload: unknown, fetchSpy?: jest.Mock) {
   const fetchFn =
-    fetchSpy ??
-    jest.fn(async (_input: string) => response(200, payload));
+    fetchSpy ?? jest.fn(async (_input: string) => response(200, payload));
   return {
     client: createTrainingApi({
       baseUrl: 'https://api.pickle.test',

@@ -461,8 +461,7 @@ export function DrillLibraryScreen() {
   }, []);
 
   const visibleDrills = useMemo(
-    () =>
-      (drills ?? []).filter(drill => matchesQuery(drill, debouncedQuery)),
+    () => (drills ?? []).filter(drill => matchesQuery(drill, debouncedQuery)),
     [debouncedQuery, drills],
   );
 

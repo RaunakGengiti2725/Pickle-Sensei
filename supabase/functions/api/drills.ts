@@ -59,8 +59,7 @@ const SEEDS: SeedDrill[] = [
   {
     slug: "dink-target-boxes",
     title: "Dink target boxes",
-    purpose:
-      "Flatten the dink arc by demanding depth control into kitchen target zones.",
+    purpose: "Flatten the dink arc by demanding depth control into kitchen target zones.",
     instructions: [
       "Place two flat targets in the opponent kitchen: one near the sideline, one center.",
       "Cooperative crosscourt dink rally; score a point only when the ball lands in a target.",
@@ -240,8 +239,7 @@ const SEEDS: SeedDrill[] = [
   {
     slug: "fast-hands-battle",
     title: "Fast hands battle",
-    purpose:
-      "Sharpen kitchen-line reflex exchanges: compact counters under real speedup pressure.",
+    purpose: "Sharpen kitchen-line reflex exchanges: compact counters under real speedup pressure.",
     instructions: [
       "Both players at the kitchen line. One initiates a controlled speedup at the other's paddle-side shoulder.",
       "Play the exchange out at full speed until a miss or an unreturnable ball; keep volleys compact, elbow in front.",
@@ -375,8 +373,7 @@ const SEEDS: SeedDrill[] = [
   {
     slug: "serve-corner-targets",
     title: "Serve corner targets",
-    purpose:
-      "Serve with intention: alternate wide and T targets deep in the service box.",
+    purpose: "Serve with intention: alternate wide and T targets deep in the service box.",
     instructions: [
       "Place towels in the deep-wide and deep-middle corners of the diagonal service box.",
       "Alternate serving to each target; a hit scores 3, landing in the deep third scores 1.",
@@ -405,8 +402,7 @@ const SEEDS: SeedDrill[] = [
   {
     slug: "serve-under-pressure",
     title: "Serve under pressure",
-    purpose:
-      "Make the serve hold up when it counts: consequence scoring on blocked serve reps.",
+    purpose: "Make the serve hold up when it counts: consequence scoring on blocked serve reps.",
     instructions: [
       "Serve sets of 10 with a target of 8 makes; two consecutive misses restart the set.",
       "Before each serve, run the full match routine — breath, drop checkpoint, target look.",
@@ -450,8 +446,7 @@ const SEEDS: SeedDrill[] = [
   {
     slug: "return-target-halves",
     title: "Return target halves",
-    purpose:
-      "Direct the return on purpose: call the target half before the serve and hit it deep.",
+    purpose: "Direct the return on purpose: call the target half before the serve and hit it deep.",
     instructions: [
       "Before each serve, call 'forehand side' or 'backhand side' of the server's court.",
       "Return deep into the called half; a called deep landing scores 2, any other in-ball scores 0.",
@@ -510,8 +505,7 @@ const SEEDS: SeedDrill[] = [
   {
     slug: "midcourt-reset-blocks",
     title: "Midcourt reset blocks",
-    purpose:
-      "Absorb pace from no-man's-land: soft-hand resets off attacks aimed at the feet.",
+    purpose: "Absorb pace from no-man's-land: soft-hand resets off attacks aimed at the feet.",
     instructions: [
       "Stand at midcourt; partner at the kitchen line attacks balls at your feet and hips.",
       "Reset with the paddle tip down, lifting gently with legs and shoulder — the ball should die in the kitchen.",
@@ -525,8 +519,7 @@ const SEEDS: SeedDrill[] = [
   {
     slug: "transition-zone-crawl",
     title: "Transition zone crawl",
-    purpose:
-      "Earn the kitchen line the real way: advance only behind drops that actually land.",
+    purpose: "Earn the kitchen line the real way: advance only behind drops that actually land.",
     instructions: [
       "Start at the baseline; kitchen-line partner feeds every ball back at you.",
       "Hit a drop; if it lands in the kitchen, take two steps in and split-step. If not, hold position.",
@@ -662,10 +655,7 @@ const SEEDS: SeedDrill[] = [
 /** Deterministic UUIDv5-style id over the slug (same construction the
  * saved-drills fallback used, so pre-existing bookmarks keep their ids). */
 export async function deterministicUuid(seed: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-1",
-    new TextEncoder().encode(seed),
-  );
+  const digest = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(seed));
   const bytes = new Uint8Array(digest).slice(0, 16);
   bytes[6] = (bytes[6] & 0x0f) | 0x50;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
@@ -702,9 +692,7 @@ export async function drillCatalog(): Promise<CatalogDrillRecord[]> {
   return cachedCatalog;
 }
 
-export async function drillCatalogEntry(
-  slug: string,
-): Promise<CatalogDrillRecord | null> {
+export async function drillCatalogEntry(slug: string): Promise<CatalogDrillRecord | null> {
   const catalog = await drillCatalog();
   return catalog.find((drill) => drill.slug === slug) ?? null;
 }
@@ -721,9 +709,7 @@ export async function searchDrillCatalog(params: {
   return catalog.filter((drill) => {
     if (family && !drill.families.includes(family)) return false;
     if (!q) return true;
-    const haystack = [drill.title, drill.description, ...drill.equipment]
-      .join("\n")
-      .toLowerCase();
+    const haystack = [drill.title, drill.description, ...drill.equipment].join("\n").toLowerCase();
     return haystack.includes(q);
   });
 }

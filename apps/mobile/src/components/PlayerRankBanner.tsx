@@ -53,7 +53,9 @@ export function PlayerRankBanner(props: {
   );
 
   const summary = resolved?.summary ?? null;
-  const accent = summary ? RANK_TIER_STYLE[summary.tier].accent : color.onDarkSubtle;
+  const accent = summary
+    ? RANK_TIER_STYLE[summary.tier].accent
+    : color.onDarkSubtle;
   const best = summary?.techniques[0] ?? null;
   const detailLine = summary
     ? `Best: ${best ? `${best.shotType.replace(/_/g, ' ')} ${best.score.toFixed(1)}` : '—'}${
