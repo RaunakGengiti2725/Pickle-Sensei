@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
 
+# Least-privilege workflow token: every job only reads the repo. No job may
+# write contents, packages, or PRs with the default GITHUB_TOKEN.
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -80,6 +85,13 @@ jobs:
       - name: Jest (logic suites)
         working-directory: apps/mobile
         run: npm test
+
+  supabase-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Supabase RLS + security regression matrix
+        run: ./supabase/tests/run_rls_tests.sh
 
   containers:
     if: github.ref == 'refs/heads/main'

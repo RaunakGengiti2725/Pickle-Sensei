@@ -40,10 +40,7 @@
 // Verify with `supabase functions serve api` + a real Google ID token.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
-import {
-  drillCatalogEntry,
-  searchDrillCatalog,
-} from "./drills.ts";
+import { drillCatalogEntry, searchDrillCatalog } from "./drills.ts";
 import { drillInstructionalMedia } from "./drillMedia.ts";
 
 // Publishable key (sb_publishable_…) set via `supabase secrets set
@@ -52,8 +49,7 @@ import { drillInstructionalMedia } from "./drillMedia.ts";
 // signInWithIdToken we hold the USER's own session, and every data access
 // runs as that user under row-level security.
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_ANON_KEY =
-  Deno.env.get("SB_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SB_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
 
 const json = (status: number, body: unknown): Response =>
   new Response(JSON.stringify(body), {
@@ -63,6 +59,21 @@ const json = (status: number, body: unknown): Response =>
 
 const errorJson = (status: number, message: string): Response =>
   json(status, { error: { message } });
+
+/** Log the real database/auth failure server-side (Edge Function logs only)
+ * and return an opaque retryable 503. Internal error strings — SQL details,
+ * constraint names, table names, hostnames — never reach clients. */
+function unavailable(context: string, error?: { message?: string } | string | null): Response {
+  const detail = typeof error === "string" ? error : (error?.message ?? "");
+  console.error(`[api] ${context}${detail ? `: ${detail}` : ""}`);
+  return errorJson(503, `${context}. Please retry.`);
+}
+
+/** Same redaction for per-item rejections inside batch responses. */
+function redactedDetail(context: string, detail: string): string {
+  console.error(`[api] ${context}: ${detail}`);
+  return `${context}.`;
+}
 
 // Coded errors: the app's ApiError reads error.code (e.g. the feedback prompt
 // treats analysis.feedback_exists as already-done).
@@ -76,8 +87,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isUuid = (value: unknown): value is string =>
   typeof value === "string" && UUID_RE.test(value);
 
@@ -132,6 +142,36 @@ interface AuthedUser {
   db: ReturnType<typeof createClient>;
 }
 
+/** Verified-token cache: one successful signInWithIdToken per token per
+ * isolate, bounded by the token's own exp (capped at 5 minutes). Repeated
+ * requests with the same bearer reuse the already-verified Supabase session
+ * instead of minting a new auth session each time — verification still
+ * happens (once, inside Supabase Auth), and an expired token falls out of
+ * the cache and re-verifies. */
+interface CachedAuth {
+  expiresAtMs: number;
+  user: { id: string; email: string | null; provider: "google" | "apple" };
+  accessToken: string;
+}
+const AUTH_CACHE_MAX_MS = 5 * 60_000;
+const AUTH_CACHE_MAX_ENTRIES = 2000;
+const authCache = new Map<string, CachedAuth>();
+
+function authedUserFrom(cached: CachedAuth): AuthedUser {
+  const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      headers: { Authorization: `Bearer ${cached.accessToken}` },
+    },
+  });
+  return {
+    id: cached.user.id,
+    email: cached.user.email,
+    provider: cached.user.provider,
+    db,
+  };
+}
+
 /** Verify the provider ID token with Supabase Auth and return a client that
  * acts as that user under RLS. Every endpoint authenticates this way — the
  * bearer the app holds IS the provider token (bootstrap contract). */
@@ -148,28 +188,87 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
     return errorJson(401, "Bearer token is not a Google or Apple ID token.");
   }
 
+  const cached = authCache.get(token);
+  if (cached) {
+    if (cached.expiresAtMs > Date.now()) return authedUserFrom(cached);
+    authCache.delete(token);
+  }
+
   const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const signIn = await authClient.auth.signInWithIdToken({ provider, token });
   if (signIn.error || !signIn.data.user || !signIn.data.session) {
-    return errorJson(
-      401,
-      `The identity token could not be verified: ${signIn.error?.message ?? "no user"}.`,
+    console.error(
+      `[api] identity token rejected (${provider}): ${signIn.error?.message ?? "no user"}`,
     );
+    return errorJson(401, "The identity token could not be verified.");
   }
-  const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: {
-      headers: { Authorization: `Bearer ${signIn.data.session.access_token}` },
+
+  const exp = payload?.exp;
+  const tokenExpMs = typeof exp === "number" ? exp * 1000 : 0;
+  const entry: CachedAuth = {
+    expiresAtMs: Math.min(
+      Date.now() + AUTH_CACHE_MAX_MS,
+      tokenExpMs > Date.now() ? tokenExpMs : Date.now() + AUTH_CACHE_MAX_MS,
+    ),
+    user: {
+      id: signIn.data.user.id,
+      email: signIn.data.user.email ?? null,
+      provider,
+    },
+    accessToken: signIn.data.session.access_token,
+  };
+  if (authCache.size >= AUTH_CACHE_MAX_ENTRIES) {
+    const oldest = authCache.keys().next().value;
+    if (oldest !== undefined) authCache.delete(oldest);
+  }
+  authCache.set(token, entry);
+  return authedUserFrom(entry);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Abuse limits (per isolate — a best-effort brake, not a billing boundary;
+// Supabase Auth's own rate limits and the free-rating permit gate remain the
+// authoritative controls).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX_AUTHED = 120; // per user per minute
+const RATE_MAX_UNAUTHED = 30; // failed/unauthenticated per IP per minute
+const rateBuckets = new Map<string, { windowStartMs: number; count: number }>();
+
+function rateLimited(key: string, max: number): boolean {
+  const now = Date.now();
+  const bucket = rateBuckets.get(key);
+  if (!bucket || now - bucket.windowStartMs >= RATE_WINDOW_MS) {
+    if (rateBuckets.size > 10_000) rateBuckets.clear();
+    rateBuckets.set(key, { windowStartMs: now, count: 1 });
+    return false;
+  }
+  bucket.count += 1;
+  return bucket.count > max;
+}
+
+const tooManyRequests = (): Response =>
+  json(429, {
+    error: {
+      code: "rate.limited",
+      message: "Too many requests. Please slow down and retry shortly.",
     },
   });
-  return {
-    id: signIn.data.user.id,
-    email: signIn.data.user.email ?? null,
-    provider,
-    db,
-  };
+
+function clientIp(request: Request): string {
+  const fwd = request.headers.get("x-forwarded-for") ?? "";
+  return fwd.split(",")[0]?.trim() || "unknown";
+}
+
+/** Requests with bodies larger than this are rejected before parsing. */
+const MAX_BODY_BYTES = 1_048_576;
+
+function bodyTooLarge(request: Request): boolean {
+  const contentLength = Number(request.headers.get("content-length") ?? "0");
+  return Number.isFinite(contentLength) && contentLength > MAX_BODY_BYTES;
 }
 
 interface ProfileRow {
@@ -200,10 +299,7 @@ async function readProfile(user: AuthedUser): Promise<ProfileRow | Response> {
     profile = await select();
   }
   if (profile.error || !profile.data) {
-    return errorJson(
-      503,
-      `Canonical account row is unavailable${profile.error ? `: ${profile.error.message}` : ""}.`,
-    );
+    return unavailable("Canonical account row is unavailable", profile.error);
   }
   return profile.data as unknown as ProfileRow;
 }
@@ -246,9 +342,7 @@ function permitView(row: PermitRow) {
     status: row.status,
     outcome: row.outcome,
     reservedAt: new Date(reservedAtMs).toISOString(),
-    expiresAt: new Date(
-      reservedAtMs + PERMIT_LIFETIME_HOURS * 3_600_000,
-    ).toISOString(),
+    expiresAt: new Date(reservedAtMs + PERMIT_LIFETIME_HOURS * 3_600_000).toISOString(),
   };
 }
 
@@ -266,7 +360,7 @@ async function accessPayload(user: AuthedUser): Promise<unknown | Response> {
     .eq("user_id", user.id)
     .eq("result_kind", "scored");
   if (scored.error) {
-    return errorJson(503, `Access state unavailable: ${scored.error.message}.`);
+    return unavailable("Access state unavailable", scored.error);
   }
   const reservedQ = await user.db
     .from("analysis_permits")
@@ -275,10 +369,7 @@ async function accessPayload(user: AuthedUser): Promise<unknown | Response> {
     .eq("status", "reserved")
     .gt("created_at", permitFreshCutoffIso());
   if (reservedQ.error) {
-    return errorJson(
-      503,
-      `Access state unavailable: ${reservedQ.error.message}.`,
-    );
+    return unavailable("Access state unavailable", reservedQ.error);
   }
   const used = Math.min(2, scored.count ?? 0);
   const remaining = 2 - used;
@@ -302,18 +393,11 @@ async function accessPayload(user: AuthedUser): Promise<unknown | Response> {
 /** POST /v1/analysis-permits — mirrors apps/mobile/src/data/api.ts:121-134
  * (reserve): upsert-by-idempotency-key, respond { permit } (+ access, as
  * services/api does; the client only reads permit). */
-async function reserveAnalysisPermit(
-  authed: AuthedUser,
-  request: Request,
-): Promise<Response> {
+async function reserveAnalysisPermit(authed: AuthedUser, request: Request): Promise<Response> {
   const body = await readBody(request);
   const idempotencyKey = body.idempotencyKey;
   if (typeof idempotencyKey !== "string" || !idempotencyKey.trim()) {
-    return codedError(
-      400,
-      "validation.analysis_permit",
-      "idempotencyKey is required.",
-    );
+    return codedError(400, "validation.analysis_permit", "idempotencyKey is required.");
   }
 
   const respond = async (row: PermitRow): Promise<Response> => {
@@ -329,7 +413,7 @@ async function reserveAnalysisPermit(
     .eq("idempotency_key", idempotencyKey)
     .maybeSingle();
   if (existing.error) {
-    return errorJson(503, `Permit lookup failed: ${existing.error.message}.`);
+    return unavailable("Permit lookup failed", existing.error);
   }
   if (existing.data) return respond(existing.data as unknown as PermitRow);
 
@@ -362,7 +446,7 @@ async function reserveAnalysisPermit(
         .maybeSingle();
       if (settled.data) return respond(settled.data as unknown as PermitRow);
     }
-    return errorJson(503, `Permit reserve failed: ${inserted.error.message}.`);
+    return unavailable("Permit reserve failed", inserted.error);
   }
   return respond(inserted.data as unknown as PermitRow);
 }
@@ -388,11 +472,7 @@ async function finalizeAnalysisPermitRoute(
   permitId: string,
 ): Promise<Response> {
   if (!isUuid(permitId)) {
-    return codedError(
-      400,
-      "validation.analysis_permit_finalize",
-      "Permit id must be a UUID.",
-    );
+    return codedError(400, "validation.analysis_permit_finalize", "Permit id must be a UUID.");
   }
   const body = await readBody(request);
   const outcome = body.outcome;
@@ -418,14 +498,10 @@ async function finalizeAnalysisPermitRoute(
     .eq("user_id", authed.id)
     .maybeSingle();
   if (found.error) {
-    return errorJson(503, `Permit lookup failed: ${found.error.message}.`);
+    return unavailable("Permit lookup failed", found.error);
   }
   if (!found.data) {
-    return codedError(
-      404,
-      "access.permit_not_found",
-      "Analysis permit not found.",
-    );
+    return codedError(404, "access.permit_not_found", "Analysis permit not found.");
   }
   const row = found.data as unknown as PermitRow;
 
@@ -455,7 +531,7 @@ async function finalizeAnalysisPermitRoute(
     .select(PERMIT_COLUMNS)
     .maybeSingle();
   if (updated.error) {
-    return errorJson(503, `Permit finalize failed: ${updated.error.message}.`);
+    return unavailable("Permit finalize failed", updated.error);
   }
   if (!updated.data) {
     // Lost a race with another finalize/sync; report the settled state.
@@ -618,8 +694,7 @@ function parseSyncShot(
       !isRecord(c) ||
       typeof c.key !== "string" ||
       !c.key.trim() ||
-      !(c.score === null ||
-        (typeof c.score === "number" && c.score >= 0 && c.score <= 100)) ||
+      !(c.score === null || (typeof c.score === "number" && c.score >= 0 && c.score <= 100)) ||
       !isUnit(c.confidence) ||
       typeof c.band !== "string" ||
       !CHECKPOINT_BANDS.has(c.band) ||
@@ -679,18 +754,11 @@ function parseSyncShot(
  * honestly: supabase-js has no multi-statement transaction, so the
  * shot/details/permit writes are sequential with compensating cleanup, not
  * atomic like services/api upsertShots. */
-async function syncShots(
-  authed: AuthedUser,
-  request: Request,
-): Promise<Response> {
+async function syncShots(authed: AuthedUser, request: Request): Promise<Response> {
   const body = await readBody(request);
   const shotsRaw = body.shots;
   if (!Array.isArray(shotsRaw) || shotsRaw.length < 1 || shotsRaw.length > 200) {
-    return codedError(
-      400,
-      "validation.shots_sync",
-      "Body must be { shots: [1..200 entries] }.",
-    );
+    return codedError(400, "validation.shots_sync", "Body must be { shots: [1..200 entries] }.");
   }
 
   const acceptedIds: string[] = [];
@@ -699,8 +767,7 @@ async function syncShots(
     rejected.push({ id, code, message });
 
   for (const raw of shotsRaw) {
-    const rawId =
-      isRecord(raw) && typeof raw.id === "string" ? raw.id : "unknown";
+    const rawId = isRecord(raw) && typeof raw.id === "string" ? raw.id : "unknown";
     const parsed = parseSyncShot(raw);
     if ("rejectedCode" in parsed) {
       reject(rawId, parsed.rejectedCode, parsed.rejectedMessage);
@@ -719,7 +786,11 @@ async function syncShots(
       .eq("user_id", authed.id)
       .maybeSingle();
     if (existing.error) {
-      reject(shot.id, "shot.lookup_failed", existing.error.message);
+      reject(
+        shot.id,
+        "shot.lookup_failed",
+        redactedDetail("Shot lookup failed", existing.error.message),
+      );
       continue;
     }
     if (existing.data) {
@@ -736,7 +807,11 @@ async function syncShots(
       .eq("user_id", authed.id)
       .maybeSingle();
     if (permitQ.error) {
-      reject(shot.id, "shot.lookup_failed", permitQ.error.message);
+      reject(
+        shot.id,
+        "shot.lookup_failed",
+        redactedDetail("Permit lookup failed", permitQ.error.message),
+      );
       continue;
     }
     const permit = permitQ.data as unknown as PermitRow | null;
@@ -745,11 +820,7 @@ async function syncShots(
       continue;
     }
     if (permit.status !== "reserved") {
-      reject(
-        shot.id,
-        "access.permit_not_reserved",
-        "Analysis permit is no longer reserved.",
-      );
+      reject(shot.id, "access.permit_not_reserved", "Analysis permit is no longer reserved.");
       continue;
     }
     if (permitIsStale(permit)) {
@@ -773,7 +844,11 @@ async function syncShots(
         .eq("user_id", authed.id)
         .maybeSingle();
       if (session.error) {
-        reject(shot.id, "shot.lookup_failed", session.error.message);
+        reject(
+          shot.id,
+          "shot.lookup_failed",
+          redactedDetail("Session lookup failed", session.error.message),
+        );
         continue;
       }
       if (!session.data) {
@@ -822,15 +897,15 @@ async function syncShots(
         if (settled.data) {
           acceptedIds.push(shot.id);
         } else {
-          reject(
-            shot.id,
-            "shot.id_conflict",
-            "Shot id is already bound to a different user.",
-          );
+          reject(shot.id, "shot.id_conflict", "Shot id is already bound to a different user.");
         }
         continue;
       }
-      reject(shot.id, "shot.write_failed", inserted.error.message);
+      reject(
+        shot.id,
+        "shot.write_failed",
+        redactedDetail("Shot write failed", inserted.error.message),
+      );
       continue;
     }
 
@@ -874,12 +949,8 @@ async function syncShots(
       // No transactions here: compensate by deleting the shot (cascades take
       // the partial details) so a retry starts clean instead of a replay
       // acknowledging a shot whose details were silently lost.
-      await authed.db
-        .from("shots")
-        .delete()
-        .eq("id", shot.id)
-        .eq("user_id", authed.id);
-      reject(shot.id, "shot.write_failed", detailError);
+      await authed.db.from("shots").delete().eq("id", shot.id).eq("user_id", authed.id);
+      reject(shot.id, "shot.write_failed", redactedDetail("Shot detail write failed", detailError));
       continue;
     }
 
@@ -913,10 +984,7 @@ async function syncShots(
  * focusCheckpoint have no columns and are skipped, not invented (all client
  * modes are practice-type, so kind keeps its 'practice' default). The client
  * discards the response body → 200 {}. */
-async function createSession(
-  authed: AuthedUser,
-  request: Request,
-): Promise<Response> {
+async function createSession(authed: AuthedUser, request: Request): Promise<Response> {
   const body = await readBody(request);
   if (!isUuid(body.id) || !isIsoDate(body.startedAt)) {
     return codedError(
@@ -926,12 +994,14 @@ async function createSession(
     );
   }
   // Idempotent by client UUID — offline reconnect never duplicates.
-  const upserted = await authed.db.from("sessions").upsert(
-    { id: body.id, user_id: authed.id, started_at: body.startedAt },
-    { onConflict: "id", ignoreDuplicates: true },
-  );
+  const upserted = await authed.db
+    .from("sessions")
+    .upsert(
+      { id: body.id, user_id: authed.id, started_at: body.startedAt },
+      { onConflict: "id", ignoreDuplicates: true },
+    );
   if (upserted.error) {
-    return errorJson(503, `Session create failed: ${upserted.error.message}.`);
+    return unavailable("Session create failed", upserted.error);
   }
   const owned = await authed.db
     .from("sessions")
@@ -940,14 +1010,10 @@ async function createSession(
     .eq("user_id", authed.id)
     .maybeSingle();
   if (owned.error) {
-    return errorJson(503, `Session lookup failed: ${owned.error.message}.`);
+    return unavailable("Session lookup failed", owned.error);
   }
   if (!owned.data) {
-    return codedError(
-      409,
-      "session.id_conflict",
-      "Session id belongs to another user.",
-    );
+    return codedError(409, "session.id_conflict", "Session id belongs to another user.");
   }
   return json(200, {});
 }
@@ -955,10 +1021,7 @@ async function createSession(
 /** POST /v1/sessions/:id/finalize — mirrors apps/mobile/src/data/sync.ts:272
  * (payload is just { id }; body unused, response discarded). Stamps ended_at
  * once (a replay never moves it). */
-async function finalizeSession(
-  authed: AuthedUser,
-  sessionId: string,
-): Promise<Response> {
+async function finalizeSession(authed: AuthedUser, sessionId: string): Promise<Response> {
   if (!isUuid(sessionId)) {
     return codedError(400, "validation.session", "Session id must be a UUID.");
   }
@@ -969,7 +1032,7 @@ async function finalizeSession(
     .eq("user_id", authed.id)
     .maybeSingle();
   if (found.error) {
-    return errorJson(503, `Session lookup failed: ${found.error.message}.`);
+    return unavailable("Session lookup failed", found.error);
   }
   if (!found.data) {
     return codedError(404, "session.not_found", "Session not found.");
@@ -981,10 +1044,7 @@ async function finalizeSession(
       .eq("id", sessionId)
       .eq("user_id", authed.id);
     if (updated.error) {
-      return errorJson(
-        503,
-        `Session finalize failed: ${updated.error.message}.`,
-      );
+      return unavailable("Session finalize failed", updated.error);
     }
   }
   return json(200, {});
@@ -994,11 +1054,7 @@ async function finalizeSession(
 // Consent ledger
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CONSENT_SCOPES = [
-  "video_analysis",
-  "model_training",
-  "evaluation_telemetry",
-] as const;
+const CONSENT_SCOPES = ["video_analysis", "model_training", "evaluation_telemetry"] as const;
 
 interface ConsentRow {
   scope: string;
@@ -1007,9 +1063,7 @@ interface ConsentRow {
   created_at: string;
 }
 
-async function loadConsentRows(
-  authed: AuthedUser,
-): Promise<ConsentRow[] | Response> {
+async function loadConsentRows(authed: AuthedUser): Promise<ConsentRow[] | Response> {
   const rows = await authed.db
     .from("consent_records")
     .select("scope, action, consent_version, created_at")
@@ -1017,7 +1071,7 @@ async function loadConsentRows(
     .order("created_at", { ascending: true })
     .order("id", { ascending: true });
   if (rows.error) {
-    return errorJson(503, `Consent ledger unavailable: ${rows.error.message}.`);
+    return unavailable("Consent ledger unavailable", rows.error);
   }
   return (rows.data ?? []) as unknown as ConsentRow[];
 }
@@ -1038,12 +1092,7 @@ function foldConsentStatus(rows: ConsentRow[]) {
         scope,
         active: last?.action === "grant",
         consentVersion: last?.consent_version ?? null,
-        lastAction:
-          last === null
-            ? null
-            : last.action === "grant"
-              ? "granted"
-              : "withdrawn",
+        lastAction: last === null ? null : last.action === "grant" ? "granted" : "withdrawn",
         lastActionAt: last?.created_at ?? null,
       };
     }),
@@ -1056,25 +1105,15 @@ const consentScopeActive = (rows: ConsentRow[], scope: string): boolean =>
 /** POST /v1/me/consent/grant — mirrors apps/mobile/src/account/consentApi.ts
  * grant callers (lines 139-151, 170-182): body { scope, consentVersion,
  * source, device, captureMode }; responds with the folded status. */
-async function grantConsent(
-  authed: AuthedUser,
-  request: Request,
-): Promise<Response> {
+async function grantConsent(authed: AuthedUser, request: Request): Promise<Response> {
   const body = await readBody(request);
   const scope = body.scope;
   const consentVersion = body.consentVersion;
-  if (
-    typeof scope !== "string" ||
-    !(CONSENT_SCOPES as readonly string[]).includes(scope)
-  ) {
+  if (typeof scope !== "string" || !(CONSENT_SCOPES as readonly string[]).includes(scope)) {
     return codedError(400, "validation.consent_grant", "Unknown consent scope.");
   }
   if (typeof consentVersion !== "string" || !consentVersion.trim()) {
-    return codedError(
-      400,
-      "validation.consent_grant",
-      "consentVersion is required.",
-    );
+    return codedError(400, "validation.consent_grant", "consentVersion is required.");
   }
   const inserted = await authed.db.from("consent_records").insert({
     user_id: authed.id,
@@ -1086,7 +1125,7 @@ async function grantConsent(
     capture_mode: typeof body.captureMode === "string" ? body.captureMode : null,
   });
   if (inserted.error) {
-    return errorJson(503, `Consent grant failed: ${inserted.error.message}.`);
+    return unavailable("Consent grant failed", inserted.error);
   }
   const rows = await loadConsentRows(authed);
   return rows instanceof Response ? rows : json(200, foldConsentStatus(rows));
@@ -1096,21 +1135,11 @@ async function grantConsent(
  * (lines 153-163, 184-194): body { scope, source, device }. The withdrawal
  * row carries forward the version being withdrawn from (or null when the
  * scope was never granted), mirroring services/api. */
-async function withdrawConsent(
-  authed: AuthedUser,
-  request: Request,
-): Promise<Response> {
+async function withdrawConsent(authed: AuthedUser, request: Request): Promise<Response> {
   const body = await readBody(request);
   const scope = body.scope;
-  if (
-    typeof scope !== "string" ||
-    !(CONSENT_SCOPES as readonly string[]).includes(scope)
-  ) {
-    return codedError(
-      400,
-      "validation.consent_withdraw",
-      "Unknown consent scope.",
-    );
+  if (typeof scope !== "string" || !(CONSENT_SCOPES as readonly string[]).includes(scope)) {
+    return codedError(400, "validation.consent_withdraw", "Unknown consent scope.");
   }
   const before = await loadConsentRows(authed);
   if (before instanceof Response) return before;
@@ -1124,7 +1153,7 @@ async function withdrawConsent(
     device: typeof body.device === "string" ? body.device : null,
   });
   if (inserted.error) {
-    return errorJson(503, `Consent withdraw failed: ${inserted.error.message}.`);
+    return unavailable("Consent withdraw failed", inserted.error);
   }
   const rows = await loadConsentRows(authed);
   return rows instanceof Response ? rows : json(200, foldConsentStatus(rows));
@@ -1143,10 +1172,7 @@ async function withdrawConsent(
  * validateEvaluationTrial) is a workspace package this Deno function cannot
  * import, so structural checks here are minimal and labeling tools
  * re-validate offline. */
-async function uploadEvaluationTrials(
-  authed: AuthedUser,
-  request: Request,
-): Promise<Response> {
+async function uploadEvaluationTrials(authed: AuthedUser, request: Request): Promise<Response> {
   const body = await readBody(request);
   const trials = body.trials;
   if (!Array.isArray(trials) || trials.length < 1 || trials.length > 200) {
@@ -1180,15 +1206,17 @@ async function uploadEvaluationTrials(
     }
     // trialId is client-generated and idempotent: a retried upload of the
     // same trial is acknowledged, never duplicated.
-    const upserted = await authed.db.from("evaluation_trials").upsert(
-      { id: trialId, user_id: authed.id, payload: trial },
-      { onConflict: "id", ignoreDuplicates: true },
-    );
+    const upserted = await authed.db
+      .from("evaluation_trials")
+      .upsert(
+        { id: trialId, user_id: authed.id, payload: trial },
+        { onConflict: "id", ignoreDuplicates: true },
+      );
     if (upserted.error) {
       rejected.push({
         trialId,
         code: "evaluation.trial_write_failed",
-        message: upserted.error.message,
+        message: redactedDetail("Trial write failed", upserted.error.message),
       });
       continue;
     }
@@ -1202,7 +1230,7 @@ async function uploadEvaluationTrials(
       rejected.push({
         trialId,
         code: "evaluation.trial_write_failed",
-        message: owned.error.message,
+        message: redactedDetail("Trial lookup failed", owned.error.message),
       });
       continue;
     }
@@ -1245,21 +1273,13 @@ async function submitAnalysisFeedback(
   analysisId: string,
 ): Promise<Response> {
   if (!isUuid(analysisId)) {
-    return codedError(
-      400,
-      "validation.analysis_feedback",
-      "Analysis id must be a UUID.",
-    );
+    return codedError(400, "validation.analysis_feedback", "Analysis id must be a UUID.");
   }
   const body = await readBody(request);
   const rating = body.rating;
   const category = body.category ?? null;
   if (typeof rating !== "string" || !FEEDBACK_RATINGS.has(rating)) {
-    return codedError(
-      400,
-      "validation.analysis_feedback",
-      "rating must be accurate|not_quite.",
-    );
+    return codedError(400, "validation.analysis_feedback", "rating must be accurate|not_quite.");
   }
   // Category is required exactly when the answer is not_quite (contract
   // refine in packages/api-contracts AnalysisFeedbackRequest).
@@ -1282,7 +1302,7 @@ async function submitAnalysisFeedback(
     .eq("user_id", authed.id)
     .maybeSingle();
   if (shot.error) {
-    return errorJson(503, `Feedback lookup failed: ${shot.error.message}.`);
+    return unavailable("Feedback lookup failed", shot.error);
   }
   if (!shot.data) {
     return codedError(404, "analysis.not_found", "Analysis not found.");
@@ -1310,7 +1330,7 @@ async function submitAnalysisFeedback(
         "Feedback was already recorded for this analysis.",
       );
     }
-    return errorJson(503, `Feedback write failed: ${inserted.error.message}.`);
+    return unavailable("Feedback write failed", inserted.error);
   }
   const row = inserted.data as unknown as { id: string; created_at: string };
   return json(201, {
@@ -1343,9 +1363,7 @@ function computePracticeStreak(days: string[], today: string) {
     return Number.isFinite(parsed) ? Math.floor(parsed / DAY_MS) : null;
   };
   const todayDay = toDay(today)!;
-  const uniqueDays = [
-    ...new Set(days.map(toDay).filter((d): d is number => d !== null)),
-  ]
+  const uniqueDays = [...new Set(days.map(toDay).filter((d): d is number => d !== null))]
     .filter((d) => d <= todayDay)
     .sort((a, b) => a - b);
   if (uniqueDays.length === 0) {
@@ -1392,13 +1410,11 @@ function computePracticeStreak(days: string[], today: string) {
 async function getProgress(authed: AuthedUser): Promise<Response> {
   const seriesQ = await authed.db
     .from("progress_daily")
-    .select(
-      "day, shot_type, scoring_model_version, shot_count, avg_score, best_score",
-    )
+    .select("day, shot_type, scoring_model_version, shot_count, avg_score, best_score")
     .eq("user_id", authed.id)
     .order("day", { ascending: true });
   if (seriesQ.error) {
-    return errorJson(503, `Progress unavailable: ${seriesQ.error.message}.`);
+    return unavailable("Progress unavailable", seriesQ.error);
   }
   const daysQ = await authed.db
     .from("practice_days")
@@ -1406,25 +1422,21 @@ async function getProgress(authed: AuthedUser): Promise<Response> {
     .eq("user_id", authed.id)
     .order("day", { ascending: true });
   if (daysQ.error) {
-    return errorJson(503, `Progress unavailable: ${daysQ.error.message}.`);
+    return unavailable("Progress unavailable", daysQ.error);
   }
 
-  const series = ((seriesQ.data ?? []) as Array<Record<string, unknown>>).map(
-    (row) => ({
-      day: String(row.day),
-      shot_type: String(row.shot_type),
-      scoring_model_version: String(row.scoring_model_version),
-      shot_count: Number(row.shot_count),
-      // View scores are 0-10; the contract (and services/api) sends 0-100
-      // with one decimal, and the client divides by 10.
-      avg_score: Math.round(Number(row.avg_score) * 100) / 10,
-      best_score: Math.round(Number(row.best_score) * 100) / 10,
-    }),
-  );
+  const series = ((seriesQ.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+    day: String(row.day),
+    shot_type: String(row.shot_type),
+    scoring_model_version: String(row.scoring_model_version),
+    shot_count: Number(row.shot_count),
+    // View scores are 0-10; the contract (and services/api) sends 0-100
+    // with one decimal, and the client divides by 10.
+    avg_score: Math.round(Number(row.avg_score) * 100) / 10,
+    best_score: Math.round(Number(row.best_score) * 100) / 10,
+  }));
   const streak = computePracticeStreak(
-    ((daysQ.data ?? []) as Array<Record<string, unknown>>).map((row) =>
-      String(row.day),
-    ),
+    ((daysQ.data ?? []) as Array<Record<string, unknown>>).map((row) => String(row.day)),
     new Date().toISOString().slice(0, 10),
   );
   return json(200, { series, improving: [], needsAttention: [], streak });
@@ -1468,7 +1480,7 @@ async function getPlayerRank(authed: AuthedUser): Promise<Response> {
     .eq("user_id", authed.id)
     .order("shot_type", { ascending: true });
   if (techniquesQ.error) {
-    return errorJson(503, `Rank unavailable: ${techniquesQ.error.message}.`);
+    return unavailable("Rank unavailable", techniquesQ.error);
   }
   const techniques = ((techniquesQ.data ?? []) as Array<Record<string, unknown>>)
     .map((row) => ({
@@ -1489,17 +1501,15 @@ async function getPlayerRank(authed: AuthedUser): Promise<Response> {
     .eq("user_id", authed.id)
     .maybeSingle();
   if (stateQ.error) {
-    return errorJson(503, `Rank unavailable: ${stateQ.error.message}.`);
+    return unavailable("Rank unavailable", stateQ.error);
   }
-  const state = stateQ.data as
-    | {
-        rating: unknown;
-        tier: unknown;
-        technique_count: unknown;
-        scored_shot_count: unknown;
-        updated_at: unknown;
-      }
-    | null;
+  const state = stateQ.data as {
+    rating: unknown;
+    tier: unknown;
+    technique_count: unknown;
+    scored_shot_count: unknown;
+    updated_at: unknown;
+  } | null;
 
   let rating: number;
   let tier: string;
@@ -1513,10 +1523,7 @@ async function getPlayerRank(authed: AuthedUser): Promise<Response> {
   } else {
     // Same formula as the trigger: average in integer hundredths, round
     // half away from zero to 2 decimals (Postgres round(numeric, 2)).
-    const sumHundredths = techniques.reduce(
-      (sum, t) => sum + Math.round(t.score * 100),
-      0,
-    );
+    const sumHundredths = techniques.reduce((sum, t) => sum + Math.round(t.score * 100), 0);
     rating = Math.round(sumHundredths / techniques.length) / 100;
     tier = playerRankTierForRating(rating);
     scoredShotCount = null;
@@ -1577,20 +1584,14 @@ async function savedDrillEntry(slug: string): Promise<{
  * listCatalogDrills: { items: [...], cursor: null } with q/family filters.
  * Every item carries validation_state UNVALIDATED — the client renders the
  * draft status loudly; nothing here is coach-validated. */
-async function listCatalogDrills(
-  authed: AuthedUser,
-  url: URL,
-): Promise<Response> {
+async function listCatalogDrills(authed: AuthedUser, url: URL): Promise<Response> {
   const items = await searchDrillCatalog({
     q: url.searchParams.get("q") ?? undefined,
     family: url.searchParams.get("family") ?? undefined,
   });
-  const saved = await authed.db
-    .from("user_saved_drills")
-    .select("slug")
-    .eq("user_id", authed.id);
+  const saved = await authed.db.from("user_saved_drills").select("slug").eq("user_id", authed.id);
   if (saved.error) {
-    return errorJson(503, `Drill catalog unavailable: ${saved.error.message}.`);
+    return unavailable("Drill catalog unavailable", saved.error);
   }
   const savedSlugs = new Set(
     ((saved.data ?? []) as Array<{ slug: string }>).map((row) => row.slug),
@@ -1607,10 +1608,7 @@ async function listCatalogDrills(
  * prescription is coach-endorsed). instructionalMedia serves the
  * oEmbed-verified, attributed third-party videos from drillMedia.ts — the
  * client labels them community video, never Pickle Sensei coaching. */
-async function getCatalogDrill(
-  authed: AuthedUser,
-  slug: string,
-): Promise<Response> {
+async function getCatalogDrill(authed: AuthedUser, slug: string): Promise<Response> {
   const entry = await drillCatalogEntry(slug);
   if (!entry) {
     return codedError(404, "drill.not_found", "This drill is not in the catalog.");
@@ -1622,7 +1620,7 @@ async function getCatalogDrill(
     .eq("slug", slug)
     .maybeSingle();
   if (saved.error) {
-    return errorJson(503, `Drill detail unavailable: ${saved.error.message}.`);
+    return unavailable("Drill detail unavailable", saved.error);
   }
   const { families: _families, validation_state: _state, ...drill } = entry;
   return json(200, {
@@ -1641,7 +1639,7 @@ async function listSavedDrills(authed: AuthedUser): Promise<Response> {
     .eq("user_id", authed.id)
     .order("saved_at", { ascending: false });
   if (rows.error) {
-    return errorJson(503, `Saved drills unavailable: ${rows.error.message}.`);
+    return unavailable("Saved drills unavailable", rows.error);
   }
   const items = await Promise.all(
     ((rows.data ?? []) as Array<Record<string, unknown>>).map(async (row) => ({
@@ -1660,12 +1658,11 @@ async function saveDrill(authed: AuthedUser, slug: string): Promise<Response> {
   if (!DRILL_SLUG_RE.test(slug)) {
     return codedError(400, "validation.saved_drill", "Invalid drill slug.");
   }
-  const upserted = await authed.db.from("user_saved_drills").upsert(
-    { user_id: authed.id, slug },
-    { onConflict: "user_id,slug", ignoreDuplicates: true },
-  );
+  const upserted = await authed.db
+    .from("user_saved_drills")
+    .upsert({ user_id: authed.id, slug }, { onConflict: "user_id,slug", ignoreDuplicates: true });
   if (upserted.error) {
-    return errorJson(503, `Drill save failed: ${upserted.error.message}.`);
+    return unavailable("Drill save failed", upserted.error);
   }
   const row = await authed.db
     .from("user_saved_drills")
@@ -1674,10 +1671,7 @@ async function saveDrill(authed: AuthedUser, slug: string): Promise<Response> {
     .eq("slug", slug)
     .maybeSingle();
   if (row.error || !row.data) {
-    return errorJson(
-      503,
-      `Drill save failed${row.error ? `: ${row.error.message}` : ""}.`,
-    );
+    return unavailable("Drill save failed", row.error);
   }
   return json(200, {
     slug,
@@ -1696,7 +1690,7 @@ async function unsaveDrill(authed: AuthedUser, slug: string): Promise<Response> 
     .eq("user_id", authed.id)
     .eq("slug", slug);
   if (deleted.error) {
-    return errorJson(503, `Drill unsave failed: ${deleted.error.message}.`);
+    return unavailable("Drill unsave failed", deleted.error);
   }
   return noContent();
 }
@@ -1715,19 +1709,29 @@ Deno.serve(async (request: Request): Promise<Response> => {
   const path = v1 >= 0 ? url.pathname.slice(v1) : url.pathname;
   const route = `${request.method} ${path}`;
 
+  if (bodyTooLarge(request)) {
+    return errorJson(413, "Request body is too large.");
+  }
+
   const authed = await authenticate(request);
-  if (authed instanceof Response) return authed;
+  if (authed instanceof Response) {
+    // Failed/unauthenticated requests are limited per IP so token-guessing
+    // and credential-stuffing bursts get slowed down.
+    if (rateLimited(`ip:${clientIp(request)}`, RATE_MAX_UNAUTHED)) {
+      return tooManyRequests();
+    }
+    return authed;
+  }
+  if (rateLimited(`user:${authed.id}`, RATE_MAX_AUTHED)) {
+    return tooManyRequests();
+  }
 
   // ── Parameterized routes (an id/slug in the path) are regex-matched first;
   // everything static falls through to the exact-route switch below.
   if (request.method === "POST") {
     let m = /^\/v1\/analysis-permits\/([^/]+)\/finalize$/.exec(path);
     if (m) {
-      return finalizeAnalysisPermitRoute(
-        authed,
-        request,
-        decodeURIComponent(m[1]),
-      );
+      return finalizeAnalysisPermitRoute(authed, request, decodeURIComponent(m[1]));
     }
     m = /^\/v1\/sessions\/([^/]+)\/finalize$/.exec(path);
     if (m) return finalizeSession(authed, decodeURIComponent(m[1]));
@@ -1740,9 +1744,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     const m = /^\/v1\/me\/saved-drills\/([^/]+)$/.exec(path);
     if (m) {
       const slug = decodeURIComponent(m[1]);
-      return request.method === "PUT"
-        ? saveDrill(authed, slug)
-        : unsaveDrill(authed, slug);
+      return request.method === "PUT" ? saveDrill(authed, slug) : unsaveDrill(authed, slug);
     }
   }
 
@@ -1761,15 +1763,11 @@ Deno.serve(async (request: Request): Promise<Response> => {
       const profile = await readProfile(authed);
       if (profile instanceof Response) return profile;
       if (profile.provider !== authed.provider) {
-        await authed.db
-          .from("profiles")
-          .update({ provider: authed.provider })
-          .eq("id", authed.id);
+        await authed.db.from("profiles").update({ provider: authed.provider }).eq("id", authed.id);
       }
       return json(200, {
         user: { id: profile.id, email: profile.email },
-        onboardingState:
-          profile.onboarding_state === "complete" ? "complete" : "pending",
+        onboardingState: profile.onboarding_state === "complete" ? "complete" : "pending",
       });
     }
 
@@ -1778,8 +1776,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
       if (profile instanceof Response) return profile;
       return json(200, {
         user: { id: profile.id, email: profile.email },
-        onboardingState:
-          profile.onboarding_state === "complete" ? "complete" : "pending",
+        onboardingState: profile.onboarding_state === "complete" ? "complete" : "pending",
         profile: {
           skill_level: profile.skill_level,
           handedness: profile.handedness,
@@ -1791,10 +1788,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
     }
 
     case "PUT /v1/me/onboarding": {
-      const body = (await request.json().catch(() => null)) as Record<
-        string,
-        unknown
-      > | null;
+      const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
       const skillLevel = body?.skillLevel;
       const handedness = body?.handedness;
       const goal = body?.goal;
@@ -1825,10 +1819,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
         .select("id")
         .maybeSingle();
       if (updated.error || !updated.data) {
-        return errorJson(
-          503,
-          `Your coaching profile could not be saved${updated.error ? `: ${updated.error.message}` : ""}.`,
-        );
+        return unavailable("Your coaching profile could not be saved", updated.error);
       }
       return json(200, {
         plan: { focusCheckpoint: focusSlug },
@@ -1881,9 +1872,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
     case "GET /v1/me/consent/status": {
       const rows = await loadConsentRows(authed);
-      return rows instanceof Response
-        ? rows
-        : json(200, foldConsentStatus(rows));
+      return rows instanceof Response ? rows : json(200, foldConsentStatus(rows));
     }
 
     case "POST /v1/me/consent/grant":
