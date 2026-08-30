@@ -125,11 +125,18 @@ function response(body: unknown, status = 200): Response {
   } as unknown as Response;
 }
 
+const sessionExpiresAt = Math.floor(Date.now() / 1000) + 3600;
+
 function bootstrapSuccessFetch(): jest.Mock {
   return jest.fn().mockResolvedValue(
     response({
       user: { id: canonicalId, email: 'pat@example.com' },
       onboardingState: 'complete',
+      session: {
+        accessToken: 'supabase-access-token',
+        refreshToken: 'supabase-refresh-token',
+        expiresAt: sessionExpiresAt,
+      },
     }),
   );
 }
@@ -228,18 +235,22 @@ describe('authStore hydrate silent restore', () => {
         }),
       }),
     );
-    // …the API session and data owner are live for the canonical account…
+    // …and the resulting API bearer is the revocable Supabase access token,
+    // NOT the provider ID token (spent by the one-time exchange).
     expect(getApiSession()).toMatchObject({
-      bearerToken: 'silent-google-id-token',
+      bearerToken: 'supabase-access-token',
+      refreshToken: 'supabase-refresh-token',
       canonicalAppUserId: canonicalId,
       provider: 'google',
     });
     expect(getActiveDataOwner()).toBe(canonicalId);
     // …the flag stays armed for the next launch, and no kv value ever holds
-    // the token itself.
+    // provider or session token material.
     expect(mockKv.get(LAST_PROVIDER_KEY)).toBe(GOOGLE_FLAG);
     for (const value of mockKv.values()) {
       expect(value).not.toContain('silent-google-id-token');
+      expect(value).not.toContain('supabase-access-token');
+      expect(value).not.toContain('supabase-refresh-token');
     }
     expect(mockGoogleSignin.configure.mock.calls[0]?.[0]).toMatchObject({
       webClientId: 'test-web-client.apps.googleusercontent.com',
@@ -324,12 +335,13 @@ describe('authStore hydrate silent restore', () => {
     expect(mockKv.get(LAST_PROVIDER_KEY)).toBe(GOOGLE_FLAG);
   });
 
-  it('interactive Google sign-in writes the flag and signOut clears it', async () => {
+  it('interactive Google sign-in writes the flag and signOut revokes and clears it', async () => {
     mockGoogleSignin.signIn.mockResolvedValue({
       type: 'success',
       data: googleUser('interactive-google-id-token'),
     });
-    installFetch(bootstrapSuccessFetch());
+    const fetchMock = bootstrapSuccessFetch();
+    installFetch(fetchMock);
 
     await useAuthStore.getState().signInWithGoogle();
     expect(useAuthStore.getState().error).toBeNull();
@@ -337,6 +349,18 @@ describe('authStore hydrate silent restore', () => {
     expect(mockKv.get(LAST_PROVIDER_KEY)).toBe(GOOGLE_FLAG);
 
     await useAuthStore.getState().signOut();
+
+    // Sign-out revoked the application session server-side, bearing the
+    // Supabase access token — not just forgotten locally.
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.example.test/v1/auth/logout',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer supabase-access-token',
+        }),
+      }),
+    );
 
     const state = useAuthStore.getState();
     expect(state.session).toBeNull();

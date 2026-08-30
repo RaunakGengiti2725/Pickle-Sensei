@@ -7,6 +7,8 @@ import {
 const session: ApiSession = {
   apiBaseUrl: 'https://api.example.test',
   bearerToken: 'real-token',
+  refreshToken: 'refresh-token-1',
+  bearerExpiresAtMs: Date.now() + 3_600_000,
   canonicalAppUserId: '11111111-1111-4111-8111-111111111111',
   provider: 'google',
 };

@@ -29,23 +29,28 @@ cannot be confirmed or fixed from this repository**:
    `public` only, and the Google/Apple providers restrict `aud` to the two
    client IDs in `apps/mobile/src/config/runtimeConfig.ts`, cross-user media
    exposure cannot be ruled out.
-2. **B-2 (P1, architecture): provider ID tokens are the app's only bearer.**
-   The mobile app holds Google/Apple ID tokens in memory and replays them as
-   the API bearer (`apps/mobile/src/account/AUTH_LIMITATIONS.md` documents
-   this honestly). Consequences: no server-side revocation of a stolen ID
-   token before its natural expiry (~1 h), and sign-out is client-side only.
-   Mitigations shipped (verification via Supabase Auth on every request,
-   per-IP throttling of failed auth), but true revocability needs the
-   documented follow-up: exchange the provider token once and hold the
-   Supabase session (refresh + revoke) instead.
+2. **B-2 — RESOLVED IN CODE (verification pending against a live Supabase
+   project): revocable Supabase-session bearers.** The provider ID token is
+   now spent exactly once: `/v1/account/bootstrap` exchanges it via
+   `signInWithIdToken` and returns a Supabase session (short-lived access
+   token + rotating refresh token). Every other endpoint accepts only the
+   Supabase access token (provider tokens are explicitly rejected with a
+   pointer to bootstrap); `/v1/auth/refresh` rotates the session and
+   `/v1/auth/logout` revokes all refresh tokens server-side (global scope).
+   Sign-out in the app calls the logout endpoint before clearing memory. A
+   stolen access token now dies within the access-token TTL after revocation
+   (configure a short JWT expiry in the Dashboard — see manual actions), and
+   a stolen refresh token is dead immediately. Remaining before this can be
+   marked verified: exercise bootstrap/refresh/logout against a live
+   Supabase project with a real Google ID token.
 3. **B-3 (P1, external): production credential rotation is unexercised.**
    No production secrets exist in the repo (verified — see Secrets), but there
    is also no evidence a rotation of the Supabase service keys / OAuth client
    secrets has ever been performed. The runbook below defines the drill; it
    must be executed once before release.
 
-When B-1 is confirmed and B-2/B-3 are accepted or fixed by the owner, the
-code-level posture supports **GO**.
+When B-1 is confirmed, B-2's live verification is performed, and B-3 is
+executed by the owner, the code-level posture supports **GO**.
 
 ---
 
@@ -72,20 +77,20 @@ Supabase Auth (verifier), Postgres (RLS-authoritative), Edge Function
 
 ## Release gates — evidence table
 
-| Gate                                    | Status           | Evidence                                                                                                                                                                                          |
-| --------------------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| No cross-user data exposure             | PASS (code)      | RLS regression matrix B1–B4 executed green (`supabase/tests/`); every table RLS-enabled with owner-only policies                                                                                  |
-| No service-role key in client/edge code | PASS             | Edge Function uses `SUPABASE_ANON_KEY` + user session only; repo+history scan found no service key                                                                                                |
-| No authentication bypass                | PASS (code)      | Every Edge route authenticates before routing; services/api routes inventoried — all `/v1/*` behind `authenticate`/`requireAdmin` except catalog reads and signature-verified webhooks            |
-| No RLS bypass via definer functions     | PASS             | All `SECURITY DEFINER` functions pin `search_path=''`; client EXECUTE revoked; views are `security_invoker`                                                                                       |
-| No public bucket for private media      | UNVERIFIED — B-1 | No buckets defined in repo; Dashboard state unknown                                                                                                                                               |
-| No client-controlled admin              | PASS             | Admin role only from verified OIDC claim (`services/api/src/auth/tokens.ts`); Supabase deployment has no admin surface                                                                            |
-| Consent history tamper-proof            | PASS             | Append-only enforced at grant, policy AND trigger layer (case D1–D3); deletion cascade still works (D4)                                                                                           |
-| No IDOR/BOLA on core APIs               | PASS (code)      | All Edge queries filter by the RLS session user; services/api ownership in SQL (`WHERE user_id=$me`); UUID possession never grants access                                                         |
-| No unbounded expensive public endpoint  | PASS             | 401 before any DB work; per-IP limit on failed auth; batch caps (200); 1 MiB body cap; DB-level payload CHECKs                                                                                    |
-| No committed production secret          | PASS             | Full-history Gitleaks: 503 findings, all classified false-positive (dataset `sessionKey` corpus IDs, labeled test-only HS256 strings, Podfile.lock checksums, a public product-key constant)      |
-| No major exploitable dependency         | PASS w/ note     | Workspace `pnpm audit`: 0 known vulns. Mobile: 9 "high" all chain to image-size GHSA-w3rx-r6r6-pgpr — dev-time Metro bundler only, no fixed release exists, not present in the shipped app binary |
-| Token revocability                      | FAIL — B-2       | Provider ID token is the bearer; no server-side revocation before expiry                                                                                                                          |
+| Gate                                    | Status            | Evidence                                                                                                                                                                                          |
+| --------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No cross-user data exposure             | PASS (code)       | RLS regression matrix B1–B4 executed green (`supabase/tests/`); every table RLS-enabled with owner-only policies                                                                                  |
+| No service-role key in client/edge code | PASS              | Edge Function uses `SUPABASE_ANON_KEY` + user session only; repo+history scan found no service key                                                                                                |
+| No authentication bypass                | PASS (code)       | Every Edge route authenticates before routing; services/api routes inventoried — all `/v1/*` behind `authenticate`/`requireAdmin` except catalog reads and signature-verified webhooks            |
+| No RLS bypass via definer functions     | PASS              | All `SECURITY DEFINER` functions pin `search_path=''`; client EXECUTE revoked; views are `security_invoker`                                                                                       |
+| No public bucket for private media      | UNVERIFIED — B-1  | No buckets defined in repo; Dashboard state unknown                                                                                                                                               |
+| No client-controlled admin              | PASS              | Admin role only from verified OIDC claim (`services/api/src/auth/tokens.ts`); Supabase deployment has no admin surface                                                                            |
+| Consent history tamper-proof            | PASS              | Append-only enforced at grant, policy AND trigger layer (case D1–D3); deletion cascade still works (D4)                                                                                           |
+| No IDOR/BOLA on core APIs               | PASS (code)       | All Edge queries filter by the RLS session user; services/api ownership in SQL (`WHERE user_id=$me`); UUID possession never grants access                                                         |
+| No unbounded expensive public endpoint  | PASS              | 401 before any DB work; per-IP limit on failed auth; batch caps (200); 1 MiB body cap; DB-level payload CHECKs                                                                                    |
+| No committed production secret          | PASS              | Full-history Gitleaks: 503 findings, all classified false-positive (dataset `sessionKey` corpus IDs, labeled test-only HS256 strings, Podfile.lock checksums, a public product-key constant)      |
+| No major exploitable dependency         | PASS w/ note      | Workspace `pnpm audit`: 0 known vulns. Mobile: 9 "high" all chain to image-size GHSA-w3rx-r6r6-pgpr — dev-time Metro bundler only, no fixed release exists, not present in the shipped app binary |
+| Token revocability                      | PASS (code) — B-2 | Bearer is a short-lived Supabase access token; logout revokes all refresh tokens (global scope); provider ID tokens accepted only by bootstrap; live-project verification pending                 |
 
 ---
 
@@ -115,9 +120,12 @@ Supabase Auth (verifier), Postgres (RLS-authoritative), Edge Function
   clients; they go to function logs, clients get an opaque retryable 503.
 - **Rate limiting**: per-user (120/min) and per-IP-on-auth-failure (30/min).
 - **Request body cap** (1 MiB) before parsing.
-- **Verified-token cache** (≤5 min, bounded) so a hot client doesn't mint a
-  new Supabase Auth session per request — reduces auth-endpoint load without
-  skipping verification.
+- **Revocable session bearers (B-2 fix)**: `/v1/account/bootstrap` is the
+  only route that accepts a provider ID token; it performs the one-time
+  `signInWithIdToken` exchange and returns the Supabase session. All other
+  routes require the Supabase access token, verified via `auth.getUser`
+  (bounded ≤1 min cache). New `/v1/auth/refresh` (rotates the session) and
+  `/v1/auth/logout` (revokes all refresh tokens, global scope).
 
 ### CI (`.github/workflows/ci.yml`)
 
@@ -140,8 +148,9 @@ Supabase Auth (verifier), Postgres (RLS-authoritative), Edge Function
 owner-only policies, definer functions pinned; validated by applying all six
 migrations to a clean Postgres 15 and running the matrix.
 
-**Edge Function** — no service key; verification delegated to Supabase Auth
-(`signInWithIdToken`); JWT payload decode used for provider routing only; all
+**Edge Function** — no service key; provider tokens verified by Supabase Auth
+(`signInWithIdToken`) at bootstrap only; access tokens verified by
+`auth.getUser`; JWT payload decode used for issuer routing/rejection only; all
 queries run under the user's RLS session; UUID/enums validated; consent is
 grant/withdraw append rows folded server-side; batch writes capped at 200.
 
@@ -151,10 +160,12 @@ HS256 constructible only in dev/test; all routes behind
 (timing-safe authorization compare); ownership enforced in SQL; parameterized
 queries throughout; route-tiered in-process rate limiter with bounded store.
 
-**Mobile** — bearer/session material in memory only (never SQLite,
-AsyncStorage, logs); no secret logging found; config contains only public
-identifiers (Supabase URL, OAuth client IDs, RC public SDK keys). Known gap:
-B-2 above, plus tokens lost on restart (UX, not security).
+**Mobile** — bearer/session material (access + refresh token) in memory only
+(never SQLite, AsyncStorage, logs); background refresh rotates the access
+token before expiry; sign-out calls `/v1/auth/logout` (server-side
+revocation) before clearing memory; no secret logging found; config contains
+only public identifiers (Supabase URL, OAuth client IDs, RC public SDK keys).
+Tokens are lost on restart (UX, not security — Google restores silently).
 
 **Secrets** — full-history Gitleaks scan (278 commits): 503 findings, 100%
 classified benign (see gate table). No rotation required.
@@ -172,11 +183,13 @@ worthwhile follow-up), token now read-only.
    are unaffected (they never hold Supabase keys — the URL+publishable key are
    public by design and grant nothing without RLS).
 2. **OAuth client secret leaked**: rotate in Google Cloud Console / Apple
-   Developer; update the Supabase Auth provider config; old tokens die at
-   natural expiry (~1 h) — B-2 means there is no faster kill switch yet.
-3. **Account compromise**: delete or suspend the user in Supabase Auth; RLS
-   confines the attacker to that user's rows for the token's remaining
-   lifetime; the append-only ledgers preserve the tamper-evident history.
+   Developer; update the Supabase Auth provider config; provider ID tokens
+   die at natural expiry (~1 h) but they only grant bootstrap — application
+   sessions are killed independently via refresh-token revocation.
+3. **Account compromise**: delete or suspend the user in Supabase Auth (this
+   revokes their refresh tokens); the stolen access token dies at its TTL;
+   RLS confines the attacker to that user's rows until then; the append-only
+   ledgers preserve the tamper-evident history.
 4. **Data-layer regression suspected**: run
    `./supabase/tests/run_rls_tests.sh` — it reproduces the entire boundary
    matrix against the current migrations in ~1 minute.
@@ -186,7 +199,9 @@ worthwhile follow-up), token now read-only.
 - [ ] B-1: verify Dashboard config (providers restricted to the two client
       IDs, exposed schemas = `public`, no public buckets, Auth rate limits on).
 - [ ] B-3: perform one full key-rotation drill using the runbook above.
-- [ ] Decide on B-2 (accept 1 h revocation latency for v1, or move to
-      Supabase-session bearers).
+- [ ] B-2: verify the new bootstrap/refresh/logout flow against a live
+      Supabase project with a real Google ID token, and set a short access
+      token JWT expiry (Dashboard → Auth → Sessions; e.g. 10–15 min) so a
+      stolen access token dies quickly after revocation.
 - [ ] Follow-up hardening (non-blocking): SHA-pin GitHub Actions; add
       Gitleaks + `pnpm audit` as CI jobs.

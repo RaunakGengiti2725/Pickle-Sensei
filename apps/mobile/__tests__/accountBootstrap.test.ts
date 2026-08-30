@@ -26,12 +26,20 @@ function response(body: unknown, status = 200): Response {
   } as unknown as Response;
 }
 
+const sessionExpiresAt = Math.floor(Date.now() / 1000) + 3600;
+const supabaseSession = {
+  accessToken: 'supabase-access-token',
+  refreshToken: 'supabase-refresh-token',
+  expiresAt: sessionExpiresAt,
+};
+
 describe('canonical account bootstrap', () => {
-  it('sends the real runtime context and returns only the backend UUID as canonical ID', async () => {
+  it('exchanges the provider token once and returns the revocable Supabase session as the API bearer', async () => {
     const fetchFn = jest.fn().mockResolvedValue(
       response({
         user: { id: canonicalId, email: 'player@example.com' },
         onboardingState: 'pending',
+        session: supabaseSession,
       }),
     );
 
@@ -44,9 +52,13 @@ describe('canonical account bootstrap', () => {
     });
 
     expect(result.account.id).toBe(canonicalId);
+    // The API bearer is the short-lived Supabase access token, never the
+    // provider ID token (which is spent by the one-time exchange above).
     expect(result.apiSession).toEqual({
       apiBaseUrl: 'https://api.pickle.example',
-      bearerToken: 'provider-issued-jwt',
+      bearerToken: 'supabase-access-token',
+      refreshToken: 'supabase-refresh-token',
+      bearerExpiresAtMs: sessionExpiresAt * 1000,
       canonicalAppUserId: canonicalId,
       provider: 'google',
     });
@@ -88,11 +100,32 @@ describe('canonical account bootstrap', () => {
     });
   });
 
+  it('rejects a bootstrap response without a revocable session', async () => {
+    const fetchFn = jest.fn().mockResolvedValue(
+      response({
+        user: { id: canonicalId, email: null },
+        onboardingState: 'complete',
+      }),
+    );
+    await expect(
+      bootstrapCanonicalAccount({
+        apiBaseUrl: 'https://api.pickle.example',
+        bearerToken: 'token',
+        provider: 'google',
+        environment,
+        fetchFn,
+      }),
+    ).rejects.toMatchObject({
+      code: 'account.invalid_response',
+    });
+  });
+
   it('rejects a provider subject or malformed value returned in place of a canonical UUID', async () => {
     const fetchFn = jest.fn().mockResolvedValue(
       response({
         user: { id: 'google-subject-123', email: null },
         onboardingState: 'complete',
+        session: supabaseSession,
       }),
     );
     await expect(
@@ -146,6 +179,8 @@ describe('in-memory API session', () => {
     establishApiSession({
       apiBaseUrl: 'https://api.pickle.example',
       bearerToken: 'memory-only-token',
+      refreshToken: 'memory-only-refresh-token',
+      bearerExpiresAtMs: sessionExpiresAt * 1000,
       canonicalAppUserId: canonicalId,
       provider: 'apple',
     });

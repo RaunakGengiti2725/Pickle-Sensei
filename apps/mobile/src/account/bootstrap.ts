@@ -101,6 +101,39 @@ function serverMessage(payload: unknown): string | null {
   return typeof message === 'string' && message.trim() ? message : null;
 }
 
+interface SessionTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresAtMs: number;
+}
+
+/** The revocable Supabase session minted by the one-time bootstrap exchange.
+ * Required: without it the app would have to keep bearing the provider ID
+ * token, which no server-side logout can revoke. */
+function parseSessionTokens(payload: unknown): SessionTokens {
+  const session = isRecord(payload) ? payload['session'] : null;
+  if (isRecord(session)) {
+    const accessToken = session['accessToken'];
+    const refreshToken = session['refreshToken'];
+    const expiresAt = session['expiresAt'];
+    if (
+      typeof accessToken === 'string' &&
+      accessToken.trim() &&
+      typeof refreshToken === 'string' &&
+      refreshToken.trim() &&
+      typeof expiresAt === 'number' &&
+      Number.isFinite(expiresAt)
+    ) {
+      return { accessToken, refreshToken, expiresAtMs: expiresAt * 1000 };
+    }
+  }
+  throw new AccountBootstrapError(
+    'account.invalid_response',
+    'The account server did not return a revocable session.',
+    true,
+  );
+}
+
 function parseCanonicalAccount(payload: unknown): CanonicalAccount {
   if (!isRecord(payload) || !isRecord(payload['user'])) {
     throw new AccountBootstrapError(
@@ -128,8 +161,10 @@ function parseCanonicalAccount(payload: unknown): CanonicalAccount {
 }
 
 /**
- * Exchanges a provider-issued OIDC bearer for this app's canonical account.
- * The provider subject is deliberately absent from the result.
+ * Exchanges a provider-issued OIDC bearer — exactly once — for this app's
+ * canonical account plus a revocable Supabase session. The provider subject
+ * is deliberately absent from the result, and the provider token is never
+ * used as an API bearer again.
  */
 export async function bootstrapCanonicalAccount(
   input: AccountBootstrapInput,
@@ -195,11 +230,14 @@ export async function bootstrapCanonicalAccount(
   }
 
   const account = parseCanonicalAccount(payload);
+  const tokens = parseSessionTokens(payload);
   return {
     account,
     apiSession: {
       apiBaseUrl,
-      bearerToken,
+      bearerToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      bearerExpiresAtMs: tokens.expiresAtMs,
       canonicalAppUserId: account.id,
       provider: input.provider,
     },

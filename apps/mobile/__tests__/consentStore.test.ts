@@ -9,6 +9,8 @@ import { useConsentStore } from '../src/state/consentStore';
 const session = {
   apiBaseUrl: 'https://api.test',
   bearerToken: 'token-1',
+  refreshToken: 'refresh-token-1',
+  bearerExpiresAtMs: Date.now() + 3_600_000,
   canonicalAppUserId: 'a0000000-0000-0000-0000-000000000001',
   provider: 'apple' as const,
 };

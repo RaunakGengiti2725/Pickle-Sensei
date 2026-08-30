@@ -32,6 +32,8 @@ function fact(
 const SESSION: ApiSession = {
   apiBaseUrl: 'https://api.test',
   bearerToken: 'token',
+  refreshToken: 'refresh-token-1',
+  bearerExpiresAtMs: Date.now() + 3_600_000,
   canonicalAppUserId: 'user-1',
   provider: 'google',
 };

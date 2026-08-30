@@ -21,7 +21,15 @@ unverified JWT claims. Google also requires a web OAuth client ID so the native
 SDK returns an ID token with the backend's configured audience. Apple requires
 the backend audience to match the app/service identifier.
 
-Provider tokens live in memory only. On process restart a synced user must
-authenticate again until a real backend token-exchange/refresh-session endpoint
-and native Keychain/Keystore storage are implemented. Guest mode has no server
-token and remains explicitly local-only.
+Provider tokens are spent exactly once: `/v1/account/bootstrap` exchanges the
+Google/Apple ID token with Supabase Auth and returns a revocable Supabase
+session (short-lived access token + rotating refresh token). The access token
+is the only API bearer after bootstrap; `/v1/auth/refresh` rotates it and
+`/v1/auth/logout` revokes every refresh token for the account server-side, so
+sign-out (or a remote revocation) actually kills the application session
+instead of waiting for the provider ID token's natural expiry.
+
+All session material lives in memory only. On process restart a synced user is
+restored via the provider's silent sign-in (Google) or must authenticate again
+(Apple) until native Keychain/Keystore storage is implemented. Guest mode has
+no server token and remains explicitly local-only.

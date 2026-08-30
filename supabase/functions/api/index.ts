@@ -2,11 +2,16 @@
 // account + onboarding + access + sync + consent API contracts on top of
 // Supabase Auth.
 //
-//   All endpoints:   Authorization: Bearer <Google/Apple ID TOKEN (OIDC)>
+//   POST /v1/account/bootstrap takes Authorization: Bearer <Google/Apple ID
+//   TOKEN (OIDC)>, exchanges it with Supabase Auth ONCE, and returns a
+//   revocable Supabase session { accessToken, refreshToken, expiresAt }.
+//   Every other endpoint takes Authorization: Bearer <Supabase ACCESS TOKEN>.
 //     → 401/403 { error: { message } }   (app maps to rejected)
 //     → 5xx     { error: { message } }   (app maps to retryable unavailable)
 //
-//   POST /v1/account/bootstrap → { user:{id,email}, onboardingState }
+//   POST /v1/account/bootstrap → { user:{id,email}, onboardingState, session }
+//   POST /v1/auth/refresh      → { session } (rotates the refresh token)
+//   POST /v1/auth/logout       → 204; revokes ALL of the user's refresh tokens
 //   GET  /v1/me                → + profile { skill_level, handedness, … }
 //   PUT  /v1/me/onboarding     → { plan:{focusCheckpoint}, recommendedCheckpoint }
 //   GET  /v1/me/access         → free-ratings/premium access state (used is
@@ -27,13 +32,17 @@
 //   GET/PUT/DELETE /v1/me/saved-drills[/:slug]
 //
 // The app (apps/mobile/src/account/bootstrap.ts) sends the provider ID token
-// as the bearer; this function exchanges it with Supabase Auth
+// to bootstrap only; this function exchanges it with Supabase Auth
 // (signInWithIdToken), which verifies it against the Google/Apple provider
 // configuration and creates/returns the auth.users row. The profiles trigger
-// (see migrations) provisions the canonical account row.
+// (see migrations) provisions the canonical account row. From then on the
+// app bears the short-lived Supabase access token and refreshes it via
+// /v1/auth/refresh; logout revokes the refresh tokens server-side, so a
+// stolen bearer dies with the session instead of surviving until the
+// provider ID token's natural expiry.
 //
-// Deploy with JWT verification OFF (the bearer is a provider token, not a
-// Supabase JWT):   supabase functions deploy api --no-verify-jwt
+// Deploy with JWT verification OFF (bootstrap's bearer is a provider token,
+// not a Supabase JWT):   supabase functions deploy api --no-verify-jwt
 //
 // UNVERIFIED-HERE: written locally without a Supabase project attached; the
 // TypeScript is Deno-targeted (not part of the pnpm workspace typecheck).
@@ -111,6 +120,8 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
   }
 }
 
+const SUPABASE_ISSUER = `${SUPABASE_URL}/auth/v1`;
+
 /** Route the token to the Supabase provider by issuer claim. Verification
  * itself happens inside Supabase Auth (signInWithIdToken). */
 function providerForIssuer(issuer: unknown): "google" | "apple" | null {
@@ -142,67 +153,102 @@ interface AuthedUser {
   db: ReturnType<typeof createClient>;
 }
 
-/** Verified-token cache: one successful signInWithIdToken per token per
- * isolate, bounded by the token's own exp (capped at 5 minutes). Repeated
- * requests with the same bearer reuse the already-verified Supabase session
- * instead of minting a new auth session each time — verification still
- * happens (once, inside Supabase Auth), and an expired token falls out of
- * the cache and re-verifies. */
+function bearerOf(request: Request): string {
+  const authorization = request.headers.get("Authorization") ?? "";
+  return authorization.startsWith("Bearer ") ? authorization.slice("Bearer ".length).trim() : "";
+}
+
+function anonAuthClient() {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+function userScopedDb(accessToken: string): ReturnType<typeof createClient> {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    },
+  });
+}
+
+interface SupabaseSessionLike {
+  access_token: string;
+  refresh_token: string;
+  expires_at?: number;
+  expires_in?: number;
+}
+
+/** The session shape returned to the app: a short-lived access token (the
+ * API bearer from now on) plus the rotating refresh token that keeps it
+ * alive and — crucially — can be revoked server-side on logout. */
+function sessionView(session: SupabaseSessionLike) {
+  return {
+    accessToken: session.access_token,
+    refreshToken: session.refresh_token,
+    expiresAt: session.expires_at ?? Math.floor(Date.now() / 1000) + (session.expires_in ?? 3600),
+  };
+}
+
+/** Verified-access-token cache: one successful getUser() per bearer per
+ * isolate, bounded by the token's own exp (capped at 60 seconds so bans,
+ * account deletion, and global sign-out propagate quickly). */
 interface CachedAuth {
   expiresAtMs: number;
   user: { id: string; email: string | null; provider: "google" | "apple" };
-  accessToken: string;
 }
-const AUTH_CACHE_MAX_MS = 5 * 60_000;
+const AUTH_CACHE_MAX_MS = 60_000;
 const AUTH_CACHE_MAX_ENTRIES = 2000;
 const authCache = new Map<string, CachedAuth>();
 
-function authedUserFrom(cached: CachedAuth): AuthedUser {
-  const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: {
-      headers: { Authorization: `Bearer ${cached.accessToken}` },
-    },
-  });
+function authedUserFrom(token: string, cached: CachedAuth): AuthedUser {
   return {
     id: cached.user.id,
     email: cached.user.email,
     provider: cached.user.provider,
-    db,
+    db: userScopedDb(token),
   };
 }
 
-/** Verify the provider ID token with Supabase Auth and return a client that
- * acts as that user under RLS. Every endpoint authenticates this way — the
- * bearer the app holds IS the provider token (bootstrap contract). */
+function cacheProvider(value: unknown): "google" | "apple" | null {
+  return value === "google" || value === "apple" ? value : null;
+}
+
+/** Authenticate a SUPABASE access token (issued by /v1/account/bootstrap or
+ * /v1/auth/refresh) and return a client that acts as that user under RLS.
+ * Provider ID tokens are deliberately rejected here: they are exchanged
+ * exactly once at bootstrap for a revocable Supabase session, so a stolen
+ * app bearer can be killed by logout instead of outliving revocation. */
 async function authenticate(request: Request): Promise<AuthedUser | Response> {
-  const authorization = request.headers.get("Authorization") ?? "";
-  const token = authorization.startsWith("Bearer ")
-    ? authorization.slice("Bearer ".length).trim()
-    : "";
+  const token = bearerOf(request);
   if (!token) return errorJson(401, "Missing bearer token.");
 
   const payload = decodeJwtPayload(token);
-  const provider = providerForIssuer(payload?.iss);
-  if (!provider) {
-    return errorJson(401, "Bearer token is not a Google or Apple ID token.");
+  if (providerForIssuer(payload?.iss)) {
+    return errorJson(
+      401,
+      "Provider ID tokens are only accepted by POST /v1/account/bootstrap. Use the Supabase session it returns.",
+    );
+  }
+  if (payload?.iss !== SUPABASE_ISSUER) {
+    return errorJson(401, "Bearer token is not a session token for this API.");
   }
 
   const cached = authCache.get(token);
   if (cached) {
-    if (cached.expiresAtMs > Date.now()) return authedUserFrom(cached);
+    if (cached.expiresAtMs > Date.now()) return authedUserFrom(token, cached);
     authCache.delete(token);
   }
 
-  const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const signIn = await authClient.auth.signInWithIdToken({ provider, token });
-  if (signIn.error || !signIn.data.user || !signIn.data.session) {
-    console.error(
-      `[api] identity token rejected (${provider}): ${signIn.error?.message ?? "no user"}`,
-    );
-    return errorJson(401, "The identity token could not be verified.");
+  const verified = await anonAuthClient().auth.getUser(token);
+  if (verified.error || !verified.data.user) {
+    console.error(`[api] access token rejected: ${verified.error?.message ?? "no user"}`);
+    return errorJson(401, "The session is no longer valid. Sign in again.");
+  }
+  const provider = cacheProvider(verified.data.user.app_metadata?.provider);
+  if (!provider) {
+    return errorJson(401, "The session does not belong to a Google or Apple account.");
   }
 
   const exp = payload?.exp;
@@ -213,18 +259,89 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
       tokenExpMs > Date.now() ? tokenExpMs : Date.now() + AUTH_CACHE_MAX_MS,
     ),
     user: {
-      id: signIn.data.user.id,
-      email: signIn.data.user.email ?? null,
+      id: verified.data.user.id,
+      email: verified.data.user.email ?? null,
       provider,
     },
-    accessToken: signIn.data.session.access_token,
   };
   if (authCache.size >= AUTH_CACHE_MAX_ENTRIES) {
     const oldest = authCache.keys().next().value;
     if (oldest !== undefined) authCache.delete(oldest);
   }
   authCache.set(token, entry);
-  return authedUserFrom(entry);
+  return authedUserFrom(token, entry);
+}
+
+/** Bootstrap-only: verify the provider ID token with Supabase Auth (the one
+ * and only signInWithIdToken exchange) and return the user plus the freshly
+ * minted revocable Supabase session. */
+async function authenticateProviderToken(
+  request: Request,
+): Promise<{ authed: AuthedUser; session: SupabaseSessionLike } | Response> {
+  const token = bearerOf(request);
+  if (!token) return errorJson(401, "Missing bearer token.");
+
+  const payload = decodeJwtPayload(token);
+  const provider = providerForIssuer(payload?.iss);
+  if (!provider) {
+    return errorJson(401, "Bearer token is not a Google or Apple ID token.");
+  }
+
+  const signIn = await anonAuthClient().auth.signInWithIdToken({ provider, token });
+  if (signIn.error || !signIn.data.user || !signIn.data.session) {
+    console.error(
+      `[api] identity token rejected (${provider}): ${signIn.error?.message ?? "no user"}`,
+    );
+    return errorJson(401, "The identity token could not be verified.");
+  }
+
+  return {
+    authed: {
+      id: signIn.data.user.id,
+      email: signIn.data.user.email ?? null,
+      provider,
+      db: userScopedDb(signIn.data.session.access_token),
+    },
+    session: signIn.data.session,
+  };
+}
+
+/** POST /v1/auth/refresh — rotate { refreshToken } into a fresh Supabase
+ * session. 401 means the refresh token was revoked or already rotated: the
+ * app must sign in again. */
+async function refreshSessionRoute(request: Request): Promise<Response> {
+  const body = await readBody(request);
+  const refreshToken = body.refreshToken;
+  if (typeof refreshToken !== "string" || !refreshToken.trim()) {
+    return codedError(400, "validation.refresh", "refreshToken is required.");
+  }
+  const refreshed = await anonAuthClient().auth.refreshSession({
+    refresh_token: refreshToken,
+  });
+  if (refreshed.error || !refreshed.data.session) {
+    console.error(`[api] refresh rejected: ${refreshed.error?.message ?? "no session"}`);
+    return errorJson(401, "The session could not be refreshed. Sign in again.");
+  }
+  return json(200, { session: sessionView(refreshed.data.session) });
+}
+
+/** POST /v1/auth/logout — revoke every refresh token of the calling user
+ * (scope=global), so the whole application session dies now rather than at
+ * the access token's natural expiry. */
+async function logoutRoute(request: Request): Promise<Response> {
+  const token = bearerOf(request);
+  authCache.delete(token);
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/logout?scope=global`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  if (!response.ok) {
+    return unavailable("Sign-out could not be completed", `status ${response.status}`);
+  }
+  return noContent();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1713,6 +1830,37 @@ Deno.serve(async (request: Request): Promise<Response> => {
     return errorJson(413, "Request body is too large.");
   }
 
+  // Session establishment/rotation happens before general authentication:
+  // bootstrap is the ONLY route that accepts a provider ID token, and
+  // refresh authenticates by refresh token in the body. Both are throttled
+  // per IP — they are the expensive/anonymous entry points.
+  if (route === "POST /v1/account/bootstrap") {
+    if (rateLimited(`ip:${clientIp(request)}`, RATE_MAX_UNAUTHED)) {
+      return tooManyRequests();
+    }
+    const exchanged = await authenticateProviderToken(request);
+    if (exchanged instanceof Response) return exchanged;
+    const profile = await readProfile(exchanged.authed);
+    if (profile instanceof Response) return profile;
+    if (profile.provider !== exchanged.authed.provider) {
+      await exchanged.authed.db
+        .from("profiles")
+        .update({ provider: exchanged.authed.provider })
+        .eq("id", exchanged.authed.id);
+    }
+    return json(200, {
+      user: { id: profile.id, email: profile.email },
+      onboardingState: profile.onboarding_state === "complete" ? "complete" : "pending",
+      session: sessionView(exchanged.session),
+    });
+  }
+  if (route === "POST /v1/auth/refresh") {
+    if (rateLimited(`ip:${clientIp(request)}`, RATE_MAX_UNAUTHED)) {
+      return tooManyRequests();
+    }
+    return refreshSessionRoute(request);
+  }
+
   const authed = await authenticate(request);
   if (authed instanceof Response) {
     // Failed/unauthenticated requests are limited per IP so token-guessing
@@ -1759,17 +1907,8 @@ Deno.serve(async (request: Request): Promise<Response> => {
   }
 
   switch (route) {
-    case "POST /v1/account/bootstrap": {
-      const profile = await readProfile(authed);
-      if (profile instanceof Response) return profile;
-      if (profile.provider !== authed.provider) {
-        await authed.db.from("profiles").update({ provider: authed.provider }).eq("id", authed.id);
-      }
-      return json(200, {
-        user: { id: profile.id, email: profile.email },
-        onboardingState: profile.onboarding_state === "complete" ? "complete" : "pending",
-      });
-    }
+    case "POST /v1/auth/logout":
+      return logoutRoute(request);
 
     case "GET /v1/me": {
       const profile = await readProfile(authed);

@@ -32,6 +32,8 @@ beforeEach(() => {
   establishApiSession({
     apiBaseUrl: 'https://api.example.test',
     bearerToken: 'transient-test-token',
+    refreshToken: 'refresh-token-1',
+    bearerExpiresAtMs: Date.now() + 3_600_000,
     canonicalAppUserId: '7fc2c743-028f-4ec6-942c-a84508f3be38',
     provider: 'apple',
   });

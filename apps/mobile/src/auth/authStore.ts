@@ -4,7 +4,18 @@ import {
   AccountBootstrapError,
   bootstrapCanonicalAccount,
 } from '../account/bootstrap';
-import { clearApiSession, establishApiSession } from '../account/apiSession';
+import type { ApiSession } from '../account/apiSession';
+import {
+  clearApiSession,
+  establishApiSession,
+  getApiSession,
+  subscribeToApiSession,
+} from '../account/apiSession';
+import {
+  SessionRefreshError,
+  refreshApiSession,
+  revokeApiSession,
+} from '../account/sessionLifecycle';
 import { getAccountBootstrapEnvironment } from '../account/deviceContext';
 import {
   GOOGLE_IOS_CLIENT_ID,
@@ -146,10 +157,90 @@ async function persistLastProvider(provider: 'google' | null): Promise<void> {
 }
 
 function clearSyncedRuntime(): void {
+  cancelScheduledRefresh();
   clearSyncRuntime();
   clearApiSession();
   clearAccessStoreConfiguration();
   clearTrainingStoreConfiguration();
+}
+
+// ─── Supabase session rotation ───────────────────────────────────────────────
+// The bearer is a short-lived Supabase access token; it is rotated in the
+// background via /v1/auth/refresh shortly before expiry so consumers always
+// hold a live token. A rejected refresh means the session was revoked
+// server-side (e.g. logout on another device) → hard local sign-out.
+
+const REFRESH_LEEWAY_MS = 120_000;
+const REFRESH_RETRY_MS = 30_000;
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+function cancelScheduledRefresh(): void {
+  if (refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = null;
+}
+
+// Whatever clears the in-memory session (sign-out, account switch, tests)
+// also disarms the pending rotation.
+subscribeToApiSession(session => {
+  if (!session) cancelScheduledRefresh();
+});
+
+function scheduleSessionRefresh(apiSession: ApiSession): void {
+  cancelScheduledRefresh();
+  const delay = Math.max(
+    apiSession.bearerExpiresAtMs - Date.now() - REFRESH_LEEWAY_MS,
+    5_000,
+  );
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    void rotateSession(apiSession);
+  }, delay);
+}
+
+async function rotateSession(previous: ApiSession): Promise<void> {
+  if (getApiSession() !== previous) return; // superseded by a newer session
+  try {
+    const next = await refreshApiSession(previous);
+    if (getApiSession() !== previous) return;
+    wireSyncedRuntime(next);
+  } catch (error) {
+    if (getApiSession() !== previous) return;
+    if (error instanceof SessionRefreshError && !error.retryable) {
+      clearSyncedRuntime();
+      setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+      useAuthStore.setState({ session: null });
+      return;
+    }
+    // Transient failure: the current bearer may still be alive; retry soon.
+    refreshTimer = setTimeout(() => {
+      refreshTimer = null;
+      void rotateSession(previous);
+    }, REFRESH_RETRY_MS);
+  }
+}
+
+/** Points every synced consumer (API session, billing, training, sync) at
+ * this ApiSession's bearer. Called on sign-in AND on every token rotation —
+ * consumers capture the token at configure time, so rotation re-wires them. */
+function wireSyncedRuntime(apiSession: ApiSession): void {
+  const config = getRuntimePublicConfig();
+  establishApiSession(apiSession);
+  configureAccessStore(
+    createBillingAccessDependencies({
+      revenueCatPublicSdkKey: config.revenueCatPublicSdkKey,
+      canonicalAppUserId: apiSession.canonicalAppUserId,
+      apiBaseUrl: apiSession.apiBaseUrl,
+      apiToken: apiSession.bearerToken,
+    }),
+  );
+  configureTrainingStore(
+    createTrainingApi({
+      baseUrl: apiSession.apiBaseUrl,
+      token: apiSession.bearerToken,
+    }),
+  );
+  configureSyncRuntime(apiSession);
+  scheduleSessionRefresh(apiSession);
 }
 
 async function establishSyncedAccount(input: {
@@ -166,22 +257,7 @@ async function establishSyncedAccount(input: {
     environment: getAccountBootstrapEnvironment(config),
   });
   setActiveDataOwner(canonicalDataOwner(result.account.id));
-  establishApiSession(result.apiSession);
-  configureAccessStore(
-    createBillingAccessDependencies({
-      revenueCatPublicSdkKey: config.revenueCatPublicSdkKey,
-      canonicalAppUserId: result.apiSession.canonicalAppUserId,
-      apiBaseUrl: result.apiSession.apiBaseUrl,
-      apiToken: result.apiSession.bearerToken,
-    }),
-  );
-  configureTrainingStore(
-    createTrainingApi({
-      baseUrl: result.apiSession.apiBaseUrl,
-      token: result.apiSession.bearerToken,
-    }),
-  );
-  configureSyncRuntime(result.apiSession);
+  wireSyncedRuntime(result.apiSession);
   await persistLocalGuest(false);
   return {
     provider: input.provider,
@@ -406,6 +482,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     const provider = get().session?.provider;
+    // Server-side revocation of every refresh token for this account: a
+    // bearer stolen from this device is dead after this call, not merely
+    // forgotten locally. Best-effort — local material is cleared regardless.
+    const apiSession = getApiSession();
+    if (apiSession) await revokeApiSession(apiSession);
     clearSyncedRuntime();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     set({ session: null, error: null, busy: false });

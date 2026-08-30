@@ -4,12 +4,18 @@ import { create } from 'zustand';
  * Authenticated API material held in memory only.
  *
  * `canonicalAppUserId` is always the UUID returned by `/v1/account/bootstrap`.
- * It is never an Apple user identifier or Google subject. The bearer is not
- * written to SQLite, AsyncStorage, logs, crash metadata, or UI state.
+ * It is never an Apple user identifier or Google subject. `bearerToken` is
+ * the short-lived Supabase access token minted by the bootstrap exchange (the
+ * provider ID token is never reused as an API bearer); `refreshToken` rotates
+ * it via `/v1/auth/refresh` and is revoked server-side by `/v1/auth/logout`.
+ * None of this material is written to SQLite, AsyncStorage, logs, crash
+ * metadata, or UI state.
  */
 export interface ApiSession {
   apiBaseUrl: string;
   bearerToken: string;
+  refreshToken: string;
+  bearerExpiresAtMs: number;
   canonicalAppUserId: string;
   provider: 'apple' | 'google';
 }
