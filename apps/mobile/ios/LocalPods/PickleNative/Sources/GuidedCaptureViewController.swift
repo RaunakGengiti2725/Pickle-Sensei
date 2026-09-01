@@ -812,7 +812,16 @@ final class GuidedCaptureViewController: UIViewController {
       return
     }
 
-    guard let event = detector.ingest(pose: pose, paddle: nil), event.confidence >= 0.65 else { return }
+    // NO CONFIDENCE GATE HERE, BY CONSTRUCTION. `StrokeEvent.confidence` is
+    // `min(0.95, 0.5 + peakSpeed / (triggerWristSpeed * 4))` and an event is
+    // only emitted once `peakSpeed >= triggerWristSpeed`, so the value is
+    // structurally floored at 0.75 for EVERY config — a `>= 0.65` check here
+    // read like a quality bar but could never reject a single event. Removed
+    // rather than retuned: trigger confidence is an ordinal restatement of
+    // peak wrist speed, not a calibrated probability, so the real quality
+    // controls are the detector's own `triggerWristSpeed` / `minStrokeMs` /
+    // `maxStrokeMs` thresholds. Re-adding a gate here needs calibration data.
+    guard let event = detector.ingest(pose: pose, paddle: nil) else { return }
     guard let captureEvidence = evidenceAccumulator.summary(
       startMs: event.startMs,
       endMs: event.endMs,

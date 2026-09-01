@@ -637,6 +637,192 @@ begin
 end $$;
 reset role;
 
+-- ──────────────── H: lifetime free-rating limit is unforgeable ─────────────
+--
+-- The product promises exactly two lifetime free ratings. Before migration
+-- 20260901000000 the Edge Function decided this with an unserialized
+-- read-then-insert, so concurrent reserves carrying DIFFERENT idempotency keys
+-- could each observe availableToReserve >= 1 and both insert.
+--
+-- A single psql session cannot exercise true concurrency, so these cases pin
+-- the two properties that make the invariant hold regardless of interleaving:
+-- reserve_analysis_permit() refuses to over-issue, and apply_synced_shot()
+-- refuses to record a third scored shot EVEN when handed a valid reserved
+-- permit — which is precisely the state a lost race would leave behind.
+
+reset role;
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-00000000000c', 'carol@example.com',
+        '{"full_name":"Carol"}', '{"provider":"google"}');
+
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000c';
+
+-- H1: distinct idempotency keys may reserve up to the limit, then must be
+-- refused. A fresh account has remaining=2, reserved=0.
+do $$
+declare r record;
+begin
+  select * into r from public.reserve_analysis_permit('carol-key-1');
+  if r.result <> 'accepted' then
+    raise exception 'H1: first free reserve must succeed (got %)', r.result;
+  end if;
+  select * into r from public.reserve_analysis_permit('carol-key-2');
+  if r.result <> 'accepted' then
+    raise exception 'H1: second free reserve must succeed (got %)', r.result;
+  end if;
+  select * into r from public.reserve_analysis_permit('carol-key-3');
+  if r.result <> 'access.paywall_required' then
+    raise exception
+      'H1: a THIRD distinct key must be refused, not silently over-issued (got %)', r.result;
+  end if;
+  if (select count(*) from public.analysis_permits
+      where user_id = '00000000-0000-4000-8000-00000000000c') <> 2 then
+    raise exception 'H1: exactly two permits may exist for a free account';
+  end if;
+end $$;
+
+-- H2: replaying a key returns the SAME permit and consumes no extra allowance
+-- (idempotent by contract — the client retries reserves on flaky networks).
+do $$
+declare r record; v_first uuid;
+begin
+  select permit_id into v_first from public.reserve_analysis_permit('carol-key-1');
+  select * into r from public.reserve_analysis_permit('carol-key-1');
+  if r.result <> 'accepted' or r.permit_id <> v_first then
+    raise exception 'H2: replay must return the same permit (got % / %)', r.result, r.permit_id;
+  end if;
+  if (select count(*) from public.analysis_permits
+      where user_id = '00000000-0000-4000-8000-00000000000c') <> 2 then
+    raise exception 'H2: replay must not create a permit';
+  end if;
+end $$;
+
+-- H3: THE BACKSTOP. Consume both free ratings, then hand apply_synced_shot a
+-- valid, reserved, unexpired permit — the exact artifact a lost reserve race
+-- produces — and require it to refuse the third scored shot and release the
+-- permit rather than record a third free rating.
+do $$
+declare v text; p uuid; i int;
+begin
+  for i in 1..2 loop
+    select permit_id into p from public.reserve_analysis_permit('carol-key-' || i);
+    v := public.apply_synced_shot(jsonb_build_object(
+      'id', ('00000000-0000-4000-8000-0000000000c' || i)::uuid,
+      'analysisPermitId', p,
+      'resultKind', 'scored',
+      'shotType', 'drive', 'cameraView', 'side',
+      'capturedAt', '2026-08-31T10:00:00Z',
+      'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+      'overallScore', 7.1, 'confidence', 0.9,
+      'versionVector', jsonb_build_object(
+        'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+        'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+        'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+        'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+    ));
+    if v <> 'accepted' then
+      raise exception 'H3: free rating % must be accepted (got %)', i, v;
+    end if;
+  end loop;
+
+  -- Simulate the over-issued permit a lost race would leave behind.
+  insert into public.analysis_permits (id, user_id, idempotency_key)
+  values ('00000000-0000-4000-8000-0000000000af',
+          '00000000-0000-4000-8000-00000000000c', 'carol-raced-key');
+
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000c9',
+    'analysisPermitId', '00000000-0000-4000-8000-0000000000af',
+    'resultKind', 'scored',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.1, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'access.paywall_required' then
+    raise exception
+      'H3: a third scored shot must be refused even with a valid permit (got %)', v;
+  end if;
+  if (select count(*) from public.shots
+      where user_id = '00000000-0000-4000-8000-00000000000c'
+        and result_kind = 'scored') <> 2 then
+    raise exception 'H3: a free account must never exceed two scored shots';
+  end if;
+  if not exists (select 1 from public.analysis_permits
+                 where id = '00000000-0000-4000-8000-0000000000af'
+                   and status = 'released' and outcome = 'free_limit_exceeded') then
+    raise exception 'H3: the refused permit must be released, not left reserved';
+  end if;
+end $$;
+
+-- H4: an abstention still costs nothing — the backstop must not turn
+-- low_confidence into a paywall (unscored attempts are free, by contract).
+do $$
+declare v text;
+begin
+  insert into public.analysis_permits (id, user_id, idempotency_key)
+  values ('00000000-0000-4000-8000-0000000000ae',
+          '00000000-0000-4000-8000-00000000000c', 'carol-abstain-key');
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000ca',
+    'analysisPermitId', '00000000-0000-4000-8000-0000000000ae',
+    'resultKind', 'low_confidence',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', null, 'confidence', 0.2,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'accepted' then
+    raise exception 'H4: an abstention must sync even at the free limit (got %)', v;
+  end if;
+  if not exists (select 1 from public.analysis_permits
+                 where id = '00000000-0000-4000-8000-0000000000ae'
+                   and status = 'released' and outcome = 'low_confidence') then
+    raise exception 'H4: an abstention must RELEASE its permit, never consume it';
+  end if;
+end $$;
+
+-- H5: cross-user — reserve runs under the caller's RLS, so it can only ever
+-- see and create the CALLER's permits, never another account's.
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000b';
+do $$
+declare r record;
+begin
+  select * into r from public.reserve_analysis_permit('carol-key-1');
+  if r.result <> 'accepted' then
+    raise exception 'H5: bob must get his own fresh permit (got %)', r.result;
+  end if;
+  if not exists (select 1 from public.analysis_permits
+                 where id = r.permit_id
+                   and user_id = '00000000-0000-4000-8000-00000000000b') then
+    raise exception
+      'H5: a colliding idempotency key must never return another user''s permit';
+  end if;
+end $$;
+
+-- H6: anonymous callers cannot reserve at all.
+set local role anon;
+do $$
+begin
+  begin
+    perform public.reserve_analysis_permit('anon-key');
+    raise exception 'H6: anon must not execute reserve_analysis_permit';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+
 rollback;
 
 \echo SECURITY REGRESSION MATRIX: ALL CASES PASSED

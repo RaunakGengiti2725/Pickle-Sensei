@@ -468,49 +468,45 @@ async function reserveAnalysisPermit(authed: AuthedUser, request: Request): Prom
     return json(200, { permit: permitView(row), access });
   };
 
-  const existing = await authed.db
-    .from("analysis_permits")
-    .select(PERMIT_COLUMNS)
-    .eq("user_id", authed.id)
-    .eq("idempotency_key", idempotencyKey)
-    .maybeSingle();
-  if (existing.error) {
-    return serviceUnavailable("Rating reservation", existing.error.message);
+  // ONE atomic reserve_analysis_permit RPC (idempotent lookup + lifetime
+  // free-limit check + insert, under a per-user advisory lock — migration
+  // 20260901000000). This replaces a read-then-insert whose two statements
+  // nothing serialized: concurrent reserves carrying DIFFERENT idempotency
+  // keys could each observe canStartRating and both insert, taking an account
+  // past its two lifetime free ratings. The old 23505 branch only ever
+  // covered the same-key retry, which the RPC now handles internally.
+  const reserved = await authed.db.rpc("reserve_analysis_permit", {
+    p_idempotency_key: idempotencyKey,
+  });
+  if (reserved.error) {
+    return serviceUnavailable("Rating reservation", reserved.error.message);
   }
-  if (existing.data) return respond(existing.data as unknown as PermitRow);
-
-  // Lifetime free limit: both ratings used or held → paywall, exactly as
-  // services/api reserveAnalysisPermit rejects (402 access.paywall_required).
-  const access = await accessPayload(authed);
-  if (access instanceof Response) return access;
-  if (!(access as { canStartRating: boolean }).canStartRating) {
+  const row = (Array.isArray(reserved.data) ? reserved.data[0] : reserved.data) as {
+    result: string;
+    permit_id: string | null;
+    permit_status: string | null;
+    permit_outcome: string | null;
+    permit_created_at: string | null;
+  } | null;
+  if (!row) {
+    return serviceUnavailable("Rating reservation", "reserve_analysis_permit returned no row");
+  }
+  if (row.result === "access.paywall_required") {
     return codedError(
       402,
       "access.paywall_required",
       "Both lifetime free ratings have been used or reserved. Membership is required for another rating.",
     );
   }
-
-  const inserted = await authed.db
-    .from("analysis_permits")
-    .insert({ user_id: authed.id, idempotency_key: idempotencyKey })
-    .select(PERMIT_COLUMNS)
-    .single();
-  if (inserted.error) {
-    // Unique(user_id, idempotency_key) race: another request from the same
-    // device won — return that permit (idempotent by contract).
-    if (inserted.error.code === "23505") {
-      const settled = await authed.db
-        .from("analysis_permits")
-        .select(PERMIT_COLUMNS)
-        .eq("user_id", authed.id)
-        .eq("idempotency_key", idempotencyKey)
-        .maybeSingle();
-      if (settled.data) return respond(settled.data as unknown as PermitRow);
-    }
-    return serviceUnavailable("Rating reservation", inserted.error.message);
+  if (row.result !== "accepted" || !row.permit_id) {
+    return serviceUnavailable("Rating reservation", row.result);
   }
-  return respond(inserted.data as unknown as PermitRow);
+  return respond({
+    id: row.permit_id,
+    status: row.permit_status,
+    outcome: row.permit_outcome,
+    created_at: row.permit_created_at,
+  } as unknown as PermitRow);
 }
 
 /** Outcomes the client may finalize directly (api.ts release():136-147 sends
@@ -826,6 +822,11 @@ const SYNC_STATUS_MESSAGES: Record<string, string> = {
   "access.permit_not_found": "Analysis permit not found.",
   "access.permit_not_reserved": "Analysis permit is no longer reserved.",
   "access.permit_expired": "Analysis permit expired.",
+  // Free-limit backstop in apply_synced_shot: the permit was valid but the
+  // account is already at its two lifetime scored ratings, so the scored shot
+  // is refused rather than recorded as a third free rating.
+  "access.paywall_required":
+    "Both lifetime free ratings have been used. Membership is required for another rating.",
   "shot.session_not_found": "Session not found or not yours.",
   "shot.id_conflict": "Shot id is already bound to a different user.",
 };

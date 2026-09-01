@@ -126,8 +126,20 @@ public final class ApplePoseProvider: PoseProviding, @unchecked Sendable {
   /// the existing temporal anchor stickiness then follows that person as they
   /// move. The seed never re-decides identity later — it is initialization,
   /// not a spatial constraint.
+  ///
+  /// COORDINATE SPACE: callers pass DISPLAY-normalized points (top-left
+  /// origin) — the space `PoseFrame.landmarks`, taps, and `targetSeed` all
+  /// use. The anchor is compared against `torsoMid`, which reads Vision's raw
+  /// `recognizedPoint().location` in BOTTOM-left origin, so y is flipped on
+  /// the way in to match. Without the flip a seed naming an athlete at y=0.7
+  /// lands 0.4 away from them — far outside `incumbentRadius` (0.12) — so the
+  /// tap is inert or mirrored onto a bystander on exactly the frame it exists
+  /// to control. Guarded by `stateLock` like every other access: this is
+  /// called from the main thread while the vision queue reads the anchor.
   public func setPrimaryPersonSeed(x: Double, y: Double) {
-    previousTorsoMid = CGPoint(x: x, y: y)
+    stateLock.lock()
+    previousTorsoMid = CGPoint(x: x, y: 1.0 - y)
+    stateLock.unlock()
   }
 
   /// Reset the temporal primary-person anchor (new clip / new session).
@@ -135,6 +147,17 @@ public final class ApplePoseProvider: PoseProviding, @unchecked Sendable {
     stateLock.lock()
     previousTorsoMid = nil
     stateLock.unlock()
+  }
+
+  /// The temporal anchor, in Vision's BOTTOM-left space — the same space
+  /// `torsoMid` produces and `primaryPerson` compares against. Deliberately
+  /// `internal`: production code never reads the anchor, but the seed's
+  /// coordinate conversion is only observable here, and an untested flip is
+  /// how it silently regressed once already.
+  var primaryPersonAnchorForTesting: CGPoint? {
+    stateLock.lock()
+    defer { stateLock.unlock() }
+    return previousTorsoMid
   }
 
   /// Largest-torso selection across detected people, weighted toward the
