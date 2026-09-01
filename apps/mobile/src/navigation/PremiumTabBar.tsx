@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import type { HostInstance } from 'react-native';
 import type { NavigationProp } from '@react-navigation/native';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +18,7 @@ import { useReducedMotion } from '../design/components';
 import { color, radius, shadow, space, type } from '../design/tokens';
 import { useAccessStore } from '../state/accessStore';
 import { useAuthStore } from '../auth/authStore';
+import { useWalkthroughTarget } from '../walkthrough/targets';
 import type { MainTabParams, RootStackParams } from './params';
 
 const BAR_HEIGHT = 70;
@@ -101,6 +103,9 @@ function GradientActionButton(props: {
   open: boolean;
   overlay?: boolean;
   bottom?: number;
+  /** Walkthrough anchor — set on the in-bar instance only, so the spotlight
+   * measures the resting Coach button, never the overlay copy. */
+  innerRef?: React.Ref<HostInstance>;
 }) {
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
@@ -115,6 +120,7 @@ function GradientActionButton(props: {
 
   return (
     <Pressable
+      ref={props.innerRef}
       accessibilityRole="button"
       accessibilityLabel={
         props.open ? 'Close coach actions' : 'Open coach actions'
@@ -145,6 +151,10 @@ function GradientActionButton(props: {
 export function PremiumTabBar(props: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotion();
+  // Walkthrough anchors: the spotlight tour measures these live views.
+  const coachFabTarget = useWalkthroughTarget('coach-fab');
+  const libraryTabTarget = useWalkthroughTarget('tab-library');
+  const progressTabTarget = useWalkthroughTarget('tab-progress');
   const progress = useSharedValue(0);
   const [menuVisible, setMenuVisible] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -258,6 +268,7 @@ export function PremiumTabBar(props: BottomTabBarProps) {
               return (
                 <View key={route.key} style={styles.centerSlot}>
                   <GradientActionButton
+                    innerRef={coachFabTarget}
                     progress={progress}
                     open={menuOpen}
                     onPress={menuOpen ? () => closeMenu() : openMenu}
@@ -283,6 +294,13 @@ export function PremiumTabBar(props: BottomTabBarProps) {
             return (
               <Pressable
                 key={route.key}
+                ref={
+                  name === 'Library'
+                    ? libraryTabTarget
+                    : name === 'Performance'
+                      ? progressTabTarget
+                      : undefined
+                }
                 accessibilityRole="tab"
                 accessibilityLabel={meta.label}
                 accessibilityState={{ selected: isFocused }}
