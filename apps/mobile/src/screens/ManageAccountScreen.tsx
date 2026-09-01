@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -59,6 +60,7 @@ function DeleteAccountSheet(props: {
   const [step, setStep] = useState<DeleteAccountStep>({ phase: 'review' });
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const presentationRef = useRef(0);
 
   const stopCountdown = () => {
     if (timerRef.current) {
@@ -69,6 +71,7 @@ function DeleteAccountSheet(props: {
 
   useEffect(() => {
     if (!props.visible) {
+      presentationRef.current += 1;
       stopCountdown();
       setStep({ phase: 'review' });
       setError(null);
@@ -77,10 +80,12 @@ function DeleteAccountSheet(props: {
   }, [props.visible]);
 
   const beginRequest = async () => {
+    const presentation = presentationRef.current;
     setError(null);
     setStep({ phase: 'requesting' });
     try {
       const { challenge } = await requestAccountDeletion(getApiSession());
+      if (presentation !== presentationRef.current) return;
       const secondsLeft = Math.ceil(DELETE_ARM_DELAY_MS / 1000);
       setStep({ phase: 'armed', challenge, secondsLeft });
       timerRef.current = setInterval(() => {
@@ -94,6 +99,7 @@ function DeleteAccountSheet(props: {
         });
       }, 1_000);
     } catch (e) {
+      if (presentation !== presentationRef.current) return;
       setStep({ phase: 'review' });
       setError(
         e instanceof AccountDeletionError
@@ -104,13 +110,21 @@ function DeleteAccountSheet(props: {
   };
 
   const confirmDeletion = async (challenge: string) => {
+    const presentation = presentationRef.current;
     setError(null);
     setStep({ phase: 'deleting', challenge });
     try {
       await confirmAccountDeletion(getApiSession(), challenge);
       props.onDeleted();
     } catch (e) {
-      setStep({ phase: 'armed', challenge, secondsLeft: 0 });
+      if (presentation !== presentationRef.current) return;
+      const canRetrySameChallenge =
+        e instanceof AccountDeletionError ? e.retryable : true;
+      setStep(
+        canRetrySameChallenge
+          ? { phase: 'armed', challenge, secondsLeft: 0 }
+          : { phase: 'review' },
+      );
       setError(
         e instanceof AccountDeletionError
           ? e.message
@@ -130,7 +144,9 @@ function DeleteAccountSheet(props: {
     >
       <View style={styles.modalRoot}>
         <Pressable
+          accessibilityRole="button"
           accessibilityLabel="Cancel account deletion"
+          disabled={busy}
           onPress={busy ? undefined : props.onCancel}
           style={StyleSheet.absoluteFill}
         />
@@ -138,7 +154,8 @@ function DeleteAccountSheet(props: {
           <PressableScale
             accessibilityLabel="Close account deletion confirmation"
             containerStyle={styles.dialogCloseContainer}
-            onPress={props.onCancel}
+            disabled={busy}
+            onPress={busy ? undefined : props.onCancel}
             style={styles.dialogClose}
           >
             <Icon name="close" size={20} color={color.ink} />
@@ -319,7 +336,15 @@ export function ManageAccountScreen() {
           // The server account is gone; unlike a plain sign-out this also
           // purges the deleted owner's local rows and fully disconnects the
           // provider SDK so nothing can silently restore a dead account.
-          void completeAccountDeletion();
+          void completeAccountDeletion().then(() => {
+            const cleanup = useAuthStore.getState().deletionCleanup;
+            if (cleanup?.localPurge === 'failed') {
+              Alert.alert(
+                'Account deleted',
+                'Your account and synced data were deleted. Some data saved on this phone could not be removed — delete the app to clear it.',
+              );
+            }
+          });
         }}
       />
     </SafeAreaView>

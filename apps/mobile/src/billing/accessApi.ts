@@ -5,6 +5,7 @@ import {
   type CanonicalBillingState,
   type CanonicalBillingSync,
 } from './types';
+import { reportApiUnauthorized } from '../account/apiSession';
 
 export type BillingFetch = (
   input: string,
@@ -170,6 +171,14 @@ export function createCanonicalAccessClient(
         'billing.backend_unavailable',
         'Membership verification is temporarily unavailable.',
         true,
+      );
+    }
+    if (response.status === 401) {
+      reportApiUnauthorized(values.token);
+      throw new BillingError(
+        'billing.backend_unavailable',
+        'Your sign-in has expired. Sign in again to check membership access.',
+        false,
       );
     }
     if (!response.ok) {
