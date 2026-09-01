@@ -26,8 +26,8 @@ Deno.test(
 Deno.test(
   "[defect-pin] sanitizeUserText deletes \\n \\r \\t as control chars BEFORE collapsing whitespace, gluing words together",
   () => {
-    // http.ts:41 strips \u0000-\u001f (which includes \t \n \r) and only then
-    // http.ts:42 collapses \s+ — so a line break between words is lost, not
+    // http.ts:42 strips \u0000-\u001f (which includes \t \n \r) and only then
+    // http.ts:43 collapses \s+ — so a line break between words is lost, not
     // turned into a space.
     assertEquals(sanitizeUserText("lose\nmy\tdinks\r\nfast", 64), "losemydinksfast");
   },
