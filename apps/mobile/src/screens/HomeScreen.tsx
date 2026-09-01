@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   RefreshControl,
   ScrollView,
@@ -27,7 +27,6 @@ import { getDb } from '../data/db';
 import {
   listCaptureHistory,
   listShots,
-  type CaptureHistoryEntry,
   type LocalShotRow,
 } from '../data/repository';
 import type { RootStackParams } from '../navigation/params';
@@ -36,7 +35,10 @@ import {
   fetchCanonicalProgress,
   type CanonicalProgress,
 } from '../progress/api';
-import { buildPracticeHistory } from '../progress/practiceHistory';
+import {
+  buildPracticeHistory,
+  type PracticeHistoryResult,
+} from '../progress/practiceHistory';
 import { PracticeVolumeChart } from '../progress/PracticeVolumeChart';
 import { PlayerRankBanner } from '../components/PlayerRankBanner';
 import { NotificationPrimingCard } from '../notifications/NotificationPrimingCard';
@@ -60,6 +62,14 @@ function formatTrackedTime(milliseconds: number) {
   return seconds < 10 ? `${seconds.toFixed(1)}s` : `${Math.round(seconds)}s`;
 }
 
+function emptyPracticeHistory(): PracticeHistoryResult {
+  return buildPracticeHistory([], {
+    asOfIso: new Date().toISOString(),
+    timeZone: deviceTimeZone(),
+    range: '7d',
+  });
+}
+
 export function HomeScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
@@ -70,8 +80,8 @@ export function HomeScreen() {
   const [recent, setRecent] = useState<LocalShotRow[]>([]);
   const [allShots, setAllShots] = useState<LocalShotRow[]>([]);
   const [latestScored, setLatestScored] = useState<LocalShotRow | null>(null);
-  const [captures, setCaptures] = useState<CaptureHistoryEntry[]>([]);
-  const [asOfIso, setAsOfIso] = useState(() => new Date().toISOString());
+  const [practice, setPractice] =
+    useState<PracticeHistoryResult>(emptyPracticeHistory);
   const [canonicalProgress, setCanonicalProgress] =
     useState<CanonicalProgress | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -92,8 +102,13 @@ export function HomeScreen() {
           shot => shot.resultKind === 'scored' && shot.overallScore !== null,
         ) ?? null,
       );
-      setCaptures(captureHistory);
-      setAsOfIso(new Date().toISOString());
+      setPractice(
+        buildPracticeHistory(captureHistory, {
+          asOfIso: new Date().toISOString(),
+          timeZone: deviceTimeZone(),
+          range: '7d',
+        }),
+      );
       const apiSession = getApiSession();
       if (apiSession) {
         try {
@@ -122,16 +137,6 @@ export function HomeScreen() {
     }, [load, refreshConsistency]),
   );
 
-  const timeZone = useMemo(deviceTimeZone, []);
-  const practice = useMemo(
-    () =>
-      buildPracticeHistory(captures, {
-        asOfIso,
-        timeZone,
-        range: '7d',
-      }),
-    [asOfIso, captures, timeZone],
-  );
   // The product streak: meaningful training days (analyses, sessions,
   // drills) from the consistency engine — never mere app opens or captures.
   const trainingStreak = consistency?.currentStreak ?? 0;
@@ -204,6 +209,7 @@ export function HomeScreen() {
                 'day',
               )} training streak. Opens the consistency calendar.`}
               onPress={() => navigation.navigate('StreakCalendar')}
+              hitSlop={6}
               style={styles.streakBadge}
               testID="home-streak-badge"
             >
