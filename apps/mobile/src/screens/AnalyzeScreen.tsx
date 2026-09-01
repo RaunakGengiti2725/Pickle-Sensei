@@ -40,6 +40,7 @@ import {
 import type { EnvelopeVerdict } from '@pickle/shared-types';
 import { TargetSelector, type TargetSelection } from '../camera/TargetSelector';
 import { getDb } from '../data/db';
+import { triggerOutboxSync } from '../data/syncRuntime';
 import {
   savePendingCapture,
   setCaptureTargetSeed,
@@ -47,6 +48,7 @@ import {
 } from '../data/repository';
 import { runCaptureAnalysis } from '../analysis/runCaptureAnalysis';
 import { getApiSession } from '../account/apiSession';
+import { getRuntimePublicConfig } from '../config/runtimeConfig';
 import { useAppStore } from '../state/appStore';
 import { useAccessStore } from '../state/accessStore';
 import { makeUuid } from '../util/uuid';
@@ -89,7 +91,12 @@ type Phase =
       kind: 'free_limit';
       analysisId: string;
     }
-  | { kind: 'error'; message: string };
+  | {
+      kind: 'error';
+      message: string;
+      stage: 'capture' | 'analysis';
+      recovery: 'retry' | 'upgrade';
+    };
 
 export const READINESS_COPY: Record<CameraReadinessState, string> = {
   no_person: 'Step fully into frame',
@@ -545,6 +552,7 @@ export function AnalyzeScreen() {
   );
   const operationActive = useRef(false);
   const scoringActive = useRef(false);
+  const abandoned = useRef(false);
   const autoLaunchStarted = useRef(false);
   // Honest progress surface for the scoring flow (parallel to `phase`, so
   // every existing message/transition stays byte-identical). Non-null only
@@ -729,15 +737,22 @@ export function AnalyzeScreen() {
                 : {}),
             };
           } catch (error) {
+            if (abandoned.current) return;
             const message = importedPoseExtractionFailureMessage(error);
             usabilityFunnel.log('error_shown', message);
-            setPhase({ kind: 'error', message });
+            setPhase({
+              kind: 'error',
+              message,
+              stage: 'analysis',
+              recovery: 'retry',
+            });
             return;
           } finally {
             extractionRun.current = null;
           }
           setPhase({ kind: 'working', message: 'Measuring your swing…' });
         }
+        if (abandoned.current) return;
         setAnalysisProgress(analysisStageProgress('measuring'));
         const outcome = await runCaptureAnalysis({
           db: getDb(),
@@ -751,7 +766,7 @@ export function AnalyzeScreen() {
             baseUrl: session?.apiBaseUrl ?? '',
             token: session?.bearerToken ?? null,
           },
-          appVersion: '0.1.0',
+          appVersion: getRuntimePublicConfig().appVersion,
           focusCheckpoint: profile?.focusCheckpoint,
           targetSeed,
           captureEnvelope:
@@ -766,10 +781,23 @@ export function AnalyzeScreen() {
         // The measured/saved boundary lives inside runCaptureAnalysis (no
         // incremental signal is exposed); once it returns, the remaining
         // work is routing the already-persisted outcome.
+        const paywallRequired =
+          outcome.kind === 'unavailable' &&
+          outcome.cause === 'paywall_required';
+        if (outcome.kind === 'scored') triggerOutboxSync();
+        if (outcome.kind === 'scored' || paywallRequired) {
+          void useAccessStore.getState().refreshAccess();
+        }
+        if (abandoned.current) return;
         setAnalysisProgress(analysisStageProgress('saving'));
         if (outcome.kind === 'unavailable') {
           usabilityFunnel.log('error_shown', outcome.reason);
-          setPhase({ kind: 'error', message: outcome.reason });
+          setPhase({
+            kind: 'error',
+            message: outcome.reason,
+            stage: 'analysis',
+            recovery: paywallRequired ? 'upgrade' : 'retry',
+          });
           return;
         }
         if (outcome.kind === 'quality_blocked') {
@@ -779,6 +807,8 @@ export function AnalyzeScreen() {
           setPhase({
             kind: 'error',
             message: qualityBlockedMessage(outcome.reason, outcome.envelope),
+            stage: 'analysis',
+            recovery: 'retry',
           });
           return;
         }
@@ -816,9 +846,15 @@ export function AnalyzeScreen() {
         usabilityFunnel.log('result_opened');
         navigation.replace('Result', { analysisId: outcome.analysisId });
       } catch (error) {
+        if (abandoned.current) return;
         const message = error instanceof Error ? error.message : String(error);
         usabilityFunnel.log('error_shown', message);
-        setPhase({ kind: 'error', message });
+        setPhase({
+          kind: 'error',
+          message,
+          stage: 'analysis',
+          recovery: 'retry',
+        });
       } finally {
         scoringActive.current = false;
         // The progress surface describes ONE scoring run; it never outlives
@@ -903,7 +939,12 @@ export function AnalyzeScreen() {
           });
         }
         usabilityFunnel.log('error_shown', message);
-        setPhase({ kind: 'error', message });
+        setPhase({
+          kind: 'error',
+          message,
+          stage: 'capture',
+          recovery: 'retry',
+        });
       }
     } finally {
       operationActive.current = false;
@@ -932,6 +973,7 @@ export function AnalyzeScreen() {
 
   useEffect(
     () => () => {
+      abandoned.current = true;
       if (operationActive.current) cancelCameraOperation();
     },
     [],
@@ -945,6 +987,7 @@ export function AnalyzeScreen() {
           dark
           title={source === 'library' ? 'Import video' : 'Auto Analyze'}
           onClose={() => {
+            abandoned.current = true;
             cancelCameraOperation();
             navigation.goBack();
           }}
@@ -990,7 +1033,11 @@ export function AnalyzeScreen() {
       <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
         <StatusBar barStyle="dark-content" />
         <ScreenHeader
-          title="Capture interrupted"
+          title={
+            phase.stage === 'capture'
+              ? 'Capture interrupted'
+              : 'Analysis stopped'
+          }
           onClose={() => navigation.goBack()}
         />
         <View style={styles.stateBody} accessibilityRole="alert">
@@ -1000,11 +1047,21 @@ export function AnalyzeScreen() {
           <Text style={[type.h1, styles.stateTitle]}>Nothing was rated.</Text>
           <Text style={[type.body, styles.stateCopy]}>{phase.message}</Text>
           <View style={styles.stateActions}>
-            <Button
-              label="Try again"
-              variant="dark"
-              onPress={() => void run()}
-            />
+            {phase.recovery === 'upgrade' ? (
+              <Button
+                label="Upgrade to Pro"
+                variant="volt"
+                onPress={() =>
+                  navigation.navigate('Paywall', { source: 'rating' })
+                }
+              />
+            ) : (
+              <Button
+                label="Try again"
+                variant="dark"
+                onPress={() => void run()}
+              />
+            )}
             <Button
               label="Close"
               variant="ghost"
