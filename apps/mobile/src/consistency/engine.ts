@@ -167,6 +167,15 @@ function humanizeShotType(value: string): string {
   return value.replace(/_/g, ' ');
 }
 
+export function specialistTitle(detail: string): string {
+  const technique = humanizeShotType(detail)
+    .split(' ')
+    .filter(word => word.length > 0)
+    .map(word => word[0]!.toUpperCase() + word.slice(1))
+    .join(' ');
+  return `${technique} Specialist`;
+}
+
 function activityLabel(input: TrainingActivityInput): string {
   if (input.label) return input.label;
   if (input.shotType) return humanizeShotType(input.shotType);

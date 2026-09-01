@@ -232,31 +232,31 @@ export function PaywallScreen(props: PaywallScreenProps) {
   // shows store-verified pricing. Entering content slides/fades in 220ms
   // ease-out (transform+opacity only, native driver).
   const [page, setPage] = useState<PaywallPage>('value');
+  const pageRef = useRef<PaywallPage>('value');
   const pageOpacity = useRef(new Animated.Value(1)).current;
   const pageShift = useRef(new Animated.Value(0)).current;
 
   const transitionTo = useCallback(
     (next: PaywallPage) => {
-      setPage(current => {
-        if (current === next) return current;
-        pageOpacity.setValue(0);
-        pageShift.setValue(next === 'pricing' ? 28 : -28);
-        Animated.parallel([
-          Animated.timing(pageOpacity, {
-            toValue: 1,
-            duration: 220,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }),
-          Animated.timing(pageShift, {
-            toValue: 0,
-            duration: 220,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: true,
-          }),
-        ]).start();
-        return next;
-      });
+      if (pageRef.current === next) return;
+      pageRef.current = next;
+      pageOpacity.setValue(0);
+      pageShift.setValue(next === 'pricing' ? 28 : -28);
+      Animated.parallel([
+        Animated.timing(pageOpacity, {
+          toValue: 1,
+          duration: 220,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pageShift, {
+          toValue: 0,
+          duration: 220,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
+      setPage(next);
     },
     [pageOpacity, pageShift],
   );
