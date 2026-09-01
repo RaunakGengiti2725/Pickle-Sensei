@@ -92,9 +92,10 @@ backend is the Supabase Edge Function in `supabase/functions/api/` (Deno);
   `pickle_sensei_pro_annual` (see docs/DISTRIBUTION.md; both subscriptions
   must live in ONE subscription group), `pickle_sensei_pro_lifetime`
   (non-consumable).
-- Backend fallback secret `REVENUECAT_PUBLIC_SDK_KEY` still holds the TEST
-  STORE key — swap it (or set `REVENUECAT_SECRET_API_KEY`) at deploy time,
-  never mid-hold.
+- Backend fallback secret `REVENUECAT_PUBLIC_SDK_KEY` holds the PRODUCTION
+  App Store public key (`appl_…`) as of 2026-09-01. Setting
+  `REVENUECAT_SECRET_API_KEY` (RevenueCat dashboard → API keys → secret) is
+  still preferred — the fallback only covers subscriber reads.
 - `public.billing_entitlements` is written ONLY by the edge function via
   service role. Never add user INSERT/UPDATE policies to it.
 
