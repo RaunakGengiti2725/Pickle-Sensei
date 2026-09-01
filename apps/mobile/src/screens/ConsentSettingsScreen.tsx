@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Card, ScreenHeader, SectionTitle } from '../design/components';
+import { Button, Card, ScreenHeader, SectionTitle } from '../design/components';
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import { useAuthStore } from '../auth/authStore';
@@ -41,6 +41,8 @@ export function ConsentSettingsScreen() {
   }, [hydrate, session]);
 
   const signedOut = availability === 'signed_out';
+  const loading = availability === 'loading';
+  const unavailable = availability === 'unavailable';
   const toggleDisabled = busy || availability !== 'ready';
 
   return (
@@ -97,12 +99,40 @@ export function ConsentSettingsScreen() {
             accountability.
           </Text>
           {signedOut ? (
-            <Text style={[type.caption, styles.noteText]}>
-              Sign in to change this. Nothing is shared while signed out.
+            <>
+              <Text style={[type.caption, styles.noteText]}>
+                Sign in to change this. Nothing is shared while signed out.
+              </Text>
+              <View style={styles.actionWrap}>
+                <Button
+                  label="Connect account"
+                  variant="dark"
+                  onPress={() => navigation.navigate('ConnectAccount')}
+                />
+              </View>
+            </>
+          ) : null}
+          {loading ? (
+            <Text
+              accessibilityLiveRegion="polite"
+              style={[type.caption, styles.noteText]}
+            >
+              Checking your current choice…
             </Text>
           ) : null}
-          {availability === 'unavailable' && error ? (
-            <Text style={[type.caption, styles.errorText]}>{error}</Text>
+          {unavailable ? (
+            <>
+              <Text style={[type.caption, styles.errorText]}>
+                {error ?? 'Consent settings are temporarily unavailable.'}
+              </Text>
+              <View style={styles.actionWrap}>
+                <Button
+                  label="Try again"
+                  variant="secondary"
+                  onPress={() => void hydrate()}
+                />
+              </View>
+            </>
           ) : null}
           {availability === 'ready' && error ? (
             <Text style={[type.caption, styles.errorText]}>{error}</Text>
@@ -133,4 +163,5 @@ const styles = StyleSheet.create({
   bodyText: { color: color.inkSoft, marginTop: space.md },
   noteText: { color: color.inkSoft, marginTop: space.md },
   errorText: { color: color.bad, marginTop: space.md },
+  actionWrap: { marginTop: space.md },
 });
