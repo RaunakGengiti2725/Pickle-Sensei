@@ -248,13 +248,27 @@ function ensureAccountScopedSchema(db: DB): void {
 
 let instance: DB | null = null;
 
+function openMigrated(): DB {
+  const db = open({ name: 'pickle-sensei.db' });
+  try {
+    for (const sql of LOCAL_MIGRATIONS) {
+      db.executeSync(sql);
+    }
+    ensureAccountScopedSchema(db);
+  } catch (error) {
+    try {
+      db.close();
+    } catch {
+      // Preserve the original migration error.
+    }
+    throw error;
+  }
+  return db;
+}
+
 export function getDb(): LocalDb {
   if (!instance) {
-    instance = open({ name: 'pickle-sensei.db' });
-    for (const sql of LOCAL_MIGRATIONS) {
-      instance.executeSync(sql);
-    }
-    ensureAccountScopedSchema(instance);
+    instance = openMigrated();
   }
   const db = instance;
   return {
