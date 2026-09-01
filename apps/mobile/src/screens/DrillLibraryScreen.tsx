@@ -21,6 +21,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useApiSessionStore } from '../account/apiSession';
 import {
+  Button,
   Card,
   EmptyState,
   ErrorState,
@@ -148,6 +149,15 @@ function toMessage(error: unknown): string {
     : 'The drill catalog is temporarily unavailable.';
 }
 
+function isUnconfigured(error: unknown): boolean {
+  return (
+    error instanceof TrainingError && error.code === 'training.unconfigured'
+  );
+}
+
+type LoadFailure =
+  { kind: 'unconfigured' } | { kind: 'error'; message: string };
+
 /**
  * Every playable media entry, mirroring firstPlayableMedia's expiry rule in
  * training/components exactly: embeds are always playable, hosted files only
@@ -244,16 +254,16 @@ function FocusCard(props: { focus: LibraryFocus }) {
   );
 }
 
-function DrillCard(props: {
+const DrillCard = React.memo(function DrillCard(props: {
   drill: CatalogDrill;
   expanded: boolean;
   detail: DetailState | undefined;
   savePending: boolean;
-  onToggleExpanded: () => void;
-  onToggleSaved: () => void;
-  onRetryDetail: () => void;
+  onToggleExpanded: (slug: string) => void;
+  onToggleSaved: (drill: CatalogDrill) => void;
+  onRetryDetail: (slug: string) => void;
   onOpenMedia: (media: InstructionalMedia) => void;
-  onBrowseVideos: () => void;
+  onBrowseVideos: (title: string) => void;
 }) {
   const { drill } = props;
   const coachByline = DRAFT_BYLINE_PATTERN.test(drill.coachName)
@@ -283,7 +293,7 @@ function DrillCard(props: {
           }
           accessibilityState={{ selected: drill.saved }}
           disabled={props.savePending}
-          onPress={props.onToggleSaved}
+          onPress={() => props.onToggleSaved(drill)}
           containerStyle={styles.bookmarkContainer}
           style={[
             styles.bookmarkButton,
@@ -302,7 +312,7 @@ function DrillCard(props: {
           drill.title
         }`}
         accessibilityState={{ expanded: props.expanded }}
-        onPress={props.onToggleExpanded}
+        onPress={() => props.onToggleExpanded(drill.slug)}
         style={styles.cardBody}
       >
         <Text numberOfLines={3} style={[type.caption, styles.description]}>
@@ -331,18 +341,24 @@ function DrillCard(props: {
               </Text>
             ) : detail.status === 'error' ? (
               <View style={styles.detailError}>
-                <Icon name="close" size={16} color={color.bad} />
-                <Text style={[type.caption, styles.detailErrorText]}>
-                  Drill detail could not be loaded from this deployment.{' '}
-                  {detail.message}
-                </Text>
+                <View style={styles.detailErrorRow}>
+                  <Icon name="close" size={16} color={color.bad} />
+                  <Text style={[type.caption, styles.detailErrorText]}>
+                    Drill detail could not be loaded from this deployment.{' '}
+                    {detail.message}
+                  </Text>
+                </View>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Retry detail for ${drill.title}`}
-                  onPress={props.onRetryDetail}
-                  style={({ pressed }) => [pressed && styles.pressed]}
+                  onPress={() => props.onRetryDetail(drill.slug)}
+                  hitSlop={8}
+                  style={({ pressed }) => [
+                    styles.detailRetryButton,
+                    pressed && styles.pressed,
+                  ]}
                 >
-                  <Text style={[type.caption, styles.detailRetry]}>
+                  <Text style={[type.bodyBold, styles.detailRetry]}>
                     Try again
                   </Text>
                 </Pressable>
@@ -422,7 +438,7 @@ function DrillCard(props: {
                 <PressableScale
                   testID={`browse-videos-${drill.slug}`}
                   accessibilityLabel={`Browse YouTube videos for ${drill.title}`}
-                  onPress={props.onBrowseVideos}
+                  onPress={() => props.onBrowseVideos(drill.title)}
                   style={styles.mediaRow}
                 >
                   <View style={styles.browseIcon}>
@@ -445,7 +461,7 @@ function DrillCard(props: {
       ) : null}
     </Card>
   );
-}
+});
 
 export function DrillLibraryScreen() {
   const navigation =
@@ -461,7 +477,7 @@ export function DrillLibraryScreen() {
   );
 
   const [drills, setDrills] = useState<CatalogDrill[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadFailure, setLoadFailure] = useState<LoadFailure | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -482,6 +498,8 @@ export function DrillLibraryScreen() {
   );
   const requestIdRef = useRef(0);
   const hasLoadedRef = useRef(false);
+  const expandedSlugRef = useRef<string | null>(null);
+  const requestedDetailsRef = useRef<Set<string>>(new Set());
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toastOpacity = useRef(new Animated.Value(0)).current;
   /** Synchronous single-flight guard for save mutations. `pendingSaves` is
@@ -547,7 +565,7 @@ export function DrillLibraryScreen() {
       const requestId = ++requestIdRef.current;
       if (mode === 'initial') {
         setDrills(null);
-        setLoadError(null);
+        setLoadFailure(null);
       } else if (mode === 'refresh') {
         setRefreshing(true);
         void loadFocus();
@@ -560,11 +578,18 @@ export function DrillLibraryScreen() {
         if (requestId !== requestIdRef.current) return;
         hasLoadedRef.current = true;
         setDrills(items);
-        setLoadError(null);
+        setLoadFailure(null);
       } catch (error) {
         if (requestId !== requestIdRef.current) return;
-        if (mode === 'initial') setLoadError(toMessage(error));
-        else setInlineError(toMessage(error));
+        if (mode === 'initial') {
+          setLoadFailure(
+            isUnconfigured(error)
+              ? { kind: 'unconfigured' }
+              : { kind: 'error', message: toMessage(error) },
+          );
+        } else {
+          setInlineError(toMessage(error));
+        }
       } finally {
         if (requestId === requestIdRef.current) setRefreshing(false);
       }
@@ -578,7 +603,6 @@ export function DrillLibraryScreen() {
 
   const toggleSaved = useCallback(
     async (drill: CatalogDrill) => {
-      if (pendingSaves.has(drill.slug)) return;
       if (inFlightSavesRef.current.has(drill.slug)) return;
       inFlightSavesRef.current.add(drill.slug);
       const nextSaved = !drill.saved;
@@ -612,11 +636,12 @@ export function DrillLibraryScreen() {
         });
       }
     },
-    [api, pendingSaves, showToast],
+    [api, showToast],
   );
 
   const loadDetail = useCallback(
     async (slug: string) => {
+      requestedDetailsRef.current.add(slug);
       setDetails(prev => ({ ...prev, [slug]: { status: 'loading' } }));
       try {
         const detail = await api.getDrill(slug);
@@ -633,13 +658,15 @@ export function DrillLibraryScreen() {
 
   const toggleExpanded = useCallback(
     (slug: string) => {
-      const alreadyExpanded = expandedSlug === slug;
-      setExpandedSlug(alreadyExpanded ? null : slug);
-      if (!alreadyExpanded && details[slug] === undefined) {
+      const alreadyExpanded = expandedSlugRef.current === slug;
+      const next = alreadyExpanded ? null : slug;
+      expandedSlugRef.current = next;
+      setExpandedSlug(next);
+      if (!alreadyExpanded && !requestedDetailsRef.current.has(slug)) {
         void loadDetail(slug);
       }
     },
-    [details, expandedSlug, loadDetail],
+    [loadDetail],
   );
 
   // YouTube search-results pages only. Instructional videos themselves play
@@ -652,6 +679,21 @@ export function DrillLibraryScreen() {
       setInlineError('YouTube could not be opened on this device.');
     }
   }, []);
+
+  const browseVideos = useCallback(
+    (title: string) => void openExternal(youtubeSearchUrl(title)),
+    [openExternal],
+  );
+
+  const retryDetail = useCallback(
+    (slug: string) => void loadDetail(slug),
+    [loadDetail],
+  );
+
+  const toggleSavedDrill = useCallback(
+    (drill: CatalogDrill) => void toggleSaved(drill),
+    [toggleSaved],
+  );
 
   const visibleDrills = useMemo(
     () => (drills ?? []).filter(drill => matchesQuery(drill, debouncedQuery)),
@@ -688,22 +730,44 @@ export function DrillLibraryScreen() {
       expanded={expandedSlug === drill.slug}
       detail={details[drill.slug]}
       savePending={pendingSaves.has(drill.slug)}
-      onToggleExpanded={() => toggleExpanded(drill.slug)}
-      onToggleSaved={() => void toggleSaved(drill)}
-      onRetryDetail={() => void loadDetail(drill.slug)}
+      onToggleExpanded={toggleExpanded}
+      onToggleSaved={toggleSavedDrill}
+      onRetryDetail={retryDetail}
       onOpenMedia={setPlayerMedia}
-      onBrowseVideos={() => void openExternal(youtubeSearchUrl(drill.title))}
+      onBrowseVideos={browseVideos}
     />
   );
 
+  const catalogEmpty = drills !== null && drills.length === 0 && !filtered;
+
   let content: React.ReactNode;
-  if (drills === null && loadError === null) {
+  if (drills === null && loadFailure === null) {
     content = <LoadingState label="Loading the drill catalog…" />;
+  } else if (drills === null && loadFailure?.kind === 'unconfigured') {
+    content = (
+      <View style={styles.flex} testID="drill-library-unconfigured">
+        <EmptyState
+          title="The drill catalog needs a synced account."
+          body="Sign in with Apple or Google to browse the catalog and save drills to your library."
+          action={
+            <Button
+              label="Connect account"
+              variant="dark"
+              onPress={() => navigation.navigate('ConnectAccount')}
+            />
+          }
+        />
+      </View>
+    );
   } else if (drills === null) {
     content = (
       <ErrorState
         title="The drill catalog could not load."
-        detail={loadError ?? 'The drill catalog is temporarily unavailable.'}
+        detail={
+          loadFailure?.kind === 'error'
+            ? loadFailure.message
+            : 'The drill catalog is temporarily unavailable.'
+        }
         onRetry={() => void load('initial')}
       />
     );
@@ -733,20 +797,28 @@ export function DrillLibraryScreen() {
           </Text>
         ) : null}
         {inlineError ? (
-          <Pressable
+          <View
             accessibilityRole="alert"
-            accessibilityLabel="Dismiss error"
-            onPress={() => setInlineError(null)}
+            accessibilityLiveRegion="assertive"
             style={styles.inlineError}
+            testID="drill-library-inline-error"
           >
-            <Icon name="close" size={16} color={color.bad} />
             <Text style={[type.caption, styles.inlineErrorText]}>
               {inlineError}
             </Text>
-          </Pressable>
+            <PressableScale
+              accessibilityLabel="Dismiss error"
+              onPress={() => setInlineError(null)}
+              hitSlop={8}
+              containerStyle={styles.clearContainer}
+              style={styles.inlineErrorDismiss}
+            >
+              <Icon name="close" size={14} color={color.bad} />
+            </PressableScale>
+          </View>
         ) : null}
         {!filtered && focus ? <FocusCard focus={focus} /> : null}
-        {!filtered && focus === null ? (
+        {!filtered && !catalogEmpty && focus === null ? (
           <View style={styles.focusHint} testID="library-focus-hint">
             <Icon name="spark" size={17} color={color.court} />
             <Text style={[type.caption, styles.focusHintText]}>
@@ -769,7 +841,12 @@ export function DrillLibraryScreen() {
             ) : null}
           </>
         ) : null}
-        {visibleDrills.length === 0 ? (
+        {catalogEmpty ? (
+          <EmptyState
+            title="No drills published yet"
+            body="Drills will appear here as they are published. Pull down to refresh, or go back to your Library."
+          />
+        ) : visibleDrills.length === 0 ? (
           <EmptyState
             title="No drills match"
             body="Try a different search or family filter."
@@ -829,6 +906,7 @@ export function DrillLibraryScreen() {
                     : 'Show all drill families'
                 }
                 onPress={() => setFamily(value)}
+                hitSlop={4}
                 style={({ pressed }) => [
                   styles.familyChip,
                   selected && styles.familyChipSelected,
@@ -953,7 +1031,7 @@ const styles = StyleSheet.create({
   resultCount: { color: color.inkSoft, marginBottom: space.md },
   inlineError: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: space.sm,
     borderRadius: radius.md,
     backgroundColor: color.badSoft,
@@ -961,6 +1039,13 @@ const styles = StyleSheet.create({
     marginBottom: space.md,
   },
   inlineErrorText: { color: color.bad, flex: 1 },
+  inlineErrorDismiss: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   focusCard: { marginBottom: space.md },
   focusEyebrow: { color: color.onDarkSubtle },
   focusTitleRow: {
@@ -1034,12 +1119,20 @@ const styles = StyleSheet.create({
   detailWrap: { gap: space.sm },
   detailLabel: { color: color.inkSoft, marginTop: space.xs },
   detailMuted: { color: color.inkSoft },
-  detailError: {
+  detailError: { gap: space.xs },
+  detailErrorRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: space.sm,
   },
   detailErrorText: { color: color.bad, flex: 1 },
+  detailRetryButton: {
+    minHeight: 44,
+    alignSelf: 'flex-start',
+    justifyContent: 'center',
+    paddingHorizontal: space.sm,
+    marginLeft: -space.sm,
+  },
   detailRetry: { color: color.court },
   cueBlock: { gap: space.sm },
   cueRow: {
