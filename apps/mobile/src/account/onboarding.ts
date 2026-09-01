@@ -1,5 +1,6 @@
 import { CHECKPOINTS, type Handedness } from '@pickle/shared-types';
 import type { ApiSession } from './apiSession';
+import { getRuntimePublicConfig } from '../config/runtimeConfig';
 import { focusForGoal, type Gender, type Profile } from '../state/profile';
 
 const GENDERS: readonly Gender[] = [
@@ -47,7 +48,7 @@ async function request(
         Accept: 'application/json',
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.bearerToken}`,
-        'X-Client-Version': '0.1.0',
+        'X-Client-Version': getRuntimePublicConfig().appVersion,
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
