@@ -1,389 +1,198 @@
-// Audit reproductions for the `db-migrations-rls-indexes` area.
+// Static pins over the migration chain in supabase/migrations. The live
+// behaviour (grant layer, quota, planner) is asserted by
+// supabase/tests/security_regression.sql cases H7 and I1–I3 against a real
+// Postgres; this suite guards the chain itself so a later migration cannot
+// quietly reopen a closed path or drop a load-bearing index.
 //
-// Boots a throwaway Docker postgres:16, installs the hosted-like shim from
-// supabase/tests/shim_auth.sql, applies every migration in order (exactly like
-// supabase/tests/run_rls_tests.sh) and then runs SQL probes as the
-// `authenticated` role / as the table owner.
-//
-// Two kinds of cases live here:
-//   * INVARIANT cases assert behaviour the migrations promise and that holds.
-//   * REPRO cases pin a CONFIRMED defect in its CURRENT (broken) state so the
-//     defect is reproducible; when the fix migration lands the assertion
-//     marked "flip after fix" must be inverted.
-//
-// Run: deno test --allow-run --allow-read --allow-env supabase/functions/api/__wf__/
-// Skips (does not fail) when Docker is unavailable.
+//   deno test --no-config --allow-read supabase/functions/api/__wf__/
 
-import { assert, assertEquals, assertStringIncludes } from "jsr:@std/assert@1";
-import { fromFileUrl, join } from "jsr:@std/path@1";
-
-const REPO_ROOT = fromFileUrl(new URL("../../../../", import.meta.url));
-const MIGRATIONS_DIR = join(REPO_ROOT, "supabase", "migrations");
-const SHIM = join(REPO_ROOT, "supabase", "tests", "shim_auth.sql");
-const CONTAINER = `wf-db-audit-${Date.now()}`;
-
-const USER_A = "00000000-0000-4000-8000-00000000aaaa";
-
-async function run(cmd: string[], opts: { stdin?: string; allowFail?: boolean } = {}) {
-  const command = new Deno.Command(cmd[0], {
-    args: cmd.slice(1),
-    stdin: opts.stdin === undefined ? "null" : "piped",
-    stdout: "piped",
-    stderr: "piped",
-  });
-  const child = command.spawn();
-  if (opts.stdin !== undefined) {
-    const writer = child.stdin.getWriter();
-    await writer.write(new TextEncoder().encode(opts.stdin));
-    await writer.close();
-  }
-  const out = await child.output();
-  const stdout = new TextDecoder().decode(out.stdout);
-  const stderr = new TextDecoder().decode(out.stderr);
-  if (!out.success && !opts.allowFail) {
-    throw new Error(`${cmd.join(" ")} failed (${out.code}):\n${stdout}\n${stderr}`);
-  }
-  return { code: out.code, stdout, stderr };
+function ok(condition: unknown, message: string): asserts condition {
+  if (!condition) throw new Error(message);
 }
 
-async function dockerAvailable(): Promise<boolean> {
-  try {
-    const r = await run(["docker", "info"], { allowFail: true });
-    return r.code === 0;
-  } catch {
-    return false;
-  }
+const MIGRATIONS_DIR = new URL("../../../migrations/", import.meta.url);
+
+const SHOTS_DELETE_REVOKE = "20260902000000_shots_delete_revoke.sql";
+const CASCADE_USER_INDEXES = "20260902000100_cascade_user_indexes.sql";
+const PERMITS_SWEEP_INDEX = "20260902000200_permits_reserved_sweep_index.sql";
+const SCALE_AND_SECURITY = "20260831000000_scale_and_security.sql";
+
+const REQUIRED_INDEXES: ReadonlyArray<{
+  name: string;
+  table: string;
+  definition: RegExp;
+  migration: string;
+}> = [
+  {
+    name: "shot_phases_user_idx",
+    table: "shot_phases",
+    definition: /on public\.shot_phases \(user_id\)/,
+    migration: CASCADE_USER_INDEXES,
+  },
+  {
+    name: "shot_measurements_user_idx",
+    table: "shot_measurements",
+    definition: /on public\.shot_measurements \(user_id\)/,
+    migration: CASCADE_USER_INDEXES,
+  },
+  {
+    name: "analysis_feedback_user_created_idx",
+    table: "analysis_feedback",
+    definition: /on public\.analysis_feedback \(user_id, created_at desc\)/,
+    migration: CASCADE_USER_INDEXES,
+  },
+  {
+    name: "analysis_permits_reserved_created_idx",
+    table: "analysis_permits",
+    definition: /on public\.analysis_permits \(created_at\) where status = 'reserved'/,
+    migration: PERMITS_SWEEP_INDEX,
+  },
+];
+
+type Migration = { file: string; statements: string[] };
+
+function normalizeSql(sql: string): string[] {
+  const withoutComments = sql
+    .split("\n")
+    .map((line) => line.replace(/--.*$/, ""))
+    .join("\n");
+  return withoutComments
+    .split(";")
+    .map((statement) => statement.replace(/\s+/g, " ").trim().toLowerCase())
+    .filter((statement) => statement.length > 0);
 }
 
-/** Runs SQL as the postgres superuser inside the container; returns stdout
- * with `-A -t` (unaligned, tuples only) so single-column probes are one value
- * per line. */
-async function psql(sql: string, opts: { allowFail?: boolean } = {}) {
-  return await run(
-    [
-      "docker",
-      "exec",
-      "-i",
-      CONTAINER,
-      "psql",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-q",
-      "-A",
-      "-t",
-      "-U",
-      "postgres",
-    ],
-    { stdin: sql, allowFail: opts.allowFail },
-  );
-}
-
-async function bootDatabase() {
-  await run([
-    "docker",
-    "run",
-    "-d",
-    "--rm",
-    "--name",
-    CONTAINER,
-    "-e",
-    "POSTGRES_PASSWORD=pg",
-    "postgres:16",
-  ]);
-  for (let i = 0; i < 60; i++) {
-    const ready = await run(["docker", "exec", CONTAINER, "pg_isready", "-U", "postgres"], {
-      allowFail: true,
-    });
-    if (ready.code === 0) break;
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-  await run(["docker", "cp", SHIM, `${CONTAINER}:/shim_auth.sql`]);
-  await run(["docker", "cp", MIGRATIONS_DIR, `${CONTAINER}:/migrations`]);
-  await run([
-    "docker",
-    "exec",
-    CONTAINER,
-    "psql",
-    "-v",
-    "ON_ERROR_STOP=1",
-    "-q",
-    "-U",
-    "postgres",
-    "-f",
-    "/shim_auth.sql",
-  ]);
+async function loadChain(): Promise<Migration[]> {
   const files: string[] = [];
   for await (const entry of Deno.readDir(MIGRATIONS_DIR)) {
     if (entry.isFile && entry.name.endsWith(".sql")) files.push(entry.name);
   }
   files.sort();
-  for (const f of files) {
-    await run([
-      "docker",
-      "exec",
-      CONTAINER,
-      "psql",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-q",
-      "-U",
-      "postgres",
-      "-f",
-      `/migrations/${f}`,
-    ]);
+  const chain: Migration[] = [];
+  for (const file of files) {
+    const sql = await Deno.readTextFile(new URL(file, MIGRATIONS_DIR));
+    chain.push({ file, statements: normalizeSql(sql) });
   }
+  return chain;
 }
 
-async function teardown() {
-  await run(["docker", "rm", "-f", CONTAINER], { allowFail: true });
+function after(chain: Migration[], file: string): Migration[] {
+  const index = chain.findIndex((m) => m.file === file);
+  ok(index >= 0, `${file} must exist in the migration chain`);
+  return chain.slice(index + 1);
 }
 
-const VERSION_VECTOR = `jsonb_build_object(
-  'appVersion','1.0.0','modelBundleVersion','bundle-1','poseModelVersion','pose-1',
-  'paddleModelVersion','paddle-1','strokeDetectorVersion','stroke-1',
-  'phaseModelVersion','phase-1','scoringModelVersion','scoring-1','shotConfigVersion','config-1')`;
-
-function scoredShotJson(id: string, permitKey: string) {
-  return `jsonb_build_object(
-    'id','${id}',
-    'analysisPermitId',(select id from public.analysis_permits where idempotency_key='${permitKey}'),
-    'sessionId',null,'shotType','dink','cameraView','side','capturedAt',now()::text,
-    'startMs',0,'contactMs',100,'endMs',200,'overallScore',7.5,'confidence',0.9,'resultKind','scored',
-    'phases','[]'::jsonb,'checkpoints','[]'::jsonb,'versionVector',${VERSION_VECTOR})`;
+function statementsOf(chain: Migration[], file: string): string[] {
+  const migration = chain.find((m) => m.file === file);
+  ok(migration, `${file} must exist in the migration chain`);
+  return migration.statements;
 }
 
-const asUser = (uid: string) => `
-  set local role authenticated;
-  select set_config('request.jwt.claim.sub', '${uid}', true);
-  select set_config('request.jwt.claim.role', 'authenticated', true);
-`;
+function grantsDeleteOnShots(statement: string): boolean {
+  if (!statement.startsWith("grant ")) return false;
+  const [privileges, objects = ""] = statement.split(" on ", 2);
+  if (!/\bdelete\b/.test(privileges) && !/\ball\b/.test(privileges)) {
+    return false;
+  }
+  return /\bpublic\.shots\b/.test(objects);
+}
 
-const provision = (uid: string, email: string) => `
-  insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
-  values ('${uid}', '${email}', '{}'::jsonb, '{"provider":"google"}'::jsonb);
-`;
+function createsDeletePolicyOnShots(statement: string): boolean {
+  return (
+    statement.startsWith("create policy") &&
+    /\bon public\.shots\b/.test(statement) &&
+    /\bfor delete\b/.test(statement)
+  );
+}
 
-const lines = (s: string) =>
-  s
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
+Deno.test("shots: the client DELETE path is closed and never reopened", async () => {
+  const chain = await loadChain();
+  const revoke = statementsOf(chain, SHOTS_DELETE_REVOKE);
+  ok(
+    revoke.includes("revoke delete on public.shots from authenticated"),
+    "the revoke migration must drop the authenticated DELETE grant on shots",
+  );
+  ok(
+    revoke.includes('drop policy if exists "shots_delete_own" on public.shots'),
+    "the revoke migration must drop the shots_delete_own policy",
+  );
 
-const skip = !(await dockerAvailable());
-
-Deno.test({
-  name: "db-migrations-rls-indexes audit matrix",
-  ignore: skip,
-  sanitizeResources: false,
-  sanitizeOps: false,
-  async fn(t) {
-    await bootDatabase();
-    try {
-      await t.step(
-        "INVARIANT: hosted-like matrix applies (migration chain + shim boot)",
-        async () => {
-          const r = await psql(`select count(*) from pg_policies where schemaname='public';`);
-          assert(Number(lines(r.stdout)[0]) > 20, "RLS policies present");
-        },
+  for (const migration of after(chain, SHOTS_DELETE_REVOKE)) {
+    for (const statement of migration.statements) {
+      ok(
+        !grantsDeleteOnShots(statement),
+        `${migration.file} re-grants DELETE on public.shots: ${statement}`,
       );
-
-      await t.step(
-        "REPRO (high): authenticated keeps DELETE on public.shots -> lifetime free-rating counter is client-resettable",
-        async () => {
-          const r = await psql(`
-            begin;
-            ${provision(USER_A, "a@x.test")}
-            ${asUser(USER_A)}
-            \\echo GRANTS
-            select string_agg(privilege_type, ',' order by privilege_type)
-              from information_schema.role_table_grants
-             where grantee='authenticated' and table_schema='public' and table_name='shots';
-            \\echo RESERVE1
-            select result from public.reserve_analysis_permit('k1');
-            select public.apply_synced_shot(${scoredShotJson(
-              "00000000-0000-4000-8000-0000000000e1",
-              "k1",
-            )});
-            select result from public.reserve_analysis_permit('k2');
-            select public.apply_synced_shot(${scoredShotJson(
-              "00000000-0000-4000-8000-0000000000e2",
-              "k2",
-            )});
-            \\echo BEFORE
-            select scored_count from public.access_state();
-            select result from public.reserve_analysis_permit('k3');
-            \\echo DELETE
-            delete from public.shots where user_id = '${USER_A}';
-            \\echo AFTER
-            select scored_count from public.access_state();
-            select result from public.reserve_analysis_permit('k4');
-            rollback;
-          `);
-          const out = lines(r.stdout);
-          const grants = out[out.indexOf("GRANTS") + 1];
-          // Defect: DELETE is still granted (20260829120000_progress_data.sql:303-305;
-          // 20260831160000_defense_in_depth.sql:58 only revokes UPDATE).
-          assertStringIncludes(grants, "DELETE", "flip after fix: DELETE must be revoked");
-          const before = out.slice(out.indexOf("BEFORE") + 1, out.indexOf("DELETE"));
-          assertEquals(before, ["2", "access.paywall_required"], "both lifetime ratings consumed");
-          const after = out.slice(out.indexOf("AFTER") + 1);
-          // Defect: after the client DELETE, scored_count is 0 and a third
-          // free rating is reserved. flip after fix: expect the DELETE to be
-          // rejected (42501) and ["2","access.paywall_required"] here.
-          assertEquals(after, ["0", "accepted"], "flip after fix: counter must not reset");
-        },
+      ok(
+        !createsDeletePolicyOnShots(statement),
+        `${migration.file} recreates a DELETE policy on public.shots: ${statement}`,
       );
-
-      await t.step(
-        "INVARIANT: shots UPDATE, detail-row and ledger mutations stay denied",
-        async () => {
-          // ON_ERROR_STOP aborts at the first error, so each denial is its own transaction.
-          const upd = await psql(
-            `begin; ${provision(USER_A, "a@x.test")} ${asUser(USER_A)}
-          update public.shots set overall_score = 9.9 where user_id = '${USER_A}'; rollback;`,
-            { allowFail: true },
-          );
-          assertStringIncludes(upd.stderr, "permission denied for table shots");
-          const delph = await psql(
-            `begin; ${provision(USER_A, "a@x.test")} ${asUser(USER_A)}
-          delete from public.shot_phases where user_id = '${USER_A}'; rollback;`,
-            { allowFail: true },
-          );
-          assertStringIncludes(delph.stderr, "permission denied for table shot_phases");
-          const delcons = await psql(
-            `begin; ${provision(USER_A, "a@x.test")} ${asUser(USER_A)}
-          delete from public.consent_records where user_id = '${USER_A}'; rollback;`,
-            { allowFail: true },
-          );
-          assertStringIncludes(delcons.stderr, "permission denied for table consent_records");
-        },
-      );
-
-      await t.step(
-        "INVARIANT: hot RPCs are SECURITY INVOKER; rank recompute is DEFINER, pinned, not client-executable",
-        async () => {
-          const r = await psql(`
-          select p.proname || ':' || case when p.prosecdef then 'definer' else 'invoker' end || ':' ||
-                 coalesce(array_to_string(p.proconfig, ';'), '-') || ':' ||
-                 has_function_privilege('authenticated', p.oid, 'execute')::text
-            from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-           where n.nspname = 'public'
-             and p.proname in ('access_state','apply_synced_shot','reserve_analysis_permit','recompute_player_rank','handle_shot_rank_refresh','reject_ledger_mutation')
-           order by 1;
-        `);
-          const rows = lines(r.stdout);
-          const pinned = 'search_path=""';
-          assert(rows.includes(`access_state:invoker:${pinned}:true`), rows.join("|"));
-          assert(rows.includes(`apply_synced_shot:invoker:${pinned}:true`), rows.join("|"));
-          assert(rows.includes(`reserve_analysis_permit:invoker:${pinned}:true`), rows.join("|"));
-          assert(rows.includes(`recompute_player_rank:definer:${pinned}:false`), rows.join("|"));
-          assert(rows.includes(`handle_shot_rank_refresh:definer:${pinned}:false`), rows.join("|"));
-          assert(rows.includes(`reject_ledger_mutation:invoker:${pinned}:false`), rows.join("|"));
-        },
-      );
-
-      await t.step(
-        "INVARIANT: hot reads use the owner indexes under RLS (100k-user shape)",
-        async () => {
-          // 5k users x 10 shots (rank trigger disabled for the bulk load only).
-          await psql(`
-          insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
-          select ('00000000-0000-4000-9000-' || lpad(to_hex(g), 12, '0'))::uuid, 'u' || g || '@x.test', '{}'::jsonb, '{"provider":"google"}'::jsonb
-          from generate_series(1, 5000) g;
-          alter table public.shots disable trigger shots_player_rank_refresh;
-          insert into public.shots (id, user_id, shot_type, camera_view, captured_at, start_ms, contact_ms, end_ms, overall_score, analysis_confidence, result_kind,
-            app_version, model_bundle_version, pose_model_version, paddle_model_version, stroke_detector_version, phase_model_version, scoring_model_version, shot_config_version)
-          select gen_random_uuid(), p.id, (array['dink','drive','serve','volley'])[1 + (s % 4)], 'side', now() - (s || ' hours')::interval, 0, 100, 200,
-            (random()*10)::numeric(4,2), 0.9, 'scored', '1.0.0','b','p','pa','s','ph','sc','c'
-          from public.profiles p cross join generate_series(1, 10) s;
-          alter table public.shots enable trigger shots_player_rank_refresh;
-          insert into public.shot_phases (shot_id, user_id, phase_key, start_ms, representative_ms, end_ms, confidence)
-          select sh.id, sh.user_id, 'phase' || k, 0, 50, 100, 0.9 from public.shots sh cross join generate_series(1, 6) k;
-          insert into public.analysis_permits (user_id, idempotency_key, status, outcome, created_at)
-          select p.id, 'k' || g, case when g % 50 = 0 then 'reserved' else 'finalized' end, 'scored', now() - (g || ' days')::interval
-          from public.profiles p cross join generate_series(1, 15) g;
-          insert into public.analysis_feedback (user_id, analysis_id, rating)
-          select user_id, id, 'accurate' from public.shots where random() < 0.34;
-          vacuum analyze public.shots; vacuum analyze public.shot_phases; vacuum analyze public.analysis_permits; vacuum analyze public.analysis_feedback;
-        `);
-          const uid = "00000000-0000-4000-9000-000000000123";
-          const r = await psql(`
-          begin;
-          ${asUser(uid)}
-          \\echo RANK
-          explain (costs off) select shot_type, score from public.player_technique_rating where user_id = '${uid}' order by shot_type;
-          \\echo PROGRESS
-          explain (costs off) select day, shot_count from public.progress_daily where user_id = '${uid}' order by day;
-          \\echo CONSENT
-          explain (costs off) select scope from public.consent_records where user_id = '${uid}' order by created_at, id;
-          \\echo PERMITS
-          explain (costs off) select count(*) from public.analysis_permits where user_id = '${uid}' and status='reserved' and created_at > now() - interval '24 hours';
-          rollback;
-        `);
-          const out = r.stdout;
-          const section = (a: string, b?: string) =>
-            out.slice(out.indexOf(a), b ? out.indexOf(b) : undefined);
-          // Either owner-leading partial index is a correct choice for these two.
-          assert(
-            /shots_user_(type_)?scored_idx/.test(section("RANK", "PROGRESS")),
-            section("RANK", "PROGRESS"),
-          );
-          assert(
-            /shots_user_(type_)?scored_idx/.test(section("PROGRESS", "CONSENT")),
-            section("PROGRESS", "CONSENT"),
-          );
-          assertStringIncludes(section("CONSENT", "PERMITS"), "consent_records_user_created_idx");
-          assertStringIncludes(section("PERMITS"), "analysis_permits_user_status_idx");
-          assert(!out.includes("Seq Scan"), `no sequential scans on hot reads:\n${out}`);
-        },
-      );
-
-      await t.step(
-        "REPRO (medium): profiles -> shot_phases / shot_measurements / analysis_feedback cascades have no user_id index (account deletion seq-scans them)",
-        async () => {
-          const uid = "00000000-0000-4000-9000-000000000123";
-          const r = await psql(`
-            \\echo PHASES
-            explain (costs off) select 1 from public.shot_phases where user_id = '${uid}';
-            \\echo MEASUREMENTS
-            explain (costs off) select 1 from public.shot_measurements where user_id = '${uid}';
-            \\echo FEEDBACK
-            explain (costs off) select 1 from public.analysis_feedback where user_id = '${uid}';
-            \\echo CASCADE
-            begin;
-            explain (analyze, costs off, timing off, summary off, buffers) delete from auth.users where id = '${uid}';
-            rollback;
-          `);
-          const out = r.stdout;
-          const section = (a: string, b: string) => out.slice(out.indexOf(a), out.indexOf(b));
-          // flip after fix: expect "Index Scan"/"Bitmap Index Scan" on
-          // shot_phases (user_id), shot_measurements (user_id), analysis_feedback (user_id).
-          assertStringIncludes(section("PHASES", "MEASUREMENTS"), "Seq Scan on shot_phases");
-          assertStringIncludes(
-            section("MEASUREMENTS", "FEEDBACK"),
-            "Seq Scan on shot_measurements",
-          );
-          assertStringIncludes(section("FEEDBACK", "CASCADE"), "Seq Scan on analysis_feedback");
-          assertStringIncludes(
-            out,
-            "Trigger for constraint shot_phases_user_id_fkey on profiles: calls=1",
-          );
-        },
-      );
-
-      await t.step(
-        "REPRO (low): pg_cron stale-permit sweep predicate has no usable index (hourly seq scan of every permit ever issued)",
-        async () => {
-          const r = await psql(`
-            explain (costs off) update public.analysis_permits set status = 'released', outcome = 'expired'
-              where status = 'reserved' and created_at < now() - interval '24 hours';
-          `);
-          // flip after fix: expect an index scan on a partial (created_at) where status='reserved' index.
-          assertStringIncludes(r.stdout, "Seq Scan on analysis_permits");
-        },
-      );
-    } finally {
-      await teardown();
     }
-  },
+  }
+});
+
+Deno.test("shots: the pre-fix chain is the one the revoke was written against", async () => {
+  const chain = await loadChain();
+  const before = chain.slice(
+    0,
+    chain.findIndex((m) => m.file === SHOTS_DELETE_REVOKE),
+  );
+  const granted = before.some((m) => m.statements.some(grantsDeleteOnShots));
+  ok(granted, "20260829120000 grants DELETE on shots");
+});
+
+Deno.test("cascade children and the permit sweep are indexed on their lookup columns", async () => {
+  const chain = await loadChain();
+  for (const index of REQUIRED_INDEXES) {
+    const statements = statementsOf(chain, index.migration);
+    const create = statements.find((s) =>
+      s.startsWith(`create index if not exists ${index.name} `),
+    );
+    ok(create, `${index.migration} must create ${index.name}`);
+    ok(
+      index.definition.test(create),
+      `${index.name} must be defined on the lookup column(s): ${create}`,
+    );
+
+    for (const migration of after(chain, index.migration)) {
+      for (const statement of migration.statements) {
+        ok(
+          !(statement.startsWith("drop index") && statement.includes(index.name)),
+          `${migration.file} drops ${index.name}`,
+        );
+        ok(
+          !(
+            statement.startsWith("drop table") &&
+            new RegExp(`\\bpublic\\.${index.table}\\b`).test(statement)
+          ),
+          `${migration.file} drops public.${index.table}`,
+        );
+      }
+    }
+  }
+});
+
+Deno.test("permit sweep: the pg_cron predicate and the partial index stay in step", async () => {
+  const chain = await loadChain();
+  const cron = statementsOf(chain, SCALE_AND_SECURITY).find(
+    (s) => s.includes("cron.schedule") && s.includes("expire-stale-analysis-permits"),
+  );
+  ok(cron, "the stale-permit sweep must be scheduled in 20260831000000");
+  ok(
+    cron.includes("where status = ''reserved'' and created_at <"),
+    `sweep predicate must be status = 'reserved' and created_at < …: ${cron}`,
+  );
+
+  const sweepIndex = statementsOf(chain, PERMITS_SWEEP_INDEX).find((s) =>
+    s.startsWith("create index if not exists analysis_permits_reserved_created_idx "),
+  );
+  ok(sweepIndex, "the partial sweep index must be created");
+  ok(
+    sweepIndex.endsWith("where status = 'reserved'"),
+    `the partial index predicate must match the sweep: ${sweepIndex}`,
+  );
+  ok(
+    sweepIndex.includes("(created_at)"),
+    `the partial index must be keyed on created_at: ${sweepIndex}`,
+  );
 });
