@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Animated, {
@@ -45,6 +45,7 @@ import { plural } from '../util/plural';
  */
 
 const TOP_OF_SCALE = 10;
+const FOLD_AWAY_MS = 180;
 
 /** Fill fraction (0..1) of one tier segment on the ladder (same math as
  * PlayerRankCard / RankUpCelebration — every ladder must agree). */
@@ -71,7 +72,16 @@ export function PlayerRankBanner(props: {
 }) {
   const [serverRank, setServerRank] = useState<ServerPlayerRank | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [foldOutMounted, setFoldOutMounted] = useState(false);
+  const foldAwayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reduced = useReducedMotion();
+
+  useEffect(
+    () => () => {
+      if (foldAwayTimer.current) clearTimeout(foldAwayTimer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     let active = true;
@@ -118,8 +128,14 @@ export function PlayerRankBanner(props: {
   const toggle = () => {
     const opening = !expanded;
     setExpanded(opening);
+    if (foldAwayTimer.current) {
+      clearTimeout(foldAwayTimer.current);
+      foldAwayTimer.current = null;
+    }
+    if (opening) setFoldOutMounted(true);
     if (reduced) {
       unfold.value = opening ? 1 : 0;
+      if (!opening) setFoldOutMounted(false);
       return;
     }
     if (opening) {
@@ -138,9 +154,13 @@ export function PlayerRankBanner(props: {
       );
     } else {
       unfold.value = withTiming(0, {
-        duration: 180,
+        duration: FOLD_AWAY_MS,
         easing: Easing.in(Easing.quad),
       });
+      foldAwayTimer.current = setTimeout(() => {
+        foldAwayTimer.current = null;
+        setFoldOutMounted(false);
+      }, FOLD_AWAY_MS);
     }
   };
 
@@ -265,8 +285,12 @@ export function PlayerRankBanner(props: {
         </Pressable>
       </View>
 
-      {expanded ? (
-        <Animated.View style={[styles.expanded, unfoldStyle]}>
+      {foldOutMounted ? (
+        <Animated.View
+          pointerEvents={expanded ? 'auto' : 'none'}
+          style={[styles.expanded, unfoldStyle]}
+          testID="player-rank-banner-fold-out"
+        >
           <View style={styles.divider} />
           {summary ? (
             <>

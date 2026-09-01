@@ -22,9 +22,9 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
-	<!-- Google Sign-In return URL scheme: replace with the REVERSED iOS OAuth
-	     client ID from Google Cloud Console (see supabase/README.md §5).
-	     The placeholder is inert until replaced. -->
+	<!-- Google Sign-In return URL scheme: the REVERSED form of the live
+	     GOOGLE_IOS_CLIENT_ID in src/config/runtimeConfig.ts (see
+	     supabase/README.md §5). Keep the two in sync when the client ID rotates. -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

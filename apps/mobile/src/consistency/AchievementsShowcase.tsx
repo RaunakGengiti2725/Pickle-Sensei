@@ -12,7 +12,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { PressableScale, useReducedMotion } from '../design/components';
 import { color, radius, space, type } from '../design/tokens';
-import type { ConsistencySnapshot } from './engine';
+import { specialistTitle, type ConsistencySnapshot } from './engine';
 import {
   RARITY_LABEL,
   STREAK_MILESTONES,
@@ -80,7 +80,7 @@ function buildEntries(snapshot: ConsistencySnapshot): ShowcaseEntry[] {
   entries.push({
     id: VOLUME_ACHIEVEMENTS.specialist.id,
     title: specialist?.detail
-      ? `${specialist.detail} Specialist`
+      ? specialistTitle(specialist.detail)
       : VOLUME_ACHIEVEMENTS.specialist.title,
     blurb: VOLUME_ACHIEVEMENTS.specialist.blurb,
     reward: VOLUME_ACHIEVEMENTS.specialist.reward,
@@ -168,6 +168,7 @@ export function AchievementsShowcase(props: {
                     }`
                   : `Locked. ${entry.progressLabel ?? ''}`
               }`}
+              accessibilityState={{ selected: selectedId === entry.id }}
               onPress={() =>
                 setSelectedId(current =>
                   current === entry.id ? null : entry.id,

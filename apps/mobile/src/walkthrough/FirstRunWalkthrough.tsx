@@ -390,6 +390,7 @@ function WalkthroughStage() {
   return (
     <View style={styles.root} testID="first-run-walkthrough">
       <Pressable
+        accessibilityRole="button"
         accessibilityLabel="Dismiss walkthrough"
         onPress={dismiss}
         style={StyleSheet.absoluteFill}
