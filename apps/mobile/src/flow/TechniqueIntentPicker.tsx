@@ -11,7 +11,7 @@ import {
   type VoiceIntentResolution,
 } from '@pickle/shared-types';
 import { PressableScale } from '../design/components';
-import { color, font, radius, space, type } from '../design/tokens';
+import { color, radius, space, type } from '../design/tokens';
 
 /**
  * "WHAT ARE YOU WORKING ON?" — one canonical intent architecture for
@@ -199,12 +199,12 @@ export function TechniqueIntentPicker(props: {
 
 const styles = StyleSheet.create({
   intentField: {
+    ...type.body,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: color.line,
     backgroundColor: color.surfaceElevated,
     color: color.ink,
-    fontFamily: font.regular,
     paddingHorizontal: space.md,
     minHeight: 44,
     marginTop: space.sm,

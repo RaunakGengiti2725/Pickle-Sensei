@@ -32,7 +32,7 @@ import Reanimated, {
   withDelay,
   withTiming,
 } from 'react-native-reanimated';
-import { bandColor, color, font, radius, shadow, space, type } from './tokens';
+import { bandColor, color, radius, shadow, space, type } from './tokens';
 import { Icon, type IconName } from './icons';
 
 const AnimatedCircle = Reanimated.createAnimatedComponent(Circle);
@@ -829,13 +829,7 @@ const styles = StyleSheet.create({
   pressableContainer: { alignSelf: 'stretch' },
   pressableBase: { justifyContent: 'center' },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  wordmark: {
-    fontFamily: font.semibold,
-    fontSize: 18,
-    lineHeight: 22,
-    fontWeight: 'normal',
-    letterSpacing: -0.5,
-  },
+  wordmark: { ...type.h3 },
   screenHeader: {
     minHeight: 52,
     paddingHorizontal: space.lg,

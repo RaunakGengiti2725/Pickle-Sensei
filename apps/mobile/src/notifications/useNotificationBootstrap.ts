@@ -18,7 +18,7 @@ export function useNotificationBootstrap(ownerKey: string | null): void {
 
   useEffect(() => {
     if (!ownerKey) return;
-    void hydrate();
+    void hydrate({ expectedOwnerKey: ownerKey });
   }, [hydrate, ownerKey]);
 
   useEffect(() => {

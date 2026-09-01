@@ -39,18 +39,23 @@ jest.mock('../src/data/db', () => ({
   }),
 }));
 
-import { useNotificationStore } from '../src/notifications/notificationStore';
+import {
+  PENDING_NOTIFICATION_ONBOARDING_KV_KEY,
+  useNotificationStore,
+} from '../src/notifications/notificationStore';
 
 class FakeScheduler implements SchedulerPort {
   permission: PermissionState = 'undetermined';
   appliedPlans: PlannedNotification[][] = [];
   cancelAllCalls = 0;
+  requestCalls = 0;
   requestResult: PermissionState = 'granted';
 
   async permissionState(): Promise<PermissionState> {
     return this.permission;
   }
   async requestPermission(): Promise<PermissionState> {
+    this.requestCalls += 1;
     this.permission = this.requestResult;
     return this.requestResult;
   }
@@ -84,6 +89,7 @@ function resetStore() {
 }
 
 const owner = '33333333-3333-4333-8333-333333333333';
+const otherOwner = '44444444-4444-4444-8444-444444444444';
 
 beforeEach(() => {
   mockKvTable.clear();
@@ -191,6 +197,100 @@ describe('notification store', () => {
       .getState()
       .setPrefs({ enabled: false }, deps(scheduler));
     expect(scheduler.cancelAllCalls).toBeGreaterThan(cancelsBefore);
+  });
+
+  it('holds a granted pre-auth onboarding choice until a writable owner hydrates', async () => {
+    const scheduler = new FakeScheduler();
+    await useNotificationStore
+      .getState()
+      .completeOnboardingStep('enable', deps(scheduler));
+
+    expect(scheduler.requestCalls).toBe(1);
+    expect(useNotificationStore.getState().prefs.enabled).toBe(false);
+    expect(scheduler.appliedPlans).toEqual([]);
+    expect(
+      JSON.parse(mockKvTable.get(PENDING_NOTIFICATION_ONBOARDING_KV_KEY)!),
+    ).toEqual({ version: 1, enabled: true });
+
+    setActiveDataOwner(owner);
+    await useNotificationStore.getState().hydrate(deps(scheduler));
+    expect(useNotificationStore.getState().prefs).toMatchObject({
+      enabled: true,
+      promptDismissed: true,
+    });
+    expect(scheduler.appliedPlans.length).toBeGreaterThan(0);
+    expect(mockKvTable.get(PENDING_NOTIFICATION_ONBOARDING_KV_KEY)).toBe('');
+  });
+
+  it('keeps reminders off when the onboarding permission request is denied', async () => {
+    const scheduler = new FakeScheduler();
+    scheduler.requestResult = 'denied';
+    await useNotificationStore
+      .getState()
+      .completeOnboardingStep('enable', deps(scheduler));
+
+    expect(scheduler.requestCalls).toBe(1);
+    expect(
+      JSON.parse(mockKvTable.get(PENDING_NOTIFICATION_ONBOARDING_KV_KEY)!),
+    ).toEqual({ version: 1, enabled: false });
+  });
+
+  it('records Not now during pre-auth onboarding without requesting permission', async () => {
+    const scheduler = new FakeScheduler();
+    await useNotificationStore
+      .getState()
+      .completeOnboardingStep('not_now', deps(scheduler));
+
+    expect(scheduler.requestCalls).toBe(0);
+    expect(
+      JSON.parse(mockKvTable.get(PENDING_NOTIFICATION_ONBOARDING_KV_KEY)!),
+    ).toEqual({ version: 1, enabled: false });
+  });
+
+  it('keeps existing owner preferences over a pre-auth choice', async () => {
+    mockKvTable.set(
+      notificationPrefsKeyForOwner(owner),
+      JSON.stringify({
+        ...DEFAULT_NOTIFICATION_PREFS,
+        enabled: false,
+        promptDismissed: true,
+      }),
+    );
+    mockKvTable.set(
+      PENDING_NOTIFICATION_ONBOARDING_KV_KEY,
+      JSON.stringify({ version: 1, enabled: true }),
+    );
+    setActiveDataOwner(owner);
+
+    const scheduler = new FakeScheduler();
+    await useNotificationStore.getState().hydrate(deps(scheduler));
+    expect(useNotificationStore.getState().prefs.enabled).toBe(false);
+    expect(scheduler.appliedPlans).toEqual([]);
+    expect(mockKvTable.get(PENDING_NOTIFICATION_ONBOARDING_KV_KEY)).toBe('');
+  });
+
+  it('does not apply one owner’s plan after the active owner changes', async () => {
+    mockKvTable.set(
+      notificationPrefsKeyForOwner(owner),
+      JSON.stringify({
+        ...DEFAULT_NOTIFICATION_PREFS,
+        enabled: true,
+        promptDismissed: true,
+      }),
+    );
+    setActiveDataOwner(owner);
+    const scheduler = new FakeScheduler();
+    scheduler.permission = 'granted';
+
+    await useNotificationStore.getState().hydrate({
+      scheduler,
+      loadContext: async () => {
+        setActiveDataOwner(otherOwner);
+        return planContext;
+      },
+    });
+
+    expect(scheduler.appliedPlans).toEqual([]);
   });
 
   it('dismissPrompt is durable and one-way', async () => {

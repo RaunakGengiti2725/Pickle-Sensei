@@ -32,7 +32,12 @@ import {
 export interface NotificationStoreDeps {
   scheduler?: SchedulerPort;
   loadContext?: () => Promise<NotificationPlanContext>;
+  expectedOwnerKey?: string;
 }
+
+export type NotificationOnboardingChoice = 'enable' | 'not_now';
+export const PENDING_NOTIFICATION_ONBOARDING_KV_KEY =
+  'onboarding.pending-notifications';
 
 interface NotificationState {
   hydrated: boolean;
@@ -43,6 +48,10 @@ interface NotificationState {
   refreshPermission: (deps?: NotificationStoreDeps) => Promise<void>;
   /** System prompt → on grant, flips the master switch on and schedules. */
   requestPermissionAndEnable: (
+    deps?: NotificationStoreDeps,
+  ) => Promise<boolean>;
+  completeOnboardingStep: (
+    choice: NotificationOnboardingChoice,
     deps?: NotificationStoreDeps,
   ) => Promise<boolean>;
   setPrefs: (
@@ -88,6 +97,23 @@ async function defaultLoadContext(): Promise<NotificationPlanContext> {
   }
 }
 
+function parsePendingOnboardingChoice(
+  raw: string | null,
+): { enabled: boolean } | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as unknown;
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      return null;
+    const record = value as Record<string, unknown>;
+    return record['version'] === 1 && typeof record['enabled'] === 'boolean'
+      ? { enabled: record['enabled'] }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 async function persistPrefs(
   owner: string,
   prefs: NotificationPrefs,
@@ -106,11 +132,13 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   permission: 'unknown',
 
   hydrate: async deps => {
-    const owner = getActiveDataOwner();
+    const owner = deps?.expectedOwnerKey ?? getActiveDataOwner();
+    if (getActiveDataOwner() !== owner) return;
     const scheduler = deps?.scheduler ?? getScheduler();
     if (owner === SIGNED_OUT_DATA_OWNER) {
       // No readable owner: nothing may stay scheduled.
       await scheduler.cancelAllPlanned().catch(() => {});
+      if (getActiveDataOwner() !== owner) return;
       set({
         hydrated: true,
         ownerKey: owner,
@@ -121,14 +149,34 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     }
     let prefs: NotificationPrefs;
     try {
-      const raw = await getKv(getDb(), notificationPrefsKeyForOwner(owner));
+      const db = getDb();
+      const raw = await getKv(db, notificationPrefsKeyForOwner(owner));
       prefs = parseNotificationPrefs(raw);
+      const pendingRaw = await getKv(
+        db,
+        PENDING_NOTIFICATION_ONBOARDING_KV_KEY,
+      );
+      const pending = parsePendingOnboardingChoice(pendingRaw);
+      if (getActiveDataOwner() !== owner) return;
+      if (pending) {
+        if (!raw) {
+          prefs = {
+            ...prefs,
+            enabled: pending.enabled,
+            promptDismissed: true,
+          };
+          await persistPrefs(owner, prefs);
+          if (getActiveDataOwner() !== owner) return;
+        }
+        await setKv(db, PENDING_NOTIFICATION_ONBOARDING_KV_KEY, '');
+      }
     } catch {
       prefs = { ...DEFAULT_NOTIFICATION_PREFS };
     }
     if (getActiveDataOwner() !== owner) return;
     set({ hydrated: true, ownerKey: owner, prefs });
     await get().refreshPermission(deps);
+    if (getActiveDataOwner() !== owner || get().ownerKey !== owner) return;
     await get().syncNow(deps);
   },
 
@@ -156,6 +204,35 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     return true;
   },
 
+  completeOnboardingStep: async (choice, deps) => {
+    const scheduler = deps?.scheduler ?? getScheduler();
+    let enabled = false;
+    if (choice === 'enable') {
+      try {
+        const state = await scheduler.requestPermission();
+        set({ permission: state });
+        enabled = state === 'granted';
+      } catch {
+        set({ permission: 'unknown' });
+      }
+    }
+    const owner = getActiveDataOwner();
+    if (owner === SIGNED_OUT_DATA_OWNER) {
+      try {
+        await setKv(
+          getDb(),
+          PENDING_NOTIFICATION_ONBOARDING_KV_KEY,
+          JSON.stringify({ version: 1, enabled }),
+        );
+      } catch {
+        return enabled;
+      }
+      return enabled;
+    }
+    await get().setPrefs({ enabled, promptDismissed: true }, deps);
+    return enabled;
+  },
+
   setPrefs: async (patch, deps) => {
     const owner = getActiveDataOwner();
     if (owner === SIGNED_OUT_DATA_OWNER) return;
@@ -178,10 +255,11 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   syncNow: async deps => {
     const scheduler = deps?.scheduler ?? getScheduler();
     const owner = getActiveDataOwner();
-    const { prefs, permission } = get();
+    const { ownerKey, prefs, permission } = get();
     try {
       if (
         owner === SIGNED_OUT_DATA_OWNER ||
+        ownerKey !== owner ||
         !prefs.enabled ||
         permission !== 'granted'
       ) {
@@ -190,6 +268,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       }
       const loadContext = deps?.loadContext ?? defaultLoadContext;
       const plan = buildNotificationPlan(prefs, await loadContext());
+      if (getActiveDataOwner() !== owner || get().ownerKey !== owner) return;
       await scheduler.applyPlan(plan);
     } catch {
       // Scheduling is best-effort by design: a failed sync never breaks the

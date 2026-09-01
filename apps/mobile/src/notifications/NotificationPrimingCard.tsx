@@ -42,6 +42,8 @@ export function NotificationPrimingCard() {
         <View style={styles.actions}>
           <PressableScale
             accessibilityLabel="Turn on practice reminders"
+            accessibilityHint="Request notification permission and schedule reminders"
+            accessibilityRole="button"
             containerStyle={styles.actionSlot}
             onPress={() => void requestPermissionAndEnable()}
             style={[styles.action, styles.actionPrimary]}
@@ -52,6 +54,8 @@ export function NotificationPrimingCard() {
           </PressableScale>
           <PressableScale
             accessibilityLabel="Not now"
+            accessibilityHint="Dismiss this reminder offer"
+            accessibilityRole="button"
             containerStyle={styles.actionSlot}
             onPress={() => void dismissPrompt()}
             style={styles.action}

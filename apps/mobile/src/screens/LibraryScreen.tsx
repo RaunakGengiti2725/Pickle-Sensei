@@ -666,7 +666,7 @@ const styles = StyleSheet.create({
   },
   strokeName: { color: color.ink, textTransform: 'capitalize' },
   readMeta: { color: color.inkSoft, marginTop: 3 },
-  score: { ...type.score, color: color.ink, fontSize: 29, lineHeight: 33 },
+  score: { ...type.score, color: color.ink, fontSize: 30, lineHeight: 34 },
   notRead: { alignItems: 'center', gap: 4 },
   planSummary: {
     minHeight: 226,

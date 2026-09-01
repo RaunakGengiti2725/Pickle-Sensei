@@ -99,19 +99,45 @@ backend is the Supabase Edge Function in `supabase/functions/api/` (Deno);
 - `public.billing_entitlements` is written ONLY by the edge function via
   service role. Never add user INSERT/UPDATE policies to it.
 
+## Typography canon (title roles must match EXACTLY across screens)
+
+All text styles come from `src/design/tokens.ts type` — never invent ad-hoc
+fontSize/fontFamily near a token. Title roles:
+
+- Top-level pages (Progress, Library, Settings): `type.hero` title at
+  content paddingTop `space.xl`, `type.body` subtitle `marginTop: space.sm`,
+  `maxWidth: 340`.
+- Pre-auth landings (Welcome, SignIn, Analyze camera landing) and every
+  onboarding step: optional `type.micro` kicker → `type.hero` title
+  (`marginTop: space.sm` after a kicker) → `type.body` sub
+  (`marginTop: space.sm`, `maxWidth: 340`).
+- Sub-page headers: `ScreenHeader` (`type.h3`). Section headers:
+  `SectionTitle` (`type.h3`); Progress's dark dashboard uses
+  DashSectionHeader (`type.micro`, letterSpacing 1.2 everywhere).
+- Centered state/celebration headlines (signed-out states, Analyze states,
+  Result moments, Paywall title): `type.h1`.
+- Data numerals may size per card, but the SAME role must match everywhere
+  (e.g. card technique scores are `type.score` at 30/34 on Home, Progress,
+  and Library; big stat counters are `type.display` at 64/66).
+
 ## Launch flow (onboarding BEFORE login)
 
-App.tsx Gate order: Welcome → onboarding questionnaire (device-once) →
-sign-in → app; `src/flow/launchGate.ts` + `__tests__/launchGate.test.ts` pin
-it. Pre-auth answers stash under device kv `onboarding.pending-profile` and
-are adopted by the first writable owner appStore.hydrate() sees WITHOUT a
-profile (canonical accounts save through `/v1/me/onboarding` first — server
-focusCheckpoint wins); an existing local/server profile always beats the
-stash, which is single-use. `onboarding.device-complete` marks the device
-onboarded (backfilled whenever a profile hydrates) and deliberately survives
-sign-out/deletion so returning users go straight to sign-in. Signed-in
-sessions with no profile still get the in-account OnboardingScreen (default
-`mode='account'`; the pre-auth gate passes `mode='preauth'`).
+App.tsx Gate order: Welcome → onboarding questionnaire + notification choice
+(device-once) → sign-in → app; `src/flow/launchGate.ts` +
+`__tests__/launchGate.test.ts` pin it. Pre-auth answers stash under device kv
+`onboarding.pending-profile` and are adopted by the first writable owner
+appStore.hydrate() sees WITHOUT a profile (canonical accounts save through
+`/v1/me/onboarding` first — server focusCheckpoint wins); an existing
+local/server profile always beats the stash, which is single-use. The final
+notification screen asks before the OS prompt: only “Turn on reminders” may
+request permission, while “Not now” never does. Its device-level
+`onboarding.pending-notifications` choice is adopted by the first writable
+owner notificationStore.hydrate() sees unless that owner already has reminder
+prefs. `onboarding.device-complete` marks the device onboarded (backfilled
+whenever a profile hydrates) and deliberately survives sign-out/deletion so
+returning users go straight to sign-in. Signed-in sessions with no profile
+still get the in-account OnboardingScreen (default `mode='account'`; the
+pre-auth gate passes `mode='preauth'`).
 
 ## App Store rating prompts
 

@@ -240,7 +240,10 @@ export function SettingsScreen() {
       >
         <Text style={[type.hero, { color: color.ink }]}>Settings</Text>
         <Text
-          style={[type.body, { color: color.inkSoft, marginTop: space.sm }]}
+          style={[
+            type.body,
+            { color: color.inkSoft, marginTop: space.sm, maxWidth: 340 },
+          ]}
         >
           Your player profile, coaching preferences, and privacy controls.
         </Text>

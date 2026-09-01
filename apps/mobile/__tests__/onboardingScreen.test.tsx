@@ -41,11 +41,26 @@ jest.mock('../src/auth/authStore', () => {
   };
 });
 
+const mockCompleteNotificationOnboarding = jest.fn<
+  Promise<boolean>,
+  ['enable' | 'not_now']
+>(() => Promise.resolve(true));
+jest.mock('../src/notifications/notificationStore', () => {
+  const state = {
+    completeOnboardingStep: (choice: 'enable' | 'not_now') =>
+      mockCompleteNotificationOnboarding(choice),
+  };
+  return {
+    useNotificationStore: (selector: (s: typeof state) => unknown) =>
+      selector(state),
+  };
+});
+
 import { OnboardingScreen } from '../src/screens/OnboardingScreen';
 
 /**
- * Walks the 7-step onboarding flow (name → gender → level → handedness →
- * goal → problem → reveal) and pins the personalization contract:
+ * Walks the 8-step onboarding flow (name → gender → level → handedness →
+ * goal → problem → reveal → notifications) and pins the personalization contract:
  * completeOnboarding receives the trimmed firstName and the gender value.
  */
 
@@ -118,11 +133,15 @@ describe('OnboardingScreen', () => {
     mockCompleteOnboarding.mockClear();
     mockCompletePreAuthOnboarding.mockClear();
     mockCompletePreAuthOnboarding.mockResolvedValue(true);
+    mockCompleteNotificationOnboarding.mockClear();
+    mockCompleteNotificationOnboarding.mockResolvedValue(true);
     mockSignOut.mockClear();
   });
 
   it('starts on the name step with Continue locked until a real name is typed', () => {
     const renderer = renderScreen();
+    // Every step opens with the same kicker → title → sub block.
+    expect(allText(renderer)).toContain('PLAYER SETUP');
     expect(allText(renderer)).toContain('What should we call you?');
     expect(allText(renderer)).toContain(
       'Your coach personalizes every session.',
@@ -130,6 +149,14 @@ describe('OnboardingScreen', () => {
 
     const continueButton = findPressable(renderer, 'Continue');
     expect(continueButton.props.disabled).toBe(true);
+    const progress = renderer.root.findByProps({
+      accessibilityRole: 'progressbar',
+    });
+    expect(progress.props.accessibilityValue).toEqual({
+      min: 1,
+      max: 8,
+      now: 1,
+    });
 
     const input = renderer.root.findByType(TextInput);
     expect(input.props.placeholder).toBe('First name');
@@ -159,7 +186,7 @@ describe('OnboardingScreen', () => {
     act(() => renderer.unmount());
   });
 
-  it('walks name → gender → level → handedness → goal → problem → reveal and completes with the new fields', () => {
+  it('walks name → gender → level → handedness → goal → problem → reveal → notifications and completes with the new fields', async () => {
     const renderer = renderScreen();
 
     act(() => renderer.root.findByType(TextInput).props.onChangeText(' Dana '));
@@ -186,10 +213,17 @@ describe('OnboardingScreen', () => {
     press(renderer, 'Control');
     press(renderer, 'Continue');
 
-    // Reveal step is personalized with the trimmed name.
     expect(allText(renderer)).toContain('Built for Dana.');
+    expect(mockCompleteNotificationOnboarding).not.toHaveBeenCalled();
+    press(renderer, 'Continue');
 
-    press(renderer, 'Start with 2 free ratings');
+    expect(allText(renderer)).toContain('Stay match-ready.');
+    expect(allText(renderer)).toContain('Scheduled on this phone');
+    expect(mockCompleteNotificationOnboarding).not.toHaveBeenCalled();
+    press(renderer, 'Not now');
+    await act(async () => {});
+
+    expect(mockCompleteNotificationOnboarding).toHaveBeenCalledWith('not_now');
     expect(mockCompleteOnboarding).toHaveBeenCalledWith(walkedProfile);
     expect(mockCompletePreAuthOnboarding).not.toHaveBeenCalled();
     act(() => renderer.unmount());
@@ -205,11 +239,32 @@ describe('OnboardingScreen', () => {
       });
       walkToReveal(renderer);
       expect(allText(renderer)).toContain('Built for Dana.');
+      press(renderer, 'Continue');
+      expect(allText(renderer)).toContain('Stay match-ready.');
 
-      press(renderer, 'Start with 2 free ratings');
+      press(renderer, 'Turn on reminders');
       await act(async () => {});
+      expect(mockCompleteNotificationOnboarding).toHaveBeenCalledWith('enable');
       expect(mockCompletePreAuthOnboarding).toHaveBeenCalledWith(walkedProfile);
       expect(mockCompleteOnboarding).not.toHaveBeenCalled();
+      expect(onFinished).toHaveBeenCalledTimes(1);
+      act(() => renderer.unmount());
+    });
+
+    it('finishes onboarding with reminders off when permission is denied', async () => {
+      mockCompleteNotificationOnboarding.mockResolvedValue(false);
+      const onFinished = jest.fn();
+      const renderer = renderScreen({
+        mode: 'preauth',
+        onFinished,
+        onExitToSignIn: jest.fn(),
+      });
+      walkToReveal(renderer);
+      press(renderer, 'Continue');
+      press(renderer, 'Turn on reminders');
+      await act(async () => {});
+
+      expect(mockCompletePreAuthOnboarding).toHaveBeenCalledWith(walkedProfile);
       expect(onFinished).toHaveBeenCalledTimes(1);
       act(() => renderer.unmount());
     });
@@ -223,7 +278,8 @@ describe('OnboardingScreen', () => {
         onExitToSignIn: jest.fn(),
       });
       walkToReveal(renderer);
-      press(renderer, 'Start with 2 free ratings');
+      press(renderer, 'Continue');
+      press(renderer, 'Not now');
       await act(async () => {});
       expect(onFinished).not.toHaveBeenCalled();
       act(() => renderer.unmount());

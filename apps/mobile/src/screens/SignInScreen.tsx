@@ -146,7 +146,7 @@ const styles = StyleSheet.create({
   sub: {
     ...type.body,
     color: color.inkSoft,
-    marginTop: space.md,
+    marginTop: space.sm,
     maxWidth: 340,
   },
   providers: { marginTop: space.xl, gap: 12 },
@@ -175,10 +175,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  providerMarkText: {
-    fontSize: 13,
-    fontWeight: 'normal',
-  },
+  providerMarkText: { ...type.caption },
   letterMark: { fontFamily: font.bold },
   appleMark: { fontFamily: 'System', fontSize: 18, lineHeight: 20 },
   busyRow: {

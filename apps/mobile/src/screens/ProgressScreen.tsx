@@ -418,7 +418,7 @@ export function ProgressScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.pageHeader}>
-          <Text style={[type.h1, styles.pageTitle]}>Progress</Text>
+          <Text style={[type.hero, styles.pageTitle]}>Progress</Text>
           <Text style={[type.body, styles.pageSubtitle]}>
             Practice activity and technique scores stay separate, so every
             number has a clear source.
@@ -1064,7 +1064,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: color.surfaceDark },
   content: {
     paddingHorizontal: space.lg,
-    paddingTop: space.lg,
+    paddingTop: space.xl,
     paddingBottom: space.xxxl + 28,
   },
   pageHeader: { maxWidth: 380 },
@@ -1072,7 +1072,7 @@ const styles = StyleSheet.create({
   pageSubtitle: {
     color: color.onDarkSubtle,
     marginTop: space.sm,
-    maxWidth: 360,
+    maxWidth: 340,
   },
   // WHOOP-style underline tabs (MOBBIN: WHOOP OVERVIEW/SLEEP/RECOVERY/STRAIN).
   sectionBar: {
@@ -1088,7 +1088,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingTop: 12,
   },
-  sectionLabel: { color: color.onDarkFaint, letterSpacing: 1.6 },
+  sectionLabel: { color: color.onDarkFaint, letterSpacing: 1.2 },
   sectionLabelActive: { color: color.onDark },
   sectionUnderline: {
     alignSelf: 'stretch',
@@ -1127,7 +1127,7 @@ const styles = StyleSheet.create({
     marginBottom: space.sm + 4,
   },
   dashHeaderTitle: { color: color.onDarkMuted, letterSpacing: 1.2 },
-  dashHeaderRight: { color: color.onDarkFaint, letterSpacing: 0.8 },
+  dashHeaderRight: { color: color.onDarkFaint, letterSpacing: 1.2 },
   statRows: { gap: 8 },
   practiceHero: {
     marginTop: space.md,
@@ -1460,7 +1460,7 @@ const styles = StyleSheet.create({
     ...type.score,
     color: color.onDark,
     fontSize: 30,
-    lineHeight: 33,
+    lineHeight: 34,
   },
   chartWrap: { marginTop: space.md, alignItems: 'center', overflow: 'hidden' },
   strokeMeta: {

@@ -17,10 +17,14 @@ import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, space, type } from '../design/tokens';
 import { focusForGoal, useAppStore, type Gender } from '../state/appStore';
 import { useAuthStore } from '../auth/authStore';
+import {
+  type NotificationOnboardingChoice,
+  useNotificationStore,
+} from '../notifications/notificationStore';
 
 /**
  * Onboarding (spec p. 5): name → gender → level → handedness → goal →
- * problem → plan reveal. Seeds coaching language and the personalized
+ * problem → plan reveal → notification choice. Seeds coaching language and the personalized
  * starting focus. Answers are setup, not a test — copy stays warm, choices
  * carry context, back is free.
  */
@@ -33,6 +37,7 @@ const STEPS = [
   'goal',
   'problem',
   'reveal',
+  'notifications',
 ] as const;
 type Step = (typeof STEPS)[number];
 
@@ -115,7 +120,7 @@ const NAME_QUESTION = {
 } as const;
 
 const QUESTIONS: Record<
-  Exclude<Step, 'name' | 'reveal'>,
+  Exclude<Step, 'name' | 'reveal' | 'notifications'>,
   { title: string; sub: string; choices: Choice[] }
 > = {
   gender: {
@@ -144,6 +149,24 @@ const QUESTIONS: Record<
     choices: PROBLEMS,
   },
 };
+
+const NOTIFICATION_BENEFITS = [
+  {
+    icon: 'bell',
+    title: 'Practice nudge',
+    detail: 'Once a day at 5:30 PM by default',
+  },
+  {
+    icon: 'flame',
+    title: 'Streak defense',
+    detail: 'Only when a real streak needs attention',
+  },
+  {
+    icon: 'progress',
+    title: 'Weekly recap',
+    detail: 'A Sunday pointer to your Performance tab',
+  },
+] as const;
 
 const FOCUS_COPY: Record<string, { name: string; why: string }> = {
   contact_position: {
@@ -174,7 +197,12 @@ const FOCUS_COPY: Record<string, { name: string; why: string }> = {
 
 function ProgressBar(props: { step: number; total: number }) {
   return (
-    <View style={styles.progressRow}>
+    <View
+      accessibilityLabel={`Onboarding step ${props.step + 1} of ${props.total}`}
+      accessibilityRole="progressbar"
+      accessibilityValue={{ min: 1, max: props.total, now: props.step + 1 }}
+      style={styles.progressRow}
+    >
       {Array.from({ length: props.total }, (_, i) => (
         <View
           key={i}
@@ -275,16 +303,31 @@ export function OnboardingScreen(props: {
   const onboardingBusy = useAppStore(s => s.onboardingBusy);
   const onboardingError = useAppStore(s => s.onboardingError);
   const signOut = useAuthStore(s => s.signOut);
+  const completeNotificationOnboarding = useNotificationStore(
+    s => s.completeOnboardingStep,
+  );
   const [stepIndex, setStepIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [notificationBusy, setNotificationBusy] = useState(false);
+  const [notificationChoice, setNotificationChoice] =
+    useState<NotificationOnboardingChoice | null>(null);
 
-  const step = STEPS[stepIndex] ?? 'reveal';
+  const step = STEPS[stepIndex] ?? 'notifications';
   const firstName = (answers['name'] ?? '').trim();
   const goal = answers['goal'] ?? 'all-around';
   const focus = focusForGoal(goal);
   const focusCopy = FOCUS_COPY[focus] ?? FOCUS_COPY['contact_position']!;
+  const answeredProfile = {
+    firstName: firstName || undefined,
+    gender: answers['gender'] as Gender | undefined,
+    skillLevel: answers['level'] ?? '3.0',
+    handedness: (answers['handedness'] as Handedness | undefined) ?? 'right',
+    goal,
+    biggestProblem: answers['problem'] ?? 'not sure',
+    focusCheckpoint: focus,
+  };
   const stepComplete =
-    step === 'reveal'
+    step === 'reveal' || step === 'notifications'
       ? true
       : step === 'name'
         ? firstName.length >= 1
@@ -298,6 +341,25 @@ export function OnboardingScreen(props: {
 
   const goForward = () => setStepIndex(i => Math.min(i + 1, STEPS.length - 1));
   const goBack = () => setStepIndex(i => Math.max(i - 1, 0));
+
+  const finishOnboarding = async (choice: NotificationOnboardingChoice) => {
+    if (notificationBusy || onboardingBusy) return;
+    setNotificationBusy(true);
+    try {
+      if (!notificationChoice) {
+        await completeNotificationOnboarding(choice);
+        setNotificationChoice(choice);
+      }
+      if (preAuth) {
+        const ok = await completePreAuthOnboarding(answeredProfile);
+        if (ok) props.onFinished?.();
+        return;
+      }
+      await completeOnboarding(answeredProfile);
+    } finally {
+      setNotificationBusy(false);
+    }
+  };
 
   // Step one has nothing to go back to inside the flow, so the escape route
   // leaves the flow entirely: pre-auth it skips ahead to sign-in (existing
@@ -373,7 +435,7 @@ export function OnboardingScreen(props: {
         </Text>
       </View>
 
-      {step !== 'reveal' ? (
+      {step !== 'reveal' && step !== 'notifications' ? (
         // 'padding' keeps the pinned Continue footer above the iOS keyboard
         // while the name step's text field is focused; Android resizes the
         // window itself.
@@ -382,19 +444,13 @@ export function OnboardingScreen(props: {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <LockedScroll key={step} bottomInset={space.lg}>
-            <Text style={[type.h1, { color: color.ink }]}>
+            <Text style={[type.micro, { color: color.court }]}>
+              PLAYER SETUP
+            </Text>
+            <Text style={[type.hero, styles.stepTitle]}>
               {step === 'name' ? NAME_QUESTION.title : QUESTIONS[step].title}
             </Text>
-            <Text
-              style={[
-                type.body,
-                {
-                  color: color.inkSoft,
-                  marginTop: space.xs,
-                  marginBottom: space.lg,
-                },
-              ]}
-            >
+            <Text style={[type.body, styles.stepSub]}>
               {step === 'name' ? NAME_QUESTION.sub : QUESTIONS[step].sub}
             </Text>
             {step === 'name' ? (
@@ -440,15 +496,13 @@ export function OnboardingScreen(props: {
             />
           </View>
         </KeyboardAvoidingView>
-      ) : (
+      ) : step === 'reveal' ? (
         <>
           <LockedScroll bottomInset={space.lg}>
             <Text style={[type.micro, { color: color.court }]}>
               YOUR STARTING PLAN
             </Text>
-            <Text
-              style={[type.hero, { color: color.ink, marginTop: space.sm }]}
-            >
+            <Text style={[type.hero, styles.stepTitle]}>
               One focus.{`\n`}Visible progress.
             </Text>
             {firstName ? (
@@ -539,6 +593,71 @@ export function OnboardingScreen(props: {
           <View
             style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}
           >
+            <Button label="Continue" variant="dark" onPress={goForward} />
+          </View>
+        </>
+      ) : (
+        <>
+          <LockedScroll key="notifications" bottomInset={space.lg}>
+            <Text style={[type.micro, { color: color.court }]}>
+              STAY IN RHYTHM
+            </Text>
+            <Text style={[type.hero, styles.stepTitle]}>Stay match-ready.</Text>
+            <Text style={[type.body, styles.notificationIntro]}>
+              Get a useful nudge when it can help—never a stream of noise.
+            </Text>
+
+            <View style={styles.notificationPreview}>
+              <View style={styles.notificationPreviewHeader}>
+                <View style={styles.notificationPreviewIcon}>
+                  <Icon name="bell" size={20} color={color.onVolt} />
+                </View>
+                <View style={styles.notificationPreviewHeading}>
+                  <Text style={[type.micro, styles.notificationPreviewApp]}>
+                    PICKLE SENSEI
+                  </Text>
+                  <Text style={[type.caption, styles.notificationPreviewTime]}>
+                    PRACTICE REMINDER · 5:30 PM
+                  </Text>
+                </View>
+              </View>
+              <Text style={[type.h3, styles.notificationPreviewTitle]}>
+                Ready for a few clean reps?
+              </Text>
+              <Text style={[type.caption, styles.notificationPreviewBody]}>
+                A short court session today keeps your training plan moving.
+              </Text>
+            </View>
+
+            <View style={styles.notificationBenefits}>
+              {NOTIFICATION_BENEFITS.map(benefit => (
+                <View key={benefit.title} style={styles.notificationBenefit}>
+                  <View style={styles.notificationBenefitIcon}>
+                    <Icon name={benefit.icon} size={18} color={color.court} />
+                  </View>
+                  <View style={styles.notificationBenefitCopy}>
+                    <Text style={[type.bodyBold, { color: color.ink }]}>
+                      {benefit.title}
+                    </Text>
+                    <Text style={[type.caption, { color: color.inkSoft }]}>
+                      {benefit.detail}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.notificationPrivacy}>
+              <Icon name="shield" size={17} color={color.inkSoft} />
+              <Text style={[type.caption, styles.notificationPrivacyCopy]}>
+                Scheduled on this phone. Lock-screen copy never includes your
+                name, scores, or clips.
+              </Text>
+            </View>
+          </LockedScroll>
+          <View
+            style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}
+          >
             {onboardingError ? (
               <Text style={[type.caption, styles.onboardingError]}>
                 {onboardingError}
@@ -546,35 +665,29 @@ export function OnboardingScreen(props: {
             ) : null}
             <Button
               label={
-                onboardingBusy
-                  ? 'Saving your coaching plan…'
-                  : 'Start with 2 free ratings'
+                notificationBusy || onboardingBusy
+                  ? 'Finishing setup…'
+                  : 'Turn on reminders'
               }
               variant="dark"
-              disabled={onboardingBusy}
-              onPress={() => {
-                const answeredProfile = {
-                  firstName: firstName || undefined,
-                  gender: answers['gender'] as Gender | undefined,
-                  skillLevel: answers['level'] ?? '3.0',
-                  handedness:
-                    (answers['handedness'] as Handedness | undefined) ??
-                    'right',
-                  goal,
-                  biggestProblem: answers['problem'] ?? 'not sure',
-                  focusCheckpoint: focus,
-                };
-                if (preAuth) {
-                  // Sign-in comes next; the stash is adopted by whichever
-                  // account (or guest bucket) hydrates after it.
-                  void completePreAuthOnboarding(answeredProfile).then(ok => {
-                    if (ok) props.onFinished?.();
-                  });
-                  return;
-                }
-                void completeOnboarding(answeredProfile);
-              }}
+              disabled={notificationBusy || onboardingBusy}
+              onPress={() => void finishOnboarding('enable')}
             />
+            <PressableScale
+              accessibilityLabel="Not now"
+              accessibilityHint="Finish setup without enabling reminders"
+              accessibilityRole="button"
+              disabled={notificationBusy || onboardingBusy}
+              onPress={() => void finishOnboarding('not_now')}
+              style={styles.notificationSkip}
+            >
+              <Text style={[type.bodyBold, styles.notificationSkipLabel]}>
+                Not now
+              </Text>
+            </PressableScale>
+            <Text style={[type.caption, styles.notificationFooterNote]}>
+              Change this anytime in Settings.
+            </Text>
           </View>
         </>
       )}
@@ -630,6 +743,15 @@ const styles = StyleSheet.create({
     backgroundColor: color.surface,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: color.line,
+  },
+  // One title block for every onboarding step (questions, reveal,
+  // notifications): micro kicker → hero title → body sub, same position.
+  stepTitle: { color: color.ink, marginTop: space.sm },
+  stepSub: {
+    color: color.inkSoft,
+    marginTop: space.sm,
+    maxWidth: 340,
+    marginBottom: space.lg,
   },
   choiceCard: {
     flexDirection: 'row',
@@ -725,6 +847,81 @@ const styles = StyleSheet.create({
     color: color.courtDeep,
     marginTop: space.sm,
     letterSpacing: 0.45,
+  },
+  notificationIntro: {
+    color: color.inkSoft,
+    marginTop: space.sm,
+    maxWidth: 340,
+  },
+  notificationPreview: {
+    marginTop: space.xl,
+    padding: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: color.surfaceDark,
+  },
+  notificationPreviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+  },
+  notificationPreviewIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: color.volt,
+  },
+  notificationPreviewHeading: { flex: 1, minWidth: 0 },
+  notificationPreviewApp: { color: color.onDark },
+  notificationPreviewTime: {
+    color: color.onDarkSubtle,
+    marginTop: 2,
+    fontVariant: ['tabular-nums'],
+  },
+  notificationPreviewTitle: { color: color.onDark, marginTop: space.lg },
+  notificationPreviewBody: { color: color.onDarkMuted, marginTop: 4 },
+  notificationBenefits: { marginTop: space.lg, gap: 10 },
+  notificationBenefit: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
+    borderRadius: radius.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    backgroundColor: color.surfaceElevated,
+  },
+  notificationBenefitIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: color.courtSoft,
+  },
+  notificationBenefitCopy: { flex: 1, minWidth: 0 },
+  notificationPrivacy: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: space.sm,
+    marginTop: space.lg,
+    paddingHorizontal: space.sm,
+  },
+  notificationPrivacyCopy: { color: color.inkSoft, flex: 1 },
+  notificationSkip: {
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: space.xs,
+  },
+  notificationSkipLabel: { color: color.inkSoft },
+  notificationFooterNote: {
+    color: color.inkSoft,
+    textAlign: 'center',
+    marginTop: 2,
   },
   onboardingError: {
     color: color.bad,

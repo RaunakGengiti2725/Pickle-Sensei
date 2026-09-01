@@ -1445,7 +1445,7 @@ const styles = StyleSheet.create({
     paddingBottom: space.xl,
   },
   hero: { color: color.onDark, marginTop: space.sm },
-  heroCopy: { color: color.onDarkSubtle, marginTop: space.md, maxWidth: 370 },
+  heroCopy: { color: color.onDarkSubtle, marginTop: space.sm, maxWidth: 340 },
   preview: {
     height: 250,
     marginTop: space.xl,

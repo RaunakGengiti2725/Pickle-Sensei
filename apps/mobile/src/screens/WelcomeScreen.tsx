@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
   tagline: {
     ...type.body,
     color: color.onDarkMuted,
-    marginTop: space.md,
+    marginTop: space.sm,
     maxWidth: 340,
   },
   courtStory: {
