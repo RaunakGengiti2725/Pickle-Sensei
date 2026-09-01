@@ -1,0 +1,242 @@
+/**
+ * App Store compliance sweep — static iOS/runtime configuration.
+ *
+ * Pins the release invariants App Review checks before any screen renders:
+ * usage-description strings for every sensitive capability the native layer
+ * touches, the export-compliance declaration, the Sign in with Apple
+ * entitlement (Google sign-in is offered, App Review 4.8), the privacy
+ * manifest's required-reason API declarations with valid reason codes, and
+ * the public legal endpoints the paywall links to (App Review 3.1.2).
+ */
+import { getRuntimePublicConfig } from '../../src/config/runtimeConfig';
+
+// The mobile tsconfig has no Node types (matches importedRealFootageAnalysis).
+declare const require: (id: string) => unknown;
+declare const __dirname: string;
+type Fs = {
+  readFileSync: (path: string, encoding: 'utf8') => string;
+  readdirSync: (path: string) => string[];
+  statSync: (path: string) => { isDirectory(): boolean };
+};
+const { readFileSync, readdirSync, statSync } = require('fs') as Fs;
+const { join } = require('path') as { join: (...parts: string[]) => string };
+
+const MOBILE_ROOT = join(__dirname, '..', '..');
+const IOS_APP = join(MOBILE_ROOT, 'ios', 'PickleSensei');
+
+function read(relativePath: string): string {
+  return readFileSync(join(MOBILE_ROOT, relativePath), 'utf8');
+}
+
+function plistString(plist: string, key: string): string | null {
+  const match = new RegExp(
+    `<key>${key}</key>\\s*<string>([^<]*)</string>`,
+  ).exec(plist);
+  return match?.[1] ?? null;
+}
+
+function plistBool(plist: string, key: string): boolean | null {
+  const match = new RegExp(`<key>${key}</key>\\s*<(true|false)/>`).exec(plist);
+  return match ? match[1] === 'true' : null;
+}
+
+describe('Info.plist usage descriptions and export compliance', () => {
+  const plist = readFileSync(join(IOS_APP, 'Info.plist'), 'utf8');
+
+  it.each([
+    'NSCameraUsageDescription',
+    'NSMicrophoneUsageDescription',
+    'NSPhotoLibraryUsageDescription',
+  ])('%s is a real sentence, not a placeholder', key => {
+    const value = plistString(plist, key);
+    expect(value).not.toBeNull();
+    expect(value!.length).toBeGreaterThan(40);
+    expect(value).toMatch(/Pickle Sensei/);
+    expect(value).not.toMatch(/TODO|lorem|placeholder|coming soon/i);
+  });
+
+  it('declares ITSAppUsesNonExemptEncryption=false', () => {
+    expect(plistBool(plist, 'ITSAppUsesNonExemptEncryption')).toBe(false);
+  });
+
+  it('keeps App Transport Security strict (no arbitrary loads)', () => {
+    expect(plistBool(plist, 'NSAllowsArbitraryLoads')).toBe(false);
+  });
+
+  it('registers the reversed Google iOS client id as a URL scheme', () => {
+    const { googleIosClientId } = getRuntimePublicConfig();
+    expect(googleIosClientId).toMatch(/\.apps\.googleusercontent\.com$/);
+    const reversed = googleIosClientId!.split('.').reverse().join('.');
+    expect(plist).toContain(`<string>${reversed}</string>`);
+  });
+});
+
+describe('Sign in with Apple entitlement (Google sign-in is offered)', () => {
+  it('declares com.apple.developer.applesignin in the entitlements file', () => {
+    const entitlements = readFileSync(
+      join(IOS_APP, 'PickleSensei.entitlements'),
+      'utf8',
+    );
+    expect(entitlements).toMatch(
+      /<key>com\.apple\.developer\.applesignin<\/key>\s*<array>\s*<string>Default<\/string>/,
+    );
+  });
+
+  it('wires the entitlements file into every build configuration', () => {
+    const pbxproj = read('ios/PickleSensei.xcodeproj/project.pbxproj');
+    const wired = pbxproj.match(
+      /CODE_SIGN_ENTITLEMENTS = PickleSensei\/PickleSensei\.entitlements;/g,
+    );
+    expect(wired?.length ?? 0).toBeGreaterThanOrEqual(2);
+  });
+
+  it('the sign-in screen offers Apple on iOS alongside Google', () => {
+    const source = read('src/screens/SignInScreen.tsx');
+    expect(source).toContain('label="Continue with Apple"');
+    expect(source).toContain('label="Continue with Google"');
+    expect(source).toMatch(
+      /Platform\.OS === 'ios'\s*\?\s*\(\s*<ProviderButton/,
+    );
+  });
+});
+
+describe('PrivacyInfo.xcprivacy required-reason APIs', () => {
+  const manifest = readFileSync(join(IOS_APP, 'PrivacyInfo.xcprivacy'), 'utf8');
+
+  // Apple's approved reason codes per accessed-API category.
+  const APPROVED_REASONS: Record<string, string[]> = {
+    NSPrivacyAccessedAPICategoryUserDefaults: ['CA92.1', '1C8F.1', 'C56D.1'],
+    NSPrivacyAccessedAPICategoryFileTimestamp: [
+      'DDA9.1',
+      'C617.1',
+      '3B52.1',
+      '0A2A.1',
+    ],
+    NSPrivacyAccessedAPICategorySystemBootTime: ['35F9.1', '8FFB.1', '3D61.1'],
+    NSPrivacyAccessedAPICategoryDiskSpace: [
+      '85F4.1',
+      'E174.1',
+      '7D9E.1',
+      'B728.1',
+    ],
+    NSPrivacyAccessedAPICategoryActiveKeyboards: ['3EC4.1', '54BD.1'],
+  };
+
+  function declaredCategories(): Array<{ type: string; reasons: string[] }> {
+    const entries: Array<{ type: string; reasons: string[] }> = [];
+    const dictPattern =
+      /<key>NSPrivacyAccessedAPIType<\/key>\s*<string>([^<]+)<\/string>\s*<key>NSPrivacyAccessedAPITypeReasons<\/key>\s*<array>([\s\S]*?)<\/array>/g;
+    let match: RegExpExecArray | null;
+    while ((match = dictPattern.exec(manifest)) !== null) {
+      const reasons = Array.from(
+        match[2]!.matchAll(/<string>([^<]+)<\/string>/g),
+        m => m[1]!,
+      );
+      entries.push({ type: match[1]!, reasons });
+    }
+    return entries;
+  }
+
+  it('declares the categories React Native core touches', () => {
+    const types = declaredCategories().map(entry => entry.type);
+    expect(types).toEqual(
+      expect.arrayContaining([
+        'NSPrivacyAccessedAPICategoryUserDefaults',
+        'NSPrivacyAccessedAPICategoryFileTimestamp',
+        'NSPrivacyAccessedAPICategorySystemBootTime',
+      ]),
+    );
+  });
+
+  it('every declared category carries at least one approved reason code', () => {
+    const entries = declaredCategories();
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) {
+      const approved = APPROVED_REASONS[entry.type];
+      expect(approved).toBeDefined();
+      expect(entry.reasons.length).toBeGreaterThan(0);
+      for (const reason of entry.reasons) {
+        expect(approved).toContain(reason);
+      }
+    }
+  });
+
+  it('declares no tracking and is bundled as an app resource', () => {
+    expect(manifest).toMatch(/<key>NSPrivacyTracking<\/key>\s*<false\/>/);
+    const pbxproj = read('ios/PickleSensei.xcodeproj/project.pbxproj');
+    expect(pbxproj).toMatch(/PrivacyInfo\.xcprivacy in Resources/);
+  });
+});
+
+describe('runtime config: paywall legal links (App Review 3.1.2)', () => {
+  it('points Terms and Privacy at the public legal API endpoints', () => {
+    const config = getRuntimePublicConfig();
+    expect(config.apiBaseUrl).toMatch(/^https:\/\//);
+    expect(config.legalTermsUrl).toBe(`${config.apiBaseUrl}/terms`);
+    expect(config.legalPrivacyUrl).toBe(`${config.apiBaseUrl}/privacy`);
+  });
+
+  it('the API function serves GET /privacy and GET /terms without auth', () => {
+    const legal = readFileSync(
+      join(MOBILE_ROOT, '..', '..', 'supabase', 'functions', 'api', 'legal.ts'),
+      'utf8',
+    );
+    expect(legal).toMatch(/privacy/i);
+    expect(legal).toMatch(/terms/i);
+    const index = readFileSync(
+      join(MOBILE_ROOT, '..', '..', 'supabase', 'functions', 'api', 'index.ts'),
+      'utf8',
+    );
+    expect(index).toMatch(/\/privacy/);
+    expect(index).toMatch(/\/terms/);
+  });
+
+  it('the RootNavigator Paywall route passes both legal handlers', () => {
+    const source = read('src/navigation/RootNavigator.tsx');
+    expect(source).toMatch(
+      /onOpenTerms: \(\) => void Linking\.openURL\(legalTermsUrl\)/,
+    );
+    expect(source).toMatch(
+      /onOpenPrivacy: \(\) => void Linking\.openURL\(legalPrivacyUrl\)/,
+    );
+  });
+});
+
+describe('no Live Court remnants or placeholder UI in the shipped tree', () => {
+  it('RootNavigator registers no Live Court routes', () => {
+    const source = read('src/navigation/RootNavigator.tsx');
+    expect(source).not.toMatch(/LiveCourt|LiveSummary|GameplayProgress/);
+    const params = read('src/navigation/params.ts');
+    expect(params).not.toMatch(/LiveCourt|LiveSummary|GameplayProgress/);
+  });
+
+  it('the Add tab route is only ever handled by the custom tab bar', () => {
+    // The tab bar swaps the Add slot for the Coach FAB and never navigates
+    // to it, so its empty portal component is unreachable by users.
+    const tabBar = read('src/navigation/PremiumTabBar.tsx');
+    expect(tabBar).toMatch(/if \(name === 'Add'\) \{/);
+    expect(tabBar).not.toMatch(/navigate\(\s*'Add'/);
+    const navigator = read('src/navigation/RootNavigator.tsx');
+    expect(navigator).not.toMatch(/linking=|initialState=/);
+  });
+
+  it('no screen ships "coming soon" or dead-handler copy', () => {
+    const files: string[] = [];
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        const full = join(dir, entry);
+        if (statSync(full).isDirectory()) walk(full);
+        else if (/\.tsx?$/.test(entry)) files.push(full);
+      }
+    };
+    walk(join(MOBILE_ROOT, 'src'));
+    const offenders = files.filter(file => {
+      const text = readFileSync(file, 'utf8');
+      return (
+        /coming soon|under construction|lorem ipsum/i.test(text) ||
+        /onPress=\{\(\) => \{\}\}/.test(text)
+      );
+    });
+    expect(offenders).toEqual([]);
+  });
+});
