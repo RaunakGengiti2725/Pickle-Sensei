@@ -79,7 +79,7 @@ export function SplashScreen(props: {
 
   return (
     <Animated.View
-      pointerEvents="none"
+      pointerEvents="box-only"
       accessible
       accessibilityLabel="Pickle Sensei is starting"
       style={[
