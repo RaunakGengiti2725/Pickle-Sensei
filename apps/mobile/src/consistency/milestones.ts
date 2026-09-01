@@ -1,6 +1,6 @@
 /**
  * The consistency reward ladder. Streak milestones are IDENTITY rewards —
- * badges, emblems, frames, celebration effects — never rating points: a
+ * badges, crests, celebration effects — never rating points: a
  * 6.2 player who shows up every day is a dedicated 6.2 player, not a 7.1.
  * (The skill rating lives in playerRank and only ever moves on evidence.)
  *
@@ -68,7 +68,7 @@ export const STREAK_MILESTONES: readonly StreakMilestone[] = [
     days: 14,
     title: 'Fortnight Form',
     blurb: 'Two weeks without letting go.',
-    reward: 'Court emblem',
+    reward: 'Rare crossed-paddles badge',
     rarity: 'rare',
     bonusXp: 140,
   },
@@ -77,7 +77,7 @@ export const STREAK_MILESTONES: readonly StreakMilestone[] = [
     days: 30,
     title: '30 Day Club',
     blurb: 'A month of showing up. Very few do this.',
-    reward: 'Exclusive profile frame',
+    reward: 'Epic laurel badge',
     rarity: 'epic',
     bonusXp: 300,
   },
