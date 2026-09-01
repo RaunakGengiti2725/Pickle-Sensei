@@ -159,6 +159,7 @@ export function PremiumTabBar(props: BottomTabBarProps) {
   const [menuVisible, setMenuVisible] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingAction = useRef<(() => void) | null>(null);
   const motionDuration = reducedMotion ? 1 : 210;
   const backdropAnimatedStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
@@ -183,18 +184,22 @@ export function PremiumTabBar(props: BottomTabBarProps) {
       clearTimeout(closeTimer.current);
       closeTimer.current = null;
     }
+    pendingAction.current = null;
     setMenuVisible(true);
     setMenuOpen(true);
   }, []);
 
   const closeMenu = useCallback(
     (after?: () => void) => {
-      if (closeTimer.current) clearTimeout(closeTimer.current);
+      if (after) pendingAction.current = after;
+      if (closeTimer.current) return;
       setMenuOpen(false);
       closeTimer.current = setTimeout(() => {
         closeTimer.current = null;
+        const action = pendingAction.current;
+        pendingAction.current = null;
         setMenuVisible(false);
-        after?.();
+        action?.();
       }, motionDuration);
     },
     [motionDuration],
@@ -204,21 +209,23 @@ export function PremiumTabBar(props: BottomTabBarProps) {
     props.navigation.getParent<NavigationProp<RootStackParams>>();
 
   const openRatingFlow = useCallback(
-    async (source: 'camera' | 'library') => {
+    (source: 'camera' | 'library') => {
       if (useAuthStore.getState().session?.localOnly) {
         rootNavigation?.navigate('ConnectAccount');
         return;
       }
-      let access = useAccessStore.getState().canonicalAccess;
-      if (!access) {
-        await useAccessStore.getState().initialize();
-        access = useAccessStore.getState().canonicalAccess;
-      }
-      if (access?.canStartRating) {
-        rootNavigation?.navigate('Analyze', { source });
+      const { canonicalAccess, status } = useAccessStore.getState();
+      if (
+        !canonicalAccess?.canStartRating &&
+        (canonicalAccess !== null ||
+          status === 'ready' ||
+          status === 'unconfigured' ||
+          status === 'error')
+      ) {
+        rootNavigation?.navigate('Paywall', { source: 'rating' });
         return;
       }
-      rootNavigation?.navigate('Paywall', { source: 'rating' });
+      rootNavigation?.navigate('Analyze', { source });
     },
     [rootNavigation],
   );
@@ -234,14 +241,14 @@ export function PremiumTabBar(props: BottomTabBarProps) {
       detail: 'Auto capture · validated scores only',
       icon: 'camera',
       accent: color.volt,
-      onPress: () => runAction(() => void openRatingFlow('camera')),
+      onPress: () => runAction(() => openRatingFlow('camera')),
     },
     {
       title: 'Import Video',
       detail: 'Choose a real clip from this phone',
       icon: 'upload',
       accent: color.flame,
-      onPress: () => runAction(() => void openRatingFlow('library')),
+      onPress: () => runAction(() => openRatingFlow('library')),
     },
     {
       title: 'Drill Library',
@@ -359,6 +366,7 @@ export function PremiumTabBar(props: BottomTabBarProps) {
             ]}
           >
             <Pressable
+              accessibilityRole="button"
               accessibilityLabel="Close coach actions"
               onPress={() => closeMenu()}
               style={styles.backdropPressable}
