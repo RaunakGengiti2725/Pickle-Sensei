@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { PressableScale } from '../design/components';
 import { Icon } from '../design/icons';
@@ -18,6 +18,25 @@ export function NotificationPrimingCard() {
     s => s.requestPermissionAndEnable,
   );
   const dismissPrompt = useNotificationStore(s => s.dismissPrompt);
+  const [pending, setPending] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  const onTurnOn = async () => {
+    if (pending) return;
+    setPending(true);
+    setFailed(false);
+    const enabled = await requestPermissionAndEnable();
+    if (!mounted.current) return;
+    setPending(false);
+    setFailed(!enabled);
+  };
 
   const visible =
     hydrated &&
@@ -44,12 +63,14 @@ export function NotificationPrimingCard() {
             accessibilityLabel="Turn on practice reminders"
             accessibilityHint="Request notification permission and schedule reminders"
             accessibilityRole="button"
+            accessibilityState={{ busy: pending }}
             containerStyle={styles.actionSlot}
-            onPress={() => void requestPermissionAndEnable()}
+            disabled={pending}
+            onPress={() => void onTurnOn()}
             style={[styles.action, styles.actionPrimary]}
           >
             <Text style={[type.caption, styles.actionPrimaryLabel]}>
-              Turn on
+              {pending ? 'Asking…' : failed ? 'Try again' : 'Turn on'}
             </Text>
           </PressableScale>
           <PressableScale
@@ -57,12 +78,24 @@ export function NotificationPrimingCard() {
             accessibilityHint="Dismiss this reminder offer"
             accessibilityRole="button"
             containerStyle={styles.actionSlot}
+            disabled={pending}
             onPress={() => void dismissPrompt()}
             style={styles.action}
           >
             <Text style={[type.caption, styles.actionLabel]}>Not now</Text>
           </PressableScale>
         </View>
+        {failed ? (
+          <Text
+            accessibilityLiveRegion="polite"
+            accessibilityRole="alert"
+            style={[type.caption, styles.failure]}
+            testID="notification-priming-failure"
+          >
+            Reminders couldn’t be turned on. Try again, or allow notifications
+            for Pickle Sensei in your phone’s Settings.
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -91,8 +124,9 @@ const styles = StyleSheet.create({
   caption: { color: color.inkSoft, marginTop: 3 },
   actions: { flexDirection: 'row', gap: 8, marginTop: space.sm + 2 },
   actionSlot: { flexGrow: 0, alignSelf: 'flex-start', minWidth: 96 },
+  failure: { color: color.bad, marginTop: space.sm },
   action: {
-    minHeight: 40,
+    minHeight: 44,
     paddingHorizontal: space.md,
     borderRadius: radius.pill,
     borderWidth: 1,
