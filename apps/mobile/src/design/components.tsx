@@ -519,18 +519,11 @@ export function CheckpointRow(props: {
   const value =
     props.score === null ? 0 : Math.max(0, Math.min(100, props.score));
   const bar = bandColor(props.band);
-  return (
-    <PressableScale
-      onPress={props.onPress}
-      disabled={!props.onPress}
-      accessibilityRole={props.onPress ? 'button' : 'text'}
-      accessibilityLabel={`${props.name}, ${
-        props.score === null
-          ? 'not read'
-          : `${Math.round(props.score)} out of 100`
-      }`}
-      style={styles.checkpointRow}
-    >
+  const accessibilityLabel = `${props.name}, ${
+    props.score === null ? 'not read' : `${Math.round(props.score)} out of 100`
+  }`;
+  const body = (
+    <>
       <View style={styles.checkpointTop}>
         <Text style={[type.bodyBold, { color: color.ink, flex: 1 }]}>
           {props.name}
@@ -548,6 +541,28 @@ export function CheckpointRow(props: {
           ]}
         />
       </View>
+    </>
+  );
+  if (!props.onPress) {
+    return (
+      <View
+        accessible
+        accessibilityRole="text"
+        accessibilityLabel={accessibilityLabel}
+        style={[styles.pressableBase, styles.checkpointRow]}
+      >
+        {body}
+      </View>
+    );
+  }
+  return (
+    <PressableScale
+      onPress={props.onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      style={styles.checkpointRow}
+    >
+      {body}
     </PressableScale>
   );
 }
@@ -664,6 +679,7 @@ export function ErrorState(props: {
   title: string;
   detail: string;
   onRetry?: () => void;
+  retryLabel?: string;
   dark?: boolean;
 }) {
   return (
@@ -709,7 +725,7 @@ export function ErrorState(props: {
         {props.onRetry ? (
           <View style={{ marginTop: space.lg, alignSelf: 'stretch' }}>
             <Button
-              label="Try again"
+              label={props.retryLabel ?? 'Try again'}
               onPress={props.onRetry}
               variant="secondary"
             />
