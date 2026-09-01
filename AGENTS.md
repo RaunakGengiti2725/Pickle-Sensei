@@ -53,6 +53,23 @@ backend is the Supabase Edge Function in `supabase/functions/api/` (Deno);
   errors (insert/update infer `never`) — deploy bundling type-strips, and the
   standalone modules (`cache.ts`, `rateLimit.ts`, `http.ts`, `legal.ts`)
   check clean.
+- Defense in depth (`20260831160000_defense_in_depth.sql`): column-level
+  UPDATE grants sized to EXACTLY the writes the edge fn performs (shots have
+  NO client update — favorites are device-local, sync is INSERT-only via the
+  RPC; sessions move only `ended_at`; permits only `status`/`outcome`),
+  trigger-enforced append-only ledgers, NOT NULL ledger owners, NOT VALID
+  size caps, anon/public revokes. If you add a client-side column write,
+  extend the grant in a NEW migration or every 42501 shows up as a 503.
+  PostgREST upserts (`resolution=merge-duplicates`) put EVERY payload column
+  in DO UPDATE — the grant must include them all (see
+  account_deletion_requests).
+- RLS/security regression matrix: `./supabase/tests/run_rls_tests.sh`
+  (Docker postgres:16, or a throwaway local initdb cluster when Docker is
+  absent; CI job `supabase-security`). It installs hosted-like default
+  privileges first, applies every migration in order, then asserts the
+  allowed AND denied paths (owner flows, RLS, anon, append-only, column
+  grants, size caps, function EXECUTE). Historical audit:
+  `docs/SECURITY_CERTIFICATION_2026-08-30.md` (see its status addendum).
 - Load tests: `tools/loadtest/` (k6). Release gate: `docs/PRELAUNCH_CHECKLIST.md`.
 
 ## Billing
