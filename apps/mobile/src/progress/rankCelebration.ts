@@ -10,6 +10,10 @@ import {
   getActiveDataOwner,
   SIGNED_OUT_DATA_OWNER,
 } from '../data/accountScope';
+import {
+  useWalkthroughStore,
+  walkthroughYieldsTo,
+} from '../walkthrough/walkthroughStore';
 
 /**
  * Rank-shift detection. Every surface that resolves the player's rank
@@ -24,6 +28,11 @@ import {
  *
  * The record is written before the overlay is shown, so a race between two
  * screens can never produce a duplicate ceremony.
+ *
+ * The overlay never stacks on the first-run walkthrough: a ceremony that
+ * resolves while the tour is showing is held as `pending` and raised the
+ * moment the tour is dismissed, and the tour in turn waits for a showing
+ * ceremony (`walkthroughYieldsTo`).
  */
 
 export interface RankCelebration {
@@ -95,6 +104,8 @@ export function evaluateRankTransition(
 
 interface RankCelebrationState {
   current: RankCelebration | null;
+  /** Earned while the walkthrough was showing; raised once it dismisses. */
+  pending: RankCelebration | null;
   /** Serialized: concurrent reports from multiple screens queue up. */
   maybeCelebrate: (summary: PlayerRankSummary) => Promise<void>;
   dismiss: () => void;
@@ -105,6 +116,7 @@ let evaluationQueue: Promise<void> = Promise.resolve();
 export const useRankCelebrationStore = create<RankCelebrationState>(
   (set, get) => ({
     current: null,
+    pending: null,
 
     maybeCelebrate: async summary => {
       const run = async () => {
@@ -144,7 +156,12 @@ export const useRankCelebrationStore = create<RankCelebrationState>(
           }
         }
         const celebration = evaluateRankTransition(stored, summary);
-        if (celebration && !get().current) set({ current: celebration });
+        if (!celebration || get().current || get().pending) return;
+        if (useWalkthroughStore.getState().visible) {
+          set({ pending: celebration });
+        } else {
+          set({ current: celebration });
+        }
       };
       evaluationQueue = evaluationQueue.then(run, run);
       await evaluationQueue;
@@ -153,3 +170,16 @@ export const useRankCelebrationStore = create<RankCelebrationState>(
     dismiss: () => set({ current: null }),
   }),
 );
+
+useWalkthroughStore.subscribe(state => {
+  if (state.visible) return;
+  const { current, pending } = useRankCelebrationStore.getState();
+  if (pending && !current) {
+    useRankCelebrationStore.setState({ current: pending, pending: null });
+  }
+});
+
+walkthroughYieldsTo({
+  isShowing: () => useRankCelebrationStore.getState().current !== null,
+  subscribe: listener => useRankCelebrationStore.subscribe(listener),
+});
