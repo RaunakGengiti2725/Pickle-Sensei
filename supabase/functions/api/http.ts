@@ -26,33 +26,42 @@ export function legalTextResponse(text: string, status = 200): Response {
   });
 }
 
+// Stripping control characters is sanitizeUserText's purpose.
+const CONTROL_AND_SPOOFING_CHARS =
+  // eslint-disable-next-line no-control-regex
+  /[\u0000-\u0008\u000e-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g;
+const LONE_SURROGATES = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
+
 /**
  * Sanitize free-form user text before storing it: strips control characters
- * (C0/C1) and zero-width/bidi characters that enable spoofing, collapses
- * whitespace runs, trims, and caps the length. Rendering stays safe because
- * clients display via React Native <Text> (no HTML interpretation) and any
- * HTML surface must escape via escapeHtml — this strip is defense in depth,
- * not the only line.
+ * (C0/C1 — whitespace ones normalise to a space instead), lone surrogates,
+ * and zero-width/bidi characters that enable spoofing, collapses whitespace
+ * runs, trims, and caps the length in code points (never splitting a
+ * surrogate pair; matches the DB's char_length caps). Rendering stays safe
+ * because clients display via React Native <Text> (no HTML interpretation)
+ * and any HTML surface must escape via escapeHtml — this strip is defense in
+ * depth, not the only line.
  */
 export function sanitizeUserText(value: string, maxLength: number): string {
-  return (
-    value
-      // Stripping control characters is this function's purpose.
-      // eslint-disable-next-line no-control-regex
-      .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, maxLength)
-  );
+  const cleaned = value
+    .replace(CONTROL_AND_SPOOFING_CHARS, "")
+    .replace(LONE_SURROGATES, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return Array.from(cleaned).slice(0, maxLength).join("").trimEnd();
 }
 
-/** First client IP from the gateway's x-forwarded-for chain. Used only for
- * rate limiting — never stored. */
+/** Client IP for rate limiting — never stored. Prefers the edge's single
+ * trusted `cf-connecting-ip`; otherwise the LAST x-forwarded-for hop (proxies
+ * append the peer they saw, so the leftmost entries are client-controlled). */
 export function clientIp(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for") ?? "";
-  const first = forwarded.split(",")[0]?.trim();
-  if (first) return first;
-  return request.headers.get("cf-connecting-ip")?.trim() || "unknown";
+  const edgeIp = request.headers.get("cf-connecting-ip")?.trim();
+  if (edgeIp) return edgeIp;
+  const hops = (request.headers.get("x-forwarded-for") ?? "")
+    .split(",")
+    .map((hop) => hop.trim())
+    .filter(Boolean);
+  return hops[hops.length - 1] || "unknown";
 }
 
 /** Constant-time string equality for webhook shared secrets. */
