@@ -5,6 +5,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
+  Button,
   Card,
   PressableScale,
   RevealFill,
@@ -119,6 +120,34 @@ function nextDayKey(day: string): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** Today's YYYY-MM-DD in the device zone — the same clock the engine keys
+ * days by. */
+function localTodayKey(now: Date): string {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US-u-ca-gregory-nu-latn', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    let year = '';
+    let month = '';
+    let day = '';
+    for (const part of formatter.formatToParts(now)) {
+      if (part.type === 'year') year = part.value;
+      else if (part.type === 'month') month = part.value;
+      else if (part.type === 'day') day = part.value;
+    }
+    if (year && month && day) return `${year}-${month}-${day}`;
+  } catch {
+    // Fall through to the UTC key below.
+  }
+  return now.toISOString().slice(0, 10);
+}
+
+function monthOf(day: string): { year: number; month: number } {
+  return { year: Number(day.slice(0, 4)), month: Number(day.slice(5, 7)) - 1 };
+}
+
 const HEAT_TINTS = [
   'transparent',
   'rgba(255,155,66,0.14)',
@@ -167,6 +196,7 @@ function DayCell(props: {
       ) : null}
       <PressableScale
         accessibilityLabel={label}
+        accessibilityState={{ selected: props.selected }}
         disabled={!counted}
         onPress={() => props.onPress(cell.day as string)}
         containerStyle={styles.dayPressable}
@@ -277,6 +307,7 @@ export function StreakCalendarScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const snapshot = useConsistencyStore(s => s.snapshot);
+  const loadError = useConsistencyStore(s => s.loadError);
   const refresh = useConsistencyStore(s => s.refresh);
 
   useFocusEffect(
@@ -285,19 +316,18 @@ export function StreakCalendarScreen() {
     }, [refresh]),
   );
 
-  const asOfDay = snapshot?.asOfDay ?? new Date().toISOString().slice(0, 10);
-  const [visible, setVisible] = useState(() => ({
-    year: Number(asOfDay.slice(0, 4)),
-    month: Number(asOfDay.slice(5, 7)) - 1,
-  }));
+  const asOfDay = snapshot?.asOfDay ?? localTodayKey(new Date());
+  const [visible, setVisible] = useState(() => monthOf(asOfDay));
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [autoSelected, setAutoSelected] = useState(false);
 
-  // Open on today's log once — after that the selection belongs to the user
-  // (deselecting must stay deselected).
+  // Anchor the month and open today's log once the first snapshot lands —
+  // after that the month and the selection belong to the user (deselecting
+  // must stay deselected).
   useEffect(() => {
     if (autoSelected || !snapshot) return;
     setAutoSelected(true);
+    setVisible(monthOf(snapshot.asOfDay));
     if (snapshot.trainedToday) setSelectedDay(snapshot.asOfDay);
   }, [autoSelected, snapshot]);
 
@@ -310,12 +340,13 @@ export function StreakCalendarScreen() {
     const keys = Object.keys(snapshot.days);
     return keys.length > 0 ? keys.reduce((a, b) => (a < b ? a : b)) : asOfDay;
   }, [asOfDay, snapshot]);
+  const currentMonth = monthOf(asOfDay);
+  const earliestMonth = monthOf(earliestDay);
   const atCurrentMonth =
-    visible.year === Number(asOfDay.slice(0, 4)) &&
-    visible.month === Number(asOfDay.slice(5, 7)) - 1;
+    visible.year === currentMonth.year && visible.month === currentMonth.month;
   const atEarliestMonth =
-    visible.year === Number(earliestDay.slice(0, 4)) &&
-    visible.month === Number(earliestDay.slice(5, 7)) - 1;
+    visible.year === earliestMonth.year &&
+    visible.month === earliestMonth.month;
 
   const streak = snapshot?.currentStreak ?? 0;
   const intensity = flameIntensityForStreak(streak);
@@ -341,6 +372,43 @@ export function StreakCalendarScreen() {
         : snapshot.trainedToday
           ? `Day ${streak} secured. You trained ${snapshot.trainedLast7} of the last 7 days.`
           : `You trained ${snapshot.trainedLast7} of the last 7 days.`;
+
+  if (!snapshot && loadError) {
+    return (
+      <SafeAreaView edges={['top']} style={styles.screen}>
+        <StatusBar barStyle="dark-content" />
+        <ScreenHeader
+          title="Consistency"
+          eyebrow="Training streak"
+          onBack={() => navigation.goBack()}
+        />
+        <View style={styles.content}>
+          <Card
+            tone="light"
+            style={styles.loadErrorCard}
+            testID="streak-load-error"
+          >
+            <View accessibilityRole="alert" accessibilityLiveRegion="assertive">
+              <Text style={[type.h3, { color: color.ink }]}>
+                Couldn’t load your training history
+              </Text>
+              <Text style={[type.caption, styles.loadErrorCopy]}>
+                Your streak and calendar are stored on this device and could not
+                be read just now. Your streak is not shown until it can be.
+              </Text>
+            </View>
+            <View style={{ marginTop: space.md }}>
+              <Button
+                label="Try again"
+                variant="secondary"
+                onPress={() => void refresh()}
+              />
+            </View>
+          </Card>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
@@ -446,6 +514,7 @@ export function StreakCalendarScreen() {
             <PressableScale
               accessibilityLabel="Previous month"
               disabled={atEarliestMonth}
+              hitSlop={6}
               onPress={() => setVisible(v => addMonths(v.year, v.month, -1))}
               style={[
                 styles.monthArrow,
@@ -460,6 +529,7 @@ export function StreakCalendarScreen() {
             <PressableScale
               accessibilityLabel="Next month"
               disabled={atCurrentMonth}
+              hitSlop={6}
               onPress={() => setVisible(v => addMonths(v.year, v.month, 1))}
               style={[
                 styles.monthArrow,
@@ -750,6 +820,8 @@ const styles = StyleSheet.create({
     backgroundColor: color.surfaceAlt,
   },
   monthArrowDisabled: { opacity: 0.35 },
+  loadErrorCard: { marginTop: space.sm },
+  loadErrorCopy: { color: color.inkSoft, marginTop: space.sm },
   weekdayRow: { flexDirection: 'row', marginBottom: 4 },
   weekdayLabel: {
     flex: 1,
