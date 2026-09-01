@@ -6,7 +6,7 @@
 // means at most 60 requests inside each clock minute per key. Limits fail
 // OPEN on backend errors: a Redis outage must never lock users out.
 
-import { redisConfigured, redisWindowIncr } from "./cache.ts";
+import { redisConfigured, redisWindowGet, redisWindowIncr } from "./cache.ts";
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -40,6 +40,31 @@ function memoryIncr(key: string, windowSeconds: number): number {
   return 1;
 }
 
+function memoryGet(key: string): number {
+  const existing = windows.get(key);
+  return existing && existing.resetAtMs > Date.now() ? existing.count : 0;
+}
+
+function windowKey(scope: string, id: string, windowSeconds: number) {
+  const bucket = Math.floor(Date.now() / (windowSeconds * 1_000));
+  return { bucket, key: `rl:${scope}:${bucket}:${id}` };
+}
+
+function toResult(
+  count: number,
+  limit: number,
+  bucket: number,
+  windowSeconds: number,
+  allowed: boolean,
+): RateLimitResult {
+  const remaining = Math.max(0, limit - count);
+  const retryAfterSeconds = Math.max(
+    1,
+    Math.ceil((bucket + 1) * windowSeconds - Date.now() / 1_000),
+  );
+  return { allowed, limit, remaining, retryAfterSeconds };
+}
+
 /**
  * Count one hit against `scope`+`id` and report whether it is allowed.
  *
@@ -52,8 +77,7 @@ export async function enforceRateLimit(
   limit: number,
   windowSeconds: number,
 ): Promise<RateLimitResult> {
-  const bucket = Math.floor(Date.now() / (windowSeconds * 1_000));
-  const key = `rl:${scope}:${bucket}:${id}`;
+  const { bucket, key } = windowKey(scope, id, windowSeconds);
   let count: number | null = null;
   if (redisConfigured()) {
     count = await redisWindowIncr(key, windowSeconds);
@@ -61,12 +85,30 @@ export async function enforceRateLimit(
   if (count === null) {
     count = memoryIncr(key, windowSeconds);
   }
-  const remaining = Math.max(0, limit - count);
-  const retryAfterSeconds = Math.max(
-    1,
-    Math.ceil((bucket + 1) * windowSeconds - Date.now() / 1_000),
-  );
-  return { allowed: count <= limit, limit, remaining, retryAfterSeconds };
+  return toResult(count, limit, bucket, windowSeconds, count <= limit);
+}
+
+/**
+ * Inspect a window WITHOUT counting a hit. `allowed` is false once `limit`
+ * hits have already been recorded (the next hit would exceed it). Used for
+ * budgets that are charged by a later outcome (e.g. only failed
+ * authentications count) but must gate every request up front.
+ */
+export async function peekRateLimit(
+  scope: string,
+  id: string,
+  limit: number,
+  windowSeconds: number,
+): Promise<RateLimitResult> {
+  const { bucket, key } = windowKey(scope, id, windowSeconds);
+  let count: number | null = null;
+  if (redisConfigured()) {
+    count = await redisWindowGet(key);
+  }
+  if (count === null) {
+    count = memoryGet(key);
+  }
+  return toResult(count, limit, bucket, windowSeconds, count < limit);
 }
 
 /** 429 body + headers shared by every limited route. */

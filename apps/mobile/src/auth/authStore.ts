@@ -4,7 +4,12 @@ import {
   AccountBootstrapError,
   bootstrapCanonicalAccount,
 } from '../account/bootstrap';
-import { clearApiSession, establishApiSession } from '../account/apiSession';
+import {
+  clearApiSession,
+  establishApiSession,
+  setApiUnauthorizedListener,
+  type ApiSession,
+} from '../account/apiSession';
 import { getAccountBootstrapEnvironment } from '../account/deviceContext';
 import {
   GOOGLE_IOS_CLIENT_ID,
@@ -49,9 +54,26 @@ export interface AuthSession {
 }
 
 export interface AuthError {
-  code: 'auth.canceled' | 'auth.not_configured' | 'auth.failed';
+  code:
+    | 'auth.canceled'
+    | 'auth.not_configured'
+    | 'auth.failed'
+    | 'auth.session_expired';
   message: string;
 }
+
+/** Outcome of the on-device cleanup that follows a server-confirmed
+ * deletion. `failed` means the account is gone server-side but some of its
+ * rows are still on this phone — the surface that started the deletion must
+ * tell the user. */
+export interface AccountDeletionCleanup {
+  localPurge: 'complete' | 'failed' | 'not_needed';
+}
+
+const LOCAL_PURGE_ATTEMPTS = 3;
+
+export const SESSION_EXPIRED_MESSAGE =
+  'Your sign-in expired. Sign in again to keep syncing — everything on this phone is still here.';
 
 interface NativePickleAuth {
   signInWithApple(): Promise<{
@@ -68,6 +90,8 @@ interface AuthState {
   session: AuthSession | null;
   busy: boolean;
   error: AuthError | null;
+  /** Result of the most recent completeAccountDeletion(); null until one ran. */
+  deletionCleanup: AccountDeletionCleanup | null;
   hydrate: () => Promise<void>;
   signInWithApple: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -186,6 +210,7 @@ async function establishSyncedAccount(input: {
     }),
   );
   configureSyncRuntime(result.apiSession);
+  setApiUnauthorizedListener(handleApiUnauthorized);
   await persistLocalGuest(false);
   return {
     provider: input.provider,
@@ -260,11 +285,54 @@ async function restoreGoogleSessionSilently(
   });
 }
 
+/**
+ * The backend rejected the current bearer (provider ID tokens expire after
+ * about an hour). Stop every retry loop immediately, then try a silent Google
+ * refresh; when that is impossible, land signed out with an honest reason so
+ * the user is never left tapping controls that fail against a dead token.
+ */
+function handleApiUnauthorized(expired: ApiSession): void {
+  const state = useAuthStore.getState();
+  const current = state.session;
+  if (
+    state.busy ||
+    !current ||
+    current.localOnly ||
+    current.canonicalAppUserId !== expired.canonicalAppUserId
+  ) {
+    return;
+  }
+  clearSyncedRuntime();
+  void (async () => {
+    if (expired.provider === 'google' && GOOGLE_WEB_CLIENT_ID) {
+      try {
+        const session =
+          await restoreGoogleSessionSilently(GOOGLE_WEB_CLIENT_ID);
+        if (session) {
+          useAuthStore.setState({ session, error: null });
+          return;
+        }
+      } catch {
+        // Fall through to the explicit re-sign-in below.
+      }
+      clearSyncedRuntime();
+    }
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    useAuthStore.setState({
+      session: null,
+      busy: false,
+      error: { code: 'auth.session_expired', message: SESSION_EXPIRED_MESSAGE },
+    });
+    await persistLocalGuest(false);
+  })();
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   hydrated: false,
   session: null,
   busy: false,
   error: null,
+  deletionCleanup: null,
 
   hydrate: async () => {
     clearSyncedRuntime();
@@ -435,17 +503,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       : null;
     clearSyncedRuntime();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-    set({ session: null, error: null, busy: false });
+    set({ session: null, error: null, busy: false, deletionCleanup: null });
     await persistLocalGuest(false);
     await persistLastProvider(null);
+    let localPurge: AccountDeletionCleanup['localPurge'] = 'not_needed';
     if (deletedOwner) {
-      try {
-        await purgeOwnerData(getDb(), deletedOwner);
-      } catch {
-        // The owner bucket is unreachable while signed out and the server
-        // copy is gone; a leftover local row cannot resurrect the account.
+      localPurge = 'failed';
+      for (let attempt = 0; attempt < LOCAL_PURGE_ATTEMPTS; attempt += 1) {
+        try {
+          await purgeOwnerData(getDb(), deletedOwner);
+          localPurge = 'complete';
+          break;
+        } catch {
+          // Retried below; the caller is told if every attempt fails.
+        }
       }
     }
+    set({ deletionCleanup: { localPurge } });
     if (provider === 'google') {
       try {
         const { GoogleSignin } = await loadGoogleSignin();

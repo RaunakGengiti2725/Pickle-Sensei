@@ -3,6 +3,8 @@ import type {
   AnalysisFeedbackRating,
 } from '@pickle/shared-types';
 import type { SyncTransport } from './sync';
+import { reportApiUnauthorized } from '../account/apiSession';
+import { getRuntimePublicConfig } from '../config/runtimeConfig';
 
 /**
  * API client. Base URL/token come from app state; in development the API's
@@ -76,7 +78,7 @@ async function request<T>(
       headers: {
         'content-type': 'application/json',
         ...(config.token ? { authorization: `Bearer ${config.token}` } : {}),
-        'x-client-version': '0.1.0',
+        'x-client-version': getRuntimePublicConfig().appVersion,
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       signal: controller.signal,
@@ -96,6 +98,9 @@ async function request<T>(
   const json = (await response.json().catch(() => null)) as
     (T & { error?: { code: string; message: string } }) | null;
   if (!response.ok) {
+    if (response.status === 401 && config.token) {
+      reportApiUnauthorized(config.token);
+    }
     throw new ApiError(
       response.status,
       json?.error?.code ?? 'unknown',

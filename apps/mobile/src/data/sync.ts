@@ -85,6 +85,23 @@ export function isPermanentSyncFailure(error: unknown): boolean {
   return false;
 }
 
+/**
+ * Per-item rejections the server itself labels as retryable (its own write
+ * failed, or the bearer must be refreshed). They record the reason but keep
+ * the row's attempt budget intact, matching how a whole-request 5xx is
+ * treated; every other rejection code is a contract verdict that will not
+ * change on replay.
+ */
+export const TRANSIENT_SYNC_REJECTION_CODES: ReadonlySet<string> = new Set([
+  'shot.write_failed',
+  'evaluation.trial_write_failed',
+  'auth.required',
+]);
+
+export function isTransientSyncRejection(code: string): boolean {
+  return TRANSIENT_SYNC_REJECTION_CODES.has(code);
+}
+
 async function recordRowFailure(
   db: LocalDb,
   owner: string,
@@ -181,16 +198,14 @@ export async function drainOutbox(
           continue;
         }
         const rejection = rejected.get(entry.shotId);
-        await db.execute(
-          `UPDATE outbox SET attempts = attempts + 1, last_error = ?
-           WHERE owner_key = ? AND id = ?`,
-          [
-            rejection
-              ? `${rejection.code}: ${rejection.message}`
-              : 'shot.sync_unacknowledged',
-            owner,
-            entry.row['id'],
-          ],
+        await recordRowFailure(
+          db,
+          owner,
+          entry.row['id'],
+          rejection
+            ? `${rejection.code}: ${rejection.message}`
+            : 'shot.sync_unacknowledged',
+          !rejection || !isTransientSyncRejection(rejection.code),
         );
         failed++;
       }
@@ -205,14 +220,29 @@ export async function drainOutbox(
 
   const trialRows = rows.filter(r => r['kind'] === 'evaluation.trial');
   if (trialRows.length > 0 && transport.uploadEvaluationTrials) {
+    const entries: Array<{
+      row: (typeof trialRows)[number];
+      trial: { trialId: string };
+    }> = [];
+    for (const r of trialRows) {
+      try {
+        const trial = JSON.parse(String(r['payload'])) as { trialId: unknown };
+        if (typeof trial.trialId !== 'string') {
+          throw new Error('evaluation.trial_missing_id');
+        }
+        entries.push({ row: r, trial: { ...trial, trialId: trial.trialId } });
+      } catch (error) {
+        await recordRowFailure(db, owner, r['id'], error, true);
+        failed++;
+      }
+    }
     try {
-      const entries = trialRows.map(r => ({
-        row: r,
-        trial: JSON.parse(String(r['payload'])) as { trialId: string },
-      }));
-      const response = await transport.uploadEvaluationTrials(
-        entries.map(entry => entry.trial),
-      );
+      const response =
+        entries.length > 0
+          ? await transport.uploadEvaluationTrials(
+              entries.map(entry => entry.trial),
+            )
+          : { acceptedTrialIds: [], rejected: [] };
       const accepted = new Set(response.acceptedTrialIds);
       const rejected = new Map(
         response.rejected.map(item => [item.trialId, item] as const),
@@ -227,26 +257,21 @@ export async function drainOutbox(
           continue;
         }
         const rejection = rejected.get(entry.trial.trialId);
-        await db.execute(
-          `UPDATE outbox SET attempts = attempts + 1, last_error = ?
-           WHERE owner_key = ? AND id = ?`,
-          [
-            rejection
-              ? `${rejection.code}: ${rejection.message}`
-              : 'evaluation.trial_unacknowledged',
-            owner,
-            entry.row['id'],
-          ],
+        await recordRowFailure(
+          db,
+          owner,
+          entry.row['id'],
+          rejection
+            ? `${rejection.code}: ${rejection.message}`
+            : 'evaluation.trial_unacknowledged',
+          !rejection || !isTransientSyncRejection(rejection.code),
         );
         failed++;
       }
     } catch (error) {
-      for (const r of trialRows) {
-        await db.execute(
-          `UPDATE outbox SET attempts = attempts + 1, last_error = ?
-           WHERE owner_key = ? AND id = ?`,
-          [String(error), owner, r['id']],
-        );
+      const permanent = isPermanentSyncFailure(error);
+      for (const entry of entries) {
+        await recordRowFailure(db, owner, entry.row['id'], error, permanent);
         failed++;
       }
     }
