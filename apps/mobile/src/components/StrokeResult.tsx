@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type AccessibilityActionEvent,
   type GestureResponderEvent,
 } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
@@ -98,6 +99,13 @@ function formatSeconds(ms: number): string {
   return `${(Math.max(0, ms) / 1000).toFixed(2)}s`;
 }
 
+/** VoiceOver swipe-up/down moves the playhead by 1/20th of the timeline. */
+const SCRUB_STEPS = 20;
+const SCRUB_ACTIONS = [
+  { name: 'increment' as const },
+  { name: 'decrement' as const },
+];
+
 // ─── §1.2 Replay card ───────────────────────────────────────────────────────
 
 function ReplayCard(props: {
@@ -168,16 +176,32 @@ function ReplayCard(props: {
     playTimer.current = null;
     setPlaying(false);
   };
+  const seekTo = (ms: number) => {
+    stopPlayback();
+    const next = Math.min(base.endMs, Math.max(base.startMs, ms));
+    setPlayheadMs(next);
+    if (nativePlayback) setSeekMs(next - base.startMs);
+  };
   const seekToX = (event: GestureResponderEvent) => {
     if (trackWidth <= 0) return;
-    stopPlayback();
     const ratio = Math.min(
       1,
       Math.max(0, event.nativeEvent.locationX / trackWidth),
     );
-    const next = base.startMs + ratio * span;
-    setPlayheadMs(next);
-    if (nativePlayback) setSeekMs(next - base.startMs);
+    seekTo(base.startMs + ratio * span);
+  };
+  const scrubStepMs = span / SCRUB_STEPS;
+  const onScrubAccessibilityAction = (event: AccessibilityActionEvent) => {
+    switch (event.nativeEvent.actionName) {
+      case 'increment':
+        seekTo(playheadMs + scrubStepMs);
+        return;
+      case 'decrement':
+        seekTo(playheadMs - scrubStepMs);
+        return;
+      default:
+        return;
+    }
   };
   const togglePlay = () => {
     if (playing) {
@@ -263,8 +287,19 @@ function ReplayCard(props: {
       </View>
 
       <View
+        accessible
+        accessibilityRole="adjustable"
         accessibilityLabel="Replay timeline scrubber"
-        accessibilityHint="Drag to move through the analyzed clip"
+        accessibilityHint="Drag, or swipe up and down, to move through the analyzed clip"
+        accessibilityValue={{
+          min: 0,
+          max: span,
+          now: Math.round(playheadMs - base.startMs),
+          text: formatSeconds(playheadMs - base.startMs),
+        }}
+        accessibilityActions={SCRUB_ACTIONS}
+        onAccessibilityAction={onScrubAccessibilityAction}
+        testID="stroke-result-scrubber"
         onLayout={event => setTrackWidth(event.nativeEvent.layout.width)}
         onStartShouldSetResponder={() => true}
         onMoveShouldSetResponder={() => true}
@@ -457,6 +492,7 @@ export function StrokeResult(props: StrokeResultProps) {
               accessibilityRole="tab"
               accessibilityLabel={chip.label}
               accessibilityState={{ selected: chip.isCurrent }}
+              hitSlop={4}
               onPress={() =>
                 chip.isCurrent
                   ? undefined
