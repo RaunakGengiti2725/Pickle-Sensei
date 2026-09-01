@@ -126,8 +126,8 @@ function mappingTargetLine(mapping: DrillMapping): string | null {
     mapping.targetRepetitionsPerSet !== null
       ? `${mapping.targetSets} × ${mapping.targetRepetitionsPerSet}`
       : mapping.targetDurationSeconds !== null
-      ? `${mapping.targetSets} × ${mapping.targetDurationSeconds}s`
-      : `${mapping.targetSets} set${mapping.targetSets === 1 ? '' : 's'}`;
+        ? `${mapping.targetSets} × ${mapping.targetDurationSeconds}s`
+        : `${mapping.targetSets} set${mapping.targetSets === 1 ? '' : 's'}`;
   const parts = [sets];
   if (mapping.restSeconds !== null) parts.push(`rest ${mapping.restSeconds}s`);
   return parts.join(' · ');

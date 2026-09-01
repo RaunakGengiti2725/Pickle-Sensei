@@ -8,6 +8,7 @@
  * PremiumTabBar tests) keep their own inline jest.mock, which wins.
  */
 import * as React from 'react';
+import { Image, ScrollView, Text, View } from 'react-native';
 
 type AnyProps = Record<string, unknown> & {
   animatedProps?: Record<string, unknown>;
@@ -24,8 +25,6 @@ function createAnimatedComponent(
     });
   };
 }
-
-const { View, Text, ScrollView, Image } = require('react-native');
 
 const passthrough = (value: unknown) => value;
 

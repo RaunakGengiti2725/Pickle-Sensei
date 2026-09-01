@@ -134,9 +134,8 @@ export const useAppStore = create<AppState>(set => ({
         apiSession &&
         canonicalDataOwner(apiSession.canonicalAppUserId) === owner
       ) {
-        const canonicalProfile = await fetchCanonicalOnboardingProfile(
-          apiSession,
-        );
+        const canonicalProfile =
+          await fetchCanonicalOnboardingProfile(apiSession);
         if (canonicalProfile) {
           raw = JSON.stringify(canonicalProfile);
           await setKv(db, profileKeyForOwner(owner), raw);

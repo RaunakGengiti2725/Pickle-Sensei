@@ -294,8 +294,8 @@ export function ProgressScreen() {
   const latestLabel = latestLocal
     ? latestLocal.shotType.replace(/_/g, ' ')
     : latestSynced
-    ? `${latestSynced.shotType.replace(/_/g, ' ')} daily average`
-    : null;
+      ? `${latestSynced.shotType.replace(/_/g, ' ')} daily average`
+      : null;
 
   const byShot = useMemo(() => {
     return SHOT_TYPES.map(shotType => {

@@ -86,8 +86,8 @@ function randomFact(rng: () => number, index: number): ScoredCheckpointFact {
       roll < 0.15
         ? null
         : roll < 0.25
-        ? pick(rng, HOSTILE_SCORES)
-        : Math.round(rng() * 100);
+          ? pick(rng, HOSTILE_SCORES)
+          : Math.round(rng() * 100);
     return {
       key: pick(rng, CHECKPOINT_KEYS),
       score,

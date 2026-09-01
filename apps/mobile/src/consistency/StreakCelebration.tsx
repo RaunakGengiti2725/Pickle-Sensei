@@ -180,8 +180,8 @@ function ConfettiPiece(props: {
       progress.value <= 0
         ? 0
         : progress.value >= 0.92
-        ? (1 - progress.value) / 0.08
-        : 1,
+          ? (1 - progress.value) / 0.08
+          : 1,
     transform: [
       { translateY: -40 + progress.value * (props.screenHeight * 0.72) },
       {
@@ -372,8 +372,8 @@ function CelebrationStage(props: { celebration: ConsistencyCelebration }) {
           'days',
         )} of real training`
       : celebration.detail
-      ? `25 scored ${celebration.detail} analyses`
-      : `${celebration.value} training activities logged`;
+        ? `25 scored ${celebration.detail} analyses`
+        : `${celebration.value} training activities logged`;
 
   return (
     <View style={styles.root} testID="streak-celebration">
@@ -437,10 +437,10 @@ function CelebrationStage(props: { celebration: ConsistencyCelebration }) {
                 slot === 0
                   ? palette.accent
                   : slot === 1
-                  ? palette.glint
-                  : slot === 2
-                  ? color.volt
-                  : color.mint
+                    ? palette.glint
+                    : slot === 2
+                      ? color.volt
+                      : color.mint
               }
               spin={spin}
               drift={drift}
@@ -496,8 +496,8 @@ function CelebrationStage(props: { celebration: ConsistencyCelebration }) {
                 index % 3 === 0
                   ? color.volt
                   : index % 3 === 1
-                  ? palette.accent
-                  : palette.glint
+                    ? palette.accent
+                    : palette.glint
               }
               reduced={reduced}
             />

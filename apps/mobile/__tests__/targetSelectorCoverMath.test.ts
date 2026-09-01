@@ -76,10 +76,7 @@ describe('viewPointToSourcePoint', () => {
     const { scale, offsetX, offsetY } = coverTransform(view, landscape);
     const source = viewPointToSourcePoint(tap, view, landscape);
     expect(source.x * landscape.width * scale - offsetX).toBeCloseTo(tap.x, 9);
-    expect(source.y * landscape.height * scale - offsetY).toBeCloseTo(
-      tap.y,
-      9,
-    );
+    expect(source.y * landscape.height * scale - offsetY).toBeCloseTo(tap.y, 9);
   });
 
   it('crops vertically for a source taller than the view aspect', () => {

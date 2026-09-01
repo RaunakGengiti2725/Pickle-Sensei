@@ -42,7 +42,8 @@ async function renderBanner(streakDays: number, onPressStreak?: () => void) {
 
 function nodeByTestId(renderer: TestRenderer.ReactTestRenderer, id: string) {
   return renderer.root.findAll(
-    node => node.props.testID === id && typeof node.props.onPress !== 'undefined',
+    node =>
+      node.props.testID === id && typeof node.props.onPress !== 'undefined',
   )[0]!;
 }
 

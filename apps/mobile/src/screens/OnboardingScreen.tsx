@@ -287,8 +287,8 @@ export function OnboardingScreen(props: {
     step === 'reveal'
       ? true
       : step === 'name'
-      ? firstName.length >= 1
-      : answers[step] !== undefined;
+        ? firstName.length >= 1
+        : answers[step] !== undefined;
 
   // Selection never auto-advances; the user confirms with Continue so a
   // mis-tap is recoverable and the pace belongs to them.

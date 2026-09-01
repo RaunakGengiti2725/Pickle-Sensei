@@ -6,11 +6,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import {
-  BrandMark,
-  PressableScale,
-  ScreenHeader,
-} from '../design/components';
+import { BrandMark, PressableScale, ScreenHeader } from '../design/components';
 import { Icon } from '../design/icons';
 import { color, font, radius, space, type } from '../design/tokens';
 import { useReliableSafeAreaInsets } from '../design/safeArea';

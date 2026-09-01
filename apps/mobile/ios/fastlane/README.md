@@ -30,9 +30,9 @@ Build a signed release archive (Mac-only)
 ```
 
 Create/refresh the local Apple Distribution certificate + App Store
-    profile via the ASC API (Mac-only). Needed once per Mac: cloud-managed
-    signing certificates require an Admin API key, while classic cert+profile
-    creation works with the App Manager key this repo uses.
+profile via the ASC API (Mac-only). Needed once per Mac: cloud-managed
+signing certificates require an Admin API key, while classic cert+profile
+creation works with the App Manager key this repo uses.
 
 ### ios beta
 
@@ -49,10 +49,10 @@ Bump build number, build, and upload to TestFlight internal testing (Mac-only)
 ```
 
 Build and upload the App Store release binary (Mac-only). Uploads the
-    binary ONLY — metadata, screenshots, pricing, and the actual submission to
-    App Review stay deliberate manual steps in App Store Connect.
+binary ONLY — metadata, screenshots, pricing, and the actual submission to
+App Review stay deliberate manual steps in App Store Connect.
 
-----
+---
 
 This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.
 

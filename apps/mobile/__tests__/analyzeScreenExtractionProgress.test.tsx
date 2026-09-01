@@ -230,8 +230,7 @@ function progressBarCount(renderer: ReactTestRenderer): number {
   // De-duplicated by host elements: composite + host both carry the role.
   return renderer.root.findAll(
     n =>
-      n.props.accessibilityRole === 'progressbar' &&
-      typeof n.type === 'string',
+      n.props.accessibilityRole === 'progressbar' && typeof n.type === 'string',
   ).length;
 }
 

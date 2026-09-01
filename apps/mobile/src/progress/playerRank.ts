@@ -68,12 +68,16 @@ function finiteNumber(value: unknown): number | null {
 
 export function parsePlayerRank(payload: unknown): ServerPlayerRank | null {
   if (!isRecord(payload) || !('rank' in payload)) {
-    throw new PlayerRankApiError('The rank server returned an invalid response.');
+    throw new PlayerRankApiError(
+      'The rank server returned an invalid response.',
+    );
   }
   const rank = payload['rank'];
   if (rank === null) return null;
   if (!isRecord(rank) || !Array.isArray(rank['techniques'])) {
-    throw new PlayerRankApiError('The rank server returned an invalid response.');
+    throw new PlayerRankApiError(
+      'The rank server returned an invalid response.',
+    );
   }
   const rating = finiteNumber(rank['rating']);
   const techniqueCount = finiteNumber(rank['techniqueCount']);
@@ -85,7 +89,9 @@ export function parsePlayerRank(payload: unknown): ServerPlayerRank | null {
     techniqueCount === null ||
     typeof tier !== 'string'
   ) {
-    throw new PlayerRankApiError('The rank server returned an invalid response.');
+    throw new PlayerRankApiError(
+      'The rank server returned an invalid response.',
+    );
   }
   const techniques = rank['techniques'].map(row => {
     if (!isRecord(row)) {
@@ -138,11 +144,15 @@ export async function fetchPlayerRank(
       },
     });
   } catch {
-    throw new PlayerRankApiError('Your account rank is temporarily unavailable.');
+    throw new PlayerRankApiError(
+      'Your account rank is temporarily unavailable.',
+    );
   }
   const payload = (await response.json().catch(() => null)) as unknown;
   if (!response.ok) {
-    throw new PlayerRankApiError('Your account rank is temporarily unavailable.');
+    throw new PlayerRankApiError(
+      'Your account rank is temporarily unavailable.',
+    );
   }
   return parsePlayerRank(payload);
 }

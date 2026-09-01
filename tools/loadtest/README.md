@@ -13,11 +13,11 @@ brew install k6        # macOS
 
 ## Scripts
 
-| Script          | Auth needed | What it proves                                                                 |
-| --------------- | ----------- | ------------------------------------------------------------------------------ |
-| `smoke.js`      | none        | Public endpoints stay fast + correct under concurrency; limiter answers 429s with `Retry-After`, never 5xx. |
+| Script          | Auth needed | What it proves                                                                                                        |
+| --------------- | ----------- | --------------------------------------------------------------------------------------------------------------------- |
+| `smoke.js`      | none        | Public endpoints stay fast + correct under concurrency; limiter answers 429s with `Retry-After`, never 5xx.           |
 | `auth-abuse.js` | none        | Token stuffing yields only 401/429; after the per-IP failure budget the limiter blocks WITHOUT hitting Supabase Auth. |
-| `user-flow.js`  | real token  | The app's launch/read mix (bootstrap → access → rank → progress → drills) under N concurrent users. |
+| `user-flow.js`  | real token  | The app's launch/read mix (bootstrap → access → rank → progress → drills) under N concurrent users.                   |
 
 ```sh
 BASE=https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api

@@ -144,8 +144,8 @@ export function HomeScreen() {
   const displayedStroke = latestScored
     ? latestScored.shotType.replace(/_/g, ' ')
     : latestSynced
-    ? `${latestSynced.shotType.replace(/_/g, ' ')} daily average`
-    : null;
+      ? `${latestSynced.shotType.replace(/_/g, ' ')} daily average`
+      : null;
   const focus = profile?.focusCheckpoint
     ? profile.focusCheckpoint.replace(/_/g, ' ')
     : null;
@@ -378,8 +378,8 @@ export function HomeScreen() {
               {displayedScore === null
                 ? 'Camera practice still counts. Scores appear only after validated analysis.'
                 : latestScored
-                ? 'Latest validated scored stroke on this device'
-                : 'Latest synced daily average'}
+                  ? 'Latest validated scored stroke on this device'
+                  : 'Latest synced daily average'}
             </Text>
           </View>
           <Text style={styles.techniqueSummaryScore}>

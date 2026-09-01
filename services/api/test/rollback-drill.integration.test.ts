@@ -163,7 +163,6 @@ describe.skipIf(!testUrl)("rollback drill (real PostgreSQL, linux-test measureme
     // Linux-test measurements, reported for the drill record — not production.
     expect(timeToDisableMs).toBeGreaterThan(0);
     expect(timeToRollbackMs).toBeGreaterThan(0);
-    // eslint-disable-next-line no-console
     console.log(
       `[rollback-drill linux-test] feature-flags timeToDisableMs=${timeToDisableMs.toFixed(1)} timeToRollbackMs=${timeToRollbackMs.toFixed(1)}`,
     );
@@ -229,7 +228,6 @@ describe.skipIf(!testUrl)("rollback drill (real PostgreSQL, linux-test measureme
     } finally {
       await pool.end();
     }
-    // eslint-disable-next-line no-console
     console.log(
       `[rollback-drill linux-test] model-bundles timeToRollbackMs=${timeToRollbackMs.toFixed(1)}`,
     );
@@ -285,7 +283,6 @@ describe.skipIf(!testUrl)("rollback drill (real PostgreSQL, linux-test measureme
       await badApp.close();
       const timeToDisableMs = performance.now() - disableStart;
       expect(timeToDisableMs).toBeGreaterThan(0);
-      // eslint-disable-next-line no-console
       console.log(
         `[rollback-drill linux-test] backend-config timeToDisableMs=${timeToDisableMs.toFixed(1)}`,
       );
@@ -306,7 +303,6 @@ describe.skipIf(!testUrl)("rollback drill (real PostgreSQL, linux-test measureme
         headers: auth(adminToken),
       });
       expect(adminBack.statusCode).toBe(200);
-      // eslint-disable-next-line no-console
       console.log(
         `[rollback-drill linux-test] backend-config timeToRollbackMs=${timeToRollbackMs.toFixed(1)}`,
       );

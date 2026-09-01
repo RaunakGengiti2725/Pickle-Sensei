@@ -113,9 +113,7 @@ describe('extraction ETA math', () => {
   it('clamps out-of-range native fractions instead of rendering them', () => {
     expect(observeExtractionProgress(null, 0, 1.7).lastProgress).toBe(1);
     expect(observeExtractionProgress(null, 0, -0.2).lastProgress).toBe(0);
-    expect(observeExtractionProgress(null, 0, Number.NaN).lastProgress).toBe(
-      0,
-    );
+    expect(observeExtractionProgress(null, 0, Number.NaN).lastProgress).toBe(0);
   });
 
   it('null state renders nothing — no invented sublabel', () => {

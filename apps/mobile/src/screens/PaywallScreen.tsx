@@ -62,8 +62,8 @@ function periodLabel(period: BillingPeriod): string {
   return period === 'annual'
     ? 'year'
     : period === 'lifetime'
-    ? 'one-time'
-    : 'month';
+      ? 'one-time'
+      : 'month';
 }
 
 function savingsLabel(annual: StorePlan | null, monthly: StorePlan | null) {
@@ -283,8 +283,8 @@ export function PaywallScreen(props: PaywallScreenProps) {
     selectedPeriod === 'annual'
       ? plans?.annual
       : selectedPeriod === 'lifetime'
-      ? plans?.lifetime
-      : plans?.monthly;
+        ? plans?.lifetime
+        : plans?.monthly;
   const busy = operation !== 'idle';
   const annualSavings = savingsLabel(
     plans?.annual ?? null,
@@ -298,8 +298,8 @@ export function PaywallScreen(props: PaywallScreenProps) {
   const purchaseLabel = selectedPlan?.freeTrial
     ? 'Start free trial'
     : selectedPlan
-    ? `Continue · ${selectedPlan.priceString}${ctaSuffix[selectedPlan.period]}`
-    : 'Store pricing unavailable';
+      ? `Continue · ${selectedPlan.priceString}${ctaSuffix[selectedPlan.period]}`
+      : 'Store pricing unavailable';
   const canPurchase = Boolean(selectedPlan && canonicalAccess);
   const showRetry =
     status !== 'loading' && (!plans || canonicalAccess === null);

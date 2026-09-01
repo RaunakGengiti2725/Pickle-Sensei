@@ -39,9 +39,7 @@ describe("playerRankTierForRating", () => {
   it("tiers ascend monotonically and start at 0", () => {
     expect(PLAYER_RANK_TIERS[0].minRating).toBe(0);
     for (let i = 1; i < PLAYER_RANK_TIERS.length; i++) {
-      expect(PLAYER_RANK_TIERS[i].minRating).toBeGreaterThan(
-        PLAYER_RANK_TIERS[i - 1].minRating,
-      );
+      expect(PLAYER_RANK_TIERS[i].minRating).toBeGreaterThan(PLAYER_RANK_TIERS[i - 1].minRating);
     }
   });
 });
@@ -146,9 +144,7 @@ describe("computePlayerRank", () => {
   });
 
   it("keeps only the freshest RANK_FORM_WINDOW analyses in a technique's form", () => {
-    const inputs = Array.from({ length: 9 }, (_, i) =>
-      scored("dink", i + 1, day(i + 1)),
-    );
+    const inputs = Array.from({ length: 9 }, (_, i) => scored("dink", i + 1, day(i + 1)));
     const rank = computePlayerRank(inputs)!;
     // Newest first 9..2 (the oldest score, 1, falls outside the window):
     // (8·900+7·800+6·700+5·600+4·500+3·400+2·300+1·200)/36 = 24000/36 → 6.67.
@@ -270,10 +266,6 @@ describe("computePlayerRank", () => {
       scored("dink", 8, day(1)),
       scored("volley", 6, day(1)),
     ])!;
-    expect(rank.techniques.map((t) => t.shotType)).toEqual([
-      "dink",
-      "serve",
-      "volley",
-    ]);
+    expect(rank.techniques.map((t) => t.shotType)).toEqual(["dink", "serve", "volley"]);
   });
 });

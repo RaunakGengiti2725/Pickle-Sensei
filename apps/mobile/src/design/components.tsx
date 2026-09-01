@@ -801,8 +801,8 @@ export function Stat(props: {
                 ? color.volt
                 : color.court
               : props.dark
-              ? color.onDark
-              : color.ink,
+                ? color.onDark
+                : color.ink,
           },
         ]}
       >

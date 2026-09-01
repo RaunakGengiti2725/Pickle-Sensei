@@ -207,8 +207,8 @@ function DeleteAccountSheet(props: {
                   step.phase === 'deleting'
                     ? 'Deleting…'
                     : step.secondsLeft > 0
-                    ? `Permanently delete (${step.secondsLeft})`
-                    : 'Permanently delete'
+                      ? `Permanently delete (${step.secondsLeft})`
+                      : 'Permanently delete'
                 }
                 variant="danger"
                 disabled={

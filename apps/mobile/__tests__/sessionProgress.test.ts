@@ -13,12 +13,12 @@ import {
 const scored = (overallScore: number) =>
   ({
     result: { resultKind: 'scored', overallScore },
-  } as unknown as AnalysisRecord);
+  }) as unknown as AnalysisRecord;
 const lowConf = () =>
   ({
     result: { resultKind: 'low_confidence', overallScore: null },
-  } as unknown as AnalysisRecord);
-const resultless = () => ({ result: null } as unknown as AnalysisRecord);
+  }) as unknown as AnalysisRecord;
+const resultless = () => ({ result: null }) as unknown as AnalysisRecord;
 
 function view(partial: Partial<SessionEventView>): SessionEventView {
   return {

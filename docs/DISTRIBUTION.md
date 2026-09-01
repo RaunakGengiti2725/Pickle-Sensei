@@ -60,6 +60,7 @@ Plus the normal JS gates: `npm ci && npx tsc --noEmit && npm test`.
   ```
 
   The .p8 private key lives only at that path (mode 600), never in the repo.
+
 - **App ID capabilities**: `com.picklesensei` has IN_APP_PURCHASE and
   APPLE_ID_AUTH (Sign in with Apple, primary-app configuration; enabled
   2026-08-30 via the ASC API to match the entitlements file).

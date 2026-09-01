@@ -221,9 +221,7 @@ describe('CapturedClip contract additions', () => {
       ...importedClipPayload,
       posterUri: 'file:///private/var/mobile/import.poster.jpg',
     });
-    expect(clip.posterUri).toBe(
-      'file:///private/var/mobile/import.poster.jpg',
-    );
+    expect(clip.posterUri).toBe('file:///private/var/mobile/import.poster.jpg');
   });
 
   it('rejects a posterUri that is not a private file: URI', () => {

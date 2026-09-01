@@ -24,8 +24,8 @@ export function StatDeltaRow(props: {
     props.delta === null || props.delta === 0
       ? null
       : props.delta > 0
-      ? ('up' as const)
-      : ('down' as const);
+        ? ('up' as const)
+        : ('down' as const);
   const comparison =
     props.previous === null
       ? ''
@@ -33,8 +33,8 @@ export function StatDeltaRow(props: {
           direction === null
             ? ''
             : direction === 'up'
-            ? ', trending up'
-            : ', trending down'
+              ? ', trending up'
+              : ', trending down'
         }`;
 
   return (

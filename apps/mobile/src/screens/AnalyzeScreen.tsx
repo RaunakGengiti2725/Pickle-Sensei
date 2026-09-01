@@ -625,8 +625,8 @@ export function AnalyzeScreen() {
               event.state === 'completed'
                 ? 1
                 : event.state === 'extracting'
-                ? event.progress
-                : undefined;
+                  ? event.progress
+                  : undefined;
             if (matchesRun && typeof fraction === 'number') {
               const emittedAtMs = Date.parse(event.emittedAtIso);
               run.eta = observeExtractionProgress(
@@ -687,8 +687,8 @@ export function AnalyzeScreen() {
         message: needsPoseExtraction
           ? 'Reading player movement…'
           : declaredStroke
-          ? 'Measuring your swing…'
-          : 'Measuring your swing and reading the stroke…',
+            ? 'Measuring your swing…'
+            : 'Measuring your swing and reading the stroke…',
       });
       // Stage model for the progress bar (parallel to the caption above,
       // which keeps its exact strings): stages advance only at boundaries
@@ -1319,8 +1319,8 @@ export function AnalyzeScreen() {
               intent === null
                 ? 'cleared'
                 : intent.source === 'auto'
-                ? 'AUTO'
-                : intent.canonical ?? intent.legacySlug ?? 'unknown',
+                  ? 'AUTO'
+                  : (intent.canonical ?? intent.legacySlug ?? 'unknown'),
             );
             setTechniqueIntent(intent);
             // The legacy capture/analysis chain consumes the slug; the

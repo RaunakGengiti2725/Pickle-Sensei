@@ -81,7 +81,10 @@ function loadRealSequence(): { sequence: PoseSequence; sidecarJson: string } {
       `real pose artifact failed domain parsing: ${parsed.failure.message}`,
     );
   }
-  return { sequence: parsed.value, sidecarJson: serializePoseSequence(parsed.value) };
+  return {
+    sequence: parsed.value,
+    sidecarJson: serializePoseSequence(parsed.value),
+  };
 }
 
 function recordingDb(): LocalDb {
@@ -194,7 +197,8 @@ describeReal(
       );
       const result = outcome.record.result;
       expect(result).not.toBeNull();
-      if (!result) throw new Error('unreachable: durable outcome without a result');
+      if (!result)
+        throw new Error('unreachable: durable outcome without a result');
       expect(result.source).toBe('real');
       if (outcome.kind === 'scored') {
         expect(result.overallScore).not.toBeNull();

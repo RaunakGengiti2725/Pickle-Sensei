@@ -33,9 +33,7 @@ import { sessionScoreProgression } from './sessionProgress';
  */
 
 export type SpokenCueCategory =
-  | LiveCueCategory
-  | 'SESSION_START'
-  | 'SESSION_END';
+  LiveCueCategory | 'SESSION_START' | 'SESSION_END';
 
 export interface CoachVoicePort {
   available(): boolean;
@@ -173,7 +171,8 @@ export class LiveSessionCoach {
         {
           repIndex: this.repCounter,
           kind,
-          overallScore: kind === 'scored' ? result?.overallScore ?? null : null,
+          overallScore:
+            kind === 'scored' ? (result?.overallScore ?? null) : null,
           checkpoints: checkpointObservations(event),
         },
         this.rules,

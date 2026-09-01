@@ -367,6 +367,7 @@ export const useTrainingStore = create<TrainingStoreState>((set, get) => ({
       // tests) that only exercise training plans.
       if (completion.qualifiesForStreak !== false && item.drill) {
         const { useConsistencyStore } =
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
           require('../consistency/store') as typeof import('../consistency/store');
         void useConsistencyStore.getState().recordDrillCompletion({
           id: completion.id,

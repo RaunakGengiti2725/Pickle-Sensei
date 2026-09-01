@@ -110,8 +110,8 @@ export function buildNotificationPlan(
     const timestampMs = context.practicedToday
       ? atLocalMinutes(addDays(context.nowMs, 1), STREAK_DEFENSE_MINUTES)
       : todayMs >= context.nowMs + MIN_LEAD_MS
-      ? todayMs
-      : null;
+        ? todayMs
+        : null;
     if (timestampMs !== null) {
       const copy = streakDefenseCopy(timestampMs, {
         streakDays: context.streakDays,

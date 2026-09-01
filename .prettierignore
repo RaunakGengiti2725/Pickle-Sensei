@@ -24,3 +24,8 @@ docs/STATUS_BOARD.md
 docs/HANDOFF_V3.md
 docs/DECISIONS.md
 .testing/
+# Supabase CLI local state + committed bench result artifacts (provenance bytes)
+supabase/.temp/
+tools/mac-bench/results/
+# Local Ruby gems for fastlane (git-ignored; never present in CI checkouts)
+apps/mobile/vendor/

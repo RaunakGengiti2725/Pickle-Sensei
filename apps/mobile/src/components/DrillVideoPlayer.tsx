@@ -221,8 +221,8 @@ export function DrillVideoPlayer(props: {
         stage === 'watch'
           ? media.sourceUrl
           : media.kind === 'embed'
-          ? media.embedUrl
-          : media.playbackUrl;
+            ? media.embedUrl
+            : media.playbackUrl;
       const failedUrl = event.nativeEvent.url;
       if (failedUrl && failedUrl.startsWith(mainUrl.split('?')[0] ?? mainUrl)) {
         onWebViewFailure();

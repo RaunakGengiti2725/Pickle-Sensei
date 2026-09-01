@@ -12,8 +12,7 @@ interface NativeAudioCoach {
 }
 
 const native: NativeAudioCoach | undefined = NativeModules.PickleAudioCoach as
-  | NativeAudioCoach
-  | undefined;
+  NativeAudioCoach | undefined;
 
 export const tts = {
   available(): boolean {

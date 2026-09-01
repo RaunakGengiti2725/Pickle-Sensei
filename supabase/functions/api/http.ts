@@ -35,11 +35,15 @@ export function legalTextResponse(text: string, status = 200): Response {
  * not the only line.
  */
 export function sanitizeUserText(value: string, maxLength: number): string {
-  return value
-    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, maxLength);
+  return (
+    value
+      // Stripping control characters is this function's purpose.
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, maxLength)
+  );
 }
 
 /** First client IP from the gateway's x-forwarded-for chain. Used only for

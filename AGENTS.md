@@ -9,8 +9,14 @@ backend is the Supabase Edge Function in `supabase/functions/api/` (Deno);
 
 - Mobile: `cd apps/mobile && npx tsc --noEmit && npx jest --silent`
 - Workspace: `pnpm -r typecheck` and `pnpm --filter @pickle/shared-types test`
-- ESLint is currently broken repo-wide (eslint 8 config loading eslint 9 from the
-  pnpm root — pre-existing). Use `npx prettier --check` for formatting.
+- CI's `verify` job = `pnpm format:check` + `pnpm lint` + `pnpm typecheck` +
+  `pnpm test` (needs a Postgres for @pickle/database — CI service user
+  `pickle` is superuser) + `@pickle/database migrate/seed` + the ml/scripts
+  python unittests. Root `eslint .` covers apps/mobile too. Prettier: the
+  ROOT version (3.9.6 via ^3.6.2) is the formatting authority; apps/mobile
+  pins the SAME exact version so `npx prettier --check` agrees in both
+  places — bump them together or formatting ping-pongs.
+- Supabase RLS/security matrix: `./supabase/tests/run_rls_tests.sh`
 - iOS native deps: `cd apps/mobile/ios && bundle exec pod install`
 
 ## Deploy (Supabase project `ucqnaiwqwjtgvlduiuib`, linked via CLI)

@@ -39,80 +39,80 @@ Principles that show up everywhere:
 
 ### Core palette
 
-| Token | Value | Usage |
-|---|---|---|
-| `ink` | `#071710` | Primary text on light, dark buttons |
-| `inkElevated` | `#10271E` | Elevated dark cards, dark icon buttons |
-| `inkSoft` | `#627168` | Secondary/muted text on light, inactive icons |
-| `graphite` | `#1A2D25` | Deep neutral (rarely used directly) |
-| `surface` | `#F7F6F0` | App background (light) — warm chalk |
-| `surfaceElevated` | `#FFFFFF` | Cards, buttons, tab bar |
-| `surfaceAlt` | `#EBEFE8` | Soft cards, track backgrounds, neutral pills |
-| `surfaceDark` | `#06130E` | App background (dark screens), dark card bases |
-| `line` | `#DCE3DC` | Hairline borders/dividers on light |
-| `lineDark` | `#21382E` | Hairline borders/dividers on dark |
-| `lineStrongDark` | `#4A5550` | Stronger borders on dark |
-| `lineMutedDark` | `#31433B` | Muted dividers inside dark cards |
+| Token             | Value     | Usage                                          |
+| ----------------- | --------- | ---------------------------------------------- |
+| `ink`             | `#071710` | Primary text on light, dark buttons            |
+| `inkElevated`     | `#10271E` | Elevated dark cards, dark icon buttons         |
+| `inkSoft`         | `#627168` | Secondary/muted text on light, inactive icons  |
+| `graphite`        | `#1A2D25` | Deep neutral (rarely used directly)            |
+| `surface`         | `#F7F6F0` | App background (light) — warm chalk            |
+| `surfaceElevated` | `#FFFFFF` | Cards, buttons, tab bar                        |
+| `surfaceAlt`      | `#EBEFE8` | Soft cards, track backgrounds, neutral pills   |
+| `surfaceDark`     | `#06130E` | App background (dark screens), dark card bases |
+| `line`            | `#DCE3DC` | Hairline borders/dividers on light             |
+| `lineDark`        | `#21382E` | Hairline borders/dividers on dark              |
+| `lineStrongDark`  | `#4A5550` | Stronger borders on dark                       |
+| `lineMutedDark`   | `#31433B` | Muted dividers inside dark cards               |
 
 ### Brand + accents
 
-| Token | Value | Usage |
-|---|---|---|
-| `court` | `#087956` | Primary brand green — primary buttons, active tab, links |
-| `courtDeep` | `#07563E` | Deep green — gradient starts, court-tone cards, paywall |
-| `courtSoft` | `#D8EEE4` | Soft green chips, active-tab pill, icon chips on light |
-| `volt` | `#D7FA45` | THE accent — optic ball. Score arcs, COACH FAB, volt CTAs |
-| `voltSoft` | `#EFFBC4` | Soft volt tint |
-| `mint` | `#53D99B` | Secondary accent, gradient partner of volt |
-| `flame` | `#FF9B42` | Streak flame, tertiary accent |
-| `onVolt` | `#142014` | Text/icons on volt backgrounds |
+| Token       | Value     | Usage                                                     |
+| ----------- | --------- | --------------------------------------------------------- |
+| `court`     | `#087956` | Primary brand green — primary buttons, active tab, links  |
+| `courtDeep` | `#07563E` | Deep green — gradient starts, court-tone cards, paywall   |
+| `courtSoft` | `#D8EEE4` | Soft green chips, active-tab pill, icon chips on light    |
+| `volt`      | `#D7FA45` | THE accent — optic ball. Score arcs, COACH FAB, volt CTAs |
+| `voltSoft`  | `#EFFBC4` | Soft volt tint                                            |
+| `mint`      | `#53D99B` | Secondary accent, gradient partner of volt                |
+| `flame`     | `#FF9B42` | Streak flame, tertiary accent                             |
+| `onVolt`    | `#142014` | Text/icons on volt backgrounds                            |
 
 ### Status (score bands)
 
 Score bands are never color-only — always paired with the number.
 
-| Token | Value | Soft pair | Usage |
-|---|---|---|---|
-| `good` | `#137A50` | `goodSoft` `#DCEFE4` | Green band (good technique) |
-| `warn` | `#A86416` | `warnSoft` `#F6E8CE` | Yellow band (needs work) |
-| `bad` | `#A63D36` | `badSoft` `#F4DEDB` | Red band (fix this) |
-| unscored | `inkSoft` `#627168` | — | No score yet |
+| Token    | Value               | Soft pair            | Usage                       |
+| -------- | ------------------- | -------------------- | --------------------------- |
+| `good`   | `#137A50`           | `goodSoft` `#DCEFE4` | Green band (good technique) |
+| `warn`   | `#A86416`           | `warnSoft` `#F6E8CE` | Yellow band (needs work)    |
+| `bad`    | `#A63D36`           | `badSoft` `#F4DEDB`  | Red band (fix this)         |
+| unscored | `inkSoft` `#627168` | —                    | No score yet                |
 
 ### Text on dark
 
-| Token | Value | Usage |
-|---|---|---|
-| `onDark` | `#F8FAF5` | Primary text on dark |
-| `onDarkMuted` | `#A5B1AA` | Secondary text on dark |
-| `onDarkSubtle` | `#93A39B` | Captions on dark |
-| `onDarkFaint` | `#819087` | Faintest labels on dark |
-| `onDarkDisabled` | `#66736D` | Disabled on dark |
+| Token            | Value     | Usage                   |
+| ---------------- | --------- | ----------------------- |
+| `onDark`         | `#F8FAF5` | Primary text on dark    |
+| `onDarkMuted`    | `#A5B1AA` | Secondary text on dark  |
+| `onDarkSubtle`   | `#93A39B` | Captions on dark        |
+| `onDarkFaint`    | `#819087` | Faintest labels on dark |
+| `onDarkDisabled` | `#66736D` | Disabled on dark        |
 
 ### Overlays & tints
 
-| Token | Value | Usage |
-|---|---|---|
-| `overlayStrong` | `rgba(4,10,8,0.68)` | Modal backdrop |
-| `overlayDeep` | `rgba(7,17,14,0.9)` | Deepest scrim |
-| `overlayDark` | `rgba(7,17,14,0.84)` | Dark overlay panels |
-| `overlayDarkSoft` | `rgba(7,17,14,0.82)` | Floating pills over imagery |
-| `inkTint` | `rgba(11,23,19,0.09)` | Subtle ink tint chip on light |
-| `onDarkTint` | `rgba(255,255,255,0.1)` | Subtle white tint chip on dark |
-| `shadow` | `#08120E` | Shadow color (green-tinted, never pure black) |
+| Token             | Value                   | Usage                                         |
+| ----------------- | ----------------------- | --------------------------------------------- |
+| `overlayStrong`   | `rgba(4,10,8,0.68)`     | Modal backdrop                                |
+| `overlayDeep`     | `rgba(7,17,14,0.9)`     | Deepest scrim                                 |
+| `overlayDark`     | `rgba(7,17,14,0.84)`    | Dark overlay panels                           |
+| `overlayDarkSoft` | `rgba(7,17,14,0.82)`    | Floating pills over imagery                   |
+| `inkTint`         | `rgba(11,23,19,0.09)`   | Subtle ink tint chip on light                 |
+| `onDarkTint`      | `rgba(255,255,255,0.1)` | Subtle white tint chip on dark                |
+| `shadow`          | `#08120E`               | Shadow color (green-tinted, never pure black) |
 
 ### Rank tier emblems (video-game style)
 
 Each tier has `accent` (stroke), `deep` (fill), `glint` (highlight),
 `tint` (background wash at ~16% alpha):
 
-| Tier | accent | deep | glint | tint |
-|---|---|---|---|---|
-| Bronze | `#D08A4E` | `#3D2415` | `#F2B984` | `rgba(208,138,78,0.16)` |
-| Silver | `#C3CFD6` | `#2E373D` | `#E8F1F5` | `rgba(195,207,214,0.16)` |
-| Gold | `#E8C25C` | `#3F3110` | `#F7E3A1` | `rgba(232,194,92,0.16)` |
-| Platinum | `#8FE6D9` | `#0F3B34` | `#D3FFF6` | `rgba(143,230,217,0.16)` |
-| Diamond | `#9CC8FF` | `#14304A` | `#DCEDFF` | `rgba(156,200,255,0.18)` |
-| Unranked | `#819087` | `rgba(255,255,255,0.08)` | — | — |
+| Tier     | accent    | deep                     | glint     | tint                     |
+| -------- | --------- | ------------------------ | --------- | ------------------------ |
+| Bronze   | `#D08A4E` | `#3D2415`                | `#F2B984` | `rgba(208,138,78,0.16)`  |
+| Silver   | `#C3CFD6` | `#2E373D`                | `#E8F1F5` | `rgba(195,207,214,0.16)` |
+| Gold     | `#E8C25C` | `#3F3110`                | `#F7E3A1` | `rgba(232,194,92,0.16)`  |
+| Platinum | `#8FE6D9` | `#0F3B34`                | `#D3FFF6` | `rgba(143,230,217,0.16)` |
+| Diamond  | `#9CC8FF` | `#14304A`                | `#DCEDFF` | `rgba(156,200,255,0.18)` |
+| Unranked | `#819087` | `rgba(255,255,255,0.08)` | —         | —                        |
 
 Emblem silhouettes escalate: medal → hex badge → star shield → crest → cut gem.
 
@@ -120,25 +120,40 @@ Emblem silhouettes escalate: medal → hex badge → star shield → crest → c
 
 ```css
 :root {
-  --ink: #071710;            --ink-elevated: #10271E;
-  --ink-soft: #627168;       --graphite: #1A2D25;
-  --surface: #F7F6F0;        --surface-elevated: #FFFFFF;
-  --surface-alt: #EBEFE8;    --surface-dark: #06130E;
-  --line: #DCE3DC;           --line-dark: #21382E;
-  --line-strong-dark: #4A5550; --line-muted-dark: #31433B;
-  --court: #087956;          --court-deep: #07563E;
-  --court-soft: #D8EEE4;     --volt: #D7FA45;
-  --volt-soft: #EFFBC4;      --mint: #53D99B;
-  --flame: #FF9B42;          --on-volt: #142014;
-  --good: #137A50;           --good-soft: #DCEFE4;
-  --warn: #A86416;           --warn-soft: #F6E8CE;
-  --bad: #A63D36;            --bad-soft: #F4DEDB;
-  --on-dark: #F8FAF5;        --on-dark-muted: #A5B1AA;
-  --on-dark-subtle: #93A39B; --on-dark-faint: #819087;
-  --overlay-strong: rgba(4,10,8,0.68);
-  --ink-tint: rgba(11,23,19,0.09);
-  --on-dark-tint: rgba(255,255,255,0.10);
-  --shadow-color: #08120E;
+  --ink: #071710;
+  --ink-elevated: #10271e;
+  --ink-soft: #627168;
+  --graphite: #1a2d25;
+  --surface: #f7f6f0;
+  --surface-elevated: #ffffff;
+  --surface-alt: #ebefe8;
+  --surface-dark: #06130e;
+  --line: #dce3dc;
+  --line-dark: #21382e;
+  --line-strong-dark: #4a5550;
+  --line-muted-dark: #31433b;
+  --court: #087956;
+  --court-deep: #07563e;
+  --court-soft: #d8eee4;
+  --volt: #d7fa45;
+  --volt-soft: #effbc4;
+  --mint: #53d99b;
+  --flame: #ff9b42;
+  --on-volt: #142014;
+  --good: #137a50;
+  --good-soft: #dcefe4;
+  --warn: #a86416;
+  --warn-soft: #f6e8ce;
+  --bad: #a63d36;
+  --bad-soft: #f4dedb;
+  --on-dark: #f8faf5;
+  --on-dark-muted: #a5b1aa;
+  --on-dark-subtle: #93a39b;
+  --on-dark-faint: #819087;
+  --overlay-strong: rgba(4, 10, 8, 0.68);
+  --ink-tint: rgba(11, 23, 19, 0.09);
+  --on-dark-tint: rgba(255, 255, 255, 0.1);
+  --shadow-color: #08120e;
 }
 ```
 
@@ -153,30 +168,45 @@ Emblem silhouettes escalate: medal → hex badge → star shield → crest → c
 
 ### Type scale
 
-| Style | Weight | Size / Line | Tracking (px → em) | Use |
-|---|---|---|---|---|
-| `hero` | 600 | 48 / 50 | −2.2px → `-0.046em` | Welcome hero ("See the stroke.") |
-| `display` | 600 | 64 / 68 | −2.5px → `-0.039em` | Giant stat numbers, ring score |
-| `score` | 600 | 44 / 48 | −1.5px → `-0.034em` | Score numerals in cards |
-| `h1` | 600 | 32 / 36 | −1px → `-0.031em` | Screen greetings/titles |
-| `h2` | 600 | 21 / 27 | −0.35px → `-0.017em` | Card titles, empty-state titles |
-| `h3` | 600 | 17 / 22 | −0.15px → `-0.009em` | Section titles, row values |
-| `body` | 400 | 16 / 23 | 0 | Body copy |
-| `bodyBold` | 600 | 16 / 22 | 0 | Button labels, row titles |
-| `caption` | 500 | 13 / 18 | 0 | Secondary copy, sublabels |
-| `micro` | 600 | 11 / 14 | +0.9px → `+0.082em`, UPPERCASE | Eyebrows, pills, tab labels |
-| wordmark | 600 | 18 / 22 | −0.5px → `-0.028em` | "Pickle Sensei" next to mark |
+| Style      | Weight | Size / Line | Tracking (px → em)             | Use                              |
+| ---------- | ------ | ----------- | ------------------------------ | -------------------------------- |
+| `hero`     | 600    | 48 / 50     | −2.2px → `-0.046em`            | Welcome hero ("See the stroke.") |
+| `display`  | 600    | 64 / 68     | −2.5px → `-0.039em`            | Giant stat numbers, ring score   |
+| `score`    | 600    | 44 / 48     | −1.5px → `-0.034em`            | Score numerals in cards          |
+| `h1`       | 600    | 32 / 36     | −1px → `-0.031em`              | Screen greetings/titles          |
+| `h2`       | 600    | 21 / 27     | −0.35px → `-0.017em`           | Card titles, empty-state titles  |
+| `h3`       | 600    | 17 / 22     | −0.15px → `-0.009em`           | Section titles, row values       |
+| `body`     | 400    | 16 / 23     | 0                              | Body copy                        |
+| `bodyBold` | 600    | 16 / 22     | 0                              | Button labels, row titles        |
+| `caption`  | 500    | 13 / 18     | 0                              | Secondary copy, sublabels        |
+| `micro`    | 600    | 11 / 14     | +0.9px → `+0.082em`, UPPERCASE | Eyebrows, pills, tab labels      |
+| wordmark   | 600    | 18 / 22     | −0.5px → `-0.028em`            | "Pickle Sensei" next to mark     |
 
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap');
-body { font-family: 'Manrope', system-ui, sans-serif; font-size: 16px;
-       line-height: 1.44; color: var(--ink); background: var(--surface); }
-.display, .score, [data-numeric] { font-variant-numeric: tabular-nums; }
-.micro { font-size: 11px; line-height: 14px; font-weight: 600;
-         letter-spacing: 0.082em; text-transform: uppercase; }
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap");
+body {
+  font-family: "Manrope", system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.44;
+  color: var(--ink);
+  background: var(--surface);
+}
+.display,
+.score,
+[data-numeric] {
+  font-variant-numeric: tabular-nums;
+}
+.micro {
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.082em;
+  text-transform: uppercase;
+}
 ```
 
 Rules:
+
 - Eyebrow labels (`micro`) are ALWAYS uppercase with wide tracking, e.g.
   `THIS WEEK`, `ON-DEVICE`, `POSE-GUIDED`, `SELF SET`, `COACH`.
 - Big numbers can scale beyond the scale (e.g. 64px count, ring number =
@@ -206,11 +236,11 @@ Rules:
 
 ### Shadows (green-tinted, extremely soft)
 
-| Token | CSS equivalent |
-|---|---|
-| `soft` (cards) | `box-shadow: 0 8px 24px rgba(8,18,14,0.07)` |
-| `floating` (FAB, popovers) | `box-shadow: 0 10px 26px rgba(8,18,14,0.14)` |
-| tab bar (upward) | `box-shadow: 0 -8px 20px rgba(8,18,14,0.055)` |
+| Token                      | CSS equivalent                                |
+| -------------------------- | --------------------------------------------- |
+| `soft` (cards)             | `box-shadow: 0 8px 24px rgba(8,18,14,0.07)`   |
+| `floating` (FAB, popovers) | `box-shadow: 0 10px 26px rgba(8,18,14,0.14)`  |
+| tab bar (upward)           | `box-shadow: 0 -8px 20px rgba(8,18,14,0.055)` |
 
 Dark/court/soft-tone cards drop the shadow entirely (flat on dark).
 
@@ -239,7 +269,8 @@ Hairline everywhere: `1px solid var(--line)` on light,
 **Brand mark**: black-ink silhouette of a pickleball player (headband, paddle
 up, ready stance) — `apps/mobile/assets/brand/pickle-mark@3x.png`, tintable
 (rendered in `ink` on light, `onDark` on dark). Lockup = 32px mark + 10px gap
-+ "Pickle Sensei" wordmark (18px / 600 / −0.5px).
+
+- "Pickle Sensei" wordmark (18px / 600 / −0.5px).
 
 ---
 
@@ -251,14 +282,14 @@ Pill-shaped, 56px min-height (46px compact), 1px border, 24px horizontal
 padding, `bodyBold` label, 8px gap between icon/label.
 **Primary, volt, and dark variants always append a trailing arrow icon (18px).**
 
-| Variant | Background | Text | Border |
-|---|---|---|---|
-| `primary` | `court` | `onDark` | `court` |
-| `secondary` | `surfaceElevated` | `ink` | `line` |
-| `ghost` | transparent | `ink` | `line` |
-| `danger` | `badSoft` | `bad` | `badSoft` |
-| `volt` | `volt` | `onVolt` | `volt` |
-| `dark` | `ink` | `onDark` | `ink` |
+| Variant     | Background        | Text     | Border    |
+| ----------- | ----------------- | -------- | --------- |
+| `primary`   | `court`           | `onDark` | `court`   |
+| `secondary` | `surfaceElevated` | `ink`    | `line`    |
+| `ghost`     | transparent       | `ink`    | `line`    |
+| `danger`    | `badSoft`         | `bad`    | `badSoft` |
+| `volt`      | `volt`            | `onVolt` | `volt`    |
+| `dark`      | `ink`             | `onDark` | `ink`     |
 
 States: pressed → opacity 0.92 + scale 0.975; disabled → opacity 0.42.
 Web: use `:active { transform: scale(0.975); }` and a subtle hover
@@ -360,20 +391,30 @@ All motion is **ease-out-cubic** (`cubic-bezier(0.33, 1, 0.68, 1)`),
 transform/opacity-only, and every animation has a reduced-motion fallback
 that renders the final state instantly.
 
-| Interaction | Spec |
-|---|---|
-| Press in / out | scale → 0.975 in 110ms / back in 150ms; pressed opacity 0.92 |
-| Score ring reveal | 900ms arc sweep + synchronized number count-up, once on mount |
-| Bar fill reveal | scaleX 0 → 1 from left, 520ms, staggered per row |
-| Menu / backdrop | 210ms fade + rise; rows stagger (translateY 20+7i → 0, scale 0.96 → 1) |
-| FAB toggle | rotate 0 → 45°, scale 1 → 1.04 |
+| Interaction       | Spec                                                                   |
+| ----------------- | ---------------------------------------------------------------------- |
+| Press in / out    | scale → 0.975 in 110ms / back in 150ms; pressed opacity 0.92           |
+| Score ring reveal | 900ms arc sweep + synchronized number count-up, once on mount          |
+| Bar fill reveal   | scaleX 0 → 1 from left, 520ms, staggered per row                       |
+| Menu / backdrop   | 210ms fade + rise; rows stagger (translateY 20+7i → 0, scale 0.96 → 1) |
+| FAB toggle        | rotate 0 → 45°, scale 1 → 1.04                                         |
 
 Web equivalents:
 
 ```css
-:root { --ease-out: cubic-bezier(0.33, 1, 0.68, 1); }
-.pressable:active { transform: scale(0.975); transition: transform 110ms var(--ease-out); }
-@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+:root {
+  --ease-out: cubic-bezier(0.33, 1, 0.68, 1);
+}
+.pressable:active {
+  transform: scale(0.975);
+  transition: transform 110ms var(--ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
 ```
 
 Reveal animations happen **once** (the "score-reveal moment"), never loop.
@@ -439,6 +480,7 @@ This is the strongest template for a landing page hero.
 ## 10. Do / Don't
 
 **Do**
+
 - Use volt sparingly, on dark, for the single most important element.
 - Round everything: pills for interactive, 18–34px for containers.
 - Show scores as `X.X` with tabular numerals; use `—` when absent.
@@ -446,6 +488,7 @@ This is the strongest template for a landing page hero.
 - Keep shadows barely-there and green-tinted.
 
 **Don't**
+
 - No pure black (`#000`) or pure gray neutrals — everything is green-tinted.
 - No bold (700) headings — the look is SemiBold + tight tracking.
 - No emoji as icons; only the custom 1.8px stroke set.

@@ -71,10 +71,10 @@ function Gate() {
   const desiredOwner = !authHydrated
     ? null
     : session?.provider === 'guest'
-    ? GUEST_DATA_OWNER
-    : session?.canonicalAppUserId
-    ? canonicalDataOwner(session.canonicalAppUserId)
-    : SIGNED_OUT_DATA_OWNER;
+      ? GUEST_DATA_OWNER
+      : session?.canonicalAppUserId
+        ? canonicalDataOwner(session.canonicalAppUserId)
+        : SIGNED_OUT_DATA_OWNER;
 
   useEffect(() => {
     if (!desiredOwner) return;

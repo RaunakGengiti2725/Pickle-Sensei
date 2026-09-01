@@ -174,9 +174,7 @@ export async function markStoreReviewCompleted(): Promise<void> {
 }
 
 export type SettingsRateOutcome =
-  | 'store_page'
-  | 'native_prompt'
-  | 'unavailable';
+  'store_page' | 'native_prompt' | 'unavailable';
 
 /**
  * Settings' "Rate Pickle Sensei" row. Prefers the App Store write-review

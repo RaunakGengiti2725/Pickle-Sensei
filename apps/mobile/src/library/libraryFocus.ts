@@ -183,8 +183,8 @@ export function computeLibraryFocus(
       (a.latestCapturedAt === b.latestCapturedAt
         ? 0
         : a.latestCapturedAt < b.latestCapturedAt
-        ? 1
-        : -1) ||
+          ? 1
+          : -1) ||
       checkpointOrder(a.checkpoint) - checkpointOrder(b.checkpoint) ||
       (a.shotType < b.shotType ? -1 : a.shotType > b.shotType ? 1 : 0),
   );

@@ -160,10 +160,8 @@ export function playerRankDivisionForRating(rating: number): {
   const floor = tier.minRating;
   const ceiling = PLAYER_RANK_TIERS[index + 1]?.minRating ?? TOP_OF_SCALE;
   const span = ceiling - floor;
-  const fraction =
-    span <= 0 ? 1 : Math.max(0, Math.min(1, (rating - floor) / span));
-  const division: PlayerRankDivision =
-    fraction >= 2 / 3 ? 1 : fraction >= 1 / 3 ? 2 : 3;
+  const fraction = span <= 0 ? 1 : Math.max(0, Math.min(1, (rating - floor) / span));
+  const division: PlayerRankDivision = fraction >= 2 / 3 ? 1 : fraction >= 1 / 3 ? 2 : 3;
   return { division, label: DIVISION_LABELS[division] };
 }
 
@@ -262,9 +260,7 @@ export function computePlayerRank(
       confidence: Math.min(bucket.length, RANK_CONFIDENCE_CAP),
     });
   }
-  techniques.sort(
-    (a, b) => b.score - a.score || a.shotType.localeCompare(b.shotType),
-  );
+  techniques.sort((a, b) => b.score - a.score || a.shotType.localeCompare(b.shotType));
 
   // Rating: confidence-weighted average of the per-technique ROUNDED scores,
   // rounded to 2 decimals again — the same two-stage rounding the SQL
@@ -279,8 +275,7 @@ export function computePlayerRank(
   const tier = playerRankTierForRating(rating);
   const tierIndex = PLAYER_RANK_TIERS.findIndex((t) => t.key === tier.key);
   const next = PLAYER_RANK_TIERS[tierIndex + 1] ?? null;
-  const { division, label: divisionLabel } =
-    playerRankDivisionForRating(rating);
+  const { division, label: divisionLabel } = playerRankDivisionForRating(rating);
 
   return {
     rating,
@@ -296,8 +291,7 @@ export function computePlayerRank(
           key: next.key,
           label: next.label,
           minRating: next.minRating,
-          pointsNeeded:
-            Math.round(next.minRating * 100 - rating * 100) / 100,
+          pointsNeeded: Math.round(next.minRating * 100 - rating * 100) / 100,
         }
       : null,
   };

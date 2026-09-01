@@ -150,8 +150,8 @@ function DayCell(props: {
             'activities',
           )}`
       : props.isFuture
-      ? ''
-      : ', not trained'
+        ? ''
+        : ', not trained'
   }`;
   return (
     <View style={styles.dayCell}>
@@ -337,10 +337,10 @@ export function StreakCalendarScreen() {
     !snapshot || snapshot.totalActivities === 0
       ? 'Your first analysis lights the flame.'
       : snapshot.atRisk
-      ? 'No training yet today — one analysis keeps the flame alive.'
-      : snapshot.trainedToday
-      ? `Day ${streak} secured. You trained ${snapshot.trainedLast7} of the last 7 days.`
-      : `You trained ${snapshot.trainedLast7} of the last 7 days.`;
+        ? 'No training yet today — one analysis keeps the flame alive.'
+        : snapshot.trainedToday
+          ? `Day ${streak} secured. You trained ${snapshot.trainedLast7} of the last 7 days.`
+          : `You trained ${snapshot.trainedLast7} of the last 7 days.`;
 
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
@@ -577,8 +577,8 @@ export function StreakCalendarScreen() {
                             activity.kind === 'drill'
                               ? 'library'
                               : activity.kind === 'session_stroke'
-                              ? 'court'
-                              : 'camera'
+                                ? 'court'
+                                : 'camera'
                           }
                           color={color.court}
                           size={15}
@@ -599,8 +599,8 @@ export function StreakCalendarScreen() {
                           {activity.kind === 'session_stroke'
                             ? ' · SESSION'
                             : activity.kind === 'drill'
-                            ? ' · DRILL'
-                            : ''}
+                              ? ' · DRILL'
+                              : ''}
                         </Text>
                       </View>
                       <Text style={styles.activityScore}>

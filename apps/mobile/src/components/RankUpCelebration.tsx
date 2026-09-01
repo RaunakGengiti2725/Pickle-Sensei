@@ -27,7 +27,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { PLAYER_RANK_TIERS } from '@pickle/shared-types';
 import { Button, useReducedMotion } from '../design/components';
-import { color, radius, space, type } from '../design/tokens';
+import { color, space, type } from '../design/tokens';
 import { useRankCelebrationStore } from '../progress/rankCelebration';
 import type { RankCelebration } from '../progress/rankCelebration';
 import { RankIcon, RANK_TIER_STYLE } from './RankIcon';
@@ -419,8 +419,8 @@ function CelebrationStage(props: { celebration: RankCelebration }) {
                 index % 3 === 0
                   ? color.volt
                   : index % 3 === 1
-                  ? tierStyle.accent
-                  : tierStyle.glint
+                    ? tierStyle.accent
+                    : tierStyle.glint
               }
               reduced={reduced}
             />
@@ -464,10 +464,10 @@ function CelebrationStage(props: { celebration: RankCelebration }) {
                   summary.techniqueCount === 1 ? 'technique' : 'techniques'
                 } — recent swings count most.`
               : summary.nextTier
-              ? `${summary.nextTier.pointsNeeded.toFixed(2)} to ${
-                  summary.nextTier.label
-                }. Every analysis moves it.`
-              : 'Top tier — every new analysis defends it.'}
+                ? `${summary.nextTier.pointsNeeded.toFixed(2)} to ${
+                    summary.nextTier.label
+                  }. Every analysis moves it.`
+                : 'Top tier — every new analysis defends it.'}
           </Text>
         </Animated.View>
 

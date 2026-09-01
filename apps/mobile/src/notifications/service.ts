@@ -35,6 +35,9 @@ let cachedModule: NotifeeModule | null = null;
 
 function loadModule(): NotifeeModule {
   if (!cachedModule) {
+    // Deliberately lazy: the native module must not load at import time
+    // (jest hosts and signed-out processes never touch it).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     cachedModule = require('react-native-notify-kit') as NotifeeModule;
   }
   return cachedModule;
@@ -100,8 +103,8 @@ class NotifeeScheduler implements SchedulerPort {
           ...(item.repeat === 'daily'
             ? { repeatFrequency: RepeatFrequency.DAILY }
             : item.repeat === 'weekly'
-            ? { repeatFrequency: RepeatFrequency.WEEKLY }
-            : {}),
+              ? { repeatFrequency: RepeatFrequency.WEEKLY }
+              : {}),
         },
       );
     }

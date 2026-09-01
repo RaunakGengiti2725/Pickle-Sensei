@@ -52,8 +52,8 @@ function row(
       summary === null
         ? null
         : typeof summary === 'string'
-        ? summary
-        : JSON.stringify(summary),
+          ? summary
+          : JSON.stringify(summary),
   };
 }
 

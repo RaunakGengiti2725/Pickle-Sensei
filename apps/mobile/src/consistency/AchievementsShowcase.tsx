@@ -63,8 +63,6 @@ function buildEntries(snapshot: ConsistencySnapshot): ShowcaseEntry[] {
     };
   });
   const sessions = earnedById.get(VOLUME_ACHIEVEMENTS.sessions100.id);
-  const sessionsToGo =
-    VOLUME_ACHIEVEMENTS.sessions100.threshold - snapshot.totalActivities;
   entries.push({
     id: VOLUME_ACHIEVEMENTS.sessions100.id,
     title: VOLUME_ACHIEVEMENTS.sessions100.title,

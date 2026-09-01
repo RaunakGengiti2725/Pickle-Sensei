@@ -36,10 +36,10 @@ export function ConsistencyCard(props: {
     !snapshot || snapshot.totalActivities === 0
       ? 'Your first analysis lights the flame.'
       : snapshot.atRisk
-      ? 'No training yet today — one analysis keeps it alive.'
-      : snapshot.trainedToday
-      ? `Day ${streak} secured · ${snapshot.trainedLast7} of the last 7 days`
-      : `You trained ${snapshot?.trainedLast7 ?? 0} of the last 7 days`;
+        ? 'No training yet today — one analysis keeps it alive.'
+        : snapshot.trainedToday
+          ? `Day ${streak} secured · ${snapshot.trainedLast7} of the last 7 days`
+          : `You trained ${snapshot?.trainedLast7 ?? 0} of the last 7 days`;
 
   return (
     <PressableScale

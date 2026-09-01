@@ -190,8 +190,8 @@ export function SettingsScreen() {
     session === null
       ? '—'
       : session.provider === 'guest'
-      ? 'Guest · this device'
-      : session.displayName ?? session.email ?? session.subject;
+        ? 'Guest · this device'
+        : (session.displayName ?? session.email ?? session.subject);
   // Guests with an onboarding first name are greeted by name; the guest
   // provider label moves down to the caption line.
   const isGuest = session?.provider === 'guest';
@@ -208,26 +208,26 @@ export function SettingsScreen() {
     consentAvailability !== 'ready'
       ? 'Manage'
       : modelTrainingActive
-      ? 'Training: contributing'
-      : 'Training: off';
+        ? 'Training: contributing'
+        : 'Training: off';
   const membershipLabel = access?.premium
     ? 'Pro active'
     : access
-    ? access.freeRatings.remaining > 0
-      ? `${access.freeRatings.remaining} free rating${
-          access.freeRatings.remaining === 1 ? '' : 's'
-        } left`
-      : 'Upgrade required'
-    : 'Verify access';
+      ? access.freeRatings.remaining > 0
+        ? `${access.freeRatings.remaining} free rating${
+            access.freeRatings.remaining === 1 ? '' : 's'
+          } left`
+        : 'Upgrade required'
+      : 'Verify access';
   const notificationsValue = !notificationPrefs.enabled
     ? 'Off'
     : notificationPermission === 'denied'
-    ? 'Allow in system settings'
-    : notificationPrefs.practiceReminder
-    ? `Daily · ${formatReminderMinutes(
-        notificationPrefs.practiceReminderMinutes,
-      )}`
-    : 'On';
+      ? 'Allow in system settings'
+      : notificationPrefs.practiceReminder
+        ? `Daily · ${formatReminderMinutes(
+            notificationPrefs.practiceReminderMinutes,
+          )}`
+        : 'On';
 
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
@@ -255,8 +255,8 @@ export function SettingsScreen() {
                 session === null
                   ? 'SIGNED OUT'
                   : session.provider === 'guest'
-                  ? 'LOCAL'
-                  : 'SYNCED'
+                    ? 'LOCAL'
+                    : 'SYNCED'
               }
               tone={session === null ? 'neutral' : 'volt'}
             />

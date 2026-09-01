@@ -2022,7 +2022,7 @@ async function confirmAccountDeletion(authed: AuthedUser, request: Request): Pro
   // Drop this user's cached derived state; the auth token cache entry ages
   // out on its own (≤10 min) and every query behind it hits RLS-empty rows.
   await cacheDel(rankCacheKey(authed.id), progressCacheKey(authed.id));
-  console.log(`[api] account deleted: ${authed.id}`);
+  console.warn(`[api] account deleted: ${authed.id}`);
   return json(200, { deleted: true });
 }
 

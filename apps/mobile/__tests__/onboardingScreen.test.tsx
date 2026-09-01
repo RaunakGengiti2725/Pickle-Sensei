@@ -10,10 +10,10 @@ jest.mock('react-native-safe-area-context', () => ({
   },
 }));
 
-const mockCompleteOnboarding = jest.fn((_profile: unknown) =>
+const mockCompleteOnboarding = jest.fn<Promise<void>, [unknown]>(() =>
   Promise.resolve(),
 );
-const mockCompletePreAuthOnboarding = jest.fn((_profile: unknown) =>
+const mockCompletePreAuthOnboarding = jest.fn<Promise<boolean>, [unknown]>(() =>
   Promise.resolve(true),
 );
 jest.mock('../src/state/appStore', () => {

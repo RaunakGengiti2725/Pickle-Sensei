@@ -67,8 +67,8 @@ export function getRuntimePublicConfig(): RuntimePublicConfig {
     Platform.OS === 'ios'
       ? REVENUECAT_IOS_PUBLIC_SDK_KEY
       : Platform.OS === 'android'
-      ? REVENUECAT_ANDROID_PUBLIC_SDK_KEY
-      : null;
+        ? REVENUECAT_ANDROID_PUBLIC_SDK_KEY
+        : null;
 
   return {
     apiBaseUrl: API_BASE_URL,

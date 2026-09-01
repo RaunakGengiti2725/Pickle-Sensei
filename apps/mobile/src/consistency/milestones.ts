@@ -10,12 +10,7 @@
  */
 
 export type AchievementRarity =
-  | 'common'
-  | 'uncommon'
-  | 'rare'
-  | 'epic'
-  | 'legendary'
-  | 'mythic';
+  'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'mythic';
 
 export const RARITY_LABEL: Record<AchievementRarity, string> = {
   common: 'Common',
