@@ -18,6 +18,8 @@ import TestRenderer, { act } from 'react-test-renderer';
  *   1. ScreenHeader "Back"                      -> navigation.goBack()
  *   2. Switch "Use my video to improve models"  -> setModelTrainingConsent()
  *      -> grantModelTrainingConsent / withdrawModelTrainingConsent
+ *   3. Button "Connect account" (signed out)    -> navigate('ConnectAccount')
+ *   4. Button "Try again" (unavailable)         -> hydrate() -> fetchConsentStatus
  */
 
 jest.mock('../../src/data/db', () => ({ getDb: jest.fn() }));
@@ -29,8 +31,9 @@ jest.mock('react-native-safe-area-context', () => {
 });
 
 const mockGoBack = jest.fn();
+const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ goBack: mockGoBack }),
+  useNavigation: () => ({ goBack: mockGoBack, navigate: mockNavigate }),
 }));
 
 type ConsentApi = typeof import('../../src/account/consentApi');
@@ -174,6 +177,21 @@ function toggle(renderer: TestRenderer.ReactTestRenderer) {
   return renderer.root.findByType(Switch);
 }
 
+function controlLabels(renderer: TestRenderer.ReactTestRenderer): string[] {
+  return pressables(renderer).map(n => String(n.props.accessibilityLabel));
+}
+
+function buttonLabeled(
+  renderer: TestRenderer.ReactTestRenderer,
+  label: string,
+) {
+  const [node] = pressables(renderer).filter(
+    n => n.props.accessibilityLabel === label,
+  );
+  if (!node) throw new Error(`No pressable labeled ${label}`);
+  return node;
+}
+
 function resetStores() {
   useConsentStore.setState({
     availability: 'loading',
@@ -200,15 +218,13 @@ describe('ConsentSettingsScreen button ledger', () => {
     }
   });
 
-  it('exposes exactly the two interactive elements in the ledger', async () => {
+  it('exposes exactly the two interactive elements in the ledger when ready', async () => {
     establishApiSession(apiSession);
     useAuthStore.setState({ session: authSession });
     mockFetchConsentStatus.mockResolvedValue(status(false));
     const renderer = await renderScreen();
 
-    const buttons = pressables(renderer);
-    expect(buttons).toHaveLength(1);
-    expect(buttons[0]?.props.accessibilityLabel).toBe('Back');
+    expect(controlLabels(renderer)).toEqual(['Back']);
     expect(
       renderer.root.findAll(n => typeof n.props.onLongPress === 'function'),
     ).toHaveLength(0);
@@ -421,8 +437,35 @@ describe('ConsentSettingsScreen button ledger', () => {
       });
       expect(mockGrant).not.toHaveBeenCalled();
       expect(mockWithdraw).not.toHaveBeenCalled();
-      // WF-ISSUE: signed-out consent state tells the user to sign in but
-      // offers no sign-in / Connect account action on the screen.
+    });
+
+    it('offers a Connect account button to a local-only guest that opens the ConnectAccount route', async () => {
+      useAuthStore.setState({ session: guestSession });
+      const renderer = await renderScreen();
+
+      expect(controlLabels(renderer)).toEqual(['Back', 'Connect account']);
+      const connect = buttonLabeled(renderer, 'Connect account');
+      expect(connect.props.accessibilityRole).toBe('button');
+      expect(connect.props.disabled).toBeFalsy();
+
+      act(() => {
+        connect.props.onPress();
+      });
+      expect(mockNavigate).toHaveBeenCalledTimes(1);
+      expect(mockNavigate).toHaveBeenCalledWith('ConnectAccount');
+      expect(mockGoBack).not.toHaveBeenCalled();
+      expect(mockFetchConsentStatus).not.toHaveBeenCalled();
+    });
+
+    it('hides Connect account and Try again once the ledger is ready', async () => {
+      establishApiSession(apiSession);
+      useAuthStore.setState({ session: authSession });
+      mockFetchConsentStatus.mockResolvedValue(status(false));
+      const renderer = await renderScreen();
+
+      expect(controlLabels(renderer)).toEqual(['Back']);
+      expect(allText(renderer)).not.toContain('Sign in to change this.');
+      expect(allText(renderer)).not.toContain('Checking your current choice');
     });
 
     it('is disabled with visible copy when the status fetch fails', async () => {
@@ -440,11 +483,64 @@ describe('ConsentSettingsScreen button ledger', () => {
         'The consent server returned an invalid response.',
       );
       expect(mockGrant).not.toHaveBeenCalled();
-      // WF-ISSUE: unavailable consent state has no retry control (only Back
-      // and re-entering the screen re-runs hydrate).
+      expect(controlLabels(renderer)).toEqual(['Back', 'Try again']);
     });
 
-    it('stays disabled without explanatory copy while the status is loading', async () => {
+    it('re-fetches the ledger from the Try again button and re-enables the switch on success', async () => {
+      establishApiSession(apiSession);
+      useAuthStore.setState({ session: authSession });
+      mockFetchConsentStatus.mockRejectedValueOnce(
+        new TypeError('Network request failed'),
+      );
+      const renderer = await renderScreen();
+
+      expect(useConsentStore.getState().availability).toBe('unavailable');
+      expect(allText(renderer)).toContain(
+        'Consent settings are temporarily unavailable.',
+      );
+      const retry = buttonLabeled(renderer, 'Try again');
+      expect(retry.props.accessibilityRole).toBe('button');
+      expect(retry.props.disabled).toBeFalsy();
+      expect(mockFetchConsentStatus).toHaveBeenCalledTimes(1);
+
+      mockFetchConsentStatus.mockResolvedValueOnce(status(true));
+      await act(async () => {
+        retry.props.onPress();
+      });
+
+      expect(mockFetchConsentStatus).toHaveBeenCalledTimes(2);
+      expect(mockFetchConsentStatus.mock.calls[1]?.[0]).toEqual(apiSession);
+      expect(useConsentStore.getState().availability).toBe('ready');
+      expect(toggle(renderer).props.disabled).toBe(false);
+      expect(toggle(renderer).props.value).toBe(true);
+      expect(controlLabels(renderer)).toEqual(['Back']);
+      expect(allText(renderer)).not.toContain('temporarily unavailable');
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(mockGoBack).not.toHaveBeenCalled();
+    });
+
+    it('keeps Try again available and the error visible when the retry fails again', async () => {
+      establishApiSession(apiSession);
+      useAuthStore.setState({ session: authSession });
+      mockFetchConsentStatus.mockRejectedValue(
+        new ConsentApiError('The consent server returned an invalid response.'),
+      );
+      const renderer = await renderScreen();
+
+      await act(async () => {
+        buttonLabeled(renderer, 'Try again').props.onPress();
+      });
+
+      expect(mockFetchConsentStatus).toHaveBeenCalledTimes(2);
+      expect(useConsentStore.getState().availability).toBe('unavailable');
+      expect(toggle(renderer).props.disabled).toBe(true);
+      expect(allText(renderer)).toContain(
+        'The consent server returned an invalid response.',
+      );
+      expect(controlLabels(renderer)).toEqual(['Back', 'Try again']);
+    });
+
+    it('stays disabled with loading copy while the status is loading, then clears it', async () => {
       establishApiSession(apiSession);
       useAuthStore.setState({ session: authSession });
       const pending = deferred<ConsentStatus>();
@@ -453,14 +549,42 @@ describe('ConsentSettingsScreen button ledger', () => {
 
       expect(useConsentStore.getState().availability).toBe('loading');
       expect(toggle(renderer).props.disabled).toBe(true);
-      // WF-ISSUE: loading consent state renders a disabled switch with no
-      // loading indicator or copy.
+      expect(allText(renderer)).toContain('Checking your current choice…');
+      expect(controlLabels(renderer)).toEqual(['Back']);
 
       await act(async () => {
         pending.resolve(status(false));
         await pending.promise;
       });
       expect(toggle(renderer).props.disabled).toBe(false);
+      expect(allText(renderer)).not.toContain('Checking your current choice');
+    });
+
+    it('shows the loading copy again while Try again is in flight', async () => {
+      establishApiSession(apiSession);
+      useAuthStore.setState({ session: authSession });
+      mockFetchConsentStatus.mockRejectedValueOnce(
+        new ConsentApiError('Consent settings are temporarily unavailable.'),
+      );
+      const renderer = await renderScreen();
+      const pending = deferred<ConsentStatus>();
+      mockFetchConsentStatus.mockReturnValueOnce(pending.promise);
+
+      await act(async () => {
+        buttonLabeled(renderer, 'Try again').props.onPress();
+      });
+
+      expect(useConsentStore.getState().availability).toBe('loading');
+      expect(allText(renderer)).toContain('Checking your current choice…');
+      expect(allText(renderer)).not.toContain('temporarily unavailable');
+      expect(controlLabels(renderer)).toEqual(['Back']);
+
+      await act(async () => {
+        pending.resolve(status(false));
+        await pending.promise;
+      });
+      expect(toggle(renderer).props.disabled).toBe(false);
+      expect(controlLabels(renderer)).toEqual(['Back']);
     });
 
     it('does not throw when the server omits the model_training scope', async () => {
