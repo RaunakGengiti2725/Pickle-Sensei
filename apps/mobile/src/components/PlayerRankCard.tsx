@@ -6,6 +6,11 @@ import { color, radius, space, type } from '../design/tokens';
 import { getApiSession } from '../account/apiSession';
 import type { RealAnalysisFact } from '../data/repository';
 import {
+  DUPR_ESTIMATE_NOTE,
+  duprEstimate,
+  formatDuprEstimate,
+} from '../progress/duprEstimate';
+import {
   fetchPlayerRank,
   resolvePlayerRank,
   type ServerPlayerRank,
@@ -108,6 +113,9 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
             {summary.rating.toFixed(2)}
           </Text>
           <Text style={[type.caption, styles.ratingScale]}>/ 10</Text>
+          <Text style={[type.micro, styles.duprEstimate]}>
+            {formatDuprEstimate(summary.rating)}
+          </Text>
         </View>
       </View>
 
@@ -116,7 +124,9 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
           summary.divisionLabel
         }. Rating ${summary.rating.toFixed(
           2,
-        )} out of 10, from your current form across ${
+        )} out of 10, estimated DUPR ${duprEstimate(summary.rating).toFixed(
+          1,
+        )}, from your current form across ${
           summary.techniqueCount
         } ${techniqueNoun}.`}
         style={styles.tierRow}
@@ -177,7 +187,8 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
 
       <Text style={[type.caption, styles.formulaNote]}>
         Current form across {summary.techniqueCount} {techniqueNoun} — your
-        newest swings count most, and proven strokes weigh more. {sourceNote}
+        newest swings count most, and proven strokes weigh more. {sourceNote}{' '}
+        {DUPR_ESTIMATE_NOTE}
       </Text>
     </Card>
   );
@@ -198,6 +209,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   ratingScale: { color: color.onDarkSubtle },
+  duprEstimate: { color: color.onDarkFaint },
   tierRow: {
     flexDirection: 'row',
     alignItems: 'center',

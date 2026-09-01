@@ -32,7 +32,9 @@ import { plural } from '../util/plural';
 import { scoringStackStatus } from '../vision/providers';
 import { useAccessStore } from '../state/accessStore';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
+import { DUPR_ESTIMATE_NOTE } from '../progress/duprEstimate';
 import { rateAppFromSettings } from '../review/appStoreReview';
+import { useWalkthroughStore } from '../walkthrough/walkthroughStore';
 import type { RootStackParams } from '../navigation/params';
 
 const GENDER_LABELS: Record<Gender, string> = {
@@ -419,6 +421,20 @@ export function SettingsScreen() {
               onPress={() => void rateAppFromSettings()}
             />
           ) : null}
+          {/* Replays the first-run tour on demand; the device's one-time
+              record is untouched, so this never re-arms the auto-show. The
+              tour spotlights Home-screen elements, so land on Home first —
+              the overlay's measurement retries cover the tab transition. */}
+          <SettingRow
+            icon="court"
+            label="App walkthrough"
+            value="Replay"
+            preserveCase
+            onPress={() => {
+              navigation.navigate('Tabs', { screen: 'Home' });
+              useWalkthroughStore.getState().replay();
+            }}
+          />
           <SettingRow
             icon="library"
             label="App version"
@@ -452,7 +468,8 @@ export function SettingsScreen() {
         <View style={styles.ratingNote}>
           <Icon name="shield" size={16} color={color.inkSoft} />
           <Text style={[type.caption, { color: color.inkSoft, flex: 1 }]}>
-            Technique Score is coaching feedback—not a DUPR or player rating.
+            Technique Score is coaching feedback—not a verified DUPR or player
+            rating. {DUPR_ESTIMATE_NOTE}
           </Text>
         </View>
 

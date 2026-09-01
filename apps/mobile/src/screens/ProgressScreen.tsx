@@ -40,6 +40,10 @@ import {
   PRACTICE_HISTORY_RANGES,
   type PracticeHistoryRangeKey,
 } from '../progress/practiceHistory';
+import {
+  DUPR_ESTIMATE_NOTE,
+  formatDuprEstimate,
+} from '../progress/duprEstimate';
 import { PracticeVolumeChart } from '../progress/PracticeVolumeChart';
 import { ScoreTrendChart } from '../progress/ScoreTrendChart';
 import { StatDeltaRow } from '../progress/StatDeltaRow';
@@ -765,6 +769,9 @@ export function ProgressScreen() {
                     {latestScore.toFixed(1)}
                   </Text>
                   <Text style={[type.body, styles.techniqueScale]}>/ 10</Text>
+                  <Text style={[type.caption, styles.techniqueDupr]}>
+                    {formatDuprEstimate(latestScore)}
+                  </Text>
                 </View>
               )}
             </Card>
@@ -1043,7 +1050,7 @@ export function ProgressScreen() {
             </View>
             <Text style={styles.ratingDisclosure}>
               Technique Score is coaching feedback, not a DUPR or verified match
-              rating.
+              rating. {DUPR_ESTIMATE_NOTE}
             </Text>
           </>
         )}
@@ -1379,6 +1386,7 @@ const styles = StyleSheet.create({
     lineHeight: 74,
   },
   techniqueScale: { color: color.onDarkSubtle, marginLeft: 8 },
+  techniqueDupr: { color: color.onDarkFaint, marginLeft: 8 },
   trendCard: { paddingBottom: space.md },
   trendCardTop: {
     flexDirection: 'row',

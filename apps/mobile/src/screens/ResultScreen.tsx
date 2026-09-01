@@ -49,6 +49,10 @@ import {
   techniqueScoreSectionVisible,
 } from '../components/strokeResultModel';
 import { AnalysisFeedbackPrompt } from '../components/AnalysisFeedbackPrompt';
+import {
+  DUPR_ESTIMATE_NOTE,
+  formatDuprEstimate,
+} from '../progress/duprEstimate';
 import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
 
 /**
@@ -316,6 +320,16 @@ export function ResultScreen() {
                     dark
                   />
                 </View>
+                {typeof analysis.overallScore === 'number' ? (
+                  <>
+                    <Text style={[type.caption, styles.duprEstimate]}>
+                      {formatDuprEstimate(analysis.overallScore)}
+                    </Text>
+                    <Text style={[type.caption, styles.duprNote]}>
+                      {DUPR_ESTIMATE_NOTE}
+                    </Text>
+                  </>
+                ) : null}
               </Card>
             ) : undefined
           }
@@ -682,6 +696,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: space.md,
+  },
+  duprEstimate: { color: color.onDarkMuted, textAlign: 'center' },
+  duprNote: {
+    color: color.onDarkFaint,
+    textAlign: 'center',
+    marginTop: space.xs,
   },
   fixCard: { padding: space.lg },
   fixHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },

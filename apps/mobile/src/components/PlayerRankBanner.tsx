@@ -18,6 +18,7 @@ import { useReducedMotion } from '../design/components';
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import { getApiSession } from '../account/apiSession';
+import { formatDuprEstimate } from '../progress/duprEstimate';
 import {
   fetchPlayerRank,
   resolvePlayerRank,
@@ -217,7 +218,10 @@ export function PlayerRankBanner(props: {
               {summary ? (
                 <Text style={[type.bodyBold, { color: accent }]}>
                   {summary.rating.toFixed(2)}
-                  <Text style={[type.micro, styles.ratingScale]}> /10</Text>
+                  <Text style={[type.micro, styles.ratingScale]}>
+                    {' /10 '}
+                    {formatDuprEstimate(summary.rating)}
+                  </Text>
                 </Text>
               ) : null}
             </View>

@@ -28,6 +28,7 @@ import Animated, {
 import { PLAYER_RANK_TIERS } from '@pickle/shared-types';
 import { Button, useReducedMotion } from '../design/components';
 import { color, space, type } from '../design/tokens';
+import { formatDuprEstimate } from '../progress/duprEstimate';
 import { useRankCelebrationStore } from '../progress/rankCelebration';
 import type { RankCelebration } from '../progress/rankCelebration';
 import { RankIcon, RANK_TIER_STYLE } from './RankIcon';
@@ -210,6 +211,10 @@ function RatingCountUp(props: {
         {value.toFixed(2)}
       </Text>
       <Text style={[type.caption, styles.ratingScale]}> / 10</Text>
+      <Text style={[type.caption, styles.ratingDupr]}>
+        {' '}
+        {formatDuprEstimate(props.to)}
+      </Text>
     </View>
   );
 }
@@ -580,6 +585,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   ratingScale: { color: color.onDarkSubtle },
+  ratingDupr: { color: color.onDarkFaint },
   ladder: {
     flexDirection: 'row',
     gap: 5,

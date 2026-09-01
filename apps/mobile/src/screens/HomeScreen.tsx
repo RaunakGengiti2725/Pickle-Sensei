@@ -43,6 +43,8 @@ import { NotificationPrimingCard } from '../notifications/NotificationPrimingCar
 import { flameIntensityForStreak } from '../consistency/engine';
 import { FlameIcon } from '../consistency/FlameIcon';
 import { useConsistencyStore } from '../consistency/store';
+import { formatDuprEstimate } from '../progress/duprEstimate';
+import { useWalkthroughTarget } from '../walkthrough/targets';
 import { plural } from '../util/plural';
 
 function deviceTimeZone() {
@@ -61,6 +63,7 @@ function formatTrackedTime(milliseconds: number) {
 export function HomeScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
+  const rankBannerTarget = useWalkthroughTarget('rank-banner');
   const profile = useAppStore(s => s.profile);
   const consistency = useConsistencyStore(s => s.snapshot);
   const refreshConsistency = useConsistencyStore(s => s.refresh);
@@ -215,12 +218,16 @@ export function HomeScreen() {
           </View>
         </View>
 
-        <PlayerRankBanner
-          shots={allShots}
-          streakDays={trainingStreak}
-          streakAtRisk={consistency?.atRisk ?? false}
-          onPressStreak={() => navigation.navigate('StreakCalendar')}
-        />
+        {/* Walkthrough anchor: the honest-ratings step spotlights the real
+            rank banner (collapsable={false} keeps the view measurable). */}
+        <View ref={rankBannerTarget} collapsable={false}>
+          <PlayerRankBanner
+            shots={allShots}
+            streakDays={trainingStreak}
+            streakAtRisk={consistency?.atRisk ?? false}
+            onPressStreak={() => navigation.navigate('StreakCalendar')}
+          />
+        </View>
 
         <NotificationPrimingCard />
 
@@ -382,9 +389,16 @@ export function HomeScreen() {
                   : 'Latest synced daily average'}
             </Text>
           </View>
-          <Text style={styles.techniqueSummaryScore}>
-            {displayedScore === null ? '—' : displayedScore.toFixed(1)}
-          </Text>
+          <View style={styles.techniqueSummaryScoreWrap}>
+            <Text style={styles.techniqueSummaryScore}>
+              {displayedScore === null ? '—' : displayedScore.toFixed(1)}
+            </Text>
+            {displayedScore !== null ? (
+              <Text style={[type.micro, styles.techniqueSummaryDupr]}>
+                {formatDuprEstimate(displayedScore)}
+              </Text>
+            ) : null}
+          </View>
         </Card>
 
         {focus ? (
@@ -666,12 +680,14 @@ const styles = StyleSheet.create({
   },
   techniqueSummaryTitle: { color: color.ink, textTransform: 'capitalize' },
   techniqueSummaryCopy: { color: color.inkSoft, marginTop: 3 },
+  techniqueSummaryScoreWrap: { alignItems: 'flex-end' },
   techniqueSummaryScore: {
     ...type.score,
     color: color.ink,
     fontSize: 30,
     lineHeight: 34,
   },
+  techniqueSummaryDupr: { color: color.inkSoft, marginTop: 2 },
   scoreCard: { padding: space.lg, minHeight: 358 },
   scoreCardTop: {
     flexDirection: 'row',
