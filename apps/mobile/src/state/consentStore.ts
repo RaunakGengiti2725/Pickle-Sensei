@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Platform } from 'react-native';
-import { getApiSession } from '../account/apiSession';
+import { getApiSession, type ApiSession } from '../account/apiSession';
 import {
   ConsentApiError,
   fetchConsentStatus,
@@ -37,6 +37,29 @@ function deviceLabel(): string {
   return `${Platform.OS} ${String(Platform.Version)}`;
 }
 
+const SIGNED_OUT_STATE: Pick<
+  ConsentState,
+  'availability' | 'modelTrainingActive' | 'lastActionAt' | 'busy' | 'error'
+> = {
+  availability: 'signed_out',
+  modelTrainingActive: false,
+  lastActionAt: null,
+  busy: false,
+  error: null,
+};
+
+/**
+ * A response only belongs to the account that is still signed in when it
+ * lands; a sign-out or account switch mid-flight makes it stale.
+ */
+function isCurrentSession(session: ApiSession): boolean {
+  return getApiSession()?.canonicalAppUserId === session.canonicalAppUserId;
+}
+
+function staleSessionState(): Partial<ConsentState> {
+  return getApiSession() ? { busy: false } : SIGNED_OUT_STATE;
+}
+
 function applyStatus(
   status: ConsentStatus,
 ): Pick<ConsentState, 'availability' | 'modelTrainingActive' | 'lastActionAt'> {
@@ -58,18 +81,22 @@ export const useConsentStore = create<ConsentState>((set, get) => ({
   hydrate: async fetchFn => {
     const session = getApiSession();
     if (!session) {
-      set({
-        availability: 'signed_out',
-        modelTrainingActive: false,
-        lastActionAt: null,
-        error: null,
-      });
+      set(SIGNED_OUT_STATE);
       return;
     }
     set({ availability: 'loading', error: null });
     try {
-      set(applyStatus(await fetchConsentStatus(session, fetchFn)));
+      const status = await fetchConsentStatus(session, fetchFn);
+      if (!isCurrentSession(session)) {
+        set(staleSessionState());
+        return;
+      }
+      set(applyStatus(status));
     } catch (error) {
+      if (!isCurrentSession(session)) {
+        set(staleSessionState());
+        return;
+      }
       set({
         availability: 'unavailable',
         modelTrainingActive: false,
@@ -83,14 +110,29 @@ export const useConsentStore = create<ConsentState>((set, get) => ({
 
   setModelTrainingConsent: async (granted, fetchFn) => {
     const session = getApiSession();
-    if (!session || get().busy) return;
+    if (!session) {
+      set({
+        ...SIGNED_OUT_STATE,
+        error: 'Sign in to change this setting. Nothing was changed.',
+      });
+      return;
+    }
+    if (get().busy) return;
     set({ busy: true, error: null });
     try {
       const status = granted
         ? await grantModelTrainingConsent(session, deviceLabel(), fetchFn)
         : await withdrawModelTrainingConsent(session, deviceLabel(), fetchFn);
+      if (!isCurrentSession(session)) {
+        set(staleSessionState());
+        return;
+      }
       set({ busy: false, ...applyStatus(status) });
     } catch (error) {
+      if (!isCurrentSession(session)) {
+        set(staleSessionState());
+        return;
+      }
       // The optimistic state is never kept: the ledger did not change.
       set({
         busy: false,
