@@ -11,10 +11,7 @@ import type { HostInstance } from 'react-native';
  */
 
 export type WalkthroughTargetKey =
-  | 'coach-fab'
-  | 'rank-banner'
-  | 'tab-library'
-  | 'tab-progress';
+  'coach-fab' | 'rank-banner' | 'tab-library' | 'tab-progress';
 
 export interface TargetRect {
   x: number;

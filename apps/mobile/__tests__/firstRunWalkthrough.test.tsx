@@ -27,7 +27,10 @@ import { useWalkthroughStore } from '../src/walkthrough/walkthroughStore';
  * the final CTA all dismiss. Arrow geometry is asserted as pure math.
  */
 
-const TARGET_RECTS: Record<WalkthroughTargetKey, { x: number; y: number; width: number; height: number }> = {
+const TARGET_RECTS: Record<
+  WalkthroughTargetKey,
+  { x: number; y: number; width: number; height: number }
+> = {
   'coach-fab': { x: 165, y: 700, width: 64, height: 64 },
   'rank-banner': { x: 24, y: 120, width: 345, height: 96 },
   'tab-library': { x: 96, y: 760, width: 70, height: 54 },

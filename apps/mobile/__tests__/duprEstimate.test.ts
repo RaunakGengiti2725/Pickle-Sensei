@@ -36,8 +36,6 @@ describe('duprEstimate', () => {
 
   it('ships a disclaimer that names the limitation', () => {
     expect(DUPR_ESTIMATE_NOTE).toContain('estimate');
-    expect(DUPR_ESTIMATE_NOTE).toContain(
-      'technique doesn’t directly transfer',
-    );
+    expect(DUPR_ESTIMATE_NOTE).toContain('technique doesn’t directly transfer');
   });
 });

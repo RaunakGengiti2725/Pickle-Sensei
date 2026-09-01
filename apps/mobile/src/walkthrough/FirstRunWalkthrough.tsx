@@ -357,7 +357,10 @@ function WalkthroughStage() {
         if (!hasWalkthroughTarget(step.targetKey)) break;
         const measured = await measureWalkthroughTarget(step.targetKey);
         if (cancelled) return;
-        if (measured && rectVisibleInWindow(measured, windowWidth, windowHeight)) {
+        if (
+          measured &&
+          rectVisibleInWindow(measured, windowWidth, windowHeight)
+        ) {
           setRect(measured);
           return;
         }
