@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import {
   BrandMark,
-  Button,
   PressableScale,
   ScreenHeader,
 } from '../design/components';
@@ -62,19 +61,10 @@ function ProviderButton(props: {
   );
 }
 
-export function SignInScreen(props: {
-  onBack: () => void;
-  allowGuest?: boolean;
-}) {
+export function SignInScreen(props: { onBack: () => void }) {
   const insets = useReliableSafeAreaInsets();
-  const {
-    busy,
-    error,
-    signInWithApple,
-    signInWithGoogle,
-    continueAsGuest,
-    clearError,
-  } = useAuthStore();
+  const { busy, error, signInWithApple, signInWithGoogle, clearError } =
+    useAuthStore();
 
   return (
     <View
@@ -142,20 +132,10 @@ export function SignInScreen(props: {
       </View>
 
       <View style={styles.footer}>
-        {props.allowGuest !== false ? (
-          <Button
-            label="Continue on this device"
-            variant="ghost"
-            disabled={busy}
-            onPress={() => void continueAsGuest()}
-          />
-        ) : null}
         <View style={styles.trustRow}>
           <Icon name="shield" color={color.court} size={17} />
           <Text style={styles.trustCopy}>
-            {props.allowGuest === false
-              ? 'Your existing on-device reads stay here when you connect.'
-              : 'Guest sessions stay on this device. Connect an account to use free ratings, membership, and synced coaching.'}
+            Your existing on-device reads stay here when you connect.
           </Text>
         </View>
       </View>

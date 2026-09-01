@@ -471,6 +471,10 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
         do {
           try await coordinator.start()
           await MainActor.run {
+            // Court sessions run minutes with nobody touching the phone;
+            // auto-lock would kill the rolling recording mid-session.
+            // Restored when the session capture stops.
+            UIApplication.shared.isIdleTimerDisabled = true
             resolve(["sessionCaptureId": coordinator.captureId])
           }
         } catch CameraEngine.EngineError.permissionDenied {
@@ -505,6 +509,7 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
       }
       self.sessionCoordinator = nil
       coordinator.stop()
+      UIApplication.shared.isIdleTimerDisabled = false
       resolve(true)
     }
   }

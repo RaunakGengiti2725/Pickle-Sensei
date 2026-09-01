@@ -16,32 +16,105 @@ default_platform(:ios)
 
 platform :ios do
   desc "Build a signed release archive (Mac-only)"
-  lane :build do
+  lane :build do |options|
+    # With the ASC API key in the environment, let xcodebuild do automatic
+    # (cloud-managed) signing headlessly: it can mint/refresh the Apple
+    # Distribution certificate and App Store profile without an Apple ID
+    # signed into Xcode. gym forwards these auth flags to -exportArchive on
+    # its own — do NOT also pass export_xcargs or the flags duplicate and
+    # xcodebuild aborts with "may only be provided once".
+    key_filepath = ENV["APP_STORE_CONNECT_API_KEY_KEY_FILEPATH"]
+    xcargs = []
+    if key_filepath
+      xcargs += [
+        "-allowProvisioningUpdates",
+        "-authenticationKeyPath #{File.expand_path(key_filepath).shellescape}",
+        "-authenticationKeyID #{ENV.fetch('APP_STORE_CONNECT_API_KEY_KEY_ID').shellescape}",
+        "-authenticationKeyIssuerID #{ENV.fetch('APP_STORE_CONNECT_API_KEY_ISSUER_ID').shellescape}",
+      ]
+    end
+    # Build number arrives as a build-settings override so nothing rewrites
+    # project.pbxproj/Info.plist (agvtool would hardcode CFBundleVersion and
+    # break the $(CURRENT_PROJECT_VERSION) sourcing that check:distribution
+    # asserts).
+    xcargs << "CURRENT_PROJECT_VERSION=#{options[:build_number]}" if options[:build_number]
     build_app(
       workspace: "PickleSensei.xcworkspace",
       scheme: "PickleSensei",
       configuration: "Release",
-      export_method: "app-store",
       output_directory: "build",
+      xcargs: xcargs.join(" "),
+      # The export re-signs with the Apple Distribution identity that
+      # prep_signing installed. Manual style, because cloud-managed signing
+      # (automatic style at export) requires an Admin ASC key — the repo's
+      # App Manager key can create classic certs/profiles but not cloud-sign.
+      export_options: {
+        method: "app-store-connect",
+        destination: "export",
+        signingStyle: "manual",
+        signingCertificate: "Apple Distribution",
+        provisioningProfiles: {
+          "com.picklesensei" => "com.picklesensei AppStore",
+        },
+      },
+    )
+  end
+
+  # Reads the App Store Connect API key from the environment: either the raw
+  # key content (APP_STORE_CONNECT_API_KEY_KEY) or a path to the .p8 file
+  # (APP_STORE_CONNECT_API_KEY_KEY_FILEPATH). Never committed.
+  private_lane :asc_api_key do
+    key_filepath = ENV["APP_STORE_CONNECT_API_KEY_KEY_FILEPATH"]
+    app_store_connect_api_key(
+      key_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_KEY_ID"),
+      issuer_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ISSUER_ID"),
+      **(key_filepath ? { key_filepath: key_filepath } : { key_content: ENV.fetch("APP_STORE_CONNECT_API_KEY_KEY") }),
+    )
+  end
+
+  desc "Create/refresh the local Apple Distribution certificate + App Store
+    profile via the ASC API (Mac-only). Needed once per Mac: cloud-managed
+    signing certificates require an Admin API key, while classic cert+profile
+    creation works with the App Manager key this repo uses."
+  lane :prep_signing do
+    api_key = asc_api_key
+    get_certificates(
+      development: false, # Apple Distribution
+      api_key: api_key,
+      output_path: "build/signing",
+    )
+    get_provisioning_profile(
+      api_key: api_key,
+      output_path: "build/signing",
     )
   end
 
   desc "Bump build number, build, and upload to TestFlight internal testing (Mac-only)"
   lane :beta do
-    api_key = app_store_connect_api_key(
-      key_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_KEY_ID"),
-      issuer_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ISSUER_ID"),
-      key_content: ENV.fetch("APP_STORE_CONNECT_API_KEY_KEY"),
-    )
-    increment_build_number(
-      xcodeproj: "PickleSensei.xcodeproj",
-      build_number: latest_testflight_build_number(api_key: api_key) + 1,
-    )
-    build
+    api_key = asc_api_key
+    # initial_build_number 0 → the very first upload becomes build 1.
+    number = latest_testflight_build_number(api_key: api_key, initial_build_number: 0) + 1
+    build(build_number: number)
     upload_to_testflight(
       api_key: api_key,
       skip_waiting_for_build_processing: true,
       distribute_external: false, # internal testers only; external needs App Review
+    )
+  end
+
+  desc "Build and upload the App Store release binary (Mac-only). Uploads the
+    binary ONLY — metadata, screenshots, pricing, and the actual submission to
+    App Review stay deliberate manual steps in App Store Connect."
+  lane :release do
+    api_key = asc_api_key
+    number = latest_testflight_build_number(api_key: api_key, initial_build_number: 0) + 1
+    build(build_number: number)
+    upload_to_app_store(
+      api_key: api_key,
+      skip_metadata: true,
+      skip_screenshots: true,
+      precheck_include_in_app_purchases: false, # precheck cannot use API keys for IAP
+      submit_for_review: false, # review submission is a human decision
     )
   end
 end

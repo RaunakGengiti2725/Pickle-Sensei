@@ -7,6 +7,7 @@ import type { AnalysisRecord } from '@pickle/swing-domain';
 import type { LocalDb } from './db';
 import { assertCapturedClip, type CapturedClip } from '../camera/capture';
 import { getActiveDataOwner, requireWritableDataOwner } from './accountScope';
+import type { ScoredCheckpointFact } from '../library/libraryFocus';
 
 /**
  * Local repository: every analysis persists offline first; the outbox syncs
@@ -78,6 +79,53 @@ async function inTransaction(
     }
     throw error;
   }
+}
+
+/** Every owner-partitioned local table. Kept in one place so account
+ * deletion can never silently miss a store added later. */
+const OWNER_SCOPED_TABLES = [
+  'local_shot',
+  'local_session',
+  'local_capture',
+  'local_analysis_record',
+  'outbox',
+  'sync_receipt',
+] as const;
+
+/** Every owner-scoped kv namespace (`<namespace>:<owner>`). Must stay in
+ * agreement with the key builders that write them:
+ *   profile           → data/accountScope.ts profileKeyForOwner
+ *   rank.celebrated   → progress/rankCelebration.ts rankCelebrationKeyForOwner
+ *   notifications     → notifications/types.ts notificationPrefsKeyForOwner
+ *   consistency       → consistency/store.ts consistencyKeyForOwner
+ * (pinned by repositoryAccountScope tests). */
+export const OWNER_SCOPED_KV_NAMESPACES = [
+  'profile',
+  'rank.celebrated',
+  'notifications',
+  'consistency',
+] as const;
+
+/**
+ * Removes every locally stored row belonging to `owner` — called after the
+ * server confirms account deletion, so no analysis history, outbox entry, or
+ * cached profile survives on the device. Transactional: either the whole
+ * owner bucket is gone or nothing changed.
+ */
+export async function purgeOwnerData(
+  db: LocalDb,
+  owner: string,
+): Promise<void> {
+  await inTransaction(db, async () => {
+    for (const table of OWNER_SCOPED_TABLES) {
+      await db.execute(`DELETE FROM ${table} WHERE owner_key = ?`, [owner]);
+    }
+    for (const namespace of OWNER_SCOPED_KV_NAMESPACES) {
+      await db.execute(`DELETE FROM kv WHERE key = ?`, [
+        `${namespace}:${owner}`,
+      ]);
+    }
+  });
 }
 
 export async function saveAnalysis(
@@ -183,6 +231,40 @@ export async function listShots(
   }));
 }
 
+/** One row per real training activity on this device — every real analysis
+ * (scored or honestly abstained: the swing happened) with its session tie.
+ * Unbounded on purpose: the consistency engine replays the whole history. */
+export interface ActivityShotRow {
+  id: string;
+  sessionId: string | null;
+  shotType: string;
+  capturedAt: string;
+  overallScore: number | null;
+  resultKind: string;
+}
+
+export async function listActivityShots(
+  db: LocalDb,
+): Promise<ActivityShotRow[]> {
+  const owner = getActiveDataOwner();
+  const { rows } = await db.execute(
+    `SELECT id, session_id, shot_type, captured_at, overall_score, result_kind
+     FROM local_shot
+     WHERE owner_key = ? AND source = 'real'
+     ORDER BY captured_at ASC`,
+    [owner],
+  );
+  return rows.map(r => ({
+    id: String(r['id']),
+    sessionId: r['session_id'] ? String(r['session_id']) : null,
+    shotType: String(r['shot_type']),
+    capturedAt: String(r['captured_at']),
+    overallScore:
+      r['overall_score'] === null ? null : Number(r['overall_score']),
+    resultKind: String(r['result_kind']),
+  }));
+}
+
 export async function getAnalysis(
   db: LocalDb,
   id: string,
@@ -249,6 +331,55 @@ export async function listRealAnalysisFacts(
         resultKind: analysis.resultKind,
         scoringModelVersion: analysis.versionVector.scoringModelVersion,
         shotConfigVersion: analysis.versionVector.shotConfigVersion,
+      });
+    } catch {
+      // Corrupt local payloads are excluded rather than guessed or coerced.
+    }
+  }
+  return facts;
+}
+
+/**
+ * Checkpoint-level evidence from recent scored real analyses, newest first —
+ * the drill library's focus signal. Payload provenance is re-checked after
+ * the SQL boundary; corrupt or non-conforming rows are skipped, never
+ * repaired into evidence.
+ */
+export async function listScoredCheckpointFacts(
+  db: LocalDb,
+  limit = 120,
+): Promise<ScoredCheckpointFact[]> {
+  const owner = getActiveDataOwner();
+  if (!Number.isSafeInteger(limit) || limit < 1) {
+    throw new Error('Checkpoint fact limit must be a positive integer.');
+  }
+  const { rows } = await db.execute(
+    `SELECT payload FROM local_shot
+     WHERE owner_key = ? AND source = 'real' AND result_kind = 'scored'
+     ORDER BY captured_at DESC LIMIT ?`,
+    [owner, limit],
+  );
+  const facts: ScoredCheckpointFact[] = [];
+  for (const row of rows) {
+    try {
+      const analysis = JSON.parse(String(row['payload'])) as ShotAnalysis;
+      if (analysis.source !== 'real' || analysis.resultKind !== 'scored') {
+        continue;
+      }
+      if (!Array.isArray(analysis.checkpoints)) continue;
+      facts.push({
+        id: analysis.id,
+        shotType: analysis.shotType,
+        capturedAt: analysis.capturedAtIso,
+        checkpoints: analysis.checkpoints.map(checkpoint => ({
+          key: String(checkpoint.key),
+          score:
+            typeof checkpoint.score === 'number' &&
+            Number.isFinite(checkpoint.score)
+              ? checkpoint.score
+              : null,
+          applicable: checkpoint.applicable === true,
+        })),
       });
     } catch {
       // Corrupt local payloads are excluded rather than guessed or coerced.
@@ -592,6 +723,41 @@ export async function finishSession(
       [owner, JSON.stringify({ id })],
     );
   });
+}
+
+export interface LiveSessionHistoryRow {
+  id: string;
+  startedAt: string;
+  endedAt: string | null;
+  /** Raw summary JSON exactly as stored; parsing/validation is the caller's
+   * (parseLiveSessionSummaryRecord) responsibility. */
+  summary: string | null;
+}
+
+/** Completed Live Court sessions for the active owner, oldest first — the
+ * cross-session gameplay progression source. Reads only; corrupt rows are
+ * returned raw and excluded by the strict parser downstream. */
+export async function listLiveSessionHistory(
+  db: LocalDb,
+  limit = 60,
+): Promise<LiveSessionHistoryRow[]> {
+  const owner = getActiveDataOwner();
+  if (!Number.isSafeInteger(limit) || limit < 1) {
+    throw new Error('Live session history limit must be a positive integer.');
+  }
+  const { rows } = await db.execute(
+    `SELECT id, started_at, ended_at, summary FROM local_session
+     WHERE owner_key = ? AND mode = 'live_court' AND completed = 1
+     ORDER BY started_at ASC, id ASC
+     LIMIT ?`,
+    [owner, limit],
+  );
+  return rows.map(row => ({
+    id: String(row['id']),
+    startedAt: String(row['started_at']),
+    endedAt: row['ended_at'] == null ? null : String(row['ended_at']),
+    summary: row['summary'] == null ? null : String(row['summary']),
+  }));
 }
 
 export async function hasShotSyncReceipt(

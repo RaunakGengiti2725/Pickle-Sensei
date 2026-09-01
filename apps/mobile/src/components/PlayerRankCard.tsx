@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { PLAYER_RANK_TIERS } from '@pickle/shared-types';
-import { Card } from '../design/components';
+import { Card, RevealFill } from '../design/components';
 import { color, radius, space, type } from '../design/tokens';
 import { getApiSession } from '../account/apiSession';
 import type { RealAnalysisFact } from '../data/repository';
@@ -10,12 +10,14 @@ import {
   resolvePlayerRank,
   type ServerPlayerRank,
 } from '../progress/playerRank';
+import { useRankCelebrationStore } from '../progress/rankCelebration';
 import { RankIcon, RANK_TIER_STYLE } from './RankIcon';
 
 /**
  * The player's personal rank (Bronze → Silver → Gold → Platinum → Diamond).
- * Not a leaderboard — it never compares users. The rating is the average of
- * each technique's LATEST scored analysis, so every analysis moves it.
+ * Not a leaderboard — it never compares users. The rating is form-weighted:
+ * each technique is scored from its most recent analyses (newest heaviest),
+ * and techniques blend by evidence — so training visibly moves it.
  *
  * Self-contained on purpose: it takes the already-loaded local analysis
  * facts and fetches the account-saved rank itself, so the host screen only
@@ -61,6 +63,13 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
     [props.facts, serverRank],
   );
 
+  // Rank-shift ceremony: report every resolved rank; the store compares it
+  // to the account's durable record and celebrates upward moves once.
+  const maybeCelebrate = useRankCelebrationStore(s => s.maybeCelebrate);
+  useEffect(() => {
+    if (resolved) void maybeCelebrate(resolved.summary);
+  }, [maybeCelebrate, resolved]);
+
   if (!resolved) {
     return (
       <Card tone="dark" style={styles.card} testID="player-rank-card">
@@ -72,8 +81,8 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
           <View style={styles.flex}>
             <Text style={[type.h3, { color: color.onDark }]}>Unranked</Text>
             <Text style={[type.caption, styles.unrankedCopy]}>
-              Your first scored analysis places you. Each technique’s latest
-              score counts toward your rank.
+              Your first scored analysis places you. Your rank tracks your
+              current form — recent swings count most.
             </Text>
           </View>
         </View>
@@ -103,9 +112,11 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
       </View>
 
       <View
-        accessibilityLabel={`Player rank ${summary.tierLabel}. Rating ${summary.rating.toFixed(
+        accessibilityLabel={`Player rank ${summary.tierLabel} ${
+          summary.divisionLabel
+        }. Rating ${summary.rating.toFixed(
           2,
-        )} out of 10, averaged from your latest score in ${
+        )} out of 10, from your current form across ${
           summary.techniqueCount
         } ${techniqueNoun}.`}
         style={styles.tierRow}
@@ -113,7 +124,10 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
         <RankIcon tier={summary.tier} size={52} />
         <View style={styles.flex}>
           <Text style={[type.h2, { color: color.onDark }]}>
-            {summary.tierLabel}
+            {summary.tierLabel}{' '}
+            <Text style={{ color: tierStyle.accent }}>
+              {summary.divisionLabel}
+            </Text>
           </Text>
           <Text style={[type.caption, styles.tierDetail]}>
             {summary.nextTier
@@ -134,7 +148,8 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
           return (
             <View key={tier.key} style={styles.ladderSegment}>
               {fill > 0 ? (
-                <View
+                <RevealFill
+                  delay={index * 60}
                   style={[
                     styles.ladderFill,
                     {
@@ -161,8 +176,8 @@ export function PlayerRankCard(props: { facts: RealAnalysisFact[] }) {
       </View>
 
       <Text style={[type.caption, styles.formulaNote]}>
-        Average of your latest score in {summary.techniqueCount}{' '}
-        {techniqueNoun} · every analysis moves it. {sourceNote}
+        Current form across {summary.techniqueCount} {techniqueNoun} — your
+        newest swings count most, and proven strokes weigh more. {sourceNote}
       </Text>
     </Card>
   );

@@ -15,13 +15,35 @@ export interface RuntimePublicConfig {
   googleIosClientId: string | null;
   googleWebClientId: string | null;
   appVersion: string;
+  /** Public legal pages served by the API function (supabase/functions/api/
+   * legal.ts). The paywall (App Review 3.1.2) and the App Store listing point
+   * here. Null only when the API origin itself is unconfigured. */
+  legalPrivacyUrl: string | null;
+  legalTermsUrl: string | null;
+  /** Numeric Apple app id (App Store Connect → App Information → Apple ID),
+   * e.g. "6743210987". Null until the App Store record exists. */
+  appStoreId: string | null;
+  /** Deep link straight to the App Store write-review page. Settings' "Rate
+   * Pickle Sensei" row prefers it over the OS-throttled in-app sheet; null
+   * whenever appStoreId is unset. */
+  appStoreWriteReviewUrl: string | null;
 }
 
 // Supabase Edge Function implementing /v1/account/bootstrap (supabase/README.md).
 const API_BASE_URL: string | null =
   'https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api';
-const REVENUECAT_IOS_PUBLIC_SDK_KEY: string | null = null;
-const REVENUECAT_ANDROID_PUBLIC_SDK_KEY: string | null = null;
+// iOS: the PRODUCTION App Store public SDK key (RevenueCat → Project
+// settings → API keys → App Store app). Purchases go through real StoreKit:
+// sandbox Apple IDs in dev/TestFlight, real money in App Store builds.
+const REVENUECAT_IOS_PUBLIC_SDK_KEY: string | null =
+  'appl_twORWAKcOeYuEFbvZGOUjnWDrAl';
+// ─────────────────────────────────────────────────────────────────────────────
+// ⚠️ Android still uses the RevenueCat TEST STORE key (simulated purchases,
+// no real money). Android is not shipping yet; swap to the goog_… key from
+// RevenueCat → Project settings → API keys before any Play submission.
+// ─────────────────────────────────────────────────────────────────────────────
+const REVENUECAT_ANDROID_PUBLIC_SDK_KEY: string | null =
+  'test_KoDgUCMwMgtQnAruBvqBwvmByQk';
 // iOS OAuth client (Google Cloud Console → Credentials → OAuth client → iOS,
 // bundle id com.picklesensei). Its REVERSED form must also be the
 // CFBundleURLSchemes entry in Info.plist.
@@ -35,13 +57,18 @@ const GOOGLE_WEB_CLIENT_ID: string | null =
 /** Keep this aligned with MARKETING_VERSION/versionName for each release. */
 const APP_VERSION = '1.0';
 
+// Numeric Apple app id from App Store Connect (App Information → General →
+// Apple ID). Stays null until the ASC app record exists; setting it turns
+// Settings' "Rate Pickle Sensei" row into a direct write-review deep link.
+const APP_STORE_ID: string | null = null;
+
 export function getRuntimePublicConfig(): RuntimePublicConfig {
   const revenueCatPublicSdkKey =
     Platform.OS === 'ios'
       ? REVENUECAT_IOS_PUBLIC_SDK_KEY
       : Platform.OS === 'android'
-        ? REVENUECAT_ANDROID_PUBLIC_SDK_KEY
-        : null;
+      ? REVENUECAT_ANDROID_PUBLIC_SDK_KEY
+      : null;
 
   return {
     apiBaseUrl: API_BASE_URL,
@@ -49,5 +76,11 @@ export function getRuntimePublicConfig(): RuntimePublicConfig {
     googleIosClientId: GOOGLE_IOS_CLIENT_ID,
     googleWebClientId: GOOGLE_WEB_CLIENT_ID,
     appVersion: APP_VERSION,
+    legalPrivacyUrl: API_BASE_URL ? `${API_BASE_URL}/privacy` : null,
+    legalTermsUrl: API_BASE_URL ? `${API_BASE_URL}/terms` : null,
+    appStoreId: APP_STORE_ID,
+    appStoreWriteReviewUrl: APP_STORE_ID
+      ? `https://apps.apple.com/app/id${APP_STORE_ID}?action=write-review`
+      : null,
   };
 }

@@ -13,10 +13,10 @@ export type RootStackParams = {
   Analyze: { source?: 'camera' | 'library' } | undefined;
   Result: { analysisId: string };
   DrillLibrary: undefined;
-  LiveCourt: undefined;
-  LiveSummary: { sessionId: string };
+  StreakCalendar: undefined;
   ConnectAccount: undefined;
+  ManageAccount: undefined;
   ConsentSettings: undefined;
-  Paywall:
-    { source?: 'rating' | 'live_court' | 'training' | 'settings' } | undefined;
+  NotificationSettings: undefined;
+  Paywall: { source?: 'rating' | 'training' | 'settings' } | undefined;
 };

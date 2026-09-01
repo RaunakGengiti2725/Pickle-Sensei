@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import type { Handedness } from '@pickle/shared-types';
@@ -12,16 +15,25 @@ import { Button, PressableScale } from '../design/components';
 import { Icon } from '../design/icons';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, space, type } from '../design/tokens';
-import { focusForGoal, useAppStore } from '../state/appStore';
+import { focusForGoal, useAppStore, type Gender } from '../state/appStore';
 import { useAuthStore } from '../auth/authStore';
 
 /**
- * Onboarding (spec p. 5): level → handedness → goal → problem → plan reveal.
- * Seeds coaching language and the personalized starting focus. Answers are
- * setup, not a test — copy stays warm, choices carry context, back is free.
+ * Onboarding (spec p. 5): name → gender → level → handedness → goal →
+ * problem → plan reveal. Seeds coaching language and the personalized
+ * starting focus. Answers are setup, not a test — copy stays warm, choices
+ * carry context, back is free.
  */
 
-const STEPS = ['level', 'handedness', 'goal', 'problem', 'reveal'] as const;
+const STEPS = [
+  'name',
+  'gender',
+  'level',
+  'handedness',
+  'goal',
+  'problem',
+  'reveal',
+] as const;
 type Step = (typeof STEPS)[number];
 
 interface Choice {
@@ -38,6 +50,13 @@ const LEVELS: Choice[] = [
   { value: '4.0', label: '4.0', sub: 'Competitive, controlled pace' },
   { value: '4.5', label: '4.5', sub: 'Tournament regular' },
   { value: '5.0+', label: '5.0+', sub: 'Open play, high level' },
+];
+
+const GENDERS: Choice[] = [
+  { value: 'female', label: 'Female' },
+  { value: 'male', label: 'Male' },
+  { value: 'nonbinary', label: 'Non-binary' },
+  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
 ];
 
 const HANDS: Choice[] = [
@@ -85,10 +104,25 @@ const PROBLEMS: Choice[] = [
   },
 ];
 
+/**
+ * The 'name' step is a free-text input, not a choice list, so it carries its
+ * own copy record and a custom render branch; every other question stays in
+ * the uniform ChoiceCard step machine below.
+ */
+const NAME_QUESTION = {
+  title: 'What should we call you?',
+  sub: 'Your coach personalizes every session.',
+} as const;
+
 const QUESTIONS: Record<
-  Exclude<Step, 'reveal'>,
+  Exclude<Step, 'name' | 'reveal'>,
   { title: string; sub: string; choices: Choice[] }
 > = {
+  gender: {
+    title: 'How do you identify?',
+    sub: 'Used to tailor coaching references and demo models.',
+    choices: GENDERS,
+  },
   level: {
     title: 'Where is your game today?',
     sub: 'Sets coaching language — never used to inflate scores.',
@@ -218,9 +252,26 @@ function ChoiceCard(props: {
   );
 }
 
-export function OnboardingScreen() {
+export function OnboardingScreen(props: {
+  /**
+   * 'account' (default): the signed-in flow — answers save to the active
+   * owner (server-synced for canonical accounts) and the escape route signs
+   * out. 'preauth': the questionnaire runs BEFORE the login flow — answers
+   * are stashed device-level for adoption after sign-in, completion hands
+   * off through onFinished, and the escape route skips ahead to sign-in.
+   */
+  mode?: 'account' | 'preauth';
+  /** Pre-auth only: called after the answers were durably stashed. */
+  onFinished?: () => void;
+  /** Pre-auth only: "already have an account" escape to the sign-in screen. */
+  onExitToSignIn?: () => void;
+}) {
+  const preAuth = props.mode === 'preauth';
   const insets = useReliableSafeAreaInsets();
   const completeOnboarding = useAppStore(s => s.completeOnboarding);
+  const completePreAuthOnboarding = useAppStore(
+    s => s.completePreAuthOnboarding,
+  );
   const onboardingBusy = useAppStore(s => s.onboardingBusy);
   const onboardingError = useAppStore(s => s.onboardingError);
   const signOut = useAuthStore(s => s.signOut);
@@ -228,9 +279,16 @@ export function OnboardingScreen() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
 
   const step = STEPS[stepIndex] ?? 'reveal';
+  const firstName = (answers['name'] ?? '').trim();
   const goal = answers['goal'] ?? 'all-around';
   const focus = focusForGoal(goal);
   const focusCopy = FOCUS_COPY[focus] ?? FOCUS_COPY['contact_position']!;
+  const stepComplete =
+    step === 'reveal'
+      ? true
+      : step === 'name'
+      ? firstName.length >= 1
+      : answers[step] !== undefined;
 
   // Selection never auto-advances; the user confirms with Continue so a
   // mis-tap is recoverable and the pace belongs to them.
@@ -241,9 +299,25 @@ export function OnboardingScreen() {
   const goForward = () => setStepIndex(i => Math.min(i + 1, STEPS.length - 1));
   const goBack = () => setStepIndex(i => Math.max(i - 1, 0));
 
-  // Step one has nothing to go back to inside the flow, so the escape route is
-  // out of the account entirely — otherwise the user is stranded here.
+  // Step one has nothing to go back to inside the flow, so the escape route
+  // leaves the flow entirely: pre-auth it skips ahead to sign-in (existing
+  // users shouldn't be quizzed before they can log in); in-account it exits
+  // the account itself — otherwise the user is stranded here.
   const leaveOnboarding = () => {
+    if (preAuth) {
+      Alert.alert(
+        'Skip setup?',
+        'You can sign in now and personalize your coaching later.',
+        [
+          { text: 'Keep setting up', style: 'cancel' },
+          {
+            text: 'Skip to sign-in',
+            onPress: () => props.onExitToSignIn?.(),
+          },
+        ],
+      );
+      return;
+    }
     Alert.alert(
       'Leave setup?',
       'You will be returned to the sign-in screen. Your answers so far are not saved.',
@@ -278,7 +352,11 @@ export function OnboardingScreen() {
           ) : (
             <PressableScale
               accessibilityLabel="Leave setup"
-              accessibilityHint="Sign out and return to the sign-in screen"
+              accessibilityHint={
+                preAuth
+                  ? 'Skip ahead to the sign-in screen'
+                  : 'Sign out and return to the sign-in screen'
+              }
               hitSlop={12}
               onPress={leaveOnboarding}
               style={styles.headerButton}
@@ -296,10 +374,16 @@ export function OnboardingScreen() {
       </View>
 
       {step !== 'reveal' ? (
-        <>
+        // 'padding' keeps the pinned Continue footer above the iOS keyboard
+        // while the name step's text field is focused; Android resizes the
+        // window itself.
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
           <LockedScroll key={step} bottomInset={space.lg}>
             <Text style={[type.h1, { color: color.ink }]}>
-              {QUESTIONS[step].title}
+              {step === 'name' ? NAME_QUESTION.title : QUESTIONS[step].title}
             </Text>
             <Text
               style={[
@@ -311,16 +395,39 @@ export function OnboardingScreen() {
                 },
               ]}
             >
-              {QUESTIONS[step].sub}
+              {step === 'name' ? NAME_QUESTION.sub : QUESTIONS[step].sub}
             </Text>
-            {QUESTIONS[step].choices.map(choice => (
-              <ChoiceCard
-                key={choice.value}
-                choice={choice}
-                selected={answers[step] === choice.value}
-                onPress={() => select(step, choice.value)}
+            {step === 'name' ? (
+              <TextInput
+                accessibilityLabel="First name"
+                autoFocus
+                autoCapitalize="words"
+                autoComplete="given-name"
+                textContentType="givenName"
+                autoCorrect={false}
+                returnKeyType="next"
+                maxLength={40}
+                placeholder="First name"
+                placeholderTextColor={color.inkSoft}
+                value={answers['name'] ?? ''}
+                onChangeText={text => select('name', text)}
+                // The keyboard's Next key mirrors the Continue button, but
+                // never past an empty name.
+                onSubmitEditing={() => {
+                  if (firstName.length >= 1) goForward();
+                }}
+                style={styles.nameInput}
               />
-            ))}
+            ) : (
+              QUESTIONS[step].choices.map(choice => (
+                <ChoiceCard
+                  key={choice.value}
+                  choice={choice}
+                  selected={answers[step] === choice.value}
+                  onPress={() => select(step, choice.value)}
+                />
+              ))
+            )}
           </LockedScroll>
           <View
             style={[styles.footer, { paddingBottom: insets.bottom + space.md }]}
@@ -328,11 +435,11 @@ export function OnboardingScreen() {
             <Button
               label="Continue"
               variant="dark"
-              disabled={answers[step] === undefined}
+              disabled={!stepComplete}
               onPress={goForward}
             />
           </View>
-        </>
+        </KeyboardAvoidingView>
       ) : (
         <>
           <LockedScroll bottomInset={space.lg}>
@@ -344,6 +451,16 @@ export function OnboardingScreen() {
             >
               One focus.{`\n`}Visible progress.
             </Text>
+            {firstName ? (
+              <Text
+                style={[
+                  type.body,
+                  { color: color.inkSoft, marginTop: space.sm },
+                ]}
+              >
+                Built for {firstName}.
+              </Text>
+            ) : null}
 
             <View style={styles.focusCard}>
               <View style={styles.focusTop}>
@@ -436,7 +553,9 @@ export function OnboardingScreen() {
               variant="dark"
               disabled={onboardingBusy}
               onPress={() => {
-                void completeOnboarding({
+                const answeredProfile = {
+                  firstName: firstName || undefined,
+                  gender: answers['gender'] as Gender | undefined,
                   skillLevel: answers['level'] ?? '3.0',
                   handedness:
                     (answers['handedness'] as Handedness | undefined) ??
@@ -444,7 +563,16 @@ export function OnboardingScreen() {
                   goal,
                   biggestProblem: answers['problem'] ?? 'not sure',
                   focusCheckpoint: focus,
-                });
+                };
+                if (preAuth) {
+                  // Sign-in comes next; the stash is adopted by whichever
+                  // account (or guest bucket) hydrates after it.
+                  void completePreAuthOnboarding(answeredProfile).then(ok => {
+                    if (ok) props.onFinished?.();
+                  });
+                  return;
+                }
+                void completeOnboarding(answeredProfile);
               }}
             />
           </View>
@@ -514,6 +642,19 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     backgroundColor: color.surfaceElevated,
     minHeight: 64,
+  },
+  // Text-entry sibling of choiceCard: same surface, border, and radius so
+  // the name step reads as part of the same family of inputs.
+  nameInput: {
+    ...type.h2,
+    color: color.ink,
+    borderWidth: 1,
+    borderColor: color.line,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.md,
+    paddingVertical: space.md,
+    backgroundColor: color.surfaceElevated,
+    minHeight: 56,
   },
   choiceCardSelected: {
     borderColor: color.court,

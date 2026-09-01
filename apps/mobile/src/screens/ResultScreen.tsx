@@ -38,41 +38,37 @@ import {
   StrokeResult,
   StrokeResultAnalyzing,
 } from '../components/StrokeResult';
+import { DaySecuredBanner } from '../consistency/DaySecuredBanner';
+import { useConsistencyStore } from '../consistency/store';
 import {
   loadStrokeResultEvidence,
   type StrokeResultEvidence,
 } from '../components/strokeResultData';
-import { techniqueScoreSectionVisible } from '../components/strokeResultModel';
+import {
+  CHECKPOINT_NAMES,
+  techniqueScoreSectionVisible,
+} from '../components/strokeResultModel';
 import { AnalysisFeedbackPrompt } from '../components/AnalysisFeedbackPrompt';
 import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
 
 /**
  * RESULT ROUTE — the single entry point for a stroke's outcome, reached from
- * Stroke Analysis (AnalyzeScreen), Library/Home history rows, and Session
- * event cards (LiveCourtScreen). The consumer hierarchy is the canonical
- * StrokeResult component (MOBBIN brief §1: one component, two entry points);
- * this screen adds only data loading, the validated-training sections it has
- * always owned, and navigation wiring for TRY AGAIN / attempts.
+ * Stroke Analysis (AnalyzeScreen) and Library/Home history rows. The
+ * consumer hierarchy is the canonical StrokeResult component (MOBBIN brief
+ * §1: one component, two entry points); this screen adds only data loading,
+ * the validated-training sections it has always owned, and navigation
+ * wiring for TRY AGAIN / attempts.
  */
-
-const CHECKPOINT_NAMES: Record<string, string> = {
-  ready_position: 'Ready position',
-  athletic_base: 'Athletic base',
-  preparation: 'Preparation',
-  paddle_set: 'Paddle set',
-  swing_length: 'Swing length',
-  sequencing: 'Sequencing',
-  paddle_path: 'Paddle path',
-  contact_position: 'Contact position',
-  face_wrist_stability: 'Face / wrist stability',
-  follow_through: 'Follow-through',
-  recovery: 'Recovery',
-};
 
 type SyncEvidenceState = 'checking' | 'synced' | 'pending' | 'unknown';
 
+/**
+ * Embeds open their canonical watch page, never the raw /embed/ URL: YouTube
+ * refuses embed surfaces loaded without an embedding referer (error 153),
+ * while the watch page always plays in the YouTube app or browser.
+ */
 function mediaUrl(media: InstructionalMedia): string {
-  return media.kind === 'hosted' ? media.playbackUrl : media.embedUrl;
+  return media.kind === 'hosted' ? media.playbackUrl : media.sourceUrl;
 }
 
 function humanize(value: string): string {
@@ -104,6 +100,7 @@ export function ResultScreen() {
   const clearMutationError = useTrainingStore(
     state => state.clearMutationError,
   );
+  const refreshConsistency = useConsistencyStore(state => state.refresh);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,6 +127,12 @@ export function ResultScreen() {
   useEffect(() => {
     void loadCurrentPlan();
   }, [loadCurrentPlan]);
+
+  // The analysis this screen shows was just persisted: re-derive the streak
+  // so the first training of the day arms its "Day N secured" moment here.
+  useEffect(() => {
+    void refreshConsistency();
+  }, [refreshConsistency, route.params.analysisId]);
 
   const analysis = evidence?.analysis ?? evidence?.record?.result ?? null;
 
@@ -385,12 +388,13 @@ export function ResultScreen() {
               <Card style={styles.checkpointsCard}>
                 {analysis.checkpoints
                   .filter(checkpoint => checkpoint.applicable)
-                  .map(checkpoint => (
+                  .map((checkpoint, index) => (
                     <CheckpointRow
                       key={checkpoint.key}
                       name={CHECKPOINT_NAMES[checkpoint.key] ?? checkpoint.key}
                       score={checkpoint.score}
                       band={checkpoint.band}
+                      revealDelay={index * 45}
                     />
                   ))}
               </Card>
@@ -653,6 +657,8 @@ export function ResultScreen() {
           ) : null}
         </StrokeResult>
       </ScrollView>
+      {/* "Day N secured" — first meaningful training of the day lands here. */}
+      <DaySecuredBanner />
     </SafeAreaView>
   );
 }

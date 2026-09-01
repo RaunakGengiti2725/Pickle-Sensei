@@ -24,8 +24,18 @@ import Svg, {
   Polyline,
   Stop,
 } from 'react-native-svg';
+import Reanimated, {
+  Easing as ReanimatedEasing,
+  useAnimatedProps,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withTiming,
+} from 'react-native-reanimated';
 import { bandColor, color, font, radius, shadow, space, type } from './tokens';
 import { Icon, type IconName } from './icons';
+
+const AnimatedCircle = Reanimated.createAnimatedComponent(Circle);
 
 let reducedMotionValue = false;
 let reducedMotionStarted = false;
@@ -330,7 +340,11 @@ export function SectionTitle(props: {
   );
 }
 
-/** 0–10 technique score ring; color and label are never color-only. */
+const SCORE_RING_SWEEP_MS = 900;
+
+/** 0–10 technique score ring; color and label are never color-only. The arc
+ * sweeps in and the number counts up once on mount (the score-reveal moment);
+ * reduced motion renders the final state immediately. */
 export function ScoreRing(props: {
   score: number | null;
   size?: number;
@@ -346,14 +360,54 @@ export function ScoreRing(props: {
   const accent = props.accent ?? color.volt;
   const fg = props.dark ? color.onDark : color.ink;
   const track = props.dark ? color.lineDark : color.line;
-  const scoreText = props.score === null ? '—' : props.score.toFixed(1);
+  const reduced = useReducedMotion();
+  const animate = !reduced && props.score !== null;
+
+  const sweep = useSharedValue(animate ? 0 : fraction);
+  useEffect(() => {
+    if (!animate) {
+      sweep.value = fraction;
+      return;
+    }
+    sweep.value = withTiming(fraction, {
+      duration: SCORE_RING_SWEEP_MS,
+      easing: ReanimatedEasing.out(ReanimatedEasing.cubic),
+    });
+  }, [animate, fraction, sweep]);
+  const sweepProps = useAnimatedProps(() => ({
+    strokeDashoffset: circumference * (1 - sweep.value),
+  }));
+
+  // The number rides the same easing as the arc so both land together.
+  const [displayScore, setDisplayScore] = useState(animate ? 0 : props.score);
+  useEffect(() => {
+    if (!animate || props.score === null) {
+      setDisplayScore(props.score);
+      return;
+    }
+    const target = props.score;
+    let frame = 0;
+    let startedAt: number | null = null;
+    const tick = (timestamp: number) => {
+      if (startedAt === null) startedAt = timestamp;
+      const linear = Math.min(1, (timestamp - startedAt) / SCORE_RING_SWEEP_MS);
+      const eased = 1 - Math.pow(1 - linear, 3);
+      setDisplayScore(target * eased);
+      if (linear < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [animate, props.score]);
+
+  const scoreText =
+    props.score === null ? '—' : (displayScore ?? props.score).toFixed(1);
 
   return (
     <View
       accessibilityLabel={
         props.score === null
           ? 'No technique score yet'
-          : `Technique score ${scoreText} out of 10`
+          : `Technique score ${props.score.toFixed(1)} out of 10`
       }
       style={{
         width: size,
@@ -377,7 +431,7 @@ export function ScoreRing(props: {
           strokeWidth={stroke}
           fill="none"
         />
-        <Circle
+        <AnimatedCircle
           cx={size / 2}
           cy={size / 2}
           r={r}
@@ -386,7 +440,7 @@ export function ScoreRing(props: {
           fill="none"
           strokeLinecap="round"
           strokeDasharray={`${circumference}`}
-          strokeDashoffset={circumference * (1 - fraction)}
+          animatedProps={sweepProps}
           transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
       </Svg>
@@ -415,11 +469,52 @@ export function ScoreRing(props: {
   );
 }
 
+/**
+ * Bar fill that sweeps in from the left once on mount (transform-only: the
+ * final width is laid out immediately, so nothing shifts and the resting
+ * rounded corners are exact). Reduced motion renders at rest.
+ */
+export function RevealFill(props: {
+  style?: StyleProp<ViewStyle>;
+  delay?: number;
+  testID?: string;
+}) {
+  const reduced = useReducedMotion();
+  const progress = useSharedValue(reduced ? 1 : 0);
+
+  useEffect(() => {
+    if (reduced) {
+      progress.value = 1;
+      return;
+    }
+    progress.value = withDelay(
+      props.delay ?? 0,
+      withTiming(1, {
+        duration: 520,
+        easing: ReanimatedEasing.out(ReanimatedEasing.cubic),
+      }),
+    );
+  }, [progress, props.delay, reduced]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scaleX: progress.value }],
+  }));
+
+  return (
+    <Reanimated.View
+      testID={props.testID}
+      style={[styles.revealFill, props.style, animatedStyle]}
+    />
+  );
+}
+
 export function CheckpointRow(props: {
   name: string;
   score: number | null;
   band: 'green' | 'yellow' | 'red' | 'unscored';
   onPress?: () => void;
+  /** Stagger offset (ms) for the bar's one-time reveal sweep. */
+  revealDelay?: number;
 }) {
   const value =
     props.score === null ? 0 : Math.max(0, Math.min(100, props.score));
@@ -445,7 +540,8 @@ export function CheckpointRow(props: {
         </Text>
       </View>
       <View style={styles.metricTrack}>
-        <View
+        <RevealFill
+          delay={props.revealDelay}
           style={[
             styles.metricFill,
             { width: `${value}%`, backgroundColor: bar },
@@ -568,9 +664,15 @@ export function ErrorState(props: {
   title: string;
   detail: string;
   onRetry?: () => void;
+  dark?: boolean;
 }) {
   return (
-    <SafeAreaView style={[styles.page, { backgroundColor: color.surface }]}>
+    <SafeAreaView
+      style={[
+        styles.page,
+        { backgroundColor: props.dark ? color.surfaceDark : color.surface },
+      ]}
+    >
       <View
         accessibilityLiveRegion="assertive"
         accessibilityRole="alert"
@@ -582,7 +684,11 @@ export function ErrorState(props: {
         <Text
           style={[
             type.h2,
-            { color: color.ink, textAlign: 'center', marginTop: space.md },
+            {
+              color: props.dark ? color.onDark : color.ink,
+              textAlign: 'center',
+              marginTop: space.md,
+            },
           ]}
         >
           {props.title}
@@ -591,7 +697,7 @@ export function ErrorState(props: {
           style={[
             type.body,
             {
-              color: color.inkSoft,
+              color: props.dark ? color.onDarkSubtle : color.inkSoft,
               textAlign: 'center',
               marginTop: space.sm,
               maxWidth: 310,
@@ -695,8 +801,8 @@ export function Stat(props: {
                 ? color.volt
                 : color.court
               : props.dark
-                ? color.onDark
-                : color.ink,
+              ? color.onDark
+              : color.ink,
           },
         ]}
       >
@@ -798,6 +904,7 @@ const styles = StyleSheet.create({
     marginTop: 9,
   },
   metricFill: { height: 4, borderRadius: 2 },
+  revealFill: { transformOrigin: 'left' },
   stateWrap: {
     alignItems: 'center',
     justifyContent: 'center',

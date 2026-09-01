@@ -2,7 +2,7 @@ import React from 'react';
 import { StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
-import { BrandMark, Button, Pill } from '../design/components';
+import { BrandMark, Button, Pill, PressableScale } from '../design/components';
 import { color, radius, space, type } from '../design/tokens';
 
 function CourtStory() {
@@ -69,7 +69,11 @@ function CourtStory() {
   );
 }
 
-export function WelcomeScreen(props: { onGetStarted: () => void }) {
+export function WelcomeScreen(props: {
+  onGetStarted: () => void;
+  /** Straight to sign-in — returning users skip the setup questionnaire. */
+  onSignIn?: () => void;
+}) {
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
       <StatusBar barStyle="light-content" />
@@ -96,6 +100,19 @@ export function WelcomeScreen(props: { onGetStarted: () => void }) {
           variant="volt"
           onPress={props.onGetStarted}
         />
+        {props.onSignIn ? (
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel="I already have an account"
+            accessibilityHint="Skip setup and go to sign-in"
+            onPress={props.onSignIn}
+            style={styles.signInLink}
+          >
+            <Text style={[type.bodyBold, { color: color.onDarkMuted }]}>
+              I already have an account
+            </Text>
+          </PressableScale>
+        ) : null}
         <Text style={styles.privacy}>
           Two successful validated ratings free · Unscored attempts don’t count
         </Text>
@@ -155,6 +172,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     paddingTop: space.lg,
     paddingBottom: space.sm,
+  },
+  // A quiet full-width text action under the primary CTA: 44pt minimum
+  // touch height, no competing button chrome.
+  signInLink: {
+    minHeight: 44,
+    marginTop: space.xs,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   privacy: {
     ...type.caption,

@@ -85,6 +85,109 @@ function titleCase(value: string): string {
   return clean.charAt(0).toUpperCase() + clean.slice(1);
 }
 
+/** Canonical display names for scoring checkpoints (shared by the Result
+ * screen's stroke map and the limiting-factor copy below). */
+export const CHECKPOINT_NAMES: Record<string, string> = {
+  ready_position: 'Ready position',
+  athletic_base: 'Athletic base',
+  preparation: 'Preparation',
+  paddle_set: 'Paddle set',
+  swing_length: 'Swing length',
+  sequencing: 'Sequencing',
+  paddle_path: 'Paddle path',
+  contact_position: 'Contact position',
+  face_wrist_stability: 'Face / wrist stability',
+  follow_through: 'Follow-through',
+  recovery: 'Recovery',
+};
+
+function checkpointName(key: string): string {
+  return CHECKPOINT_NAMES[key] ?? humanizeToken(key);
+}
+
+/**
+ * Human copy for one uncertainty limiting-factor token. The pipeline emits
+ * machine tokens (`paddle_track_unavailable`,
+ * `checkpoint_unobserved:<key>`, …); rendering them raw produced broken
+ * sentences ("We couldn’t establish paddle track unavailable",
+ * "Checkpoint unobserved:face wrist stability"). Each known token maps to:
+ *  - `noun` — the object of "We couldn’t establish …";
+ *  - `reason` — the object of "the read was limited by …";
+ *  - `ledger` — a full line for the WHAT WE COULDN’T ESTABLISH list, or
+ *    null when the ledger already states it (never duplicated).
+ * Unknown tokens fall back to plain humanization — never dropped.
+ */
+export interface LimitingFactorCopy {
+  noun: string;
+  reason: string;
+  ledger: string | null;
+}
+
+export function limitingFactorCopy(factor: string): LimitingFactorCopy {
+  if (factor.startsWith('checkpoint_unobserved:')) {
+    const name = checkpointName(factor.slice('checkpoint_unobserved:'.length));
+    return {
+      noun: `a read on the ${name.toLowerCase()} checkpoint`,
+      reason: `an unobserved ${name.toLowerCase()} checkpoint`,
+      ledger: `The ${name.toLowerCase()} checkpoint — not observed in this clip.`,
+    };
+  }
+  switch (factor) {
+    case 'paddle_track_unavailable':
+      return {
+        noun: 'a paddle track',
+        reason: 'a missing paddle track',
+        ledger: 'A paddle track for this swing.',
+      };
+    case 'ball_track_unavailable':
+      return {
+        noun: 'a ball track',
+        reason: 'a missing ball track',
+        ledger: 'A ball track for this swing.',
+      };
+    case 'court_geometry_unavailable':
+      return {
+        noun: 'court geometry',
+        reason: 'missing court geometry',
+        ledger: 'Court geometry for this camera view.',
+      };
+    case 'analysis_confidence_below_threshold':
+      return {
+        noun: 'enough confidence to score this stroke',
+        reason: 'analysis confidence below the scoring threshold',
+        ledger: 'Enough analysis confidence to clear the scoring threshold.',
+      };
+    case 'auto_stroke_resolved_at_side_depth_no_leaf_for_scoring':
+      return {
+        noun: 'the exact stroke inside that family',
+        reason: 'a family-level read without the exact stroke',
+        // The ledger already reports the family-depth gap as its own line.
+        ledger: null,
+      };
+    default:
+      return {
+        noun: humanizeToken(factor),
+        reason: humanizeToken(factor),
+        ledger: `${titleCase(factor.replace(/:/g, ' — '))}.`,
+      };
+  }
+}
+
+/** True when a limiting-factor token has dedicated human copy (unknown
+ * tokens read acceptably only in the "limited by" form). */
+function knownLimitingFactor(factor: string): boolean {
+  return (
+    factor.startsWith('checkpoint_unobserved:') ||
+    [
+      'paddle_track_unavailable',
+      'ball_track_unavailable',
+      'court_geometry_unavailable',
+      'analysis_confidence_below_threshold',
+      'auto_stroke_resolved_at_side_depth_no_leaf_for_scoring',
+    ].includes(factor)
+  );
+}
+
 // ─── §1.1 WHAT WAS THE STROKE — title + honest source subtitle ─────────────
 
 export interface StrokeResultHeader {
@@ -262,10 +365,10 @@ export function contactMarkerPresentation(
     contact.ballConfirmed && contact.paddleConfirmed
       ? 'ball_and_paddle'
       : contact.ballConfirmed
-        ? 'ball'
-        : contact.paddleConfirmed
-          ? 'paddle'
-          : 'motion';
+      ? 'ball'
+      : contact.paddleConfirmed
+      ? 'paddle'
+      : 'motion';
   const caption = {
     ball_and_paddle: 'Ball + paddle confirmed',
     ball: 'Ball-confirmed',
@@ -284,7 +387,11 @@ export function contactMarkerPresentation(
 // ─── §1.2 REPLAY — phase-colored segments (temporalPhasesV2 only) ───────────
 
 export type PhaseSegmentKey =
-  'preparation' | 'acceleration' | 'follow_through' | 'recovery' | 'swing';
+  | 'preparation'
+  | 'acceleration'
+  | 'follow_through'
+  | 'recovery'
+  | 'swing';
 
 export interface PhaseSegmentView {
   key: PhaseSegmentKey;
@@ -394,7 +501,10 @@ export interface InsightInput {
 
 export interface StrokeInsight {
   basis:
-    'disagreement' | 'contact_confirmation' | 'phase_timeline' | 'abstention';
+    | 'disagreement'
+    | 'contact_confirmation'
+    | 'phase_timeline'
+    | 'abstention';
   sentence: string;
 }
 
@@ -449,24 +559,35 @@ export function selectInsight(input: InsightInput): StrokeInsight {
       sentence:
         'We couldn’t identify this stroke and didn’t guess — ' +
         (factor
-          ? `the read was limited by ${humanizeToken(factor)}.`
+          ? `the read was limited by ${limitingFactorCopy(factor).reason}.`
           : 'the motion didn’t give the classifier enough to commit.'),
+    };
+  }
+  if (!factor) {
+    return {
+      basis: 'abstention',
+      sentence:
+        'Nothing beyond what is shown could be established from this ' +
+        'capture — nothing was invented.',
     };
   }
   return {
     basis: 'abstention',
-    sentence: factor
-      ? `We couldn’t establish ${humanizeToken(factor)} — nothing was ` +
-        'invented to fill the gap.'
-      : 'Nothing beyond what is shown could be established from this ' +
-        'capture — nothing was invented.',
+    sentence: knownLimitingFactor(factor)
+      ? `We couldn’t establish ${limitingFactorCopy(factor).noun} — ` +
+        'nothing was invented to fill the gap.'
+      : 'We couldn’t establish a clean read — this attempt was limited by ' +
+        `${humanizeToken(factor)}. Nothing was invented to fill the gap.`,
   };
 }
 
 // ─── §1.4 MEASURED ROWS — provenance-labeled, collapse >4 ───────────────────
 
 export type MeasurementProvenance =
-  'DETECTED' | 'ESTIMATE' | 'MEASURED' | 'PREDICTED';
+  | 'DETECTED'
+  | 'ESTIMATE'
+  | 'MEASURED'
+  | 'PREDICTED';
 
 export interface MeasuredRowView {
   key: string;
@@ -698,7 +819,8 @@ export function abstentionLedger(input: {
     );
   }
   for (const factor of input.record?.uncertainty?.limitingFactors ?? []) {
-    notEstablished.push(titleCase(factor) + '.');
+    const line = limitingFactorCopy(factor).ledger;
+    if (line && !notEstablished.includes(line)) notEstablished.push(line);
   }
   return { held, notEstablished };
 }

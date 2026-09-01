@@ -1,3 +1,12 @@
+// The store mirrors finished drills into the consistency ledger (lazily
+// required so SQLite never loads here); the double records the calls.
+const mockRecordDrillCompletion = jest.fn(async () => undefined);
+jest.mock('../src/consistency/store', () => ({
+  useConsistencyStore: {
+    getState: () => ({ recordDrillCompletion: mockRecordDrillCompletion }),
+  },
+}));
+
 import {
   clearTrainingStoreConfiguration,
   configureTrainingStore,
@@ -109,6 +118,7 @@ function fakeApi(overrides: Partial<TrainingApi> = {}): TrainingApi {
 
 afterEach(() => {
   clearTrainingStoreConfiguration();
+  mockRecordDrillCompletion.mockClear();
 });
 
 describe('real training state', () => {
@@ -150,6 +160,31 @@ describe('real training state', () => {
     expect(
       useTrainingStore.getState().currentPlan?.items[0]?.completion,
     ).toMatchObject({ qualifiesForStreak: true, actualRepetitions: 24 });
+    // The finished drill lands in the consistency ledger so the training
+    // day counts toward the streak.
+    expect(mockRecordDrillCompletion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        slug: 'contact-shadow',
+        title: 'Contact Shadow Reps',
+      }),
+    );
+  });
+
+  it('keeps non-qualifying drill completions out of the streak ledger', async () => {
+    const api = fakeApi({
+      completeDrill: jest.fn(async evidence => ({
+        id: evidence.id,
+        completedAt: evidence.completedAt,
+        actualRepetitions: evidence.actualRepetitions,
+        actualDurationSeconds: evidence.actualDurationSeconds,
+        qualifiesForStreak: false,
+      })),
+    });
+    configureTrainingStore(api);
+    await useTrainingStore.getState().createPlan(sourceShotId);
+    const item = useTrainingStore.getState().currentPlan!.items[0]!;
+    await useTrainingStore.getState().completePlanItem(item);
+    expect(mockRecordDrillCompletion).not.toHaveBeenCalled();
   });
 
   it('sends reassessment to the server and keeps its comparable score delta', async () => {

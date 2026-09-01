@@ -81,6 +81,34 @@ curl -X POST 'http://127.0.0.1:54321/functions/v1/api/v1/account/bootstrap' \
 In-app: Sign in with Google → should land signed-in; the `profiles` table
 gains one row (Dashboard → Table editor).
 
+## Billing verification (RevenueCat)
+
+`POST /v1/billing/sync` verifies the caller's membership **server-side**
+against RevenueCat's REST API (`GET /v1/subscribers/{app_user_id}`, where the
+app_user_id is the canonical account uuid) and persists the verdict to
+`public.billing_entitlements`. Set the REST key as a function secret before
+deploying:
+
+```bash
+supabase secrets set REVENUECAT_SECRET_API_KEY=sk_…
+```
+
+(`REVENUECAT_PUBLIC_SDK_KEY` is honored as a fallback.) Without a key the
+endpoint returns a typed 503 `billing_unconfigured`. Recognized entitlement
+identifiers: `pickle_sensei_pro` (canonical) and `premium` (alias); an
+entitlement counts while `expires_date` is null (lifetime) or in the future.
+Premium members bypass the two-free-ratings paywall in every access check.
+
+The backing table — plus the optional `profiles.first_name` /
+`profiles.gender` onboarding columns — ships in
+`migrations/20260830120000_production_launch.sql`. The player rank is
+**form-weighted** as of `migrations/20260831130000_form_weighted_rank.sql`:
+per technique, the most recent 8 scored analyses averaged with linear recency
+weights (newest ×8 … oldest ×1); the rating weights each technique by its
+evidence, capped at 5 analyses (mirrors
+`packages/shared-types/src/playerRank.ts`). Run `supabase db push` before
+deploying the function.
+
 ## Honest limits
 
 - The Edge Function serves **only** `/v1/account/bootstrap`. Every other

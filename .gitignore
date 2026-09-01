@@ -51,3 +51,5 @@ datasets/release/
 # mac-bench per-clip scratch intermediates (documented outputs are the
 # results/*.json + *.samples.jsonl files, which ARE committed)
 tools/mac-bench/results/scratch-*/
+# supabase CLI local state (project ref, versions)
+supabase/.temp/

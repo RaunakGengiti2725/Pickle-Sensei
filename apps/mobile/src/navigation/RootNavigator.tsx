@@ -1,6 +1,10 @@
 import React, { useEffect } from 'react';
-import { View } from 'react-native';
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { Linking, View } from 'react-native';
+import {
+  NavigationContainer,
+  DefaultTheme,
+  createNavigationContainerRef,
+} from '@react-navigation/native';
 import {
   createNativeStackNavigator,
   type NativeStackNavigationProp,
@@ -16,15 +20,17 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { AnalyzeScreen } from '../screens/AnalyzeScreen';
 import { DrillLibraryScreen } from '../screens/DrillLibraryScreen';
 import { ResultScreen } from '../screens/ResultScreen';
-import { LiveCourtScreen } from '../screens/LiveCourtScreen';
-import { LiveSummaryScreen } from '../screens/LiveSummaryScreen';
+import { StreakCalendarScreen } from '../screens/StreakCalendarScreen';
 import { PaywallScreen } from '../screens/PaywallScreen';
 import { SignInScreen } from '../screens/SignInScreen';
+import { ManageAccountScreen } from '../screens/ManageAccountScreen';
 import { ConsentSettingsScreen } from '../screens/ConsentSettingsScreen';
+import { NotificationSettingsScreen } from '../screens/NotificationSettingsScreen';
 import { PremiumTabBar } from './PremiumTabBar';
 import { LoadingState } from '../design/components';
 import { useAccessStore } from '../state/accessStore';
 import { useAuthStore } from '../auth/authStore';
+import { getRuntimePublicConfig } from '../config/runtimeConfig';
 
 const Stack = createNativeStackNavigator<RootStackParams>();
 const Tabs = createBottomTabNavigator<MainTabParams>();
@@ -54,10 +60,19 @@ function CoachActionPortal() {
 function PaywallRoute({
   navigation,
 }: NativeStackScreenProps<RootStackParams, 'Paywall'>) {
+  // Subscription paywalls must link to functional Terms of Use and Privacy
+  // Policy pages (App Review 3.1.2). Served by the API function (legal.ts).
+  const { legalTermsUrl, legalPrivacyUrl } = getRuntimePublicConfig();
   return (
     <PaywallScreen
       onClose={() => navigation.goBack()}
       onPurchased={() => navigation.goBack()}
+      {...(legalTermsUrl
+        ? { onOpenTerms: () => void Linking.openURL(legalTermsUrl) }
+        : {})}
+      {...(legalPrivacyUrl
+        ? { onOpenPrivacy: () => void Linking.openURL(legalPrivacyUrl) }
+        : {})}
     />
   );
 }
@@ -71,12 +86,12 @@ function ConnectAccountRoute({
     if (provider && provider !== 'guest') navigation.goBack();
   }, [navigation, provider]);
 
-  return <SignInScreen allowGuest={false} onBack={() => navigation.goBack()} />;
+  return <SignInScreen onBack={() => navigation.goBack()} />;
 }
 
 function useRatingRouteGate<RouteName extends keyof RootStackParams>(
   navigation: NativeStackNavigationProp<RootStackParams, RouteName>,
-  source: 'rating' | 'live_court',
+  source: 'rating',
 ) {
   const status = useAccessStore(state => state.status);
   const canonicalAccess = useAccessStore(state => state.canonicalAccess);
@@ -117,17 +132,6 @@ function AnalyzeRoute({
   );
 }
 
-function LiveCourtRoute({
-  navigation,
-}: NativeStackScreenProps<RootStackParams, 'LiveCourt'>) {
-  const allowed = useRatingRouteGate(navigation, 'live_court');
-  return allowed ? (
-    <LiveCourtScreen />
-  ) : (
-    <LoadingState label="Checking access…" />
-  );
-}
-
 const theme = {
   ...DefaultTheme,
   colors: {
@@ -137,9 +141,29 @@ const theme = {
   },
 };
 
+const navigationRef = createNavigationContainerRef<RootStackParams>();
+
+/** Routes a pressed reminder to its declared tab once navigation is live. */
+function useNotificationPressRouting() {
+  useEffect(() => {
+    // Lazy require keeps the notification native module out of module
+    // evaluation (and out of any environment that merely imports this file).
+    const { subscribeToNotificationPresses } =
+      require('../notifications/service') as typeof import('../notifications/service');
+    const unsubscribe = subscribeToNotificationPresses(target => {
+      if (!navigationRef.isReady()) return;
+      navigationRef.navigate('Tabs', {
+        screen: target === 'Performance' ? 'Performance' : 'Home',
+      });
+    });
+    return unsubscribe;
+  }, []);
+}
+
 export function RootNavigator() {
+  useNotificationPressRouting();
   return (
-    <NavigationContainer theme={theme}>
+    <NavigationContainer ref={navigationRef} theme={theme}>
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
@@ -168,14 +192,9 @@ export function RootNavigator() {
           options={{ title: 'Drill Library' }}
         />
         <Stack.Screen
-          name="LiveCourt"
-          component={LiveCourtRoute}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="LiveSummary"
-          component={LiveSummaryScreen}
-          options={{ title: 'Summary', headerBackVisible: false }}
+          name="StreakCalendar"
+          component={StreakCalendarScreen}
+          options={{ title: 'Consistency' }}
         />
         <Stack.Screen
           name="Paywall"
@@ -186,9 +205,19 @@ export function RootNavigator() {
           }}
         />
         <Stack.Screen
+          name="ManageAccount"
+          component={ManageAccountScreen}
+          options={{ title: 'Manage Account' }}
+        />
+        <Stack.Screen
           name="ConsentSettings"
           component={ConsentSettingsScreen}
           options={{ title: 'Data & Consent' }}
+        />
+        <Stack.Screen
+          name="NotificationSettings"
+          component={NotificationSettingsScreen}
+          options={{ title: 'Notifications' }}
         />
         <Stack.Screen
           name="ConnectAccount"

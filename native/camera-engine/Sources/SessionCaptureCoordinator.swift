@@ -67,6 +67,55 @@ final class SessionCaptureCoordinator: @unchecked Sendable {
   /// Rebased (session-relative) timestamp in ms + wrist speed in
   /// normalized-image units/second, per measurable pose frame.
   var onMotionSample: ((Int, Double) -> Void)?
+  /// Measured pose per handled frame (nil when the frame had no usable
+  /// pose). Consumed by the live session preview overlay; delivery thread is
+  /// the vision queue — observers hop to main themselves.
+  var onPoseFrame: ((PoseFrame?) -> Void)?
+
+  // ── Active-coordinator registry ───────────────────────────────────────────
+  // The RN preview view finds the LIVE session's camera by captureId; entries
+  // are weak so a released coordinator can never be resurrected by lookup.
+  private final class WeakEntry {
+    weak var value: SessionCaptureCoordinator?
+    init(_ value: SessionCaptureCoordinator) { self.value = value }
+  }
+
+  private static let registryLock = NSLock()
+  private static var registry: [String: WeakEntry] = [:]
+
+  static func active(withId captureId: String) -> SessionCaptureCoordinator? {
+    registryLock.lock()
+    defer { registryLock.unlock() }
+    return registry[captureId]?.value
+  }
+
+  /// True while ANY session capture is registered — keep-awake owners use
+  /// this so ending one camera surface never re-enables auto-lock while a
+  /// rolling session recording is still running.
+  static func anyActive() -> Bool {
+    registryLock.lock()
+    defer { registryLock.unlock() }
+    return registry.values.contains { $0.value != nil }
+  }
+
+  private func register() {
+    Self.registryLock.lock()
+    Self.registry[captureId] = WeakEntry(self)
+    Self.registry = Self.registry.filter { $0.value.value != nil }
+    Self.registryLock.unlock()
+  }
+
+  private func unregister() {
+    Self.registryLock.lock()
+    Self.registry[captureId] = nil
+    Self.registryLock.unlock()
+  }
+
+  /// Live preview surface for the rolling session camera. Safe to call any
+  /// time after init; the layer renders once the session starts.
+  func makePreviewLayer() -> AVCaptureVideoPreviewLayer {
+    engine.makePreviewLayer()
+  }
 
   private let engine: CameraEngine
   private let poseProvider = ApplePoseProvider()
@@ -91,6 +140,11 @@ final class SessionCaptureCoordinator: @unchecked Sendable {
       maximumObservationSeconds: Self.maximumSessionSeconds,
       movieFragmentSeconds: Self.movieFragmentSeconds
     ))
+    register()
+  }
+
+  deinit {
+    unregister()
   }
 
   func start() async throws {
@@ -118,6 +172,7 @@ final class SessionCaptureCoordinator: @unchecked Sendable {
     stateLock.lock()
     stopped = true
     stateLock.unlock()
+    unregister()
     engine.stopContinuousRecording()
     engine.stop()
   }
@@ -193,6 +248,7 @@ final class SessionCaptureCoordinator: @unchecked Sendable {
         )
         self.evidenceAccumulator.ingest(pose: pose)
         self.retainPose(pose)
+        self.onPoseFrame?(pose)
         if let sample = self.motionStream.ingest(pose: pose) {
           self.stateLock.lock()
           let base = self.sessionBaseMs
@@ -204,6 +260,7 @@ final class SessionCaptureCoordinator: @unchecked Sendable {
       } catch {
         // A frame without a usable pose is an honest miss, recorded as such.
         self.evidenceAccumulator.ingestMissing(timestampMs: timestampMs)
+        self.onPoseFrame?(nil)
       }
     }
   }

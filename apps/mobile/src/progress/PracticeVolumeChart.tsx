@@ -65,6 +65,10 @@ export function PracticeVolumeChart(props: {
   const firstLabel = compacted[0]?.firstLabel ?? '';
   const lastLabel = compacted.at(-1)?.lastLabel ?? '';
   const middleLabel = compacted[Math.floor(compacted.length / 2)]?.firstLabel;
+  // WHOOP-style value labels only fit short windows; long ranges keep the
+  // silhouette readable instead (MOBBIN: WHOOP strain/calories bars).
+  const showValues = compacted.length <= 7;
+  const barCeiling = showValues ? 50 : 65;
 
   return (
     <View
@@ -80,17 +84,24 @@ export function PracticeVolumeChart(props: {
     >
       <View importantForAccessibility="no-hide-descendants" style={styles.plot}>
         {compacted.map((bucket, index) => {
+          const isLatest = index === compacted.length - 1;
           const targetHeight =
-            bucket.count === 0 ? 4 : 13 + (bucket.count / maximum) * 65;
+            bucket.count === 0 ? 4 : 13 + (bucket.count / maximum) * barCeiling;
           return (
             <View key={bucket.key} style={styles.barSlot}>
+              {isLatest ? <View style={styles.todayColumn} /> : null}
+              {showValues && bucket.count > 0 ? (
+                <Text
+                  style={[styles.barValue, isLatest && styles.barValueLatest]}
+                >
+                  {bucket.count}
+                </Text>
+              ) : null}
               <Animated.View
                 style={[
                   styles.bar,
                   bucket.count === 0 && styles.barEmpty,
-                  index === compacted.length - 1 &&
-                    bucket.count > 0 &&
-                    styles.barLatest,
+                  isLatest && bucket.count > 0 && styles.barLatest,
                   {
                     height: reveal.interpolate({
                       inputRange: [0, 1],
@@ -127,7 +138,31 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: color.lineMutedDark,
   },
-  barSlot: { flex: 1, height: 78, justifyContent: 'flex-end' },
+  barSlot: {
+    flex: 1,
+    height: 78,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  todayColumn: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  barValue: {
+    ...type.micro,
+    color: color.onDarkMuted,
+    fontSize: 10,
+    lineHeight: 13,
+    letterSpacing: 0.2,
+    marginBottom: 3,
+    fontVariant: ['tabular-nums'],
+  },
+  barValueLatest: { color: color.volt },
   bar: {
     width: '100%',
     minWidth: 3,

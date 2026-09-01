@@ -1,6 +1,66 @@
 import AVFoundation
 import UIKit
 
+/// Landmark ↔ screen mapping for pose evidence drawn over a live preview.
+///
+/// Pose landmarks live in NORMALIZED-IMAGE space: x,y ∈ [0,1], origin
+/// top-left, **rotation already applied** (VisionCoreContracts) — the space
+/// of the upright buffers the data connection delivers. The preview layer's
+/// own point-conversion APIs (`layerPointConverted(fromCaptureDevicePoint:)`)
+/// expect the UNROTATED sensor space used by focus/exposure points of
+/// interest, which is a different space; feeding landmarks through them drew
+/// the whole body heat map rotated 90° off the athlete. The displayed
+/// picture rect (gravity + crop applied) plus the preview connection's
+/// mirroring flag are sufficient to place a normalized-image point exactly.
+extension AVCaptureVideoPreviewLayer {
+  /// The full video picture rect in layer coordinates. The unit metadata
+  /// rect always maps to the whole displayed picture regardless of the
+  /// connection's rotation or mirroring (those only permute its corners).
+  var displayedVideoRect: CGRect {
+    layerRectConverted(fromMetadataOutputRect: CGRect(x: 0, y: 0, width: 1, height: 1))
+  }
+
+  private var displayedVideoIsMirrored: Bool {
+    connection?.isVideoMirrored ?? false
+  }
+
+  /// Normalized-image point (top-left origin, rotation applied) → layer point.
+  func layerPoint(fromNormalizedImagePoint point: CGPoint) -> CGPoint {
+    let rect = displayedVideoRect
+    guard rect.width > 0, rect.height > 0,
+          rect.width.isFinite, rect.height.isFinite else {
+      // Not laid out / not attached yet: scale into the layer bounds so the
+      // overlay degrades to approximately-placed rather than exploding.
+      return CGPoint(x: point.x * bounds.width, y: point.y * bounds.height)
+    }
+    let normalizedX = displayedVideoIsMirrored ? 1 - point.x : point.x
+    return CGPoint(
+      x: rect.minX + normalizedX * rect.width,
+      y: rect.minY + point.y * rect.height
+    )
+  }
+
+  /// Layer point → normalized-image point (inverse of the mapping above),
+  /// clamped to [0,1]. Used to express user taps in the SAME space pose
+  /// landmarks use so region/occupancy math compares like with like.
+  func normalizedImagePoint(fromLayerPoint point: CGPoint) -> CGPoint {
+    let rect = displayedVideoRect
+    guard rect.width > 0, rect.height > 0,
+          rect.width.isFinite, rect.height.isFinite else {
+      return CGPoint(
+        x: min(1, max(0, bounds.width > 0 ? point.x / bounds.width : 0)),
+        y: min(1, max(0, bounds.height > 0 ? point.y / bounds.height : 0))
+      )
+    }
+    let normalizedX = (point.x - rect.minX) / rect.width
+    let normalizedY = (point.y - rect.minY) / rect.height
+    return CGPoint(
+      x: min(1, max(0, displayedVideoIsMirrored ? 1 - normalizedX : normalizedX)),
+      y: min(1, max(0, normalizedY))
+    )
+  }
+}
+
 /// Draws only evidence produced by current Apple Vision observations. Instead
 /// of a stick figure, the athlete is rendered as a BODY HEAT MAP: soft
 /// additive glows placed at observed landmarks and along observed limb lines,
@@ -146,6 +206,29 @@ final class PoseOverlayView: UIView {
     if acquiredLock { animateLockAcquired() }
   }
 
+  /// Live-session update path: a raw measured pose frame (no readiness
+  /// evaluator runs during session play). Joint coverage is the measured
+  /// fraction of visible canonical joints — the same joints the heat map
+  /// draws — so brightness still follows real evidence.
+  func update(pose: PoseFrame) {
+    assert(Thread.isMainThread)
+    latestTimestampMs = pose.timestampMs
+    readinessState = .ready
+    var nextLandmarks: [String: PoseLandmark] = [:]
+    for landmark in pose.landmarks { nextLandmarks[landmark.name] = landmark }
+    landmarks = nextLandmarks
+    let canonical = Set(Self.segments.flatMap { [$0.0, $0.1] })
+    let visibleCount = pose.landmarks.filter {
+      canonical.contains($0.name) && $0.visibility >= 0.35
+    }.count
+    jointCoverage = canonical.isEmpty
+      ? 0
+      : Double(visibleCount) / Double(canonical.count)
+    trailBuffer.ingest(landmarks: pose.landmarks, timestampMs: pose.timestampMs)
+    setNeedsDisplay()
+    redraw()
+  }
+
   func clear() {
     assert(Thread.isMainThread)
     landmarks.removeAll(keepingCapacity: true)
@@ -196,8 +279,8 @@ final class PoseOverlayView: UIView {
     let heat: (String) -> CGFloat = { heatByJoint[$0] ?? 0 }
 
     let layerPoint: (PoseLandmark) -> CGPoint = { landmark in
-      previewLayer.layerPointConverted(
-        fromCaptureDevicePoint: CGPoint(x: landmark.x, y: landmark.y)
+      previewLayer.layerPoint(
+        fromNormalizedImagePoint: CGPoint(x: landmark.x, y: landmark.y)
       )
     }
 
@@ -305,13 +388,13 @@ final class PoseOverlayView: UIView {
       context.setLineWidth(1.75 + 3.25 * speed)
       context.beginPath()
       context.move(
-        to: previewLayer.layerPointConverted(
-          fromCaptureDevicePoint: CGPoint(x: segment.startX, y: segment.startY)
+        to: previewLayer.layerPoint(
+          fromNormalizedImagePoint: CGPoint(x: segment.startX, y: segment.startY)
         )
       )
       context.addLine(
-        to: previewLayer.layerPointConverted(
-          fromCaptureDevicePoint: CGPoint(x: segment.endX, y: segment.endY)
+        to: previewLayer.layerPoint(
+          fromNormalizedImagePoint: CGPoint(x: segment.endX, y: segment.endY)
         )
       )
       context.strokePath()
@@ -325,8 +408,8 @@ final class PoseOverlayView: UIView {
     guard previewLayer != nil else { return }
     let visibleLayerPoints = landmarks.values.compactMap { landmark -> CGPoint? in
       guard landmark.visibility >= 0.35, let previewLayer else { return nil }
-      return previewLayer.layerPointConverted(
-        fromCaptureDevicePoint: CGPoint(x: landmark.x, y: landmark.y)
+      return previewLayer.layerPoint(
+        fromNormalizedImagePoint: CGPoint(x: landmark.x, y: landmark.y)
       )
     }
 

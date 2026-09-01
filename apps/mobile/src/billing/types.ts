@@ -1,4 +1,4 @@
-export type BillingPeriod = 'annual' | 'monthly';
+export type BillingPeriod = 'annual' | 'monthly' | 'lifetime';
 
 export interface FreeTrialDisplay {
   /** Store-confirmed localized duration, for example "7-day free trial". */
@@ -20,6 +20,7 @@ export interface StorePlans {
   offeringId: string;
   annual: StorePlan | null;
   monthly: StorePlan | null;
+  lifetime: StorePlan | null;
 }
 
 export interface StoreEntitlementState {

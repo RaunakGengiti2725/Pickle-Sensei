@@ -171,8 +171,17 @@ final class GuidedCaptureViewController: UIViewController {
 
   override func viewDidAppear(_ animated: Bool) {
     super.viewDidAppear(animated)
+    // The athlete steps away from the phone; auto-lock mid-capture would
+    // kill the camera. Restored in viewWillDisappear.
+    UIApplication.shared.isIdleTimerDisabled = true
     emit(type: "session", values: ["state": "starting"])
     engine.start()
+  }
+
+  override func viewWillDisappear(_ animated: Bool) {
+    super.viewWillDisappear(animated)
+    // Never re-enable auto-lock underneath a still-running session capture.
+    UIApplication.shared.isIdleTimerDisabled = SessionCaptureCoordinator.anyActive()
   }
 
   override func viewDidLayoutSubviews() {
@@ -1045,11 +1054,17 @@ final class GuidedCaptureViewController: UIViewController {
     stateLock.unlock()
     guard !alreadyCapturing, targetAcquisition == .choosingRegion else { return }
     let viewPoint = recognizer.location(in: view)
-    let devicePoint = previewLayer.captureDevicePointConverted(fromLayerPoint: viewPoint)
-    guard devicePoint.x.isFinite, devicePoint.y.isFinite else { return }
+    // The start region is compared against pose torso midpoints, which live
+    // in NORMALIZED-IMAGE space (top-left origin, rotation applied). The
+    // preview layer's captureDevicePointConverted returns the UNROTATED
+    // sensor space — a different space that skewed the region for every
+    // off-center tap — so the tap is mapped through the displayed picture
+    // rect instead, landing in the exact space the occupancy math uses.
+    let imagePoint = previewLayer.normalizedImagePoint(fromLayerPoint: viewPoint)
+    guard imagePoint.x.isFinite, imagePoint.y.isFinite else { return }
     startRegion = CGPoint(
-      x: min(1, max(0, devicePoint.x)),
-      y: min(1, max(0, devicePoint.y))
+      x: min(1, max(0, imagePoint.x)),
+      y: min(1, max(0, imagePoint.y))
     )
     targetAcquisition = .waitingForOccupant
     occupancyStreak = 0

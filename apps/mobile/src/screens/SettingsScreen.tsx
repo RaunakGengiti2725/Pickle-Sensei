@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StatusBar,
@@ -20,19 +22,33 @@ import {
 } from '../design/components';
 import { Icon, type IconName } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
-import { useAppStore } from '../state/appStore';
+import { useAppStore, type Gender } from '../state/appStore';
 import { useAuthStore } from '../auth/authStore';
-import { tts } from '../audio/tts';
-import { nativeSessionMotionFeedAvailability } from '../flow/session';
+import { useConsentStore } from '../state/consentStore';
+import { useNotificationStore } from '../notifications/notificationStore';
+import { formatReminderMinutes } from '../notifications/types';
+import { useConsistencyStore } from '../consistency/store';
+import { plural } from '../util/plural';
 import { scoringStackStatus } from '../vision/providers';
 import { useAccessStore } from '../state/accessStore';
+import { getRuntimePublicConfig } from '../config/runtimeConfig';
+import { rateAppFromSettings } from '../review/appStoreReview';
 import type { RootStackParams } from '../navigation/params';
+
+const GENDER_LABELS: Record<Gender, string> = {
+  female: 'Female',
+  male: 'Male',
+  nonbinary: 'Non-binary',
+  prefer_not_to_say: 'Prefer not to say',
+};
 
 function SettingRow(props: {
   icon: IconName;
   label: string;
   value: string;
   last?: boolean;
+  /** Values that are already sentence-cased opt out of auto-capitalize. */
+  preserveCase?: boolean;
   onPress?: () => void;
 }) {
   const content = (
@@ -43,7 +59,14 @@ function SettingRow(props: {
       <Text style={[type.body, { color: color.ink, flex: 1 }]}>
         {props.label}
       </Text>
-      <Text numberOfLines={2} style={[type.caption, styles.rowValue]}>
+      <Text
+        numberOfLines={2}
+        style={[
+          type.caption,
+          styles.rowValue,
+          props.preserveCase && { textTransform: 'none' },
+        ]}
+      >
         {props.value}
       </Text>
       {props.onPress ? (
@@ -149,28 +172,62 @@ export function SettingsScreen() {
   const signOut = useAuthStore(s => s.signOut);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const access = useAccessStore(s => s.canonicalAccess);
+  const consentAvailability = useConsentStore(s => s.availability);
+  const modelTrainingActive = useConsentStore(s => s.modelTrainingActive);
+  const hydrateConsent = useConsentStore(s => s.hydrate);
+  const notificationPrefs = useNotificationStore(s => s.prefs);
+  const notificationPermission = useNotificationStore(s => s.permission);
+  const consistency = useConsistencyStore(s => s.snapshot);
+  const { legalPrivacyUrl, legalTermsUrl } = getRuntimePublicConfig();
+
+  // The consent value must reflect the server ledger, never a hard-coded
+  // claim; re-hydrate whenever the signed-in session changes.
+  useEffect(() => {
+    void hydrateConsent();
+  }, [hydrateConsent, session]);
+
   const accountLabel =
     session === null
       ? '—'
       : session.provider === 'guest'
-        ? 'Guest · this device'
-        : (session.displayName ?? session.email ?? session.subject);
+      ? 'Guest · this device'
+      : session.displayName ?? session.email ?? session.subject;
+  // Guests with an onboarding first name are greeted by name; the guest
+  // provider label moves down to the caption line.
+  const isGuest = session?.provider === 'guest';
+  const accountName =
+    isGuest && profile?.firstName ? profile.firstName : accountLabel;
+  const accountCaption = isGuest
+    ? profile?.firstName
+      ? 'Guest · this device'
+      : 'Progress stays on this phone until you connect an account.'
+    : `${session?.provider ?? ''} account`;
   const scoringStack = scoringStackStatus();
   const modelLabel = scoringStack.version;
-  // Truthful per-build capability: native continuous session capture exists
-  // on this build or sessions run replay-only — never a hard-coded claim.
-  const liveCourtLabel = nativeSessionMotionFeedAvailability().available
-    ? 'Live session capture ready'
-    : 'Replay demo only on this build';
+  const consentValue =
+    consentAvailability !== 'ready'
+      ? 'Manage'
+      : modelTrainingActive
+      ? 'Training: contributing'
+      : 'Training: off';
   const membershipLabel = access?.premium
     ? 'Pro active'
     : access
-      ? access.freeRatings.remaining > 0
-        ? `${access.freeRatings.remaining} free rating${
-            access.freeRatings.remaining === 1 ? '' : 's'
-          } left`
-        : 'Upgrade required'
-      : 'Verify access';
+    ? access.freeRatings.remaining > 0
+      ? `${access.freeRatings.remaining} free rating${
+          access.freeRatings.remaining === 1 ? '' : 's'
+        } left`
+      : 'Upgrade required'
+    : 'Verify access';
+  const notificationsValue = !notificationPrefs.enabled
+    ? 'Off'
+    : notificationPermission === 'denied'
+    ? 'Allow in system settings'
+    : notificationPrefs.practiceReminder
+    ? `Daily · ${formatReminderMinutes(
+        notificationPrefs.practiceReminderMinutes,
+      )}`
+    : 'On';
 
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
@@ -190,7 +247,7 @@ export function SettingsScreen() {
           <View style={styles.accountTop}>
             <View style={styles.avatar}>
               <Text style={[type.h2, { color: color.onVolt }]}>
-                {accountLabel.charAt(0).toUpperCase()}
+                {accountName.charAt(0).toUpperCase()}
               </Text>
             </View>
             <Pill
@@ -198,8 +255,8 @@ export function SettingsScreen() {
                 session === null
                   ? 'SIGNED OUT'
                   : session.provider === 'guest'
-                    ? 'LOCAL'
-                    : 'SYNCED'
+                  ? 'LOCAL'
+                  : 'SYNCED'
               }
               tone={session === null ? 'neutral' : 'volt'}
             />
@@ -208,14 +265,12 @@ export function SettingsScreen() {
             numberOfLines={1}
             style={[type.h2, { color: color.onDark, marginTop: space.lg }]}
           >
-            {accountLabel}
+            {accountName}
           </Text>
           <Text
             style={[type.caption, { color: color.onDarkFaint, marginTop: 4 }]}
           >
-            {session?.provider === 'guest'
-              ? 'Progress stays on this phone until you connect an account.'
-              : `${session?.provider ?? ''} account`}
+            {accountCaption}
           </Text>
         </Card>
 
@@ -245,6 +300,18 @@ export function SettingsScreen() {
         <SectionTitle title="Player" />
         <Card style={styles.groupCard}>
           <SettingRow
+            icon="person"
+            label="Name"
+            value={profile?.firstName ?? '—'}
+            preserveCase
+          />
+          <SettingRow
+            icon="person"
+            label="Gender"
+            value={profile?.gender ? GENDER_LABELS[profile.gender] : '—'}
+            preserveCase
+          />
+          <SettingRow
             icon="progress"
             label="Playing level"
             value={profile?.skillLevel ?? '—'}
@@ -258,23 +325,30 @@ export function SettingsScreen() {
             icon="spark"
             label="Current focus"
             value={(profile?.focusCheckpoint ?? '—').replace(/_/g, ' ')}
+          />
+          <SettingRow
+            icon="flame"
+            label="Consistency"
+            value={
+              consistency
+                ? `${consistency.currentStreak} day streak · ${
+                    consistency.earned.length
+                  } ${plural(consistency.earned.length, 'badge')}`
+                : '—'
+            }
+            onPress={() => navigation.navigate('StreakCalendar')}
             last
           />
         </Card>
 
-        <SectionTitle title="Coaching" />
+        <SectionTitle title="Reminders" />
         <Card style={styles.groupCard}>
-          {/* Status readouts, not actions: SettingRow renders no chevron
-              when onPress is absent, so these read as informational. */}
           <SettingRow
-            icon="volume"
-            label="Audio coach"
-            value={tts.available() ? 'Balanced voice' : 'On-screen text only'}
-          />
-          <SettingRow
-            icon="court"
-            label="Live Court"
-            value={liveCourtLabel}
+            icon="bell"
+            label="Notifications"
+            value={notificationsValue}
+            preserveCase
+            onPress={() => navigation.navigate('NotificationSettings')}
             last
           />
         </Card>
@@ -284,7 +358,8 @@ export function SettingsScreen() {
           <SettingRow
             icon="shield"
             label="Data & consent"
-            value="Model training off by default"
+            value={consentValue}
+            preserveCase
             onPress={() => navigation.navigate('ConsentSettings')}
             last
           />
@@ -330,13 +405,49 @@ export function SettingsScreen() {
 
         <SectionTitle title="About" />
         <Card style={styles.groupCard}>
-          <SettingRow icon="library" label="App version" value="0.1.0" />
+          {/* StoreKit review, on demand (iOS only — Play review isn't wired).
+              With the numeric app id configured this deep-links straight to
+              the write-review page and permanently ends the per-analysis
+              rating asks; until then it raises the OS-throttled in-app
+              sheet. */}
+          {Platform.OS === 'ios' ? (
+            <SettingRow
+              icon="star"
+              label="Rate Pickle Sensei"
+              value="App Store"
+              preserveCase
+              onPress={() => void rateAppFromSettings()}
+            />
+          ) : null}
+          <SettingRow
+            icon="library"
+            label="App version"
+            value={getRuntimePublicConfig().appVersion}
+          />
           <SettingRow
             icon="spark"
             label="Scoring model"
             value={modelLabel}
-            last
+            last={!legalPrivacyUrl && !legalTermsUrl}
           />
+          {legalPrivacyUrl ? (
+            <SettingRow
+              icon="shield"
+              label="Privacy policy"
+              value="View"
+              onPress={() => void Linking.openURL(legalPrivacyUrl)}
+              last={!legalTermsUrl}
+            />
+          ) : null}
+          {legalTermsUrl ? (
+            <SettingRow
+              icon="library"
+              label="Terms of use"
+              value="View"
+              onPress={() => void Linking.openURL(legalTermsUrl)}
+              last
+            />
+          ) : null}
         </Card>
         <View style={styles.ratingNote}>
           <Icon name="shield" size={16} color={color.inkSoft} />
@@ -344,6 +455,26 @@ export function SettingsScreen() {
             Technique Score is coaching feedback—not a DUPR or player rating.
           </Text>
         </View>
+
+        {/* Server-account management (incl. two-step deletion, App Review
+            5.1.1(v), now on the ManageAccount screen). Guests have no server
+            account — their data never leaves the phone, so the row only
+            renders for synced sessions. */}
+        {session && !session.localOnly ? (
+          <>
+            <SectionTitle title="Account" />
+            <Card style={styles.groupCard}>
+              <SettingRow
+                icon="person"
+                label="Manage account"
+                value="Details"
+                preserveCase
+                onPress={() => navigation.navigate('ManageAccount')}
+                last
+              />
+            </Card>
+          </>
+        ) : null}
 
         <PressableScale
           accessibilityLabel="Sign out"
@@ -412,6 +543,9 @@ const styles = StyleSheet.create({
     maxWidth: 130,
   },
   privacyCard: {
+    // The white consent Card above has no bottom margin of its own, so the
+    // dark panel needs explicit top spacing or the two visually fuse.
+    marginTop: space.md,
     borderRadius: radius.lg,
     backgroundColor: color.surfaceDark,
     padding: space.lg,

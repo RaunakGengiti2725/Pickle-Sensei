@@ -77,9 +77,15 @@ function isCurrentConfiguration(
 }
 
 function selectedPlan(plans: StorePlans | null, period: BillingPeriod) {
-  return period === 'annual'
-    ? (plans?.annual ?? null)
-    : (plans?.monthly ?? null);
+  if (!plans) return null;
+  switch (period) {
+    case 'annual':
+      return plans.annual;
+    case 'monthly':
+      return plans.monthly;
+    case 'lifetime':
+      return plans.lifetime;
+  }
 }
 
 export const selectHasPremium = (state: AccessStoreState): boolean =>
@@ -164,9 +170,11 @@ export const useAccessStore = create<AccessStoreState>((set, get) => ({
       plans,
       selectedPeriod: plans?.annual
         ? 'annual'
-        : plans?.monthly
-          ? 'monthly'
-          : 'annual',
+        : plans?.lifetime
+          ? 'lifetime'
+          : plans?.monthly
+            ? 'monthly'
+            : 'annual',
       canonicalAccess: accessResult.value,
       error: error?.toState() ?? null,
     });

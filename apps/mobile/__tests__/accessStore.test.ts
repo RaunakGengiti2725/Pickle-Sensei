@@ -59,16 +59,26 @@ const plans: StorePlans = {
     pricePerMonthString: '$4.99',
     freeTrial: null,
   },
+  lifetime: {
+    id: 'lifetime-plan',
+    productId: 'premium_lifetime_15999',
+    period: 'lifetime',
+    price: 159.99,
+    priceString: '$159.99',
+    pricePerMonthString: null,
+    freeTrial: null,
+  },
 };
 
 function dependencies(options?: {
   getAccess?: () => Promise<CanonicalAccessState>;
   syncBilling?: BillingAccessDependencies['backend']['syncBilling'];
+  loadPlans?: () => Promise<StorePlans>;
 }): BillingAccessDependencies {
   return {
     store: {
       configure: jest.fn(async () => undefined),
-      loadPlans: jest.fn(async () => plans),
+      loadPlans: jest.fn(options?.loadPlans ?? (async () => plans)),
       purchase: jest.fn(async () => ({
         premium: true,
         productId: 'premium_annual_3999',
@@ -123,7 +133,37 @@ describe('accessStore', () => {
     const state = useAccessStore.getState();
     expect(state.status).toBe('ready');
     expect(state.selectedPeriod).toBe('annual');
+    expect(state.plans?.lifetime?.id).toBe('lifetime-plan');
     expect(state.canonicalAccess).toEqual(freeAccess);
+  });
+
+  it('prefers the lifetime plan over monthly when annual is unavailable', async () => {
+    configureAccessStore(
+      dependencies({ loadPlans: async () => ({ ...plans, annual: null }) }),
+    );
+    await useAccessStore.getState().initialize();
+    expect(useAccessStore.getState().selectedPeriod).toBe('lifetime');
+  });
+
+  it('purchases the lifetime plan once it is selected', async () => {
+    const clients = dependencies();
+    configureAccessStore(clients);
+    await useAccessStore.getState().initialize();
+    useAccessStore.getState().selectPeriod('lifetime');
+    expect(useAccessStore.getState().selectedPeriod).toBe('lifetime');
+    await expect(useAccessStore.getState().purchaseSelected()).resolves.toBe(
+      true,
+    );
+    expect(clients.store.purchase).toHaveBeenCalledWith('lifetime-plan');
+  });
+
+  it('ignores selecting a period whose plan the store did not return', async () => {
+    configureAccessStore(
+      dependencies({ loadPlans: async () => ({ ...plans, lifetime: null }) }),
+    );
+    await useAccessStore.getState().initialize();
+    useAccessStore.getState().selectPeriod('lifetime');
+    expect(useAccessStore.getState().selectedPeriod).toBe('annual');
   });
 
   it('keeps verified free ratings available when store pricing is unconfigured', async () => {

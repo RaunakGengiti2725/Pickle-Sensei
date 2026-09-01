@@ -9,12 +9,15 @@ import {
 
 const CANONICAL_USER_ID = '11111111-1111-4111-8111-111111111111';
 
-function customerInfo(premium = false): RevenueCatCustomerInfoLike {
+function customerInfo(
+  premium = false,
+  entitlementId: 'premium' | 'pickle_sensei_pro' = 'premium',
+): RevenueCatCustomerInfoLike {
   return {
     entitlements: {
       active: premium
         ? {
-            premium: {
+            [entitlementId]: {
               productIdentifier: 'premium_annual_3999',
               expirationDate: '2027-08-27T00:00:00.000Z',
             },
@@ -25,18 +28,27 @@ function customerInfo(premium = false): RevenueCatCustomerInfoLike {
 }
 
 function storePackage(
-  period: 'ANNUAL' | 'MONTHLY',
+  period: 'ANNUAL' | 'MONTHLY' | 'LIFETIME',
   options?: { trial?: boolean; androidTrial?: boolean },
 ): RevenueCatPackageLike {
-  const annual = period === 'ANNUAL';
+  const identifiers = {
+    ANNUAL: { pkg: '$rc_annual', product: 'premium_annual_3999' },
+    MONTHLY: { pkg: '$rc_monthly', product: 'premium_monthly_499' },
+    LIFETIME: { pkg: '$rc_lifetime', product: 'premium_lifetime_15999' },
+  }[period];
+  const pricing = {
+    ANNUAL: { price: 39.99, priceString: '$39.99', perMonth: '$3.33' },
+    MONTHLY: { price: 4.99, priceString: '$4.99', perMonth: '$4.99' },
+    LIFETIME: { price: 159.99, priceString: '$159.99', perMonth: null },
+  }[period];
   return {
-    identifier: annual ? '$rc_annual' : '$rc_monthly',
+    identifier: identifiers.pkg,
     packageType: period,
     product: {
-      identifier: annual ? 'premium_annual_3999' : 'premium_monthly_499',
-      price: annual ? 39.99 : 4.99,
-      priceString: annual ? '$39.99' : '$4.99',
-      pricePerMonthString: annual ? '$3.33' : '$4.99',
+      identifier: identifiers.product,
+      price: pricing.price,
+      priceString: pricing.priceString,
+      pricePerMonthString: pricing.perMonth,
       introPrice: options?.trial
         ? { price: 0, cycles: 1, period: 'P7D' }
         : null,
@@ -57,6 +69,8 @@ function sdk(options?: {
   eligible?: boolean;
   annual?: RevenueCatPackageLike | null;
   monthly?: RevenueCatPackageLike | null;
+  lifetime?: RevenueCatPackageLike | null;
+  entitlementId?: 'premium' | 'pickle_sensei_pro';
 }): RevenueCatSdk & Record<string, jest.Mock> {
   let appUserId = CANONICAL_USER_ID;
   return {
@@ -71,14 +85,23 @@ function sdk(options?: {
     getOfferings: jest.fn(async () => ({
       current: {
         identifier: 'default',
-        annual: options?.annual ?? storePackage('ANNUAL', { trial: true }),
-        monthly: options?.monthly ?? storePackage('MONTHLY'),
+        annual:
+          options?.annual !== undefined
+            ? options.annual
+            : storePackage('ANNUAL', { trial: true }),
+        monthly:
+          options?.monthly !== undefined
+            ? options.monthly
+            : storePackage('MONTHLY'),
+        lifetime: options?.lifetime ?? null,
       },
     })),
     purchasePackage: jest.fn(async () => ({
-      customerInfo: customerInfo(true),
+      customerInfo: customerInfo(true, options?.entitlementId),
     })),
-    restorePurchases: jest.fn(async () => customerInfo(true)),
+    restorePurchases: jest.fn(async () =>
+      customerInfo(true, options?.entitlementId),
+    ),
     getCustomerInfo: jest.fn(async () => customerInfo(false)),
     checkTrialOrIntroductoryPriceEligibility: jest.fn(async () => ({
       premium_annual_3999: { status: options?.eligible ? 2 : 0 },
@@ -173,6 +196,70 @@ describe('RevenueCat billing client', () => {
       native.checkTrialOrIntroductoryPriceEligibility,
     ).not.toHaveBeenCalled();
   });
+
+  it('normalizes the lifetime package with no per-month price and no trial claim', async () => {
+    // Even if the store attaches intro-offer data, a one-time purchase can
+    // never advertise a free trial or a per-month rate.
+    const native = sdk({
+      eligible: true,
+      lifetime: storePackage('LIFETIME', { trial: true }),
+    });
+    const client = createRevenueCatBillingClient(
+      { publicSdkKey: 'appl_public', canonicalAppUserId: CANONICAL_USER_ID },
+      native,
+      'ios',
+    );
+    const plans = await client.loadPlans();
+    expect(plans.lifetime).toMatchObject({
+      productId: 'premium_lifetime_15999',
+      period: 'lifetime',
+      priceString: '$159.99',
+      pricePerMonthString: null,
+      freeTrial: null,
+    });
+  });
+
+  it('loads plans when only the lifetime package is available', async () => {
+    const client = createRevenueCatBillingClient(
+      { publicSdkKey: 'appl_public', canonicalAppUserId: CANONICAL_USER_ID },
+      sdk({ annual: null, monthly: null, lifetime: storePackage('LIFETIME') }),
+      'ios',
+    );
+    const plans = await client.loadPlans();
+    expect(plans.annual).toBeNull();
+    expect(plans.monthly).toBeNull();
+    expect(plans.lifetime?.priceString).toBe('$159.99');
+  });
+
+  it('reports offerings unavailable only when annual, monthly, and lifetime are all missing', async () => {
+    const client = createRevenueCatBillingClient(
+      { publicSdkKey: 'appl_public', canonicalAppUserId: CANONICAL_USER_ID },
+      sdk({ annual: null, monthly: null, lifetime: null }),
+      'ios',
+    );
+    await expect(client.loadPlans()).rejects.toMatchObject({
+      code: 'billing.offerings_unavailable',
+    });
+  });
+
+  it.each(['pickle_sensei_pro', 'premium'] as const)(
+    'unlocks the store entitlement under the %s id',
+    async entitlementId => {
+      const native = sdk({ entitlementId });
+      (native.getCustomerInfo as jest.Mock).mockResolvedValue(
+        customerInfo(true, entitlementId),
+      );
+      const client = createRevenueCatBillingClient(
+        { publicSdkKey: 'appl_public', canonicalAppUserId: CANONICAL_USER_ID },
+        native,
+        'ios',
+      );
+      await expect(client.readEntitlement()).resolves.toMatchObject({
+        premium: true,
+        productId: 'premium_annual_3999',
+      });
+    },
+  );
 });
 
 describe('canonical access API', () => {

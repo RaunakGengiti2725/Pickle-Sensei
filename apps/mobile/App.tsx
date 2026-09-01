@@ -19,6 +19,15 @@ import {
   UNASSIGNED_STABILITY_USER_KEY,
   stabilitySlo,
 } from './src/analysis/stabilityTelemetry';
+import { useNotificationBootstrap } from './src/notifications/useNotificationBootstrap';
+import { useConsistencyBootstrap } from './src/consistency/useConsistencyBootstrap';
+import { RankUpCelebration } from './src/components/RankUpCelebration';
+import { StreakCelebration } from './src/consistency/StreakCelebration';
+import {
+  stageAfterGetStarted,
+  stageAfterOnboarding,
+  type PreAuthStage,
+} from './src/flow/launchGate';
 import { makeUuid } from './src/util/uuid';
 
 const queryClient = new QueryClient();
@@ -33,16 +42,25 @@ stabilitySlo.setContext({
 });
 stabilitySlo.record({ kind: 'session_started' });
 
-/** Launch → account (Apple/Google/guest) → onboarding → app (spec p. 5). */
+/**
+ * Launch → onboarding (device-once, pre-auth) → account (Apple/Google)
+ * → app. The questionnaire runs BEFORE the login flow; its answers wait in
+ * the appStore pre-auth stash and are adopted by the owner that signs in
+ * (launchGate.ts pins the ordering). Signed-in accounts that still lack a
+ * profile — e.g. an existing account on a new device whose pre-auth answers
+ * were superseded or could not sync — fall back to the in-account
+ * OnboardingScreen exactly as before.
+ */
 function Gate() {
   const appHydrated = useAppStore(s => s.hydrated);
   const appOwnerKey = useAppStore(s => s.ownerKey);
   const profile = useAppStore(s => s.profile);
+  const preAuthOnboarded = useAppStore(s => s.preAuthOnboarded);
   const hydrateApp = useAppStore(s => s.hydrate);
   const authHydrated = useAuthStore(s => s.hydrated);
   const session = useAuthStore(s => s.session);
   const hydrateAuth = useAuthStore(s => s.hydrate);
-  const [showSignIn, setShowSignIn] = useState(false);
+  const [preAuthStage, setPreAuthStage] = useState<PreAuthStage>('welcome');
   const [splashDone, setSplashDone] = useState(false);
   const handleSplashFinished = useCallback(() => setSplashDone(true), []);
 
@@ -53,10 +71,10 @@ function Gate() {
   const desiredOwner = !authHydrated
     ? null
     : session?.provider === 'guest'
-      ? GUEST_DATA_OWNER
-      : session?.canonicalAppUserId
-        ? canonicalDataOwner(session.canonicalAppUserId)
-        : SIGNED_OUT_DATA_OWNER;
+    ? GUEST_DATA_OWNER
+    : session?.canonicalAppUserId
+    ? canonicalDataOwner(session.canonicalAppUserId)
+    : SIGNED_OUT_DATA_OWNER;
 
   useEffect(() => {
     if (!desiredOwner) return;
@@ -82,6 +100,14 @@ function Gate() {
     return () => subscription.remove();
   }, []);
 
+  // Owner-scoped reminder schedule: hydrates per account, cancels everything
+  // for a signed-out process, re-syncs on each return to the foreground.
+  useNotificationBootstrap(desiredOwner);
+
+  // Owner-scoped consistency state (streak, momentum, milestones): hydrates
+  // per account and re-derives on every foreground so the flame stays honest.
+  useConsistencyBootstrap(desiredOwner);
+
   const ready =
     authHydrated &&
     Boolean(desiredOwner) &&
@@ -91,10 +117,21 @@ function Gate() {
   // Rendered under the splash so the first screen is already painted by the
   // time the overlay clears — the handoff is a fade, not a swap.
   const content = !ready ? null : !session ? (
-    showSignIn ? (
-      <SignInScreen onBack={() => setShowSignIn(false)} />
+    preAuthStage === 'signin' ? (
+      <SignInScreen onBack={() => setPreAuthStage('welcome')} />
+    ) : preAuthStage === 'onboarding' ? (
+      <OnboardingScreen
+        mode="preauth"
+        onFinished={() => setPreAuthStage(stageAfterOnboarding())}
+        onExitToSignIn={() => setPreAuthStage(stageAfterOnboarding())}
+      />
     ) : (
-      <WelcomeScreen onGetStarted={() => setShowSignIn(true)} />
+      <WelcomeScreen
+        onGetStarted={() =>
+          setPreAuthStage(stageAfterGetStarted(preAuthOnboarded))
+        }
+        onSignIn={() => setPreAuthStage('signin')}
+      />
     )
   ) : !profile ? (
     <OnboardingScreen />
@@ -105,6 +142,12 @@ function Gate() {
   return (
     <View style={{ flex: 1, backgroundColor: color.surfaceDark }}>
       {content}
+      {/* Global rank-up overlay: any screen that resolves a higher tier
+          raises it through the celebration store. */}
+      <RankUpCelebration />
+      {/* Global streak-milestone overlay: the consistency store raises one
+          durable ceremony per earned milestone. */}
+      <StreakCelebration />
       {splashDone ? null : (
         <SplashScreen ready={ready} onFinished={handleSplashFinished} />
       )}

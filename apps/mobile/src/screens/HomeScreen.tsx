@@ -39,6 +39,11 @@ import {
 import { buildPracticeHistory } from '../progress/practiceHistory';
 import { PracticeVolumeChart } from '../progress/PracticeVolumeChart';
 import { PlayerRankBanner } from '../components/PlayerRankBanner';
+import { NotificationPrimingCard } from '../notifications/NotificationPrimingCard';
+import { flameIntensityForStreak } from '../consistency/engine';
+import { FlameIcon } from '../consistency/FlameIcon';
+import { useConsistencyStore } from '../consistency/store';
+import { plural } from '../util/plural';
 
 function deviceTimeZone() {
   try {
@@ -57,6 +62,8 @@ export function HomeScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const profile = useAppStore(s => s.profile);
+  const consistency = useConsistencyStore(s => s.snapshot);
+  const refreshConsistency = useConsistencyStore(s => s.refresh);
   const [recent, setRecent] = useState<LocalShotRow[]>([]);
   const [allShots, setAllShots] = useState<LocalShotRow[]>([]);
   const [latestScored, setLatestScored] = useState<LocalShotRow | null>(null);
@@ -108,7 +115,8 @@ export function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [load]),
+      void refreshConsistency();
+    }, [load, refreshConsistency]),
   );
 
   const timeZone = useMemo(deviceTimeZone, []);
@@ -121,6 +129,9 @@ export function HomeScreen() {
       }),
     [asOfIso, captures, timeZone],
   );
+  // The product streak: meaningful training days (analyses, sessions,
+  // drills) from the consistency engine — never mere app opens or captures.
+  const trainingStreak = consistency?.currentStreak ?? 0;
   const latestSynced = canonicalProgress?.series.reduce<
     CanonicalProgress['series'][number] | null
   >(
@@ -133,8 +144,8 @@ export function HomeScreen() {
   const displayedStroke = latestScored
     ? latestScored.shotType.replace(/_/g, ' ')
     : latestSynced
-      ? `${latestSynced.shotType.replace(/_/g, ' ')} daily average`
-      : null;
+    ? `${latestSynced.shotType.replace(/_/g, ' ')} daily average`
+    : null;
   const focus = profile?.focusCheckpoint
     ? profile.focusCheckpoint.replace(/_/g, ' ')
     : null;
@@ -183,29 +194,45 @@ export function HomeScreen() {
               }
               tone="neutral"
             />
-            <View
-              accessibilityLabel={`${practice.currentStreak} day automatic capture streak`}
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel={`${trainingStreak} ${plural(
+                trainingStreak,
+                'day',
+              )} training streak. Opens the consistency calendar.`}
+              onPress={() => navigation.navigate('StreakCalendar')}
               style={styles.streakBadge}
+              testID="home-streak-badge"
             >
-              <Icon name="flame" color={color.flame} size={17} />
+              <FlameIcon
+                intensity={flameIntensityForStreak(trainingStreak)}
+                size={17}
+              />
               <Text style={[type.caption, styles.streakValue]}>
-                {practice.currentStreak}
+                {trainingStreak}
               </Text>
-            </View>
+            </PressableScale>
           </View>
         </View>
 
         <PlayerRankBanner
           shots={allShots}
-          streakDays={practice.currentStreak}
-          onPress={() => navigation.navigate('Tabs', { screen: 'Performance' })}
+          streakDays={trainingStreak}
+          streakAtRisk={consistency?.atRisk ?? false}
+          onPressStreak={() => navigation.navigate('StreakCalendar')}
         />
 
-        <Text style={[type.h1, styles.welcome]}>Ready when you are.</Text>
+        <NotificationPrimingCard />
 
-        {/* Two analysis modes. Stroke Analysis is the flagship: one movement,
-            deepest feedback, zero-touch capture. Session Analysis follows a
-            full live session with many strokes. */}
+        <Text style={[type.h1, styles.welcome]}>
+          {profile?.firstName
+            ? `Ready when you are, ${profile.firstName}.`
+            : 'Ready when you are.'}
+        </Text>
+
+        {/* Stroke Analysis is the flagship: one movement, deepest feedback,
+            zero-touch capture. The second card routes to guided practice in
+            the Drill Library. */}
         <View style={styles.modeRow}>
           <PressableScale
             accessibilityRole="button"
@@ -240,24 +267,24 @@ export function HomeScreen() {
           </PressableScale>
           <PressableScale
             accessibilityRole="button"
-            accessibilityLabel="Session Analysis. Follow a live session with multiple strokes."
+            accessibilityLabel="Drill Library. Guided drills you can search."
             containerStyle={styles.modeCardSlot}
             style={[styles.modeCardShell, styles.modeCardSecondary]}
-            onPress={() => navigation.navigate('LiveCourt')}
+            onPress={() => navigation.navigate('DrillLibrary')}
           >
             <View style={styles.modeCardInner}>
               <View style={styles.modeCardTop}>
                 <View style={[styles.modeIconChip, styles.modeIconChipLight]}>
-                  <Icon name="court" color={color.courtDeep} size={20} />
+                  <Icon name="library" color={color.courtDeep} size={20} />
                 </View>
                 <Icon name="arrow" color={color.inkSoft} size={17} />
               </View>
               <View>
                 <Text style={[type.bodyBold, styles.modeTitleLight]}>
-                  Session Analysis
+                  Drill Library
                 </Text>
                 <Text style={[type.caption, styles.modeCaptionLight]}>
-                  Rallies, stroke by stroke
+                  Guided practice, searchable
                 </Text>
               </View>
             </View>
@@ -313,7 +340,9 @@ export function HomeScreen() {
               <Text style={styles.practiceFooterValue}>
                 {practice.activeDays}
               </Text>
-              <Text style={styles.practiceFooterLabel}>active days</Text>
+              <Text style={styles.practiceFooterLabel}>
+                {practice.activeDays === 1 ? 'active day' : 'active days'}
+              </Text>
             </View>
             <View style={styles.practiceFooterDivider} />
             <View style={styles.practiceFooterItem}>
@@ -327,7 +356,7 @@ export function HomeScreen() {
               <Text style={styles.practiceFooterValue}>
                 {practice.currentStreak}
               </Text>
-              <Text style={styles.practiceFooterLabel}>day streak</Text>
+              <Text style={styles.practiceFooterLabel}>capture streak</Text>
             </View>
           </View>
         </View>
@@ -349,8 +378,8 @@ export function HomeScreen() {
               {displayedScore === null
                 ? 'Camera practice still counts. Scores appear only after validated analysis.'
                 : latestScored
-                  ? 'Latest validated scored stroke on this device'
-                  : 'Latest synced daily average'}
+                ? 'Latest validated scored stroke on this device'
+                : 'Latest synced daily average'}
             </Text>
           </View>
           <Text style={styles.techniqueSummaryScore}>

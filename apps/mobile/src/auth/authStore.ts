@@ -12,7 +12,7 @@ import {
 } from '../config/authConfig';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
 import { getDb } from '../data/db';
-import { getKv, setKv } from '../data/repository';
+import { getKv, purgeOwnerData, setKv } from '../data/repository';
 import {
   GUEST_DATA_OWNER,
   SIGNED_OUT_DATA_OWNER,
@@ -73,6 +73,10 @@ interface AuthState {
   signInWithGoogle: () => Promise<void>;
   continueAsGuest: () => Promise<void>;
   signOut: () => Promise<void>;
+  /** After the SERVER confirms deletion: purge this account's local data,
+   * disconnect the provider SDK, and land signed out. Never call before the
+   * backend has acknowledged the deletion. */
+  completeAccountDeletion: () => Promise<void>;
   clearError: () => void;
 }
 
@@ -284,9 +288,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const lastProvider = await getKv(db, LAST_PROVIDER_KV_KEY);
       if (lastProvider === LAST_PROVIDER_GOOGLE_VALUE && GOOGLE_WEB_CLIENT_ID) {
         try {
-          const session = await restoreGoogleSessionSilently(
-            GOOGLE_WEB_CLIENT_ID,
-          );
+          const session =
+            await restoreGoogleSessionSilently(GOOGLE_WEB_CLIENT_ID);
           if (session) {
             set({ session, hydrated: true });
             return;
@@ -420,6 +423,38 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       } catch {
         // Local API and billing material is already gone. Provider SDK cleanup
         // can safely be retried on the next interactive sign-in.
+      }
+    }
+  },
+
+  completeAccountDeletion: async () => {
+    const session = get().session;
+    const provider = session?.provider;
+    const deletedOwner = session?.canonicalAppUserId
+      ? canonicalDataOwner(session.canonicalAppUserId)
+      : null;
+    clearSyncedRuntime();
+    setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+    set({ session: null, error: null, busy: false });
+    await persistLocalGuest(false);
+    await persistLastProvider(null);
+    if (deletedOwner) {
+      try {
+        await purgeOwnerData(getDb(), deletedOwner);
+      } catch {
+        // The owner bucket is unreachable while signed out and the server
+        // copy is gone; a leftover local row cannot resurrect the account.
+      }
+    }
+    if (provider === 'google') {
+      try {
+        const { GoogleSignin } = await loadGoogleSignin();
+        // Full disconnect: the account no longer exists, so the SDK must not
+        // silently restore it on the next launch.
+        await GoogleSignin.revokeAccess();
+        await GoogleSignin.signOut();
+      } catch {
+        // Best effort; the silent-restore flag is already cleared above.
       }
     }
   },

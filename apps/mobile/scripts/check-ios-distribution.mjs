@@ -42,6 +42,11 @@ check(
 );
 check('pbxproj: DEVELOPMENT_TEAM set', /DEVELOPMENT_TEAM = \w+;/.test(pbxproj));
 check(
+  'pbxproj: iPhone-only (TARGETED_DEVICE_FAMILY = 1; v1 launch decision)',
+  /TARGETED_DEVICE_FAMILY = 1;/.test(pbxproj) &&
+    !/TARGETED_DEVICE_FAMILY = "1,2";/.test(pbxproj),
+);
+check(
   'pbxproj: entitlements wired',
   /CODE_SIGN_ENTITLEMENTS = PickleSensei\/PickleSensei\.entitlements;/.test(
     pbxproj,
@@ -70,6 +75,10 @@ check(
   infoPlist.includes('$(MARKETING_VERSION)') &&
     infoPlist.includes('$(CURRENT_PROJECT_VERSION)'),
 );
+check(
+  'Info.plist: export-compliance exemption declared (ITSAppUsesNonExemptEncryption=false)',
+  /ITSAppUsesNonExemptEncryption<\/key>\s*<false\/>/.test(infoPlist),
+);
 
 const privacy = readText('ios/PickleSensei/PrivacyInfo.xcprivacy') ?? '';
 check(
@@ -77,9 +86,11 @@ check(
   privacy.includes('NSPrivacyAccessedAPITypes'),
 );
 
+const entitlements = readText('ios/PickleSensei/PickleSensei.entitlements');
+check('entitlements file exists', entitlements !== null);
 check(
-  'entitlements file exists',
-  readText('ios/PickleSensei/PickleSensei.entitlements') !== null,
+  'entitlements: Sign in with Apple capability declared',
+  (entitlements ?? '').includes('com.apple.developer.applesignin'),
 );
 check(
   'Podfile.lock committed (deterministic pods)',
@@ -92,6 +103,11 @@ check(
   /lane :beta do/.test(fastfile),
 );
 check(
+  'fastlane: release (App Store) lane defined, binary-only, no auto-submit',
+  /lane :release do/.test(fastfile) &&
+    fastfile.includes('submit_for_review: false'),
+);
+check(
   'fastlane: internal-only distribution (no external without review)',
   fastfile.includes('distribute_external: false'),
 );
@@ -102,11 +118,17 @@ check(
 );
 
 const appfile = readText('ios/fastlane/Appfile') ?? '';
+const appfileTeam = /team_id\("(\w+)"\)/.exec(appfile)?.[1] ?? null;
 check(
   'fastlane: Appfile identifies app + team without secrets',
   appfile.includes('com.picklesensei') &&
-    appfile.includes('H26U6W4K6V') &&
+    appfileTeam !== null &&
     !/password|apple_id\(/.test(appfile),
+);
+check(
+  'fastlane: Appfile team matches DEVELOPMENT_TEAM in project.pbxproj',
+  appfileTeam !== null &&
+    new RegExp(`DEVELOPMENT_TEAM = ${appfileTeam};`).test(pbxproj),
 );
 
 if (failures.length > 0) {

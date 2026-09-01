@@ -8,7 +8,8 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import LinearGradient from 'react-native-linear-gradient';
 import { SHOT_TYPES } from '@pickle/shared-types';
 import {
@@ -17,7 +18,6 @@ import {
   LoadingState,
   Pill,
   PressableScale,
-  SectionTitle,
   TrendChart,
 } from '../design/components';
 import { Icon } from '../design/icons';
@@ -41,7 +41,27 @@ import {
   type PracticeHistoryRangeKey,
 } from '../progress/practiceHistory';
 import { PracticeVolumeChart } from '../progress/PracticeVolumeChart';
+import { ScoreTrendChart } from '../progress/ScoreTrendChart';
+import { StatDeltaRow } from '../progress/StatDeltaRow';
+import {
+  buildTechniqueDashboard,
+  formatSignedDelta,
+  vsPriorLabel,
+} from '../progress/techniqueDashboard';
 import { PlayerRankCard } from '../components/PlayerRankCard';
+import { AchievementsShowcase } from '../consistency/AchievementsShowcase';
+import { ConsistencyCard } from '../consistency/ConsistencyCard';
+import { useConsistencyStore } from '../consistency/store';
+import type { RootStackParams } from '../navigation/params';
+import { plural } from '../util/plural';
+
+/**
+ * PROGRESS — a WHOOP-style dark performance dashboard (MOBBIN: WHOOP
+ * overview/recovery statistics, Strava progress). Every number keeps this
+ * page's founding rule: practice activity and technique scores stay separate,
+ * comparisons only exist when a real prior window exists, and nothing is
+ * interpolated. The dopamine comes from honest deltas, not invented ones.
+ */
 
 type ProgressSection = 'practice' | 'technique';
 
@@ -86,10 +106,15 @@ function makeDayFormatter(timeZone: string) {
 }
 
 function dayKey(value: string, formatter: Intl.DateTimeFormat) {
+  // A corrupt timestamp must exclude the row, never crash the screen:
+  // formatToParts throws a RangeError on an Invalid Date. The empty string
+  // sorts below every real day key, so range filters drop the fact.
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return '';
   let year = '';
   let month = '';
   let day = '';
-  for (const part of formatter.formatToParts(new Date(value))) {
+  for (const part of formatter.formatToParts(new Date(parsed))) {
     if (part.type === 'year') year = part.value;
     else if (part.type === 'month') month = part.value;
     else if (part.type === 'day') day = part.value;
@@ -106,15 +131,47 @@ function formatTrackedTime(milliseconds: number) {
   return `${minutes}m ${remaining}s`;
 }
 
-function percent(value: number | null) {
-  return value === null ? '—' : `${Math.round(value * 100)}%`;
+/** Calendar day ("2026-08-30") → short label ("Aug 30") in the device zone. */
+function shortDayLabel(day: string) {
+  const parsed = new Date(`${day}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return day;
+  return parsed.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
 }
 
-function displayCaptureTitle(capture: CaptureHistoryEntry) {
+export function percent(value: number | null) {
+  if (value === null) return '—';
+  // Defensive display clamp: a rate can only be 0–100%, so out-of-range
+  // input never renders as an impossible percentage.
+  return `${Math.round(Math.min(1, Math.max(0, value)) * 100)}%`;
+}
+
+export function displayCaptureTitle(capture: CaptureHistoryEntry) {
   const recognition = capture.clip?.recognition;
   return recognition?.status === 'recognized'
     ? recognition.shotType.replace(/_/g, ' ')
-    : 'Unlabeled motion';
+    : 'Practice clip';
+}
+
+/** Count-correct label for a stroke card's comparison basis. */
+function basisLabel(count: number, basis: 'daily averages' | 'scored reads') {
+  return basis === 'daily averages'
+    ? plural(count, 'daily average', 'daily averages')
+    : plural(count, 'scored read', 'scored reads');
+}
+
+/** WHOOP-style section header: uppercase title, right-aligned context. */
+function DashSectionHeader(props: { title: string; right?: string }) {
+  return (
+    <View style={styles.dashHeader}>
+      <Text style={[type.micro, styles.dashHeaderTitle]}>{props.title}</Text>
+      {props.right ? (
+        <Text style={[type.micro, styles.dashHeaderRight]}>{props.right}</Text>
+      ) : null}
+    </View>
+  );
 }
 
 function EvidenceMetric(props: {
@@ -148,10 +205,14 @@ function EvidenceMetric(props: {
 
 export function ProgressScreen() {
   const { width } = useWindowDimensions();
+  const navigation =
+    useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const profile = useAppStore(state => state.profile);
+  const consistency = useConsistencyStore(state => state.snapshot);
+  const refreshConsistency = useConsistencyStore(state => state.refresh);
   const timeZone = useMemo(deviceTimeZone, []);
   const dayFormatter = useMemo(() => makeDayFormatter(timeZone), [timeZone]);
-  const [section, setSection] = useState<ProgressSection>('practice');
+  const [section, setSection] = useState<ProgressSection>('technique');
   const [range, setRange] = useState<PracticeHistoryRangeKey>('28d');
   const [captures, setCaptures] = useState<CaptureHistoryEntry[]>([]);
   const [facts, setFacts] = useState<RealAnalysisFact[]>([]);
@@ -191,15 +252,20 @@ export function ProgressScreen() {
           if (active) setLoaded(true);
         }
       })();
+      void refreshConsistency();
       return () => {
         active = false;
       };
-    }, [loadRevision]),
+    }, [loadRevision, refreshConsistency]),
   );
 
   const practice = useMemo(
     () => buildPracticeHistory(captures, { asOfIso, timeZone, range }),
     [asOfIso, captures, range, timeZone],
+  );
+  const dashboard = useMemo(
+    () => buildTechniqueDashboard(facts, { asOfIso, timeZone, range }),
+    [asOfIso, facts, range, timeZone],
   );
   const selectedDefinition = PRACTICE_HISTORY_RANGES.find(
     candidate => candidate.key === range,
@@ -216,9 +282,6 @@ export function ProgressScreen() {
   const allScored = facts.filter(
     fact => fact.resultKind === 'scored' && fact.overallScore !== null,
   );
-  const selectedScored = selectedFacts.filter(
-    fact => fact.resultKind === 'scored' && fact.overallScore !== null,
-  );
   const latestLocal = allScored[0] ?? null;
   const latestSynced = canonical?.series.reduce<
     CanonicalProgress['series'][number] | null
@@ -231,14 +294,8 @@ export function ProgressScreen() {
   const latestLabel = latestLocal
     ? latestLocal.shotType.replace(/_/g, ' ')
     : latestSynced
-      ? `${latestSynced.shotType.replace(/_/g, ' ')} daily average`
-      : null;
-  const rangeRatedReps =
-    selectedSeries?.reduce((sum, point) => sum + point.shotCount, 0) ??
-    selectedScored.length;
-  const scoredDays = new Set(
-    selectedScored.map(fact => dayKey(fact.capturedAt, dayFormatter)),
-  ).size;
+    ? `${latestSynced.shotType.replace(/_/g, ' ')} daily average`
+    : null;
 
   const byShot = useMemo(() => {
     return SHOT_TYPES.map(shotType => {
@@ -305,11 +362,39 @@ export function ProgressScreen() {
         } captures versus the prior ${selectedDefinition.label.toLowerCase()}.`;
   const chartWidth = Math.max(210, Math.min(292, width - 112));
 
-  if (!loaded) return <LoadingState label="Loading measured progress…" />;
+  // Prior-window values for the WHOOP-style practice rows. A first measured
+  // period (zero prior captures) hides every comparison instead of faking 0s.
+  const practiceHasPrior = previousCaptureCount > 0;
+  const previousActiveDays =
+    practice.activeDays - practice.priorPeriodDelta.activeDays;
+  const previousTrackedMs =
+    practice.trackedDurationMs - practice.priorPeriodDelta.trackedDurationMs;
+
+  const reps = dashboard.scoredReps;
+  const repsDelta =
+    reps.previous === null ? null : reps.current - reps.previous;
+  const scoredDays = dashboard.scoredDays;
+  const scoredDaysDelta =
+    scoredDays.previous === null
+      ? null
+      : scoredDays.current - scoredDays.previous;
+  const avgScore = dashboard.avgScore;
+  const avgDelta =
+    avgScore.current !== null && avgScore.previous !== null
+      ? avgScore.current - avgScore.previous
+      : null;
+  const bestScore = dashboard.bestScore;
+  const bestDelta =
+    bestScore.current !== null && bestScore.previous !== null
+      ? bestScore.current - bestScore.previous
+      : null;
+
+  if (!loaded) return <LoadingState dark label="Loading measured progress…" />;
 
   if (loadError) {
     return (
       <ErrorState
+        dark
         title="Progress couldn’t load"
         detail={loadError}
         onRetry={() => {
@@ -323,7 +408,7 @@ export function ProgressScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="light-content" />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
@@ -339,8 +424,8 @@ export function ProgressScreen() {
         <View accessibilityRole="tablist" style={styles.sectionBar}>
           {(
             [
-              ['practice', 'Practice'],
-              ['technique', 'Technique'],
+              ['technique', 'TECHNIQUE'],
+              ['practice', 'PRACTICE'],
             ] as const
           ).map(([key, label]) => {
             const active = section === key;
@@ -349,23 +434,26 @@ export function ProgressScreen() {
                 key={key}
                 accessibilityRole="tab"
                 accessibilityState={{ selected: active }}
-                accessibilityLabel={`${label} progress`}
+                accessibilityLabel={`${label.toLowerCase()} progress`}
                 containerStyle={styles.sectionSlot}
                 onPress={() => setSection(key)}
-                style={[
-                  styles.sectionOption,
-                  active && styles.sectionOptionActive,
-                ]}
+                style={styles.sectionOption}
               >
                 <Text
                   style={[
-                    type.bodyBold,
+                    type.micro,
                     styles.sectionLabel,
                     active && styles.sectionLabelActive,
                   ]}
                 >
                   {label}
                 </Text>
+                <View
+                  style={[
+                    styles.sectionUnderline,
+                    active && styles.sectionUnderlineActive,
+                  ]}
+                />
               </PressableScale>
             );
           })}
@@ -400,6 +488,10 @@ export function ProgressScreen() {
 
         {section === 'practice' ? (
           <>
+            <ConsistencyCard
+              snapshot={consistency}
+              onPress={() => navigation.navigate('StreakCalendar')}
+            />
             <View style={styles.practiceHero}>
               <LinearGradient
                 colors={[color.courtDeep, color.surfaceDark]}
@@ -504,7 +596,55 @@ export function ProgressScreen() {
               </View>
             </View>
 
-            <SectionTitle title="Capture evidence" />
+            <DashSectionHeader
+              title="KEY STATISTICS"
+              right={vsPriorLabel(range)}
+            />
+            <View style={styles.statRows}>
+              <StatDeltaRow
+                icon="camera"
+                label="CAPTURES"
+                value={String(practice.captureCount)}
+                previous={
+                  practiceHasPrior ? String(previousCaptureCount) : null
+                }
+                delta={
+                  practiceHasPrior
+                    ? practice.priorPeriodDelta.captureCount
+                    : null
+                }
+                testID="practice-stat-captures"
+              />
+              <StatDeltaRow
+                icon="check"
+                label="ACTIVE DAYS"
+                value={String(practice.activeDays)}
+                previous={practiceHasPrior ? String(previousActiveDays) : null}
+                delta={
+                  practiceHasPrior ? practice.priorPeriodDelta.activeDays : null
+                }
+                testID="practice-stat-active-days"
+              />
+              <StatDeltaRow
+                icon="person"
+                label="POSE TRACKED"
+                value={formatTrackedTime(practice.trackedDurationMs)}
+                previous={
+                  practiceHasPrior ? formatTrackedTime(previousTrackedMs) : null
+                }
+                delta={
+                  practiceHasPrior
+                    ? practice.priorPeriodDelta.trackedDurationMs
+                    : null
+                }
+                testID="practice-stat-pose-tracked"
+              />
+            </View>
+
+            <DashSectionHeader
+              title="CAPTURE EVIDENCE"
+              right={selectedDefinition.label.toUpperCase()}
+            />
             <View style={styles.evidenceGrid}>
               <EvidenceMetric
                 label="POSE AVAILABILITY"
@@ -518,7 +658,7 @@ export function ProgressScreen() {
               />
             </View>
             <View style={styles.evidenceDisclosure}>
-              <Icon name="shield" color={color.court} size={18} />
+              <Icon name="shield" color={color.mint} size={18} />
               <Text style={[type.caption, styles.evidenceDisclosureCopy]}>
                 These are camera-read measurements, not form scores. Imports,
                 corrupt evidence, and unverified legacy clips never enter the
@@ -526,23 +666,21 @@ export function ProgressScreen() {
               </Text>
             </View>
 
-            <SectionTitle
-              title="Recent camera evidence"
+            <DashSectionHeader
+              title="RECENT CAMERA EVIDENCE"
               right={
-                eligibleRecentCaptures.length ? (
-                  <Text style={[type.caption, { color: color.inkSoft }]}>
-                    Latest {eligibleRecentCaptures.length}
-                  </Text>
-                ) : undefined
+                eligibleRecentCaptures.length
+                  ? `LATEST ${eligibleRecentCaptures.length}`
+                  : undefined
               }
             />
             {eligibleRecentCaptures.length === 0 ? (
-              <Card tone="soft" style={styles.emptyPractice}>
+              <Card tone="dark" style={styles.emptyPractice}>
                 <View style={styles.emptyPracticeIcon}>
-                  <Icon name="camera" color={color.court} size={22} />
+                  <Icon name="camera" color={color.mint} size={22} />
                 </View>
                 <View style={styles.flex}>
-                  <Text style={[type.bodyBold, { color: color.ink }]}>
+                  <Text style={[type.bodyBold, { color: color.onDark }]}>
                     No verified motion captured yet
                   </Text>
                   <Text style={[type.caption, styles.emptyPracticeCopy]}>
@@ -556,7 +694,7 @@ export function ProgressScreen() {
                 {eligibleRecentCaptures.map(capture => (
                   <View key={capture.id} style={styles.captureRow}>
                     <View style={styles.captureGlyph}>
-                      <Icon name="person" color={color.court} size={20} />
+                      <Icon name="person" color={color.mint} size={20} />
                     </View>
                     <View style={styles.flex}>
                       <Text style={[type.bodyBold, styles.captureTitle]}>
@@ -631,70 +769,125 @@ export function ProgressScreen() {
               )}
             </Card>
 
-            <SectionTitle title={selectedDefinition.label} />
-            <View style={styles.techniqueStats}>
-              <View style={styles.techniqueStat}>
-                <Text style={styles.techniqueStatValue}>{rangeRatedReps}</Text>
-                <Text style={[type.caption, styles.techniqueStatLabel]}>
-                  accepted scored reps
-                </Text>
-              </View>
-              <View style={styles.techniqueStatDivider} />
-              <View style={styles.techniqueStat}>
-                <Text style={styles.techniqueStatValue}>{scoredDays}</Text>
-                <Text style={[type.caption, styles.techniqueStatLabel]}>
-                  scored days on device
-                </Text>
-              </View>
+            <DashSectionHeader
+              title="KEY STATISTICS"
+              right={vsPriorLabel(range)}
+            />
+            <View style={styles.statRows}>
+              <StatDeltaRow
+                icon="spark"
+                label="SCORED REPS"
+                value={String(reps.current)}
+                previous={reps.previous === null ? null : String(reps.previous)}
+                delta={repsDelta}
+                testID="technique-stat-reps"
+              />
+              <StatDeltaRow
+                icon="progress"
+                label="AVG SCORE"
+                value={
+                  avgScore.current === null ? '—' : avgScore.current.toFixed(1)
+                }
+                previous={
+                  avgScore.previous === null
+                    ? null
+                    : avgScore.previous.toFixed(1)
+                }
+                delta={avgDelta}
+                testID="technique-stat-avg"
+              />
+              <StatDeltaRow
+                icon="star"
+                label="BEST SCORE"
+                value={
+                  bestScore.current === null
+                    ? '—'
+                    : bestScore.current.toFixed(1)
+                }
+                previous={
+                  bestScore.previous === null
+                    ? null
+                    : bestScore.previous.toFixed(1)
+                }
+                delta={bestDelta}
+                testID="technique-stat-best"
+              />
+              <StatDeltaRow
+                icon="check"
+                label="SCORED DAYS"
+                value={String(scoredDays.current)}
+                previous={
+                  scoredDays.previous === null
+                    ? null
+                    : String(scoredDays.previous)
+                }
+                delta={scoredDaysDelta}
+                testID="technique-stat-days"
+              />
             </View>
 
-            {canonical &&
-            (canonical.improving.length || canonical.needsAttention.length) ? (
-              <>
-                <SectionTitle title="Observed score signals" />
-                <Card tone="soft" style={styles.signalCard}>
-                  {canonical.improving.slice(0, 2).map(signal => (
-                    <View
-                      key={`up-${signal.checkpoint}`}
-                      style={styles.signalRow}
-                    >
-                      <Pill label="RECENT READS HIGHER" tone="good" />
-                      <Text style={[type.bodyBold, styles.signalName]}>
-                        {signal.checkpoint.replace(/_/g, ' ')}
-                      </Text>
-                      <Text style={[type.bodyBold, { color: color.good }]}>
-                        {`+${signal.delta.toFixed(1)}`}
-                      </Text>
-                    </View>
-                  ))}
-                  {canonical.needsAttention.slice(0, 2).map(signal => (
-                    <View
-                      key={`focus-${signal.checkpoint}`}
-                      style={styles.signalRow}
-                    >
-                      <Pill label="LOWER RECENT AVG" tone="warn" />
-                      <Text style={[type.bodyBold, styles.signalName]}>
-                        {signal.checkpoint.replace(/_/g, ' ')}
-                      </Text>
-                      <Text style={[type.bodyBold, { color: color.warn }]}>
-                        {signal.avg.toFixed(1)}
-                      </Text>
-                    </View>
-                  ))}
-                  <Text style={[type.caption, styles.signalDisclosure]}>
-                    Server observations compare accepted scored reads from the
-                    last 30 days. They are not a player rating.
+            <DashSectionHeader
+              title="SCORE TREND"
+              right={selectedDefinition.label.toUpperCase()}
+            />
+            <Card tone="dark" style={styles.trendCard}>
+              <View style={styles.trendCardTop}>
+                <Text style={[type.micro, { color: color.volt }]}>
+                  DAILY AVG · ALL TECHNIQUES
+                </Text>
+                <Text style={[type.micro, styles.trendScale]}>0–10</Text>
+              </View>
+              {reps.current === 0 ? (
+                <View style={styles.trendEmpty}>
+                  <Text style={[type.caption, styles.trendEmptyCopy]}>
+                    No comparable scored reads in this window yet. Your next
+                    validated analysis starts this chart.
                   </Text>
-                </Card>
-              </>
+                </View>
+              ) : (
+                <ScoreTrendChart buckets={dashboard.buckets} />
+              )}
+              {dashboard.insight ? (
+                <Text style={[type.caption, styles.trendInsight]}>
+                  {dashboard.insight}
+                </Text>
+              ) : null}
+            </Card>
+
+            {dashboard.personalBest ? (
+              <Card
+                tone="dark"
+                style={styles.pbCard}
+                testID="personal-best-card"
+              >
+                <View style={styles.pbIcon}>
+                  <Icon name="star" color={color.volt} size={20} />
+                </View>
+                <View style={styles.flex}>
+                  <Text style={[type.micro, { color: color.volt }]}>
+                    NEW PERSONAL BEST
+                  </Text>
+                  <Text style={[type.h3, styles.pbName]}>
+                    {dashboard.personalBest.shotType.replace(/_/g, ' ')}
+                  </Text>
+                  <Text style={[type.caption, styles.pbDetail]}>
+                    Beats your previous best{' '}
+                    {dashboard.personalBest.previousBest.toFixed(1)} ·{' '}
+                    {shortDayLabel(dashboard.personalBest.day)}
+                  </Text>
+                </View>
+                <Text style={styles.pbScore}>
+                  {dashboard.personalBest.score.toFixed(1)}
+                </Text>
+              </Card>
             ) : null}
 
-            <SectionTitle title="By stroke" />
+            <DashSectionHeader title="BY STROKE" />
             {byShot.length === 0 ? (
-              <Card tone="soft" style={styles.strokeEmpty}>
-                <Icon name="progress" size={22} color={color.court} />
+              <Card tone="dark" style={styles.strokeEmpty}>
+                <Icon name="progress" size={22} color={color.mint} />
                 <View style={styles.flex}>
-                  <Text style={[type.bodyBold, { color: color.ink }]}>
+                  <Text style={[type.bodyBold, { color: color.onDark }]}>
                     Comparable trends start after scoring
                   </Text>
                   <Text style={[type.caption, styles.strokeEmptyCopy]}>
@@ -707,7 +900,11 @@ export function ProgressScreen() {
               byShot.map(item => {
                 const current = item.points.at(-1) ?? null;
                 return (
-                  <Card key={item.shotType} style={styles.strokeCard}>
+                  <Card
+                    key={item.shotType}
+                    tone="dark"
+                    style={styles.strokeCard}
+                  >
                     <View style={styles.strokeTop}>
                       <View style={styles.flex}>
                         <Text style={[type.h3, styles.strokeName]}>
@@ -715,7 +912,7 @@ export function ProgressScreen() {
                         </Text>
                         <Text style={[type.caption, styles.strokeBasis]}>
                           {item.repCount} accepted reps · {item.points.length}{' '}
-                          {item.basis}
+                          {basisLabel(item.points.length, item.basis)}
                         </Text>
                       </View>
                       <View style={styles.strokeScoreWrap}>
@@ -728,7 +925,7 @@ export function ProgressScreen() {
                               type.micro,
                               {
                                 color:
-                                  item.movement >= 0 ? color.good : color.warn,
+                                  item.movement >= 0 ? color.mint : color.flame,
                               },
                             ]}
                           >
@@ -739,17 +936,22 @@ export function ProgressScreen() {
                     </View>
                     <View style={styles.chartWrap}>
                       <TrendChart
+                        dark
                         points={item.points}
                         width={chartWidth}
                         height={66}
                       />
                     </View>
                     <View style={styles.strokeMeta}>
-                      <Text style={[type.caption, { color: color.inkSoft }]}>
-                        Last {Math.min(10, item.points.length)} {item.basis}{' '}
+                      <Text style={[type.caption, styles.strokeMetaLabel]}>
+                        Last {Math.min(10, item.points.length)}{' '}
+                        {basisLabel(
+                          Math.min(10, item.points.length),
+                          item.basis,
+                        )}{' '}
                         standard deviation
                       </Text>
-                      <Text style={[type.bodyBold, { color: color.ink }]}>
+                      <Text style={[type.bodyBold, { color: color.onDark }]}>
                         {item.spread === null
                           ? 'Need 2'
                           : `±${item.spread.toFixed(1)}`}
@@ -760,12 +962,78 @@ export function ProgressScreen() {
               })
             )}
 
+            {canonical &&
+            (canonical.improving.length || canonical.needsAttention.length) ? (
+              <>
+                <DashSectionHeader
+                  title="OBSERVED SCORE SIGNALS"
+                  right="LAST 30 DAYS"
+                />
+                <Card tone="dark" style={styles.signalCard}>
+                  {canonical.improving.slice(0, 2).map(signal => (
+                    <View
+                      key={`up-${signal.checkpoint}`}
+                      style={styles.signalRow}
+                    >
+                      <View style={styles.flex}>
+                        <Text style={[type.bodyBold, styles.signalName]}>
+                          {signal.checkpoint.replace(/_/g, ' ')}
+                        </Text>
+                        <Text style={[type.micro, { color: color.mint }]}>
+                          RECENT READS HIGHER
+                        </Text>
+                      </View>
+                      <Text style={[styles.signalValue, { color: color.mint }]}>
+                        {formatSignedDelta(signal.delta)}
+                      </Text>
+                    </View>
+                  ))}
+                  {canonical.needsAttention.slice(0, 2).map(signal => (
+                    <View
+                      key={`focus-${signal.checkpoint}`}
+                      style={styles.signalRow}
+                    >
+                      <View style={styles.flex}>
+                        <Text style={[type.bodyBold, styles.signalName]}>
+                          {signal.checkpoint.replace(/_/g, ' ')}
+                        </Text>
+                        <Text style={[type.micro, { color: color.flame }]}>
+                          LOWER RECENT AVG
+                        </Text>
+                      </View>
+                      <Text
+                        style={[styles.signalValue, { color: color.flame }]}
+                      >
+                        {signal.avg.toFixed(1)}
+                      </Text>
+                    </View>
+                  ))}
+                  <Text style={[type.caption, styles.signalDisclosure]}>
+                    Server observations compare accepted scored reads from the
+                    last 30 days. They are not a player rating.
+                  </Text>
+                </Card>
+              </>
+            ) : null}
+
+            <ConsistencyCard
+              snapshot={consistency}
+              onPress={() => navigation.navigate('StreakCalendar')}
+            />
+
+            {consistency && consistency.totalActivities > 0 ? (
+              <>
+                <DashSectionHeader title="ACHIEVEMENTS" />
+                <AchievementsShowcase dark snapshot={consistency} />
+              </>
+            ) : null}
+
             <View style={styles.levelContext}>
               <View style={styles.levelIcon}>
-                <Icon name="person" color={color.court} size={20} />
+                <Icon name="person" color={color.mint} size={20} />
               </View>
               <View style={styles.flex}>
-                <Text style={[type.micro, { color: color.inkSoft }]}>
+                <Text style={[type.micro, { color: color.onDarkFaint }]}>
                   SELF-REPORTED PLAYING LEVEL
                 </Text>
                 <Text style={[type.h3, styles.levelValue]}>
@@ -786,43 +1054,52 @@ export function ProgressScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  screen: { flex: 1, backgroundColor: color.surface },
+  screen: { flex: 1, backgroundColor: color.surfaceDark },
   content: {
     paddingHorizontal: space.lg,
     paddingTop: space.lg,
     paddingBottom: space.xxxl + 28,
   },
   pageHeader: { maxWidth: 380 },
-  pageTitle: { color: color.ink },
-  pageSubtitle: { color: color.inkSoft, marginTop: space.sm, maxWidth: 360 },
+  pageTitle: { color: color.onDark },
+  pageSubtitle: {
+    color: color.onDarkSubtle,
+    marginTop: space.sm,
+    maxWidth: 360,
+  },
+  // WHOOP-style underline tabs (MOBBIN: WHOOP OVERVIEW/SLEEP/RECOVERY/STRAIN).
   sectionBar: {
     flexDirection: 'row',
-    padding: 4,
     marginTop: space.lg,
-    borderRadius: radius.pill,
-    backgroundColor: color.surfaceAlt,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: color.lineDark,
   },
   sectionSlot: { flex: 1 },
   sectionOption: {
     minHeight: 44,
     alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: radius.pill,
+    justifyContent: 'flex-end',
+    paddingTop: 12,
   },
-  sectionOptionActive: { backgroundColor: color.ink },
-  sectionLabel: { color: color.inkSoft },
+  sectionLabel: { color: color.onDarkFaint, letterSpacing: 1.6 },
   sectionLabelActive: { color: color.onDark },
+  sectionUnderline: {
+    alignSelf: 'stretch',
+    height: 2,
+    borderRadius: 1,
+    marginTop: 10,
+    backgroundColor: 'transparent',
+  },
+  sectionUnderlineActive: { backgroundColor: color.volt },
   rangeBar: {
     flexDirection: 'row',
     alignSelf: 'flex-start',
     padding: 3,
-    marginTop: 12,
+    marginTop: space.md,
     borderRadius: radius.pill,
-    backgroundColor: color.surfaceElevated,
+    backgroundColor: color.inkElevated,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
+    borderColor: color.lineDark,
   },
   rangeSlot: { width: 64 },
   rangeOption: {
@@ -831,15 +1108,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: radius.pill,
   },
-  rangeOptionActive: { backgroundColor: color.courtSoft },
-  rangeLabel: { color: color.inkSoft },
-  rangeLabelActive: { color: color.courtDeep },
+  rangeOptionActive: { backgroundColor: color.volt },
+  rangeLabel: { color: color.onDarkMuted },
+  rangeLabelActive: { color: color.onVolt },
+  dashHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.md,
+    marginTop: space.xl,
+    marginBottom: space.sm + 4,
+  },
+  dashHeaderTitle: { color: color.onDarkMuted, letterSpacing: 1.2 },
+  dashHeaderRight: { color: color.onDarkFaint, letterSpacing: 0.8 },
+  statRows: { gap: 8 },
   practiceHero: {
     marginTop: space.md,
     borderRadius: radius.xl,
     padding: space.lg,
     paddingBottom: space.lg + 4,
     backgroundColor: color.surfaceDark,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineDark,
     overflow: 'hidden',
   },
   practiceHeroTop: {
@@ -963,14 +1253,14 @@ const styles = StyleSheet.create({
     minHeight: 160,
     padding: space.md,
     borderRadius: radius.lg,
-    backgroundColor: color.surfaceElevated,
+    backgroundColor: color.inkElevated,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
+    borderColor: color.lineDark,
   },
-  evidenceLabel: { color: color.inkSoft },
+  evidenceLabel: { color: color.onDarkMuted },
   evidenceValue: {
     ...type.score,
-    color: color.ink,
+    color: color.onDark,
     fontSize: 34,
     lineHeight: 39,
     marginTop: 8,
@@ -978,16 +1268,16 @@ const styles = StyleSheet.create({
   evidenceTrack: {
     height: 5,
     borderRadius: 3,
-    backgroundColor: color.surfaceAlt,
+    backgroundColor: color.onDarkTint,
     overflow: 'hidden',
     marginTop: 9,
   },
   evidenceFill: {
     height: 5,
     borderRadius: 3,
-    backgroundColor: color.court,
+    backgroundColor: color.mint,
   },
-  evidenceDetail: { color: color.inkSoft, marginTop: 10 },
+  evidenceDetail: { color: color.onDarkSubtle, marginTop: 10 },
   evidenceDisclosure: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -995,23 +1285,23 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingHorizontal: space.sm,
   },
-  evidenceDisclosureCopy: { color: color.inkSoft, flex: 1 },
+  evidenceDisclosureCopy: { color: color.onDarkSubtle, flex: 1 },
   emptyPractice: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   emptyPracticeIcon: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: color.courtSoft,
+    backgroundColor: 'rgba(83,217,155,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  emptyPracticeCopy: { color: color.inkSoft, marginTop: 4 },
+  emptyPracticeCopy: { color: color.onDarkSubtle, marginTop: 4 },
   captureList: {
     borderRadius: radius.lg,
-    backgroundColor: color.surfaceElevated,
+    backgroundColor: color.inkElevated,
     paddingHorizontal: space.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
+    borderColor: color.lineDark,
   },
   captureRow: {
     minHeight: 88,
@@ -1020,7 +1310,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 13,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: color.line,
+    borderBottomColor: color.lineDark,
   },
   captureGlyph: {
     width: 44,
@@ -1028,22 +1318,22 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: color.courtSoft,
+    backgroundColor: 'rgba(83,217,155,0.12)',
   },
-  captureTitle: { color: color.ink, textTransform: 'capitalize' },
-  captureMeta: { color: color.inkSoft, marginTop: 2 },
-  captureDate: { color: color.inkSoft, marginTop: 1 },
+  captureTitle: { color: color.onDark, textTransform: 'capitalize' },
+  captureMeta: { color: color.onDarkSubtle, marginTop: 2 },
+  captureDate: { color: color.onDarkFaint, marginTop: 1 },
   captureStatus: {
     minHeight: 26,
     paddingHorizontal: 8,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: color.surfaceAlt,
+    backgroundColor: color.onDarkTint,
   },
   captureStatusText: {
     ...type.micro,
-    color: color.courtDeep,
+    color: color.volt,
     fontSize: 9,
     lineHeight: 12,
     letterSpacing: 0.45,
@@ -1072,7 +1362,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: color.inkTint,
+    backgroundColor: color.onDarkTint,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.lineDark,
   },
@@ -1089,44 +1379,65 @@ const styles = StyleSheet.create({
     lineHeight: 74,
   },
   techniqueScale: { color: color.onDarkSubtle, marginLeft: 8 },
-  techniqueStats: {
-    minHeight: 108,
+  trendCard: { paddingBottom: space.md },
+  trendCardTop: {
     flexDirection: 'row',
-    alignItems: 'stretch',
-    padding: space.md,
-    borderRadius: radius.lg,
-    backgroundColor: color.surfaceElevated,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.line,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: space.md,
   },
-  techniqueStat: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  techniqueStatDivider: {
-    width: StyleSheet.hairlineWidth,
-    backgroundColor: color.line,
-    marginHorizontal: space.md,
+  trendScale: { color: color.onDarkFaint },
+  trendEmpty: { minHeight: 96, justifyContent: 'center' },
+  trendEmptyCopy: { color: color.onDarkSubtle, maxWidth: 300 },
+  trendInsight: {
+    color: color.onDarkSubtle,
+    marginTop: space.md,
+    paddingTop: space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.lineDark,
   },
-  techniqueStatValue: {
+  pbCard: {
+    marginTop: space.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.md,
+    borderWidth: 1,
+    borderColor: 'rgba(215,250,69,0.35)',
+  },
+  pbIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(215,250,69,0.12)',
+  },
+  pbName: { color: color.onDark, marginTop: 2, textTransform: 'capitalize' },
+  pbDetail: { color: color.onDarkSubtle, marginTop: 2 },
+  pbScore: {
     ...type.score,
-    color: color.ink,
+    color: color.volt,
     fontSize: 34,
     lineHeight: 38,
   },
-  techniqueStatLabel: {
-    color: color.inkSoft,
-    textAlign: 'center',
-    marginTop: 3,
-  },
   signalCard: { gap: space.md },
   signalRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  signalName: { color: color.ink, flex: 1, textTransform: 'capitalize' },
+  signalName: {
+    color: color.onDark,
+    textTransform: 'capitalize',
+  },
+  signalValue: {
+    ...type.h3,
+    fontVariant: ['tabular-nums'],
+  },
   signalDisclosure: {
-    color: color.inkSoft,
+    color: color.onDarkSubtle,
     paddingTop: space.md,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.line,
+    borderTopColor: color.lineDark,
   },
   strokeEmpty: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  strokeEmptyCopy: { color: color.inkSoft, marginTop: 4 },
+  strokeEmptyCopy: { color: color.onDarkSubtle, marginTop: 4 },
   strokeCard: { marginBottom: 10, padding: space.lg },
   strokeTop: {
     flexDirection: 'row',
@@ -1134,12 +1445,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: space.md,
   },
-  strokeName: { color: color.ink, textTransform: 'capitalize' },
-  strokeBasis: { color: color.inkSoft, marginTop: 3 },
+  strokeName: { color: color.onDark, textTransform: 'capitalize' },
+  strokeBasis: { color: color.onDarkSubtle, marginTop: 3 },
   strokeScoreWrap: { alignItems: 'flex-end' },
   strokeScore: {
     ...type.score,
-    color: color.ink,
+    color: color.onDark,
     fontSize: 30,
     lineHeight: 33,
   },
@@ -1148,16 +1459,19 @@ const styles = StyleSheet.create({
     marginTop: space.md,
     paddingTop: space.md,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.line,
+    borderTopColor: color.lineDark,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: space.md,
   },
+  strokeMetaLabel: { color: color.onDarkSubtle, flex: 1 },
   levelContext: {
     minHeight: 82,
     borderRadius: radius.lg,
-    backgroundColor: color.surfaceElevated,
+    backgroundColor: color.inkElevated,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineDark,
     paddingHorizontal: space.md,
     marginTop: space.lg,
     flexDirection: 'row',
@@ -1168,14 +1482,14 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: color.courtSoft,
+    backgroundColor: 'rgba(83,217,155,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  levelValue: { color: color.ink, marginTop: 3 },
+  levelValue: { color: color.onDark, marginTop: 3 },
   ratingDisclosure: {
     ...type.caption,
-    color: color.inkSoft,
+    color: color.onDarkFaint,
     marginTop: 8,
     paddingHorizontal: space.sm,
   },

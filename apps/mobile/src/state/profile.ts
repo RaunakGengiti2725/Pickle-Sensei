@@ -1,6 +1,11 @@
 import type { CheckpointKey, Handedness } from '@pickle/shared-types';
 
+export type Gender = 'female' | 'male' | 'nonbinary' | 'prefer_not_to_say';
+
 export interface Profile {
+  /** Optional: older stored profiles predate name/gender collection. */
+  firstName?: string;
+  gender?: Gender;
   skillLevel: string;
   handedness: Handedness;
   goal: string;

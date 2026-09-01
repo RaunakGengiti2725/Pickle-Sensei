@@ -360,6 +360,21 @@ export const useTrainingStore = create<TrainingStoreState>((set, get) => ({
           : null,
         mutationError: null,
       }));
+      // A finished prescribed drill is a meaningful training day: mirror it
+      // into the owner-scoped consistency ledger (server evidence remains
+      // authoritative for the plan itself). Fire-and-forget by design; the
+      // require is lazy so this store never drags SQLite into hosts (and
+      // tests) that only exercise training plans.
+      if (completion.qualifiesForStreak !== false && item.drill) {
+        const { useConsistencyStore } =
+          require('../consistency/store') as typeof import('../consistency/store');
+        void useConsistencyStore.getState().recordDrillCompletion({
+          id: completion.id,
+          slug: item.drill.slug,
+          title: item.drill.title,
+          completedAtIso: completion.completedAt,
+        });
+      }
       return true;
     } catch (cause) {
       if (!isCurrentConfiguration(api, version)) return false;

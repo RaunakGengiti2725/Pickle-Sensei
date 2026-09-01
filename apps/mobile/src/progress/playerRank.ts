@@ -1,6 +1,7 @@
 import {
   computePlayerRank,
   PLAYER_RANK_TIERS,
+  playerRankDivisionForRating,
   playerRankTierForRating,
   type PlayerRankSummary,
 } from '@pickle/shared-types';
@@ -10,8 +11,10 @@ import type { ApiSession } from '../account/apiSession';
  * Personal player rank (Bronze → Diamond) — client side.
  *
  * The formula itself lives in @pickle/shared-types (computePlayerRank):
- * average of each technique's LATEST scored analysis, mapped to a tier.
- * This module resolves the two honest sources for it:
+ * form-weighted — each technique is its most recent 8 scored analyses with
+ * newest-heaviest linear weights, and techniques blend into the rating with
+ * evidence-capped confidence weights. This module resolves the two honest
+ * sources for it:
  *   - the account rank saved on Supabase (player_rank_state, kept current
  *     by a database trigger on every synced shot), fetched via GET /v1/rank;
  *   - the same formula computed locally from this device's analysis history,
@@ -27,7 +30,13 @@ export interface ServerPlayerRank {
   /** Null when the server had to fall back to inline compute (no saved row). */
   scoredShotCount: number | null;
   updatedAt: string | null;
-  techniques: Array<{ shotType: string; score: number; capturedAt: string }>;
+  techniques: Array<{
+    shotType: string;
+    score: number;
+    capturedAt: string;
+    /** Analyses inside the technique's form window; absent on old servers. */
+    sampledCount?: number;
+  }>;
 }
 
 export interface ResolvedPlayerRank {
@@ -92,7 +101,14 @@ export function parsePlayerRank(payload: unknown): ServerPlayerRank | null {
     ) {
       throw new PlayerRankApiError('Invalid rank technique row.');
     }
-    return { shotType, score, capturedAt };
+    // Older deployments omit sampled_count; the summary treats it as absent.
+    const sampledCount = finiteNumber(row['sampled_count']);
+    return {
+      shotType,
+      score,
+      capturedAt,
+      ...(sampledCount !== null ? { sampledCount } : {}),
+    };
   });
   const scoredShotCount = finiteNumber(rank['scoredShotCount']);
   const updatedAt = rank['updatedAt'];
@@ -172,10 +188,15 @@ export function summaryFromServer(server: ServerPlayerRank): PlayerRankSummary {
   const techniques = [...server.techniques].sort(
     (a, b) => b.score - a.score || a.shotType.localeCompare(b.shotType),
   );
+  const { division, label: divisionLabel } = playerRankDivisionForRating(
+    server.rating,
+  );
   return {
     rating: server.rating,
     tier: tier.key,
     tierLabel: tier.label,
+    division,
+    divisionLabel,
     techniqueCount: server.techniqueCount,
     scoredAnalysisCount: server.scoredShotCount ?? techniques.length,
     techniques,

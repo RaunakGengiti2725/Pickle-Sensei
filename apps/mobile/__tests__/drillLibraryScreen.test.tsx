@@ -2,22 +2,50 @@ import React from 'react';
 import { Linking, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { CatalogDrill } from '../src/training/api';
+import type { ScoredCheckpointFact } from '../src/library/libraryFocus';
 import {
   TrainingError,
   type DrillDetail,
+  type DrillMapping,
   type InstructionalMedia,
 } from '../src/training/types';
 
 jest.mock('react-native-safe-area-context', () => {
   const { View } =
     jest.requireActual<typeof import('react-native')>('react-native');
-  return { SafeAreaView: View };
+  return {
+    SafeAreaView: View,
+    useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+    initialWindowMetrics: null,
+  };
+});
+
+// In-app playback runs through react-native-webview; a passthrough View
+// keeps every prop (source, onError, testID) inspectable in the tree.
+jest.mock('react-native-webview', () => {
+  const ReactModule = require('react');
+  const { View } = require('react-native');
+  const MockWebView = (props: Record<string, unknown>) =>
+    ReactModule.createElement(View, props);
+  return { __esModule: true, default: MockWebView, WebView: MockWebView };
 });
 
 const mockGoBack = jest.fn();
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: mockGoBack, navigate: mockNavigate }),
+}));
+
+// The screen reads local checkpoint evidence for its focus; the SQLite
+// binding does not exist under jest, so both layers are doubled.
+jest.mock('../src/data/db', () => ({ getDb: jest.fn() }));
+const mockListScoredCheckpointFacts = jest.fn<
+  Promise<ScoredCheckpointFact[]>,
+  [unknown]
+>();
+jest.mock('../src/data/repository', () => ({
+  listScoredCheckpointFacts: (...args: [unknown]) =>
+    mockListScoredCheckpointFacts(...args),
 }));
 
 const mockListCatalogDrills = jest.fn<
@@ -39,23 +67,33 @@ jest.mock('../src/training/api', () => ({
 import { DrillLibraryScreen } from '../src/screens/DrillLibraryScreen';
 
 /**
- * Pins the honest drill-library surface: every card carries the UNVALIDATED
- * engineering-draft label and the server's coach line verbatim, search is
- * debounced and filters both client-side and via the endpoint, and the save
- * bookmark is optimistic but reverts loudly when the server refuses.
+ * Pins the production drill-library surface: the default view is a learning
+ * surface — a focus card computed from local scored evidence, family-matched
+ * recommendations under it, then the rest of the catalog — while search and
+ * family filters switch to plain results. Cards lead with one quiet metadata
+ * line (no internal validation-state or draft messaging, whatever the
+ * payload says), clean coach bylines render while internal draft bylines are
+ * hidden, search is debounced and filters both client-side and via the
+ * endpoint, and the save bookmark is optimistic with a transient toast on
+ * success and a loud revert on failure.
  *
- * Video honesty is pinned too: every served instructional video is listed
- * with creator + attribution verbatim under a single community-video
- * disclosure, and the only "more videos" affordances are real YouTube
- * search deep links (per drill, and per typed query) — no fabricated video
- * IDs or counts.
+ * Video honesty is pinned too: the expanded form guide lists the server's
+ * coaching cues before any video, every served instructional video renders
+ * with creator + attribution verbatim, playback happens in-app through the
+ * DrillVideoPlayer WebView modal (never Linking), and only the YouTube
+ * search-results rows (per drill, and per typed query) open externally.
  */
 
-const DRAFT_PILL = 'UNVALIDATED · ENGINEERING DRAFT';
-const DISCLOSURE = 'Community video · not Pickle Sensei coach-validated';
+const DISCLOSURE = 'Community videos · credited to their creators';
+const SAVED_TOAST = 'Saved to your library · Library → Saved drills';
+const REMOVED_TOAST = 'Removed from saved drills';
 const DINK_BROWSE_URL =
   'https://www.youtube.com/results?search_query=Dink%20Target%20Ladder%20pickleball%20drill';
+const FOCUS_HINT =
+  'After two scored analyses of the same technique, this library sorts ' +
+  'itself around your weakest checkpoint.';
 
+// Legacy engineering payload: the client must still look production-clean.
 const dinkDrill: CatalogDrill = {
   id: '0b96363e-4a11-47c5-9d2c-3f5b8e6f2a17',
   slug: 'dink-target-ladder',
@@ -71,17 +109,18 @@ const dinkDrill: CatalogDrill = {
   saved: false,
 };
 
+// Production payload: a clean byline renders as a subtle caption.
 const volleyDrill: CatalogDrill = {
   id: '9d0a1c9e-2f65-4b7a-8c3d-6e5f4a3b2c1d',
   slug: 'volley-wall-intervals',
   title: 'Volley Wall Intervals',
   description: 'Timed volley intervals against a rebound wall.',
-  coachName: 'Engineering draft — not coach-validated',
+  coachName: 'Pickle Sensei Training Library',
   equipment: ['paddle', 'rebound wall'],
   difficultyMin: null,
   difficultyMax: null,
   families: ['volley'],
-  validationState: 'UNVALIDATED',
+  validationState: 'PUBLISHED',
   saved: true,
 };
 
@@ -97,6 +136,18 @@ const detailFixture: DrillDetail = {
   saved: false,
   mappings: [],
   instructionalMedia: [],
+};
+
+const cueMapping: DrillMapping = {
+  checkpoint: 'contact_height',
+  shotType: 'dink',
+  planRole: 'targeted',
+  faultDirections: ['high'],
+  cueText: 'Contact the ball below your waist.',
+  targetSets: 3,
+  targetRepetitionsPerSet: 10,
+  targetDurationSeconds: null,
+  restSeconds: 30,
 };
 
 const youtubeMedia: InstructionalMedia = {
@@ -127,6 +178,7 @@ const secondYoutubeMedia: InstructionalMedia = {
 
 const detailWithMediaFixture: DrillDetail = {
   ...detailFixture,
+  mappings: [cueMapping],
   instructionalMedia: [youtubeMedia],
 };
 
@@ -134,6 +186,31 @@ const detailWithTwoMediaFixture: DrillDetail = {
   ...detailFixture,
   instructionalMedia: [youtubeMedia, secondYoutubeMedia],
 };
+
+/** Two scored dink reads whose weakest checkpoint is contact_position —
+ * recency-weighted (2·50 + 1·60) / 3 ≈ 53. */
+function dinkFocusFacts(): ScoredCheckpointFact[] {
+  return [
+    {
+      id: '00000000-0000-4000-8000-000000000002',
+      shotType: 'dink',
+      capturedAt: '2026-08-02T10:00:00.000Z',
+      checkpoints: [
+        { key: 'contact_position', score: 50, applicable: true },
+        { key: 'athletic_base', score: 80, applicable: true },
+      ],
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000001',
+      shotType: 'dink',
+      capturedAt: '2026-08-01T10:00:00.000Z',
+      checkpoints: [
+        { key: 'contact_position', score: 60, applicable: true },
+        { key: 'athletic_base', score: 82, applicable: true },
+      ],
+    },
+  ];
+}
 
 function renderScreen() {
   let renderer!: TestRenderer.ReactTestRenderer;
@@ -167,12 +244,6 @@ function allText(renderer: TestRenderer.ReactTestRenderer): string {
     .join(' ');
 }
 
-function draftPillCount(renderer: TestRenderer.ReactTestRenderer): number {
-  return renderer.root.findAllByType(Text).filter(
-    node => node.props.children === DRAFT_PILL,
-  ).length;
-}
-
 async function pressByLabel(
   renderer: TestRenderer.ReactTestRenderer,
   label: string,
@@ -198,6 +269,14 @@ function findPressableByTestId(
   return node ?? null;
 }
 
+function findByTestId(
+  renderer: TestRenderer.ReactTestRenderer,
+  testID: string,
+) {
+  const [node] = renderer.root.findAll(n => n.props.testID === testID);
+  return node ?? null;
+}
+
 async function pressByTestId(
   renderer: TestRenderer.ReactTestRenderer,
   testID: string,
@@ -216,6 +295,27 @@ function textCount(
   return renderer.root
     .findAllByType(Text)
     .filter(node => node.props.children === text).length;
+}
+
+/** Rendered drill-card testIDs in tree (top-to-bottom) order. Host nodes
+ * only: composite wrappers repeat the same testID prop. */
+function drillCardOrder(renderer: TestRenderer.ReactTestRenderer): string[] {
+  return renderer.root
+    .findAll(
+      n =>
+        typeof n.type === 'string' &&
+        typeof n.props.testID === 'string' &&
+        n.props.testID.startsWith('drill-card-'),
+    )
+    .map(n => n.props.testID as string);
+}
+
+/** The in-app player's WebView node, or null while the modal is closed. */
+function findPlayerWebView(renderer: TestRenderer.ReactTestRenderer) {
+  const [node] = renderer.root.findAll(
+    n => n.props.testID === 'drill-video-webview' && n.props.source,
+  );
+  return node ?? null;
 }
 
 function typeSearch(renderer: TestRenderer.ReactTestRenderer, text: string) {
@@ -251,6 +351,7 @@ describe('DrillLibraryScreen', () => {
           false,
         ),
       );
+    mockListScoredCheckpointFacts.mockReset().mockResolvedValue([]);
     mockGoBack.mockClear();
     mockNavigate.mockClear();
   });
@@ -262,21 +363,130 @@ describe('DrillLibraryScreen', () => {
     jest.restoreAllMocks();
   });
 
-  it('renders every catalog drill with the honest engineering-draft label', async () => {
+  it('renders a production-clean catalog with one quiet metadata line per card', async () => {
     const renderer = renderScreen();
     await settle();
     const copy = allText(renderer);
     expect(copy).toContain('Dink Target Ladder');
     expect(copy).toContain('Volley Wall Intervals');
-    expect(copy).toContain('Engineering draft — not coach-validated');
-    expect(copy).toContain('PADDLE · BALLS');
-    expect(copy).toContain('SKILL 2.0–3.5');
-    expect(copy).toContain('none coach-validated yet');
-    expect(draftPillCount(renderer)).toBe(2);
+    // Family, skill band, and equipment collapse into a single sentence-case
+    // line — no shouting pill rows.
+    expect(textCount(renderer, 'Dinks · Skill 2.0–3.5 · Paddle, balls')).toBe(
+      1,
+    );
+    expect(textCount(renderer, 'Volleys · Paddle, rebound wall')).toBe(1);
+    // The default view is a learning surface, not a result set: the count
+    // line only appears once the user searches or filters.
+    expect(copy).not.toContain('of 2 drills');
+    // No internal validation-state or draft messaging, whatever the payload.
+    expect(copy).not.toMatch(/UNVALIDATED/i);
+    expect(copy).not.toMatch(/engineering draft/i);
+    expect(copy).not.toMatch(/coach-validated/i);
+    expect(copy).not.toContain('PUBLISHED');
     expect(mockListCatalogDrills).toHaveBeenCalledWith({
       q: undefined,
       family: undefined,
     });
+    act(() => renderer.unmount());
+  });
+
+  it('advertises the form-guide affordance on every card', async () => {
+    const renderer = renderScreen();
+    await settle();
+    // Every collapsed card carries an explicit call to action, so the form
+    // cues and videos are never hidden behind an unlabeled tap target.
+    expect(textCount(renderer, 'Form guide & videos')).toBe(2);
+    await pressByLabel(renderer, 'Show detail for Dink Target Ladder');
+    await settle();
+    expect(textCount(renderer, 'Hide form guide')).toBe(1);
+    expect(textCount(renderer, 'Form guide & videos')).toBe(1);
+    // Collapsing restores the invitation.
+    await pressByLabel(renderer, 'Hide detail for Dink Target Ladder');
+    expect(textCount(renderer, 'Form guide & videos')).toBe(2);
+    act(() => renderer.unmount());
+  });
+
+  it('shows a clean server byline but hides the internal draft byline', async () => {
+    const renderer = renderScreen();
+    await settle();
+    const copy = allText(renderer);
+    // volleyDrill's production byline renders as a caption…
+    expect(copy).toContain('Pickle Sensei Training Library');
+    // …while dinkDrill's internal seeding byline never reaches users.
+    expect(copy).not.toContain('Engineering draft — not coach-validated');
+    act(() => renderer.unmount());
+  });
+
+  it('sorts the default view around the weakest evidenced checkpoint', async () => {
+    mockListScoredCheckpointFacts.mockResolvedValue(dinkFocusFacts());
+    const renderer = renderScreen();
+    await settle();
+    const copy = allText(renderer);
+    // The focus card names the checkpoint, its recency-weighted average,
+    // and exactly the evidence behind it — computed locally.
+    expect(findByTestId(renderer, 'library-focus')).not.toBeNull();
+    expect(copy).toContain('YOUR FOCUS');
+    expect(copy).toContain('Contact position');
+    expect(textCount(renderer, '53')).toBe(1);
+    expect(copy).toContain('Dink · from 2 recent scored reads');
+    // Family-matched drills lead, with the matching rule stated verbatim —
+    // no claim that a specific drill was validated for the checkpoint.
+    expect(copy).toContain('Recommended for you');
+    expect(copy).toContain('Matched to your focus by technique family.');
+    expect(copy).toContain('All drills');
+    expect(drillCardOrder(renderer)).toEqual([
+      'drill-card-dink-target-ladder',
+      'drill-card-volley-wall-intervals',
+    ]);
+    // The empty-evidence hint never renders alongside a real focus.
+    expect(findByTestId(renderer, 'library-focus-hint')).toBeNull();
+    expect(copy).not.toContain(FOCUS_HINT);
+    act(() => renderer.unmount());
+  });
+
+  it('shows the honest hint instead of a focus when evidence is thin', async () => {
+    const renderer = renderScreen();
+    await settle();
+    expect(findByTestId(renderer, 'library-focus')).toBeNull();
+    expect(findByTestId(renderer, 'library-focus-hint')).not.toBeNull();
+    const copy = allText(renderer);
+    expect(copy).toContain(FOCUS_HINT);
+    expect(copy).not.toContain('Recommended for you');
+    expect(copy).not.toContain('YOUR FOCUS');
+    act(() => renderer.unmount());
+  });
+
+  it('never lets a failing local evidence read block the catalog', async () => {
+    mockListScoredCheckpointFacts.mockRejectedValue(
+      new Error('local db unavailable'),
+    );
+    const renderer = renderScreen();
+    await settle();
+    const copy = allText(renderer);
+    expect(copy).toContain('Dink Target Ladder');
+    expect(findByTestId(renderer, 'library-focus')).toBeNull();
+    expect(copy).not.toContain('Recommended for you');
+    act(() => renderer.unmount());
+  });
+
+  it('drops the personalized sections while searching or filtering', async () => {
+    mockListScoredCheckpointFacts.mockResolvedValue(dinkFocusFacts());
+    const renderer = renderScreen();
+    await settle();
+    expect(allText(renderer)).toContain('YOUR FOCUS');
+    typeSearch(renderer, 'wall');
+    await advanceDebounce();
+    await settle();
+    let copy = allText(renderer);
+    expect(copy).not.toContain('YOUR FOCUS');
+    expect(copy).not.toContain('Recommended for you');
+    expect(copy).toContain('1 of 2 drills');
+    typeSearch(renderer, '');
+    await advanceDebounce();
+    await settle();
+    copy = allText(renderer);
+    expect(copy).toContain('YOUR FOCUS');
+    expect(copy).toContain('Recommended for you');
     act(() => renderer.unmount());
   });
 
@@ -299,10 +509,11 @@ describe('DrillLibraryScreen', () => {
     const copy = allText(renderer);
     expect(copy).toContain('Volley Wall Intervals');
     expect(copy).not.toContain('Dink Target Ladder');
+    expect(copy).toContain('1 of 2 drills');
     act(() => renderer.unmount());
   });
 
-  it('single-select family pills pass the family param through', async () => {
+  it('single-select family chips pass the family param through', async () => {
     const renderer = renderScreen();
     await settle();
     await pressByLabel(renderer, 'Filter volley drills');
@@ -323,9 +534,10 @@ describe('DrillLibraryScreen', () => {
     act(() => renderer.unmount());
   });
 
-  it('saves optimistically through the api and flips the bookmark', async () => {
+  it('saves optimistically, flips the bookmark, and confirms with a toast', async () => {
     const renderer = renderScreen();
     await settle();
+    expect(allText(renderer)).not.toContain(SAVED_TOAST);
     await pressByLabel(renderer, 'Save Dink Target Ladder');
     expect(mockSaveDrill).toHaveBeenCalledWith('dink-target-ladder');
     expect(
@@ -336,10 +548,16 @@ describe('DrillLibraryScreen', () => {
           typeof n.props.onPress === 'function',
       ).length,
     ).toBeGreaterThan(0);
+    // Non-blocking confirmation, gone again after the auto-dismiss window.
+    expect(allText(renderer)).toContain(SAVED_TOAST);
+    await act(async () => {
+      jest.advanceTimersByTime(2600);
+    });
+    expect(allText(renderer)).not.toContain(SAVED_TOAST);
     act(() => renderer.unmount());
   });
 
-  it('unsaves an already-saved drill through the api', async () => {
+  it('unsaves an already-saved drill and confirms the removal', async () => {
     const renderer = renderScreen();
     await settle();
     await pressByLabel(
@@ -347,10 +565,11 @@ describe('DrillLibraryScreen', () => {
       'Remove Volley Wall Intervals from saved drills',
     );
     expect(mockUnsaveDrill).toHaveBeenCalledWith('volley-wall-intervals');
+    expect(allText(renderer)).toContain(REMOVED_TOAST);
     act(() => renderer.unmount());
   });
 
-  it('reverts the optimistic save and surfaces the error when saving fails', async () => {
+  it('reverts the optimistic save, surfaces the error, and shows no toast', async () => {
     mockSaveDrill.mockRejectedValue(
       new TrainingError(
         'training.unavailable',
@@ -370,17 +589,22 @@ describe('DrillLibraryScreen', () => {
           typeof n.props.onPress === 'function',
       ).length,
     ).toBeGreaterThan(0);
-    expect(allText(renderer)).toContain('Saving is offline right now.');
+    const copy = allText(renderer);
+    expect(copy).toContain('Saving is offline right now.');
+    expect(copy).not.toContain(SAVED_TOAST);
     act(() => renderer.unmount());
   });
 
-  it('shows the empty state when no drill matches the search', async () => {
+  it('shows the clean empty state when no drill matches the search', async () => {
     const renderer = renderScreen();
     await settle();
     typeSearch(renderer, 'zzzz-no-such-drill');
     await advanceDebounce();
     await settle();
-    expect(allText(renderer)).toContain('No drills match');
+    const copy = allText(renderer);
+    expect(copy).toContain('No drills match');
+    expect(copy).toContain('Try a different search or family filter.');
+    expect(copy).not.toMatch(/engineering draft/i);
     act(() => renderer.unmount());
   });
 
@@ -418,13 +642,36 @@ describe('DrillLibraryScreen', () => {
     mockGetDrill.mockResolvedValueOnce(detailFixture);
     await pressByLabel(renderer, 'Retry detail for Dink Target Ladder');
     await settle();
-    expect(allText(renderer)).toContain(
-      'No reviewed prescription is published for this drill yet.',
+    const copy = allText(renderer);
+    expect(copy).toContain('More drills on YouTube');
+    // An empty detail fabricates nothing: no form-focus header without
+    // mappings, no video header without media, no draft caveats.
+    expect(copy).not.toContain('FORM FOCUS');
+    expect(copy).not.toContain('WATCH IT DONE');
+    expect(copy).not.toMatch(/reviewed prescription/i);
+    expect(copy).not.toContain('no rights-cleared video yet');
+    act(() => renderer.unmount());
+  });
+
+  it('leads the expanded detail with the form guide, before any video', async () => {
+    mockGetDrill.mockResolvedValue(detailWithMediaFixture);
+    const renderer = renderScreen();
+    await settle();
+    await pressByLabel(renderer, 'Show detail for Dink Target Ladder');
+    await settle();
+    const copy = allText(renderer);
+    // The cue is real learning content: instruction, checkpoint, targets.
+    expect(copy).toContain('FORM FOCUS');
+    expect(copy).toContain('Contact the ball below your waist.');
+    expect(copy).toContain('Contact height · 3 × 10 · rest 30s');
+    // Form content precedes the video section in the rendered order.
+    expect(copy.indexOf('FORM FOCUS')).toBeLessThan(
+      copy.indexOf('WATCH IT DONE'),
     );
     act(() => renderer.unmount());
   });
 
-  it('renders the WATCH row with verbatim attribution for embed media and opens the source URL', async () => {
+  it('opens the in-app player modal for a media row instead of leaving the app', async () => {
     mockGetDrill.mockResolvedValue(detailWithMediaFixture);
     const openUrl = spyOnOpenUrl();
     const renderer = renderScreen();
@@ -432,49 +679,78 @@ describe('DrillLibraryScreen', () => {
     await pressByLabel(renderer, 'Show detail for Dink Target Ladder');
     await settle();
     const copy = allText(renderer);
-    expect(copy).toContain('WATCH: real coach demonstration');
+    expect(copy).toContain('Watch demonstration');
     // Creator + attribution are mandatory display, rendered verbatim.
     expect(copy).toContain('Third Shot Sports');
     expect(copy).toContain('Video by Third Shot Sports on YouTube');
-    // The row never implies Pickle Sensei's own coaches made the video.
-    expect(copy).toContain(
-      'Community video · not Pickle Sensei coach-validated',
-    );
-    expect(copy).toContain('1 instructional video');
+    expect(copy).toContain(DISCLOSURE);
+    expect(findPlayerWebView(renderer)).toBeNull();
+    await pressByLabel(renderer, 'Watch demonstration for Dink Target Ladder');
+    // Playback stays inside the app: modal + WebView, no Linking.
     expect(openUrl).not.toHaveBeenCalled();
-    await pressByLabel(
-      renderer,
-      'Watch real coach demonstration for Dink Target Ladder',
+    const webView = findPlayerWebView(renderer);
+    expect(webView).not.toBeNull();
+    // YouTube runs through the referer-correct IFrame API shell — never a
+    // bare /embed/ URL, which YouTube refuses with error 153.
+    expect(webView?.props.source.uri).toBeUndefined();
+    expect(webView?.props.source.baseUrl).toBe('https://com.picklesensei');
+    expect(webView?.props.source.html).toContain('"dnk101xyz"');
+    expect(webView?.props.source.html).toContain(
+      'https://www.youtube-nocookie.com',
     );
-    expect(openUrl).toHaveBeenCalledTimes(1);
-    expect(openUrl).toHaveBeenCalledWith(
-      'https://www.youtube.com/watch?v=dnk101xyz',
-    );
+    // The modal carries the license attribution and a source link.
+    expect(
+      renderer.root.findAll(
+        n =>
+          n.props.accessibilityLabel === 'Watch on YouTube' &&
+          typeof n.props.onPress === 'function',
+      ).length,
+    ).toBeGreaterThan(0);
+    await pressByLabel(renderer, 'Close video player');
+    expect(findPlayerWebView(renderer)).toBeNull();
+    expect(openUrl).not.toHaveBeenCalled();
     act(() => renderer.unmount());
   });
 
-  it('keeps the honest no-video line and offers no WATCH row when media is empty', async () => {
-    mockGetDrill.mockResolvedValue(detailFixture);
+  it('links to the source from the player and falls back when the WebView errors', async () => {
+    mockGetDrill.mockResolvedValue(detailWithMediaFixture);
     const openUrl = spyOnOpenUrl();
     const renderer = renderScreen();
     await settle();
     await pressByLabel(renderer, 'Show detail for Dink Target Ladder');
     await settle();
-    const copy = allText(renderer);
-    expect(copy).toContain('no rights-cleared video yet');
-    expect(copy).not.toContain('WATCH: real coach demonstration');
-    expect(copy).not.toContain(
-      'Community video · not Pickle Sensei coach-validated',
+    await pressByLabel(renderer, 'Watch demonstration for Dink Target Ladder');
+    // "Watch on YouTube" opens the original page for users who want it.
+    await pressByLabel(renderer, 'Watch on YouTube');
+    expect(openUrl).toHaveBeenCalledTimes(1);
+    expect(openUrl).toHaveBeenCalledWith(
+      'https://www.youtube.com/watch?v=dnk101xyz',
     );
-    expect(
-      renderer.root.findAll(
-        n =>
-          n.props.accessibilityLabel ===
-            'Watch real coach demonstration for Dink Target Ladder' &&
-          typeof n.props.onPress === 'function',
-      ),
-    ).toHaveLength(0);
-    expect(openUrl).not.toHaveBeenCalled();
+    // An embed failure falls forward to the canonical watch page in-app —
+    // the surface YouTube serves without embed restrictions.
+    const webView = findPlayerWebView(renderer);
+    expect(webView).not.toBeNull();
+    await act(async () => {
+      webView?.props.onError();
+    });
+    const watchView = findPlayerWebView(renderer);
+    expect(watchView?.props.source).toEqual({
+      uri: 'https://www.youtube.com/watch?v=dnk101xyz',
+      headers: { Referer: 'https://com.picklesensei' },
+    });
+    // Only when the watch page itself cannot load does the explicit
+    // error card appear, with an external escape hatch.
+    await act(async () => {
+      watchView?.props.onError();
+    });
+    expect(allText(renderer)).toContain(
+      'This video could not load in the app.',
+    );
+    await pressByLabel(renderer, 'Open on YouTube');
+    expect(openUrl).toHaveBeenCalledTimes(2);
+    expect(openUrl).toHaveBeenLastCalledWith(
+      'https://www.youtube.com/watch?v=dnk101xyz',
+    );
     act(() => renderer.unmount());
   });
 
@@ -486,27 +762,27 @@ describe('DrillLibraryScreen', () => {
     await pressByLabel(renderer, 'Show detail for Dink Target Ladder');
     await settle();
     const copy = allText(renderer);
-    // Both curated videos render as full WATCH rows with mandatory credits.
-    expect(textCount(renderer, 'WATCH: real coach demonstration')).toBe(2);
+    // Both curated videos render as full watch rows with mandatory credits.
+    expect(textCount(renderer, 'Watch demonstration')).toBe(2);
     expect(copy).toContain('Third Shot Sports');
     expect(copy).toContain('Video by Third Shot Sports on YouTube');
     expect(copy).toContain('Kitchen Lab Pickleball');
     expect(copy).toContain('Video by Kitchen Lab Pickleball on YouTube');
-    expect(copy).toContain('2 instructional videos');
     // One shared disclosure for the whole list, not one per row.
     expect(textCount(renderer, DISCLOSURE)).toBe(1);
     expect(
       findPressableByTestId(renderer, 'watch-media-dink-target-ladder-0'),
     ).not.toBeNull();
+    // Each row opens its own video in the in-app player.
     await pressByTestId(renderer, 'watch-media-dink-target-ladder-1');
-    expect(openUrl).toHaveBeenCalledTimes(1);
-    expect(openUrl).toHaveBeenCalledWith(
-      'https://www.youtube.com/watch?v=dnk202abc',
+    expect(openUrl).not.toHaveBeenCalled();
+    expect(findPlayerWebView(renderer)?.props.source.html).toContain(
+      '"dnk202abc"',
     );
     act(() => renderer.unmount());
   });
 
-  it('offers the YouTube browse row under curated media and opens the encoded search', async () => {
+  it('offers the external YouTube browse row under curated media', async () => {
     mockGetDrill.mockResolvedValue(detailWithMediaFixture);
     const openUrl = spyOnOpenUrl();
     const renderer = renderScreen();
@@ -514,8 +790,8 @@ describe('DrillLibraryScreen', () => {
     await pressByLabel(renderer, 'Show detail for Dink Target Ladder');
     await settle();
     const copy = allText(renderer);
-    expect(copy).toContain('Browse hundreds more on YouTube');
-    expect(copy).toContain('Search results on YouTube · community videos');
+    expect(copy).toContain('More drills on YouTube');
+    expect(copy).toContain('Opens the YouTube app');
     await pressByTestId(renderer, 'browse-videos-dink-target-ladder');
     expect(openUrl).toHaveBeenCalledTimes(1);
     // A real YouTube results deep link for "<title> pickleball drill".
@@ -531,8 +807,8 @@ describe('DrillLibraryScreen', () => {
     await pressByLabel(renderer, 'Show detail for Dink Target Ladder');
     await settle();
     const copy = allText(renderer);
-    expect(copy).toContain('no rights-cleared video yet');
-    expect(copy).toContain('Browse hundreds more on YouTube');
+    expect(copy).toContain('More drills on YouTube');
+    expect(copy).not.toContain(DISCLOSURE);
     await pressByLabel(
       renderer,
       'Browse YouTube videos for Dink Target Ladder',

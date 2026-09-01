@@ -451,7 +451,47 @@ describe('selectInsight priority', () => {
     });
     expect(insight.basis).toBe('abstention');
     expect(insight.sentence).toContain('low pose confidence');
-    expect(insight.sentence).toContain('nothing was invented');
+    expect(insight.sentence).toContain('Nothing was invented');
+  });
+
+  it('known machine tokens read as grammatical sentences, never raw tokens', () => {
+    const paddle = selectInsight({
+      limitingFactors: ['paddle_track_unavailable'],
+    });
+    expect(paddle.sentence).toBe(
+      'We couldn’t establish a paddle track — nothing was invented to fill the gap.',
+    );
+
+    const checkpoint = selectInsight({
+      limitingFactors: ['checkpoint_unobserved:face_wrist_stability'],
+    });
+    expect(checkpoint.sentence).toContain(
+      'a read on the face / wrist stability checkpoint',
+    );
+    expect(checkpoint.sentence).not.toContain('unobserved:face');
+
+    const confidence = selectInsight({
+      limitingFactors: ['analysis_confidence_below_threshold'],
+    });
+    expect(confidence.sentence).toContain(
+      'enough confidence to score this stroke',
+    );
+    expect(confidence.sentence).not.toContain('below threshold —');
+  });
+
+  it('abstained-intent insight uses the reason form of a known token', () => {
+    const insight = selectInsight({
+      strokeIntent: envelope({
+        declaredStroke: null,
+        resolutionBasis: 'abstained',
+        resolvedProfileId: null,
+        resolvedProfileVersion: null,
+      }),
+      limitingFactors: ['paddle_track_unavailable'],
+    });
+    expect(insight.sentence).toContain(
+      'the read was limited by a missing paddle track.',
+    );
   });
 });
 
@@ -643,5 +683,81 @@ describe('abstention state', () => {
     expect(ledger.notEstablished.join(' ')).toContain('exact contact moment');
     expect(ledger.notEstablished.join(' ')).toContain('technique score');
     expect(ledger.notEstablished.join(' ')).toContain('Paddle track missing');
+  });
+
+  it('machine limiting-factor tokens render as human ledger lines', () => {
+    const ledger = abstentionLedger({
+      record: {
+        id: 'r1',
+        result: null,
+        uncertainty: {
+          analysisConfidence: 0,
+          presentation: 'abstain',
+          limitingFactors: [
+            'paddle_track_unavailable',
+            'ball_track_unavailable',
+            'court_geometry_unavailable',
+            'checkpoint_unobserved:face_wrist_stability',
+            'checkpoint_unobserved:follow_through',
+            'analysis_confidence_below_threshold',
+          ],
+        },
+      },
+      analysis: null,
+      clipPresent: true,
+    });
+    const lines = ledger.notEstablished;
+    expect(lines).toContain('A paddle track for this swing.');
+    expect(lines).toContain('A ball track for this swing.');
+    expect(lines).toContain('Court geometry for this camera view.');
+    expect(lines).toContain(
+      'The face / wrist stability checkpoint — not observed in this clip.',
+    );
+    expect(lines).toContain(
+      'The follow-through checkpoint — not observed in this clip.',
+    );
+    expect(lines).toContain(
+      'Enough analysis confidence to clear the scoring threshold.',
+    );
+    // The raw token forms never leak into the surface.
+    expect(lines.join(' ')).not.toMatch(/unobserved:|_/);
+  });
+
+  it('the family-depth token never duplicates the ledger line the intent already added', () => {
+    const ledger = abstentionLedger({
+      record: {
+        id: 'r1',
+        strokeIntent: envelope({
+          declaredStroke: null,
+          resolutionBasis: 'predicted_family',
+          resolvedProfileId: 'SHARED_FOREHAND_SWING',
+          predictedStroke: {
+            taxonomyVersion: 'pickleball-stroke-taxonomy-v3',
+            classifierVersion: 'stroke-heuristic-1 (uncalibrated)',
+            label: 'FOREHAND',
+            leaf: null,
+            taxonomyDepth: 2,
+            confidence: 0.6,
+            evidence: [],
+            limitingFactors: [],
+          },
+        }),
+        result: null,
+        uncertainty: {
+          analysisConfidence: 0,
+          presentation: 'abstain',
+          limitingFactors: [
+            'auto_stroke_resolved_at_side_depth_no_leaf_for_scoring',
+          ],
+        },
+      },
+      analysis: null,
+      clipPresent: false,
+    });
+    const familyLines = ledger.notEstablished.filter(line =>
+      line.includes('exact stroke inside that family'),
+    );
+    expect(familyLines).toHaveLength(1);
+    expect(ledger.notEstablished.join(' ')).not.toContain('side depth');
   });
 });

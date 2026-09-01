@@ -48,6 +48,7 @@ import {
 import { runCaptureAnalysis } from '../analysis/runCaptureAnalysis';
 import { getApiSession } from '../account/apiSession';
 import { useAppStore } from '../state/appStore';
+import { useAccessStore } from '../state/accessStore';
 import { makeUuid } from '../util/uuid';
 import {
   SHOT_TYPES,
@@ -72,6 +73,7 @@ import {
 } from './tryAgainHandoff';
 import { usabilityFunnel } from '../analysis/usabilityTelemetry';
 import { stabilitySlo } from '../analysis/stabilityTelemetry';
+import { reportScoredAnalysisForReview } from '../review/appStoreReview';
 
 type Phase =
   | { kind: 'ready' }
@@ -493,6 +495,15 @@ function clipExplanation(clip: CapturedClip) {
   );
 }
 
+/**
+ * "both" reads naturally only while the free allowance really is 2; any
+ * other server-declared limit falls back to "all N" so the copy never lies
+ * about how many free analyses the account actually had.
+ */
+export function freeAnalysesPhrase(limit: number): string {
+  return limit === 2 ? 'both' : `all ${limit}`;
+}
+
 export function AnalyzeScreen() {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
@@ -527,6 +538,11 @@ export function AnalyzeScreen() {
   // from one clip is never attributed to the next.
   const attemptEvidence = useRef(createAttemptEvidenceBuffer());
   const profile = useAppStore(s => s.profile);
+  // Server-declared free-analysis allowance; the free-limit dialog derives
+  // its wording from this instead of hardcoding "both".
+  const freeRatingsLimit: number = useAccessStore(
+    s => s.canonicalAccess?.freeRatings.limit ?? 2,
+  );
   const operationActive = useRef(false);
   const scoringActive = useRef(false);
   const autoLaunchStarted = useRef(false);
@@ -609,8 +625,8 @@ export function AnalyzeScreen() {
               event.state === 'completed'
                 ? 1
                 : event.state === 'extracting'
-                  ? event.progress
-                  : undefined;
+                ? event.progress
+                : undefined;
             if (matchesRun && typeof fraction === 'number') {
               const emittedAtMs = Date.parse(event.emittedAtIso);
               run.eta = observeExtractionProgress(
@@ -671,8 +687,8 @@ export function AnalyzeScreen() {
         message: needsPoseExtraction
           ? 'Reading player movement…'
           : declaredStroke
-            ? 'Measuring your swing…'
-            : 'Measuring your swing and reading the stroke…',
+          ? 'Measuring your swing…'
+          : 'Measuring your swing and reading the stroke…',
       });
       // Stage model for the progress bar (parallel to the caption above,
       // which keeps its exact strings): stages advance only at boundaries
@@ -777,6 +793,12 @@ export function AnalyzeScreen() {
           }
           usabilityFunnel.log('result_opened');
           navigation.replace('Result', { analysisId: outcome.analysisId });
+          // Rating ask on the settled Result screen — every scored analysis
+          // reports; appStoreReview stops for good once the user has
+          // reviewed and iOS throttles everything in between. Never blocks
+          // or fails the analysis routing. Deliberately skipped on the
+          // free-limit path above: no OS sheet on top of the upgrade prompt.
+          void reportScoredAnalysisForReview();
           return;
         }
         // Non-scored outcomes (family-level low reads, honest abstentions,
@@ -1082,7 +1104,9 @@ export function AnalyzeScreen() {
           <View style={styles.freeLimitRoot}>
             <View
               accessibilityViewIsModal
-              accessibilityLabel="You've used both free analyses"
+              accessibilityLabel={`You've used ${freeAnalysesPhrase(
+                freeRatingsLimit,
+              )} free analyses`}
               style={styles.freeLimitDialog}
             >
               <View style={styles.freeLimitIcon}>
@@ -1092,7 +1116,8 @@ export function AnalyzeScreen() {
                 That was your last free analysis.
               </Text>
               <Text style={[type.body, styles.freeLimitBody]}>
-                Your score is saved. You’ve used both free analyses — upgrade
+                Your score is saved. You’ve used{' '}
+                {freeAnalysesPhrase(freeRatingsLimit)} free analyses — upgrade
                 to Pickle Sensei Pro to keep rating every swing.
               </Text>
               <View style={styles.freeLimitActions}>
@@ -1294,8 +1319,8 @@ export function AnalyzeScreen() {
               intent === null
                 ? 'cleared'
                 : intent.source === 'auto'
-                  ? 'AUTO'
-                  : (intent.canonical ?? intent.legacySlug ?? 'unknown'),
+                ? 'AUTO'
+                : intent.canonical ?? intent.legacySlug ?? 'unknown',
             );
             setTechniqueIntent(intent);
             // The legacy capture/analysis chain consumes the slug; the

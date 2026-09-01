@@ -1,6 +1,17 @@
 import { CHECKPOINTS, type Handedness } from '@pickle/shared-types';
 import type { ApiSession } from './apiSession';
-import { focusForGoal, type Profile } from '../state/profile';
+import { focusForGoal, type Gender, type Profile } from '../state/profile';
+
+const GENDERS: readonly Gender[] = [
+  'female',
+  'male',
+  'nonbinary',
+  'prefer_not_to_say',
+];
+
+function parseGender(value: unknown): Gender | undefined {
+  return GENDERS.includes(value as Gender) ? (value as Gender) : undefined;
+}
 
 export class OnboardingSyncError extends Error {
   constructor(message: string) {
@@ -85,7 +96,15 @@ function parseServerProfile(payload: unknown): Profile | null {
   ) {
     return null;
   }
+  // Identity fields are optional on the wire (first_name/gender): older
+  // server profiles predate them and must keep hydrating unchanged.
+  const firstName = raw['first_name'];
+  const gender = parseGender(raw['gender']);
   return {
+    ...(typeof firstName === 'string' && firstName.trim()
+      ? { firstName: firstName.trim() }
+      : {}),
+    ...(gender ? { gender } : {}),
     skillLevel,
     handedness: handedness as Handedness,
     goal,
@@ -108,18 +127,45 @@ export async function saveCanonicalOnboardingProfile(
   profile: Profile,
   fetchFn?: OnboardingFetch,
 ): Promise<Profile> {
-  const payload = await request(
-    session,
-    'PUT',
-    '/v1/me/onboarding',
-    {
-      skillLevel: profile.skillLevel,
-      handedness: profile.handedness,
-      goal: profile.goal,
-      biggestProblem: profile.biggestProblem,
-    },
-    fetchFn,
-  );
+  const coreBody = {
+    skillLevel: profile.skillLevel,
+    handedness: profile.handedness,
+    goal: profile.goal,
+    biggestProblem: profile.biggestProblem,
+  };
+  const firstName = profile.firstName?.trim();
+  const hasIdentityFields = Boolean(firstName) || profile.gender !== undefined;
+  let payload: unknown;
+  try {
+    payload = await request(
+      session,
+      'PUT',
+      '/v1/me/onboarding',
+      {
+        ...coreBody,
+        // Optional personalization; JSON.stringify drops undefined keys.
+        firstName: firstName || undefined,
+        gender: profile.gender,
+      },
+      fetchFn,
+    );
+  } catch (error) {
+    // Never fail onboarding because the OPTIONAL identity fields could not
+    // be saved remotely (e.g. a backend that rejects unknown keys). Retry
+    // once with the always-supported body; the local profile keeps them.
+    if (!hasIdentityFields) throw error;
+    try {
+      payload = await request(
+        session,
+        'PUT',
+        '/v1/me/onboarding',
+        coreBody,
+        fetchFn,
+      );
+    } catch {
+      throw error;
+    }
+  }
   if (!isRecord(payload)) {
     throw new OnboardingSyncError(
       'The account server returned an invalid coaching profile.',
@@ -136,6 +182,7 @@ export async function saveCanonicalOnboardingProfile(
   }
   return {
     ...profile,
+    ...(firstName ? { firstName } : {}),
     focusCheckpoint: recommendation as Profile['focusCheckpoint'],
   };
 }

@@ -8,7 +8,13 @@ import {
   type StorePlan,
 } from './types';
 
-const PREMIUM_ENTITLEMENT = 'premium';
+/**
+ * The single premium entitlement concept. The RevenueCat dashboard may expose
+ * it under either identifier ('pickle_sensei_pro' is current, 'premium' is
+ * legacy); holding either one unlocks the same access.
+ */
+const PREMIUM_ENTITLEMENT = 'pickle_sensei_pro';
+const LEGACY_PREMIUM_ENTITLEMENT = 'premium';
 const ELIGIBLE_FOR_INTRO_OFFER = 2;
 
 export type BillingPlatform = 'ios' | 'android' | 'other';
@@ -63,6 +69,7 @@ export interface RevenueCatSdk {
       identifier: string;
       annual: RevenueCatPackageLike | null;
       monthly: RevenueCatPackageLike | null;
+      lifetime: RevenueCatPackageLike | null;
     } | null;
   }>;
   purchasePackage(aPackage: RevenueCatPackageLike): Promise<{
@@ -139,7 +146,9 @@ function currentPlatform(): BillingPlatform {
 function entitlementFrom(
   customerInfo: RevenueCatCustomerInfoLike,
 ): StoreEntitlementState {
-  const entitlement = customerInfo.entitlements.active[PREMIUM_ENTITLEMENT];
+  const active = customerInfo.entitlements.active;
+  const entitlement =
+    active[PREMIUM_ENTITLEMENT] ?? active[LEGACY_PREMIUM_ENTITLEMENT];
   return {
     premium: Boolean(entitlement),
     productId: entitlement?.productIdentifier ?? null,
@@ -284,7 +293,12 @@ export function createRevenueCatBillingClient(
     period: BillingPeriod,
     aPackage: RevenueCatPackageLike | null,
   ): Promise<StorePlan | null> => {
-    const expectedPackageType = period === 'annual' ? 'ANNUAL' : 'MONTHLY';
+    const expectedPackageType =
+      period === 'annual'
+        ? 'ANNUAL'
+        : period === 'lifetime'
+          ? 'LIFETIME'
+          : 'MONTHLY';
     if (!aPackage || aPackage.packageType !== expectedPackageType) return null;
     const product = aPackage.product;
     if (
@@ -297,14 +311,17 @@ export function createRevenueCatBillingClient(
     }
     const id = `${offeringId}:${period}:${aPackage.identifier}:${product.identifier}`;
     packageByPlanId.set(id, aPackage);
+    // A lifetime product is a one-time purchase: it has no per-month price
+    // and can never carry an introductory free trial.
     return {
       id,
       productId: product.identifier,
       period,
       price: product.price,
       priceString: product.priceString,
-      pricePerMonthString: product.pricePerMonthString || null,
-      freeTrial: await detectTrial(aPackage),
+      pricePerMonthString:
+        period === 'lifetime' ? null : product.pricePerMonthString || null,
+      freeTrial: period === 'lifetime' ? null : await detectTrial(aPackage),
     };
   };
 
@@ -322,18 +339,19 @@ export function createRevenueCatBillingClient(
         );
       }
       packageByPlanId.clear();
-      const [annual, monthly] = await Promise.all([
+      const [annual, monthly, lifetime] = await Promise.all([
         normalizePlan(offering.identifier, 'annual', offering.annual),
         normalizePlan(offering.identifier, 'monthly', offering.monthly),
+        normalizePlan(offering.identifier, 'lifetime', offering.lifetime),
       ]);
-      if (!annual && !monthly) {
+      if (!annual && !monthly && !lifetime) {
         throw new BillingError(
           'billing.offerings_unavailable',
-          'Annual and monthly membership plans are unavailable from the app store.',
+          'Annual, monthly, and lifetime membership plans are unavailable from the app store.',
           true,
         );
       }
-      return { offeringId: offering.identifier, annual, monthly };
+      return { offeringId: offering.identifier, annual, monthly, lifetime };
     },
 
     purchase: async planId => {

@@ -35,14 +35,24 @@ import { SavedDrillCard } from '../training/components';
 import { useTrainingStore } from '../training/store';
 import type { InstructionalMedia } from '../training/types';
 import { useAuthStore } from '../auth/authStore';
+import { plural } from '../util/plural';
 
 type LibraryTab = 'reads' | 'saved';
 
+/** Pending-clips group header + pill, exported so tests pin the copy. */
+export const PENDING_SECTION_LABEL = 'SAVED CLIPS · READY TO ANALYZE';
+export const PENDING_SECTION_PILL = 'NOT SCORED';
+
+/**
+ * Embeds open their canonical watch page, never the raw /embed/ URL: YouTube
+ * refuses embed surfaces loaded without an embedding referer (error 153),
+ * while the watch page always plays in the YouTube app or browser.
+ */
 function mediaUrl(media: InstructionalMedia): string {
-  return media.kind === 'hosted' ? media.playbackUrl : media.embedUrl;
+  return media.kind === 'hosted' ? media.playbackUrl : media.sourceUrl;
 }
 
-function pendingEvidenceCopy(capture: PendingCapture): string {
+export function pendingEvidenceCopy(capture: PendingCapture): string {
   if (capture.evidenceStatus === 'valid' && capture.clip?.captureEvidence) {
     return `${
       capture.clip.captureEvidence.poseFrameCount
@@ -52,14 +62,32 @@ function pendingEvidenceCopy(capture: PendingCapture): string {
   }
   switch (capture.evidenceStatus) {
     case 'legacy':
-      return 'Evidence not recorded by this app version';
+      return 'Recorded by an older app version — can’t be scored';
     case 'metadata_mismatch':
-      return 'Saved evidence does not match this video';
+      return 'Evidence doesn’t match this video — can’t be scored';
     case 'corrupt':
-      return 'Saved evidence could not be verified';
+      return 'Saved evidence could not be verified — can’t be scored';
     case 'valid':
-      return 'Validated evidence is unavailable';
+      return 'Clip saved — analysis has not run yet';
   }
+}
+
+/**
+ * Row title for a pending clip. Prefers the player's declared stroke, then a
+ * recognized shot type; a clip with neither is labeled plainly as an auto
+ * capture instead of the old machine-y "Automatic capture".
+ */
+export function pendingCaptureTitle(capture: PendingCapture): string {
+  const stroke =
+    capture.declaredStroke ??
+    (capture.shotType !== 'unrecognized' ? capture.shotType : null);
+  if (!stroke) return 'Auto capture';
+  const strokeName = stroke
+    .split('_')
+    .filter(word => word.length > 0)
+    .map(word => word[0]!.toUpperCase() + word.slice(1))
+    .join(' ');
+  return `${strokeName} · auto capture`;
 }
 
 export function LibraryScreen() {
@@ -122,8 +150,14 @@ export function LibraryScreen() {
     0;
   const prescribedPlanItems =
     currentPlan?.items.filter(item => item.drill).length ?? 0;
+  // A saved entry renders when its server catalog detail loaded — the user
+  // saved it and the server confirmed the drill exists. SavedDrillCard
+  // labels coach-reviewed prescriptions vs plain catalog entries itself
+  // (mappings presence), so bookmark visibility never depends on a
+  // fault→drill prescription existing. Entries whose detail could NOT be
+  // fetched stay hidden with honest copy — nothing is rendered from guesses.
   const verifiedSavedDrills = savedDrills.filter(
-    drill => (drillDetails[drill.slug]?.mappings.length ?? 0) > 0,
+    drill => drillDetails[drill.slug] !== undefined,
   );
   const heldSavedCount = savedDrills.length - verifiedSavedDrills.length;
 
@@ -249,7 +283,7 @@ export function LibraryScreen() {
                 numberOfLines={2}
                 style={[type.caption, styles.exploreCopy]}
               >
-                Search the engineering-draft catalog and bookmark drills.
+                Form cues, video demos, and picks based on your scored analyses.
               </Text>
             </View>
             <Icon name="arrow" size={18} color={color.inkSoft} />
@@ -310,14 +344,23 @@ export function LibraryScreen() {
                 <Icon name="shield" size={22} color={color.court} />
               </View>
               <Text style={[type.h2, styles.messageTitle]}>
-                Saved entries are awaiting review evidence.
+                Saved entries couldn’t be verified right now.
               </Text>
               <Text style={[type.body, styles.messageBody]}>
-                {savedDrills.length} server-backed saved{' '}
+                {savedDrills.length} saved{' '}
                 {savedDrills.length === 1 ? 'entry is' : 'entries are'} hidden
-                because a current coach-reviewed prescription could not be
-                verified. No generic drill is being substituted.
+                because {savedDrills.length === 1 ? 'its' : 'their'} server
+                catalog {savedDrills.length === 1 ? 'entry' : 'entries'} could
+                not be loaded. Nothing is shown from guesses and no generic
+                drill is substituted.
               </Text>
+              <View style={styles.retryWrap}>
+                <Button
+                  label="Try again"
+                  variant="secondary"
+                  onPress={() => void loadSavedDrills()}
+                />
+              </View>
             </Card>
           ) : (
             <>
@@ -329,7 +372,7 @@ export function LibraryScreen() {
                   Saved drills
                 </Text>
                 <Text style={[type.caption, { color: color.inkSoft }]}>
-                  {verifiedSavedDrills.length} verified
+                  {verifiedSavedDrills.length} saved
                 </Text>
               </View>
               {verifiedSavedDrills.map(drill => (
@@ -348,7 +391,9 @@ export function LibraryScreen() {
                   <Text style={[type.caption, styles.heldNoticeCopy]}>
                     {heldSavedCount} additional saved{' '}
                     {heldSavedCount === 1 ? 'entry is' : 'entries are'} hidden
-                    until review evidence can be verified.
+                    because {heldSavedCount === 1 ? 'its' : 'their'} server
+                    catalog {heldSavedCount === 1 ? 'entry' : 'entries'} could
+                    not be loaded.
                   </Text>
                 </View>
               ) : null}
@@ -392,9 +437,8 @@ export function LibraryScreen() {
               {reads.length || captures.length ? (
                 <View style={styles.readHeader}>
                   <Text style={[type.body, { color: color.inkSoft }]}>
-                    {reads.length} analyzed read{reads.length === 1 ? '' : 's'}{' '}
-                    · {captures.length} pending clip
-                    {captures.length === 1 ? '' : 's'}
+                    {reads.length} analyzed {plural(reads.length, 'read')} ·{' '}
+                    {captures.length} pending {plural(captures.length, 'clip')}
                   </Text>
                   {captures.length ? (
                     <View style={styles.pendingGroup}>
@@ -403,9 +447,9 @@ export function LibraryScreen() {
                           numberOfLines={2}
                           style={[type.micro, styles.pendingHeaderLabel]}
                         >
-                          SAVED VIDEO · AWAITING MODEL
+                          {PENDING_SECTION_LABEL}
                         </Text>
-                        <Pill label="NO SCORE YET" tone="neutral" />
+                        <Pill label={PENDING_SECTION_PILL} tone="neutral" />
                       </View>
                       {captures.slice(0, 3).map(capture => (
                         <View key={capture.id} style={styles.pendingRow}>
@@ -425,9 +469,7 @@ export function LibraryScreen() {
                               numberOfLines={1}
                               style={[type.bodyBold, styles.pendingTitle]}
                             >
-                              {capture.shotType === 'unrecognized'
-                                ? 'Automatic capture'
-                                : capture.shotType.replace(/_/g, ' ')}
+                              {pendingCaptureTitle(capture)}
                             </Text>
                             <Text
                               numberOfLines={2}
@@ -595,7 +637,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pendingTitle: { color: color.ink, textTransform: 'capitalize' },
+  // No 'capitalize' here: pendingCaptureTitle already carries final casing
+  // ('Forehand Drive · auto capture').
+  pendingTitle: { color: color.ink },
   pendingMeta: { color: color.inkSoft, marginTop: 2 },
   pendingDate: { color: color.inkSoft, opacity: 0.72, marginTop: 1 },
   row: {

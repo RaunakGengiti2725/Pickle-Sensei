@@ -14,7 +14,14 @@ jest.mock('react-native-reanimated', () => {
     React.createElement(View, props);
   return {
     __esModule: true,
-    default: { View: AnimatedView },
+    default: {
+      View: AnimatedView,
+      // design/components.tsx wraps an SVG circle at module scope.
+      createAnimatedComponent:
+        (Component: React.ComponentType<Record<string, unknown>>) =>
+        (props: Record<string, unknown>) =>
+          React.createElement(Component, props),
+    },
     Easing: {
       out: (fn: unknown) => fn,
       cubic: () => 0,
@@ -137,9 +144,9 @@ describe('PremiumTabBar coach menu', () => {
     const renderer = renderBar();
     await pressByLabel(renderer, 'Open coach actions');
     const copy = allText(renderer);
-    // Existing entries stay untouched.
+    // Existing entries stay untouched (Live Court is cut from the v1 menu).
     expect(copy).toContain('Auto Analyze');
-    expect(copy).toContain('Live Court');
+    expect(copy).not.toContain('Live Court');
     expect(copy).toContain('Import Video');
     // New entry with its subtitle.
     expect(copy).toContain('Drill Library');

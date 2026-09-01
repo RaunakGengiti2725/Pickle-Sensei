@@ -91,10 +91,10 @@ export function ConsentSettingsScreen() {
             />
           </View>
           <Text style={[type.body, styles.bodyText]}>
-            Off unless you turn it on. When on, your captured stroke clips may
-            be used to improve Pickle Sensei's stroke and scoring models. You
-            can turn it off at any time and new training use stops; a record of
-            your choice is kept for accountability.
+            You choose whether anonymized capture data helps improve the scoring
+            model. Off unless you turn it on. You can turn it off at any time
+            and new training use stops; a record of your choice is kept for
+            accountability.
           </Text>
           {signedOut ? (
             <Text style={[type.caption, styles.noteText]}>

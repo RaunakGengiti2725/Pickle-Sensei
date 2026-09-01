@@ -162,17 +162,13 @@ export interface InstructionalMediaJson {
   attribution: string;
 }
 
-export async function drillInstructionalMedia(
-  slug: string,
-): Promise<InstructionalMediaJson[]> {
+export async function drillInstructionalMedia(slug: string): Promise<InstructionalMediaJson[]> {
   const keys = MEDIA_BY_SLUG[slug] ?? [];
   return Promise.all(
     keys.map(async (key) => {
       const video = VIDEOS[key];
       return {
-        id: await deterministicUuid(
-          `pickle-sensei.drill-media:${slug}:${video.videoId}`,
-        ),
+        id: await deterministicUuid(`pickle-sensei.drill-media:${slug}:${video.videoId}`),
         kind: "embed" as const,
         provider: "youtube" as const,
         videoId: video.videoId,

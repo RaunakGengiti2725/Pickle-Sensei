@@ -2,6 +2,12 @@
 -- Pickle Sensei — personal player rank (Bronze → Silver → Gold → Platinum
 -- → Diamond). NOT a leaderboard: nothing here compares users to each other.
 --
+-- NOTE (2026-08-30): the "latest per technique" formula below is SUPERSEDED
+-- by 20260830120000_production_launch.sql, which replaces the view and
+-- recompute function with "average of ALL scored analyses per technique".
+-- This file is kept verbatim because it has already been applied; only the
+-- newer migration reflects the live formula.
+--
 -- The formula (single source of truth shared verbatim with
 -- packages/shared-types/src/playerRank.ts):
 --   1. For each technique (shot_type) with at least one SCORED analysis,

@@ -24,7 +24,9 @@ export type IconName =
   | 'flame'
   | 'bookmark'
   | 'crown'
-  | 'spark';
+  | 'spark'
+  | 'star'
+  | 'bell';
 
 export function Icon(props: {
   name: IconName;
@@ -182,6 +184,22 @@ export function Icon(props: {
           d="m12 2 1.5 6.5L20 10l-6.5 1.5L12 18l-1.5-6.5L4 10l6.5-1.5Z"
           {...common}
         />
+      )}
+      {props.name === 'star' && (
+        <Path
+          d="m12 3.8 2.47 5 5.53.8-4 3.9.94 5.5L12 16.4l-4.94 2.6.94-5.5-4-3.9 5.53-.8Z"
+          {...common}
+        />
+      )}
+      {props.name === 'bell' && (
+        <>
+          <Path
+            d="M18 16H6c1.1-1.3 1.7-2.4 1.7-4.6V9.6A4.3 4.3 0 0 1 12 5.3a4.3 4.3 0 0 1 4.3 4.3v1.8c0 2.2.6 3.3 1.7 4.6Z"
+            {...common}
+          />
+          <Path d="M12 5.3V3.5" {...common} />
+          <Path d="M10 19a2 2 0 0 0 4 0" {...common} />
+        </>
       )}
     </Svg>
   );

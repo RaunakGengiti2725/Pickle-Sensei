@@ -213,23 +213,6 @@ export function PremiumTabBar(props: BottomTabBarProps) {
     [rootNavigation],
   );
 
-  const openLiveCourt = useCallback(async () => {
-    if (useAuthStore.getState().session?.localOnly) {
-      rootNavigation?.navigate('ConnectAccount');
-      return;
-    }
-    let access = useAccessStore.getState().canonicalAccess;
-    if (!access) {
-      await useAccessStore.getState().initialize();
-      access = useAccessStore.getState().canonicalAccess;
-    }
-    if (access?.canStartRating) {
-      rootNavigation?.navigate('LiveCourt');
-      return;
-    }
-    rootNavigation?.navigate('Paywall', { source: 'live_court' });
-  }, [rootNavigation]);
-
   const runAction = useCallback(
     (action: () => void) => closeMenu(action),
     [closeMenu],
@@ -244,13 +227,6 @@ export function PremiumTabBar(props: BottomTabBarProps) {
       onPress: () => runAction(() => void openRatingFlow('camera')),
     },
     {
-      title: 'Live Court',
-      detail: 'Checks camera + model availability',
-      icon: 'court',
-      accent: color.mint,
-      onPress: () => runAction(() => void openLiveCourt()),
-    },
-    {
       title: 'Import Video',
       detail: 'Choose a real clip from this phone',
       icon: 'upload',
@@ -262,8 +238,7 @@ export function PremiumTabBar(props: BottomTabBarProps) {
       detail: 'Guided drills you can search',
       icon: 'library',
       accent: color.courtSoft,
-      onPress: () =>
-        runAction(() => rootNavigation?.navigate('DrillLibrary')),
+      onPress: () => runAction(() => rootNavigation?.navigate('DrillLibrary')),
     },
   ];
 
