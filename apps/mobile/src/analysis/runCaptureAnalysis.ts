@@ -62,7 +62,12 @@ export type CaptureAnalysisOutcome =
       record: CaptureAnalysisRecord;
       guidance: string | null;
     }
-  | { kind: 'unavailable'; reason: string }
+  | {
+      kind: 'unavailable';
+      reason: string;
+      /** HTTP 402 `access.paywall_required`: not retryable without an upgrade. */
+      cause?: 'paywall_required';
+    }
   | {
       /**
        * The capture envelope is UNSUPPORTED: analysis is honestly withheld
@@ -140,7 +145,7 @@ export async function runCaptureAnalysis(
   if (outcome.kind === 'unavailable') {
     stabilitySlo.record({
       kind: 'analysis_failed',
-      failureKind: 'unavailable',
+      failureKind: outcome.cause ?? 'unavailable',
     });
   } else {
     stabilitySlo.record({ kind: 'analysis_completed' });
@@ -163,6 +168,12 @@ export async function runCaptureAnalysis(
     }
   }
   return outcome;
+}
+
+export const PAYWALL_REQUIRED_CODE = 'access.paywall_required';
+
+function isPaywallRequired(error: ApiError): boolean {
+  return error.status === 402 || error.code === PAYWALL_REQUIRED_CODE;
 }
 
 async function runCaptureAnalysisCore(
@@ -254,6 +265,13 @@ async function runCaptureAnalysisCore(
       !reserved.access.premium &&
       reserved.access.freeRatings.availableToReserve === 0;
   } catch (error) {
+    if (error instanceof ApiError && isPaywallRequired(error)) {
+      return {
+        kind: 'unavailable',
+        reason: error.message,
+        cause: 'paywall_required',
+      };
+    }
     const message =
       error instanceof ApiError
         ? error.message
