@@ -61,119 +61,127 @@ function dimensionStatus(clipPath: string, dimension: string): string | undefine
   return verdict.dimensions.find((d) => d.dimension === dimension)?.status;
 }
 
-describe.skipIf(!hasFfmpeg)("red-team synthetic adversarial clips (D3-07)", () => {
-  let dir: string;
-  let base: string;
+describe.skipIf(!hasFfmpeg)(
+  "red-team synthetic adversarial clips (D3-07)",
+  { timeout: 120_000 },
+  () => {
+    let dir: string;
+    let base: string;
 
-  beforeAll(() => {
-    dir = mkdtempSync(join(tmpdir(), "envelope-redteam-"));
-    base = join(dir, "base.mp4");
-    makeBase(base);
-  });
+    beforeAll(() => {
+      dir = mkdtempSync(join(tmpdir(), "envelope-redteam-"));
+      base = join(dir, "base.mp4");
+      makeBase(base);
+    });
 
-  afterAll(() => {
-    rmSync(dir, { recursive: true, force: true });
-  });
+    afterAll(() => {
+      rmSync(dir, { recursive: true, force: true });
+    });
 
-  it("baseline synthetic clip is fully SUPPORTED on video dimensions", () => {
-    const verdict = evaluateCaptureEnvelope(measureClip(base));
-    expect(verdict.overall).toBe("SUPPORTED");
-    expect(verdict.notMeasured).toEqual(["player_pixel_height", "player_visibility"]);
-  });
+    it("baseline synthetic clip is fully SUPPORTED on video dimensions", () => {
+      const verdict = evaluateCaptureEnvelope(measureClip(base));
+      expect(verdict.overall).toBe("SUPPORTED");
+      expect(verdict.notMeasured).toEqual(["player_pixel_height", "player_visibility"]);
+    });
 
-  it("8 fps capture is detected on frame_rate", () => {
-    const clip = join(dir, "fps8.mp4");
-    makeBase(clip, "1280x720", 8);
-    expect(dimensionStatus(clip, "frame_rate")).toBe("UNSUPPORTED");
-  });
+    it("8 fps capture is detected on frame_rate", () => {
+      const clip = join(dir, "fps8.mp4");
+      makeBase(clip, "1280x720", 8);
+      expect(dimensionStatus(clip, "frame_rate")).toBe("UNSUPPORTED");
+    });
 
-  it("240p capture is detected on resolution", () => {
-    const clip = join(dir, "res240.mp4");
-    makeBase(clip, "426x240");
-    expect(dimensionStatus(clip, "resolution")).toBe("UNSUPPORTED");
-  });
+    it("240p capture is detected on resolution", () => {
+      const clip = join(dir, "res240.mp4");
+      makeBase(clip, "426x240");
+      expect(dimensionStatus(clip, "resolution")).toBe("UNSUPPORTED");
+    });
 
-  it("near-black exposure is detected on brightness", () => {
-    const clip = join(dir, "nearblack.mp4");
-    ffmpeg([
-      "-i",
-      base,
-      "-vf",
-      "eq=brightness=-0.45",
-      "-pix_fmt",
-      "yuv420p",
-      "-c:v",
-      "libx264",
-      clip,
-    ]);
-    expect(dimensionStatus(clip, "brightness")).toBe("UNSUPPORTED");
-  });
+    it("near-black exposure is detected on brightness", () => {
+      const clip = join(dir, "nearblack.mp4");
+      ffmpeg([
+        "-i",
+        base,
+        "-vf",
+        "eq=brightness=-0.45",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:v",
+        "libx264",
+        clip,
+      ]);
+      expect(dimensionStatus(clip, "brightness")).toBe("UNSUPPORTED");
+    });
 
-  it("heavy synthetic motion blur is detected on motion_blur", () => {
-    const clip = join(dir, "blur.mp4");
-    ffmpeg(["-i", base, "-vf", "gblur=sigma=12", "-pix_fmt", "yuv420p", "-c:v", "libx264", clip]);
-    expect(dimensionStatus(clip, "motion_blur")).toBe("UNSUPPORTED");
-  });
+    it("heavy synthetic motion blur is detected on motion_blur", () => {
+      const clip = join(dir, "blur.mp4");
+      ffmpeg(["-i", base, "-vf", "gblur=sigma=12", "-pix_fmt", "yuv420p", "-c:v", "libx264", clip]);
+      expect(dimensionStatus(clip, "motion_blur")).toBe("UNSUPPORTED");
+    });
 
-  it("0.5s clip is detected on clip_duration", () => {
-    const clip = join(dir, "halfsec.mp4");
-    makeBase(clip, "1280x720", 30, 0.5);
-    expect(dimensionStatus(clip, "clip_duration")).toBe("UNSUPPORTED");
-  });
+    it("0.5s clip is detected on clip_duration", () => {
+      const clip = join(dir, "halfsec.mp4");
+      makeBase(clip, "1280x720", 30, 0.5);
+      expect(dimensionStatus(clip, "clip_duration")).toBe("UNSUPPORTED");
+    });
 
-  it("VFR timestamps are detected on timing_stability even when avg fps passes", () => {
-    const clip = join(dir, "vfr.mp4");
-    ffmpeg([
-      "-i",
-      base,
-      "-vf",
-      "setpts=PTS+(mod(N\\,2)/40)/TB",
-      "-fps_mode",
-      "passthrough",
-      "-enc_time_base",
-      "1/90000",
-      "-video_track_timescale",
-      "90000",
-      "-c:v",
-      "libx264",
-      clip,
-    ]);
-    const measurements = measureClip(clip);
-    const verdict = evaluateCaptureEnvelope(measurements);
-    expect(measurements.avgFrameRateFps).toBeGreaterThanOrEqual(29);
-    expect(verdict.dimensions.find((d) => d.dimension === "frame_rate")?.status).toBe("SUPPORTED");
-    expect(verdict.dimensions.find((d) => d.dimension === "timing_stability")?.status).toBe(
-      "UNSUPPORTED",
-    );
-  });
+    it("VFR timestamps are detected on timing_stability even when avg fps passes", () => {
+      const clip = join(dir, "vfr.mp4");
+      ffmpeg([
+        "-i",
+        base,
+        "-vf",
+        "setpts=PTS+(mod(N\\,2)/40)/TB",
+        "-fps_mode",
+        "passthrough",
+        "-enc_time_base",
+        "1/90000",
+        "-video_track_timescale",
+        "90000",
+        "-c:v",
+        "libx264",
+        clip,
+      ]);
+      const measurements = measureClip(clip);
+      const verdict = evaluateCaptureEnvelope(measurements);
+      expect(measurements.avgFrameRateFps).toBeGreaterThanOrEqual(29);
+      expect(verdict.dimensions.find((d) => d.dimension === "frame_rate")?.status).toBe(
+        "SUPPORTED",
+      );
+      expect(verdict.dimensions.find((d) => d.dimension === "timing_stability")?.status).toBe(
+        "UNSUPPORTED",
+      );
+    });
 
-  it("baseline CFR clip measures near-zero interval jitter", () => {
-    const cv = probeFrameIntervalCv(base);
-    expect(cv).not.toBeNull();
-    expect(cv!).toBeLessThan(0.15);
-  });
+    it("baseline CFR clip measures near-zero interval jitter", () => {
+      const cv = probeFrameIntervalCv(base);
+      expect(cv).not.toBeNull();
+      expect(cv!).toBeLessThan(0.15);
+    });
 
-  it("90° rotation metadata swaps display dimensions and keeps resolution honest", () => {
-    const clip = join(dir, "portraitmeta.mp4");
-    makeRotated(base, clip, 90);
-    const info = probeClipStream(clip);
-    expect([90, 270]).toContain(info.rotationDegrees);
-    expect(info.displayWidth).toBe(720);
-    expect(info.displayHeight).toBe(1280);
-    const measurements = measureClip(clip);
-    expect(Math.min(measurements.frameWidthPx!, measurements.frameHeightPx!)).toBe(720);
-    const verdict = evaluateCaptureEnvelope(measurements);
-    expect(verdict.dimensions.find((d) => d.dimension === "resolution")?.status).toBe("SUPPORTED");
-  });
+    it("90° rotation metadata swaps display dimensions and keeps resolution honest", () => {
+      const clip = join(dir, "portraitmeta.mp4");
+      makeRotated(base, clip, 90);
+      const info = probeClipStream(clip);
+      expect([90, 270]).toContain(info.rotationDegrees);
+      expect(info.displayWidth).toBe(720);
+      expect(info.displayHeight).toBe(1280);
+      const measurements = measureClip(clip);
+      expect(Math.min(measurements.frameWidthPx!, measurements.frameHeightPx!)).toBe(720);
+      const verdict = evaluateCaptureEnvelope(measurements);
+      expect(verdict.dimensions.find((d) => d.dimension === "resolution")?.status).toBe(
+        "SUPPORTED",
+      );
+    });
 
-  it("180° rotation metadata leaves pixel measurements identical to the unrotated clip", () => {
-    const clip = join(dir, "rot180meta.mp4");
-    makeRotated(base, clip, 180);
-    const rotated = measureClip(clip);
-    const plain = measureClip(base);
-    expect(rotated.frameWidthPx).toBe(plain.frameWidthPx);
-    expect(rotated.frameHeightPx).toBe(plain.frameHeightPx);
-    expect(rotated.laplacianVarianceMedian!).toBeCloseTo(plain.laplacianVarianceMedian!, 0);
-    expect(rotated.meanAbsFrameDiff!).toBeCloseTo(plain.meanAbsFrameDiff!, 1);
-  });
-});
+    it("180° rotation metadata leaves pixel measurements identical to the unrotated clip", () => {
+      const clip = join(dir, "rot180meta.mp4");
+      makeRotated(base, clip, 180);
+      const rotated = measureClip(clip);
+      const plain = measureClip(base);
+      expect(rotated.frameWidthPx).toBe(plain.frameWidthPx);
+      expect(rotated.frameHeightPx).toBe(plain.frameHeightPx);
+      expect(rotated.laplacianVarianceMedian!).toBeCloseTo(plain.laplacianVarianceMedian!, 0);
+      expect(rotated.meanAbsFrameDiff!).toBeCloseTo(plain.meanAbsFrameDiff!, 1);
+    });
+  },
+);

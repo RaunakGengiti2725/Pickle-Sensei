@@ -58,9 +58,16 @@ export function legal() {
   check(res, {
     "privacy serves the policy or rate-limits": (r) =>
       (r.status === 200 && String(r.body).includes("PRIVACY POLICY")) || r.status === 429,
-    "privacy is sandboxed by the gateway": (r) =>
-      r.status !== 200 ||
-      Boolean(r.headers["Content-Security-Policy"] || r.headers["content-security-policy"]),
+    // legal.ts serves plain text BY DESIGN (the supabase.co gateway rewrites
+    // Content-Type and sandboxes HTML — see AGENTS.md). Plain text cannot
+    // execute script, so the invariant is "never renderable HTML without a
+    // CSP", not "always carries a CSP".
+    "privacy cannot execute in a browser": (r) => {
+      if (r.status !== 200) return true;
+      const contentType = String(r.headers["Content-Type"] || r.headers["content-type"] || "");
+      const csp = r.headers["Content-Security-Policy"] || r.headers["content-security-policy"];
+      return !contentType.includes("text/html") || Boolean(csp);
+    },
   });
   sleep(1);
 }
