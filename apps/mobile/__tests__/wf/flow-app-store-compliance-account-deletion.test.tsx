@@ -42,9 +42,11 @@ const mockConfirmAccountDeletion = jest.fn<Promise<void>, unknown[]>();
 jest.mock('../../src/account/deletion', () => {
   class AccountDeletionError extends Error {
     code: string;
-    constructor(code: string, message: string) {
+    retryable: boolean;
+    constructor(code: string, message: string, retryable: boolean) {
       super(message);
       this.code = code;
+      this.retryable = retryable;
     }
   }
   return {
@@ -315,7 +317,7 @@ describe('Manage account → Delete account (App Review 5.1.1(v))', () => {
       act(() => renderer.unmount());
     });
 
-    it('confirm failure: stays armed with the same challenge, shows copy, no local purge', async () => {
+    it('retryable confirm failure: stays armed with the same challenge, shows copy, no local purge', async () => {
       mockRequestAccountDeletion.mockResolvedValue({
         challenge: 'challenge-3',
         expiresAt: '2026-09-01T00:00:00.000Z',
@@ -323,9 +325,9 @@ describe('Manage account → Delete account (App Review 5.1.1(v))', () => {
       mockConfirmAccountDeletion
         .mockRejectedValueOnce(
           new AccountDeletionError(
-            'deletion.rejected',
+            'deletion.unavailable',
             'The server declined this deletion request. Nothing was deleted.',
-            false,
+            true,
           ),
         )
         .mockResolvedValueOnce(undefined);
@@ -370,6 +372,60 @@ describe('Manage account → Delete account (App Review 5.1.1(v))', () => {
         useAuthStore.getState().completeAccountDeletion,
       ).toHaveBeenCalledTimes(1);
       expect(sheetVisible(renderer)).toBe(false);
+      act(() => renderer.unmount());
+    });
+
+    it('non-retryable confirm failure: shows copy, returns to review so a fresh challenge is requested, no local purge', async () => {
+      mockRequestAccountDeletion.mockResolvedValue({
+        challenge: 'challenge-3',
+        expiresAt: '2026-09-01T00:00:00.000Z',
+      });
+      mockConfirmAccountDeletion.mockRejectedValueOnce(
+        new AccountDeletionError(
+          'deletion.rejected',
+          'The server declined this deletion request. Nothing was deleted.',
+          false,
+        ),
+      );
+
+      const renderer = renderScreen();
+      await openSheet(renderer);
+      await act(async () => {
+        sheetButton(renderer, 'Continue to delete').props.onPress();
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(5_000);
+      });
+      const confirm = sheetButton(renderer, 'Permanently delete');
+      expect(confirm.props.disabled).toBe(false);
+      await act(async () => {
+        confirm.props.onPress();
+      });
+      expect(mockConfirmAccountDeletion).toHaveBeenCalledWith(
+        null,
+        'challenge-3',
+      );
+      expect(allText(renderer)).toContain(
+        'The server declined this deletion request. Nothing was deleted.',
+      );
+      expect(
+        useAuthStore.getState().completeAccountDeletion,
+      ).not.toHaveBeenCalled();
+
+      // The rejected challenge is dead: the sheet offers a fresh request
+      // rather than re-arming the same one.
+      expect(sheetVisible(renderer)).toBe(true);
+      expect(
+        renderer.root
+          .findAllByType(Button)
+          .map(node => String(node.props.label)),
+      ).not.toContain('Permanently delete');
+      expect(sheetButton(renderer, 'Continue to delete').props.disabled).toBe(
+        false,
+      );
+      expect(sheetButton(renderer, 'Keep my account').props.disabled).toBe(
+        false,
+      );
       act(() => renderer.unmount());
     });
   });

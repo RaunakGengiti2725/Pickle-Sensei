@@ -484,17 +484,25 @@ describe('LibraryScreen · reads tab', () => {
 
     const text = allText(renderer);
     expect(text).toContain('0 analyzed reads · 1 pending clip');
-    expect(text).toContain('SAVED CLIPS · READY TO ANALYZE');
+    // Nothing on this page can re-score a saved clip, so the header must not
+    // promise it; the note states the real next step instead.
+    expect(text).toContain('SAVED CLIPS · NOT ANALYZED');
+    expect(text).not.toContain('READY TO ANALYZE');
     expect(text).toContain('Forehand Drive · auto capture');
     expect(text).toContain('Clip saved — analysis has not run yet');
-    // With pending clips present the empty-state CTA is withheld, so the
-    // only pressables on the page are the two header tabs.
+    expect(text).toContain(
+      'Saved clips aren’t scored from the library. Record a new stroke to get a score.',
+    );
+    // The clip rows are not buttons; the only non-tab control is the
+    // always-reachable Analyze CTA so the page is never a dead end.
+    const nonTab = pressables(renderer).filter(
+      n => n.props.accessibilityRole !== 'tab',
+    );
     expect(
-      pressables(renderer).filter(n => n.props.accessibilityRole !== 'tab'),
-    ).toHaveLength(0);
-    // WF-ISSUE: Pending clips are labelled "READY TO ANALYZE" but neither the
-    // rows nor any other control on this page can analyze them (no
-    // Analyze-with-captureId route exists) — the section is a dead end.
+      new Set(nonTab.map(n => n.props.accessibilityLabel ?? n.props.label)),
+    ).toEqual(new Set(['Analyze your first stroke']));
+    await pressByLabel(renderer, 'Analyze your first stroke');
+    expect(mockNavigate).toHaveBeenCalledWith('Analyze');
 
     act(() => renderer.unmount());
   });
@@ -739,13 +747,16 @@ describe('LibraryScreen · saved drill card actions (real training store)', () =
     const bookmark = findByLabel(renderer, removeLabel);
     expect(bookmark!.props.disabled).toBe(false);
 
-    // The inline error is itself a pressable that dismisses it.
+    // The inline error is itself a labelled button that dismisses it.
     const [inlineError] = renderer.root.findAll(
       n =>
-        n.props.accessibilityRole === 'alert' &&
+        n.props.accessibilityRole === 'button' &&
+        n.props.accessibilityLabel === 'Training is temporarily unavailable.' &&
         typeof n.props.onPress === 'function',
     );
     expect(inlineError).toBeDefined();
+    expect(inlineError!.props.accessibilityHint).toBe('Dismisses this message');
+    expect(allText(renderer)).toContain('DISMISS');
     await act(async () => {
       inlineError!.props.onPress();
     });
@@ -753,9 +764,7 @@ describe('LibraryScreen · saved drill card actions (real training store)', () =
     expect(allText(renderer)).not.toContain(
       'Training is temporarily unavailable.',
     );
-    expect(
-      renderer.root.findAll(n => n.props.accessibilityRole === 'alert'),
-    ).toHaveLength(0);
+    expect(allText(renderer)).not.toContain('DISMISS');
 
     act(() => renderer.unmount());
   });
@@ -880,7 +889,7 @@ describe('LibraryScreen · pressable ledger', () => {
         'Explore the Drill Library',
         `Remove ${savedDrill.title} from saved drills`,
         `Watch reviewed instruction for ${savedDrill.title}`,
-        '<role:alert>',
+        'Could not update saved drills.',
       ]),
     );
     for (const node of renderer.root.findAll(
@@ -889,9 +898,7 @@ describe('LibraryScreen · pressable ledger', () => {
         typeof n.props.onPress === 'function' &&
         n.props.accessibilityRole !== undefined,
     )) {
-      expect(['button', 'tab', 'alert']).toContain(
-        node.props.accessibilityRole,
-      );
+      expect(['button', 'tab']).toContain(node.props.accessibilityRole);
     }
 
     act(() => renderer.unmount());

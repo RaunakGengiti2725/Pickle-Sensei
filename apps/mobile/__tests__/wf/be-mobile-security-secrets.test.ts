@@ -5,9 +5,10 @@
  *   - GUARD tests pin the checks that came back clean (no secrets in the
  *     shipped JS/native sources, ATS + URL-scheme invariants in Info.plist,
  *     provider tokens never written to SQLite kv).
- *   - REPRO tests reproduce the confirmed defects exactly as the code behaves
- *     today. They assert CURRENT behaviour so the report is falsifiable; a fix
- *     is expected to flip them (see the audit report's fix_suggestion).
+ *   - RECOVERY / GATE tests pin the fixes for the defects the audit found:
+ *     a rejected bearer is re-acquired silently (Google) or ends the session
+ *     with an honest reason, and the drill WebView only navigates within the
+ *     provider's hosts.
  *
  * Mock style follows authHydrateRestore.test.ts (in-memory kv LocalDb, Google
  * SDK module mock, jest.fn fetch) and drillVideoPlayer.test.tsx (passthrough
@@ -19,6 +20,7 @@ import type { LocalDb } from '../../src/data/db';
 import type { InstructionalMedia } from '../../src/training/types';
 import { useAuthStore } from '../../src/auth/authStore';
 import { clearApiSession, getApiSession } from '../../src/account/apiSession';
+import { shouldLoadInPlayer } from '../../src/components/DrillVideoPlayer';
 import {
   ApiError,
   createAnalysisPermitClient,
@@ -438,8 +440,11 @@ describe('GUARD token storage', () => {
 
 // ─── REPRO: the bearer IS the provider ID token and is never refreshed ───────
 
-describe('REPRO provider-token expiry has no in-app recovery', () => {
-  it('after the backend starts rejecting the token (401), the app keeps the stale bearer, stays "signed in" and never re-acquires a token', async () => {
+describe('RECOVERY provider-token expiry is handled in-app', () => {
+  const FRESH_GOOGLE_ID_TOKEN =
+    'header.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJmcmVzaCI6MX0.sig';
+
+  it('after the backend rejects the token (401), the app silently re-acquires a Google token, re-bootstraps, and installs the fresh bearer', async () => {
     await signInGoogleViaSilentRestore();
     const session = getApiSession()!;
     const bootstrapCalls = (globalThis.fetch as jest.Mock).mock.calls.length;
@@ -447,19 +452,36 @@ describe('REPRO provider-token expiry has no in-app recovery', () => {
     // Provider ID tokens are short-lived (Apple ~10 min, Google ~1 h); once
     // expired, Supabase Auth's signInWithIdToken rejects them and the edge
     // function answers 401 "The identity token could not be verified." for
-    // EVERY authenticated route.
-    const expiredFetch = jest.fn().mockResolvedValue(
-      response(
-        {
-          error: {
-            code: 'unauthorized',
-            message: 'The identity token could not be verified.',
+    // EVERY authenticated route — until a fresh token is presented.
+    const expiredFetch = jest.fn(
+      async (url: string, init: { headers: Record<string, string> }) => {
+        const bearer =
+          init.headers['authorization'] ?? init.headers['Authorization'];
+        if (
+          bearer === `Bearer ${FRESH_GOOGLE_ID_TOKEN}` &&
+          url.endsWith('/v1/account/bootstrap')
+        ) {
+          return response({
+            user: { id: canonicalId, email: 'pat@example.com' },
+            onboardingState: 'complete',
+          });
+        }
+        return response(
+          {
+            error: {
+              code: 'unauthorized',
+              message: 'The identity token could not be verified.',
+            },
           },
-        },
-        401,
-      ),
+          401,
+        );
+      },
     );
     installFetch(expiredFetch);
+    mockGoogleSignin.signInSilently.mockResolvedValue({
+      type: 'success',
+      data: googleUser(FRESH_GOOGLE_ID_TOKEN),
+    });
 
     const permits = createAnalysisPermitClient({
       baseUrl: session.apiBaseUrl,
@@ -481,27 +503,69 @@ describe('REPRO provider-token expiry has no in-app recovery', () => {
     }
     expect(syncError).toBeInstanceOf(ApiError);
     expect((syncError as ApiError).status).toBe(401);
-    // The outbox treats 401 as transient: rows stay queued and are retried
-    // every 30 s / foreground with the SAME dead bearer (syncRuntime.ts).
+    // The outbox treats 401 as transient: rows stay queued for the refreshed
+    // bearer instead of burning their attempt budget.
     expect(isPermanentSyncFailure(syncError)).toBe(false);
 
-    // Nothing in the client reacts to the 401: no refresh endpoint exists,
-    // the Google SDK is not asked for a fresh token, and the auth store still
-    // reports a live synced session.
-    expect(getApiSession()?.bearerToken).toBe(GOOGLE_ID_TOKEN);
+    // The transport reported the rejected bearer; the auth store asked the
+    // Google SDK for a fresh token (no interactive prompt), re-bootstrapped
+    // with it, and the session now carries the NEW bearer with no error.
+    await act(async () => {
+      await new Promise<void>(resolve => setImmediate(resolve));
+    });
+    expect(mockGoogleSignin.signInSilently).toHaveBeenCalledTimes(2);
+    expect(mockGoogleSignin.signIn).not.toHaveBeenCalled();
+    expect(getApiSession()?.bearerToken).toBe(FRESH_GOOGLE_ID_TOKEN);
     expect(useAuthStore.getState().session?.provider).toBe('google');
     expect(useAuthStore.getState().error).toBeNull();
-    expect(mockGoogleSignin.signInSilently).toHaveBeenCalledTimes(1);
-    expect(mockGoogleSignin.signIn).not.toHaveBeenCalled();
-    // Every request carried the stale token verbatim.
-    for (const [, init] of expiredFetch.mock.calls as Array<
-      [string, RequestInit]
-    >) {
-      expect((init.headers as Record<string, string>).authorization).toBe(
-        `Bearer ${GOOGLE_ID_TOKEN}`,
-      );
-    }
     expect(bootstrapCalls).toBe(1);
+    const rebootstrap = expiredFetch.mock.calls.filter(([url]) =>
+      url.endsWith('/v1/account/bootstrap'),
+    );
+    expect(rebootstrap).toHaveLength(1);
+    expect(rebootstrap[0]![1].headers['Authorization']).toBe(
+      `Bearer ${FRESH_GOOGLE_ID_TOKEN}`,
+    );
+    // The fresh token is still never persisted.
+    for (const value of mockKv.values()) {
+      expect(value).not.toContain(FRESH_GOOGLE_ID_TOKEN);
+    }
+  });
+
+  it('when no silent token is available, the 401 ends the session with an honest "sign-in expired" reason instead of keeping the dead bearer', async () => {
+    await signInGoogleViaSilentRestore();
+    const session = getApiSession()!;
+    installFetch(
+      jest.fn().mockResolvedValue(
+        response(
+          {
+            error: {
+              code: 'unauthorized',
+              message: 'The identity token could not be verified.',
+            },
+          },
+          401,
+        ),
+      ),
+    );
+    mockGoogleSignin.hasPreviousSignIn.mockReturnValue(false);
+
+    const transport = createTransport({
+      baseUrl: session.apiBaseUrl,
+      token: session.bearerToken,
+    });
+    await expect(transport.syncShots([])).rejects.toMatchObject({
+      status: 401,
+    } satisfies Partial<ApiError>);
+    await act(async () => {
+      await new Promise<void>(resolve => setImmediate(resolve));
+    });
+    expect(getApiSession()).toBeNull();
+    expect(useAuthStore.getState().session).toBeNull();
+    expect(useAuthStore.getState().error).toMatchObject({
+      code: 'auth.session_expired',
+    });
+    expect(mockGoogleSignin.signIn).not.toHaveBeenCalled();
   });
 
   it('the api session module exposes no refresh / re-auth primitive', () => {
@@ -525,9 +589,9 @@ describe('REPRO provider-token expiry has no in-app recovery', () => {
   });
 });
 
-// ─── REPRO: DrillVideoPlayer WebView has no origin whitelist / nav gate ──────
+// ─── GATE: DrillVideoPlayer WebView navigation is restricted to the provider ─
 
-describe('REPRO DrillVideoPlayer WebView navigation is unrestricted', () => {
+describe('GATE DrillVideoPlayer WebView navigation is restricted', () => {
   const youtubeMedia: InstructionalMedia = {
     id: '6c8f2a4e-9b31-4f0d-8a57-2e9d4b7c1f03',
     kind: 'embed',
@@ -558,16 +622,43 @@ describe('REPRO DrillVideoPlayer WebView navigation is unrestricted', () => {
     return node ?? null;
   }
 
-  it('renders the WebView with no originWhitelist and no onShouldStartLoadWithRequest gate', async () => {
+  it('routes every request through onShouldStartLoadWithRequest, which only admits https on the shell or provider hosts', async () => {
     const renderer = renderPlayer(youtubeMedia);
     const embedStage = findWebView(renderer)!;
     expect(embedStage).not.toBeNull();
-    expect(embedStage.props.originWhitelist).toBeUndefined();
-    expect(embedStage.props.onShouldStartLoadWithRequest).toBeUndefined();
+    // '*' hands EVERY request to the gate; the library's own whitelist would
+    // otherwise pass anything outside it straight to Linking.openURL.
+    expect(embedStage.props.originWhitelist).toEqual(['*']);
+    expect(typeof embedStage.props.onShouldStartLoadWithRequest).toBe(
+      'function',
+    );
+    expect(embedStage.props.setSupportMultipleWindows).toBe(false);
     expect(embedStage.props.javaScriptEnabled).toBe(true);
 
-    // Fall forward to the watch stage: the FULL provider watch page (nav
-    // chrome, comments, related videos, external links) is loaded in-app…
+    const gate = embedStage.props.onShouldStartLoadWithRequest as (request: {
+      url: string;
+      isTopFrame?: boolean;
+    }) => boolean;
+    expect(gate({ url: youtubeMedia.embedUrl, isTopFrame: true })).toBe(true);
+    expect(gate({ url: youtubeMedia.sourceUrl, isTopFrame: true })).toBe(true);
+    expect(gate({ url: 'https://com.picklesensei', isTopFrame: true })).toBe(
+      true,
+    );
+    expect(gate({ url: 'https://evil.example/phish', isTopFrame: true })).toBe(
+      false,
+    );
+    expect(
+      gate({ url: 'http://www.youtube.com/watch', isTopFrame: true }),
+    ).toBe(false);
+    expect(gate({ url: 'javascript:alert(1)', isTopFrame: true })).toBe(false);
+    expect(gate({ url: 'intent://foo', isTopFrame: true })).toBe(false);
+    // Provider sub-frames pass; the top frame stays on the provider.
+    expect(gate({ url: 'https://ads.example/pixel', isTopFrame: false })).toBe(
+      true,
+    );
+
+    // Fall forward to the watch stage: the provider watch page is still
+    // gated the same way.
     await act(async () => {
       embedStage.props.onMessage({
         nativeEvent: { data: JSON.stringify({ kind: 'error', code: 150 }) },
@@ -578,10 +669,31 @@ describe('REPRO DrillVideoPlayer WebView navigation is unrestricted', () => {
       uri: youtubeMedia.sourceUrl,
       headers: { Referer: 'https://com.picklesensei' },
     });
-    // …still with no whitelist or navigation gate, so any link tapped inside
-    // the page navigates the in-app WebView (no URL bar, no back control).
-    expect(watchStage.props.originWhitelist).toBeUndefined();
-    expect(watchStage.props.onShouldStartLoadWithRequest).toBeUndefined();
+    expect(watchStage.props.originWhitelist).toEqual(['*']);
+    expect(typeof watchStage.props.onShouldStartLoadWithRequest).toBe(
+      'function',
+    );
     act(() => renderer.unmount());
+  });
+
+  it('shouldLoadInPlayer admits vimeo hosts for vimeo media and rejects a youtube host there', () => {
+    const vimeoMedia: InstructionalMedia = {
+      ...youtubeMedia,
+      provider: 'vimeo',
+      embedUrl: 'https://player.vimeo.com/video/123',
+      sourceUrl: 'https://vimeo.com/123',
+    };
+    expect(
+      shouldLoadInPlayer(vimeoMedia, {
+        url: 'https://player.vimeo.com/video/123',
+        isTopFrame: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldLoadInPlayer(vimeoMedia, {
+        url: 'https://www.youtube.com/watch?v=x',
+        isTopFrame: true,
+      }),
+    ).toBe(false);
   });
 });

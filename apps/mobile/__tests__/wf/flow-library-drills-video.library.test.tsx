@@ -388,9 +388,15 @@ describe('Library flow · Reads tab', () => {
       'Saved evidence could not be verified — can’t be scored',
     );
     expect(text).toContain('4 s clip');
-    // With pending clips but no reads, the "first stroke" empty state is
-    // suppressed (the clips ARE the content) and no Result row exists.
-    expect(text).not.toContain('Your measured reads, in one place.');
+    // Pending clips never claim they can be analyzed from here; the note
+    // states the real next step and the Analyze CTA stays reachable so the
+    // tab is never a dead end. No Result row exists for an unscored clip.
+    expect(text).not.toContain('READY TO ANALYZE');
+    expect(text).toContain(
+      'Saved clips aren’t scored from the library. Record a new stroke to get a score.',
+    );
+    expect(text).toContain('Your measured reads, in one place.');
+    expect(text).toContain('Analyze your first stroke');
     expect(
       pressables(renderer).filter(n =>
         String(n.props.accessibilityLabel ?? '').startsWith('Open '),
@@ -580,7 +586,7 @@ describe('Library flow · Saved drills tab', () => {
     act(() => renderer.unmount());
   });
 
-  it('a mutation error is an alert the user can dismiss', async () => {
+  it('a mutation error is a labelled button the user can dismiss', async () => {
     useTrainingStore.setState({
       mutationError: {
         code: 'training.request_failed',
@@ -594,13 +600,17 @@ describe('Library flow · Saved drills tab', () => {
     const alert = firstNode(
       renderer,
       n =>
-        n.props.accessibilityRole === 'alert' &&
+        n.props.accessibilityRole === 'button' &&
+        n.props.accessibilityLabel ===
+          'The training request could not be completed.' &&
         typeof n.props.onPress === 'function',
     );
     expect(alert).toBeDefined();
+    expect(alert.props.accessibilityHint).toBe('Dismisses this message');
     expect(allText(renderer)).toContain(
       'The training request could not be completed.',
     );
+    expect(allText(renderer)).toContain('DISMISS');
     await act(async () => alert.props.onPress());
     expect(clearMutationError).toHaveBeenCalledTimes(1);
     act(() => renderer.unmount());

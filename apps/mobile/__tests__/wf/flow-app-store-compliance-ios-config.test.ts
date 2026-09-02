@@ -194,11 +194,15 @@ describe('runtime config: paywall legal links (App Review 3.1.2)', () => {
   it('the RootNavigator Paywall route passes both legal handlers', () => {
     const source = read('src/navigation/RootNavigator.tsx');
     expect(source).toMatch(
-      /onOpenTerms: \(\) => void Linking\.openURL\(legalTermsUrl\)/,
+      /onOpenTerms: \(\) =>\s*void openLegalPage\('Terms of use', legalTermsUrl\)/,
     );
     expect(source).toMatch(
-      /onOpenPrivacy: \(\) => void Linking\.openURL\(legalPrivacyUrl\)/,
+      /onOpenPrivacy: \(\) =>\s*void openLegalPage\('Privacy policy', legalPrivacyUrl\)/,
     );
+    // The helper actually opens the URL and explains a failure instead of
+    // swallowing it.
+    expect(source).toMatch(/await Linking\.openURL\(url\)/);
+    expect(source).toMatch(/could not be opened/);
   });
 });
 

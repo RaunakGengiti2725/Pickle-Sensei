@@ -578,7 +578,7 @@ describe('ManageAccountScreen button ledger', () => {
       ).toHaveBeenCalledTimes(1);
     });
 
-    it('AccountDeletionError -> message shown, stays armed at 0 and re-enabled, nothing purged', async () => {
+    it('non-retryable AccountDeletionError -> message shown, back to review (fresh challenge required), nothing purged', async () => {
       renderer = renderScreen();
       await armSheet(renderer);
       mockConfirmAccountDeletion.mockRejectedValue(
@@ -586,6 +586,39 @@ describe('ManageAccountScreen button ledger', () => {
           'deletion.rejected',
           'The server did not confirm the deletion.',
           false,
+        ),
+      );
+      act(() => {
+        jest.advanceTimersByTime(5_000);
+      });
+      await pressAsync(sheetButton(renderer, 'Permanently delete'));
+      expect(sheetOpen(renderer)).toBe(true);
+      expect(allText(renderer)).toContain(
+        'The server did not confirm the deletion.',
+      );
+      // The dead challenge is not offered again: the sheet returns to the
+      // review step so the next attempt requests a new one.
+      expect(
+        sheetButtons(renderer).map(node => node.props.label),
+      ).not.toContain('Permanently delete');
+      const restart = sheetButton(renderer, 'Continue to delete');
+      expect(restart.props.disabled).toBe(false);
+      expect(sheetButton(renderer, 'Keep my account').props.disabled).toBe(
+        false,
+      );
+      expect(
+        useAuthStore.getState().completeAccountDeletion,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('retryable AccountDeletionError -> message shown, stays armed at 0 and re-enabled, nothing purged', async () => {
+      renderer = renderScreen();
+      await armSheet(renderer);
+      mockConfirmAccountDeletion.mockRejectedValue(
+        new AccountDeletionError(
+          'deletion.unavailable',
+          'The server did not confirm the deletion.',
+          true,
         ),
       );
       act(() => {

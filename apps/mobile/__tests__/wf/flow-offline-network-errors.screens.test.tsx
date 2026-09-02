@@ -319,7 +319,7 @@ describe('ManageAccountScreen — deletion with the network failing', () => {
     act(() => renderer.unmount());
   });
 
-  it('while the request is in flight, the danger button is disabled (no double submit) and the close X still works', async () => {
+  it('while the request is in flight, the danger button is disabled (no double submit) and every dismiss control is inert', async () => {
     let resolveFetch!: (r: Response) => void;
     globalThis.fetch = (() =>
       new Promise<Response>(resolve => {
@@ -333,10 +333,30 @@ describe('ManageAccountScreen — deletion with the network failing', () => {
     expect(buttonLabelled(renderer, 'Keep my account').props.disabled).toBe(
       true,
     );
+    // The X and the backdrop are disabled until the request settles, so a
+    // late response can never arm a sheet the user already dismissed.
     expect(
-      pressableByLabel(renderer, 'Close account deletion confirmation').props
-        .onPress,
-    ).toEqual(expect.any(Function));
+      renderer.root.findAll(
+        n =>
+          n.props.accessibilityLabel ===
+            'Close account deletion confirmation' &&
+          typeof n.props.onPress === 'function',
+      ),
+    ).toHaveLength(0);
+    expect(
+      renderer.root
+        .findAll(
+          n =>
+            n.props.accessibilityLabel ===
+            'Close account deletion confirmation',
+        )
+        .some(n => n.props.accessibilityState?.disabled === true),
+    ).toBe(true);
+    expect(
+      renderer.root
+        .findAll(n => n.props.accessibilityLabel === 'Cancel account deletion')
+        .every(n => n.props.onPress === undefined),
+    ).toBe(true);
     await act(async () => {
       resolveFetch(
         jsonResponse(200, {

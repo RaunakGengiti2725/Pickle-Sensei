@@ -116,15 +116,15 @@ afterEach(() => {
 });
 
 describe('SplashScreen button ledger', () => {
-  it('declares zero interactive elements and swallows no touches', async () => {
+  it('declares zero interactive elements and intercepts touches while mounted', async () => {
     const renderer = await render(false, jest.fn());
 
     expect(interactiveNodes(renderer)).toHaveLength(0);
 
-    // The overlay root is pointer-transparent so the already-painted first
-    // screen underneath receives every touch once the fade begins.
+    // The opaque overlay swallows touches so taps during the minimum hold and
+    // exit fade never activate invisible controls on the first screen beneath.
     const root = hostRoot(renderer);
-    expect(root.props.pointerEvents).toBe('none');
+    expect(root.props.pointerEvents).toBe('box-only');
     expect(root.props.accessible).toBe(true);
     expect(root.props.accessibilityLabel).toBe('Pickle Sensei is starting');
 

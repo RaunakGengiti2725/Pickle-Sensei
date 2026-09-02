@@ -1,9 +1,9 @@
 /**
  * mobile-sync-outbox audit — focused reproductions over a fake LocalDb.
  *
- * Tests titled "REPRO:" pin CURRENTLY OBSERVED behaviour that the audit
- * reports as a defect (see the audit's `issues`); the rest certify the
- * durability properties that hold today (kill mid-flush, replay, isolation).
+ * Certifies the outbox's durability properties (kill mid-flush, replay,
+ * isolation), the transient-vs-permanent classification of failures, and the
+ * runtime's triggers and backed-off retry cadence.
  */
 import type { ShotAnalysis } from '@pickle/shared-types';
 import type { LocalDb } from '../../src/data/db';
@@ -14,8 +14,12 @@ import {
   type SyncTransport,
 } from '../../src/data/sync';
 import {
+  SYNC_RETRY_BASE_MS,
+  SYNC_RETRY_MAX_MS,
   clearSyncRuntime,
   configureSyncRuntime,
+  nextSyncRetryDelayMs,
+  triggerOutboxSync,
 } from '../../src/data/syncRuntime';
 import { hasShotSyncReceipt, saveAnalysis } from '../../src/data/repository';
 import {
@@ -24,6 +28,12 @@ import {
   canonicalDataOwner,
   setActiveDataOwner,
 } from '../../src/data/accountScope';
+import {
+  type ApiSession,
+  clearApiSession,
+  establishApiSession,
+  setApiUnauthorizedListener,
+} from '../../src/account/apiSession';
 
 jest.mock('../../src/data/db', () => ({ getDb: jest.fn() }));
 
@@ -242,7 +252,7 @@ describe('mobile-sync-outbox — per-item rejection classification', () => {
   beforeEach(() => setActiveDataOwner(GUEST_DATA_OWNER));
   afterAll(() => setActiveDataOwner(SIGNED_OUT_DATA_OWNER));
 
-  it('REPRO: a server-declared transient "shot.write_failed" rejection consumes the bounded attempt budget and abandons the shot', async () => {
+  it('a server-declared transient "shot.write_failed" rejection records the reason but keeps the attempt budget, and the shot syncs once the server recovers', async () => {
     const { db, push, outbox, receipts } = fakeDb();
     push('shot.sync', permittedAnalysis);
     const syncShots = jest.fn(async () => ({
@@ -258,19 +268,51 @@ describe('mobile-sync-outbox — per-item rejection classification', () => {
     }));
     const transport: SyncTransport = { syncShots, ...noopSessions };
     for (let i = 0; i < OUTBOX_MAX_ATTEMPTS; i++) {
+      const result = await drainOutbox(db, transport);
+      expect(result).toMatchObject({ synced: 0, failed: 1, remaining: 1 });
+    }
+    expect(syncShots).toHaveBeenCalledTimes(OUTBOX_MAX_ATTEMPTS);
+    expect(outbox[0]!.attempts).toBe(0);
+    expect(outbox[0]!.last_error).toContain('will retry');
+
+    // The server has recovered: the row is still eligible, is re-sent, and
+    // the receipt lands so the UI can leave "pending".
+    const acceptingSyncShots = jest.fn(acceptAll.syncShots);
+    const after = await drainOutbox(db, {
+      syncShots: acceptingSyncShots,
+      ...noopSessions,
+    });
+    expect(acceptingSyncShots).toHaveBeenCalledTimes(1);
+    expect(after).toMatchObject({ synced: 1, failed: 0, remaining: 0 });
+    expect(receipts).toEqual([
+      { owner: GUEST_DATA_OWNER, entityId: analysis.id },
+    ]);
+    expect(await hasShotSyncReceipt(db, analysis.id)).toBe(true);
+  });
+
+  it('a contract rejection (a code the server will not change on replay) consumes the bounded attempt budget', async () => {
+    const { db, push, outbox } = fakeDb();
+    push('shot.sync', permittedAnalysis);
+    const transport: SyncTransport = {
+      syncShots: async () => ({
+        acceptedIds: [],
+        rejected: [
+          {
+            id: analysis.id,
+            code: 'shot.invalid',
+            message: 'timestamps out of range',
+          },
+        ],
+      }),
+      ...noopSessions,
+    };
+    for (let i = 0; i < OUTBOX_MAX_ATTEMPTS; i++) {
       await drainOutbox(db, transport);
     }
     expect(outbox[0]!.attempts).toBe(OUTBOX_MAX_ATTEMPTS);
-    expect(outbox[0]!.last_error).toContain('will retry');
-
-    // The server has recovered, but the row is no longer eligible: it is never
-    // sent again, and the UI's only signal (the receipt) stays "pending".
-    syncShots.mockClear();
+    expect(outbox[0]!.last_error).toContain('shot.invalid');
     const after = await drainOutbox(db, acceptAll);
-    expect(syncShots).not.toHaveBeenCalled();
     expect(after).toMatchObject({ synced: 0, failed: 0, remaining: 1 });
-    expect(receipts).toHaveLength(0);
-    expect(await hasShotSyncReceipt(db, analysis.id)).toBe(false);
   });
 
   it('a transport-level 5xx on the same batch keeps attempts at 0 (the documented transient path)', async () => {
@@ -294,7 +336,7 @@ describe('mobile-sync-outbox — evaluation.trial transport faults', () => {
   beforeEach(() => setActiveDataOwner(GUEST_DATA_OWNER));
   afterAll(() => setActiveDataOwner(SIGNED_OUT_DATA_OWNER));
 
-  it('REPRO: an offline network fault burns the trial attempt budget while the shot in the same drain keeps attempts=0', async () => {
+  it('an offline network fault leaves both the shot and the trial fully retryable (attempts=0), and the trial uploads once connectivity returns', async () => {
     const { db, push, outbox } = fakeDb();
     push('shot.sync', permittedAnalysis);
     push('evaluation.trial', trial);
@@ -313,21 +355,26 @@ describe('mobile-sync-outbox — evaluation.trial transport faults', () => {
     const shotRow = outbox.find(r => r.kind === 'shot.sync')!;
     const trialRow = outbox.find(r => r.kind === 'evaluation.trial')!;
     expect(shotRow.attempts).toBe(0);
-    expect(trialRow.attempts).toBe(OUTBOX_MAX_ATTEMPTS);
+    expect(trialRow.attempts).toBe(0);
     expect(trialRow.last_error).toContain('Network request failed');
+    expect(uploadEvaluationTrials).toHaveBeenCalledTimes(OUTBOX_MAX_ATTEMPTS);
 
-    // Connectivity returns: the trial is never uploaded again.
-    uploadEvaluationTrials.mockClear();
+    // Connectivity returns: the trial is uploaded and leaves the queue.
+    const acceptingUpload = jest.fn(async (trials: unknown[]) => ({
+      acceptedTrialIds: trials.map(t => (t as { trialId: string }).trialId),
+      rejected: [],
+    }));
     const online: SyncTransport = {
       ...acceptAll,
-      uploadEvaluationTrials,
+      uploadEvaluationTrials: acceptingUpload,
     };
-    await drainOutbox(db, online);
-    expect(uploadEvaluationTrials).not.toHaveBeenCalled();
-    expect(outbox.some(r => r.kind === 'evaluation.trial')).toBe(true);
+    const result = await drainOutbox(db, online);
+    expect(acceptingUpload).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ synced: 2, failed: 0, remaining: 0 });
+    expect(outbox.some(r => r.kind === 'evaluation.trial')).toBe(false);
   });
 
-  it('REPRO: a 5xx / 429 from the trial endpoint is also counted as a permanent attempt', async () => {
+  it('a 5xx / 429 from the trial endpoint is transient and does not consume an attempt', async () => {
     const { db, push, outbox } = fakeDb();
     push('evaluation.trial', trial);
     await drainOutbox(db, {
@@ -342,7 +389,20 @@ describe('mobile-sync-outbox — evaluation.trial transport faults', () => {
         throw new ApiError(429, 'rate_limited', 'slow down');
       },
     });
-    expect(outbox[0]!.attempts).toBe(2);
+    expect(outbox[0]!.attempts).toBe(0);
+    expect(outbox[0]!.last_error).toContain('slow down');
+  });
+
+  it('a 4xx contract error from the trial endpoint consumes an attempt', async () => {
+    const { db, push, outbox } = fakeDb();
+    push('evaluation.trial', trial);
+    await drainOutbox(db, {
+      ...acceptAll,
+      uploadEvaluationTrials: async () => {
+        throw new ApiError(422, 'evaluation.invalid', 'bad trial');
+      },
+    });
+    expect(outbox[0]!.attempts).toBe(1);
   });
 });
 
@@ -399,11 +459,12 @@ describe('mobile-sync-outbox — kill mid-flush and replay', () => {
 });
 
 describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer', () => {
-  const session = {
+  const session: ApiSession = {
     canonicalAppUserId: '33333333-3333-4333-8333-333333333333',
     apiBaseUrl: 'https://api.test',
     bearerToken: 'provider-id-token-v1',
-  } as Parameters<typeof configureSyncRuntime>[0];
+    provider: 'apple',
+  };
   const owner = canonicalDataOwner(session.canonicalAppUserId);
 
   interface FetchCall {
@@ -443,10 +504,14 @@ describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer'
       },
     );
     setActiveDataOwner(owner);
+    // Zero jitter so the back-off schedule is deterministic.
+    jest.spyOn(Math, 'random').mockReturnValue(0.5);
   });
 
   afterEach(() => {
     clearSyncRuntime();
+    setApiUnauthorizedListener(null);
+    clearApiSession();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     delete (globalThis as { fetch?: unknown }).fetch;
     jest.useRealTimers();
@@ -457,7 +522,7 @@ describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer'
     for (let i = 0; i < 5; i++) await flushMicrotasks();
   }
 
-  it('REPRO: triggerOutboxSync has no caller in the app — nothing under src/ except syncRuntime.ts references it', () => {
+  it('triggerOutboxSync is wired to the capture flow: AnalyzeScreen calls it after a scored result is persisted', () => {
     const root = join(__dirname, '..', '..', 'src');
     const hits: string[] = [];
     const walk = (dir: string) => {
@@ -474,10 +539,13 @@ describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer'
       }
     };
     walk(root);
-    expect(hits).toEqual(['data/syncRuntime.ts']);
+    expect(hits.sort()).toEqual([
+      'data/syncRuntime.ts',
+      'screens/AnalyzeScreen.tsx',
+    ]);
   });
 
-  it('REPRO: a rating persisted right after the initial drain waits the full 30 s timer before it is sent', async () => {
+  it('a rating persisted right after the initial drain is sent immediately by triggerOutboxSync, without waiting for the 30 s timer', async () => {
     const fake = fakeDb();
     (getDb as jest.Mock).mockReturnValue(fake.db);
     configureSyncRuntime(session);
@@ -490,17 +558,39 @@ describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer'
     await settle();
     expect(calls).toHaveLength(0);
 
-    jest.advanceTimersByTime(29_999);
+    triggerOutboxSync();
+    await settle();
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe('https://api.test/v1/shots:sync');
+  });
+
+  it('without an explicit trigger, the healthy cadence drains again after 30 s', async () => {
+    const fake = fakeDb();
+    (getDb as jest.Mock).mockReturnValue(fake.db);
+    configureSyncRuntime(session);
+    await settle();
+    expect(calls).toHaveLength(0);
+
+    await saveAnalysis(fake.db, analysis, analysisPermitId);
+    jest.advanceTimersByTime(SYNC_RETRY_BASE_MS - 1);
     await settle();
     expect(calls).toHaveLength(0);
 
     jest.advanceTimersByTime(1);
     await settle();
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.url).toBe('https://api.test/v1/shots:sync');
   });
 
-  it('REPRO: after repeated 5xx the retry cadence is a fixed 30 s — no exponential backoff, no jitter', async () => {
+  it('nextSyncRetryDelayMs doubles per consecutive failure, caps at 5 min, and applies ±20% jitter', () => {
+    expect(nextSyncRetryDelayMs(0, () => 0.5)).toBe(SYNC_RETRY_BASE_MS);
+    expect(nextSyncRetryDelayMs(1, () => 0.5)).toBe(SYNC_RETRY_BASE_MS * 2);
+    expect(nextSyncRetryDelayMs(2, () => 0.5)).toBe(SYNC_RETRY_BASE_MS * 4);
+    expect(nextSyncRetryDelayMs(10, () => 0.5)).toBe(SYNC_RETRY_MAX_MS);
+    expect(nextSyncRetryDelayMs(1, () => 0)).toBe(SYNC_RETRY_BASE_MS * 2 * 0.8);
+    expect(nextSyncRetryDelayMs(1, () => 1)).toBe(SYNC_RETRY_BASE_MS * 2 * 1.2);
+  });
+
+  it('after repeated 5xx the retry cadence backs off exponentially (60 s, 120 s, 240 s, then the 5 min cap) and attempts stay at 0', async () => {
     const fake = fakeDb();
     fake.push('shot.sync', permittedAnalysis, owner);
     (getDb as jest.Mock).mockReturnValue(fake.db);
@@ -515,17 +605,29 @@ describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer'
     });
     configureSyncRuntime(session);
     await settle();
-    for (let i = 0; i < 10; i++) {
+    expect(calls).toHaveLength(1);
+
+    jest.advanceTimersByTime(30_000);
+    await settle();
+    expect(calls).toHaveLength(1);
+
+    for (const step of [60_000, 120_000, 240_000, 300_000, 300_000]) {
+      const before = calls.length;
+      jest.advanceTimersByTime(step - 30_000 - 1);
+      await settle();
+      expect(calls).toHaveLength(before);
+      jest.advanceTimersByTime(1);
+      await settle();
+      expect(calls).toHaveLength(before + 1);
       jest.advanceTimersByTime(30_000);
       await settle();
     }
-    expect(calls).toHaveLength(11);
     const gaps = calls.slice(1).map((c, i) => c.atMs - calls[i]!.atMs);
-    expect(new Set(gaps)).toEqual(new Set([30_000]));
+    expect(gaps).toEqual([60_000, 120_000, 240_000, 300_000, 300_000]);
     expect(fake.outbox[0]!.attempts).toBe(0);
   });
 
-  it('REPRO: a 429 Retry-After header is discarded — the next attempt fires at 30 s, inside the server-announced window', async () => {
+  it('a 429 counts as a failed drain: the next attempt backs off to 60 s instead of the 30 s cadence', async () => {
     const fake = fakeDb();
     fake.push('shot.sync', permittedAnalysis, owner);
     (getDb as jest.Mock).mockReturnValue(fake.db);
@@ -542,14 +644,19 @@ describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer'
     await settle();
     expect(calls).toHaveLength(1);
     expect(fake.outbox[0]!.last_error).toContain('Too many requests');
+    expect(fake.outbox[0]!.attempts).toBe(0);
+
+    jest.advanceTimersByTime(30_000);
+    await settle();
+    expect(calls).toHaveLength(1);
 
     jest.advanceTimersByTime(30_000);
     await settle();
     expect(calls).toHaveLength(2);
-    expect(calls[1]!.atMs - calls[0]!.atMs).toBeLessThan(55_000);
+    expect(calls[1]!.atMs - calls[0]!.atMs).toBe(60_000);
   });
 
-  it('REPRO: the bearer captured at configure time is replayed on every drain — a 401 never refreshes it and rows stay queued forever', async () => {
+  it('a 401 reports the rejected bearer to the auth layer, keeps the row retryable, and backs off instead of hammering the dead token', async () => {
     const fake = fakeDb();
     fake.push('shot.sync', permittedAnalysis, owner);
     (getDb as jest.Mock).mockReturnValue(fake.db);
@@ -565,18 +672,41 @@ describe('mobile-sync-outbox — runtime triggers, cadence, Retry-After, bearer'
         },
       }),
     });
+    const unauthorized = jest.fn();
+    establishApiSession(session);
+    setApiUnauthorizedListener(unauthorized);
     configureSyncRuntime(session);
     await settle();
-    for (let i = 0; i < 4; i++) {
-      jest.advanceTimersByTime(30_000);
-      await settle();
-    }
-    expect(calls).toHaveLength(5);
-    expect(new Set(calls.map(c => c.authorization))).toEqual(
-      new Set(['Bearer provider-id-token-v1']),
-    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.authorization).toBe('Bearer provider-id-token-v1');
+    expect(unauthorized).toHaveBeenCalledTimes(1);
+    expect(unauthorized).toHaveBeenCalledWith(session);
+
+    // The row is not abandoned: a fresh sign-in replaces the bearer and the
+    // rating syncs then.
     expect(fake.outbox).toHaveLength(1);
     expect(fake.outbox[0]!.attempts).toBe(0);
     expect(fake.outbox[0]!.last_error).toContain('could not be verified');
+
+    jest.advanceTimersByTime(30_000);
+    await settle();
+    expect(calls).toHaveLength(1);
+    jest.advanceTimersByTime(30_000);
+    await settle();
+    expect(calls).toHaveLength(2);
+
+    // Once the auth layer swaps the session, the old runtime is torn down and
+    // the new bearer is used for the queued row.
+    const renewed: ApiSession = {
+      ...session,
+      bearerToken: 'provider-id-token-v2',
+    };
+    establishApiSession(renewed);
+    configureSyncRuntime(renewed);
+    await settle();
+    expect(calls[calls.length - 1]!.authorization).toBe(
+      'Bearer provider-id-token-v2',
+    );
+    expect(unauthorized).toHaveBeenCalledTimes(3);
   });
 });

@@ -142,7 +142,7 @@ describe('ProgressScreen per-render fact scan (mobile-perf-memory)', () => {
     jest.useRealTimers();
   });
 
-  it('loads the full local history unbounded and re-keys every fact on an unrelated state change', async () => {
+  it('loads the full local history once and does NOT re-key any fact on an unrelated section toggle', async () => {
     mockListRealAnalysisFacts.mockResolvedValue(facts(FACT_COUNT));
 
     let renderer!: TestRenderer.ReactTestRenderer;
@@ -159,15 +159,14 @@ describe('ProgressScreen per-render fact scan (mobile-perf-memory)', () => {
     // Baseline after the data-loading renders settle.
     formatToParts.mockClear();
 
-    // A section toggle changes no fact, no range, no timezone — yet every
-    // fact is run through Intl again because `selectedFacts` is unmemoized.
+    // A section toggle changes no fact, no range, no timezone, so the
+    // memoized fact slices are reused and no fact goes through Intl again.
     await pressByLabel(renderer, 'practice progress');
-    const afterSectionToggle = formatToParts.mock.calls.length;
-    expect(afterSectionToggle).toBeGreaterThanOrEqual(FACT_COUNT);
+    expect(formatToParts.mock.calls.length).toBe(0);
 
     formatToParts.mockClear();
     await pressByLabel(renderer, 'technique progress');
-    expect(formatToParts.mock.calls.length).toBeGreaterThanOrEqual(FACT_COUNT);
+    expect(formatToParts.mock.calls.length).toBe(0);
 
     act(() => renderer.unmount());
   });

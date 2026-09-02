@@ -46,9 +46,11 @@ jest.mock('react-native-safe-area-context', () => ({
 
 const mockAccess: {
   canonicalAccess: { canStartRating: boolean } | null;
+  status: 'idle' | 'loading' | 'ready' | 'unconfigured' | 'error';
   initialize: jest.Mock<Promise<void>, []>;
 } = {
   canonicalAccess: { canStartRating: true },
+  status: 'ready',
   initialize: jest.fn(async () => undefined),
 };
 const mockAuth: { session: { localOnly: boolean } | null } = {
@@ -58,6 +60,7 @@ jest.mock('../../src/state/accessStore', () => ({
   useAccessStore: {
     getState: () => ({
       canonicalAccess: mockAccess.canonicalAccess,
+      status: mockAccess.status,
       initialize: mockAccess.initialize,
     }),
   },
@@ -146,6 +149,7 @@ describe('Coach tab — FAB and action menu replace the empty Add portal', () =>
     mockTabNavigate.mockClear();
     mockEmit.mockClear();
     mockAccess.canonicalAccess = { canStartRating: true };
+    mockAccess.status = 'ready';
     mockAccess.initialize = jest.fn(async () => undefined);
     mockAuth.session = { localOnly: false };
   });
@@ -276,27 +280,27 @@ describe('Coach tab — FAB and action menu replace the empty Add portal', () =>
     act(() => renderer.unmount());
   });
 
-  it('unknown access → initialize() first, then route on the refreshed answer; failure still resolves', async () => {
+  it('unknown access → Analyze gate (which resolves it) without awaiting; a failed check still resolves to the Paywall', async () => {
+    // The bar never awaits initialize(): an unchecked ('idle') account is
+    // handed to the Analyze route whose gate shows "Checking access…".
     mockAccess.canonicalAccess = null;
-    mockAccess.initialize = jest.fn(async () => {
-      mockAccess.canonicalAccess = { canStartRating: true };
-    });
+    mockAccess.status = 'idle';
     const renderer = renderBar();
     await pressByLabel(renderer, 'Open coach actions');
     await pressByLabel(renderer, 'Auto Analyze');
     await flushCloseAnimation();
     await act(async () => {});
-    expect(mockAccess.initialize).toHaveBeenCalledTimes(1);
+    expect(mockAccess.initialize).not.toHaveBeenCalled();
     expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', {
       source: 'camera',
     });
     act(() => renderer.unmount());
 
-    // Backend still unreachable: access stays null → honest Paywall route,
-    // never a hang and never the blank Add screen.
+    // Backend unreachable: access stays null with status 'error' → honest
+    // Paywall route, never a hang and never the blank Add screen.
     mockRootNavigate.mockClear();
     mockAccess.canonicalAccess = null;
-    mockAccess.initialize = jest.fn(async () => undefined);
+    mockAccess.status = 'error';
     const second = renderBar();
     await pressByLabel(second, 'Open coach actions');
     await pressByLabel(second, 'Import Video');

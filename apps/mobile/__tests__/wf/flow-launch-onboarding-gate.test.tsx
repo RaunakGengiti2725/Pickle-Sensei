@@ -682,7 +682,7 @@ describe('flow: launch-onboarding — App Gate end-to-end', () => {
       unmount();
     });
 
-    it('while the canonical profile fetch is in flight after sign-in, the Gate renders NOTHING (no splash, no spinner)', async () => {
+    it('while the canonical profile fetch is in flight after sign-in, the Gate paints a labelled loading state (never a bare surface)', async () => {
       let resolveFetch!: (value: Profile | null) => void;
       mockFetchCanonical.mockImplementation(
         () =>
@@ -698,10 +698,19 @@ describe('flow: launch-onboarding — App Gate end-to-end', () => {
 
       await pressAsync(renderer, 'Sign in with Apple');
       await settle();
-      // Documented observation: the sign-in screen is gone, the splash was
-      // already dismissed, and no replacement content is rendered until the
-      // network round-trip (up to the 15 s request timeout) finishes.
-      expect(renderer.root.findAllByType(Text)).toHaveLength(0);
+      // The sign-in screen is gone and the splash already dismissed, so the
+      // not-ready state must paint a real loading affordance until the
+      // network round-trip finishes.
+      expect(allText(renderer)).not.toContain('SIGN_IN_SCREEN');
+      expect(allText(renderer)).not.toContain('ROOT_NAVIGATOR');
+      expect(allText(renderer)).toContain('Loading your account');
+      expect(
+        renderer.root.findAll(
+          n =>
+            n.props.accessibilityLabel ===
+            'Loading your account. Keep Pickle Sensei open.',
+        ).length,
+      ).toBeGreaterThan(0);
       expect(useAppStore.getState().hydrated).toBe(false);
 
       await act(async () => {
@@ -712,8 +721,8 @@ describe('flow: launch-onboarding — App Gate end-to-end', () => {
       unmount();
     });
 
-    it('a failed canonical fetch (offline) skips stash adoption and re-asks the questionnaire in account mode; the stash survives', async () => {
-      mockFetchCanonical.mockRejectedValue(new Error('offline'));
+    it('a failed canonical fetch (offline) shows a retryable error instead of re-asking the questionnaire; the stash survives and is adopted on retry', async () => {
+      mockFetchCanonical.mockRejectedValueOnce(new Error('offline'));
       const renderer = await launch();
       await pressAsync(renderer, 'Start your first read');
       await answerQuestionnaire(renderer);
@@ -721,21 +730,32 @@ describe('flow: launch-onboarding — App Gate end-to-end', () => {
       await pressAsync(renderer, 'Sign in with Apple');
       await settle();
 
-      // Documented observation: the just-answered questionnaire is shown
-      // again (account mode: escape route is "Sign out").
-      expect(allText(renderer)).toContain('PLAYER SETUP');
+      // The just-answered questionnaire is NOT shown again; the Gate explains
+      // the failure and offers a retry.
+      expect(allText(renderer)).toContain(
+        'Your coaching profile couldn’t load',
+      );
+      expect(allText(renderer)).not.toContain('PLAYER SETUP');
       expect(allText(renderer)).not.toContain('ROOT_NAVIGATOR');
       expect(useAppStore.getState().hydrated).toBe(true);
       expect(useAppStore.getState().profile).toBeNull();
+      expect(useAppStore.getState().hydrateError).toEqual(expect.any(String));
       expect(mockSaveCanonical).not.toHaveBeenCalled();
       expect(
         JSON.parse(mockKv.get(PENDING_ONBOARDING_PROFILE_KV_KEY)!),
       ).toEqual({ version: 1, profile: walkedProfile });
-      const leave = pressables(renderer, 'Leave setup');
-      expect(leave).toHaveLength(1);
-      expect(leave[0]!.props.accessibilityHint).toBe(
-        'Sign out and return to the sign-in screen',
-      );
+
+      // Retry once the network is back: the stash is adopted through the
+      // canonical endpoint and the app opens.
+      mockFetchCanonical.mockResolvedValue(null);
+      mockSaveCanonical.mockImplementation(async (_s, profile) => profile);
+      await pressAsync(renderer, 'Try again');
+      await settle();
+      expect(allText(renderer)).toContain('ROOT_NAVIGATOR');
+      expect(mockSaveCanonical).toHaveBeenCalledTimes(1);
+      expect(mockSaveCanonical.mock.calls[0]?.[1]).toEqual(walkedProfile);
+      expect(useAppStore.getState().profile).toEqual(walkedProfile);
+      expect(mockKv.get(PENDING_ONBOARDING_PROFILE_KV_KEY)).toBe('');
       unmount();
     });
   });

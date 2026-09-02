@@ -580,24 +580,24 @@ describe('PlanDrillCard', () => {
     act(() => renderer.unmount());
   });
 
-  it('no prescription target: confirm is disabled and never fires', () => {
+  it('no prescription target: no completion control is rendered and the copy explains why', () => {
     const { renderer } = renderPlan({
       item: { ...planItem, targetSets: null },
     });
-    const confirm = byLabel(
-      renderer,
-      'Confirm completion of Dink Target Ladder',
-    );
-    expect(confirm.props.disabled).toBe(true);
-    expect(confirm.props.accessibilityState.disabled).toBe(true);
+    expect(
+      pressables(renderer).filter(node =>
+        String(node.props.accessibilityLabel).startsWith(
+          'Confirm completion of',
+        ),
+      ),
+    ).toHaveLength(0);
     const text = renderedText(renderer);
-    expect(text).toContain('I completed this prescription');
+    expect(text).not.toContain('I completed');
+    expect(text).not.toContain('Tap only after doing the prescribed work.');
     expect(text).toContain('—');
-    // WF-ISSUE: PlanDrillCard renders a permanently disabled completion
-    // button with "Tap only after doing the prescribed work" copy when the
-    // item carries no prescription target — no copy explains why the control
-    // is dead. Expected: explanatory copy or no button.
-    // expect(text).not.toContain('Tap only after doing the prescribed work.');
+    expect(text).toContain(
+      'No sets, reps, or time were prescribed for this drill',
+    );
     act(() => renderer.unmount());
   });
 

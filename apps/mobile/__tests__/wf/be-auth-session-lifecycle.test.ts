@@ -3,16 +3,17 @@
  * bearer stops being accepted (provider identity token past `exp`, Apple
  * credential revoked, account deleted elsewhere…).
  *
- * Facts pinned here, each of which the audit reports as a defect:
+ * Facts pinned here:
  *   1. The bearer stored after bootstrap IS the raw provider identity token
  *      (authStore → bootstrap → apiSession). No server-issued session, no
  *      refresh token, nothing to rotate.
- *   2. Once the server answers 401, every client (generic transport / outbox,
- *      training, billing) surfaces an error but NONE of them touches the auth
- *      store: the user stays "signed in", the dead bearer stays installed, and
- *      the native provider is never asked for a fresh token.
- *   3. The outbox treats 401 as transient, so a stale-bearer row is retried
- *      on every 30 s tick forever without consuming its attempt budget.
+ *   2. Once the server answers 401, the generic transport and the billing
+ *      client report the rejected bearer to the auth store, which stops every
+ *      retry loop and (for Apple, which has no silent restore) lands the user
+ *      signed out with an honest "sign-in expired" reason.
+ *   3. The outbox treats 401 as transient: the queued row keeps its attempt
+ *      budget for the next sign-in instead of being abandoned, and the dead
+ *      bearer is not replayed once the session is torn down.
  *
  * Mock style follows authHydrateRestore.test.ts (in-memory kv LocalDb,
  * module mocks for the provider SDKs, jest.fn fetch).
@@ -20,7 +21,10 @@
 import { NativeModules } from 'react-native';
 import type { ShotAnalysis } from '@pickle/shared-types';
 import type { LocalDb } from '../../src/data/db';
-import { useAuthStore } from '../../src/auth/authStore';
+import {
+  SESSION_EXPIRED_MESSAGE,
+  useAuthStore,
+} from '../../src/auth/authStore';
 import { clearApiSession, getApiSession } from '../../src/account/apiSession';
 import {
   SIGNED_OUT_DATA_OWNER,
@@ -291,7 +295,7 @@ describe('auth-session-lifecycle: bearer is the provider identity token', () => 
 });
 
 describe('auth-session-lifecycle: 401 handling on every API caller', () => {
-  it('generic transport (outbox sync): a 401 leaves the dead bearer + "signed in" state in place and retries forever', async () => {
+  it('generic transport (outbox sync): a 401 tears down the session with an honest reason, keeps the row for the next sign-in, and stops replaying the dead bearer', async () => {
     const exp = Math.floor(Date.now() / 1000) + 600;
     const token = appleIdentityToken(exp);
     const signInWithApple = await signInWithAppleToken(token);
@@ -315,22 +319,14 @@ describe('auth-session-lifecycle: 401 handling on every API caller', () => {
       token: session.bearerToken,
     });
 
-    // The lone request path surfaces a typed 401 and nothing else happens.
-    await expect(
-      transport.syncShots([analysis as unknown as Record<string, unknown>]),
-    ).rejects.toMatchObject({ status: 401 });
-
-    // Simulate three 30 s outbox ticks with the same expired bearer.
-    for (let tick = 0; tick < 3; tick++) {
-      const result = await drainOutbox(mockCurrentDb(), transport);
-      expect(result).toMatchObject({ synced: 0, failed: 1, remaining: 1 });
-    }
-    // 4 requests, every one with the same dead token…
-    expect(fetchMock).toHaveBeenCalledTimes(4);
-    for (const call of fetchMock.mock.calls) {
-      expect(call[1]?.headers?.authorization).toBe(`Bearer ${token}`);
-    }
-    // …the row never consumes its attempt budget (401 is "transient")…
+    // The first drain records the transient 401 on the row: no attempt is
+    // consumed, so the rating is still syncable after the next sign-in.
+    const result = await drainOutbox(mockCurrentDb(), transport);
+    expect(result).toMatchObject({ synced: 0, failed: 1, remaining: 1 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[1]?.headers?.authorization).toBe(
+      `Bearer ${token}`,
+    );
     expect(isPermanentSyncFailure(new ApiError(401, 'unauthorized', 'x'))).toBe(
       false,
     );
@@ -338,12 +334,27 @@ describe('auth-session-lifecycle: 401 handling on every API caller', () => {
       attempts: 0,
       last_error: expect.stringContaining('could not be verified'),
     });
-    // …and no layer reacts: auth store still "signed in" with the same
-    // bearer, no error surfaced, provider never re-prompted.
-    expect(useAuthStore.getState().session?.provider).toBe('apple');
-    expect(useAuthStore.getState().error).toBeNull();
-    expect(getApiSession()?.bearerToken).toBe(token);
+
+    // The auth layer reacted: Apple has no silent restore, so the user lands
+    // signed out with an honest reason, the bearer is gone, and the sync
+    // runtime is torn down. The provider is not re-prompted behind their back.
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(useAuthStore.getState().session).toBeNull();
+    expect(useAuthStore.getState().error).toMatchObject({
+      code: 'auth.session_expired',
+      message: SESSION_EXPIRED_MESSAGE,
+    });
+    expect(getApiSession()).toBeNull();
+    expect(getActiveDataOwner()).toBe(SIGNED_OUT_DATA_OWNER);
     expect(signInWithApple).toHaveBeenCalledTimes(1);
+
+    // A stray tick after teardown sends nothing: the signed-out owner has no
+    // rows, so the dead bearer is never replayed and the row stays queued.
+    const afterTeardown = await drainOutbox(mockCurrentDb(), transport);
+    expect(afterTeardown).toMatchObject({ synced: 0, failed: 0, remaining: 0 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(mockOutbox).toHaveLength(1);
+    expect(mockOutbox[0]).toMatchObject({ owner_key: owner, attempts: 0 });
   });
 
   it('training client: 401 becomes a non-retryable TrainingError with no auth side effect', async () => {
@@ -364,7 +375,7 @@ describe('auth-session-lifecycle: 401 handling on every API caller', () => {
     expect(getApiSession()?.bearerToken).toBe(token);
   });
 
-  it('billing client: 401 is indistinguishable from a backend outage and has no auth side effect', async () => {
+  it('billing client: 401 is a distinct, non-retryable sign-in-expired error and tears down the session', async () => {
     const token = appleIdentityToken(Math.floor(Date.now() / 1000) + 600);
     await signInWithAppleToken(token);
     const fetchFn = jest.fn().mockResolvedValue(unauthorized());
@@ -384,8 +395,10 @@ describe('auth-session-lifecycle: 401 handling on every API caller', () => {
     expect(caught).toMatchObject({
       code: 'billing.backend_unavailable',
       retryable: false,
+      message:
+        'Your sign-in has expired. Sign in again to check membership access.',
     });
-    // Same code + message a 503 would produce.
+    // A 503 is a retryable outage with different copy.
     const outageFetch = jest.fn().mockResolvedValue(response({}, 503));
     let outage: unknown;
     try {
@@ -397,11 +410,17 @@ describe('auth-session-lifecycle: 401 handling on every API caller', () => {
     } catch (error) {
       outage = error;
     }
-    expect((outage as BillingError).code).toBe((caught as BillingError).code);
-    expect((outage as BillingError).message).toBe(
-      (caught as BillingError).message,
-    );
-    expect(useAuthStore.getState().session?.provider).toBe('apple');
-    expect(getApiSession()?.bearerToken).toBe(token);
+    expect(outage).toMatchObject({
+      code: 'billing.backend_unavailable',
+      retryable: true,
+      message: 'Membership verification is temporarily unavailable.',
+    });
+
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(useAuthStore.getState().session).toBeNull();
+    expect(useAuthStore.getState().error).toMatchObject({
+      code: 'auth.session_expired',
+    });
+    expect(getApiSession()).toBeNull();
   });
 });

@@ -1,14 +1,13 @@
 /**
- * sign-in-auth flow — token refresh/expiry characterization.
+ * sign-in-auth flow — token expiry characterization.
  *
  * The bearer the app sends on every authenticated request IS the provider
  * identity token captured at sign-in (bootstrap contract; the edge function
  * re-verifies it via Supabase signInWithIdToken once its ~10 min auth cache
- * lapses). Apple identity tokens expire minutes after issue and Google ID
- * tokens after an hour, and the mobile app has no refresh/re-exchange path.
- * These tests pin what a user then sees: the auth session stays "signed in",
- * the 401 is presented as a transient outage, and nothing routes the user
- * back to the sign-in surface (see src/account/AUTH_LIMITATIONS.md).
+ * lapses). Apple identity tokens expire minutes after issue and Apple offers
+ * no silent re-exchange, so the first 401 must be honest: the request fails
+ * with sign-in-expired copy, the auth layer is told, and the user lands
+ * signed out with an explanatory reason instead of retrying a dead bearer.
  */
 import type { LocalDb } from '../../src/data/db';
 
@@ -128,8 +127,15 @@ afterEach(() => {
   delete nativeModules.PickleAuth;
 });
 
-describe('sign-in-auth token expiry (documents the current no-refresh contract)', () => {
-  it('the api session bearer is the raw provider identity token and the store exposes no refresh action', () => {
+const SESSION_EXPIRED_MESSAGE =
+  'Your sign-in expired. Sign in again to keep syncing — everything on this phone is still here.';
+
+async function settleUnauthorizedHandling(): Promise<void> {
+  await new Promise<void>(resolve => setImmediate(resolve));
+}
+
+describe('sign-in-auth token expiry (Apple: no silent refresh, honest sign-out)', () => {
+  it('the api session bearer is the raw provider identity token and the store exposes no interactive refresh action', () => {
     expect(getApiSession()).toMatchObject({
       bearerToken: 'apple-identity-token-short-lived',
       provider: 'apple',
@@ -151,7 +157,7 @@ describe('sign-in-auth token expiry (documents the current no-refresh contract)'
     );
   });
 
-  it('a 401 on /v1/me/access is surfaced as a non-retryable "temporarily unavailable" outage while the auth session stays signed in', async () => {
+  it('a 401 on /v1/me/access is a non-retryable sign-in-expired error and the expired session is signed out with an honest reason', async () => {
     const api = getApiSession()!;
     const fetchFn = jest
       .fn()
@@ -177,7 +183,7 @@ describe('sign-in-auth token expiry (documents the current no-refresh contract)'
     const billing = caught as BillingError;
     expect(billing.code).toBe('billing.backend_unavailable');
     expect(billing.message).toBe(
-      'Membership verification is temporarily unavailable.',
+      'Your sign-in has expired. Sign in again to check membership access.',
     );
     expect(billing.retryable).toBe(false);
     expect(fetchFn).toHaveBeenCalledWith(
@@ -188,8 +194,36 @@ describe('sign-in-auth token expiry (documents the current no-refresh contract)'
         }),
       }),
     );
-    // Nothing observed the 401: the user is still "signed in" with the same
-    // dead bearer, so every later call repeats the same failure.
+    // The auth layer observed the 401: Apple has no silent restore, so the
+    // dead bearer is dropped and the user is told why instead of every later
+    // call repeating the same failure.
+    await settleUnauthorizedHandling();
+    expect(useAuthStore.getState().session).toBeNull();
+    expect(useAuthStore.getState().error).toEqual({
+      code: 'auth.session_expired',
+      message: SESSION_EXPIRED_MESSAGE,
+    });
+    expect(getApiSession()).toBeNull();
+    expect(mockAppleSignIn).toHaveBeenCalledTimes(1);
+  });
+
+  it('a 401 for a bearer that is no longer the active session does not sign the current session out', async () => {
+    const api = getApiSession()!;
+    const fetchFn = jest
+      .fn()
+      .mockResolvedValue(
+        response(
+          { error: { message: 'The identity token could not be verified.' } },
+          401,
+        ),
+      );
+    const client = createCanonicalAccessClient({
+      baseUrl: api.apiBaseUrl,
+      token: 'stale-superseded-bearer',
+      fetchFn,
+    });
+    await expect(client.getAccess()).rejects.toBeInstanceOf(BillingError);
+    await settleUnauthorizedHandling();
     expect(useAuthStore.getState().session?.provider).toBe('apple');
     expect(useAuthStore.getState().error).toBeNull();
     expect(getApiSession()?.bearerToken).toBe(
@@ -197,7 +231,7 @@ describe('sign-in-auth token expiry (documents the current no-refresh contract)'
     );
   });
 
-  it('a 401 on permit reserve passes the raw server message through as the "unavailable" reason', async () => {
+  it('a 401 on permit reserve passes the raw server message through and also expires the session', async () => {
     const api = getApiSession()!;
     const fetchFn = jest
       .fn()
@@ -231,7 +265,10 @@ describe('sign-in-auth token expiry (documents the current no-refresh contract)'
         }),
       }),
     );
-    expect(useAuthStore.getState().session?.provider).toBe('apple');
+    await settleUnauthorizedHandling();
+    expect(useAuthStore.getState().session).toBeNull();
+    expect(useAuthStore.getState().error?.code).toBe('auth.session_expired');
+    expect(getApiSession()).toBeNull();
   });
 
   it('the sync outbox treats a 401 as transient forever (never consumes the attempt budget)', () => {

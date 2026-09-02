@@ -8,7 +8,7 @@
  * against the current code so the evidence is executable.
  */
 import React from 'react';
-import { Switch, Text } from 'react-native';
+import { Modal, Switch, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 jest.mock('../../src/config/authConfig', () => ({
@@ -178,7 +178,7 @@ describe('ConsentSettingsScreen ← consentStore', () => {
     act(() => renderer.unmount());
   });
 
-  it('DEFECT: when consent status could not load, the error is shown but the screen offers no retry control', () => {
+  it('when consent status could not load, the error is shown with a "Try again" control that re-hydrates', async () => {
     useConsentStore.setState({
       availability: 'unavailable',
       error: 'Consent settings are temporarily unavailable.',
@@ -188,9 +188,12 @@ describe('ConsentSettingsScreen ← consentStore', () => {
       'Consent settings are temporarily unavailable.',
     );
     expect(renderer.root.findByType(Switch).props.disabled).toBe(true);
-    // Only the header back button is pressable: no "Try again" / re-hydrate.
-    expect(controlLabels(renderer)).toEqual(['Back']);
+    expect(controlLabels(renderer)).toEqual(['Back', 'Try again']);
     expect(useConsentStore.getState().hydrate).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      pressables(renderer, 'Try again')[0]!.props.onPress();
+    });
+    expect(useConsentStore.getState().hydrate).toHaveBeenCalledTimes(2);
     act(() => renderer.unmount());
   });
 });
@@ -378,7 +381,7 @@ describe('ManageAccountScreen delete sheet ← deletion api', () => {
     act(() => renderer.unmount());
   });
 
-  it('DEFECT: the X close stays live while "Requesting…"; closing mid-request and reopening lands on a "Permanently delete (5)" button whose countdown never runs', async () => {
+  it('every dismiss control is disabled while "Requesting…", and a late response for a closed sheet is dropped (reopening arms a fresh countdown that runs)', async () => {
     const pending = deferred<{ challenge: string; expiresAt: string }>();
     mockRequestAccountDeletion.mockReturnValue(pending.promise);
     const renderer = await openSheet();
@@ -399,39 +402,41 @@ describe('ManageAccountScreen delete sheet ← deletion api', () => {
           )
           .every(node => node.props.onPress === undefined),
       ).toBe(true);
-      // …but the X is still live during the busy phase.
-      const close = pressables(
-        renderer,
-        'Close account deletion confirmation',
-      )[0]!;
-      expect(close.props.disabled).toBeFalsy();
-      await act(async () => {
-        close.props.onPress();
-      });
-      expect(allText(renderer)).not.toContain('Delete your account?');
+      // …and so is the X during the busy phase (no live dismiss control).
+      expect(
+        pressables(renderer, 'Close account deletion confirmation'),
+      ).toHaveLength(0);
+      const closeHost = renderer.root.findAll(
+        node =>
+          node.props.accessibilityLabel ===
+            'Close account deletion confirmation' &&
+          node.props.accessibilityState?.disabled === true,
+      );
+      expect(closeHost.length).toBeGreaterThan(0);
+      // Android back is ignored while busy too.
+      expect(renderer.root.findByType(Modal).props.onRequestClose).toBe(
+        undefined,
+      );
+      expect(allText(renderer)).toContain('Delete your account?');
 
-      // The request resolves against the hidden sheet and arms it + starts
-      // the countdown interval; reopening flips `visible`, whose effect
-      // cleanup clears that interval without restarting it.
+      // Because the sheet could not be dismissed mid-request, the response
+      // arms the visible sheet and its countdown actually runs down to an
+      // enabled "Permanently delete".
       await act(async () => {
         pending.resolve({
           challenge: 'challenge-1',
           expiresAt: '2026-08-31T00:00:00.000Z',
         });
       });
-      await act(async () => {
-        pressables(renderer, 'Delete account')[0]!.props.onPress();
-      });
       const armed = sheetButton(renderer, 'Permanently delete');
       expect(armed.props.label).toBe('Permanently delete (5)');
       expect(armed.props.disabled).toBe(true);
       await act(async () => {
-        jest.advanceTimersByTime(30_000);
+        jest.advanceTimersByTime(5_000);
       });
-      const stuck = sheetButton(renderer, 'Permanently delete');
-      expect(stuck.props.label).toBe('Permanently delete (5)');
-      expect(stuck.props.disabled).toBe(true);
-      // Recovery only via Keep my account (which is enabled in this phase).
+      const ready = sheetButton(renderer, 'Permanently delete');
+      expect(ready.props.label).toBe('Permanently delete');
+      expect(ready.props.disabled).toBe(false);
       expect(sheetButton(renderer, 'Keep my account').props.disabled).toBe(
         false,
       );

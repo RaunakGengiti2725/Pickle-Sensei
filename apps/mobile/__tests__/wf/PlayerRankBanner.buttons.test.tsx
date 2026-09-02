@@ -139,6 +139,21 @@ async function press(renderer: TestRenderer.ReactTestRenderer, id: string) {
   });
 }
 
+/** The fold-out stays mounted (but inert) for the 180ms collapse animation
+ * so the content can fade out instead of vanishing; wait it out. */
+const FOLD_AWAY_MS = 180;
+async function settleFoldAway(renderer: TestRenderer.ReactTestRenderer) {
+  const foldOut = renderer.root.findAll(
+    node => node.props.testID === 'player-rank-banner-fold-out',
+  );
+  for (const node of foldOut) {
+    expect(node.props.pointerEvents).toBe('none');
+  }
+  await act(async () => {
+    await new Promise<void>(resolve => setTimeout(resolve, FOLD_AWAY_MS + 20));
+  });
+}
+
 function allText(renderer: TestRenderer.ReactTestRenderer): string {
   return renderer.root
     .findAllByType(Text)
@@ -221,6 +236,7 @@ describe('player-rank-banner-toggle -> toggle()', () => {
     expect(pressable(renderer, TOGGLE).props.accessibilityState).toEqual({
       expanded: false,
     });
+    await settleFoldAway(renderer);
     expect(allText(renderer)).not.toContain('Complete one scored stroke');
     act(() => renderer.unmount());
   });
@@ -257,6 +273,7 @@ describe('player-rank-banner-toggle -> toggle()', () => {
     expect(copy).toContain('7.5+');
 
     await press(renderer, TOGGLE);
+    await settleFoldAway(renderer);
     expect(allText(renderer)).not.toContain('Current form');
     act(() => renderer.unmount());
   });
@@ -333,6 +350,7 @@ describe('player-rank-banner-toggle -> toggle()', () => {
     await press(renderer, TOGGLE);
     expect(allText(renderer)).toContain('1.00 to Platinum.');
     await press(renderer, TOGGLE);
+    await settleFoldAway(renderer);
     expect(allText(renderer)).not.toContain('Current form');
     act(() => renderer.unmount());
   });

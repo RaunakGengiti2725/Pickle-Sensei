@@ -144,6 +144,21 @@ function hostByLabel(renderer: TestRenderer.ReactTestRenderer, label: string) {
   return node;
 }
 
+/** The fold-out stays mounted (but inert) for the 180ms collapse animation
+ * so the content can fade out instead of vanishing; wait it out. */
+const FOLD_AWAY_MS = 180;
+async function settleFoldAway(renderer: TestRenderer.ReactTestRenderer) {
+  const foldOut = renderer.root.findAll(
+    node => node.props.testID === 'player-rank-banner-fold-out',
+  );
+  for (const node of foldOut) {
+    expect(node.props.pointerEvents).toBe('none');
+  }
+  await act(async () => {
+    await new Promise<void>(resolve => setTimeout(resolve, FOLD_AWAY_MS + 20));
+  });
+}
+
 function allText(renderer: TestRenderer.ReactTestRenderer): string {
   return renderer.root
     .findAllByType(Text)
@@ -368,6 +383,7 @@ describe('flow: PlayerRankBanner targets', () => {
           'player-rank-banner-toggle',
         ).props.onPress();
       });
+      if (!expected) await settleFoldAway(renderer);
       expect(allText(renderer).includes('Bronze → Silver → Gold')).toBe(
         expected,
       );

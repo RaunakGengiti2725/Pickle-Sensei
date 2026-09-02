@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 /**
@@ -226,9 +226,19 @@ describe('NotificationPrimingCard button ledger', () => {
       expect(button.props.accessibilityRole).toBe('button');
       expect(typeof button.props.accessibilityHint).toBe('string');
       expect(button.props.disabled).toBeFalsy();
-      expect(button.props.accessibilityState).toEqual({ disabled: undefined });
-      // WF-ISSUE: Priming card action buttons are 40pt tall with no hitSlop
-      // (below the 44pt minimum) — assertion on minHeight >= 44 skipped.
+      expect(button.props.accessibilityState).toMatchObject({
+        disabled: false,
+      });
+      expect(button.props.accessibilityState?.busy).toBeFalsy();
+      const rawStyle: unknown =
+        typeof button.props.style === 'function'
+          ? button.props.style({ pressed: false })
+          : button.props.style;
+      const style = (StyleSheet.flatten(rawStyle as never) ?? {}) as Record<
+        string,
+        unknown
+      >;
+      expect(Number(style['minHeight'])).toBeGreaterThanOrEqual(44);
     }
     expect(allText(renderer)).toContain('Turn on');
     expect(allText(renderer)).toContain('Not now');

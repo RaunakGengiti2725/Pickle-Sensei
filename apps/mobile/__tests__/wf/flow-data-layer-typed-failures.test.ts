@@ -280,7 +280,7 @@ describe('consent toggle → consentStore (typed failure, no optimistic state)',
     });
   });
 
-  it('DEFECT: a consent fetch that resolves after sign-out overwrites the signed-out state with the previous account’s consent', async () => {
+  it('a consent fetch that resolves after sign-out is discarded: the store stays signed_out and a toggle attempt says so', async () => {
     const pending = deferred<Response>();
     const slowFetch = jest.fn(() => pending.promise);
     const hydrating = useConsentStore.getState().hydrate(slowFetch);
@@ -295,23 +295,24 @@ describe('consent toggle → consentStore (typed failure, no optimistic state)',
     pending.resolve(jsonResponse(consentStatusBody(true)));
     await hydrating;
 
-    // Confirmed defect: no stale-session guard in consentStore.hydrate — the
-    // signed-out store now advertises a 'ready' toggle holding the previous
-    // account's grant.
+    // The stale-session guard in consentStore.hydrate drops the response:
+    // the signed-out store never advertises the previous account's grant.
     expect(getApiSession()).toBeNull();
     expect(useConsentStore.getState()).toMatchObject({
-      availability: 'ready',
-      modelTrainingActive: true,
+      availability: 'signed_out',
+      modelTrainingActive: false,
     });
 
-    // …and the now-enabled toggle is a no-op: no request, no error, no state.
+    // A toggle attempt while signed out sends nothing and says why.
     const toggleFetch = jest.fn();
     await useConsentStore
       .getState()
       .setModelTrainingConsent(false, toggleFetch);
     expect(toggleFetch).not.toHaveBeenCalled();
-    expect(useConsentStore.getState().error).toBeNull();
-    expect(useConsentStore.getState().modelTrainingActive).toBe(true);
+    expect(useConsentStore.getState().error).toBe(
+      'Sign in to change this setting. Nothing was changed.',
+    );
+    expect(useConsentStore.getState().modelTrainingActive).toBe(false);
   });
 });
 
@@ -496,7 +497,7 @@ describe('outbox sync: durable failures stay typed and bounded', () => {
     expect(await hasShotSyncReceipt(db, permittedAnalysis.id)).toBe(false);
   });
 
-  it('DEFECT: a transient evaluation-trial upload failure consumes the bounded attempt budget (shots and sessions do not)', async () => {
+  it('a transient evaluation-trial upload failure leaves the attempt budget intact, exactly like shots and sessions', async () => {
     const { db, push, outbox } = fakeDb();
     push('shot.sync', permittedAnalysis);
     push('session.create', { id: 'session-1' });
@@ -513,8 +514,8 @@ describe('outbox sync: durable failures stay typed and bounded', () => {
     const byKind = Object.fromEntries(outbox.map(r => [r.kind, r.attempts]));
     expect(byKind['shot.sync']).toBe(0);
     expect(byKind['session.create']).toBe(0);
-    // Confirmed defect: sync.ts:243-252 increments attempts for every
-    // trial-row failure regardless of isPermanentSyncFailure.
-    expect(byKind['evaluation.trial']).toBe(1);
+    expect(byKind['evaluation.trial']).toBe(0);
+    const trial = outbox.find(r => r.kind === 'evaluation.trial');
+    expect(trial?.last_error).toContain('Network request failed');
   });
 });

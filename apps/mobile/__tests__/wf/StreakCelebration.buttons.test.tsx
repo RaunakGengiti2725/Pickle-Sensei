@@ -53,7 +53,7 @@ const firstDay: ConsistencyCelebration = {
 const specialist: ConsistencyCelebration = {
   kind: 'volume',
   achievementId: 'volume.specialist',
-  title: 'serve Specialist',
+  title: 'Serve Specialist',
   blurb: 'Twenty-five scored analyses of a single stroke.',
   reward: 'Technique crest',
   rarity: 'rare',
@@ -273,7 +273,7 @@ describe('StreakCelebration button ledger', () => {
       useConsistencyStore.setState({ celebration: specialist });
     });
     expect(stageCount(renderer)).toBe(1);
-    expect(allText(renderer)).toContain('serve Specialist');
+    expect(allText(renderer)).toContain('Serve Specialist');
     expect(allText(renderer)).toContain('25 scored serve analyses');
     findBackdrop(renderer);
     act(() => {

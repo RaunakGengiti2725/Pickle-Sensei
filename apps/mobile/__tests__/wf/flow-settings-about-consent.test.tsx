@@ -369,7 +369,7 @@ describe('Data & consent — toggling', () => {
     act(() => renderer.unmount());
   });
 
-  it('a change attempted without an API session is a no-op (no request, no error)', async () => {
+  it('a change attempted without an API session sends no request and explains that nothing changed', async () => {
     act(() => {
       clearApiSession();
       useAuthStore.setState({ session: null });
@@ -380,7 +380,11 @@ describe('Data & consent — toggling', () => {
       await useConsentStore.getState().setModelTrainingConsent(true);
     });
     expect(fetchCalls).toHaveLength(0);
-    expect(useConsentStore.getState().error).toBeNull();
+    expect(useConsentStore.getState()).toMatchObject({
+      availability: 'signed_out',
+      modelTrainingActive: false,
+      error: 'Sign in to change this setting. Nothing was changed.',
+    });
     act(() => renderer.unmount());
   });
 });

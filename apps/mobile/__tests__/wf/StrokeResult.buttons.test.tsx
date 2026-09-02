@@ -576,10 +576,12 @@ describe('StrokeResult ledger — replay scrubber (measured-timeline mode)', () 
     expect(track.props.onStartShouldSetResponder()).toBe(true);
     expect(track.props.onMoveShouldSetResponder()).toBe(true);
     expect(track.props.accessibilityHint).toBe(
-      'Drag to move through the analyzed clip',
+      'Drag, or swipe up and down, to move through the analyzed clip',
     );
-    // WF-ISSUE: Replay scrubber is not accessible (no accessibilityRole /
-    // accessible / adjustable actions) — role assertion intentionally skipped.
+    expect(track.props.accessible).toBe(true);
+    expect(track.props.accessibilityRole).toBe('adjustable');
+    expect(track.props.accessibilityLabel).toBe('Replay timeline scrubber');
+    expect(Array.isArray(track.props.accessibilityActions)).toBe(true);
 
     // Before layout the track width is unknown: a touch is a no-op.
     scrubGrant(renderer, 100);

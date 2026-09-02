@@ -17,6 +17,7 @@
 jest.mock('../../src/data/db', () => ({ getDb: jest.fn(() => ({})) }));
 jest.mock('../../src/data/repository', () => ({
   hasShotSyncReceipt: jest.fn(),
+  getShotOutboxStatus: jest.fn(),
 }));
 jest.mock('../../src/components/strokeResultData', () => ({
   loadStrokeResultEvidence: jest.fn(),
@@ -80,7 +81,10 @@ import { Text } from 'react-native';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import type { ShotAnalysis } from '@pickle/shared-types';
 import { ResultScreen } from '../../src/screens/ResultScreen';
-import { hasShotSyncReceipt } from '../../src/data/repository';
+import {
+  getShotOutboxStatus,
+  hasShotSyncReceipt,
+} from '../../src/data/repository';
 import {
   loadStrokeResultEvidence,
   type StrokeResultEvidence,
@@ -289,6 +293,11 @@ beforeEach(() => {
   clearTryAgainHandoff();
   clearTrainingStoreConfiguration();
   (hasShotSyncReceipt as jest.Mock).mockResolvedValue(true);
+  (getShotOutboxStatus as jest.Mock).mockResolvedValue({
+    state: 'queued',
+    attempts: 0,
+    lastError: null,
+  });
 });
 
 afterEach(() => {

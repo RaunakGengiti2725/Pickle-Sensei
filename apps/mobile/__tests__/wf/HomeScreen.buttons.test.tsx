@@ -422,10 +422,7 @@ describe('HomeScreen button ledger', () => {
       const turnOn = pressableByLabel(renderer, 'Turn on practice reminders')!;
       expect(turnOn).not.toBeNull();
       expect(turnOn.props.accessibilityRole).toBe('button');
-      // WF-ISSUE: NotificationPrimingCard actions are 40pt tall with no
-      // hitSlop (styles.action minHeight: 40) — below the 44pt minimum.
-      // expect(meetsHitTarget(turnOn)).toBe(true);
-      expect(flatStyle(turnOn)['minHeight']).toBe(40);
+      expect(meetsHitTarget(turnOn)).toBe(true);
       await press(turnOn);
       expect(mockRequestPermissionAndEnable).toHaveBeenCalledTimes(1);
       expect(mockNavigate).not.toHaveBeenCalled();
@@ -437,10 +434,7 @@ describe('HomeScreen button ledger', () => {
       const notNow = pressableByLabel(renderer, 'Not now')!;
       expect(notNow).not.toBeNull();
       expect(notNow.props.accessibilityRole).toBe('button');
-      // WF-ISSUE: NotificationPrimingCard actions are 40pt tall with no
-      // hitSlop (styles.action minHeight: 40) — below the 44pt minimum.
-      // expect(meetsHitTarget(notNow)).toBe(true);
-      expect(flatStyle(notNow)['minHeight']).toBe(40);
+      expect(meetsHitTarget(notNow)).toBe(true);
       await press(notNow);
       expect(mockDismissPrompt).toHaveBeenCalledTimes(1);
       act(() => renderer.unmount());

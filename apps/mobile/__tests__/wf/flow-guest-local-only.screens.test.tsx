@@ -656,6 +656,14 @@ describe('PremiumTabBar capture actions — guest', () => {
 
   it('the same actions send a canonical session without access through the paywall (source=rating), once', async () => {
     asSynced();
+    // Unconfigured billing (no bootstrap in this test): the access store
+    // resolves to 'unconfigured' and the bar routes on that answer. (An
+    // unchecked 'idle' store is handed to the Analyze gate instead — the bar
+    // never awaits initialize() itself.)
+    await act(async () => {
+      await useAccessStore.getState().initialize();
+    });
+    expect(useAccessStore.getState().status).toBe('unconfigured');
     const renderer = render(<PremiumTabBar {...tabBarProps()} />);
 
     await press(renderer, 'Open coach actions');
@@ -667,7 +675,7 @@ describe('PremiumTabBar capture actions — guest', () => {
       await Promise.resolve();
     });
 
-    // Unconfigured billing (no bootstrap in this test) → honest paywall, no loop.
+    // Honest paywall, no loop.
     expect(useAccessStore.getState().status).toBe('unconfigured');
     expect(mockRootNavigate).toHaveBeenCalledTimes(1);
     expect(mockRootNavigate).toHaveBeenCalledWith('Paywall', {

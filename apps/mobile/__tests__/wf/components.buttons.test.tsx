@@ -478,7 +478,7 @@ describe('CheckpointRow -> props.onPress', () => {
     const host = onlyPressable(renderer);
     expect(host.props.accessibilityRole).toBe('button');
     expect(host.props.accessibilityLabel).toBe('Paddle prep, 72 out of 100');
-    expect(host.props.accessibilityState).toEqual({ disabled: false });
+    expect(host.props.accessibilityState?.disabled).not.toBe(true);
     expect(flat(host).opacity).toBe(1);
     expect(texts(renderer)).toEqual(['Paddle prep', '72']);
     click(host);
@@ -494,8 +494,12 @@ describe('CheckpointRow -> props.onPress', () => {
         <CheckpointRow name="Unread" score={null} band="unscored" />
       </>,
     );
-    const hosts = pressableHosts(renderer);
-    expect(hosts.map(h => h.props.accessibilityLabel)).toEqual([
+    // Without onPress these are static, labelled text rows (not controls).
+    expect(pressableHosts(renderer)).toHaveLength(0);
+    const rows = renderer.root.findAll(
+      n => typeof n.type === 'string' && n.props.accessibilityRole === 'text',
+    );
+    expect(rows.map(h => h.props.accessibilityLabel)).toEqual([
       'Over, 140 out of 100',
       'Under, -5 out of 100',
       'Unread, not read',
@@ -515,13 +519,18 @@ describe('CheckpointRow -> props.onPress', () => {
     const renderer = render(
       <CheckpointRow name="Contact point" score={55} band="yellow" />,
     );
-    const host = onlyPressable(renderer);
-    expect(host.props.accessibilityRole).toBe('text');
-    expect(host.props.onStartShouldSetResponder()).toBe(false);
-    expect(() => click(host)).not.toThrow();
-    // WF-ISSUE: CheckpointRow without onPress renders as a disabled control (42% opacity, accessibilityState.disabled=true)
-    // expect(host.props.accessibilityState).toEqual({ disabled: false });
-    // expect(flat(host).opacity).toBe(1);
+    expect(pressableHosts(renderer)).toHaveLength(0);
+    const [host] = renderer.root.findAll(
+      n => typeof n.type === 'string' && n.props.accessibilityRole === 'text',
+    );
+    if (!host) throw new Error('No static row rendered');
+    expect(host.props.accessible).toBe(true);
+    expect(host.props.accessibilityLabel).toBe('Contact point, 55 out of 100');
+    expect(host.props.onClick).toBeUndefined();
+    expect(host.props.onStartShouldSetResponder).toBeUndefined();
+    expect(host.props.accessibilityState).toBeUndefined();
+    expect(flat(host).opacity ?? 1).toBe(1);
+    expect(texts(renderer)).toEqual(['Contact point', '55']);
     act(() => renderer.unmount());
   });
 });

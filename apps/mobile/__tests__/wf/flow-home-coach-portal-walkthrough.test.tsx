@@ -433,7 +433,7 @@ describe('Technique intent picker', () => {
       source: 'voice',
       canonical: 'BACKHAND_DINK',
       legacySlug: 'dink',
-      confidence: 0.95,
+      confidence: 0.9,
     });
     act(() => renderer.unmount());
   });

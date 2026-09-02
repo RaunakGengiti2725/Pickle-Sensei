@@ -218,22 +218,23 @@ describe('PremiumTabBar button ledger', () => {
       const rows = all.filter(n => n.props.accessibilityRole === 'button');
       expect(rows.map(n => n.props.accessibilityLabel)).toEqual([
         'Close coach actions',
+        'Close coach actions',
         'Auto Analyze',
         'Import Video',
         'Drill Library',
         'Close coach actions',
       ]);
-      // Both FAB copies report the expanded state while open.
+      // Both FAB copies report the expanded state while open; the backdrop
+      // is a plain dismiss button (no expanded state of its own).
       const closeButtons = findByLabel(renderer, 'Close coach actions');
       expect(closeButtons).toHaveLength(3);
       const backdrop = closeButtons.find(
-        n => n.props.accessibilityRole === undefined,
+        n => n.props.accessibilityState === undefined,
       );
       expect(backdrop).toBeDefined();
-      // WF-ISSUE: Backdrop dismiss pressable has no accessibilityRole
-      // expect(backdrop?.props.accessibilityRole).toBe('button');
+      expect(backdrop?.props.accessibilityRole).toBe('button');
       for (const fab of closeButtons.filter(
-        n => n.props.accessibilityRole === 'button',
+        n => n.props.accessibilityState !== undefined,
       )) {
         expect(fab.props.accessibilityState).toEqual({ expanded: true });
       }
@@ -354,7 +355,7 @@ describe('PremiumTabBar button ledger', () => {
       const renderer = renderBar();
       await openMenu(renderer);
       const backdrop = findByLabel(renderer, 'Close coach actions').find(
-        n => n.props.accessibilityRole === undefined,
+        n => n.props.accessibilityState === undefined,
       );
       await act(async () => {
         backdrop?.props.onPress();
@@ -483,16 +484,17 @@ describe('PremiumTabBar button ledger', () => {
       },
     );
 
-    it('Auto Analyze -> resolves access lazily, then Analyze when the allowance permits', async () => {
+    it('Auto Analyze -> hands an unresolved access check to the Analyze route gate (no await, no Paywall)', async () => {
+      // The tab bar never resolves access itself: AnalyzeRoute's rating gate
+      // owns initialize() and shows "Checking access…" while it waits.
       mockAccessState.canonicalAccess = null;
-      mockAccessState.initialize = jest.fn(async () => {
-        mockAccessState.canonicalAccess = { canStartRating: true };
-      });
+      mockAccessState.status = 'idle';
       const renderer = renderBar();
       await openMenu(renderer);
       await press(renderer, 'Auto Analyze');
       await flushCloseAnimation();
-      expect(mockAccessState.initialize).toHaveBeenCalledTimes(1);
+      expect(mockAccessState.initialize).not.toHaveBeenCalled();
+      expect(mockRootNavigate).toHaveBeenCalledTimes(1);
       expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', {
         source: 'camera',
       });
@@ -512,18 +514,17 @@ describe('PremiumTabBar button ledger', () => {
       act(() => renderer.unmount());
     });
 
-    it('Import Video -> Paywall (its own retry surface) when access cannot be verified', async () => {
+    it('Import Video -> Paywall (its own retry surface) when access could not be verified', async () => {
       // accessStore.initialize never rejects: a failed backend read leaves
-      // canonicalAccess null and stores the error copy for the Paywall.
+      // canonicalAccess null with status 'error' and the Paywall carries the
+      // retry copy.
       mockAccessState.canonicalAccess = null;
-      mockAccessState.initialize = jest.fn(async () => {
-        mockAccessState.status = 'error';
-      });
+      mockAccessState.status = 'error';
       const renderer = renderBar();
       await openMenu(renderer);
       await press(renderer, 'Import Video');
       await flushCloseAnimation();
-      expect(mockAccessState.initialize).toHaveBeenCalledTimes(1);
+      expect(mockAccessState.initialize).not.toHaveBeenCalled();
       expect(mockRootNavigate).toHaveBeenCalledTimes(1);
       expect(mockRootNavigate).toHaveBeenCalledWith('Paywall', {
         source: 'rating',
@@ -541,58 +542,44 @@ describe('PremiumTabBar button ledger', () => {
     });
   });
 
-  describe('confirmed defects (assertions skipped, see WF-ISSUE)', () => {
-    it('a dismiss tap during the exit animation must not drop the chosen action', async () => {
+  describe('fixed defects (pinned)', () => {
+    it('a dismiss tap during the exit animation keeps the chosen action', async () => {
       const renderer = renderBar();
       await openMenu(renderer);
       await press(renderer, 'Drill Library');
       // Second tap lands on the still-mounted backdrop before the 210ms close
       // timer fires (a double tap whose second touch misses the fading row).
       const backdrop = findByLabel(renderer, 'Close coach actions').find(
-        n => n.props.accessibilityRole === undefined,
+        n => n.props.accessibilityState === undefined,
       );
       await act(async () => {
         backdrop?.props.onPress();
       });
       await flushCloseAnimation();
       expect(modal(renderer).props.visible).toBe(false);
-      // WF-ISSUE: Dismiss tap during the close animation silently drops the pending coach action
-      // expect(mockRootNavigate).toHaveBeenCalledWith('DrillLibrary');
+      expect(mockRootNavigate).toHaveBeenCalledTimes(1);
+      expect(mockRootNavigate).toHaveBeenCalledWith('DrillLibrary');
       act(() => renderer.unmount());
     });
 
-    it('a repeat tap while access is still loading must not send a free-allowance user to the Paywall', async () => {
+    it('a repeat tap while access is still loading never sends a free-allowance user to the Paywall', async () => {
+      // The bar routes an in-flight ('loading') access check to the Analyze
+      // route, whose gate waits for the answer — it never guesses Paywall.
       mockAccessState.canonicalAccess = null;
-      let settleFirstLoad!: () => void;
-      const firstLoad = new Promise<void>(resolve => {
-        settleFirstLoad = resolve;
-      });
-      // Mirrors accessStore.initialize: a concurrent call while status is
-      // 'loading' returns immediately without waiting for the in-flight load.
-      mockAccessState.initialize = jest.fn(async () => {
-        if (mockAccessState.status === 'loading') return;
-        mockAccessState.status = 'loading';
-        await firstLoad;
-        mockAccessState.canonicalAccess = { canStartRating: true };
-        mockAccessState.status = 'ready';
-      });
+      mockAccessState.status = 'loading';
       const renderer = renderBar();
       await openMenu(renderer);
       await press(renderer, 'Auto Analyze');
       await flushCloseAnimation();
-      // Nothing visible happens while the first load is in flight, so the
-      // user taps again.
-      expect(mockRootNavigate).not.toHaveBeenCalled();
       await openMenu(renderer);
       await press(renderer, 'Auto Analyze');
       await flushCloseAnimation();
-      expect(mockAccessState.initialize).toHaveBeenCalledTimes(2);
-      // WF-ISSUE: Capture actions give no pending feedback and a repeat tap during access loading misroutes to the Paywall
-      // expect(mockRootNavigate).not.toHaveBeenCalledWith('Paywall', { source: 'rating' });
-      await act(async () => {
-        settleFirstLoad();
+      expect(mockAccessState.initialize).not.toHaveBeenCalled();
+      expect(mockRootNavigate).toHaveBeenCalledTimes(2);
+      expect(mockRootNavigate).not.toHaveBeenCalledWith('Paywall', {
+        source: 'rating',
       });
-      expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', {
+      expect(mockRootNavigate).toHaveBeenLastCalledWith('Analyze', {
         source: 'camera',
       });
       act(() => renderer.unmount());

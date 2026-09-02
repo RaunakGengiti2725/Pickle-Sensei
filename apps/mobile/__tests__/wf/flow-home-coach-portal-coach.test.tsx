@@ -361,18 +361,42 @@ describe('COACH portal — actions', () => {
     act(() => renderer.unmount());
   });
 
-  it('Auto Analyze with a free allowance initializes access once and opens Analyze(camera)', async () => {
+  it('Auto Analyze with access not yet checked hands off to the Analyze gate without a billing round trip', async () => {
+    // The tab bar never resolves access itself: AnalyzeRoute's rating gate
+    // runs initialize() and shows "Checking access…" until the server answers.
     const getAccess = jest.fn(async () => freeAccess);
     configureAccessStore(billing(getAccess));
     expect(useAccessStore.getState().canonicalAccess).toBeNull();
+    expect(useAccessStore.getState().status).toBe('idle');
     const renderer = renderBar();
 
     await pressByLabel(renderer, 'Open coach actions');
     await pressByLabel(renderer, 'Auto Analyze');
     await flushCloseAnimation();
     await flushMicrotasks();
+    expect(getAccess).not.toHaveBeenCalled();
+    expect(useAccessStore.getState().status).toBe('idle');
+    expect(mockRootNavigate).toHaveBeenCalledTimes(1);
+    expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', {
+      source: 'camera',
+    });
+    act(() => renderer.unmount());
+  });
+
+  it('Auto Analyze / Import Video with a resolved free allowance open Analyze from the cached access', async () => {
+    const getAccess = jest.fn(async () => freeAccess);
+    configureAccessStore(billing(getAccess));
+    await act(async () => {
+      await useAccessStore.getState().initialize();
+    });
     expect(getAccess).toHaveBeenCalledTimes(1);
     expect(useAccessStore.getState().status).toBe('ready');
+    const renderer = renderBar();
+
+    await pressByLabel(renderer, 'Open coach actions');
+    await pressByLabel(renderer, 'Auto Analyze');
+    await flushCloseAnimation();
+    await flushMicrotasks();
     expect(mockRootNavigate).toHaveBeenCalledTimes(1);
     expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', {
       source: 'camera',
@@ -392,6 +416,9 @@ describe('COACH portal — actions', () => {
 
   it('exhausted free allowance routes to Paywall(rating)', async () => {
     configureAccessStore(billing(async () => exhaustedAccess));
+    await act(async () => {
+      await useAccessStore.getState().initialize();
+    });
     const renderer = renderBar();
     await pressByLabel(renderer, 'Open coach actions');
     await pressByLabel(renderer, 'Import Video');
@@ -404,21 +431,24 @@ describe('COACH portal — actions', () => {
     act(() => renderer.unmount());
   });
 
-  it('access backend failure fails closed to the Paywall (never a silent no-op, never Analyze)', async () => {
+  it('a failed access check fails closed to the Paywall (never a silent no-op, never Analyze)', async () => {
     configureAccessStore(
       billing(async () => {
         throw new Error('offline');
       }),
+    );
+    await act(async () => {
+      await useAccessStore.getState().initialize();
+    });
+    expect(useAccessStore.getState().status).toBe('error');
+    expect(useAccessStore.getState().error?.message).toBe(
+      'Membership verification is temporarily unavailable.',
     );
     const renderer = renderBar();
     await pressByLabel(renderer, 'Open coach actions');
     await pressByLabel(renderer, 'Auto Analyze');
     await flushCloseAnimation();
     await flushMicrotasks();
-    expect(useAccessStore.getState().status).toBe('error');
-    expect(useAccessStore.getState().error?.message).toBe(
-      'Membership verification is temporarily unavailable.',
-    );
     expect(mockRootNavigate).toHaveBeenCalledTimes(1);
     expect(mockRootNavigate).toHaveBeenCalledWith('Paywall', {
       source: 'rating',
@@ -428,12 +458,15 @@ describe('COACH portal — actions', () => {
 
   it('unconfigured billing (no clients) still resolves to the Paywall instead of hanging', async () => {
     clearAccessStoreConfiguration();
+    await act(async () => {
+      await useAccessStore.getState().initialize();
+    });
+    expect(useAccessStore.getState().status).toBe('unconfigured');
     const renderer = renderBar();
     await pressByLabel(renderer, 'Open coach actions');
     await pressByLabel(renderer, 'Auto Analyze');
     await flushCloseAnimation();
     await flushMicrotasks();
-    expect(useAccessStore.getState().status).toBe('unconfigured');
     expect(mockRootNavigate).toHaveBeenCalledTimes(1);
     expect(mockRootNavigate).toHaveBeenCalledWith('Paywall', {
       source: 'rating',

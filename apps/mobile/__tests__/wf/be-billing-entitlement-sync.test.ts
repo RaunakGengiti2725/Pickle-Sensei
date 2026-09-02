@@ -411,7 +411,7 @@ describe('runCaptureAnalysis when the server refuses the reserve with 402', () =
     (globalThis as { fetch?: unknown }).fetch = undefined;
   });
 
-  it('returns a generic "unavailable" outcome (same shape as an outage) — no paywall signal for the screen', async () => {
+  it('returns an "unavailable" outcome tagged cause=paywall_required so the screen can route to the paywall instead of a retry', async () => {
     const { db, calls } = recordingDb();
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;
@@ -443,20 +443,21 @@ describe('runCaptureAnalysis when the server refuses the reserve with 402', () =
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(outcome.kind).toBe('unavailable');
     if (outcome.kind !== 'unavailable') return;
-    // Only the server's prose survives; the machine-readable
-    // access.paywall_required code and the 402 status are dropped, so the
-    // caller cannot distinguish "pay to continue" from "service down".
+    // The server's prose survives, and the 402 access.paywall_required verdict
+    // is preserved as a machine-readable cause so "pay to continue" is
+    // distinguishable from "service down".
     expect(outcome.reason).toBe(
       'Both lifetime free ratings have been used. Membership is required for another rating.',
     );
-    expect(Object.keys(outcome).sort()).toEqual(['kind', 'reason']);
+    expect(outcome.cause).toBe('paywall_required');
+    expect(Object.keys(outcome).sort()).toEqual(['cause', 'kind', 'reason']);
     // Nothing was written locally either: the capture is left as it was.
     expect(calls.some(sql => sql.includes('local_analysis_record'))).toBe(
       false,
     );
   });
 
-  it('an outage produces the SAME outcome shape', async () => {
+  it('an outage produces an "unavailable" outcome WITHOUT a paywall cause', async () => {
     const { db } = recordingDb();
     const { clip, sidecarJson } = swingClipWithSidecar();
     mockReadArtifact = async () => sidecarJson;

@@ -254,11 +254,8 @@ describe('TechniqueIntentPicker — TextInput onChangeText', () => {
       legacySlug: 'forehand_drive',
       confidence: 0.95,
     });
-    expect(intent).toHaveProperty('rawUserText');
-    // WF-ISSUE: Voice-path provenance is stale — rawUserText is read from
-    // the pre-keystroke `text` state ('' here) instead of the typed value,
-    // and confidence is hard-coded 0.95 instead of the resolver's number.
-    // expect(intent.rawUserText).toBe('forehand drive');
+    // Voice provenance carries the typed text and the resolver's confidence.
+    expect(intent.rawUserText).toBe('forehand drive');
 
     // The field is controlled: the typed value is echoed back.
     expect(field(renderer).props.value).toBe('forehand drive');
@@ -428,7 +425,9 @@ describe('TechniqueIntentPicker — TextInput onSubmitEditing', () => {
       source: 'voice',
       canonical: 'SERVE',
       legacySlug: 'serve',
-      confidence: 0.95,
+      // Family-only phrase (no side): the resolver reports 0.9, and the
+      // picker forwards that number instead of a constant.
+      confidence: 0.9,
       rawUserText: 'serve',
     });
   });

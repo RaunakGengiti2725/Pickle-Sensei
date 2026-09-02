@@ -5,6 +5,7 @@ import type { StrokeIntentEnvelope } from '@pickle/analysis-pipeline';
 import type { ShotAnalysis } from '@pickle/shared-types';
 import type { StrokeResultEvidenceRecord } from '../../src/components/strokeResultModel';
 import type { StrokeResultEvidence } from '../../src/components/strokeResultData';
+import type { ShotOutboxStatus } from '../../src/data/repository';
 import type {
   DrillDetail,
   TrainingApi,
@@ -54,8 +55,10 @@ jest.mock('../../src/components/strokeResultData', () => ({
 }));
 
 const mockHasShotSyncReceipt = jest.fn<Promise<boolean>, unknown[]>();
+const mockGetShotOutboxStatus = jest.fn<Promise<ShotOutboxStatus>, unknown[]>();
 jest.mock('../../src/data/repository', () => ({
   hasShotSyncReceipt: (...args: unknown[]) => mockHasShotSyncReceipt(...args),
+  getShotOutboxStatus: (...args: unknown[]) => mockGetShotOutboxStatus(...args),
 }));
 
 const mockConsistencyState = {
@@ -467,6 +470,12 @@ beforeEach(() => {
   mockLoadEvidence.mockResolvedValue(evidenceFixture());
   mockHasShotSyncReceipt.mockReset();
   mockHasShotSyncReceipt.mockResolvedValue(true);
+  mockGetShotOutboxStatus.mockReset();
+  mockGetShotOutboxStatus.mockResolvedValue({
+    state: 'queued',
+    attempts: 0,
+    lastError: null,
+  });
   mockConsistencyState.refresh.mockClear();
   mockConsistencyState.recordDrillCompletion.mockClear();
   mockGetApiSession.mockReset();
@@ -509,7 +518,7 @@ describe('ResultScreen buttons — loading and missing states', () => {
     await unmount(renderer);
   });
 
-  it('Result missing → Try again goes back', async () => {
+  it('Result missing → Go back goes back (no retry is offered for evidence that is gone)', async () => {
     mockLoadEvidence.mockResolvedValue({
       analysis: null,
       record: null,
@@ -518,7 +527,8 @@ describe('ResultScreen buttons — loading and missing states', () => {
     });
     const renderer = await render();
     expect(textOf(renderer)).toContain('Result missing');
-    const retry = control(renderer, 'Try again');
+    expect(byLabel(renderer, 'Try again')).toHaveLength(0);
+    const retry = control(renderer, 'Go back');
     expect(retry.props.accessibilityRole).toBe('button');
     await press(retry);
     expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
@@ -822,11 +832,58 @@ describe('ResultScreen buttons — Build reviewed plan', () => {
     await unmount(renderer);
   });
 
-  it('is unreachable (honest copy, no dead button) until the shot has synced', async () => {
+  it('is unreachable (honest copy, no dead button) while the shot is queued in the outbox', async () => {
     mockHasShotSyncReceipt.mockResolvedValue(false);
+    mockGetShotOutboxStatus.mockResolvedValue({
+      state: 'queued',
+      attempts: 0,
+      lastError: null,
+    });
     const renderer = await render();
     expect(textOf(renderer)).toContain('Sync this read first.');
     expect(textOf(renderer)).toContain('secure outbox');
+    expect(byLabel(renderer, 'Build reviewed plan')).toHaveLength(0);
+    await unmount(renderer);
+  });
+
+  it('states the refusal count when the server rejected the shot but retries remain', async () => {
+    mockHasShotSyncReceipt.mockResolvedValue(false);
+    mockGetShotOutboxStatus.mockResolvedValue({
+      state: 'rejected',
+      attempts: 2,
+      lastError: 'HTTP 422',
+    });
+    const renderer = await render();
+    expect(textOf(renderer)).toContain('Sync this read first.');
+    expect(textOf(renderer)).toContain('refused this read 2 of');
+    expect(textOf(renderer)).toContain('HTTP 422');
+    expect(byLabel(renderer, 'Build reviewed plan')).toHaveLength(0);
+    await unmount(renderer);
+  });
+
+  it('offers a new capture, not a plan, once the outbox has given up on the shot', async () => {
+    mockHasShotSyncReceipt.mockResolvedValue(false);
+    mockGetShotOutboxStatus.mockResolvedValue({
+      state: 'exhausted',
+      attempts: 8,
+      lastError: null,
+    });
+    const renderer = await render();
+    expect(textOf(renderer)).toContain('The server did not accept this read.');
+    expect(byLabel(renderer, 'Build reviewed plan')).toHaveLength(0);
+    await press(control(renderer, 'Capture a new read'));
+    expect(mockNavigation.navigate).toHaveBeenCalledWith(
+      'Analyze',
+      expect.anything(),
+    );
+    await unmount(renderer);
+  });
+
+  it('is unreachable with honest copy when no outbox record exists for the shot', async () => {
+    mockHasShotSyncReceipt.mockResolvedValue(false);
+    mockGetShotOutboxStatus.mockResolvedValue({ state: 'absent' });
+    const renderer = await render();
+    expect(textOf(renderer)).toContain('could not verify');
     expect(byLabel(renderer, 'Build reviewed plan')).toHaveLength(0);
     await unmount(renderer);
   });
@@ -1077,14 +1134,15 @@ describe('ResultScreen buttons — PlanDrillCard controls', () => {
     await unmount(renderer);
   });
 
-  it('a prescription without a valid target has a disabled completion control and never alerts', async () => {
+  it('a prescription without a valid target renders honest copy instead of a dead completion control', async () => {
     const renderer = await render();
-    const confirm = control(renderer, 'Confirm completion of Timing toss');
-    expect(isDisabled(confirm)).toBe(true);
-    expect(textOf(renderer)).toContain('I completed this prescription');
-    // A programmatic press (what a11y or a stale gesture could deliver) is a
-    // no-op: no alert, no API call.
-    await press(confirm);
+    expect(byLabel(renderer, 'Confirm completion of Timing toss')).toHaveLength(
+      0,
+    );
+    expect(textOf(renderer)).not.toContain('I completed this prescription');
+    expect(textOf(renderer)).toContain(
+      'No sets, reps, or time were prescribed for this drill',
+    );
     expect(alertSpy).not.toHaveBeenCalled();
     expect(api.completeDrill).not.toHaveBeenCalled();
     await unmount(renderer);
@@ -1288,7 +1346,6 @@ describe('ResultScreen buttons — ledger', () => {
         'Attempt 2',
         'Close',
         'Confirm completion of Shadow swings',
-        'Confirm completion of Timing toss',
         'Confirm completion of Wall drive',
         'Done',
         'Play replay',

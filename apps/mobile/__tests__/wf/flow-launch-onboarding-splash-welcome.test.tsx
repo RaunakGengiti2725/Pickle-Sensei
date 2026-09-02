@@ -174,7 +174,7 @@ describe('flow: launch-onboarding — SplashScreen', () => {
     act(() => renderer.unmount());
   });
 
-  it('is a non-interactive, labelled overlay (no controls to tap)', () => {
+  it('is a labelled overlay with no controls that intercepts touches while mounted', () => {
     let renderer!: Renderer;
     act(() => {
       renderer = TestRenderer.create(
@@ -184,7 +184,7 @@ describe('flow: launch-onboarding — SplashScreen', () => {
     const overlay = renderer.root.findByProps({
       accessibilityLabel: 'Pickle Sensei is starting',
     });
-    expect(overlay.props.pointerEvents).toBe('none');
+    expect(overlay.props.pointerEvents).toBe('box-only');
     expect(overlay.props.accessible).toBe(true);
     expect(
       renderer.root.findAll(node => typeof node.props?.onPress === 'function'),

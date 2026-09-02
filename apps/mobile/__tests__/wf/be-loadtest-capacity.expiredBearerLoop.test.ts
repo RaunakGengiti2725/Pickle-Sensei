@@ -1,23 +1,23 @@
 /**
  * Load-capacity pin (be-loadtest-capacity): a device whose bearer has expired
- * keeps re-sending its outbox on the fixed 30 s timer.
+ * must not hammer the backend with the dead token.
  *
  * The sync runtime binds the provider ID token once per sign-in
- * (syncRuntime.configureSyncRuntime → createTransport({ token })) and nothing
- * refreshes it; the edge function answers an expired token with 401 and, on
- * its side, pays one Supabase Auth exchange per such request (see
- * tools/loadtest/wf-expired-token-loop.js). The outbox classifies 401 as
- * transient (isPermanentSyncFailure) so the row never burns an attempt, and
- * RETRY_INTERVAL_MS fires regardless of the last outcome. This suite pins that
- * cost model: N timer ticks ⇒ N identical POST /v1/shots:sync calls with the
- * same dead bearer, attempts stay at 0, and no Retry-After / backoff is
- * consulted.
+ * (syncRuntime.configureSyncRuntime → createTransport({ token })); the edge
+ * function answers an expired token with 401 and pays one Supabase Auth
+ * exchange per such request (see tools/loadtest/wf-expired-token-loop.js).
+ * The outbox classifies 401 as transient (isPermanentSyncFailure) so the row
+ * keeps its attempt budget for the next sign-in, the transport reports the
+ * rejected bearer to the auth layer (which tears the session down), and the
+ * timer backs off exponentially after every failed drain instead of firing a
+ * fixed 30 s cadence. This suite pins that cost model.
  */
 import { AppState } from 'react-native';
 import type { LocalDb } from '../../src/data/db';
 import { drainOutbox, isPermanentSyncFailure } from '../../src/data/sync';
 import { ApiError } from '../../src/data/api';
 import {
+  SYNC_RETRY_BASE_MS,
   clearSyncRuntime,
   configureSyncRuntime,
 } from '../../src/data/syncRuntime';
@@ -26,12 +26,18 @@ import {
   canonicalDataOwner,
   setActiveDataOwner,
 } from '../../src/data/accountScope';
+import {
+  type ApiSession,
+  clearApiSession,
+  establishApiSession,
+  setApiUnauthorizedListener,
+} from '../../src/account/apiSession';
 
 jest.mock('../../src/data/db', () => ({ getDb: jest.fn() }));
 
 import { getDb } from '../../src/data/db';
 
-const RETRY_INTERVAL_MS = 30_000;
+const RETRY_INTERVAL_MS = SYNC_RETRY_BASE_MS;
 
 function fakeDb(owner: string) {
   const outbox = [
@@ -97,11 +103,12 @@ function fakeDb(owner: string) {
 }
 
 const EXPIRED_BEARER = 'expired-apple-identity-token';
-const session = {
+const session: ApiSession = {
   canonicalAppUserId: '33333333-3333-4333-8333-333333333333',
   apiBaseUrl: 'https://api.test',
   bearerToken: EXPIRED_BEARER,
-} as Parameters<typeof configureSyncRuntime>[0];
+  provider: 'apple',
+};
 
 function unauthorizedResponse(): Response {
   return {
@@ -123,13 +130,15 @@ describe('be-loadtest-capacity — expired bearer retry loop', () => {
 
   afterEach(() => {
     clearSyncRuntime();
+    setApiUnauthorizedListener(null);
+    clearApiSession();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     delete (globalThis as { fetch?: unknown }).fetch;
     jest.useRealTimers();
     jest.restoreAllMocks();
   });
 
-  it('401 is transient: the row never consumes an attempt, so it is retried forever', async () => {
+  it('401 is transient: the row never consumes an attempt, so it stays syncable for the next sign-in', async () => {
     const { db, outbox } = fakeDb(owner);
     setActiveDataOwner(owner);
     const unauthorized = new ApiError(
@@ -156,8 +165,9 @@ describe('be-loadtest-capacity — expired bearer retry loop', () => {
     expect(outbox[0]!.last_error).toContain('could not be verified');
   });
 
-  it('the 30 s timer re-sends the same expired bearer every tick with no backoff', async () => {
+  it('the timer backs off exponentially after each 401 and reports the dead bearer to the auth layer', async () => {
     jest.useFakeTimers();
+    jest.spyOn(Math, 'random').mockReturnValue(0.5);
     jest
       .spyOn(AppState, 'addEventListener')
       .mockImplementation(
@@ -177,17 +187,27 @@ describe('be-loadtest-capacity — expired bearer retry loop', () => {
       },
     );
 
+    const unauthorized = jest.fn();
+    establishApiSession(session);
+    setApiUnauthorizedListener(unauthorized);
+
     configureSyncRuntime(session);
-    // Immediate drain on configure.
+    // Immediate drain on configure: one request, and the 401 is reported so
+    // the auth store can end or re-establish the session.
     await jest.advanceTimersByTimeAsync(0);
     expect(bearersSeen).toHaveLength(1);
+    expect(unauthorized).toHaveBeenCalledTimes(1);
+    expect(unauthorized).toHaveBeenCalledWith(session);
 
-    // Twelve timer ticks ≈ six minutes of an expired session in the
-    // foreground: twelve more uncacheable auth exchanges server-side.
+    // Even if nothing tears the runtime down, six minutes of an expired
+    // session in the foreground costs 2 more requests (at 60 s and 180 s),
+    // not 12: the failed drains double the delay (60, 120, 240 … capped).
+    const seenAtTick: number[] = [];
     for (let tick = 1; tick <= 12; tick++) {
       await jest.advanceTimersByTimeAsync(RETRY_INTERVAL_MS);
-      expect(bearersSeen).toHaveLength(1 + tick);
+      seenAtTick.push(bearersSeen.length);
     }
+    expect(seenAtTick).toEqual([1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3]);
     expect(new Set(bearersSeen)).toEqual(new Set([`Bearer ${EXPIRED_BEARER}`]));
     expect(outbox[0]!.attempts).toBe(0);
   });

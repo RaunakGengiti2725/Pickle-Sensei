@@ -299,21 +299,22 @@ describe('NotificationSettingsScreen buttons', () => {
       act(() => renderer.unmount());
     });
 
-    it('while the OS permission is denied the button is still rendered but cannot enable anything', async () => {
+    it('while the OS permission is denied the dead "Turn on" control is withheld; only the system-settings recovery path is offered', async () => {
       seedStore({ ...DEFAULT_NOTIFICATION_PREFS }, 'denied');
       mockScheduler.requestPermission.mockResolvedValue('denied');
       const renderer = renderScreen();
       await flush();
 
-      const before = allText(renderer);
-      await press(renderer, 'Turn on reminders');
-      expect(mockScheduler.requestPermission).toHaveBeenCalledTimes(1);
+      // iOS never re-prompts after a denial, so a "Turn on reminders" button
+      // could not do anything; the screen offers the real recovery instead.
+      pressableAbsent(renderer, 'Turn on reminders');
+      expect(allText(renderer)).toContain(
+        'Notifications are off in system settings',
+      );
+      pressable(renderer, 'Open system settings');
+      expect(mockScheduler.requestPermission).not.toHaveBeenCalled();
       expect(useNotificationStore.getState().prefs.enabled).toBe(false);
       expect(mockSetKv).not.toHaveBeenCalled();
-      expect(allText(renderer)).toBe(before);
-      // WF-ISSUE: Turn on reminders is a dead control while the OS permission is denied
-      // (iOS never re-prompts after a denial; the tap changes nothing on screen
-      // while the recovery path is the "Open system settings" button above).
       act(() => renderer.unmount());
     });
   });
@@ -357,28 +358,38 @@ describe('NotificationSettingsScreen buttons', () => {
       act(() => renderer.unmount());
     });
 
-    it('a failing settings deep link leaves the button usable', async () => {
+    it('a failing settings deep link explains the manual path and leaves the button usable', async () => {
       seedStore(ENABLED_PREFS, 'denied');
-      // The screen discards the promise (`void ...openSystemSettings()`), so a
-      // bare rejection would surface as an unhandled rejection and fail the
-      // run; the fake pre-attaches a handler to the SAME promise so the test
-      // can observe what the screen does (nothing) without that noise.
-      mockScheduler.openSystemSettings.mockImplementation(() => {
-        const failure = Promise.reject(new Error('cannot open'));
-        failure.catch(() => {});
-        return failure;
-      });
+      mockScheduler.openSystemSettings.mockRejectedValue(
+        new Error('cannot open'),
+      );
       const renderer = renderScreen();
       await flush();
-      const before = allText(renderer);
+      const manualPath =
+        'Couldn’t open Settings from here. Open the Settings app → Notifications → Pickle Sensei to allow them.';
+      expect(allText(renderer)).not.toContain(manualPath);
       await press(renderer, 'Open system settings');
+      await flush();
       expect(mockScheduler.openSystemSettings).toHaveBeenCalledTimes(1);
       expect(
         pressable(renderer, 'Open system settings').props.disabled,
       ).not.toBe(true);
-      expect(allText(renderer)).toBe(before);
-      // WF-ISSUE: Open system settings swallows a failed deep link as an unhandled rejection
-      // (no catch, no copy; the player sees nothing happen).
+      expect(allText(renderer)).toContain(manualPath);
+      expect(
+        renderer.root.findAll(
+          node =>
+            node.props.accessibilityRole === 'alert' &&
+            String(node.props.children).includes(
+              'Couldn’t open Settings from here',
+            ),
+        ).length,
+      ).toBeGreaterThan(0);
+
+      // A later successful attempt clears the failure copy.
+      mockScheduler.openSystemSettings.mockResolvedValue(undefined);
+      await press(renderer, 'Open system settings');
+      await flush();
+      expect(allText(renderer)).not.toContain(manualPath);
       act(() => renderer.unmount());
     });
   });

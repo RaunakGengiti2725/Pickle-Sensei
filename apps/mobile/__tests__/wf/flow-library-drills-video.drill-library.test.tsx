@@ -275,10 +275,20 @@ describe('Drill Library flow · catalog', () => {
       ),
     );
     const renderer = await renderScreen();
+    // An unconfigured session is not a transient outage: the screen explains
+    // the account requirement and routes to sign-in rather than offering a
+    // retry that could never succeed.
     expect(allText(renderer)).toContain(
-      'Connect a synced account to load saved drills and personalized plans.',
+      'The drill catalog needs a synced account.',
     );
-    expect(findByLabel(renderer, 'Try again')).toHaveLength(1);
+    expect(allText(renderer)).toContain(
+      'Sign in with Apple or Google to browse the catalog and save drills to your library.',
+    );
+    expect(findByLabel(renderer, 'Try again')).toHaveLength(0);
+    await act(async () => {
+      findByLabel(renderer, 'Connect account')[0]!.props.onPress();
+    });
+    expect(mockNavigate).toHaveBeenCalledWith('ConnectAccount');
     act(() => renderer.unmount());
   });
 

@@ -42,9 +42,11 @@ jest.mock('react-native-safe-area-context', () => ({
 
 const mockAccess: {
   canonicalAccess: { canStartRating: boolean } | null;
+  status: 'idle' | 'loading' | 'ready' | 'unconfigured' | 'error';
   initialize: jest.Mock<Promise<void>, []>;
 } = {
   canonicalAccess: { canStartRating: true },
+  status: 'ready',
   initialize: jest.fn(async () => {}),
 };
 const mockAuth: { session: { localOnly: boolean } | null } = {
@@ -159,6 +161,7 @@ describe('navigation-tabs: PremiumTabBar regular tabs', () => {
     mockTabNavigate.mockClear();
     mockEmit.mockClear();
     mockAccess.canonicalAccess = { canStartRating: true };
+    mockAccess.status = 'ready';
     mockAccess.initialize = jest.fn(async () => {});
     mockAuth.session = { localOnly: false };
   });
@@ -253,6 +256,7 @@ describe('navigation-tabs: COACH action portal open / cancel', () => {
     mockTabNavigate.mockClear();
     mockEmit.mockClear();
     mockAccess.canonicalAccess = { canStartRating: true };
+    mockAccess.status = 'ready';
     mockAccess.initialize = jest.fn(async () => {});
     mockAuth.session = { localOnly: false };
   });
@@ -264,11 +268,18 @@ describe('navigation-tabs: COACH action portal open / cancel', () => {
     const renderer = renderBar();
     await press(renderer, 'Open coach actions');
     expect(menu(renderer).props.visible).toBe(true);
-    // Both the in-bar button and the overlay copy now read as close/expanded.
+    // Both the in-bar button and the overlay copy now read as close/expanded;
+    // the backdrop is a plain dismiss button.
     const closers = pressables(renderer, 'Close coach actions');
-    expect(closers.length).toBeGreaterThanOrEqual(2);
+    expect(closers.length).toBeGreaterThanOrEqual(3);
+    for (const node of closers) {
+      expect(node.props.accessibilityRole).toBe('button');
+    }
+    expect(
+      closers.filter(n => n.props.accessibilityState !== undefined),
+    ).toHaveLength(2);
     for (const node of closers.filter(
-      n => n.props.accessibilityRole === 'button',
+      n => n.props.accessibilityState !== undefined,
     )) {
       expect(node.props.accessibilityState).toEqual({ expanded: true });
     }
@@ -306,7 +317,7 @@ describe('navigation-tabs: COACH action portal open / cancel', () => {
     const renderer = renderBar();
     await press(renderer, 'Open coach actions');
     await press(renderer, 'Close coach actions', nodes =>
-      nodes.find(n => n.props.accessibilityRole === undefined),
+      nodes.find(n => n.props.accessibilityState === undefined),
     );
     await flushCloseAnimation();
     expect(menu(renderer).props.visible).toBe(false);
@@ -373,6 +384,7 @@ describe('navigation-tabs: COACH actions route through the rating gate', () => {
     mockTabNavigate.mockClear();
     mockEmit.mockClear();
     mockAccess.canonicalAccess = { canStartRating: true };
+    mockAccess.status = 'ready';
     mockAccess.initialize = jest.fn(async () => {});
     mockAuth.session = { localOnly: false };
   });
@@ -431,16 +443,14 @@ describe('navigation-tabs: COACH actions route through the rating gate', () => {
     act(() => renderer.unmount());
   });
 
-  it('no cached access: awaits initialize(), then routes to Analyze when the server grants rating', async () => {
+  it('no cached access: routes to the Analyze gate without awaiting initialize() (the route resolves access)', async () => {
     mockAccess.canonicalAccess = null;
-    mockAccess.initialize = jest.fn(async () => {
-      mockAccess.canonicalAccess = { canStartRating: true };
-    });
+    mockAccess.status = 'idle';
     const renderer = renderBar();
     await press(renderer, 'Open coach actions');
     await press(renderer, 'Import Video');
     await flushCloseAnimation();
-    expect(mockAccess.initialize).toHaveBeenCalledTimes(1);
+    expect(mockAccess.initialize).not.toHaveBeenCalled();
     expect(mockRootNavigate).toHaveBeenCalledTimes(1);
     expect(mockRootNavigate).toHaveBeenCalledWith('Analyze', {
       source: 'library',
@@ -461,14 +471,14 @@ describe('navigation-tabs: COACH actions route through the rating gate', () => {
     act(() => renderer.unmount());
   });
 
-  it('access check fails (initialize leaves access null): still lands on Paywall, no dead end', async () => {
+  it('access check failed (status error, access null): still lands on Paywall, no dead end', async () => {
     mockAccess.canonicalAccess = null;
-    mockAccess.initialize = jest.fn(async () => {});
+    mockAccess.status = 'error';
     const renderer = renderBar();
     await press(renderer, 'Open coach actions');
     await press(renderer, 'Auto Analyze');
     await flushCloseAnimation();
-    expect(mockAccess.initialize).toHaveBeenCalledTimes(1);
+    expect(mockAccess.initialize).not.toHaveBeenCalled();
     expect(mockRootNavigate).toHaveBeenCalledTimes(1);
     expect(mockRootNavigate).toHaveBeenCalledWith('Paywall', {
       source: 'rating',
