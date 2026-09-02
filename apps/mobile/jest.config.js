@@ -27,6 +27,7 @@ module.exports = {
   },
   // Shared packages live outside this app's tree; resolve helpers from here.
   moduleDirectories: ['node_modules', '<rootDir>/node_modules'],
+  setupFiles: ['<rootDir>/jest.setup.js'],
   transformIgnorePatterns: [
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?|@react-navigation|react-native-.*|@op-engineering)/)',
   ],
