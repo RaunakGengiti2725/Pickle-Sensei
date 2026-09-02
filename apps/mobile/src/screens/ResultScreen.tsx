@@ -29,8 +29,19 @@ import {
 import { Icon } from '../design/icons';
 import { color, space, type } from '../design/tokens';
 import { getDb } from '../data/db';
-import { hasShotSyncReceipt } from '../data/repository';
+import { hasShotSyncReceipt, listRealAnalysisFacts } from '../data/repository';
 import type { RootStackParams } from '../navigation/params';
+import {
+  buildFormReviewScript,
+  FixList,
+  FormReviewCard,
+  RecommendedDrills,
+} from '../review';
+import { PracticeSetCard } from '../progress/PracticeSetCard';
+import {
+  summarizePracticeSet,
+  type PracticeSetSummary,
+} from '../progress/practiceSetProgress';
 import { PlanDrillCard, prescriptionLabel } from '../training/components';
 import { useTrainingStore } from '../training/store';
 import type { InstructionalMedia, TrainingPlanItem } from '../training/types';
@@ -119,6 +130,7 @@ export function ResultScreen() {
             analysis: null,
             record: null,
             clip: null,
+            review: null,
             attempts: [],
           });
         }
@@ -139,6 +151,29 @@ export function ResultScreen() {
   }, [refreshConsistency, route.params.analysisId]);
 
   const analysis = evidence?.analysis ?? evidence?.record?.result ?? null;
+
+  // PRACTICE SET: the other scored attempts of this sitting, compared only
+  // when the stroke and scoring model match (practiceSetProgress). Null
+  // until two comparable attempts exist — nothing is compared to nothing.
+  const [practiceSet, setPracticeSet] = useState<PracticeSetSummary | null>(
+    null,
+  );
+  const sessionId = analysis?.sessionId ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    setPracticeSet(null);
+    if (!sessionId) return;
+    listRealAnalysisFacts(getDb(), 200)
+      .then(facts => {
+        if (!cancelled) setPracticeSet(summarizePracticeSet(facts, sessionId));
+      })
+      .catch(() => {
+        if (!cancelled) setPracticeSet(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, route.params.analysisId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -212,13 +247,6 @@ export function ResultScreen() {
     );
   }
 
-  const fix = analysis?.priorityFix ?? null;
-  const priorityCheckpoint =
-    analysis && fix
-      ? analysis.checkpoints.find(
-          checkpoint => checkpoint.key === fix.checkpoint,
-        )
-      : null;
   const shotLabel = analysis ? humanize(analysis.shotType) : 'stroke';
   const planForThisRead =
     analysis !== null && currentPlan?.sourceShotId === analysis.id;
@@ -277,6 +305,23 @@ export function ResultScreen() {
     navigation.navigate('Analyze', { source: 'camera' });
   };
 
+  // FORM REVIEW: the flagship replay (exoskeleton + heat map + arrows,
+  // pausing at every measured checkpoint). Offered for every scored result
+  // that still has replay evidence on this device — the clip file or the
+  // recorded pose sequence; the review screen degrades honestly to whichever
+  // exists. Counts come from the same pure script the review plays.
+  const reviewScript = techniqueScoreSectionVisible(analysis)
+    ? buildFormReviewScript(analysis, null)
+    : null;
+  const reviewAvailable =
+    reviewScript !== null &&
+    (evidence.clip !== null || evidence.review?.poseSequence != null);
+  const openFormReview = (phase?: string) =>
+    navigation.navigate('FormReview', {
+      analysisId: route.params.analysisId,
+      ...(phase !== undefined ? { phase } : {}),
+    });
+
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
       <StatusBar barStyle="dark-content" />
@@ -300,6 +345,59 @@ export function ResultScreen() {
           }
           onTryAgain={tryAgain}
           onDone={() => navigation.popToTop()}
+          reviewSlot={
+            // The Form Review sits right under the replay: one tap opens the
+            // full-screen exoskeleton + heat-map playback that pauses at every
+            // measured checkpoint with its coaching cue.
+            reviewAvailable && reviewScript ? (
+              <View style={styles.reviewSlot}>
+                <FormReviewCard
+                  {...(evidence.clip?.posterUri !== undefined
+                    ? { posterUri: evidence.clip.posterUri }
+                    : {})}
+                  stopCount={reviewScript.stops.length}
+                  fixCount={
+                    reviewScript.stops.filter(stop => stop.verdict === 'fix')
+                      .length
+                  }
+                  onPress={() => openFormReview()}
+                />
+              </View>
+            ) : undefined
+          }
+          fixSlot={
+            // WHAT TO FIX → THIS SET → DRILLS: the coaching that follows the
+            // measured insight. Each piece is evidence-gated inside (nothing
+            // renders without a scored fault / two comparable attempts / a
+            // reachable catalog) — an abstained result shows none of it.
+            techniqueScoreSectionVisible(analysis) ? (
+              <>
+                <FixList
+                  analysis={analysis}
+                  {...(reviewAvailable
+                    ? { onOpenInReview: phase => openFormReview(phase) }
+                    : {})}
+                />
+                {practiceSet ? (
+                  <View style={styles.setSlot}>
+                    <PracticeSetCard
+                      compact
+                      summary={practiceSet}
+                      onOpenAttempt={analysisId =>
+                        analysisId === route.params.analysisId
+                          ? undefined
+                          : navigation.replace('Result', { analysisId })
+                      }
+                    />
+                  </View>
+                ) : null}
+                <RecommendedDrills
+                  analysis={analysis}
+                  onOpenLibrary={() => navigation.navigate('DrillLibrary')}
+                />
+              </>
+            ) : undefined
+          }
           scoreSlot={
             // Score-first: the technique score stage renders at the very
             // top of the result surface, under the compact header. The
@@ -336,56 +434,9 @@ export function ResultScreen() {
         >
           {techniqueScoreSectionVisible(analysis) ? (
             <>
-              {fix ? (
-                <>
-                  <SectionTitle title="Measured priority" />
-                  <Card style={styles.fixCard}>
-                    <View style={styles.fixHeader}>
-                      <View style={styles.priorityBadge}>
-                        <Text style={[type.micro, { color: color.onVolt }]}>
-                          01
-                        </Text>
-                      </View>
-                      <Text style={[type.micro, { color: color.bad }]}>
-                        HIGHEST OBSERVED FAULT
-                      </Text>
-                    </View>
-                    <Text style={[type.h1, styles.fixTitle]}>
-                      {CHECKPOINT_NAMES[fix.checkpoint] ??
-                        humanize(fix.checkpoint)}
-                    </Text>
-                    <Text style={[type.body, styles.fixBody]}>
-                      The scoring model ranked this checkpoint first from this
-                      captured stroke. Coaching below appears only when the
-                      server has a reviewed prescription for this exact read.
-                    </Text>
-                    <View style={styles.observationGrid}>
-                      <View style={styles.observationCell}>
-                        <Text style={[type.micro, { color: color.inkSoft }]}>
-                          DIRECTION
-                        </Text>
-                        <Text style={[type.h3, styles.observationValue]}>
-                          {priorityCheckpoint
-                            ? humanize(priorityCheckpoint.direction)
-                            : 'not reported'}
-                        </Text>
-                      </View>
-                      <View style={styles.observationCell}>
-                        <Text style={[type.micro, { color: color.inkSoft }]}>
-                          CHECKPOINT
-                        </Text>
-                        <Text style={[type.h3, styles.observationValue]}>
-                          {priorityCheckpoint?.score === null ||
-                          priorityCheckpoint?.score === undefined
-                            ? '—'
-                            : Math.round(priorityCheckpoint.score)}
-                        </Text>
-                      </View>
-                    </View>
-                  </Card>
-                </>
-              ) : null}
-
+              {/* The priority fault itself is now the first card of WHAT TO
+                  FIX (fixSlot above), with its measured direction, score and
+                  coaching cue — the stroke map below keeps the full ledger. */}
               <SectionTitle
                 title="Stroke map"
                 right={
@@ -703,27 +754,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: space.xs,
   },
-  fixCard: { padding: space.lg },
-  fixHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  priorityBadge: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: color.volt,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fixTitle: { color: color.ink, marginTop: space.lg },
-  fixBody: { color: color.inkSoft, marginTop: space.sm },
-  observationGrid: {
-    flexDirection: 'row',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.line,
-    marginTop: space.lg,
-    paddingTop: space.md,
-  },
-  observationCell: { flex: 1, gap: 5 },
-  observationValue: { color: color.ink, textTransform: 'capitalize' },
+  reviewSlot: { marginTop: space.md },
+  setSlot: { marginTop: space.md },
   checkpointsCard: { paddingHorizontal: space.lg, paddingVertical: 5 },
   traceRow: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
 import { AppState } from 'react-native';
-import type { ApiSession } from '../account/apiSession';
+import { bearerTokenFor, type ApiSession } from '../account/apiSession';
 import { canonicalDataOwner, getActiveDataOwner } from './accountScope';
 import { createTransport } from './api';
 import { getDb } from './db';
@@ -14,7 +14,8 @@ let removeAppStateListener: (() => void) | null = null;
 let triggerForGeneration: (() => Promise<void>) | null = null;
 
 /** Stops future work synchronously. An already-issued request remains bound to
- * its original owner and bearer, so it cannot upload another account's rows. */
+ * its original owner: its bearer resolves only while that owner's session is
+ * current, so it cannot upload another account's rows. */
 export function clearSyncRuntime(): void {
   generation += 1;
   triggerForGeneration = null;
@@ -28,9 +29,13 @@ export function configureSyncRuntime(session: ApiSession): void {
   clearSyncRuntime();
   const configuredGeneration = generation;
   const owner = canonicalDataOwner(session.canonicalAppUserId);
+  // The bearer is resolved per request so a rotated access token is used
+  // without rebuilding the runtime.
   const transport = createTransport({
     baseUrl: session.apiBaseUrl,
-    token: session.bearerToken,
+    get token() {
+      return bearerTokenFor(session.canonicalAppUserId);
+    },
   });
 
   const trigger = async () => {

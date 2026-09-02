@@ -28,6 +28,7 @@ import { useWalkthroughStore } from './src/walkthrough/walkthroughStore';
 import {
   stageAfterGetStarted,
   stageAfterOnboarding,
+  stageWhenLeavingOnboarding,
   type PreAuthStage,
 } from './src/flow/launchGate';
 import { makeUuid } from './src/util/uuid';
@@ -45,19 +46,21 @@ stabilitySlo.setContext({
 stabilitySlo.record({ kind: 'session_started' });
 
 /**
- * Launch → onboarding (device-once, pre-auth) → account (Apple/Google)
- * → app. The questionnaire runs BEFORE the login flow; its answers wait in
- * the appStore pre-auth stash and are adopted by the owner that signs in
- * (launchGate.ts pins the ordering). Signed-in accounts that still lack a
- * profile — e.g. an existing account on a new device whose pre-auth answers
- * were superseded or could not sync — fall back to the in-account
- * OnboardingScreen exactly as before.
+ * Launch → onboarding (pre-auth) → account (Apple/Google) → app. The
+ * questionnaire runs BEFORE the login flow and the primary CTA always leads
+ * into it; its answers wait in the appStore pre-auth stash and are adopted
+ * by the owner that signs in (launchGate.ts pins the ordering). The
+ * questionnaire is required and cannot be skipped: its step-one back control
+ * returns to Welcome, and only finishing it reaches sign-in. Returning
+ * players use Welcome's "I already have an account" link; a signed-in
+ * account that still lacks a profile — one that never finished setup, or
+ * whose pre-auth answers could not sync — lands in the in-account
+ * OnboardingScreen, whose only other exit is signing out.
  */
 function Gate() {
   const appHydrated = useAppStore(s => s.hydrated);
   const appOwnerKey = useAppStore(s => s.ownerKey);
   const profile = useAppStore(s => s.profile);
-  const preAuthOnboarded = useAppStore(s => s.preAuthOnboarded);
   const hydrateApp = useAppStore(s => s.hydrate);
   const authHydrated = useAuthStore(s => s.hydrated);
   const session = useAuthStore(s => s.session);
@@ -137,13 +140,11 @@ function Gate() {
       <OnboardingScreen
         mode="preauth"
         onFinished={() => setPreAuthStage(stageAfterOnboarding())}
-        onExitToSignIn={() => setPreAuthStage(stageAfterOnboarding())}
+        onBack={() => setPreAuthStage(stageWhenLeavingOnboarding())}
       />
     ) : (
       <WelcomeScreen
-        onGetStarted={() =>
-          setPreAuthStage(stageAfterGetStarted(preAuthOnboarded))
-        }
+        onGetStarted={() => setPreAuthStage(stageAfterGetStarted())}
         onSignIn={() => setPreAuthStage('signin')}
       />
     )

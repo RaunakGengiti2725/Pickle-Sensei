@@ -10,7 +10,7 @@ import { getKv, setKv } from '../data/repository';
  * how a read starts, that abstention is honest behavior (and free), and that
  * video stays on the phone.
  *
- * Device-level like `onboarding.device-complete` (the walkthrough teaches the
+ * Device-level like `onboarding.pending-profile` (the walkthrough teaches the
  * human holding the phone, not an account), and following the celebration
  * stores' crash-safety rule: the durable "seen" record is written BEFORE the
  * overlay is shown, so a crash loop can never replay a blocking overlay at

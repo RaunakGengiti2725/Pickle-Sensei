@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Image,
   Modal,
   ScrollView,
   StatusBar,
@@ -8,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Line, Path, Rect } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 import {
   useNavigation,
   useRoute,
@@ -46,6 +47,11 @@ import {
   setDeclaredStroke,
 } from '../data/repository';
 import { runCaptureAnalysis } from '../analysis/runCaptureAnalysis';
+import {
+  commitPracticeSet,
+  planPracticeSet,
+  type PracticeSetPlan,
+} from '../analysis/practiceSet';
 import { getApiSession } from '../account/apiSession';
 import { useAppStore } from '../state/appStore';
 import { useAccessStore } from '../state/accessStore';
@@ -129,69 +135,103 @@ function StepRow(props: {
   );
 }
 
-function FramingPreview() {
+/**
+ * The player-outline template the native camera overlays while composing
+ * (the same 130x240 figure ships in the iOS asset catalog as
+ * CaptureSilhouette), so the landing previews exactly what the camera shows.
+ */
+const CAPTURE_SILHOUETTE = require('../../assets/capture/silhouette.png');
+
+// Camera-mock geometry, in points. The outline keeps the template's 130:240
+// aspect and the brackets enclose it with a small margin — the same
+// "corners + outline read as one guide" composition the live camera draws
+// (PoseOverlayView.fixedFramingGuidePath around the silhouette frame).
+const PREVIEW_HEIGHT = 312;
+const SILHOUETTE_HEIGHT = 184;
+const SILHOUETTE_WIDTH = Math.round((SILHOUETTE_HEIGHT * 130) / 240);
+const FRAME_WIDTH = SILHOUETTE_WIDTH + 2 * space.xl;
+const FRAME_HEIGHT = SILHOUETTE_HEIGHT + 2 * space.sm;
+const FRAME_TOP = 52;
+const BRACKET_STROKE = 2.5;
+/** Mirrors the camera's cornerPath: min(28, 0.18 x the shorter side). */
+const BRACKET_LEG = Math.min(28, Math.min(FRAME_WIDTH, FRAME_HEIGHT) * 0.18);
+const SHUTTER_RING = 54;
+const SHUTTER_CORE = 40;
+
+/** Four L-shaped corner brackets around a rect, inset so round caps stay
+ * inside the drawing box. Same corner geometry as the native framing guide. */
+function cornerBracketPath(
+  width: number,
+  height: number,
+  leg: number,
+  inset: number,
+): string {
+  const left = inset;
+  const top = inset;
+  const right = width - inset;
+  const bottom = height - inset;
   return (
-    <View style={styles.preview} accessibilityLabel="Camera framing guide">
-      <Svg width="100%" height="100%" viewBox="0 0 340 236">
-        <Rect
-          x="1"
-          y="1"
-          width="338"
-          height="234"
-          rx="28"
-          fill={color.cameraSurface}
+    `M${left} ${top + leg}V${top}H${left + leg}` +
+    `M${right - leg} ${top}H${right}V${top + leg}` +
+    `M${right} ${bottom - leg}V${bottom}H${right - leg}` +
+    `M${left + leg} ${bottom}H${left}V${bottom - leg}`
+  );
+}
+
+/**
+ * Decorative mock of the live camera's setup state: framing brackets around
+ * the translucent player outline, the status pill the camera shows while
+ * composing, and the record shutter (white ring, volt core). One accessible
+ * element — nothing inside is interactive.
+ */
+function CameraMockPreview() {
+  return (
+    <View
+      style={styles.preview}
+      accessible
+      accessibilityRole="image"
+      accessibilityLabel="Camera preview: line up with the player outline and tap record"
+    >
+      <View style={styles.previewFrame}>
+        <Svg
+          width={FRAME_WIDTH}
+          height={FRAME_HEIGHT}
+          viewBox={`0 0 ${FRAME_WIDTH} ${FRAME_HEIGHT}`}
+          style={styles.previewBrackets}
+        >
+          <Path
+            d={cornerBracketPath(
+              FRAME_WIDTH,
+              FRAME_HEIGHT,
+              BRACKET_LEG,
+              BRACKET_STROKE / 2,
+            )}
+            stroke={color.mint}
+            strokeWidth={BRACKET_STROKE}
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+        <Image
+          source={CAPTURE_SILHOUETTE}
+          resizeMode="contain"
+          style={styles.previewSilhouette}
         />
-        <Path
-          d="M28 63V32h31M281 32h31v31M28 173v31h31M281 204h31v-31"
-          stroke={color.onDark}
-          strokeWidth="2.5"
-          fill="none"
-          strokeLinecap="round"
-        />
-        <Line
-          x1="42"
-          y1="178"
-          x2="298"
-          y2="178"
-          stroke={color.lineDark}
-          strokeWidth="2"
-        />
-        <Line
-          x1="170"
-          y1="178"
-          x2="170"
-          y2="214"
-          stroke={color.lineDark}
-          strokeWidth="1"
-        />
-        <Line
-          x1="84"
-          y1="178"
-          x2="59"
-          y2="214"
-          stroke={color.lineDark}
-          strokeWidth="1"
-        />
-        <Line
-          x1="256"
-          y1="178"
-          x2="281"
-          y2="214"
-          stroke={color.lineDark}
-          strokeWidth="1"
-        />
-      </Svg>
-      <View style={styles.previewCenter}>
-        <View style={styles.previewCameraIcon}>
-          <Icon name="camera" color={color.onVolt} size={25} />
+      </View>
+      <View style={styles.previewStatusRow}>
+        <View style={styles.previewStatus}>
+          <Text style={[type.micro, { color: color.mint }]}>SET UP</Text>
+          <View style={styles.previewStatusDot} />
+          <Text style={[type.caption, { color: color.onDark }]}>
+            Line up with the outline
+          </Text>
         </View>
-        <Text style={[type.h3, { color: color.onDark, marginTop: 12 }]}>
-          Live body heat map
-        </Text>
-        <Text style={[type.caption, styles.previewCopy]}>
-          Your body lights up with measured motion heat only when the camera
-          actually sees you — cool at rest, blazing at full swing speed.
-        </Text>
+      </View>
+      <View style={styles.previewShutterRow}>
+        <View style={styles.previewShutterRing}>
+          <View style={styles.previewShutterCore} />
+        </View>
       </View>
       <View style={styles.previewBadge}>
         <View style={styles.previewDot} />
@@ -205,7 +245,9 @@ function FramingPreview() {
  * The guided-capture walkthrough, as data so the zero-handholding protocol
  * (docs/USABILITY_ZERO_HANDHOLDING.md) can assert every funnel task the
  * user must perform unaided has an on-screen instruction. Order matters:
- * it is the order the user acts in.
+ * it is the order the user acts in — prop the phone, tap record, line up
+ * with the outline until Ready, swing once (the stroke ends the clip itself;
+ * tapping a starting spot is optional and only matters with others on court).
  */
 export const ANALYZE_STEPS: ReadonlyArray<{
   index: string;
@@ -216,30 +258,30 @@ export const ANALYZE_STEPS: ReadonlyArray<{
   {
     index: '01',
     icon: 'person',
-    title: 'Step fully into frame',
+    title: 'Frame the court side-on',
     detail:
-      'Place the phone at waist height and keep your full body inside the corners.',
+      'Prop the phone at waist height, side-on to your swing, with the whole outline inside the corners.',
   },
   {
     index: '02',
-    icon: 'court',
-    title: 'Tap where you will start',
+    icon: 'camera',
+    title: 'Tap record to start',
     detail:
-      'On the live camera, tap your starting spot, then walk out to it — the person standing there is who gets analyzed.',
+      'Tap the record button, then walk out and line your body up with the outline. Others on court? Tap your spot first.',
   },
   {
     index: '03',
     icon: 'spark',
     title: 'Wait for Ready',
     detail:
-      'Live pose landmarks turn the camera into an automatic trigger—no timer or shutter.',
+      'Big on-screen copy tells you to step in, move closer or hold still — readable from the court.',
   },
   {
     index: '04',
-    icon: 'camera',
+    icon: 'court',
     title: 'Make one natural stroke',
     detail:
-      'The saved clip includes two seconds before motion and 1.5 seconds after it.',
+      'Your swing ends the recording by itself. The clip keeps two seconds before and 1.5 seconds after the motion.',
   },
 ];
 
@@ -739,6 +781,23 @@ export function AnalyzeScreen() {
           setPhase({ kind: 'working', message: 'Measuring your swing…' });
         }
         setAnalysisProgress(analysisStageProgress('measuring'));
+        // PRACTICE SET: every scored analysis in one sitting shares a
+        // sessionId so the Result and Progress surfaces can show whether the
+        // re-record after the advice moved the score. A TRY AGAIN re-arm
+        // joins the set it came from; otherwise the live set is resumed or a
+        // new one starts. The plan is only READ here — it is committed
+        // (session row + outbox + kv) after a score exists, so an abstained
+        // or failed run bookkeeps nothing. Set errors never fail an analysis.
+        let practiceSet: PracticeSetPlan | null = null;
+        try {
+          practiceSet = await planPracticeSet(getDb(), {
+            shotType: declaredStroke,
+            preferredSessionId: rearm?.sessionId ?? null,
+          });
+        } catch {
+          practiceSet = null;
+        }
+        const sessionId = practiceSet?.sessionId ?? null;
         const outcome = await runCaptureAnalysis({
           db: getDb(),
           captureId,
@@ -752,6 +811,7 @@ export function AnalyzeScreen() {
             token: session?.bearerToken ?? null,
           },
           appVersion: '0.1.0',
+          sessionId,
           focusCheckpoint: profile?.focusCheckpoint,
           targetSeed,
           captureEnvelope:
@@ -783,6 +843,13 @@ export function AnalyzeScreen() {
           return;
         }
         if (outcome.kind === 'scored') {
+          // The scored analysis is saved with the plan's sessionId: commit
+          // the set now (new sets write their session row + sync entry; the
+          // kv activity stamp keeps the set alive). Best-effort — the score
+          // is already durable.
+          if (practiceSet) {
+            await commitPracticeSet(getDb(), practiceSet).catch(() => {});
+          }
           // Score first: every scored run goes straight to the Result
           // screen. When this run consumed the account's FINAL free
           // rating, the upgrade prompt is surfaced once, on top of it.
@@ -827,7 +894,7 @@ export function AnalyzeScreen() {
         setAnalysisProgress(null);
       }
     },
-    [declaredStroke, navigation, profile, techniqueIntent],
+    [declaredStroke, navigation, profile, rearm, techniqueIntent],
   );
 
   const run = useCallback(async () => {
@@ -1299,12 +1366,11 @@ export function AnalyzeScreen() {
           AUTOMATIC CAPTURE
         </Text>
         <Text style={[type.hero, styles.hero]}>
-          Set the phone.{`\n`}Swing naturally.
+          Tap record.{`\n`}Swing once.
         </Text>
         <Text style={[type.body, styles.heroCopy]}>
-          The camera finds your body, waits until the frame is stable, and
-          captures a complete motion window — including the full pose sequence
-          for scoring.
+          Prop the phone side-on at waist height. Match the outline, swing
+          naturally — the camera stops itself when your stroke is complete.
         </Text>
 
         <Text style={[type.micro, styles.declareEyebrow]}>
@@ -1329,7 +1395,7 @@ export function AnalyzeScreen() {
           }}
         />
 
-        <FramingPreview />
+        <CameraMockPreview />
 
         <View style={styles.steps}>
           {ANALYZE_STEPS.map(step => (
@@ -1343,20 +1409,21 @@ export function AnalyzeScreen() {
           ))}
         </View>
 
-        <View style={styles.trustRow}>
-          <Icon name="shield" color={color.mint} size={18} />
-          <Text style={[type.caption, styles.trustCopy]}>
-            Camera processing and clip storage stay on this device unless you
-            explicitly enable cloud video sync.
-          </Text>
-        </View>
-        <View style={styles.measurementDisclosure}>
-          <Icon name="spark" color={color.volt} size={18} />
-          <Text style={[type.caption, styles.measurementCopy]}>
-            The body glow reflects measured joint motion. Ball speed stays
-            withheld until a calibrated ball tracker can support a real MPH
-            reading.
-          </Text>
+        <View style={styles.notes}>
+          <View style={styles.noteRow}>
+            <Icon name="shield" color={color.mint} size={18} />
+            <Text style={[type.caption, styles.noteCopy]}>
+              Camera processing and clip storage stay on this device unless you
+              explicitly enable cloud video sync.
+            </Text>
+          </View>
+          <View style={styles.noteRow}>
+            <Icon name="spark" color={color.mint} size={18} />
+            <Text style={[type.caption, styles.noteCopy]}>
+              You’ll see your exoskeleton and a light motion heat map live, then
+              a frame-by-frame form review after the swing.
+            </Text>
+          </View>
         </View>
       </ScrollView>
       <View style={styles.footer}>
@@ -1447,37 +1514,79 @@ const styles = StyleSheet.create({
   hero: { color: color.onDark, marginTop: space.sm },
   heroCopy: { color: color.onDarkSubtle, marginTop: space.sm, maxWidth: 340 },
   preview: {
-    height: 250,
+    height: PREVIEW_HEIGHT,
     marginTop: space.xl,
+    paddingTop: FRAME_TOP,
+    alignItems: 'center',
     borderRadius: radius.xl,
     overflow: 'hidden',
+    backgroundColor: color.cameraSurface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.lineDark,
   },
-  previewCenter: {
-    position: 'absolute',
-    left: 44,
-    right: 44,
-    top: 66,
-    alignItems: 'center',
-  },
-  previewCameraIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: color.volt,
+  previewFrame: {
+    width: FRAME_WIDTH,
+    height: FRAME_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  previewCopy: {
-    color: color.onDarkSubtle,
-    textAlign: 'center',
-    marginTop: 5,
+  previewBrackets: { position: 'absolute', top: 0, left: 0, opacity: 0.72 },
+  previewSilhouette: {
+    width: SILHOUETTE_WIDTH,
+    height: SILHOUETTE_HEIGHT,
+    tintColor: color.onDark,
+    opacity: 0.32,
+  },
+  previewStatusRow: {
+    position: 'absolute',
+    top: 12,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  previewStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    backgroundColor: color.overlayDeep,
+    borderWidth: 1,
+    borderColor: color.onDarkTint,
+  },
+  previewStatusDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: color.onDarkSubtle,
+  },
+  previewShutterRow: {
+    position: 'absolute',
+    bottom: 14,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+  },
+  previewShutterRing: {
+    width: SHUTTER_RING,
+    height: SHUTTER_RING,
+    borderRadius: SHUTTER_RING / 2,
+    borderWidth: 3,
+    borderColor: color.onDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewShutterCore: {
+    width: SHUTTER_CORE,
+    height: SHUTTER_CORE,
+    borderRadius: SHUTTER_CORE / 2,
+    backgroundColor: color.volt,
   },
   previewBadge: {
     position: 'absolute',
-    top: 16,
-    left: 16,
+    left: 14,
+    bottom: 14 + (SHUTTER_RING - 26) / 2,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -1498,7 +1607,7 @@ const styles = StyleSheet.create({
     borderTopColor: color.lineDark,
   },
   stepRow: {
-    minHeight: 94,
+    minHeight: 84,
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: space.md,
@@ -1517,24 +1626,9 @@ const styles = StyleSheet.create({
   stepIndex: { color: color.mint, marginBottom: 2 },
   stepTitle: { color: color.onDark },
   stepDetail: { color: color.onDarkSubtle, marginTop: 3 },
-  trustRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingVertical: space.lg,
-  },
-  trustCopy: { color: color.onDarkSubtle, flex: 1 },
-  measurementDisclosure: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    padding: space.md,
-    borderRadius: radius.lg,
-    backgroundColor: color.inkElevated,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: color.lineDark,
-  },
-  measurementCopy: { color: color.onDarkSubtle, flex: 1 },
+  notes: { paddingVertical: space.lg, gap: space.md },
+  noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  noteCopy: { color: color.onDarkSubtle, flex: 1 },
   footer: {
     paddingHorizontal: space.lg,
     paddingTop: space.sm,

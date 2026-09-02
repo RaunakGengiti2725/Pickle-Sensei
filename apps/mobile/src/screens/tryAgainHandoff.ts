@@ -29,6 +29,13 @@ export interface TryAgainHandoff {
   declaredCanonical: string | null;
   /** True when the original run was AUTO DETECT (declared-null). */
   auto: boolean;
+  /**
+   * Practice set (sitting) the original attempt belonged to. The re-armed
+   * capture joins the SAME set so the next read can be compared with this
+   * one on the Result and Progress surfaces; null when the original attempt
+   * was not part of a set (legacy rows, unknown analysis).
+   */
+  sessionId: string | null;
 }
 
 /**
@@ -101,8 +108,15 @@ function canonicalMatchesSlug(canonical: string, slug: ShotTypeSlug): boolean {
  */
 export function tryAgainFromResult(
   record: Pick<StrokeResultEvidenceRecord, 'strokeIntent'> | null,
-  analysis: Pick<ShotAnalysis, 'shotType'> | null,
+  analysis:
+    | (Pick<ShotAnalysis, 'shotType'> &
+        Partial<Pick<ShotAnalysis, 'sessionId'>>)
+    | null,
 ): TryAgainHandoff {
+  // The set tie travels with every branch below: a re-record inside the same
+  // sitting must land in the same practice set regardless of how the
+  // technique intent was resolved.
+  const sessionId = analysis?.sessionId ?? null;
   const intent = record?.strokeIntent ?? null;
   if (intent) {
     if (intent.declaredStroke !== null) {
@@ -117,6 +131,7 @@ export function tryAgainFromResult(
         declaredStroke: intent.declaredStroke,
         declaredCanonical: canonical,
         auto: false,
+        sessionId,
       };
     }
     return {
@@ -124,6 +139,7 @@ export function tryAgainFromResult(
       declaredStroke: null,
       declaredCanonical: null,
       auto: true,
+      sessionId,
     };
   }
   return {
@@ -131,6 +147,7 @@ export function tryAgainFromResult(
     declaredStroke: analysis?.shotType ?? null,
     declaredCanonical: null,
     auto: false,
+    sessionId,
   };
 }
 

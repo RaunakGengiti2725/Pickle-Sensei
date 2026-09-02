@@ -8,8 +8,10 @@ import {
 /**
  * Pre-auth onboarding: the questionnaire runs BEFORE sign-in, stashes its
  * answers device-level, and hydrate() adopts them into the first writable
- * owner without a profile of its own. Existing profiles — local or canonical
- * — always win over the stash, and the stash is single-use.
+ * owner that signs in — REPLACING any profile that owner already had (the
+ * answers just given on this device are the newest intent). The stash is
+ * single-use; a failed server save keeps it, and the existing profile, for
+ * the next hydrate.
  */
 
 const mockKvTable = new Map<string, string>();
@@ -57,7 +59,6 @@ jest.mock('../src/account/onboarding', () => ({
 }));
 
 import {
-  DEVICE_ONBOARDED_KV_KEY,
   PENDING_ONBOARDING_PROFILE_KV_KEY,
   useAppStore,
 } from '../src/state/appStore';
@@ -88,7 +89,6 @@ function stashAnswers(profile: Profile = answers) {
     PENDING_ONBOARDING_PROFILE_KV_KEY,
     JSON.stringify({ version: 1, profile }),
   );
-  mockKvTable.set(DEVICE_ONBOARDED_KV_KEY, JSON.stringify({ version: 1 }));
 }
 
 beforeEach(() => {
@@ -103,7 +103,6 @@ beforeEach(() => {
     hydrated: false,
     ownerKey: null,
     profile: null,
-    preAuthOnboarded: false,
     onboardingBusy: false,
     onboardingError: null,
     lastShotType: 'forehand_drive',
@@ -113,7 +112,7 @@ beforeEach(() => {
 afterEach(() => setActiveDataOwner(SIGNED_OUT_DATA_OWNER));
 
 describe('completePreAuthOnboarding', () => {
-  it('stashes the answers while signed out and marks the device onboarded', async () => {
+  it('stashes the answers while signed out — the stash is the only device write', async () => {
     await expect(
       useAppStore.getState().completePreAuthOnboarding(answers),
     ).resolves.toBe(true);
@@ -121,23 +120,21 @@ describe('completePreAuthOnboarding', () => {
       version: 1,
       profile: answers,
     });
-    expect(mockKvTable.get(DEVICE_ONBOARDED_KV_KEY)).toBe(
-      JSON.stringify({ version: 1 }),
-    );
-    expect(useAppStore.getState().preAuthOnboarded).toBe(true);
+    expect([...mockKvTable.keys()]).toEqual([
+      PENDING_ONBOARDING_PROFILE_KV_KEY,
+    ]);
     // No owner exists yet: nothing was synced or owner-persisted.
     expect(mockSaveCanonical).not.toHaveBeenCalled();
   });
 });
 
 describe('hydrate with a pre-auth stash', () => {
-  it('keeps the stash while signed out and reports the device as onboarded', async () => {
+  it('keeps the stash while signed out', async () => {
     stashAnswers();
     await useAppStore.getState().hydrate();
     const state = useAppStore.getState();
     expect(state.hydrated).toBe(true);
     expect(state.profile).toBeNull();
-    expect(state.preAuthOnboarded).toBe(true);
     expect(pendingRaw()).not.toBeNull();
   });
 
@@ -180,7 +177,7 @@ describe('hydrate with a pre-auth stash', () => {
     expect(pendingRaw()).toBeNull();
   });
 
-  it('discards the stash when the account already has a canonical profile', async () => {
+  it('replaces an existing canonical profile with the freshly answered stash (newest intent wins)', async () => {
     stashAnswers();
     mockApiSession = {
       apiBaseUrl: 'https://api.example.test',
@@ -200,9 +197,60 @@ describe('hydrate with a pre-auth stash', () => {
 
     await useAppStore.getState().hydrate();
     const state = useAppStore.getState();
-    expect(state.profile).toEqual(existing);
-    expect(mockSaveCanonical).not.toHaveBeenCalled();
+    // Saved through the canonical endpoint like any onboarding completion…
+    expect(mockSaveCanonical).toHaveBeenCalledWith(mockApiSession, answers);
+    // …and the new answers, not the old profile, are what the owner now has.
+    expect(state.profile).toEqual(answers);
+    expect(
+      JSON.parse(mockKvTable.get(profileKeyFor(CANONICAL_OWNER))!),
+    ).toEqual(answers);
     expect(pendingRaw()).toBeNull();
+  });
+
+  it('replaces an existing guest profile with the freshly answered stash', async () => {
+    const existing: Profile = {
+      skillLevel: '2.5',
+      handedness: 'left',
+      goal: 'serve',
+      biggestProblem: 'consistency',
+      focusCheckpoint: 'sequencing',
+    };
+    mockKvTable.set(profileKeyFor(GUEST_DATA_OWNER), JSON.stringify(existing));
+    stashAnswers();
+    setActiveDataOwner(GUEST_DATA_OWNER);
+
+    await useAppStore.getState().hydrate();
+    expect(useAppStore.getState().profile).toEqual(answers);
+    expect(pendingRaw()).toBeNull();
+    expect(mockSaveCanonical).not.toHaveBeenCalled();
+  });
+
+  it('keeps the existing profile AND the stash when replacing it fails server-side', async () => {
+    stashAnswers();
+    mockApiSession = {
+      apiBaseUrl: 'https://api.example.test',
+      bearerToken: 'token',
+      canonicalAppUserId: CANONICAL_OWNER,
+      provider: 'apple',
+    };
+    const existing: Profile = {
+      skillLevel: '4.0',
+      handedness: 'left',
+      goal: 'drives',
+      biggestProblem: 'contact',
+      focusCheckpoint: 'preparation',
+    };
+    mockFetchCanonical.mockResolvedValue(existing);
+    mockSaveCanonical.mockRejectedValue(new Error('offline'));
+    setActiveDataOwner(CANONICAL_OWNER);
+
+    await useAppStore.getState().hydrate();
+    const state = useAppStore.getState();
+    expect(state.hydrated).toBe(true);
+    // Nothing invented and nothing lost: the old profile still stands…
+    expect(state.profile).toEqual(existing);
+    // …and the answers wait for the next hydrate.
+    expect(pendingRaw()).not.toBeNull();
   });
 
   it('keeps the stash when the adoption save fails, for the next hydrate', async () => {
@@ -220,18 +268,18 @@ describe('hydrate with a pre-auth stash', () => {
     const state = useAppStore.getState();
     expect(state.hydrated).toBe(true);
     expect(state.profile).toBeNull();
-    expect(state.preAuthOnboarded).toBe(true);
     expect(pendingRaw()).not.toBeNull();
   });
 
-  it('backfills the device marker for accounts that onboarded in-app before this flow', async () => {
+  it('records no device-level onboarding history when an existing profile hydrates', async () => {
+    // The launch gate never consults device history, so hydrate must not
+    // leave a "this device onboarded" marker behind that could tempt a
+    // future gate into skipping the questionnaire for new players.
     mockKvTable.set(profileKeyFor(GUEST_DATA_OWNER), JSON.stringify(answers));
     setActiveDataOwner(GUEST_DATA_OWNER);
     await useAppStore.getState().hydrate();
-    expect(useAppStore.getState().preAuthOnboarded).toBe(true);
-    expect(mockKvTable.get(DEVICE_ONBOARDED_KV_KEY)).toBe(
-      JSON.stringify({ version: 1 }),
-    );
+    expect(useAppStore.getState().profile).toEqual(answers);
+    expect([...mockKvTable.keys()]).toEqual([profileKeyFor(GUEST_DATA_OWNER)]);
   });
 
   it('ignores a malformed stash instead of adopting garbage', async () => {

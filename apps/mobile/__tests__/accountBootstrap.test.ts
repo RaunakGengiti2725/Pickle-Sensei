@@ -27,6 +27,62 @@ function response(body: unknown, status = 200): Response {
 }
 
 describe('canonical account bootstrap', () => {
+  it('bears the Supabase session the server mints and keeps its refresh token for restore', async () => {
+    const fetchFn = jest.fn().mockResolvedValue(
+      response({
+        user: { id: canonicalId, email: 'player@example.com' },
+        onboardingState: 'pending',
+        session: {
+          accessToken: 'supabase-access-token',
+          refreshToken: 'supabase-refresh-token',
+          expiresAt: 1_800_000_000,
+        },
+      }),
+    );
+
+    const result = await bootstrapCanonicalAccount({
+      apiBaseUrl: 'https://api.pickle.example/',
+      bearerToken: 'provider-issued-jwt',
+      provider: 'apple',
+      environment,
+      fetchFn,
+    });
+
+    // The provider token was spent on the exchange and is never the bearer.
+    expect(result.apiSession).toEqual({
+      apiBaseUrl: 'https://api.pickle.example',
+      bearerToken: 'supabase-access-token',
+      canonicalAppUserId: canonicalId,
+      provider: 'apple',
+      refreshToken: 'supabase-refresh-token',
+      bearerExpiresAtMs: 1_800_000_000_000,
+    });
+  });
+
+  it('falls back to bearing the provider token when the server returns no (or a malformed) session', async () => {
+    for (const session of [undefined, { accessToken: 'only-half' }]) {
+      const fetchFn = jest.fn().mockResolvedValue(
+        response({
+          user: { id: canonicalId, email: 'player@example.com' },
+          onboardingState: 'pending',
+          ...(session ? { session } : {}),
+        }),
+      );
+      const result = await bootstrapCanonicalAccount({
+        apiBaseUrl: 'https://api.pickle.example',
+        bearerToken: 'provider-issued-jwt',
+        provider: 'google',
+        environment,
+        fetchFn,
+      });
+      expect(result.apiSession).toMatchObject({
+        bearerToken: 'provider-issued-jwt',
+        refreshToken: null,
+        bearerExpiresAtMs: null,
+      });
+    }
+  });
+
   it('sends the real runtime context and returns only the backend UUID as canonical ID', async () => {
     const fetchFn = jest.fn().mockResolvedValue(
       response({
@@ -44,7 +100,7 @@ describe('canonical account bootstrap', () => {
     });
 
     expect(result.account.id).toBe(canonicalId);
-    expect(result.apiSession).toEqual({
+    expect(result.apiSession).toMatchObject({
       apiBaseUrl: 'https://api.pickle.example',
       bearerToken: 'provider-issued-jwt',
       canonicalAppUserId: canonicalId,

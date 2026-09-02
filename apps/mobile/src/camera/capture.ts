@@ -351,10 +351,21 @@ export type CameraEvent =
     })
   | (CameraEventBase & {
       type: 'session';
+      /**
+       * `composing` — camera live, nothing recorded yet (shutter shown);
+       * `recording_started` — the user pressed the shutter and the rolling
+       * spool began; `recording_stopped` — the spool was discarded and the
+       * camera returned to composing (`reason`: user_stopped |
+       * observation_timeout | no_stroke_detected). `observing`/`armed`/
+       * `disarmed` keep their pre-shutter-era meanings.
+       */
       state:
         | 'configured'
         | 'starting'
+        | 'composing'
         | 'observing'
+        | 'recording_started'
+        | 'recording_stopped'
         | 'armed'
         | 'disarmed'
         | 'interrupted'

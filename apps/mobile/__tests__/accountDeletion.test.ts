@@ -6,6 +6,8 @@
  */
 import type { ApiSession } from '../src/account/apiSession';
 import {
+  ACCOUNT_DELETION_DETAILS_MAX,
+  ACCOUNT_DELETION_REASONS,
   AccountDeletionError,
   confirmAccountDeletion,
   requestAccountDeletion,
@@ -28,7 +30,7 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 describe('account deletion client', () => {
-  it('step 1 mints a challenge from delete-request', async () => {
+  it('step 1 mints a challenge from delete-request (skipped survey → no body)', async () => {
     const fetchFn = jest.fn(async (input: string, init?: RequestInit) => {
       expect(input).toBe(
         'https://api.example.test/functions/v1/api/v1/me/delete-request',
@@ -37,16 +39,63 @@ describe('account deletion client', () => {
       expect((init?.headers as Record<string, string>).Authorization).toBe(
         'Bearer provider-token',
       );
+      // A skipped survey keeps the pre-survey wire shape: no body at all.
+      expect(init?.body).toBeUndefined();
       return jsonResponse(200, {
         challenge: '33333333-3333-4333-8333-333333333333',
         expiresAt: '2026-08-30T21:15:00.000Z',
       });
     });
 
-    await expect(requestAccountDeletion(session, fetchFn)).resolves.toEqual({
+    await expect(
+      requestAccountDeletion(session, null, fetchFn),
+    ).resolves.toEqual({
       challenge: '33333333-3333-4333-8333-333333333333',
       expiresAt: '2026-08-30T21:15:00.000Z',
     });
+  });
+
+  it('step 1 carries the exit survey verbatim under body.survey', async () => {
+    const fetchFn = jest.fn(async (_input: string, init?: RequestInit) => {
+      expect(JSON.parse(String(init?.body))).toEqual({
+        survey: {
+          reason: 'scores_inaccurate',
+          details: 'Backhand reads kept calling my drive a dink.',
+          platform: 'ios',
+          appVersion: '1.0',
+        },
+      });
+      return jsonResponse(200, {
+        challenge: '33333333-3333-4333-8333-333333333333',
+        expiresAt: '2026-08-30T21:15:00.000Z',
+      });
+    });
+
+    await requestAccountDeletion(
+      session,
+      {
+        reason: 'scores_inaccurate',
+        details: 'Backhand reads kept calling my drive a dink.',
+        platform: 'ios',
+        appVersion: '1.0',
+      },
+      fetchFn,
+    );
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('pins the survey vocabulary the server accepts (index.ts DELETION_SURVEY_REASONS)', () => {
+    expect([...ACCOUNT_DELETION_REASONS]).toEqual([
+      'not_using',
+      'not_helpful',
+      'scores_inaccurate',
+      'technical_issues',
+      'too_expensive',
+      'switching',
+      'privacy',
+      'other',
+    ]);
+    expect(ACCOUNT_DELETION_DETAILS_MAX).toBe(500);
   });
 
   it('step 1 refuses without a signed-in session', async () => {
@@ -100,7 +149,7 @@ describe('account deletion client', () => {
       jsonResponse(429, { error: { message: 'Too many requests.' } }),
     );
     await expect(
-      requestAccountDeletion(session, limited),
+      requestAccountDeletion(session, null, limited),
     ).rejects.toMatchObject({ retryable: true });
 
     const down = jest.fn(async () => {
@@ -151,6 +200,7 @@ describe('post-deletion local purge', () => {
       `rank.celebrated:${owner}`,
       `notifications:${owner}`,
       `consistency:${owner}`,
+      `practice.set:${owner}`,
     ]);
     // Every owner-scoped delete is bound to the deleted owner.
     for (const call of calls.slice(1, -1)) {

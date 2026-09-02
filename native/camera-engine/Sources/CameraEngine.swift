@@ -571,6 +571,22 @@ public final class CameraEngine: NSObject, @unchecked Sendable {
     recordingLock.unlock()
   }
 
+  /// Stops the rolling spool IF one is active and discards its file without
+  /// invoking `onRecordingFinished` (the shutter's stop / an observation
+  /// timeout: the user simply wants another go). Decided on the session
+  /// queue against the movie output's real state, so the one-shot
+  /// suppression can never be armed while nothing records and swallow a
+  /// later, real capture's finish. A no-op when nothing is recording.
+  public func discardActiveRecording() {
+    sessionQueue.async {
+      guard self.movieOutput.isRecording else { return }
+      self.recordingLock.lock()
+      self.suppressNextRecordingFinish = true
+      self.recordingLock.unlock()
+      self.movieOutput.stopRecording()
+    }
+  }
+
   public var currentRecordingFirstFrameTimestampMs: Int? {
     recordingLock.lock()
     defer { recordingLock.unlock() }

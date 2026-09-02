@@ -20,6 +20,7 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { AnalyzeScreen } from '../screens/AnalyzeScreen';
 import { DrillLibraryScreen } from '../screens/DrillLibraryScreen';
 import { ResultScreen } from '../screens/ResultScreen';
+import { FormReviewScreen } from '../screens/FormReviewScreen';
 import { StreakCalendarScreen } from '../screens/StreakCalendarScreen';
 import { PaywallScreen } from '../screens/PaywallScreen';
 import { SignInScreen } from '../screens/SignInScreen';
@@ -185,6 +186,14 @@ export function RootNavigator() {
           name="Result"
           component={ResultScreen}
           options={{ title: 'Result' }}
+        />
+        <Stack.Screen
+          name="FormReview"
+          component={FormReviewScreen}
+          options={{
+            title: 'Form review',
+            contentStyle: { backgroundColor: color.surfaceDark },
+          }}
         />
         <Stack.Screen
           name="DrillLibrary"

@@ -24,6 +24,9 @@ function fact(overrides: Partial<RealAnalysisFact> = {}): RealAnalysisFact {
     resultKind: 'scored',
     scoringModelVersion: 'model-2',
     shotConfigVersion: 'config-1',
+    sessionId: null,
+    priorityCheckpoint: null,
+    checkpointScores: {},
     ...overrides,
   };
 }

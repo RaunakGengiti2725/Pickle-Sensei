@@ -16,7 +16,7 @@
 // in-app 2-step account deletion). The support mailbox is the monitored
 // account chosen for launch (also the App Store listing's support contact).
 
-const LAST_UPDATED = "August 30, 2026";
+const LAST_UPDATED = "September 2, 2026";
 const SUPPORT_EMAIL = "picklesenseidev@gmail.com";
 
 export const PRIVACY_POLICY_TEXT = `PICKLE SENSEI — PRIVACY POLICY
@@ -89,8 +89,12 @@ Your data is retained while your account is active. You can delete your
 account at any time in Settings → Delete account (a deliberate two-step
 confirmation). Deletion permanently removes your account and all
 server-side data: profile, analysis history, sessions, consent records,
-and membership records. Data stored only on your device is yours and can
-be removed by deleting the app.
+and membership records. If you choose to answer the optional exit survey
+before deleting, we keep only your answer (the reason you picked and any
+comment you typed) together with coarse context such as app version and
+how long the account existed — with no link to you or your account. Data
+stored only on your device is yours and can be removed by deleting the
+app.
 
 
 6. SECURITY

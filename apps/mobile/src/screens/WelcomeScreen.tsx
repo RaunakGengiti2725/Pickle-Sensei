@@ -71,7 +71,9 @@ function CourtStory() {
 
 export function WelcomeScreen(props: {
   onGetStarted: () => void;
-  /** Straight to sign-in — returning users skip the setup questionnaire. */
+  /** Straight to sign-in for returning players. Setup itself is never
+   * skipped: an account that hasn't finished it lands in the in-account
+   * questionnaire after signing in. */
   onSignIn?: () => void;
 }) {
   return (
@@ -104,7 +106,7 @@ export function WelcomeScreen(props: {
           <PressableScale
             accessibilityRole="button"
             accessibilityLabel="I already have an account"
-            accessibilityHint="Skip setup and go to sign-in"
+            accessibilityHint="Sign in to an existing account"
             onPress={props.onSignIn}
             style={styles.signInLink}
           >

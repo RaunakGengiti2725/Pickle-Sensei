@@ -21,21 +21,18 @@ export { focusForGoal, type Gender, type Profile } from './profile';
 /** Session/UI state (Zustand); durable copies live in SQLite kv. */
 
 /**
- * Pre-auth onboarding (device-level, NOT owner-scoped): the questionnaire now
+ * Pre-auth onboarding (device-level, NOT owner-scoped): the questionnaire
  * runs BEFORE sign-in, so its answers are stashed under a device key until a
- * writable owner exists to adopt them. The stash is single-use: hydrate()
- * moves it into the first owner that has no profile of its own, and discards
- * it when the owner already has one (an existing account always wins over a
- * fresh questionnaire).
+ * writable owner exists to adopt them. The stash is single-use and the
+ * NEWEST intent wins: hydrate() makes it the profile of the next owner that
+ * signs in, replacing any profile that owner already had — someone who chose
+ * "Start your first read" and answered every question meant those answers to
+ * apply. (Returning players who don't want that take "I already have an
+ * account", which never writes a stash.) If the server save fails the stash
+ * is kept for the next hydrate and the owner keeps their existing profile
+ * meanwhile.
  */
 export const PENDING_ONBOARDING_PROFILE_KV_KEY = 'onboarding.pending-profile';
-/**
- * Durable "this device finished the questionnaire" marker. Survives sign-out
- * and account deletion on purpose: returning users go straight to sign-in
- * instead of re-answering setup questions.
- */
-export const DEVICE_ONBOARDED_KV_KEY = 'onboarding.device-complete';
-export const DEVICE_ONBOARDED_VALUE = JSON.stringify({ version: 1 });
 
 function parsePendingProfile(raw: string | null): Profile | null {
   if (!raw) return null;
@@ -69,11 +66,6 @@ interface AppState {
   hydrated: boolean;
   ownerKey: string | null;
   profile: Profile | null;
-  /** True once this device has completed the pre-auth questionnaire (or a
-   * profile has ever hydrated here). Gates the launch flow: false → the
-   * onboarding questionnaire runs before sign-in; true → straight to
-   * sign-in. */
-  preAuthOnboarded: boolean;
   onboardingBusy: boolean;
   onboardingError: string | null;
   lastShotType: ShotTypeSlug;
@@ -102,23 +94,17 @@ export const useAppStore = create<AppState>(set => ({
   hydrated: false,
   ownerKey: null,
   profile: null,
-  preAuthOnboarded: false,
   onboardingBusy: false,
   onboardingError: null,
   lastShotType: 'forehand_drive',
   hydrate: async () => {
     const owner = getActiveDataOwner();
     set({ hydrated: false, ownerKey: owner, profile: null });
-    // Read early so the launch gate keeps its answer even when the risky
-    // owner-scoped work below fails.
-    let preAuthOnboarded = false;
     try {
       const db = getDb();
       let pending = parsePendingProfile(
         await getKv(db, PENDING_ONBOARDING_PROFILE_KV_KEY),
       );
-      preAuthOnboarded =
-        pending !== null || (await getKv(db, DEVICE_ONBOARDED_KV_KEY)) !== null;
       let raw = await getKv(db, profileKeyForOwner(owner));
       if (!raw && owner === GUEST_DATA_OWNER) {
         const legacy = await getKv(db, 'profile');
@@ -142,16 +128,17 @@ export const useAppStore = create<AppState>(set => ({
         }
       }
       // Adopt the pre-auth questionnaire into the first writable owner that
-      // hydrates without a profile of its own; synced accounts save through
+      // hydrates, REPLACING whatever profile it had (the answers just given
+      // on this device are the newest intent); synced accounts save through
       // the canonical endpoint first (server focusCheckpoint wins) exactly
-      // like completeOnboarding. Owners that already have a profile — local
-      // or canonical — win over the stash. Either way it is single-use.
+      // like completeOnboarding. A failed save keeps both the stash (retried
+      // next hydrate) and the existing profile.
       if (
         pending &&
         owner !== SIGNED_OUT_DATA_OWNER &&
         getActiveDataOwner() === owner
       ) {
-        if (!raw) {
+        try {
           const adopted =
             apiSession &&
             canonicalDataOwner(apiSession.canonicalAppUserId) === owner
@@ -159,35 +146,24 @@ export const useAppStore = create<AppState>(set => ({
               : pending;
           raw = JSON.stringify(adopted);
           await setKv(db, profileKeyForOwner(owner), raw);
+          await setKv(db, PENDING_ONBOARDING_PROFILE_KV_KEY, '');
+          pending = null;
+        } catch {
+          // Stash and existing profile both survive for the next attempt.
         }
-        await setKv(db, PENDING_ONBOARDING_PROFILE_KV_KEY, '');
-        pending = null;
-      }
-      // Migration backfill: accounts that onboarded before the pre-auth flow
-      // existed already answered the questionnaire — never re-ask on this
-      // device after a later sign-out.
-      if (raw && !preAuthOnboarded) {
-        preAuthOnboarded = true;
-        await setKv(db, DEVICE_ONBOARDED_KV_KEY, DEVICE_ONBOARDED_VALUE);
       }
       if (getActiveDataOwner() !== owner) return;
       set({
         profile: raw ? (JSON.parse(raw) as Profile) : null,
         hydrated: true,
         ownerKey: owner,
-        preAuthOnboarded,
         lastShotType: 'forehand_drive',
         onboardingBusy: false,
         onboardingError: null,
       });
     } catch {
       if (getActiveDataOwner() === owner) {
-        set({
-          hydrated: true,
-          ownerKey: owner,
-          profile: null,
-          preAuthOnboarded,
-        });
+        set({ hydrated: true, ownerKey: owner, profile: null });
       }
     }
   },
@@ -206,17 +182,10 @@ export const useAppStore = create<AppState>(set => ({
         profileKeyForOwner(owner),
         JSON.stringify(canonicalProfile),
       );
-      try {
-        await setKv(getDb(), DEVICE_ONBOARDED_KV_KEY, DEVICE_ONBOARDED_VALUE);
-      } catch {
-        // Best-effort device marker; the owner-scoped profile write above is
-        // the completion of record and already succeeded.
-      }
       if (getActiveDataOwner() === owner) {
         set({
           profile: canonicalProfile,
           ownerKey: owner,
-          preAuthOnboarded: true,
           onboardingBusy: false,
           onboardingError: null,
         });
@@ -236,18 +205,12 @@ export const useAppStore = create<AppState>(set => ({
   completePreAuthOnboarding: async profile => {
     set({ onboardingBusy: true, onboardingError: null });
     try {
-      const db = getDb();
       await setKv(
-        db,
+        getDb(),
         PENDING_ONBOARDING_PROFILE_KV_KEY,
         JSON.stringify({ version: 1, profile }),
       );
-      await setKv(db, DEVICE_ONBOARDED_KV_KEY, DEVICE_ONBOARDED_VALUE);
-      set({
-        preAuthOnboarded: true,
-        onboardingBusy: false,
-        onboardingError: null,
-      });
+      set({ onboardingBusy: false, onboardingError: null });
       return true;
     } catch (error) {
       set({

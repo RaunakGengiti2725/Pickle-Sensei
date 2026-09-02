@@ -61,16 +61,19 @@ extension AVCaptureVideoPreviewLayer {
   }
 }
 
-/// Draws only evidence produced by current Apple Vision observations. Instead
-/// of a stick figure, the athlete is rendered as a BODY HEAT MAP: soft
-/// additive glows placed at observed landmarks and along observed limb lines,
-/// whose color and size come from each joint's measured movement speed
-/// (cool teal at rest → mint → volt → flame at full swing speed). The heat
-/// map, body-bound lock, and short motion trails disappear when inference
-/// loses the athlete; only the static full-body framing guide stays. No
-/// decorative scanner or synthetic body data is drawn: every glow center is
-/// an observed landmark or a point on the straight line between two observed
-/// landmarks, and every intensity is a measured speed.
+/// Draws only evidence produced by current Apple Vision observations. The
+/// athlete is rendered as an EXOSKELETON over a translucent BODY HEAT MAP:
+/// crisp bone lines and joint nuclei between observed landmarks (so the user
+/// sees exactly what the camera tracks), under soft additive glows whose
+/// color and size come from each joint's measured movement speed (cool teal
+/// at rest → mint → volt → flame at full swing speed). The heat is
+/// deliberately translucent — it marks where motion is, it never paints the
+/// athlete over. Skeleton, heat, body-bound lock, and short motion trails
+/// disappear when inference loses the athlete; only the static full-body
+/// framing guide stays. No decorative scanner or synthetic body data is drawn:
+/// every glow center and bone end is an observed landmark or a point on the
+/// straight line between two observed landmarks, and every intensity is a
+/// measured speed.
 final class PoseOverlayView: UIView {
   enum CaptureState: Equatable {
     case starting
@@ -148,6 +151,14 @@ final class PoseOverlayView: UIView {
   private static let headJoints = ["head"]
   private static let minimumTrailSpeed = 0.06
   private static let fullIntensitySpeed = 1.25
+  /// Heat translucency (2026-09-01): the glows sit UNDER the exoskeleton and
+  /// are scaled by this factor so the body reads through them. Tuned so a
+  /// full-speed limb is clearly flame-colored yet the athlete stays visible.
+  private static let heatOpacity: CGFloat = 0.55
+  /// Exoskeleton stroke geometry, in points at radiusUnit = 15 (scaled with
+  /// the observed torso so near and far athletes get proportional bones).
+  private static let boneWidthAtUnit: CGFloat = 2.6
+  private static let jointRadiusAtUnit: CGFloat = 3.6
 
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -297,7 +308,10 @@ final class PoseOverlayView: UIView {
     case .saving: stateAlpha = 0.62
     }
     let coverageAlpha = CGFloat(min(1, max(0.52, jointCoverage)))
-    let globalAlpha = stateAlpha * coverageAlpha
+    // Heat glows are translucent by design (heatOpacity); the exoskeleton
+    // drawn afterwards uses the un-attenuated state/coverage alpha.
+    let skeletonAlpha = stateAlpha * coverageAlpha
+    let globalAlpha = skeletonAlpha * Self.heatOpacity
 
     // ── Torso mass: observed shoulder/hip corners fill the trunk ─────────
     if let leftShoulder = visibleLandmark("left_shoulder"),
@@ -383,7 +397,7 @@ final class PoseOverlayView: UIView {
         min(1, max(0, segment.normalizedSpeedPerSecond / Self.fullIntensitySpeed))
       )
       let freshness = CGFloat(max(0, 1 - segment.ageFraction))
-      let alpha = (0.12 + 0.52 * freshness) * (0.45 + 0.55 * speed) * stateAlpha
+      let alpha = (0.12 + 0.52 * freshness) * (0.45 + 0.55 * speed) * stateAlpha * Self.heatOpacity
       context.setStrokeColor(heatColor(speed).withAlphaComponent(alpha).cgColor)
       context.setLineWidth(1.75 + 3.25 * speed)
       context.beginPath()
@@ -400,6 +414,111 @@ final class PoseOverlayView: UIView {
       context.strokePath()
     }
     context.restoreGState()
+
+    drawExoskeleton(
+      context: context,
+      layerPoint: layerPoint,
+      heat: heat,
+      radiusUnit: radiusUnit,
+      alpha: skeletonAlpha
+    )
+  }
+
+  // ── Exoskeleton ───────────────────────────────────────────────────────────
+
+  /// Crisp bones + joint nuclei over the heat, in NORMAL blend mode so the
+  /// dark contour keeps the lines legible on bright backgrounds (screen blend
+  /// can only lighten). Bone color is white tinted toward the measured heat
+  /// of its two joints, so a fast limb reads warm without losing its edge.
+  /// Every line ends at an observed landmark — nothing is inferred.
+  private func drawExoskeleton(
+    context: CGContext,
+    layerPoint: (PoseLandmark) -> CGPoint,
+    heat: (String) -> CGFloat,
+    radiusUnit: CGFloat,
+    alpha: CGFloat
+  ) {
+    guard alpha > 0.02 else { return }
+    let scale = max(0.6, min(1.6, radiusUnit / 15))
+    let boneWidth = Self.boneWidthAtUnit * scale
+    let jointRadius = Self.jointRadiusAtUnit * scale
+    let contour = UIColor.black.withAlphaComponent(0.32 * alpha)
+
+    context.saveGState()
+    context.setBlendMode(.normal)
+    context.setLineCap(.round)
+    context.setLineJoin(.round)
+
+    var bones: [(CGPoint, CGPoint, CGFloat)] = []
+    for (startName, endName) in Self.segments {
+      guard let start = visibleLandmark(startName), let end = visibleLandmark(endName) else { continue }
+      bones.append((layerPoint(start), layerPoint(end), (heat(startName) + heat(endName)) / 2))
+    }
+    // Neck: observed head down to the observed shoulder midpoint.
+    if let head = visibleLandmark("head"),
+       let leftShoulder = visibleLandmark("left_shoulder"),
+       let rightShoulder = visibleLandmark("right_shoulder") {
+      let neckBase = midpoint(layerPoint(leftShoulder), layerPoint(rightShoulder))
+      bones.append((layerPoint(head), neckBase, (heat("left_shoulder") + heat("right_shoulder")) / 2))
+    }
+
+    // Contour pass first so every bone carries a thin dark edge.
+    context.setStrokeColor(contour.cgColor)
+    context.setLineWidth(boneWidth + 2.2 * scale)
+    for (start, end, _) in bones {
+      context.beginPath()
+      context.move(to: start)
+      context.addLine(to: end)
+      context.strokePath()
+    }
+    for (start, end, boneHeat) in bones {
+      context.setStrokeColor(boneColor(heat: boneHeat).withAlphaComponent(0.9 * alpha).cgColor)
+      context.setLineWidth(boneWidth)
+      context.beginPath()
+      context.move(to: start)
+      context.addLine(to: end)
+      context.strokePath()
+    }
+
+    // Joint nuclei: filled disc with the same contour; hot joints grow a ring.
+    let jointNames = Set(Self.segments.flatMap { [$0.0, $0.1] })
+    for name in jointNames {
+      guard let landmark = visibleLandmark(name) else { continue }
+      let center = layerPoint(landmark)
+      let jointHeat = heat(name)
+      let radius = jointRadius * (1 + 0.35 * jointHeat)
+      let visibilityAlpha = CGFloat(0.55 + 0.45 * min(1, max(0, (landmark.visibility - 0.35) / 0.65)))
+      let disc = CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)
+      context.setFillColor(contour.cgColor)
+      context.fillEllipse(in: disc.insetBy(dx: -1.1 * scale, dy: -1.1 * scale))
+      context.setFillColor(boneColor(heat: jointHeat).withAlphaComponent(0.96 * alpha * visibilityAlpha).cgColor)
+      context.fillEllipse(in: disc)
+      if jointHeat > 0.45 {
+        let ringRadius = radius + 3.2 * scale * jointHeat
+        context.setStrokeColor(heatColor(jointHeat).withAlphaComponent(0.55 * alpha * jointHeat).cgColor)
+        context.setLineWidth(1.2 * scale)
+        context.strokeEllipse(in: CGRect(
+          x: center.x - ringRadius, y: center.y - ringRadius, width: ringRadius * 2, height: ringRadius * 2
+        ))
+      }
+    }
+    context.restoreGState()
+  }
+
+  /// White tinted toward the heat ramp as measured speed rises; at rest the
+  /// exoskeleton is a clean, neutral white.
+  private func boneColor(heat: CGFloat) -> UIColor {
+    let clamped = min(1, max(0, heat))
+    guard clamped > 0.02 else { return Palette.onDark }
+    var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+    heatColor(clamped).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+    let mix = 0.7 * clamped
+    return UIColor(
+      red: 248 / 255 * (1 - mix) + red * mix,
+      green: 250 / 255 * (1 - mix) + green * mix,
+      blue: 245 / 255 * (1 - mix) + blue * mix,
+      alpha: 1
+    )
   }
 
   /// Only the body-lock brackets remain layer-drawn; the heat map itself is
@@ -530,12 +649,14 @@ final class PoseOverlayView: UIView {
     guard bounds.width > 0, bounds.height > 0 else { return nil }
     // A static, deliberately spacious target helps the athlete place their
     // complete body before any pose exists. It is a framing affordance, not a
-    // scanner, and never animates.
+    // scanner, and never animates. The rect encloses the silhouette guide
+    // GuidedCaptureViewController lays out (head ≈18%, shoes ≈86% of the
+    // screen) with a small margin, so brackets and outline read as one guide.
     let guideRect = CGRect(
-      x: bounds.width * 0.14,
-      y: bounds.height * 0.24,
-      width: bounds.width * 0.72,
-      height: bounds.height * 0.62
+      x: bounds.width * 0.1,
+      y: bounds.height * 0.15,
+      width: bounds.width * 0.8,
+      height: bounds.height * 0.74
     )
     return cornerPath(in: guideRect)
   }

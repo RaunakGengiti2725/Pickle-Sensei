@@ -35,6 +35,40 @@ backend is the Supabase Edge Function in `supabase/functions/api/` (Deno);
   billing_entitlements upsert, the webhook_events audit log, and the Auth
   admin deleteUser behind two-step account deletion).
 
+## Auth sessions (durable sign-in — closing the app must NEVER sign out)
+
+- Contract (2026-09-01): `POST /v1/account/bootstrap` spends the Apple/Google
+  ID token once (`signInWithIdToken`) and returns `session {accessToken,
+refreshToken, expiresAt}` beside the account. Every other route takes the
+  Supabase ACCESS token as bearer (`authenticate()` verifies it with
+  `auth.getUser`, cached like before); `POST /v1/auth/refresh {refreshToken}`
+  rotates it (per-IP budget, 401 counts as an auth failure);
+  `POST /v1/auth/logout` revokes THIS device's session (`scope=local` — other
+  devices stay signed in) and drops the bearer from the auth cache.
+  `authenticate()` still accepts a raw provider ID token TRANSITIONALLY for
+  app builds that predate the contract — remove that branch once none are in
+  the field. Deploy the edge fn BEFORE shipping the app build (an old server
+  returns no `session`; the app then bears the provider token for that run
+  and has nothing to persist — i.e. the pre-fix behaviour, not a crash).
+- Mobile: `src/account/sessionVault.ts` keeps `{provider, canonical id,
+refreshToken, email, displayName}` in the device Keychain/Keystore via
+  `react-native-keychain` (`AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`; needs
+  `bundle exec pod install` after checkout). The ACCESS token and the
+  provider token are never persisted anywhere; SQLite kv holds no session
+  material. `authStore.hydrate()` restores from the vault FIRST (Apple and
+  Google alike, no provider SDK): the user is signed in from the record, the
+  refresh token is exchanged (launch waits ≤ 8s, then proceeds signed-in with
+  local data while the refresh continues), and `sessionKeeper.ts` rotates
+  the bearer 60s before expiry, retries transient failures with backoff, and
+  re-checks on every foreground (timers don't fire while suspended). The ONE
+  implicit sign-out is the server refusing the refresh token (401/403). The
+  legacy Google silent-restore flag is only a fallback for devices that
+  signed in before the vault existed. Long-lived API clients (sync transport,
+  billing, training) resolve the bearer per request through
+  `bearerTokenFor(canonicalAppUserId)` — never capture `bearerToken` at
+  construction, and never reconfigure those stores on rotation (configure
+  resets their state). Pinned by `__tests__/authDurableSession.test.ts`.
+
 ## Scale & security (edge function)
 
 - `cache.ts` (L1 per-isolate + L2 Upstash Redis) caches VERIFIED auth
@@ -84,6 +118,23 @@ backend is the Supabase Edge Function in `supabase/functions/api/` (Deno);
   PRODUCTION App Store public key (`appl_…`, real StoreKit — sandbox Apple IDs
   in dev/TestFlight) as of 2026-08-30; Android still uses the TEST STORE key
   (`test_…`, simulated) until a Play submission exists.
+- The "Sign in to Apple Account" dialog over the paywall is StoreKit's App
+  Store authentication, NOT the app's sign-in and NOT a bug. Sign in with
+  Apple/Google identifies the account to OUR backend; it cannot sign the
+  device into the App Store, and no app can skip App Store auth for a
+  purchase. Development-signed (Xcode) builds purchase in Apple's SANDBOX,
+  which asks for a Sandbox Apple Account on every attempt until one is
+  signed in at Settings → Developer → Sandbox Apple Account (create testers
+  in App Store Connect → Users and Access → Sandbox); after that the sheet
+  reads `[Environment: Sandbox]` and confirms with Face ID. TestFlight runs
+  in sandbox under the tester's own Apple Account; App Store builds use the
+  device's Apple Account and the normal Face ID payment sheet. Only the two
+  explicit paywall buttons reach StoreKit auth — Continue (`purchasePackage`)
+  and Restore purchases (`restorePurchases`, RC's SK2 path reads
+  `Transaction.all` + `AppTransaction.shared`); never call restore/sync
+  automatically, that prompt is the cost. Decision 2026-09-02: keep real
+  StoreKit sandbox in dev (a Test Store key for iOS Debug builds was
+  considered and declined).
 - Entitlement id: `pickle_sensei_pro` (legacy alias `premium` also honored).
 - Offering packages must use standard types MONTHLY / ANNUAL / LIFETIME.
 - Target prices: $7.99/mo, $59.99/yr, $159.99 lifetime — set on the store
@@ -120,24 +171,39 @@ fontSize/fontFamily near a token. Title roles:
   (e.g. card technique scores are `type.score` at 30/34 on Home, Progress,
   and Library; big stat counters are `type.display` at 64/66).
 
-## Launch flow (onboarding BEFORE login)
+## Launch flow (onboarding BEFORE login — and REQUIRED)
 
 App.tsx Gate order: Welcome → onboarding questionnaire + notification choice
-(device-once) → sign-in → app; `src/flow/launchGate.ts` +
-`__tests__/launchGate.test.ts` pin it. Pre-auth answers stash under device kv
-`onboarding.pending-profile` and are adopted by the first writable owner
-appStore.hydrate() sees WITHOUT a profile (canonical accounts save through
-`/v1/me/onboarding` first — server focusCheckpoint wins); an existing
-local/server profile always beats the stash, which is single-use. The final
+→ sign-in → app; `src/flow/launchGate.ts` + `__tests__/launchGate.test.ts`
+pin it. "Start your first read" ALWAYS enters the questionnaire — the gate
+takes no device-history input (a device-level "already onboarded" marker used
+to short-circuit it to sign-in on any phone that had ever held a profile; it
+was removed 2026-09-01 for conversion — invest first, then create the
+account). The questionnaire CANNOT be skipped (product decision 2026-09-01:
+the app is personalized from it): pre-auth, step one's control is a plain
+Back to Welcome (`stageWhenLeavingOnboarding()`, no alert, no "Skip to
+sign-in" — that escape was removed), later steps' Back returns to the previous
+question, and the ONLY way to reach sign-in through the flow is finishing it.
+Every other path loops back into onboarding until it's done once: Welcome's
+"I already have an account" link goes to sign-in, but an account with no
+profile lands in the in-account OnboardingScreen (`mode='account'`), whose
+only other exit is signing out. Pinned in `__tests__/onboardingScreen.test.tsx`
+(preauth + in-account escape cases). Do not reintroduce hidden gating on the
+primary CTA or any skip affordance. Pre-auth answers stash under
+device kv `onboarding.pending-profile` and are adopted by the first writable
+owner appStore.hydrate() sees, REPLACING any profile that owner already had
+(newest intent wins — someone who chose "Start your first read" and answered
+everything meant it; canonical accounts save through `/v1/me/onboarding`
+first — server focusCheckpoint wins). The stash is single-use; a failed
+server save keeps both the stash (retried next hydrate) and the existing
+profile. Pinned in `__tests__/appStorePreAuthOnboarding.test.ts`. The final
 notification screen asks before the OS prompt: only “Turn on reminders” may
 request permission, while “Not now” never does. Its device-level
 `onboarding.pending-notifications` choice is adopted by the first writable
 owner notificationStore.hydrate() sees unless that owner already has reminder
-prefs. `onboarding.device-complete` marks the device onboarded (backfilled
-whenever a profile hydrates) and deliberately survives sign-out/deletion so
-returning users go straight to sign-in. Signed-in sessions with no profile
-still get the in-account OnboardingScreen (default `mode='account'`; the
-pre-auth gate passes `mode='preauth'`).
+prefs. Signed-in sessions with no profile still get the in-account
+OnboardingScreen (default `mode='account'`; the pre-auth gate passes
+`mode='preauth'`).
 
 ## App Store rating prompts
 
@@ -238,6 +304,40 @@ Owner-scoped kv namespaces (`profile`, `rank.celebrated`, `notifications`,
 `consistency`) are pinned in `repository.ts OWNER_SCOPED_KV_NAMESPACES` and
 purged together on account deletion — add new namespaces there.
 
+## Auto Analyze camera — record-button flow (iOS, 2026-09-01)
+
+`GuidedCaptureViewController.swift` is a camera app, not a wizard: the
+camera opens in `composing` (live preview + exoskeleton, NOTHING recorded),
+the translucent player silhouette (`CaptureSilhouette` imageset in the app's
+`Images.xcassets`, template image tinted white, alpha 0.3 → 0.14 as a body is
+tracked → hidden once locked; mirrored in RN as `assets/capture/silhouette*.png`
+for the Analyze landing preview) shows where to stand, and the ONE control is
+the `CaptureShutterButton` (white ring, volt core → red stop square). Shutter
+→ `startRecordingFromShutter()` starts the rolling spool + 55 s observation
+timer + REC chip; the athlete walks out; readiness copy is prominent; the
+trigger arms itself on a stable full-body read and the swing ends the clip
+(unchanged detector/export chain). Shutter again, the observation timeout, or
+the movie output's hard duration cap all return to `composing` with a
+transient notice via `endRecordingAndCompose` — the camera never closes with
+an error for "I need another go". Tapping the preview to mark a start spot is
+OPTIONAL (crowded courts) and only while composing; the D-027 occupancy lock
+runs once recording starts. Invariants: discard a spool ONLY through
+`CameraEngine.discardActiveRecording()` (decided on the session queue against
+`movieOutput.isRecording`, so the one-shot finish suppression can never
+outlive the recording it was meant for and swallow a later real capture);
+`recordingRequested` (shutter pressed) and `recordingStarted` (delegate
+fired) are separate flags — the trigger needs both; a `recordingAlreadyActive`
+start failure is retried after 150 ms (stop → immediate re-record). The
+silhouette band (head ≈18 %, shoes ≈86 % of the screen) and
+`PoseOverlayView.fixedFramingGuidePath` (y 15–89 %) are sized so a body
+matching the outline spans ≈0.5 of the frame shoulders→ankles, inside the
+readiness evaluator's 0.32–0.88 window. Overlay: heat glows are scaled by
+`heatOpacity` (0.55) and drawn UNDER the exoskeleton (bones + joint nuclei,
+normal blend with a dark contour) — the heat marks motion, it never paints
+the athlete over. JS `CameraEvent.session` gained `composing` /
+`recording_started` / `recording_stopped(reason)`. Android's
+`GuidedCaptureActivity` still runs the older tap-to-start flow (not shipping).
+
 ## iOS camera overlays (coordinate-space invariant)
 
 Pose landmarks are NORMALIZED-IMAGE space: top-left origin, **rotation
@@ -260,6 +360,75 @@ must never render raw: `strokeResultModel.ts limitingFactorCopy()` maps each
 known token to noun / reason / ledger forms (checkpoint names come from the
 shared `CHECKPOINT_NAMES` there; ResultScreen imports it). Unknown tokens
 fall back to humanized text. Pinned in `strokeResultModel.test.ts`.
+
+The three MODALITY tokens (`MODALITY_SCOPE_FACTORS`: paddle / ball / court
+"unavailable") are structural — this engine has no paddle, ball or court
+tracker and paddle-side checkpoints are measured at the hitting wrist — so
+they are never phrased as a per-analysis failure: `selectInsight` skips them
+(the old "We couldn't establish a paddle track — nothing was invented" line
+must not come back), the ledger folds them into ONE calm `scope` footnote
+(`MEASUREMENT_SCOPE_NOTE`). For a SCORED analysis the insight is measured:
+`fixList(analysis)[0]` headline + coaching cue (`basis: measured_fault`), or
+`measured_clean` when every checkpoint is green. The replay phase strip and
+contact tick now come from `analysis.phases` (`phaseTimelineFromAnalysis` /
+`effectivePhaseTimeline`, source `wrist`, tick = wrist-speed peak) whenever
+the record carries no `temporalPhasesV2`; `UncertaintyNotes` is gated on the
+same effective timeline (`contact_estimate` note instead of "contact wasn't
+located").
+
+## Form Review (flagship replay) + What to fix + drills
+
+`src/review/formReviewModel.ts` (pure, pinned by `formReviewModel.test.ts`)
+turns a ShotAnalysis (+ the hash-verified pose sidecar) into a
+`FormReviewScript`: one `ReviewStop` per measured phase that has scored
+checkpoints (contact always), `atMs` = the phase's `representativeMs`
+(clip-relative, same axis as the sidecar), verdict fix/watch/strong from the
+worst band, `headline` = measured fact (`stopHeadline`), `cue` =
+`coachingCue(key, direction, shotType)` (85 pickleball cues, ≤150 chars, a
+positive "keep it" cue for `none`), `focusJoints`/`jointHeat`/`reviewArrow`
+dominant-side aware (`dominantSide` mirrors the phase segmenter's wrist-path
+rule; `facingSign` mirrors the feature extractor). `fixList` / `strengthList`
+feed `src/review/FixList.tsx` (What to fix, priority first) and the Result
+insight; `recommendedDrillsModel.ts` + `RecommendedDrills.tsx` fetch
+`GET /v1/catalog/drills?family=` and label the match honestly
+(`DRILL_MATCH_NOTE`). `screens/FormReviewScreen.tsx` (route `FormReview:
+{ analysisId }`) plays the clip through `ClipPlayer resizeMode="contain"`
+(+ `rate` for ¼×/½× — both props exist on iOS + Android players and the
+bridge `.m`) and draws `FormReviewOverlay` (react-native-svg) in the
+letterboxed `containRect` — landmarks are normalized to the FULL video frame,
+so the overlay rect MUST be the contain rect, never the stage. Auto-pause:
+`nextAutoPause` fires once per stop per pass (visited set; scrubs re-arm
+stops ahead of the new position) and seeks exactly to `stop.atMs` so frame
+and skeleton agree. No frame within `POSE_FRAME_TOLERANCE_MS` → nothing is
+drawn (never interpolated). Evidence: `strokeResultData.ts` adds `review`
+(`width/height` + `poseSequence` ref) beside `clip`; `poseSidecar.ts` reads +
+sha256-checks + `parsePoseSequence` exactly like `runCaptureAnalysis`.
+ResultScreen injects `FormReviewCard` (`reviewSlot`) and FixList → set card →
+drills (`fixSlot`) into `StrokeResult`; the old "Measured priority" card is
+gone (the priority fault is FixList's first card).
+
+## Practice set (same-sitting re-analysis)
+
+`src/analysis/practiceSet.ts`: every SCORED analysis in one sitting shares a
+`sessionId` (a `local_session` row of mode `practice_set`, synced through the
+existing `session.create` outbox kind). `planPracticeSet` (read-only: TRY
+AGAIN handoff `sessionId` wins → live kv set within
+`PRACTICE_SET_IDLE_TIMEOUT_MS` (20 min) → fresh uuid) runs BEFORE
+`runCaptureAnalysis` so the id lands in the ShotAnalysis; `commitPracticeSet`
+runs only after a scored outcome (session row + outbox + owner-scoped kv
+`practice.set:<owner>` — registered in `OWNER_SCOPED_KV_NAMESPACES`), so an
+abstained/failed run bookkeeps nothing (`analyzeScreenFullFlowE2E` pins "no
+outbox write on network loss"). `sync.ts drainOutbox` drains
+`session.create`/`finalize` rows BEFORE `shot.sync` and a
+`shot.session_not_found` rejection does not spend the retry budget (the
+session row was queued moments after the shot). `TryAgainHandoff.sessionId`
+carries the set through Result → Analyze → camera. `RealAnalysisFact` now
+carries `sessionId`, `priorityCheckpoint`, `checkpointScores`;
+`src/progress/practiceSetProgress.ts` (pure, integer tenths, same
+stroke + scoringModelVersion + shotConfigVersion only) →
+`PracticeSetCard` ("THIS SET": Δ headline, attempt pills, one factual insight)
+on the Progress Technique tab (`latestPracticeSet`, ≤24 h) and on the Result
+surface (`summarizePracticeSet`, ≥2 comparable attempts).
 
 ## Library saved drills
 
@@ -311,18 +480,45 @@ any of this without an explicit product decision to relaunch Live Court.
 - Pinned by `__tests__/drillVideoPlayer.test.tsx` (the ladder) and
   `__tests__/drillLibraryScreen.test.tsx`.
 
-## Launch splash (static brand, no video)
+## Launch splash (MP4 intro, 2026-09-01)
 
-`src/screens/SplashScreen.tsx` renders pixel-identical layers to the native
-launch storyboard — the `SplashGlow`/`SplashLockup` imagesets are the same
-bitmaps as `assets/brand/splash-glow*.png` / `splash-lockup*.png`, same
-geometry — so React taking over is invisible; the only motion is the glow
-breathing, and the overlay fades once App.tsx `ready` (hydration) is true.
-An MP4 intro variant (react-native-video) was built and then removed on
-2026-08-31 — the user prefers this static one; don't reintroduce the video
-without being asked. JS splash assets and the storyboard imagesets must move
-together: deleting the PNGs breaks the Xcode "Bundle React Native code and
-images" phase (Metro `UnableToResolveError`).
+`src/screens/SplashScreen.tsx` plays `assets/brand/splash.mp4` (the user's
+brand animation: 1080x1920 9:16, HEVC + AAC, ~5.0s) through
+`react-native-video` 6.x (Fabric subspec; the Podfile's
+`RCT_NEW_ARCH_ENABLED=1` env is what selects it at pod-install time). The
+file is used byte-identical — never re-encode, trim, mute or resize it.
+Invariants:
+
+- `resizeMode="contain"` on a pure-white canvas: the video is shown WHOLE at
+  its own 9:16, never cropped/stretched to the phone; every frame's edges
+  are #FFFFFF so the letterbox is invisible. The native cold-start surfaces
+  paint the SAME white — `LaunchScreen.storyboard` (plain white view, no
+  imagery), `AppDelegate.swift` window + root view (`launchCanvas`), Android
+  `styles.xml` `windowBackground` — so process start → first video frame is
+  one surface. Changing one means changing all four.
+- Sound plays (`volume` 1, not muted) but as NON-essential audio:
+  `ignoreSilentSwitch="obey"` (ambient category — the ring/silent switch
+  mutes it and it mixes over whatever is already playing) and Android
+  `disableFocus` (never pauses the user's music). A device on silent hears
+  nothing by design.
+- "Skip" (`splash-skip`): fades in once `onProgress` reports ≥ 1s of
+  playback, centered in the bottom 15% of the page, transparent background,
+  pure-black `type.bodyBold` label with a soft shadow. Nothing else may be
+  drawn over the video.
+- Handoff: the first screen renders UNDER the overlay (App.tsx); the exit is
+  a 520ms native-driven cross-fade that starts only when the intro is over
+  (ended / skipped / `onError` / 8s watchdog) AND App.tsx `ready` is true. A
+  JS-driven twin value ramps the player's `volume` to 0 alongside the fade so
+  a mid-intro skip tails off instead of cutting. `pointerEvents` flips to
+  `none` for the fade so the revealed screen is tappable at once.
+- Jest: `__mocks__/react-native-video.tsx` auto-mocks the player as an inert
+  host view carrying its props/callbacks; `__tests__/splashScreen.test.tsx`
+  pins the contract above (fake timers; RN's jest NativeAnimatedModule mock
+  ends native-driven animations after 16ms and never fires value listeners —
+  that is why the volume ramp is a separate `useNativeDriver: false` value).
+- The old static assets (`assets/brand/splash-glow*`, `splash-lockup*`, the
+  `SplashGlow`/`SplashLockup` imagesets) are no longer referenced by JS or
+  the storyboard; they are kept only until someone decides to delete them.
 
 ## Notifications (local only — no push service)
 
@@ -365,6 +561,24 @@ Debug for fast-refresh development. TestFlight: `apps/mobile/ios/fastlane`
   confirm button stays disabled ~5s, which must exceed the server's 3s
   challenge min-age. Only synced (non-guest) sessions show the Manage account
   row/link. Pinned by `__tests__/manageAccountScreen.test.tsx`.
+- Exit survey (2026-09-02): the delete link first opens a one-question
+  bottom sheet ("What's making you leave?" — 8 single-select reasons +
+  optional ≤500-char comment) inside the same `DeleteAccountSheet`, then the
+  unchanged confirmation. It is ALWAYS skippable (Skip + close both reach /
+  keep the account) — never gate deletion on it. Answers travel in the
+  step-1 body (`POST /v1/me/delete-request { survey }`) so they are stored
+  BEFORE the account exists no more; the server drops an unknown reason but
+  never the deletion. Vocabulary lives in `ACCOUNT_DELETION_REASONS`
+  (`deletion.ts`) and the edge fn's `DELETION_SURVEY_REASONS` — change both
+  together. Table `public.account_deletion_feedback`
+  (`20260902000000_account_deletion_feedback.sql`) is the ONE user row that
+  outlives deletion: FK `ON DELETE SET NULL` anonymizes it (`user_id` null
+  ⇒ actually deleted; non-null ⇒ requested but kept), insert-only from
+  clients (no SELECT), append-only via its own trigger (the generic
+  `reject_ledger_mutation` would block the SET NULL and break deletion).
+  Server stamps churn context (provider, platform, app_version,
+  account_age_days, was_premium, scored_count). Disclosed in the privacy
+  policy §5 (`legal.ts`). Query it in the Supabase SQL editor (service role).
 - Paywall legal links (App Review 3.1.2): `runtimeConfig.legalPrivacyUrl` /
   `legalTermsUrl` point at the API function's public `GET /privacy` and
   `GET /terms` pages (`supabase/functions/api/legal.ts`); wired in

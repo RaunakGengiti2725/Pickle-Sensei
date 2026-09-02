@@ -1,13 +1,21 @@
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { StrokeIntentEnvelope } from '@pickle/analysis-pipeline';
-import type { ShotAnalysis } from '@pickle/shared-types';
+import type {
+  CheckpointScore,
+  PhaseSpan,
+  ShotAnalysis,
+} from '@pickle/shared-types';
 import { StrokeResult } from '../src/components/StrokeResult';
 import {
+  ANALYSIS_TIMELINE_CAPTION,
+  MODALITY_SCOPE_FACTORS,
+  selectInsight,
   strokeResultHeader,
   techniqueScoreSectionVisible,
   type StrokeResultEvidenceRecord,
 } from '../src/components/strokeResultModel';
+import { UNCERTAINTY_COPY } from '../src/components/UncertaintyNote';
 
 /**
  * F26 — Result surface evidence-backing audit regressions.
@@ -18,6 +26,11 @@ import {
  * code path that previously rendered a provenance claim WITHOUT backing
  * evidence. Stored records are unvalidated JSON, so malformed shapes are
  * reachable at runtime even where the TypeScript types say otherwise.
+ *
+ * The inverse defect is pinned too: a claim of FAILURE about evidence the
+ * analysis does carry (measured phases, a wrist-peak contact estimate) or
+ * about the engine's structural scope (no paddle/ball/court tracker) is
+ * just as unbacked as an invented marker.
  */
 
 function analysisFixture(overrides: Partial<ShotAnalysis> = {}): ShotAnalysis {
@@ -164,6 +177,138 @@ describe('F26 — technique-score section requires a real score', () => {
       ),
     ).toBe(false);
     expect(techniqueScoreSectionVisible(null)).toBe(false);
+  });
+});
+
+// ─── The on-device scored record, as the pipeline writes it today ───────────
+
+function span(
+  key: PhaseSpan['key'],
+  startMs: number,
+  endMs: number,
+  representativeMs = startMs + (endMs - startMs) / 2,
+): PhaseSpan {
+  return { key, startMs, representativeMs, endMs, confidence: 0.8 };
+}
+
+function scored(
+  key: CheckpointScore['key'],
+  score: number,
+  band: CheckpointScore['band'],
+  direction: CheckpointScore['direction'],
+): CheckpointScore {
+  return {
+    key,
+    score,
+    confidence: 0.8,
+    band,
+    direction,
+    severity: (100 - score) / 100,
+    applicable: true,
+  };
+}
+
+function onDeviceScoredAnalysis(): ShotAnalysis {
+  return analysisFixture({
+    timestamps: { startMs: 2000, contactMs: 2400, endMs: 2700 },
+    phases: [
+      span('ready', 2000, 2100),
+      span('prepare', 2100, 2250),
+      span('accelerate', 2250, 2384),
+      span('contact', 2384, 2416, 2400),
+      span('follow_through', 2416, 2600),
+      span('recover', 2600, 2700),
+    ],
+    checkpoints: [
+      scored('ready_position', 85, 'green', 'none'),
+      scored('athletic_base', 72, 'yellow', 'narrow'),
+      scored('paddle_path', 61, 'red', 'low'),
+      scored('contact_position', 48, 'red', 'late'),
+      scored('follow_through', 80, 'green', 'none'),
+    ],
+    priorityFix: {
+      checkpoint: 'contact_position',
+      reasonKey: 'lowest_score',
+      severity: 0.52,
+      confidence: 0.8,
+    },
+  });
+}
+
+/** No contact / temporalPhasesV2 (never produced on-device) and the three
+ * structural modality tokens (always produced on-device). */
+function onDeviceScoredRecord(): StrokeResultEvidenceRecord {
+  return {
+    ...recordWith(envelope()),
+    uncertainty: {
+      analysisConfidence: 0.82,
+      presentation: 'normal',
+      limitingFactors: [...MODALITY_SCOPE_FACTORS],
+    },
+  };
+}
+
+describe('F26 — the scored insight is backed by the analysis, never by the engine’s scope', () => {
+  it('selectInsight for a scored analysis with structural tokens states the measured fault', () => {
+    const record = onDeviceScoredRecord();
+    const insight = selectInsight({
+      strokeIntent: record.strokeIntent,
+      contact: record.contact ?? null,
+      temporalPhasesV2: record.temporalPhasesV2 ?? null,
+      limitingFactors: record.uncertainty?.limitingFactors ?? [],
+      analysis: onDeviceScoredAnalysis(),
+    });
+    expect(insight.basis).toBe('measured_fault');
+    expect(insight.sentence.startsWith('Contact position scored 48 — ')).toBe(
+      true,
+    );
+    expect(insight.sentence).not.toMatch(/paddle track|ball track|court/i);
+    expect(insight.sentence).not.toContain('couldn’t establish');
+  });
+
+  it('the rendered surface draws the measured phases and never says they could not be measured', async () => {
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <StrokeResult
+          analysis={onDeviceScoredAnalysis()}
+          record={onDeviceScoredRecord()}
+          clip={null}
+          currentAnalysisId="a1"
+          onTryAgain={jest.fn()}
+          onDone={jest.fn()}
+        />,
+      );
+    });
+    const rendered = JSON.stringify(renderer.toJSON());
+    // Backed: the strip, its wrist-peak tick and caption.
+    expect(
+      renderer.root.findAll(
+        node =>
+          typeof node.type === 'string' &&
+          node.props.accessibilityLabel === 'Phase timeline',
+      ),
+    ).toHaveLength(1);
+    expect(rendered).toContain('CONTACT (WRIST PEAK)');
+    expect(rendered).toContain(ANALYSIS_TIMELINE_CAPTION);
+    // Unbacked failure claims are gone.
+    expect(rendered).not.toContain(UNCERTAINTY_COPY.phase_timing);
+    expect(rendered).not.toContain(UNCERTAINTY_COPY.contact);
+    expect(rendered).not.toContain('couldn’t establish a paddle track');
+    expect(rendered).not.toContain('no contact estimate was recorded');
+    // The one remaining uncertainty names the estimate's real limit.
+    expect(rendered).toContain(UNCERTAINTY_COPY.contact_estimate);
+    // No usable-result-v1 contact marker is drawn from a wrist peak.
+    expect(
+      renderer.root.findAll(
+        node =>
+          typeof node.props.accessibilityLabel === 'string' &&
+          node.props.accessibilityLabel.startsWith('Contact marker'),
+      ),
+    ).toHaveLength(0);
+    await act(async () => {
+      renderer.unmount();
+    });
   });
 });
 

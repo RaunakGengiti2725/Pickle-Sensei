@@ -6,8 +6,9 @@ import UIKit
 ///
 /// Renders REAL video frames from the private capture file (`file://` URL in
 /// app storage). Playback is muted and local-only: nothing here uploads,
-/// transcodes, or copies the clip. The JS ReplayCard drives `playing` and
-/// `seekMs`, and mirrors real positions back through `onClipProgress`.
+/// transcodes, or copies the clip. The JS ReplayCard / Form Review drive
+/// `playing`, `seekMs`, `rate` and `resizeMode`, and mirror real positions
+/// back through `onClipProgress`.
 @objc(PickleClipPlayerView)
 final class PickleClipPlayerView: UIView {
   private let player = AVPlayer()
@@ -86,16 +87,43 @@ final class PickleClipPlayerView: UIView {
     }
   }
 
+  /// `AVPlayer.play()` always runs at 1.0, so playback starts by setting the
+  /// rate directly (a non-zero rate starts playback at exactly that rate) and
+  /// slow motion stays in effect across pause/resume.
   @objc var playing: Bool = false {
     didSet {
       guard playing != oldValue else { return }
       if playing {
         restartIfAtEnd()
-        player.play()
+        player.rate = playbackRate
       } else {
         player.pause()
       }
     }
+  }
+
+  /// Playback rate (1 = real time; 0.5 / 0.25 = slow motion). Applied
+  /// immediately while playing; otherwise remembered for the next play.
+  /// Non-positive or non-finite values fall back to real time.
+  @objc var rate: Double = 1 {
+    didSet {
+      guard rate != oldValue, playing, player.rate != 0 else { return }
+      player.rate = playbackRate
+    }
+  }
+
+  /// 'cover' (default) crops to fill like before; 'contain' letterboxes so the
+  /// whole frame — and any overlay drawn in video coordinates — is visible.
+  @objc var resizeMode: NSString? {
+    didSet {
+      playerLayer.videoGravity =
+        (resizeMode as String?) == "contain" ? .resizeAspect : .resizeAspectFill
+    }
+  }
+
+  private var playbackRate: Float {
+    guard rate.isFinite, rate > 0 else { return 1 }
+    return Float(rate)
   }
 
   /// Seek request in clip milliseconds; negative values mean "no request".

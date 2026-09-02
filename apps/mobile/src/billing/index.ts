@@ -13,6 +13,8 @@ export interface BillingAccessConfig {
   /** Canonical UUID from the backend account response; never an auth subject. */
   canonicalAppUserId: string | null | undefined;
   apiBaseUrl: string | null | undefined;
+  /** Read on every backend request (a getter here keeps following a rotating
+   * access token), never captured at construction. */
   apiToken: string | null | undefined;
   fetchFn?: BillingFetch;
   revenueCatSdk?: RevenueCatSdk;
@@ -33,7 +35,9 @@ export function createBillingAccessDependencies(
     ),
     backend: createCanonicalAccessClient({
       baseUrl: config.apiBaseUrl,
-      token: config.apiToken,
+      get token() {
+        return config.apiToken;
+      },
       fetchFn: config.fetchFn,
     }),
   };

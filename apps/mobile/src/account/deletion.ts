@@ -5,19 +5,51 @@ import type { ApiSession } from './apiSession';
  * (App Review 5.1.1(v): apps with account creation must offer in-app
  * account deletion):
  *
- *   POST /v1/me/delete-request → { challenge, expiresAt }
+ *   POST /v1/me/delete-request { survey? } → { challenge, expiresAt }
  *   POST /v1/me/delete-confirm { challenge } → { deleted: true }
  *
  * The confirm call must present the challenge minted by a separate prior
  * request, so no single tap — accidental or scripted — can destroy an
  * account. Local sign-out and data-owner reset stay the caller's job
  * (authStore.signOut) after the server confirms deletion.
+ *
+ * The optional exit survey rides along with step 1 so it is stored BEFORE
+ * the account (and the bearer) cease to exist; the server keeps it
+ * anonymized after deletion. It is always skippable — the survey must never
+ * stand between a player and deleting their account.
  */
 
 export type AccountDeletionFetch = (
   input: string,
   init?: RequestInit,
 ) => Promise<Response>;
+
+/** Exit-survey vocabulary. Mirrors supabase/functions/api/index.ts
+ * DELETION_SURVEY_REASONS verbatim — the server drops a reason it does not
+ * know (never the deletion), so add to BOTH lists together. */
+export const ACCOUNT_DELETION_REASONS = [
+  'not_using',
+  'not_helpful',
+  'scores_inaccurate',
+  'technical_issues',
+  'too_expensive',
+  'switching',
+  'privacy',
+  'other',
+] as const;
+
+export type AccountDeletionReason = (typeof ACCOUNT_DELETION_REASONS)[number];
+
+/** Free-text cap shared with the server's sanitizer (DELETION_SURVEY_DETAILS_MAX). */
+export const ACCOUNT_DELETION_DETAILS_MAX = 500;
+
+export interface AccountDeletionSurvey {
+  reason: AccountDeletionReason;
+  /** Optional comment; the caller passes null (not "") when nothing was typed. */
+  details: string | null;
+  platform: 'ios' | 'android' | null;
+  appVersion: string | null;
+}
 
 export class AccountDeletionError extends Error {
   constructor(
@@ -103,9 +135,11 @@ async function post(
   return payload;
 }
 
-/** Step 1 — mint the deletion challenge. Destroys nothing by itself. */
+/** Step 1 — mint the deletion challenge. Destroys nothing by itself. A
+ * skipped survey sends no body at all (the pre-survey wire shape). */
 export async function requestAccountDeletion(
   session: ApiSession | null,
+  survey: AccountDeletionSurvey | null = null,
   fetchFn: AccountDeletionFetch = globalThis.fetch,
 ): Promise<AccountDeletionChallenge> {
   if (!session) {
@@ -115,7 +149,12 @@ export async function requestAccountDeletion(
       false,
     );
   }
-  const payload = await post(session, fetchFn, '/v1/me/delete-request');
+  const payload = await post(
+    session,
+    fetchFn,
+    '/v1/me/delete-request',
+    survey ? { survey } : undefined,
+  );
   const challenge = payload['challenge'];
   const expiresAt = payload['expiresAt'];
   if (typeof challenge !== 'string' || typeof expiresAt !== 'string') {

@@ -1,6 +1,10 @@
 /** Outbox sync engine tests over a fake LocalDb (no native module needed). */
 import type { LocalDb } from '../src/data/db';
-import { drainOutbox, toSyncPayload } from '../src/data/sync';
+import {
+  drainOutbox,
+  SESSION_NOT_FOUND_REJECTION,
+  toSyncPayload,
+} from '../src/data/sync';
 import type { ShotAnalysis } from '@pickle/shared-types';
 import {
   GUEST_DATA_OWNER,
@@ -224,6 +228,38 @@ describe('drainOutbox', () => {
     });
   });
 
+  it('does not spend the retry budget on a shot whose practice-set session has not synced yet', async () => {
+    // The practice set's session.create row is queued moments AFTER its
+    // first scored shot (the set is committed once a score exists). If a
+    // drain slips between the two writes, the server rejects the shot as
+    // session_not_found — an ordering artifact, not a permanent failure, so
+    // the row keeps its full attempt budget for the next pass.
+    const { db, push, outbox } = fakeDb();
+    push('shot.sync', {
+      ...permittedAnalysis,
+      sessionId: '11111111-2222-4333-8444-555555555555',
+    });
+    const result = await drainOutbox(db, {
+      syncShots: async () => ({
+        acceptedIds: [],
+        rejected: [
+          {
+            id: analysis.id,
+            code: SESSION_NOT_FOUND_REJECTION,
+            message: 'Session not found or not yours.',
+          },
+        ],
+      }),
+      createSession: async () => {},
+      finalizeSession: async () => {},
+    });
+    expect(result).toMatchObject({ synced: 0, failed: 1, remaining: 1 });
+    expect(outbox[0]).toMatchObject({
+      attempts: 0,
+      last_error: `${SESSION_NOT_FOUND_REJECTION}: Session not found or not yours.`,
+    });
+  });
+
   it('fails closed when a legacy outbox row has no permit', async () => {
     const { db, push, outbox } = fakeDb();
     push('shot.sync', analysis);
@@ -250,6 +286,76 @@ describe('drainOutbox', () => {
     });
     expect(result.synced).toBe(2);
     expect(calls).toEqual(['create', 'finalize:s1']);
+  });
+
+  it('creates a session before syncing the shot that references it (same batch)', async () => {
+    // A practice set queues session.create and its first shot.sync together;
+    // the server rejects a shot whose session it has never seen
+    // (shot.session_not_found), so the session row must drain FIRST even
+    // though the shot row was enqueued in the same batch.
+    const sessionId = 'dddddddd-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+    const { db, push, outbox } = fakeDb();
+    push('shot.sync', { ...permittedAnalysis, sessionId });
+    push('session.create', {
+      id: sessionId,
+      mode: 'practice_set',
+      shotType: 'forehand_drive',
+      focusCheckpoint: null,
+      startedAt: '2026-08-26T17:59:00.000Z',
+    });
+    const calls: string[] = [];
+    const result = await drainOutbox(db, {
+      syncShots: async shots => {
+        calls.push('syncShots');
+        expect(shots).toHaveLength(1);
+        expect((shots[0] as { sessionId: string }).sessionId).toBe(sessionId);
+        return {
+          acceptedIds: shots.map(shot => (shot as { id: string }).id),
+          rejected: [],
+        };
+      },
+      createSession: async session => {
+        calls.push('createSession');
+        expect((session as { id: string }).id).toBe(sessionId);
+      },
+      finalizeSession: async () => void calls.push('finalizeSession'),
+    });
+    expect(calls).toEqual(['createSession', 'syncShots']);
+    expect(result).toMatchObject({ synced: 2, failed: 0, remaining: 0 });
+    expect(outbox).toHaveLength(0);
+  });
+
+  it('drains session.finalize ahead of shots too, keeping evaluation trials last', async () => {
+    const { db, push } = fakeDb();
+    push('shot.sync', permittedAnalysis);
+    push('evaluation.trial', { trialId: 't1' });
+    push('session.finalize', { id: 's1' });
+    const calls: string[] = [];
+    await drainOutbox(db, {
+      syncShots: async shots => {
+        calls.push('syncShots');
+        return {
+          acceptedIds: shots.map(shot => (shot as { id: string }).id),
+          rejected: [],
+        };
+      },
+      createSession: async () => void calls.push('createSession'),
+      finalizeSession: async id => void calls.push(`finalize:${id}`),
+      uploadEvaluationTrials: async trials => {
+        calls.push('uploadEvaluationTrials');
+        return {
+          acceptedTrialIds: trials.map(
+            trial => (trial as { trialId: string }).trialId,
+          ),
+          rejected: [],
+        };
+      },
+    });
+    expect(calls).toEqual([
+      'finalize:s1',
+      'syncShots',
+      'uploadEvaluationTrials',
+    ]);
   });
 
   it('never drains rows belonging to another account', async () => {
