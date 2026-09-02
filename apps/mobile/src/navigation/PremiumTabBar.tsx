@@ -107,13 +107,14 @@ function GradientActionButton(props: {
    * measures the resting Coach button, never the overlay copy. */
   innerRef?: React.Ref<HostInstance>;
 }) {
+  const { progress } = props;
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
       {
-        rotate: `${interpolate(props.progress.value, [0, 1], [0, 45])}deg`,
+        rotate: `${interpolate(progress.value, [0, 1], [0, 45])}deg`,
       },
       {
-        scale: interpolate(props.progress.value, [0, 1], [1, 1.04]),
+        scale: interpolate(progress.value, [0, 1], [1, 1.04]),
       },
     ],
   }));
