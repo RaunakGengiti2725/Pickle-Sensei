@@ -138,7 +138,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "[defect-pin] streamed (chunked, no Content-Length) 6 MB body bypasses MAX_JSON_BODY_BYTES on PUT /v1/me/onboarding",
+  name: "streamed (chunked, no Content-Length) 6 MB body on PUT /v1/me/onboarding is rejected with 413 and never reaches the DB",
   sanitizeOps: false,
   sanitizeResources: false,
   async fn() {
@@ -153,18 +153,15 @@ Deno.test({
         body: streamedJsonBody(prefix, '"}', 6_000_000),
       }),
     );
-    // Contract (index.ts:147-150, 2141-2145): bodies over 5 MB → 413.
-    // Actual: the onboarding route parses with request.json() directly
-    // (index.ts:2254) and the body cap is only checked against the
-    // Content-Length header, so the 6 MB body is fully read and processed.
-    assertEquals(res.status, 200);
-    await res.body?.cancel();
-    assert(recorded.some((r) => r.path === "profiles" && r.method === "PATCH"));
+    assertEquals(res.status, 413);
+    const payload = (await res.json()) as { error: { message: string } };
+    assertEquals(payload.error.message, "Request body is too large.");
+    assert(!recorded.some((r) => r.path === "profiles" && r.method === "PATCH"));
   },
 });
 
 Deno.test({
-  name: "[defect-pin] streamed 6 MB body on a readBody() route is buffered in full, then reported as 400 (not 413)",
+  name: "streamed 6 MB body on a readBody() route is reported as 413 (a size problem, not a validation 400)",
   sanitizeOps: false,
   sanitizeResources: false,
   async fn() {
@@ -177,16 +174,13 @@ Deno.test({
         body: streamedJsonBody('{"idempotencyKey":"k","pad":"', '"}', 6_000_000),
       }),
     );
-    // readBody() (index.ts:152-161) awaits request.text() for the whole
-    // stream and only THEN compares the length, returning {} — so the client
-    // sees a validation 400 for a size problem.
-    assertEquals(res.status, 400);
+    assertEquals(res.status, 413);
     await res.body?.cancel();
   },
 });
 
 Deno.test({
-  name: "[defect-pin] PUT /v1/me/onboarding stores biggestProblem/skillLevel/goal WITHOUT sanitizeUserText (bidi + control chars reach the DB write)",
+  name: "PUT /v1/me/onboarding sanitizes biggestProblem like firstName (bidi + control chars never reach the DB write)",
   sanitizeOps: false,
   sanitizeResources: false,
   async fn() {
@@ -206,15 +200,13 @@ Deno.test({
     const patch = recorded.find((r) => r.path === "profiles" && r.method === "PATCH");
     assert(patch, "profiles PATCH was issued");
     const body = JSON.parse(patch.body) as Record<string, unknown>;
-    // firstName IS sanitized (index.ts:2285) …
     assertEquals(body.first_name, "Ali");
-    // … but biggest_problem is written verbatim (index.ts:2267-2269, 2304).
-    assertEquals(body.biggest_problem, hostile);
+    assertEquals(body.biggest_problem, "I lose dinks at the kitchen");
   },
 });
 
 Deno.test({
-  name: "[defect-pin] POST /v1/me/evaluation/trials echoes raw PostgREST/DB error text to the client",
+  name: "POST /v1/me/evaluation/trials reports a write failure with generic copy, never raw PostgREST/DB error text",
   sanitizeOps: false,
   sanitizeResources: false,
   async fn() {
@@ -251,13 +243,16 @@ Deno.test({
     };
     assertEquals(payload.rejected.length, 1);
     assertEquals(payload.rejected[0].code, "evaluation.trial_write_failed");
-    // index.ts:1200 — internal DB detail (table name, policy wording) leaks.
-    assertEquals(payload.rejected[0].message, dbError);
+    assertEquals(
+      payload.rejected[0].message,
+      "The trial could not be saved right now. It stays on this device and will retry.",
+    );
+    assert(!JSON.stringify(payload).includes("row-level security"));
   },
 });
 
 Deno.test({
-  name: "[defect-pin] malformed percent-encoding in a path parameter escapes the JSON error contract (uncaught URIError → Deno default 500)",
+  name: "malformed percent-encoding in a path parameter is a JSON 400, not an uncaught URIError 500",
   sanitizeOps: false,
   sanitizeResources: false,
   async fn() {
@@ -267,11 +262,10 @@ Deno.test({
       `${API_BASE}/v1/sessions/%E0%A4%A/finalize`,
       authedInit({ method: "POST", body: "{}" }),
     );
-    // index.ts:2198 decodeURIComponent(m[1]) throws; Deno.serve has no
-    // onError → text/plain "Internal Server Error", not { error: {…} }.
-    assertEquals(res.status, 500);
-    assert(!(res.headers.get("content-type") ?? "").includes("application/json"));
-    await res.body?.cancel();
+    assertEquals(res.status, 400);
+    assertStringIncludes(res.headers.get("content-type") ?? "", "application/json");
+    const payload = (await res.json()) as { error: { message: string } };
+    assertEquals(payload.error.message, "Malformed path segment.");
   },
 });
 

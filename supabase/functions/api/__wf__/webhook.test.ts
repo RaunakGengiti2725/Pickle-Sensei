@@ -88,7 +88,7 @@ Deno.test(
         app_user_id: TEST_USER_ID,
       }),
     );
-    const audit = h.callsTo("/rest/v1/webhook_events");
+    const audit = h.callsTo("/rest/v1/webhook_events").filter((c) => c.method === "POST");
     assertEquals(audit.length, 1);
     const row = audit[0].body as Record<string, unknown>;
     assertEquals(row.id, "evt-audit");
@@ -153,13 +153,12 @@ Deno.test(
 );
 
 Deno.test(
-  "REPRO (defect): TRANSFER events carry no app_user_id/aliases → neither side is re-verified",
+  "webhook: TRANSFER events (no app_user_id/aliases) re-verify BOTH transferred_from and transferred_to",
   async () => {
     // Per RevenueCat docs, TRANSFER uses only Common + Transfer fields
     // (transferred_from / transferred_to); app_user_id and aliases are absent.
-    // The source account keeps its stale premium row until expires_at (forever
-    // for lifetime products) because the app only re-syncs on explicit user
-    // action, never on launch.
+    // Both sides must be re-verified so the source account does not keep a
+    // stale premium row until expires_at.
     const h = await loadHarness();
     h.subscriber = activeSubscriber();
     const res = await h.handler(
@@ -175,29 +174,29 @@ Deno.test(
       }),
     );
     assertEquals(res.status, 200);
-    assertEquals(await res.json(), { received: true, verified: false });
-    assertEquals(h.callsTo(RC_URL).length, 0, "no RevenueCat re-verification for either account");
-    assertEquals(
-      h.callsTo("/rest/v1/billing_entitlements").length,
-      0,
-      "no entitlement row touched",
-    );
-    const audit = h.callsTo("/rest/v1/webhook_events")[0].body as Record<string, unknown>;
-    assertEquals(audit.app_user_id, null, "audit row cannot be correlated to a user either");
+    assertEquals(await res.json(), { received: true, verified: true });
+    const rc = h.callsTo(RC_URL);
+    assertEquals(rc.length, 2, "both accounts are re-verified against RevenueCat");
+    assert(rc.some((c) => c.url.endsWith(encodeURIComponent(TEST_USER_ID))));
+    assert(rc.some((c) => c.url.endsWith(encodeURIComponent(OTHER_USER_ID))));
+    const rows = h
+      .callsTo("/rest/v1/billing_entitlements")
+      .map((c) => (c.body as Record<string, unknown>).user_id);
+    assertEquals(rows.length, 2, "one entitlement row per account");
+    assert(rows.includes(TEST_USER_ID) && rows.includes(OTHER_USER_ID));
+    const audit = h.callsTo("/rest/v1/webhook_events").find((c) => c.method === "POST");
+    assert(audit, "audit row written once handled to completion");
+    assertEquals((audit.body as Record<string, unknown>).app_user_id, TEST_USER_ID);
   },
 );
 
-Deno.test(
-  "REPRO (defect): webhook route skips the Content-Length 413 guard and buffers the whole body",
-  async () => {
-    const h = await loadHarness();
-    const huge = "x".repeat(5_000_001);
-    const req = webhookRequest(null, {
-      rawBody: `{"event":{"id":"big","pad":"${huge}"}}`,
-    });
-    const res = await h.handler(req);
-    // The oversized body is read in full, then silently treated as {} → 400,
-    // instead of the 413 every other route returns from the header check.
-    assertEquals(res.status, 400);
-  },
-);
+Deno.test("webhook: oversized body is refused with 413 like every other route", async () => {
+  const h = await loadHarness();
+  const huge = "x".repeat(5_000_001);
+  const req = webhookRequest(null, {
+    rawBody: `{"event":{"id":"big","pad":"${huge}"}}`,
+  });
+  const res = await h.handler(req);
+  assertEquals(res.status, 413);
+  await res.text();
+});

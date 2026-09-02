@@ -357,7 +357,12 @@ Deno.test({
             section("PROGRESS", "CONSENT"),
           );
           assertStringIncludes(section("CONSENT", "PERMITS"), "consent_records_user_created_idx");
-          assertStringIncludes(section("PERMITS"), "analysis_permits_user_status_idx");
+          // The reserved-only partial index (sweep index) holds just in-flight
+          // permits, so it is an equally valid plan for the live-hold count.
+          assert(
+            /analysis_permits_(user_status|reserved_created)_idx/.test(section("PERMITS")),
+            section("PERMITS"),
+          );
           assert(!out.includes("Seq Scan"), `no sequential scans on hot reads:\n${out}`);
         },
       );

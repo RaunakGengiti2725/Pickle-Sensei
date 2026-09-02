@@ -24,41 +24,47 @@ Deno.test(
 );
 
 Deno.test(
-  "[defect-pin] sanitizeUserText deletes \\n \\r \\t as control chars BEFORE collapsing whitespace, gluing words together",
+  "sanitizeUserText turns \\n \\r \\t between words into single spaces instead of gluing words together",
   () => {
-    // http.ts:42 strips \u0000-\u001f (which includes \t \n \r) and only then
-    // http.ts:43 collapses \s+ — so a line break between words is lost, not
-    // turned into a space.
-    assertEquals(sanitizeUserText("lose\nmy\tdinks\r\nfast", 64), "losemydinksfast");
+    assertEquals(sanitizeUserText("lose\nmy\tdinks\r\nfast", 64), "lose my dinks fast");
   },
 );
 
-Deno.test("sanitizeUserText truncates to maxLength in UTF-16 code units", () => {
+Deno.test("sanitizeUserText truncates to maxLength code points", () => {
   assertEquals(sanitizeUserText("x".repeat(600), 512).length, 512);
 });
 
 Deno.test(
-  "[defect-pin] sanitizeUserText can end on an unpaired high surrogate → invalid JSON/UTF-8 string",
+  "sanitizeUserText never truncates inside a surrogate pair, so the result is valid UTF-16 / JSON",
   () => {
     const out = sanitizeUserText("a".repeat(511) + "😀", 512);
-    assertEquals(out.length, 512);
-    const last = out.charCodeAt(out.length - 1);
-    assert(last >= 0xd800 && last <= 0xdbff, "last code unit is a lone high surrogate");
-    assert(!out.isWellFormed(), "String is not well-formed UTF-16");
-    // JSON.stringify emits "\ud83d" (an escaped lone surrogate) — PostgreSQL's
-    // json/jsonb parser rejects it: "Unicode low surrogate must follow a high
-    // surrogate." (verified against postgres:16 in this audit).
-    assert(JSON.stringify(out).endsWith('\\ud83d"'));
+    assertEquals(Array.from(out).length, 512);
+    assert(out.endsWith("😀"), "the emoji survives whole");
+    assert(out.isWellFormed(), "String is well-formed UTF-16");
+    assert(!JSON.stringify(out).includes("\\ud83d"));
+
+    const cut = sanitizeUserText("a".repeat(512) + "😀", 512);
+    assertEquals(cut, "a".repeat(512));
+    assert(cut.isWellFormed());
   },
 );
 
-Deno.test("clientIp trusts the first X-Forwarded-For hop verbatim", () => {
-  const req = new Request("http://x/", {
-    headers: { "x-forwarded-for": " 203.0.113.9 , 10.0.0.1", "cf-connecting-ip": "198.51.100.1" },
-  });
-  assertEquals(clientIp(req), "203.0.113.9");
-  assertEquals(clientIp(new Request("http://x/")), "unknown");
-});
+Deno.test(
+  "clientIp prefers the edge's cf-connecting-ip and otherwise the LAST X-Forwarded-For hop",
+  () => {
+    const req = new Request("http://x/", {
+      headers: { "x-forwarded-for": " 203.0.113.9 , 10.0.0.1", "cf-connecting-ip": "198.51.100.1" },
+    });
+    assertEquals(clientIp(req), "198.51.100.1");
+    assertEquals(
+      clientIp(
+        new Request("http://x/", { headers: { "x-forwarded-for": " 203.0.113.9 , 10.0.0.1" } }),
+      ),
+      "10.0.0.1",
+    );
+    assertEquals(clientIp(new Request("http://x/")), "unknown");
+  },
+);
 
 Deno.test("constantTimeEqual compares byte-wise and rejects length mismatch", () => {
   assert(constantTimeEqual("secret", "secret"));

@@ -291,10 +291,10 @@ Deno.test(
   },
 );
 
-// ─── REPRO: verified-session cache survives account deletion ────────────────
+// ─── Verified-session cache is evicted by account deletion ──────────────────
 
 Deno.test(
-  "REPRO: after a successful delete-confirm the same bearer still authenticates from cache",
+  "after a successful delete-confirm the bearer is re-verified with Supabase Auth, not served from cache",
   async () => {
     resetState();
     const userId = crypto.randomUUID();
@@ -313,26 +313,14 @@ Deno.test(
     state.deletionRows = [];
     state.profileRows = [];
 
-    // No re-verification with Supabase Auth happens — the cached session for
-    // the deleted user id is reused as-is.
+    // The cached session for the deleted user id must not be reused: the next
+    // request with the same bearer goes back to Supabase Auth.
     const access = await call("GET", "/v1/me/access", token);
+    assertEquals(state.tokenCalls, 2);
     assertEquals(access.status, 200);
-    assertEquals(state.tokenCalls, 1);
-    const payload = (await access.json()) as { freeRatings: { remaining: number } };
-    assertEquals(payload.freeRatings.remaining, 2);
 
-    // /v1/me for the deleted account is a retryable 503, not a 401/410.
-    const me = await call("GET", "/v1/me", token);
-    assertEquals(me.status, 503);
-    assertStringIncludes(
-      ((await me.json()) as { error: { message: string } }).error.message,
-      "temporarily unavailable",
-    );
-    assertEquals(state.tokenCalls, 1);
-
-    // A second delete-request from the still-cached identity: the upsert
-    // fails on the FK (profiles row gone) → 503 → the client's "Start again from
-    // Settings" path dead-ends for up to the 10-minute cache lifetime.
+    // Every further request keeps being verified from a fresh cache entry, so
+    // a stale identity can never outlive the account.
     const again = await call("POST", "/v1/me/delete-confirm", token, { challenge });
     assertEquals(again.status, 403);
     assertEquals(

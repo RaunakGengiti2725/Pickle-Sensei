@@ -3,7 +3,7 @@
 //
 // Run: deno test -A --no-check --config deno.json   (inside __wf__/)
 
-import { assert, assertEquals, assertNotEquals, assertRejects } from "@std/assert";
+import { assert, assertEquals, assertNotEquals, assertStringIncludes } from "@std/assert";
 import { drillCatalog } from "../drills.ts";
 import { drillInstructionalMedia } from "../drillMedia.ts";
 import {
@@ -200,15 +200,19 @@ Deno.test("REPRO (defect): orphaned bookmark gets a NEW random id on every list 
 });
 
 Deno.test(
-  "REPRO (defect): malformed percent-encoding in a slug path throws out of the handler → 500 via Deno.serve",
+  "malformed percent-encoding in a slug path is a JSON 400 from the handler, never an uncaught URIError 500",
   async () => {
     const h = await loadHarness();
     const bad = userRequest("GET", "/v1/catalog/drills/%E0%A4%A", {
       ip: "198.51.100.7",
     });
-    await assertRejects(() => h.handler(bad), URIError);
+    const direct = await h.handler(bad);
+    assertEquals(direct.status, 400);
+    assertEquals(
+      ((await direct.json()) as { error: { message: string } }).error.message,
+      "Malformed path segment.",
+    );
 
-    // What the platform turns that into: Deno.serve's default onError → 500.
     const server = h.realServe({ port: 0, hostname: "127.0.0.1", onListen() {} }, h.handler);
     try {
       const res = await h.realFetch(
@@ -220,7 +224,8 @@ Deno.test(
           },
         },
       );
-      assertEquals(res.status, 500);
+      assertEquals(res.status, 400);
+      assertStringIncludes(res.headers.get("content-type") ?? "", "application/json");
       await res.text();
       const put = await h.realFetch(
         `http://127.0.0.1:${server.addr.port}/functions/v1/api/v1/me/saved-drills/%ZZ`,
@@ -232,7 +237,8 @@ Deno.test(
           },
         },
       );
-      assertEquals(put.status, 500);
+      assertEquals(put.status, 400);
+      assertStringIncludes(put.headers.get("content-type") ?? "", "application/json");
       await put.text();
     } finally {
       await server.shutdown();
@@ -347,12 +353,12 @@ Deno.test("healthz: 60/min per IP, then 429 + Retry-After", async () => {
 });
 
 Deno.test(
-  "REPRO (defect): per-IP limits key on the FIRST x-forwarded-for hop, which the client controls",
+  "per-IP limits key on the edge-authoritative address, so rotating the client-controlled first x-forwarded-for hop cannot buy a fresh budget",
   async () => {
     // Behind Cloudflare (the supabase.co gateway answers with server: cloudflare)
     // a client-supplied X-Forwarded-For is preserved and the real IP is
     // APPENDED, so the first hop is attacker-chosen while cf-connecting-ip is
-    // authoritative. Rotating the first hop yields a fresh budget every time.
+    // authoritative.
     const h = await loadHarness();
     const real = "203.0.113.99";
     const req = (spoofed: string) =>
@@ -369,7 +375,7 @@ Deno.test(
     assertEquals(exhausted.status, 429);
     await exhausted.text();
     const bypass = await h.handler(req("10.0.0.2"));
-    assertEquals(bypass.status, 200, "same real IP, new spoofed first hop → fresh budget");
+    assertEquals(bypass.status, 429, "same real IP, new spoofed first hop → still exhausted");
     await bypass.text();
   },
 );

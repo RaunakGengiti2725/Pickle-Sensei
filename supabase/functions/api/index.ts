@@ -2020,12 +2020,22 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
   const eventId = typeof event.id === "string" ? event.id : crypto.randomUUID();
   const eventType = typeof event.type === "string" ? event.type : "unknown";
 
-  // The subscriber to re-verify: app_user_id, falling back to any alias that
-  // parses as our canonical uuid.
-  let appUserId: string | null = isUuid(event.app_user_id) ? event.app_user_id : null;
-  if (!appUserId && Array.isArray(event.aliases)) {
-    appUserId = (event.aliases as unknown[]).find(isUuid) ?? null;
+  // The subscribers to re-verify: app_user_id, falling back to any alias that
+  // parses as our canonical uuid. TRANSFER events carry no app_user_id — both
+  // sides of the transfer (transferred_from / transferred_to) are re-verified
+  // so the source account loses premium as soon as RevenueCat moves it.
+  const uuidList = (value: unknown): string[] =>
+    Array.isArray(value) ? (value as unknown[]).filter(isUuid) : [];
+  const subjectIds = new Set<string>();
+  if (isUuid(event.app_user_id)) {
+    subjectIds.add(event.app_user_id);
+  } else {
+    const alias = uuidList(event.aliases)[0];
+    if (alias) subjectIds.add(alias);
   }
+  for (const id of uuidList(event.transferred_from)) subjectIds.add(id);
+  for (const id of uuidList(event.transferred_to)) subjectIds.add(id);
+  const appUserId: string | null = subjectIds.values().next().value ?? null;
 
   const adminDb = billingAdminDb();
   if (!adminDb) {
@@ -2065,20 +2075,28 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
     return json(200, { received: true, verified: false });
   }
 
-  const verdict = await verifyRevenueCatSubscriber(appUserId);
-  if (!verdict) {
-    // RevenueCat unreachable: 503 makes RevenueCat retry with backoff.
-    return errorJson(503, "Verification is temporarily unavailable.");
+  const verdicts: Array<{ userId: string; verdict: BillingVerdict }> = [];
+  for (const userId of subjectIds) {
+    const verdict = await verifyRevenueCatSubscriber(userId);
+    if (!verdict) {
+      // RevenueCat unreachable: 503 makes RevenueCat retry with backoff.
+      return errorJson(503, "Verification is temporarily unavailable.");
+    }
+    verdicts.push({ userId, verdict });
   }
-  const persistError = await persistBillingVerdict(appUserId, verdict, new Date().toISOString());
+  const verifiedAt = new Date().toISOString();
+  let verified = true;
+  for (const { userId, verdict } of verdicts) {
+    const persistError = await persistBillingVerdict(userId, verdict, verifiedAt);
+    if (persistError) {
+      // A user who has never bootstrapped has no profiles row (FK target); log
+      // and acknowledge — their state will be written on first billing sync.
+      console.error("[api] webhook verdict persist failed:", persistError);
+      verified = false;
+    }
+  }
   await logEvent();
-  if (persistError) {
-    // A user who has never bootstrapped has no profiles row (FK target); log
-    // and acknowledge — their state will be written on first billing sync.
-    console.error("[api] webhook verdict persist failed:", persistError);
-    return json(200, { received: true, verified: false });
-  }
-  return json(200, { received: true, verified: true });
+  return json(200, { received: true, verified });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
