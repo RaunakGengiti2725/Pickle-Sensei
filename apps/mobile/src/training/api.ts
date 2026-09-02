@@ -1,3 +1,4 @@
+import { reportApiUnauthorized } from '../account/apiSession';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
 import {
   TrainingError,
@@ -441,6 +442,7 @@ export function createTrainingApi(
     }
     if (response.status === 204) return null;
     if (response.status === 401) {
+      reportApiUnauthorized(config.token ?? values.token);
       config.onUnauthorized?.();
       throw new TrainingError(
         'training.session_expired',

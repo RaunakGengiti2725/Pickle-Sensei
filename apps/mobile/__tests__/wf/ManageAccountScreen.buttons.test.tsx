@@ -320,8 +320,7 @@ describe('ManageAccountScreen button ledger', () => {
       expect(sheetOpen(renderer)).toBe(false);
     });
 
-    // WF-ISSUE: Deletion sheet backdrop Pressable has no accessibilityRole
-    it.skip('Backdrop "Cancel account deletion" exposes accessibilityRole', async () => {
+    it('Backdrop "Cancel account deletion" exposes accessibilityRole', async () => {
       renderer = renderScreen();
       await openSheet(renderer);
       const backdrop = pressableHost(renderer, 'Cancel account deletion');
@@ -721,8 +720,7 @@ describe('ManageAccountScreen button ledger', () => {
       expect(sheetOpen(renderer)).toBe(true);
     });
 
-    // WF-ISSUE: Deletion sheet close (X) ignores the busy state and dismisses mid-request
-    it.skip('X "Close account deletion confirmation" is inert while requesting (like every other dismiss control)', async () => {
+    it('X "Close account deletion confirmation" is inert while requesting (like every other dismiss control)', async () => {
       renderer = renderScreen();
       const pending = deferred<typeof CHALLENGE>();
       mockRequestAccountDeletion.mockReturnValue(pending.promise);

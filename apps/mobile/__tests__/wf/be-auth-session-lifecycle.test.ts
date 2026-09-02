@@ -357,7 +357,7 @@ describe('auth-session-lifecycle: 401 handling on every API caller', () => {
     expect(mockOutbox[0]).toMatchObject({ owner_key: owner, attempts: 0 });
   });
 
-  it('training client: 401 becomes a non-retryable TrainingError with no auth side effect', async () => {
+  it('training client: 401 becomes a non-retryable TrainingError and tears down the session like every other caller', async () => {
     const token = appleIdentityToken(Math.floor(Date.now() / 1000) + 600);
     await signInWithAppleToken(token);
     const fetchFn = jest.fn().mockResolvedValue(unauthorized());
@@ -370,9 +370,19 @@ describe('auth-session-lifecycle: 401 handling on every API caller', () => {
       caught = error;
     }
     expect(caught).toBeInstanceOf(TrainingError);
-    expect(caught).toMatchObject({ status: 401, retryable: false });
-    expect(useAuthStore.getState().session?.provider).toBe('apple');
-    expect(getApiSession()?.bearerToken).toBe(token);
+    expect(caught).toMatchObject({
+      code: 'training.session_expired',
+      status: 401,
+      retryable: false,
+    });
+
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(useAuthStore.getState().session).toBeNull();
+    expect(useAuthStore.getState().error).toMatchObject({
+      code: 'auth.session_expired',
+      message: SESSION_EXPIRED_MESSAGE,
+    });
+    expect(getApiSession()).toBeNull();
   });
 
   it('billing client: 401 is a distinct, non-retryable sign-in-expired error and tears down the session', async () => {

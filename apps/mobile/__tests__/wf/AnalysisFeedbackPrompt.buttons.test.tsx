@@ -370,10 +370,7 @@ describe('AnalysisFeedbackPrompt button ledger', () => {
       ]);
     });
 
-    // WF-ISSUE: Feedback chips render ~28pt tall (caption lineHeight 18 +
-    // 2×space.xs padding + 2×1 border) with no hitSlop — below the 44pt
-    // minimum. This assertion fails against the current implementation.
-    it.skip('every chip meets a 44pt hit target (minHeight >= 44 or hitSlop)', async () => {
+    it('every chip meets a 44pt hit target (minHeight >= 44 or hitSlop)', async () => {
       const renderer = await render();
       for (const chip of pressables(renderer)) {
         const style = StyleSheet.flatten(chip.props.style) ?? {};
