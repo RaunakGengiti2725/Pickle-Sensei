@@ -10,11 +10,22 @@
 > `supabase-security` job) and was extended to the launch schema: the
 > `apply_synced_shot()`/`access_state()` RPCs, `billing_entitlements`,
 > `webhook_events`, `account_deletion_requests`, and full client immutability
-> of `shots` (favorites are device-local; sync is INSERT-only). The B-2 auth
-> exchange shipped in the production Edge Function. The external items (B-1
-> Dashboard verification, B-3 rotation drill) remain manual gates — see
-> `docs/PRELAUNCH_CHECKLIST.md`. `services/api` (Fastify) is legacy and not
-> deployed; the mobile app talks only to the Edge Function.
+> of `shots` (favorites are device-local; sync is INSERT-only). The external
+> items (B-1 Dashboard verification, B-3 rotation drill) remain manual gates —
+> see `docs/PRELAUNCH_CHECKLIST.md`. `services/api` (Fastify) is legacy and
+> not deployed; the mobile app talks only to the Edge Function.
+>
+> **Correction (2026-09-01).** The B-2 exchange described below did NOT ship
+> with the launch wave — it stayed on the retired branch, and main kept
+> bearing the provider ID token on every request with nothing persisted (so
+> every relaunch signed Apple users out). It landed on main on 2026-09-01
+> with two deliberate differences from the text below: (1) the mobile app now
+> persists the REFRESH token in the device Keychain (`react-native-keychain`,
+> `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`) so sessions survive relaunches —
+> access and provider tokens remain memory-only; (2) `/v1/auth/logout` uses
+> `scope=local` (this device's session), not global, and `authenticate()`
+> still accepts provider ID tokens transitionally for pre-contract app builds.
+> Live verification against the Supabase project is still pending.
 
 Scope: the Supabase deployment (Postgres/RLS, Edge Function `api`, Auth), the
 Fastify backend (`services/api`), the React Native app, CI/CD, secrets, and

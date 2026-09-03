@@ -71,13 +71,16 @@ async function request<T>(
 ): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
+  // Read the bearer once: it is resolved per request and may rotate while
+  // this call is in flight, and a 401 must name the token that was SENT.
+  const token = config.token;
   let response: Response;
   try {
     response = await fetch(`${config.baseUrl}${path}`, {
       method,
       headers: {
         'content-type': 'application/json',
-        ...(config.token ? { authorization: `Bearer ${config.token}` } : {}),
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
         'x-client-version': getRuntimePublicConfig().appVersion,
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
@@ -98,8 +101,8 @@ async function request<T>(
   const json = (await response.json().catch(() => null)) as
     (T & { error?: { code: string; message: string } }) | null;
   if (!response.ok) {
-    if (response.status === 401 && config.token) {
-      reportApiUnauthorized(config.token);
+    if (response.status === 401 && token) {
+      reportApiUnauthorized(token);
     }
     throw new ApiError(
       response.status,

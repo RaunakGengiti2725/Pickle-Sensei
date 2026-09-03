@@ -6,8 +6,9 @@ import UIKit
 ///
 /// Renders REAL video frames from the private capture file (`file://` URL in
 /// app storage). Playback is muted and local-only: nothing here uploads,
-/// transcodes, or copies the clip. The JS ReplayCard drives `playing` and
-/// `seekMs`, and mirrors real positions back through `onClipProgress`.
+/// transcodes, or copies the clip. The JS ReplayCard / Form Review drive
+/// `playing`, `seekMs`, `rate` and `resizeMode`, and mirror real positions
+/// back through `onClipProgress`.
 @objc(PickleClipPlayerView)
 final class PickleClipPlayerView: UIView {
   private let player = AVPlayer()
@@ -19,6 +20,9 @@ final class PickleClipPlayerView: UIView {
   @objc var onClipProgress: RCTDirectEventBlock?
   @objc var onClipLoad: RCTDirectEventBlock?
   @objc var onClipEnd: RCTDirectEventBlock?
+  /// The item could not be opened (file gone, unreadable, undecodable): the
+  /// layer would otherwise sit black forever, so JS is told and can say so.
+  @objc var onClipError: RCTDirectEventBlock?
 
   override static var layerClass: AnyClass { AVPlayerLayer.self }
   private var playerLayer: AVPlayerLayer { layer as! AVPlayerLayer }
@@ -68,34 +72,73 @@ final class PickleClipPlayerView: UIView {
       currentUri = uri
       statusObservation?.invalidate()
       statusObservation = nil
-      guard let uri, let url = Self.fileUrl(from: uri) else {
+      // Stored URIs are resolved against TODAY's container (see
+      // ClipMediaStore.resolveCaptureURL): a clip recorded before a rebuild
+      // still plays instead of rendering a silent black layer.
+      guard let uri, let url = ClipMediaStore.resolveCaptureURL(fromStoredUri: uri) else {
         player.replaceCurrentItem(with: nil)
+        DispatchQueue.main.async { self.onClipError?(["message": "invalid_uri"]) }
         return
       }
       let item = AVPlayerItem(url: url)
       statusObservation = item.observe(\.status, options: [.new]) { [weak self] observed, _ in
-        guard let self, observed.status == .readyToPlay else { return }
-        let seconds = observed.duration.seconds
-        DispatchQueue.main.async {
-          self.onClipLoad?([
-            "durationMs": seconds.isFinite ? seconds * 1000.0 : 0,
-          ])
+        guard let self else { return }
+        switch observed.status {
+        case .readyToPlay:
+          let seconds = observed.duration.seconds
+          DispatchQueue.main.async {
+            self.onClipLoad?([
+              "durationMs": seconds.isFinite ? seconds * 1000.0 : 0,
+            ])
+          }
+        case .failed:
+          let message = observed.error?.localizedDescription ?? "unreadable"
+          DispatchQueue.main.async { self.onClipError?(["message": message]) }
+        default:
+          break
         }
       }
       player.replaceCurrentItem(with: item)
     }
   }
 
+  /// `AVPlayer.play()` always runs at 1.0, so playback starts by setting the
+  /// rate directly (a non-zero rate starts playback at exactly that rate) and
+  /// slow motion stays in effect across pause/resume.
   @objc var playing: Bool = false {
     didSet {
       guard playing != oldValue else { return }
       if playing {
         restartIfAtEnd()
-        player.play()
+        player.rate = playbackRate
       } else {
         player.pause()
       }
     }
+  }
+
+  /// Playback rate (1 = real time; 0.5 / 0.25 = slow motion). Applied
+  /// immediately while playing; otherwise remembered for the next play.
+  /// Non-positive or non-finite values fall back to real time.
+  @objc var rate: Double = 1 {
+    didSet {
+      guard rate != oldValue, playing, player.rate != 0 else { return }
+      player.rate = playbackRate
+    }
+  }
+
+  /// 'cover' (default) crops to fill like before; 'contain' letterboxes so the
+  /// whole frame — and any overlay drawn in video coordinates — is visible.
+  @objc var resizeMode: NSString? {
+    didSet {
+      playerLayer.videoGravity =
+        (resizeMode as String?) == "contain" ? .resizeAspect : .resizeAspectFill
+    }
+  }
+
+  private var playbackRate: Float {
+    guard rate.isFinite, rate > 0 else { return 1 }
+    return Float(rate)
   }
 
   /// Seek request in clip milliseconds; negative values mean "no request".
@@ -113,12 +156,6 @@ final class PickleClipPlayerView: UIView {
     if item.currentTime().seconds >= item.duration.seconds - 0.05 {
       player.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
     }
-  }
-
-  private static func fileUrl(from uri: String) -> URL? {
-    if uri.hasPrefix("file://") { return URL(string: uri) }
-    if uri.hasPrefix("/") { return URL(fileURLWithPath: uri) }
-    return URL(string: uri)
   }
 }
 

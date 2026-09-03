@@ -105,6 +105,9 @@ function facts(count: number): RealAnalysisFact[] {
     resultKind: 'scored',
     scoringModelVersion: 'model-2',
     shotConfigVersion: 'config-1',
+    sessionId: null,
+    priorityCheckpoint: null,
+    checkpointScores: {},
   }));
 }
 

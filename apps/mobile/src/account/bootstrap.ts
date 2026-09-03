@@ -50,7 +50,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function normalizeBaseUrl(value: string | null | undefined): string {
+/** The configured API origin, validated the same way for every caller
+ * (bootstrap and session restore alike). Throws a non-retryable
+ * `account.not_configured` when the build has no usable API URL. */
+export function normalizeApiBaseUrl(value: string | null | undefined): string {
   const baseUrl = value?.trim().replace(/\/+$/, '');
   if (!baseUrl) {
     throw new AccountBootstrapError(
@@ -127,14 +130,47 @@ function parseCanonicalAccount(payload: unknown): CanonicalAccount {
   return { id, email, onboardingState };
 }
 
+interface SessionTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresAtMs: number;
+}
+
 /**
- * Exchanges a provider-issued OIDC bearer for this app's canonical account.
- * The provider subject is deliberately absent from the result.
+ * The durable Supabase session minted by the bootstrap exchange: the access
+ * token the app bears from now on plus the refresh token that restores it on
+ * the next launch. Null when the server predates the session contract — the
+ * app then bears the provider token for this run, exactly as before, and
+ * simply has nothing to persist.
+ */
+function parseSessionTokens(payload: unknown): SessionTokens | null {
+  const session = isRecord(payload) ? payload['session'] : null;
+  if (!isRecord(session)) return null;
+  const accessToken = session['accessToken'];
+  const refreshToken = session['refreshToken'];
+  const expiresAt = session['expiresAt'];
+  if (
+    typeof accessToken !== 'string' ||
+    !accessToken.trim() ||
+    typeof refreshToken !== 'string' ||
+    !refreshToken.trim() ||
+    typeof expiresAt !== 'number' ||
+    !Number.isFinite(expiresAt)
+  ) {
+    return null;
+  }
+  return { accessToken, refreshToken, expiresAtMs: expiresAt * 1000 };
+}
+
+/**
+ * Exchanges a provider-issued OIDC bearer for this app's canonical account
+ * and its durable Supabase session. The provider subject is deliberately
+ * absent from the result.
  */
 export async function bootstrapCanonicalAccount(
   input: AccountBootstrapInput,
 ): Promise<AccountBootstrapResult> {
-  const apiBaseUrl = normalizeBaseUrl(input.apiBaseUrl);
+  const apiBaseUrl = normalizeApiBaseUrl(input.apiBaseUrl);
   const bearerToken = input.bearerToken?.trim();
   if (!bearerToken) {
     throw new AccountBootstrapError(
@@ -195,13 +231,16 @@ export async function bootstrapCanonicalAccount(
   }
 
   const account = parseCanonicalAccount(payload);
+  const tokens = parseSessionTokens(payload);
   return {
     account,
     apiSession: {
       apiBaseUrl,
-      bearerToken,
+      bearerToken: tokens?.accessToken ?? bearerToken,
       canonicalAppUserId: account.id,
       provider: input.provider,
+      refreshToken: tokens?.refreshToken ?? null,
+      bearerExpiresAtMs: tokens?.expiresAtMs ?? null,
     },
   };
 }

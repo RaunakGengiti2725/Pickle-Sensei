@@ -33,6 +33,16 @@ class ClipPlayerViewManager : SimpleViewManager<ClipPlayerView>() {
     view.setSeekMs(seekMs)
   }
 
+  @ReactProp(name = "resizeMode")
+  fun setResizeMode(view: ClipPlayerView, resizeMode: String?) {
+    view.setResizeMode(resizeMode)
+  }
+
+  @ReactProp(name = "rate", defaultDouble = 1.0)
+  fun setRate(view: ClipPlayerView, rate: Double) {
+    view.setRate(rate)
+  }
+
   override fun getExportedCustomDirectEventTypeConstants(): Map<String, Any> =
     MapBuilder.of(
       "onClipProgress",
@@ -41,5 +51,7 @@ class ClipPlayerViewManager : SimpleViewManager<ClipPlayerView>() {
       MapBuilder.of("registrationName", "onClipLoad"),
       "onClipEnd",
       MapBuilder.of("registrationName", "onClipEnd"),
+      "onClipError",
+      MapBuilder.of("registrationName", "onClipError"),
     )
 }

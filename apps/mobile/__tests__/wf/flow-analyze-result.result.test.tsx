@@ -1,23 +1,31 @@
 /**
- * Workflow verification — Analyze → Result (ResultScreen side).
+ * Workflow verification — Analyze → Result (Result side).
  *
- * Mounts the real ResultScreen (evidence loading mocked at the data seam)
- * and presses its controls as a player would:
+ * The Result route is a short sequential guide (SCORE → THE PROBLEM →
+ * DRILLS → NEXT; pages without evidence are skipped) and the former one-page
+ * surface — the canonical StrokeResult with the personalized training section
+ * — is `ResultBreakdownSheet`, hosted by the `ResultDetails` route. Both are
+ * mounted for real here (evidence loading mocked at the data seam) and
+ * pressed as a player would:
  *   - opening spinner → header Close pops to top; spinner never survives the
  *     evidence load (loaded / missing / rejected)
  *   - "Result missing" → its action goes back (no dead end)
- *   - Try again → single-use handoff armed with the SAME declared intent and
- *     navigation to Analyze{source:'camera'}
- *   - Done → popToTop; attempt tab → replace('Result', {analysisId})
- *   - training section: unconfigured API is honest, pending/unknown sync
- *     pauses plan creation, synced scored read exposes "Build reviewed plan"
- *     and the in-flight mutation disables it; no unbounded sync spinner
- *   - abstained (result-null) record: no score stage, "A score is required."
+ *   - Try it again (last page) → single-use handoff armed with the SAME
+ *     declared intent + practice set and navigation to Analyze{source:'camera'}
+ *   - Done → popToTop; another attempt's pill on THIS SET →
+ *     replace('Result', {analysisId}); the current one is inert
+ *   - training section (ResultDetails): unconfigured API is honest,
+ *     pending/unknown sync pauses plan creation, synced scored read exposes
+ *     "Build reviewed plan" and the in-flight mutation disables it; no
+ *     unbounded sync spinner
+ *   - abstained (result-null) record: ONE page, no score stage, "A score is
+ *     required.", Try it again / Done live
  */
 jest.mock('../../src/data/db', () => ({ getDb: jest.fn(() => ({})) }));
 jest.mock('../../src/data/repository', () => ({
   hasShotSyncReceipt: jest.fn(),
   getShotOutboxStatus: jest.fn(),
+  listRealAnalysisFacts: jest.fn(),
 }));
 jest.mock('../../src/components/strokeResultData', () => ({
   loadStrokeResultEvidence: jest.fn(),
@@ -36,6 +44,7 @@ jest.mock('../../src/account/apiSession', () => ({
 const mockNavigation = {
   goBack: jest.fn(),
   replace: jest.fn(),
+  popTo: jest.fn(),
   popToTop: jest.fn(),
   navigate: jest.fn(),
 };
@@ -48,8 +57,8 @@ jest.mock('react-native-safe-area-context', () => {
   const React = require('react');
   const { View } = require('react-native');
   return {
-    SafeAreaView: (props: { children?: React.ReactNode }) =>
-      React.createElement(View, null, props.children),
+    SafeAreaView: (props: { children?: React.ReactNode; testID?: string }) =>
+      React.createElement(View, { testID: props.testID }, props.children),
     useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
   };
 });
@@ -81,9 +90,12 @@ import { Text } from 'react-native';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import type { ShotAnalysis } from '@pickle/shared-types';
 import { ResultScreen } from '../../src/screens/ResultScreen';
+import { ResultDetailsScreen } from '../../src/screens/ResultDetailsScreen';
 import {
   getShotOutboxStatus,
   hasShotSyncReceipt,
+  listRealAnalysisFacts,
+  type RealAnalysisFact,
 } from '../../src/data/repository';
 import {
   loadStrokeResultEvidence,
@@ -151,6 +163,7 @@ function scoredEvidence(): StrokeResultEvidence {
       result: analysis,
     },
     clip: null,
+    review: null,
     attempts: [
       {
         analysisId: 'a1',
@@ -187,6 +200,7 @@ function abstainedEvidence(): StrokeResultEvidence {
       },
     },
     clip: null,
+    review: null,
     attempts: [],
   };
 }
@@ -195,8 +209,38 @@ const missingEvidence: StrokeResultEvidence = {
   analysis: null,
   record: null,
   clip: null,
+  review: null,
   attempts: [],
 };
+
+/** The scored facts of practice set `s1` as the repository reports them —
+ * two comparable attempts, so THIS SET renders on the score page. */
+function setFacts(): RealAnalysisFact[] {
+  const base = {
+    shotType: 'forehand_drive',
+    confidence: 0.82,
+    resultKind: 'scored' as const,
+    scoringModelVersion: 'scoring-1',
+    shotConfigVersion: 'config-1',
+    sessionId: 's1',
+    priorityCheckpoint: null,
+    checkpointScores: {},
+  };
+  return [
+    {
+      ...base,
+      id: 'a0',
+      capturedAt: '2026-08-31T10:00:00.000Z',
+      overallScore: 6.8,
+    },
+    {
+      ...base,
+      id: 'a1',
+      capturedAt: '2026-09-01T10:00:00.000Z',
+      overallScore: 7.4,
+    },
+  ];
+}
 
 function textOf(renderer: ReactTestRenderer): string {
   return JSON.stringify(renderer.toJSON());
@@ -209,21 +253,28 @@ function hosts(
   return renderer.root.findAll(n => typeof n.type === 'string' && predicate(n));
 }
 
-/** Innermost pressable per visible label (composite Pressable nodes carry
- * onPress; host Views do not), in render order. */
-function findButtons(renderer: ReactTestRenderer, label: string) {
-  const candidates = renderer.root.findAll(
-    n =>
-      typeof n.props.onPress === 'function' &&
-      n.props.accessibilityRole === 'button' &&
-      n.findAll(t => t.type === Text && String(t.props.children) === label)
-        .length > 0,
-  );
+/** Drops every candidate that contains another candidate (composite wrappers
+ * such as PressableScale re-emit the props of the Pressable inside them). */
+function innermost(candidates: TestRenderer.ReactTestInstance[]) {
   return candidates.filter(
     n =>
       !candidates.some(
         other => other !== n && n.findAll(x => x === other).length > 0,
       ),
+  );
+}
+
+/** Innermost pressable per visible label (composite Pressable nodes carry
+ * onPress; host Views do not), in render order. */
+function findButtons(renderer: ReactTestRenderer, label: string) {
+  return innermost(
+    renderer.root.findAll(
+      n =>
+        typeof n.props.onPress === 'function' &&
+        n.props.accessibilityRole === 'button' &&
+        n.findAll(t => t.type === Text && String(t.props.children) === label)
+          .length > 0,
+    ),
   );
 }
 
@@ -246,12 +297,17 @@ async function press(
   });
 }
 
+/** Evidence → sync receipt → outbox status → plan resolve on successive
+ * microtask turns (timers are faked so no Animated tick outlives a test). */
 async function settle() {
-  await act(async () => {
-    await new Promise<void>(resolve => setTimeout(resolve, 0));
-  });
+  for (let i = 0; i < 4; i += 1) {
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
 }
 
+/** The Result route: the four-page guide. */
 async function render(analysisId = 'a1') {
   mockRouteParams = { analysisId };
   let renderer!: ReactTestRenderer;
@@ -259,6 +315,27 @@ async function render(analysisId = 'a1') {
     renderer = TestRenderer.create(<ResultScreen />);
   });
   return renderer;
+}
+
+/** The ResultDetails route: the full breakdown (StrokeResult + training). */
+async function renderDetails(analysisId = 'a1') {
+  mockRouteParams = { analysisId };
+  let renderer!: ReactTestRenderer;
+  await act(async () => {
+    renderer = TestRenderer.create(<ResultDetailsScreen />);
+  });
+  return renderer;
+}
+
+/** The guide's footer label that names what the NEXT page is about. */
+function stepLabel(renderer: ReactTestRenderer): string {
+  const [label] = hosts(
+    renderer,
+    n => n.props.testID === 'result-guide-step-label',
+  );
+  if (!label) return '';
+  const children = label.props.children;
+  return Array.isArray(children) ? children.join('') : String(children);
 }
 
 function spinnerCount(renderer: ReactTestRenderer) {
@@ -289,6 +366,7 @@ function fakeTrainingApi(overrides: Partial<TrainingApi> = {}): TrainingApi {
 }
 
 beforeEach(() => {
+  jest.useFakeTimers();
   jest.clearAllMocks();
   clearTryAgainHandoff();
   clearTrainingStoreConfiguration();
@@ -298,10 +376,12 @@ beforeEach(() => {
     attempts: 0,
     lastError: null,
   });
+  (listRealAnalysisFacts as jest.Mock).mockResolvedValue([]);
 });
 
 afterEach(() => {
   clearTrainingStoreConfiguration();
+  jest.useRealTimers();
 });
 
 describe('opening / missing result', () => {
@@ -333,7 +413,12 @@ describe('opening / missing result', () => {
     await act(async () => resolveEvidence(scoredEvidence()));
     await settle();
     expect(spinnerCount(renderer)).toBe(0);
+    // The guide opens on its SCORE page — nothing else is on the first screen.
     expect(textOf(renderer)).toContain('TECHNIQUE SCORE');
+    expect(
+      hosts(renderer, n => n.props.testID === 'result-guide-step-score'),
+    ).toHaveLength(1);
+    expect(textOf(renderer)).not.toContain('Personalized training');
     await act(async () => renderer.unmount());
   });
 
@@ -350,6 +435,10 @@ describe('opening / missing result', () => {
         typeof n.props.onPress === 'function',
     );
     expect(actions.length).toBeGreaterThan(0);
+    // Evidence that is gone gets "Go back", never a retry that cannot work.
+    expect(actions[actions.length - 1]!.props.accessibilityLabel).toBe(
+      'Go back',
+    );
     await act(async () => actions[actions.length - 1]!.props.onPress());
     expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
     await act(async () => renderer.unmount());
@@ -365,33 +454,101 @@ describe('opening / missing result', () => {
     expect(textOf(renderer)).toContain('Result missing');
     await act(async () => renderer.unmount());
   });
+
+  it('the ResultDetails route loads its own evidence and its Back returns to the guide', async () => {
+    (loadStrokeResultEvidence as jest.Mock).mockResolvedValue(scoredEvidence());
+    const renderer = await renderDetails();
+    await settle();
+    expect(loadStrokeResultEvidence).toHaveBeenCalledWith({}, 'a1');
+    expect(textOf(renderer)).toContain('Full breakdown');
+    expect(
+      hosts(renderer, n => n.props.testID === 'result-details-breakdown'),
+    ).toHaveLength(1);
+    const [back] = renderer.root.findAll(
+      n =>
+        n.props.accessibilityLabel === 'Back' &&
+        typeof n.props.onPress === 'function',
+    );
+    expect(back).toBeDefined();
+    await act(async () => back!.props.onPress());
+    expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
+    await act(async () => renderer.unmount());
+  });
 });
 
 describe('scored result controls', () => {
-  it('Try again arms a single-use handoff carrying the declared intent and opens the camera', async () => {
+  it('Try it again (last page) arms a single-use handoff carrying the declared intent + set and opens the camera', async () => {
     (loadStrokeResultEvidence as jest.Mock).mockResolvedValue(scoredEvidence());
     const renderer = await render();
     await settle();
     expect(peekTryAgainHandoff()).toBeNull();
+    // No fault, no replay, no drill focus: SCORE → NEXT is the whole guide.
+    expect(stepLabel(renderer)).toBe('1 OF 2 · SCORE');
+    expect(findButton(renderer, 'Try it again')).toBeNull();
+    await press(renderer, 'Continue');
+    expect(stepLabel(renderer)).toBe('2 OF 2 · NEXT');
 
-    await press(renderer, 'Try again');
+    await press(renderer, 'Try it again');
     expect(mockNavigation.navigate).toHaveBeenCalledWith('Analyze', {
       source: 'camera',
     });
     const handoff = peekTryAgainHandoff();
     expect(handoff).not.toBeNull();
     expect(handoff!.declaredStroke).toBe('forehand_drive');
+    expect(handoff!.declaredCanonical).toBe('FOREHAND_DRIVE');
+    expect(handoff!.auto).toBe(false);
+    // The re-record joins the SAME practice set.
+    expect(handoff!.sessionId).toBe('s1');
     // Consumed exactly once by the next AnalyzeScreen mount.
     expect(consumeTryAgainHandoff()).not.toBeNull();
     expect(consumeTryAgainHandoff()).toBeNull();
     await act(async () => renderer.unmount());
   });
 
-  it('Done pops to top; another attempt chip replaces the Result route with that analysisId', async () => {
+  it('Done pops to top; another attempt pill on THIS SET replaces the Result route with that analysisId', async () => {
+    (listRealAnalysisFacts as jest.Mock).mockResolvedValue(setFacts());
     (loadStrokeResultEvidence as jest.Mock).mockResolvedValue(scoredEvidence());
     const renderer = await render();
     await settle();
 
+    // THIS SET renders on the score page once two comparable attempts exist.
+    expect(
+      hosts(renderer, n => n.props.testID === 'result-guide-practice-set'),
+    ).toHaveLength(1);
+    expect(textOf(renderer)).toContain('THIS SET');
+    const pills = innermost(
+      renderer.root.findAll(
+        n =>
+          typeof n.props.testID === 'string' &&
+          n.props.testID.startsWith('practice-set-attempt-') &&
+          typeof n.props.onPress === 'function',
+      ),
+    );
+    expect(pills.map(p => p.props.testID)).toEqual([
+      'practice-set-attempt-a0',
+      'practice-set-attempt-a1',
+    ]);
+    for (const pill of pills) {
+      expect(typeof pill.props.accessibilityLabel).toBe('string');
+    }
+    // The attempt on screen is inert; the other one repoints the route.
+    await act(async () => pills[1]!.props.onPress());
+    expect(mockNavigation.replace).not.toHaveBeenCalled();
+    await act(async () => pills[0]!.props.onPress());
+    expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
+      analysisId: 'a0',
+    });
+
+    await press(renderer, 'Continue');
+    await press(renderer, 'Done');
+    expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
+    await act(async () => renderer.unmount());
+  });
+
+  it('attempt tabs on the ResultDetails sheet pop back to the guide repointed at that attempt', async () => {
+    (loadStrokeResultEvidence as jest.Mock).mockResolvedValue(scoredEvidence());
+    const renderer = await renderDetails();
+    await settle();
     const tabs = hosts(renderer, n => n.props.accessibilityRole === 'tab');
     expect(tabs.length).toBe(2);
     for (const tab of tabs) {
@@ -410,41 +567,54 @@ describe('scored result controls', () => {
     );
     expect(current).toBeDefined();
     expect(other).toBeDefined();
+    await act(async () => current!.props.onPress());
+    expect(mockNavigation.popTo).not.toHaveBeenCalled();
     await act(async () => other!.props.onPress());
-    expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
+    // Never a second Result on the stack: the guide underneath is repointed.
+    expect(mockNavigation.popTo).toHaveBeenCalledWith('Result', {
       analysisId: 'a0',
     });
-
-    await press(renderer, 'Done');
-    expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
+    expect(mockNavigation.replace).not.toHaveBeenCalled();
+    // The sheet embeds the surface without a second CTA row.
+    expect(findButton(renderer, 'Try again')).toBeNull();
+    expect(findButton(renderer, 'Done')).toBeNull();
     await act(async () => renderer.unmount());
   });
 
-  it('every button on the surface has an accessibility label and none is disabled without a reason', async () => {
+  it('every button on the guide has an accessibility label and none is disabled without a reason', async () => {
     (loadStrokeResultEvidence as jest.Mock).mockResolvedValue(scoredEvidence());
     const renderer = await render();
     await settle();
-    const buttons = hosts(
-      renderer,
-      n =>
-        n.props.accessibilityRole === 'button' && n.props.accessible === true,
-    );
-    expect(buttons.length).toBeGreaterThan(2);
-    for (const button of buttons) {
-      expect(typeof button.props.accessibilityLabel).toBe('string');
-      expect(button.props.accessibilityLabel.length).toBeGreaterThan(0);
-      expect(button.props.accessibilityState?.disabled).not.toBe(true);
-    }
-    const labels = buttons.map(b => b.props.accessibilityLabel as string);
-    expect(labels).toEqual(expect.arrayContaining(['Try again', 'Done']));
+    const audit = (expected: string[]) => {
+      const buttons = hosts(
+        renderer,
+        n =>
+          n.props.accessibilityRole === 'button' && n.props.accessible === true,
+      );
+      expect(buttons.length).toBeGreaterThan(1);
+      for (const button of buttons) {
+        expect(typeof button.props.accessibilityLabel).toBe('string');
+        expect(button.props.accessibilityLabel.length).toBeGreaterThan(0);
+        expect(button.props.accessibilityState?.disabled).not.toBe(true);
+      }
+      const labels = buttons.map(b => b.props.accessibilityLabel as string);
+      expect(labels.sort()).toEqual(expected.sort());
+    };
+    // SCORE: Close + the descriptive Next; no Back on the first page.
+    audit(['Close', 'Continue']);
+    await press(renderer, 'Continue');
+    // NEXT: Try it again with Back and Done beside it.
+    audit(['Close', 'Try it again', 'Back', 'Done']);
+    await press(renderer, 'Back');
+    audit(['Close', 'Continue']);
     await act(async () => renderer.unmount());
   });
 });
 
-describe('training section states', () => {
+describe('training section states (ResultDetails)', () => {
   it('without a configured training API the section is honest and offers no dead button', async () => {
     (loadStrokeResultEvidence as jest.Mock).mockResolvedValue(scoredEvidence());
-    const renderer = await render();
+    const renderer = await renderDetails();
     await settle();
     expect(textOf(renderer)).toContain('Training is not connected.');
     expect(findButton(renderer, 'Build reviewed plan')).toBeNull();
@@ -456,13 +626,15 @@ describe('training section states', () => {
     configureTrainingStore(fakeTrainingApi());
     (hasShotSyncReceipt as jest.Mock).mockResolvedValue(false);
     (loadStrokeResultEvidence as jest.Mock).mockResolvedValue(scoredEvidence());
-    const renderer = await render();
+    const renderer = await renderDetails();
     await settle();
     await settle();
     expect(textOf(renderer)).toContain('Sync this read first.');
     expect(textOf(renderer)).toContain('still in the secure outbox');
     expect(textOf(renderer)).not.toContain('Checking sync evidence');
     expect(findButton(renderer, 'Build reviewed plan')).toBeNull();
+    // No feedback prompt is asked for a shot the server has not accepted.
+    expect(textOf(renderer)).not.toContain('Was this analysis accurate?');
     await act(async () => renderer.unmount());
   });
 
@@ -470,7 +642,7 @@ describe('training section states', () => {
     configureTrainingStore(fakeTrainingApi());
     (hasShotSyncReceipt as jest.Mock).mockRejectedValue(new Error('db'));
     (loadStrokeResultEvidence as jest.Mock).mockResolvedValue(scoredEvidence());
-    const renderer = await render();
+    const renderer = await renderDetails();
     await settle();
     await settle();
     expect(textOf(renderer)).toContain('could not verify whether this shot');
@@ -489,7 +661,7 @@ describe('training section states', () => {
       }),
     );
     (loadStrokeResultEvidence as jest.Mock).mockResolvedValue(scoredEvidence());
-    const renderer = await render();
+    const renderer = await renderDetails();
     await settle();
     await settle();
     expect(textOf(renderer)).toContain('Turn this read into a plan.');
@@ -522,21 +694,43 @@ describe('training section states', () => {
       }),
     );
     (loadStrokeResultEvidence as jest.Mock).mockResolvedValue(scoredEvidence());
-    const renderer = await render();
+    const renderer = await renderDetails();
     await settle();
     await settle();
     expect(textOf(renderer)).toContain('Training could not be verified.');
-    // The training card's retry renders before the surface's camera retry.
+    // The sheet has no camera CTA row, so this Try again is the plan retry.
+    expect(findButtons(renderer, 'Try again')).toHaveLength(1);
     await press(renderer, 'Try again', 'first');
     expect(mockNavigation.navigate).not.toHaveBeenCalled();
     await settle();
     expect(textOf(renderer)).toContain('Turn this read into a plan.');
     await act(async () => renderer.unmount());
   });
+
+  it('the guide itself never shows the training section on any page', async () => {
+    configureTrainingStore(fakeTrainingApi());
+    (loadStrokeResultEvidence as jest.Mock).mockResolvedValue(scoredEvidence());
+    const renderer = await render();
+    await settle();
+    await settle();
+    expect(
+      hosts(renderer, n => n.props.testID === 'training-plan-section'),
+    ).toHaveLength(0);
+    expect(findButton(renderer, 'Build reviewed plan')).toBeNull();
+    await press(renderer, 'Continue');
+    expect(
+      hosts(renderer, n => n.props.testID === 'training-plan-section'),
+    ).toHaveLength(0);
+    expect(textOf(renderer)).not.toContain('Personalized training');
+    // Nor a link to the breakdown route (product decision 2026-09-02).
+    expect(textOf(renderer)).not.toContain('See full breakdown');
+    expect(mockNavigation.navigate).not.toHaveBeenCalled();
+    await act(async () => renderer.unmount());
+  });
 });
 
 describe('abstained (result-null) record', () => {
-  it('renders no score stage, says a score is required, and keeps Try again / Done live', async () => {
+  it('collapses to one page with no score stage, says a score is required, and keeps Try it again / Done live', async () => {
     (loadStrokeResultEvidence as jest.Mock).mockResolvedValue(
       abstainedEvidence(),
     );
@@ -544,15 +738,27 @@ describe('abstained (result-null) record', () => {
     await settle();
     const rendered = textOf(renderer);
     expect(rendered).not.toContain('TECHNIQUE SCORE');
+    expect(rendered).toContain('RESULT · NOT SCORED');
+    // The inline sheet's training section is honest about the missing score.
     expect(rendered).toContain('A score is required.');
     expect(rendered).not.toContain('analysis_confidence_below_threshold');
     expect(findButton(renderer, 'Build reviewed plan')).toBeNull();
-    await press(renderer, 'Try again');
+    // ONE CTA pair — the guide's footer, not a second row in the surface.
+    expect(findButton(renderer, 'Try again')).toBeNull();
+    expect(findButton(renderer, 'Continue')).toBeNull();
+    expect(findButton(renderer, 'Back')).toBeNull();
+    await press(renderer, 'Try it again');
     expect(mockNavigation.navigate).toHaveBeenCalledWith('Analyze', {
       source: 'camera',
     });
     // Abstained AUTO runs re-arm without inventing a declaration.
-    expect(peekTryAgainHandoff()?.declaredStroke ?? null).toBeNull();
+    expect(peekTryAgainHandoff()).toEqual({
+      source: 'camera',
+      declaredStroke: null,
+      declaredCanonical: null,
+      auto: true,
+      sessionId: null,
+    });
     await press(renderer, 'Done');
     expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
     await act(async () => renderer.unmount());

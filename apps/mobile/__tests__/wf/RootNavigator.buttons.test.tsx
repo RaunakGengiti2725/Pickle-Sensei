@@ -152,6 +152,12 @@ jest.mock('../../src/screens/DrillLibraryScreen', () => ({
 jest.mock('../../src/screens/ResultScreen', () => ({
   ResultScreen: () => null,
 }));
+jest.mock('../../src/screens/ResultDetailsScreen', () => ({
+  ResultDetailsScreen: () => null,
+}));
+jest.mock('../../src/screens/FormReviewScreen', () => ({
+  FormReviewScreen: () => null,
+}));
 jest.mock('../../src/screens/StreakCalendarScreen', () => ({
   StreakCalendarScreen: () => null,
 }));
@@ -218,6 +224,8 @@ const ROOT_ROUTES: readonly RouteName[] = [
   'Tabs',
   'Analyze',
   'Result',
+  'ResultDetails',
+  'FormReview',
   'DrillLibrary',
   'StreakCalendar',
   'Paywall',

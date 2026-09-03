@@ -4,12 +4,14 @@ import TestRenderer, { act } from 'react-test-renderer';
 import type { PlayerRankSummary } from '@pickle/shared-types';
 
 /**
- * Launch flow workflow: splash fade on readiness, hydration failure paths
- * (unreadable SQLite, corrupt kv rows), and the three global overlays that
- * App.tsx mounts (RankUpCelebration, StreakCelebration, FirstRunWalkthrough)
- * driven through every dismiss control — backdrop, primary CTA, and the
- * Modal's onRequestClose (Android back) — including double taps and all
- * three overlays raised at once.
+ * Launch flow workflow: splash (MP4 intro) cross-fade on readiness,
+ * hydration failure paths (unreadable SQLite, corrupt kv rows), and the three
+ * global overlays that App.tsx mounts (RankUpCelebration, StreakCelebration,
+ * FirstRunWalkthrough) driven through every dismiss control — backdrop,
+ * primary CTA, and the Modal's onRequestClose (Android back) — including
+ * double taps and all three overlays raised at once.
+ * react-native-video is auto-mocked from `__mocks__/` (canonical harness:
+ * `__tests__/splashScreen.test.tsx`).
  */
 
 type DbMode = 'throw' | 'kv';
@@ -49,7 +51,11 @@ jest.mock('../../src/account/onboarding', () => ({
   saveCanonicalOnboardingProfile: async (_s: unknown, p: unknown) => p,
 }));
 
-import { SplashScreen } from '../../src/screens/SplashScreen';
+import {
+  EXIT_MS,
+  SplashScreen,
+  WATCHDOG_MS,
+} from '../../src/screens/SplashScreen';
 import { useAppStore } from '../../src/state/appStore';
 import {
   GUEST_DATA_OWNER,
@@ -202,11 +208,18 @@ afterEach(() => {
   useWalkthroughStore.setState({ visible: false });
 });
 
+function splashVideo(renderer: TestRenderer.ReactTestRenderer) {
+  return renderer.root.find(
+    node =>
+      typeof node.type === 'string' && node.props.testID === 'splash-video',
+  );
+}
+
 describe('SplashScreen fade on readiness', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
-  it('holds for the minimum visible time even when hydration is instant', async () => {
+  it('holds until the intro is over even when hydration is instant, then cross-fades out exactly once', async () => {
     const onFinished = jest.fn();
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
@@ -214,13 +227,17 @@ describe('SplashScreen fade on readiness', () => {
         <SplashScreen ready onFinished={onFinished} />,
       );
     });
-    act(() => jest.advanceTimersByTime(1100));
+    // Ready from the first frame, intro still playing: nothing leaves short
+    // of the watchdog.
+    act(() => jest.advanceTimersByTime(WATCHDOG_MS - 1));
     expect(onFinished).not.toHaveBeenCalled();
-    // Minimum hold elapses → the exit fade starts on the next commit.
-    act(() => jest.advanceTimersByTime(100));
-    act(() => jest.advanceTimersByTime(2000));
+    // The intro ends → the exit cross-fade starts on the next commit.
+    act(() => splashVideo(renderer).props.onEnd());
+    expect(onFinished).not.toHaveBeenCalled();
+    act(() => jest.advanceTimersByTime(EXIT_MS + 50));
     expect(onFinished).toHaveBeenCalledTimes(1);
-    act(() => jest.advanceTimersByTime(5000));
+    // A late watchdog cannot re-run the handoff.
+    act(() => jest.advanceTimersByTime(WATCHDOG_MS + 5000));
     expect(onFinished).toHaveBeenCalledTimes(1);
     act(() => renderer.unmount());
   });
@@ -233,12 +250,13 @@ describe('SplashScreen fade on readiness', () => {
         <SplashScreen ready={false} onFinished={onFinished} />,
       );
     });
-    act(() => jest.advanceTimersByTime(10_000));
+    act(() => splashVideo(renderer).props.onEnd());
+    act(() => jest.advanceTimersByTime(WATCHDOG_MS + 10_000));
     expect(onFinished).not.toHaveBeenCalled();
     await act(async () => {
       renderer.update(<SplashScreen ready onFinished={onFinished} />);
     });
-    act(() => jest.advanceTimersByTime(2000));
+    act(() => jest.advanceTimersByTime(EXIT_MS + 50));
     expect(onFinished).toHaveBeenCalledTimes(1);
     act(() => renderer.unmount());
   });
@@ -253,11 +271,11 @@ describe('SplashScreen fade on readiness', () => {
     });
     act(() => jest.advanceTimersByTime(300));
     act(() => renderer.unmount());
-    act(() => jest.advanceTimersByTime(10_000));
+    act(() => jest.advanceTimersByTime(WATCHDOG_MS + EXIT_MS + 10_000));
     expect(onFinished).not.toHaveBeenCalled();
   });
 
-  it('announces itself to screen readers', async () => {
+  it('exposes the intro to screen readers as a labelled image — never as a labelled root that would hide Skip', async () => {
     let renderer!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       renderer = TestRenderer.create(
@@ -266,10 +284,25 @@ describe('SplashScreen fade on readiness', () => {
     });
     const announced = renderer.root.findAll(
       node =>
-        node.props.accessibilityLabel === 'Pickle Sensei is starting' &&
+        typeof node.type === 'string' &&
+        node.props.accessibilityLabel === 'Pickle Sensei intro animation' &&
+        node.props.accessibilityRole === 'image' &&
         node.props.accessible === true,
     );
-    expect(announced.length).toBeGreaterThan(0);
+    expect(announced).toHaveLength(1);
+    // The former "Pickle Sensei is starting" root label is gone: an
+    // accessible root would swallow the Skip control for VoiceOver users.
+    const root = renderer.root.find(
+      node =>
+        typeof node.type === 'string' && node.props.testID === 'splash-screen',
+    );
+    expect(root.props.accessible).toBeUndefined();
+    expect(root.props.accessibilityLabel).toBeUndefined();
+    expect(
+      renderer.root.findAll(
+        node => node.props?.accessibilityLabel === 'Pickle Sensei is starting',
+      ),
+    ).toHaveLength(0);
     act(() => renderer.unmount());
   });
 });
@@ -327,6 +360,7 @@ describe('AGENTS.md owner-scoping invariants for overlay state', () => {
       'rank.celebrated',
       'notifications',
       'consistency',
+      'practice.set',
     ]);
     expect(rankCelebrationKeyForOwner('owner-1')).toBe(
       'rank.celebrated:owner-1',

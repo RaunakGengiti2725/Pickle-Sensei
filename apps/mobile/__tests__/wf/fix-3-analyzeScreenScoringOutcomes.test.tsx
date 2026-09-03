@@ -1,7 +1,11 @@
 /**
  * AnalyzeScreen scoring-outcome routing:
  *   - the persisted appVersion is the runtime config's, never a literal
- *   - a scored run flushes the outbox now and refreshes canonical access
+ *   - a scored run flushes the outbox now; the canonical access snapshot is
+ *     re-read ONLY in the unmount cleanup (never while mounted — the route
+ *     gate would replace a screen whose canStartRating flips false and tear
+ *     down the "last free analysis" prompt; see
+ *     __tests__/analyzeScreenAccessRefresh.test.tsx)
  *   - a 402 paywall refusal offers the upgrade, never a retry
  *   - the error header names the step that stopped (capture vs analysis)
  *   - closing the working screen abandons the run: no Result navigation,
@@ -23,7 +27,10 @@ jest.mock('../../src/review/appStoreReview', () => ({
 }));
 const mockRefreshAccess = jest.fn(async () => true);
 jest.mock('../../src/state/accessStore', () => {
+  // A configured store (status !== 'idle'): the unmount re-read only skips
+  // for a store that was reset (signed out) before the screen left.
   const state = {
+    status: 'ready',
     canonicalAccess: null,
     refreshAccess: () => mockRefreshAccess(),
   };
@@ -187,12 +194,15 @@ describe('AnalyzeScreen — scoring outcome routing (wf fix-3)', () => {
     const request = (runCaptureAnalysis as jest.Mock).mock.calls[0]![0];
     expect(request.appVersion).toBe(getRuntimePublicConfig().appVersion);
     expect(request.appVersion).not.toBe('0.1.0');
+    // The practice-set sessionId is always handed over; this harness runs
+    // with the signed-out owner, which cannot hold a set, hence null.
+    expect(request).toHaveProperty('sessionId', null);
     await act(async () => {
       renderer.unmount();
     });
   });
 
-  it('a scored run flushes the outbox immediately, refreshes access, opens Result and asks for a review', async () => {
+  it('a scored run flushes the outbox immediately, opens Result and asks for a review; access is re-read only once the screen unmounts', async () => {
     (runCaptureAnalysis as jest.Mock).mockResolvedValue({
       kind: 'scored',
       analysisId: 'analysis-1',
@@ -202,17 +212,21 @@ describe('AnalyzeScreen — scoring outcome routing (wf fix-3)', () => {
     const renderer = await renderLibraryScreen();
     await declareAndScore(renderer);
     expect(triggerOutboxSync).toHaveBeenCalledTimes(1);
-    expect(mockRefreshAccess).toHaveBeenCalledTimes(1);
     expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
       analysisId: 'analysis-1',
     });
     expect(reportScoredAnalysisForReview).toHaveBeenCalledTimes(1);
+    // Still mounted (the navigator swaps screens after replace): the ledger
+    // is NOT re-read here — a refresh that flips canStartRating would let
+    // the route gate replace the screen under the user.
+    expect(mockRefreshAccess).not.toHaveBeenCalled();
     await act(async () => {
       renderer.unmount();
     });
+    expect(mockRefreshAccess).toHaveBeenCalledTimes(1);
   });
 
-  it('the last free rating refreshes access before the upgrade prompt and skips the review ask', async () => {
+  it('the last free rating shows the upgrade prompt without re-reading access (that would tear the prompt down) and skips the review ask', async () => {
     (runCaptureAnalysis as jest.Mock).mockResolvedValue({
       kind: 'scored',
       analysisId: 'analysis-2',
@@ -222,14 +236,26 @@ describe('AnalyzeScreen — scoring outcome routing (wf fix-3)', () => {
     const renderer = await renderLibraryScreen();
     await declareAndScore(renderer);
     expect(triggerOutboxSync).toHaveBeenCalledTimes(1);
-    expect(mockRefreshAccess).toHaveBeenCalledTimes(1);
     expect(textContents(renderer)).toContain(
       'That was your last free analysis.',
     );
     expect(reportScoredAnalysisForReview).not.toHaveBeenCalled();
+    // The prompt is up on the still-mounted screen: no refresh yet.
+    expect(mockRefreshAccess).not.toHaveBeenCalled();
+    const [seeScore] = buttonLabelled(renderer, 'See my score');
+    expect(seeScore).toBeDefined();
+    await act(async () => {
+      seeScore!.props.onPress();
+    });
+    expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
+      analysisId: 'analysis-2',
+    });
+    expect(mockRefreshAccess).not.toHaveBeenCalled();
+    // Leaving the screen is what moves the ledger.
     await act(async () => {
       renderer.unmount();
     });
+    expect(mockRefreshAccess).toHaveBeenCalledTimes(1);
   });
 
   it('a 402 paywall refusal offers Upgrade to Pro (routing to Paywall) and never Try again', async () => {
@@ -246,7 +272,9 @@ describe('AnalyzeScreen — scoring outcome routing (wf fix-3)', () => {
     expect(rendered).toContain('Your free ratings are used up.');
     expect(rendered).toContain('Upgrade to Pro');
     expect(rendered).not.toContain('Try again');
-    expect(mockRefreshAccess).toHaveBeenCalledTimes(1);
+    // The refusal is shown on the mounted screen without a refresh; the
+    // ledger (a permit was attempted) is re-read once the screen is gone.
+    expect(mockRefreshAccess).not.toHaveBeenCalled();
     expect(triggerOutboxSync).not.toHaveBeenCalled();
     expect(mockNavigation.replace).not.toHaveBeenCalled();
 
@@ -259,12 +287,14 @@ describe('AnalyzeScreen — scoring outcome routing (wf fix-3)', () => {
       source: 'rating',
     });
     expect(importStrokeVideo).toHaveBeenCalledTimes(1);
+    expect(mockRefreshAccess).not.toHaveBeenCalled();
     await act(async () => {
       renderer.unmount();
     });
+    expect(mockRefreshAccess).toHaveBeenCalledTimes(1);
   });
 
-  it('a plain unavailable outcome keeps Try again and does not touch access', async () => {
+  it('a plain unavailable outcome keeps Try again and does not touch access while mounted', async () => {
     (runCaptureAnalysis as jest.Mock).mockResolvedValue({
       kind: 'unavailable',
       reason: 'The rating service is temporarily unavailable.',
@@ -276,9 +306,25 @@ describe('AnalyzeScreen — scoring outcome routing (wf fix-3)', () => {
     expect(rendered).toContain('Try again');
     expect(rendered).not.toContain('Upgrade to Pro');
     expect(mockRefreshAccess).not.toHaveBeenCalled();
+    // The run reached runCaptureAnalysis (a permit may have been reserved
+    // and released), so the snapshot is re-read when the screen leaves.
     await act(async () => {
       renderer.unmount();
     });
+    expect(mockRefreshAccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('a capture-stage failure never reaches the ledger, so unmounting asks nothing of the server', async () => {
+    (importStrokeVideo as jest.Mock).mockRejectedValue(
+      new Error('Photos permission denied. Enable access in Settings.'),
+    );
+    const renderer = await renderLibraryScreen();
+    expect(runCaptureAnalysis).not.toHaveBeenCalled();
+    expect(mockRefreshAccess).not.toHaveBeenCalled();
+    await act(async () => {
+      renderer.unmount();
+    });
+    expect(mockRefreshAccess).not.toHaveBeenCalled();
   });
 
   it('a capture-stage failure is still headed "Capture interrupted"', async () => {
@@ -336,20 +382,28 @@ describe('AnalyzeScreen — scoring outcome routing (wf fix-3)', () => {
     expect(textContents(renderer)).not.toContain(
       'That was your last free analysis.',
     );
+    // The saved rating still leaves for the server; the access re-read
+    // waits for the (still mounted) screen to actually go away.
     expect(triggerOutboxSync).toHaveBeenCalledTimes(1);
-    expect(mockRefreshAccess).toHaveBeenCalledTimes(1);
+    expect(mockRefreshAccess).not.toHaveBeenCalled();
     await act(async () => {
       renderer.unmount();
     });
+    expect(mockRefreshAccess).toHaveBeenCalledTimes(1);
   });
 
   it('unmounting mid-scoring abandons the run the same way', async () => {
     const resolveAnalysis = pendingAnalysis();
     const renderer = await renderLibraryScreen();
     await declareAndScore(renderer);
+    expect(mockRefreshAccess).not.toHaveBeenCalled();
     await act(async () => {
       renderer.unmount();
     });
+    // The ledger was touched the moment the run started (a permit is
+    // reserved before any outcome exists), so leaving re-reads it once —
+    // even though this run's outcome has not landed yet.
+    expect(mockRefreshAccess).toHaveBeenCalledTimes(1);
     await act(async () => {
       resolveAnalysis({
         kind: 'scored',
@@ -361,5 +415,7 @@ describe('AnalyzeScreen — scoring outcome routing (wf fix-3)', () => {
     expect(mockNavigation.replace).not.toHaveBeenCalled();
     expect(reportScoredAnalysisForReview).not.toHaveBeenCalled();
     expect(triggerOutboxSync).toHaveBeenCalledTimes(1);
+    // The late outcome does not trigger a second re-read on a gone screen.
+    expect(mockRefreshAccess).toHaveBeenCalledTimes(1);
   });
 });

@@ -74,7 +74,7 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
-import { Switch, Text } from 'react-native';
+import { Modal, Switch, Text } from 'react-native';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { ConsentSettingsScreen } from '../../src/screens/ConsentSettingsScreen';
 import { ManageAccountScreen } from '../../src/screens/ManageAccountScreen';
@@ -266,6 +266,11 @@ describe('ManageAccountScreen — deletion with the network failing', () => {
     });
   });
 
+  /**
+   * The deletion dialog now opens on the exit survey ("What's making you
+   * leave?"); "Skip the survey" sends nothing and jumps straight to the
+   * confirmation page, which is where the network failures under test land.
+   */
   async function openDeleteSheet(): Promise<ReactTestRenderer> {
     let renderer!: ReactTestRenderer;
     act(() => {
@@ -274,6 +279,11 @@ describe('ManageAccountScreen — deletion with the network failing', () => {
     await act(async () => {
       pressableByLabel(renderer, 'Delete account').props.onPress();
     });
+    expect(allText(renderer)).toContain("What's making you leave?");
+    await act(async () => {
+      pressableByLabel(renderer, 'Skip the survey').props.onPress();
+    });
+    expect(allText(renderer)).toContain('Delete your account?');
     return renderer;
   }
 
@@ -333,16 +343,16 @@ describe('ManageAccountScreen — deletion with the network failing', () => {
     expect(buttonLabelled(renderer, 'Keep my account').props.disabled).toBe(
       true,
     );
-    // The X and the backdrop are disabled until the request settles, so a
-    // late response can never arm a sheet the user already dismissed.
-    expect(
-      renderer.root.findAll(
-        n =>
-          n.props.accessibilityLabel ===
-            'Close account deletion confirmation' &&
-          typeof n.props.onPress === 'function',
-      ),
-    ).toHaveLength(0);
+    // The X, the backdrop and the hardware back are disabled until the
+    // request settles, so a late response can never arm a dialog the user
+    // already dismissed (the presentation guard covers the rest).
+    const closeControls = renderer.root.findAll(
+      n =>
+        n.props.accessibilityLabel === 'Close account deletion confirmation' &&
+        typeof n.props.onPress === 'function',
+    );
+    expect(closeControls.length).toBeGreaterThan(0);
+    expect(closeControls.every(n => n.props.disabled === true)).toBe(true);
     expect(
       renderer.root
         .findAll(
@@ -352,11 +362,21 @@ describe('ManageAccountScreen — deletion with the network failing', () => {
         )
         .some(n => n.props.accessibilityState?.disabled === true),
     ).toBe(true);
+    const backdrops = renderer.root.findAll(
+      n => n.props.accessibilityLabel === 'Cancel account deletion',
+    );
+    expect(backdrops.length).toBeGreaterThan(0);
+    expect(backdrops.every(n => n.props.onPress === undefined)).toBe(true);
     expect(
-      renderer.root
-        .findAll(n => n.props.accessibilityLabel === 'Cancel account deletion')
-        .every(n => n.props.onPress === undefined),
+      backdrops.some(
+        n =>
+          n.props.disabled === true ||
+          n.props.accessibilityState?.disabled === true,
+      ),
     ).toBe(true);
+    expect(
+      renderer.root.findByType(Modal).props.onRequestClose,
+    ).toBeUndefined();
     await act(async () => {
       resolveFetch(
         jsonResponse(200, {

@@ -74,6 +74,12 @@ jest.mock('../../src/screens/DrillLibraryScreen', () => ({
 jest.mock('../../src/screens/ResultScreen', () => ({
   ResultScreen: jest.fn(() => null),
 }));
+jest.mock('../../src/screens/ResultDetailsScreen', () => ({
+  ResultDetailsScreen: jest.fn(() => null),
+}));
+jest.mock('../../src/screens/FormReviewScreen', () => ({
+  FormReviewScreen: jest.fn(() => null),
+}));
 jest.mock('../../src/screens/StreakCalendarScreen', () => ({
   StreakCalendarScreen: jest.fn(() => null),
 }));
@@ -108,6 +114,14 @@ const mockScreens = {
     'DrillLibraryScreen',
   ),
   ResultScreen: stub('../../src/screens/ResultScreen', 'ResultScreen'),
+  ResultDetailsScreen: stub(
+    '../../src/screens/ResultDetailsScreen',
+    'ResultDetailsScreen',
+  ),
+  FormReviewScreen: stub(
+    '../../src/screens/FormReviewScreen',
+    'FormReviewScreen',
+  ),
   StreakCalendarScreen: stub(
     '../../src/screens/StreakCalendarScreen',
     'StreakCalendarScreen',
@@ -189,6 +203,7 @@ jest.mock('../../src/config/runtimeConfig', () => ({
 // auto-mock in __mocks__/react-native-notify-kit.ts backs it.
 import notifee, { EventType } from 'react-native-notify-kit';
 import { RootNavigator } from '../../src/navigation/RootNavigator';
+import { color } from '../../src/design/tokens';
 import type {
   MainTabParams,
   RootStackParams,
@@ -200,6 +215,8 @@ const ROOT_ROUTES: Record<keyof RootStackParams, true> = {
   Tabs: true,
   Analyze: true,
   Result: true,
+  ResultDetails: true,
+  FormReview: true,
   DrillLibrary: true,
   StreakCalendar: true,
   ConnectAccount: true,
@@ -356,6 +373,25 @@ describe('navigation-tabs: route table integrity', () => {
     expect(stackScreen(renderer, 'Result').props.component).toBe(
       mockScreens.ResultScreen,
     );
+    // The Result guide keeps its dark shell; the full breakdown (ResultDetails)
+    // is the light evidence sheet; the form review replays on the dark stage.
+    expect(stackScreen(renderer, 'Result').props.options).toMatchObject({
+      contentStyle: { backgroundColor: color.surfaceDark },
+    });
+    expect(stackScreen(renderer, 'ResultDetails').props.component).toBe(
+      mockScreens.ResultDetailsScreen,
+    );
+    expect(stackScreen(renderer, 'ResultDetails').props.options).toMatchObject({
+      title: 'Full breakdown',
+      contentStyle: { backgroundColor: color.surface },
+    });
+    expect(stackScreen(renderer, 'FormReview').props.component).toBe(
+      mockScreens.FormReviewScreen,
+    );
+    expect(stackScreen(renderer, 'FormReview').props.options).toMatchObject({
+      title: 'Form review',
+      contentStyle: { backgroundColor: color.surfaceDark },
+    });
     expect(stackScreen(renderer, 'DrillLibrary').props.component).toBe(
       mockScreens.DrillLibraryScreen,
     );

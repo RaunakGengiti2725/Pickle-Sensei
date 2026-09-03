@@ -129,6 +129,7 @@ describe('TRY AGAIN stability emission', () => {
     declaredStroke: null,
     declaredCanonical: null,
     auto: true,
+    sessionId: null,
   } as const;
 
   it('records try_again_rearmed when a live handoff is consumed', () => {

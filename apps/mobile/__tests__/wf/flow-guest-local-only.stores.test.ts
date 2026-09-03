@@ -29,7 +29,6 @@ import {
   useAccessStore,
 } from '../../src/state/accessStore';
 import {
-  DEVICE_ONBOARDED_KV_KEY,
   PENDING_ONBOARDING_PROFILE_KV_KEY,
   useAppStore,
 } from '../../src/state/appStore';
@@ -196,7 +195,7 @@ function resetStores() {
     hydrated: false,
     ownerKey: null,
     profile: null,
-    preAuthOnboarded: false,
+    hydrateError: null,
     onboardingBusy: false,
     onboardingError: null,
     lastShotType: 'forehand_drive',
@@ -352,17 +351,47 @@ describe('guest session: gated backend features answer honestly without a reques
 // ─── Guest data adoption and isolation ───────────────────────────────────────
 
 describe('guest data: legacy/pre-auth adoption and isolation from canonical owners', () => {
-  it('the guest adopts the pre-auth questionnaire once; the stash is consumed', async () => {
+  it('the guest adopts the pre-auth questionnaire once; the stash is consumed and no device-level marker is left behind', async () => {
     mockKv.set(
       PENDING_ONBOARDING_PROFILE_KV_KEY,
       JSON.stringify({ version: 1, profile: answers }),
     );
-    mockKv.set(DEVICE_ONBOARDED_KV_KEY, JSON.stringify({ version: 1 }));
     await becomeGuest();
 
     await useAppStore.getState().hydrate();
 
     expect(useAppStore.getState().ownerKey).toBe(GUEST_DATA_OWNER);
+    expect(useAppStore.getState().profile).toEqual(answers);
+    expect(mockKv.get(profileKeyForOwner(GUEST_DATA_OWNER))).toBe(
+      JSON.stringify(answers),
+    );
+    expect(mockKv.get(PENDING_ONBOARDING_PROFILE_KV_KEY)).toBe('');
+    // The (emptied) stash is the only device-level onboarding row: the
+    // "device onboarded" marker was removed 2026-09-01 so the launch gate can
+    // never consult device history.
+    expect(
+      [...mockKv.keys()].filter(key => key.startsWith('onboarding.')),
+    ).toEqual([PENDING_ONBOARDING_PROFILE_KV_KEY]);
+    expect(useAppStore.getState()).not.toHaveProperty('preAuthOnboarded');
+  });
+
+  it('a freshly answered stash replaces an existing guest profile (newest intent wins)', async () => {
+    const existing: Profile = {
+      skillLevel: '4.0',
+      handedness: 'left',
+      goal: 'serve',
+      biggestProblem: 'power',
+      focusCheckpoint: 'sequencing',
+    };
+    mockKv.set(profileKeyForOwner(GUEST_DATA_OWNER), JSON.stringify(existing));
+    mockKv.set(
+      PENDING_ONBOARDING_PROFILE_KV_KEY,
+      JSON.stringify({ version: 1, profile: answers }),
+    );
+    await becomeGuest();
+
+    await useAppStore.getState().hydrate();
+
     expect(useAppStore.getState().profile).toEqual(answers);
     expect(mockKv.get(profileKeyForOwner(GUEST_DATA_OWNER))).toBe(
       JSON.stringify(answers),

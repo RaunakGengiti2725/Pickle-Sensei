@@ -1,14 +1,16 @@
 import React from 'react';
-import { ActivityIndicator, Modal, Text } from 'react-native';
+import { ActivityIndicator, Modal, Text, TextInput } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 /**
  * End-to-end drive of the account-deletion flow as a user would tap it
  * (App Review 5.1.1(v)): Settings → Manage account → quiet "Delete account"
- * link → two-step sheet (request → 5s armed countdown → confirm) → local
- * purge/sign-out. Unlike manageAccountScreen.test.tsx this suite runs the
- * REAL `src/account/deletion` client against a stubbed `fetch`, so the
- * failure copy the user sees comes from the production mapping.
+ * link → two-question exit survey (always skippable) → two-step confirmation
+ * (request → 5s armed countdown → confirm) → local purge/sign-out. Unlike
+ * manageAccountScreen.test.tsx this suite runs the REAL
+ * `src/account/deletion` client against a stubbed `fetch`, so the wire shape
+ * (survey body or none) and the failure copy the user sees come from the
+ * production mapping.
  */
 
 jest.mock('../../src/config/authConfig', () => ({
@@ -25,13 +27,24 @@ jest.mock('../../src/data/db', () => ({
 jest.mock('react-native-safe-area-context', () => {
   const { View } =
     jest.requireActual<typeof import('react-native')>('react-native');
-  return { SafeAreaView: View };
+  const insets = { top: 0, bottom: 0, left: 0, right: 0 };
+  return {
+    SafeAreaView: View,
+    useSafeAreaInsets: () => insets,
+    initialWindowMetrics: null,
+  };
 });
 
 const mockGoBack = jest.fn();
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: mockGoBack, navigate: mockNavigate }),
+  // Settings re-reads the free-rating ledger on every focus; a mount is the
+  // first focus.
+  useFocusEffect: (callback: () => void | (() => void)) => {
+    const React = jest.requireActual<typeof import('react')>('react');
+    React.useEffect(() => callback(), [callback]);
+  },
 }));
 
 // Settings pulls the scoring stack descriptor from the vision providers; the
@@ -181,12 +194,23 @@ function sheetVisible(renderer: TestRenderer.ReactTestRenderer): boolean {
   return renderer.root.findByType(Modal).props.visible === true;
 }
 
-async function openSheet(renderer: TestRenderer.ReactTestRenderer) {
+/** Tap the link: the dialog opens on exit-survey question 1. */
+async function openSurvey(renderer: TestRenderer.ReactTestRenderer) {
   expect(byLabel(renderer, 'Delete account')).toHaveLength(1);
   await act(async () => {
     control(renderer, 'Delete account').props.onPress();
   });
   expect(sheetVisible(renderer)).toBe(true);
+  expect(allText(renderer)).toContain("What's making you leave?");
+  expect(allText(renderer)).not.toContain('Delete your account?');
+}
+
+/** Open the dialog and skip the survey straight to the confirmation page. */
+async function openSheet(renderer: TestRenderer.ReactTestRenderer) {
+  await openSurvey(renderer);
+  await act(async () => {
+    control(renderer, 'Skip the survey').props.onPress();
+  });
   expect(allText(renderer)).toContain('Delete your account?');
 }
 
@@ -299,6 +323,193 @@ describe('ManageAccount screen chrome', () => {
     const renderer = render(<ManageAccountScreen />);
     expect(byLabel(renderer, 'Delete account')).toHaveLength(0);
     expect(allText(renderer)).toContain('Guest');
+    act(() => renderer.unmount());
+  });
+});
+
+describe('Exit survey — what rides along with the step-1 request', () => {
+  const REASONS = [
+    "I don't use it enough",
+    "It hasn't improved my game",
+    'The technique reads felt off',
+    'Bugs, crashes, or camera trouble',
+    "It's too expensive",
+    'Privacy or data concerns',
+    'Something else',
+  ];
+  const WANTED = [
+    'More accurate technique reads',
+    'A lower price or a free tier',
+    'More drills and coaching guidance',
+    'Fewer bugs and smoother capture',
+    "Nothing — I've found another app or a coach",
+    "Nothing — I just don't need it anymore",
+  ];
+
+  function radioLabels(renderer: TestRenderer.ReactTestRenderer) {
+    return renderer.root
+      .findAll(
+        node =>
+          typeof node.type === 'string' &&
+          node.props.accessibilityRole === 'radio',
+      )
+      .map(node => String(node.props.accessibilityLabel));
+  }
+
+  it('both answers and the comment travel under body.survey, stored before the account is gone', async () => {
+    const { calls } = scriptFetch(armedResponders());
+    const renderer = render(<ManageAccountScreen />);
+    await openSurvey(renderer);
+    expect(allText(renderer)).toContain('QUESTION 1 OF 2');
+    expect(radioLabels(renderer)).toEqual(REASONS);
+    expect(sheetButton(renderer, 'Next').props.disabled).toBe(true);
+
+    await act(async () => {
+      control(renderer, "It's too expensive").props.onPress();
+    });
+    expect(sheetButton(renderer, 'Next').props.disabled).toBe(false);
+    await act(async () => {
+      sheetButton(renderer, 'Next').props.onPress();
+    });
+    expect(allText(renderer)).toContain('What would have kept you?');
+    expect(allText(renderer)).toContain('QUESTION 2 OF 2');
+    expect(radioLabels(renderer)).toEqual(WANTED);
+    expect(sheetButton(renderer, 'Continue').props.disabled).toBe(true);
+
+    await act(async () => {
+      control(renderer, 'A lower price or a free tier').props.onPress();
+    });
+    const input = renderer.root.findByType(TextInput);
+    expect(input.props.accessibilityLabel).toBe(
+      'Anything else you want us to know',
+    );
+    expect(input.props.maxLength).toBe(500);
+    await act(async () => {
+      input.props.onChangeText('  $60 a year is steep for a rec player.  ');
+    });
+    await act(async () => {
+      sheetButton(renderer, 'Continue').props.onPress();
+    });
+    expect(allText(renderer)).toContain('Delete your account?');
+    // The survey never posts on its own — only with the deletion request.
+    expect(calls).toHaveLength(0);
+
+    await pressContinue(renderer);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.url).toBe(`${API_BASE}/v1/me/delete-request`);
+    expect(JSON.parse(String(calls[0]!.init?.body))).toEqual({
+      survey: {
+        reason: 'too_expensive',
+        wanted: 'price',
+        details: '$60 a year is steep for a rec player.',
+        platform: 'ios',
+        appVersion: '1.0',
+      },
+    });
+    expect(sheetButtons(renderer, 'Permanently delete')).toHaveLength(1);
+    act(() => renderer.unmount());
+  });
+
+  it('"Skip this question" keeps question 1 and records nothing else; Back keeps the first answer', async () => {
+    const { calls } = scriptFetch(armedResponders());
+    const renderer = render(<ManageAccountScreen />);
+    await openSurvey(renderer);
+    await act(async () => {
+      control(renderer, 'Privacy or data concerns').props.onPress();
+    });
+    await act(async () => {
+      sheetButton(renderer, 'Next').props.onPress();
+    });
+    // Back returns to question 1 with the reason still selected…
+    await act(async () => {
+      control(renderer, 'Back to the previous question').props.onPress();
+    });
+    expect(allText(renderer)).toContain("What's making you leave?");
+    expect(
+      hostByLabel(renderer, 'Privacy or data concerns').props
+        .accessibilityState,
+    ).toMatchObject({ selected: true });
+    await act(async () => {
+      sheetButton(renderer, 'Next').props.onPress();
+    });
+    // …and a half-typed draft is discarded by Skip — skipping means skipping.
+    await act(async () => {
+      renderer.root.findByType(TextInput).props.onChangeText('draft…');
+    });
+    await act(async () => {
+      control(renderer, 'Skip this question').props.onPress();
+    });
+    expect(allText(renderer)).toContain('Delete your account?');
+
+    await pressContinue(renderer);
+    expect(JSON.parse(String(calls[0]!.init?.body))).toEqual({
+      survey: {
+        reason: 'privacy',
+        wanted: null,
+        details: null,
+        platform: 'ios',
+        appVersion: '1.0',
+      },
+    });
+    act(() => renderer.unmount());
+  });
+
+  it('"Skip the survey" sends no body at all (the pre-survey wire shape), even after picking a reason', async () => {
+    const { calls } = scriptFetch(armedResponders());
+    const renderer = render(<ManageAccountScreen />);
+    await openSurvey(renderer);
+    await act(async () => {
+      control(renderer, 'Something else').props.onPress();
+    });
+    await act(async () => {
+      control(renderer, 'Skip the survey').props.onPress();
+    });
+    expect(allText(renderer)).toContain('Delete your account?');
+    expect(allText(renderer)).not.toContain('QUESTION');
+
+    await pressContinue(renderer);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]!.init?.body).toBeUndefined();
+    act(() => renderer.unmount());
+  });
+
+  it('closing the survey (X, backdrop, hardware back) keeps the account and resets the answers', async () => {
+    const { calls } = scriptFetch([]);
+    const renderer = render(<ManageAccountScreen />);
+
+    await openSurvey(renderer);
+    await act(async () => {
+      control(renderer, "I don't use it enough").props.onPress();
+    });
+    expect(
+      hostByLabel(renderer, 'Close and keep my account').props
+        .accessibilityRole,
+    ).toBe('button');
+    await act(async () => {
+      control(renderer, 'Close and keep my account').props.onPress();
+    });
+    expect(sheetVisible(renderer)).toBe(false);
+
+    await openSurvey(renderer);
+    expect(
+      hostByLabel(renderer, "I don't use it enough").props.accessibilityState,
+    ).toMatchObject({ selected: false });
+    expect(sheetButton(renderer, 'Next').props.disabled).toBe(true);
+    await act(async () => {
+      control(renderer, 'Cancel account deletion').props.onPress();
+    });
+    expect(sheetVisible(renderer)).toBe(false);
+
+    await openSurvey(renderer);
+    await act(async () => {
+      renderer.root.findByType(Modal).props.onRequestClose();
+    });
+    expect(sheetVisible(renderer)).toBe(false);
+
+    expect(calls).toHaveLength(0);
+    expect(
+      useAuthStore.getState().completeAccountDeletion,
+    ).not.toHaveBeenCalled();
     act(() => renderer.unmount());
   });
 });
@@ -428,6 +639,8 @@ describe('Delete account sheet — step 1 request', () => {
     expect(
       (calls[0]!.init?.headers as Record<string, string>).Authorization,
     ).toBe('Bearer provider-token');
+    // The survey was skipped: the request carries no body at all.
+    expect(calls[0]!.init?.body).toBeUndefined();
 
     let confirm = sheetButton(renderer, 'Permanently delete');
     expect(confirm.props.label).toBe('Permanently delete (5)');
@@ -737,8 +950,15 @@ describe('Delete account sheet — step 2 confirm', () => {
     scriptFetch(armedResponders());
     const renderer = render(<ManageAccountScreen />);
     await openSheet(renderer);
+    // The dialog's entrance and page-change animations are finite (220ms)
+    // Animated.timing runs; let them settle so the only timer left when the
+    // request arms is the countdown interval itself.
+    await act(async () => {
+      jest.advanceTimersByTime(500);
+    });
+    expect(jest.getTimerCount()).toBe(0);
     await pressContinue(renderer);
-    expect(jest.getTimerCount()).toBeGreaterThan(0);
+    expect(jest.getTimerCount()).toBe(1);
     act(() => renderer.unmount());
     expect(jest.getTimerCount()).toBe(0);
   });

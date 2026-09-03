@@ -7,7 +7,9 @@
  * with a failure. Tests whose name starts with "DEFECT:" document behavior
  * that was confirmed while auditing and is reported as an issue; they pass
  * against the current code so the evidence is executable. Flip their
- * expectations when the defect is fixed.
+ * expectations when the defect is fixed (the swallowed local-purge failure
+ * and the indistinguishable exhausted shot were fixed on main and are now
+ * pinned as such below).
  */
 import type { LocalDb } from '../../src/data/db';
 import {
@@ -23,7 +25,11 @@ import {
   isPermanentSyncFailure,
 } from '../../src/data/sync';
 import { ApiError } from '../../src/data/api';
-import { hasShotSyncReceipt, purgeOwnerData } from '../../src/data/repository';
+import {
+  getShotOutboxStatus,
+  hasShotSyncReceipt,
+  purgeOwnerData,
+} from '../../src/data/repository';
 import {
   clearApiSession,
   establishApiSession,
@@ -144,6 +150,22 @@ function fakeDb() {
                 r.attempts < Number(params[1]),
             )
             .map(r => ({ ...r })),
+        };
+      }
+      if (sql.startsWith('SELECT attempts, last_error FROM outbox')) {
+        // getShotOutboxStatus: the newest shot.sync row for this shot id.
+        const row = [...outbox]
+          .reverse()
+          .find(
+            r =>
+              r.owner_key === String(params[0]) &&
+              r.kind === 'shot.sync' &&
+              (JSON.parse(r.payload) as { id?: string }).id === params[1],
+          );
+        return {
+          rows: row
+            ? [{ attempts: row.attempts, last_error: row.last_error }]
+            : [],
         };
       }
       if (sql.startsWith('DELETE FROM outbox WHERE owner_key = ? AND id')) {
@@ -361,10 +383,15 @@ describe('Delete account → completeAccountDeletion (post-confirmation purge)',
         expect.stringContaining(`DELETE FROM ${table}`),
       );
     }
+    // profile, rank.celebrated, notifications, consistency, practice.set
+    // (repository.ts OWNER_SCOPED_KV_NAMESPACES).
     expect(inTx.filter(sql => sql.startsWith('DELETE FROM kv'))).toHaveLength(
-      4,
+      5,
     );
     expect(log.includes('ROLLBACK')).toBe(false);
+    expect(useAuthStore.getState().deletionCleanup).toEqual({
+      localPurge: 'complete',
+    });
   });
 
   it('a purge failure rolls the transaction back (no half-purged owner bucket)', async () => {
@@ -385,11 +412,18 @@ describe('Delete account → completeAccountDeletion (post-confirmation purge)',
     expect(log).not.toContain('COMMIT');
   });
 
-  it('DEFECT: a failed local purge after server-confirmed deletion is swallowed — no error state, nothing for the UI to show or retry', async () => {
+  it('a failed local purge after server-confirmed deletion is retried, never rethrown, and reported through deletionCleanup for the UI to tell the user', async () => {
+    // Formerly a DEFECT pin (the failure was swallowed with nothing for the
+    // UI to show); the store now records the outcome and ManageAccountScreen
+    // alerts on `localPurge === 'failed'`.
     const { db } = fakeDb();
+    let attempts = 0;
     const failing: LocalDb = {
       async execute(sql, params) {
-        if (sql === 'BEGIN IMMEDIATE') throw new Error('database is locked');
+        if (sql === 'BEGIN IMMEDIATE') {
+          attempts += 1;
+          throw new Error('database is locked');
+        }
         return db.execute(sql, params);
       },
       close() {},
@@ -400,10 +434,35 @@ describe('Delete account → completeAccountDeletion (post-confirmation purge)',
       useAuthStore.getState().completeAccountDeletion(),
     ).resolves.toBeUndefined();
 
-    // The account is signed out as if everything succeeded…
+    // The account is signed out regardless — it no longer exists server-side…
     expect(useAuthStore.getState().session).toBeNull();
-    // …but nothing records that the owner-scoped rows are still on disk.
     expect(useAuthStore.getState().error).toBeNull();
+    // …the purge was given three chances…
+    expect(attempts).toBe(3);
+    // …and the fact that owner-scoped rows are still on disk is recorded.
+    expect(useAuthStore.getState().deletionCleanup).toEqual({
+      localPurge: 'failed',
+    });
+  });
+
+  it('a local-only session has nothing to purge and says so', async () => {
+    useAuthStore.setState({
+      session: {
+        provider: 'guest',
+        subject: 'local-only',
+        canonicalAppUserId: null,
+        localOnly: true,
+        displayName: null,
+        email: null,
+      },
+    });
+    const { db, log } = fakeDb();
+    mockGetDb.mockReturnValue(db);
+    await useAuthStore.getState().completeAccountDeletion();
+    expect(log).not.toContain('BEGIN IMMEDIATE');
+    expect(useAuthStore.getState().deletionCleanup).toEqual({
+      localPurge: 'not_needed',
+    });
   });
 });
 
@@ -463,9 +522,19 @@ describe('outbox sync: durable failures stay typed and bounded', () => {
     expect(await hasShotSyncReceipt(db, permittedAnalysis.id)).toBe(true);
   });
 
-  it('DEFECT: a permanently rejected shot exhausts its budget and is never retried, yet nothing distinguishes it from a pending shot for the UI', async () => {
+  it('a permanently rejected shot exhausts its budget, is never retried, and is distinguishable from a pending shot for the UI', async () => {
+    // Formerly a DEFECT pin: the only signal Result consulted was the sync
+    // receipt, so an exhausted shot read like a pending one. Result now
+    // derives its sync evidence from hasShotSyncReceipt THEN
+    // getShotOutboxStatus, whose rejected/exhausted states carry the attempt
+    // count and the server's last error.
     const { db, push, outbox } = fakeDb();
     push('shot.sync', permittedAnalysis);
+    expect(await getShotOutboxStatus(db, permittedAnalysis.id)).toEqual({
+      state: 'queued',
+      attempts: 0,
+      lastError: null,
+    });
     const rejecting = {
       ...noopTransport,
       syncShots: async () => ({
@@ -479,7 +548,14 @@ describe('outbox sync: durable failures stay typed and bounded', () => {
         ],
       }),
     };
-    for (let i = 0; i < OUTBOX_MAX_ATTEMPTS; i++) {
+    await drainOutbox(db, rejecting);
+    // Declined once but still inside the budget: rejected, not exhausted.
+    expect(await getShotOutboxStatus(db, permittedAnalysis.id)).toMatchObject({
+      state: 'rejected',
+      attempts: 1,
+      lastError: expect.stringContaining('permit_invalid'),
+    });
+    for (let i = 1; i < OUTBOX_MAX_ATTEMPTS; i++) {
       await drainOutbox(db, rejecting);
     }
     expect(outbox[0]?.attempts).toBe(OUTBOX_MAX_ATTEMPTS);
@@ -491,10 +567,19 @@ describe('outbox sync: durable failures stay typed and bounded', () => {
     expect(calls).not.toHaveBeenCalled();
     expect(result).toMatchObject({ synced: 0, failed: 0, remaining: 1 });
 
-    // …and the only signal ResultScreen consults (hasShotSyncReceipt) is the
-    // same `false` a still-pending shot returns, so its copy promises the
-    // server will accept a shot that will never be sent again.
+    // …there is still no receipt (nothing was accepted)…
     expect(await hasShotSyncReceipt(db, permittedAnalysis.id)).toBe(false);
+    // …but the outbox status names the dead end, with the server's reason,
+    // so the UI can stop promising the server will accept it.
+    expect(await getShotOutboxStatus(db, permittedAnalysis.id)).toEqual({
+      state: 'exhausted',
+      attempts: OUTBOX_MAX_ATTEMPTS,
+      lastError: expect.stringContaining('permit_invalid'),
+    });
+    // A shot that was never queued is `absent`, not mistaken for pending.
+    expect(await getShotOutboxStatus(db, 'never-queued')).toEqual({
+      state: 'absent',
+    });
   });
 
   it('a transient evaluation-trial upload failure leaves the attempt budget intact, exactly like shots and sessions', async () => {

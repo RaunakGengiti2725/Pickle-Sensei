@@ -1,7 +1,10 @@
 import type { StrokeIntentEnvelope } from '@pickle/analysis-pipeline';
 import {
+  PHASES,
   SELECTABLE_TECHNIQUES_V1,
   SHOT_TYPES,
+  type PhaseSpan,
+  type ShotAnalysis,
   type ShotTypeSlug,
 } from '@pickle/shared-types';
 import type { ContactEstimate } from '@pickle/vision-geometry';
@@ -9,9 +12,13 @@ import {
   attemptChips,
   contactMarkerPresentation,
   contactHaloHalfWidthMs,
+  effectivePhaseTimeline,
   isAbstainedResult,
+  isModalityScopeFactor,
   measuredRows,
+  phaseTimelineFromAnalysis,
   phaseTimelinePresentation,
+  selectInsight,
   strokeResultHeader,
   visibleMeasuredRows,
   MEASURED_ROWS_COLLAPSED_COUNT,
@@ -127,6 +134,7 @@ describe('E19 — Try Again intent inheritance properties', () => {
           declaredStroke: null,
           declaredCanonical: null,
           auto: true,
+          sessionId: null,
         });
       } else {
         expect(handoff.auto).toBe(false);
@@ -209,6 +217,7 @@ describe('E19 — Try Again intent inheritance properties', () => {
       declaredStroke: 'volley',
       declaredCanonical: null,
       auto: false,
+      sessionId: null,
     });
     // 'volley' is ambiguous in the registry, so the intent honestly carries
     // no canonical rather than the foreign SERVE profile.
@@ -239,6 +248,7 @@ describe('E19 — handoff lifecycle model properties', () => {
       declaredStroke: auto ? null : pick(rng, SHOT_TYPES),
       declaredCanonical: null,
       auto,
+      sessionId: rng() < 0.5 ? null : `set-${int(rng, 1, 9)}`,
     };
   }
 
@@ -471,6 +481,157 @@ describe('E19 — phase timeline properties', () => {
         expect(presentation.caption).not.toBeNull();
       } else {
         expect(Number.isFinite(presentation.contactTickMs)).toBe(true);
+      }
+    }
+  });
+});
+
+// ─── Analysis-phase timeline structural properties ──────────────────────────
+
+describe('E19 — analysis phase timeline properties', () => {
+  function genAnalysis(rng: Rng): ShotAnalysis {
+    // Walk the canonical phase order with random gaps/lengths; sometimes
+    // drop phases, sometimes corrupt a bound, sometimes shuffle the order.
+    const spans: PhaseSpan[] = [];
+    let cursor = int(rng, 0, 3000);
+    for (const key of PHASES) {
+      if (rng() < 0.2) continue;
+      const startMs = cursor + (rng() < 0.3 ? int(rng, 0, 40) : 0);
+      const length = rng() < 0.1 ? 0 : int(rng, 1, 600);
+      const endMs = startMs + length;
+      spans.push({
+        key,
+        startMs: rng() < 0.05 ? Number.NaN : startMs,
+        representativeMs:
+          rng() < 0.1 ? Number.NaN : startMs + Math.floor(length / 2),
+        endMs: rng() < 0.05 ? Number.POSITIVE_INFINITY : endMs,
+        confidence: rng(),
+      });
+      cursor = endMs;
+    }
+    if (rng() < 0.15 && spans.length > 1) {
+      const i = int(rng, 0, spans.length - 1);
+      const j = int(rng, 0, spans.length - 1);
+      const a = spans[i]!;
+      spans[i] = spans[j]!;
+      spans[j] = a;
+    }
+    return {
+      id: `a${int(rng, 0, 1e6)}`,
+      sessionId: null,
+      shotType: pick(rng, SHOT_TYPES),
+      cameraView: 'side',
+      handedness: 'right',
+      capturedAtIso: '2026-09-01T10:00:00.000Z',
+      timestamps: {
+        startMs: 0,
+        contactMs: maybe(rng, 0.7, () => int(rng, 0, 5000)),
+        endMs: 5000,
+      },
+      phases: spans,
+      measurements: [],
+      checkpoints: [],
+      overallScore: 7,
+      analysisConfidence: 0.8,
+      resultKind: 'scored',
+      guidance: null,
+      priorityFix: null,
+      versionVector: {
+        appVersion: '0.1.0',
+        modelBundleVersion: 'on-device-fusion-1',
+        poseModelVersion: 'apple-vision-bodypose-1',
+        paddleModelVersion: 'none',
+        strokeDetectorVersion: 'temporal-stroke-heuristic-2',
+        phaseModelVersion: 'phase-geometry-1',
+        scoringModelVersion: 'scoring-1',
+        shotConfigVersion: 'config-1',
+      },
+      source: 'real',
+    };
+  }
+
+  it('segments are positive-length, ordered, non-overlapping, never ready/contact; tick is finite iff not anchor-free', () => {
+    const rng = mulberry32(0xe19_0e);
+    for (let run = 0; run < RUNS; run += 1) {
+      const analysis = genAnalysis(rng);
+      const presentation = phaseTimelineFromAnalysis(analysis);
+      if (presentation.kind !== 'segments') continue;
+      expect(presentation.segments.length).toBeGreaterThan(0);
+      expect(presentation.source).toBe('wrist');
+      expect(presentation.origin).toBe('analysis');
+      for (const segment of presentation.segments) {
+        expect(segment.endMs).toBeGreaterThan(segment.startMs);
+        expect(Number.isFinite(segment.startMs)).toBe(true);
+        expect(Number.isFinite(segment.endMs)).toBe(true);
+        expect([
+          'preparation',
+          'acceleration',
+          'follow_through',
+          'recovery',
+        ]).toContain(segment.key);
+      }
+      for (let i = 1; i < presentation.segments.length; i += 1) {
+        expect(presentation.segments[i]!.startMs).toBeGreaterThanOrEqual(
+          presentation.segments[i - 1]!.endMs,
+        );
+      }
+      if (presentation.anchorFree) {
+        expect(presentation.contactTickMs).toBeNull();
+      } else {
+        expect(Number.isFinite(presentation.contactTickMs)).toBe(true);
+      }
+      expect(presentation.caption).not.toBeNull();
+    }
+  });
+
+  it('a segmented record always wins; otherwise the analysis decides; result is deterministic', () => {
+    const rng = mulberry32(0xe19_0f);
+    for (let run = 0; run < RUNS; run += 1) {
+      const analysis = genAnalysis(rng);
+      const record: StrokeResultEvidenceRecord = {
+        id: 'r',
+        temporalPhasesV2: maybe(rng, 0.5, () => ({
+          status: 'abstained' as const,
+          reason: 'too_few_pose_frames',
+        })),
+      };
+      const effective = effectivePhaseTimeline(record, analysis);
+      const measured = phaseTimelineFromAnalysis(analysis);
+      if (measured.kind === 'segments') {
+        expect(effective).toEqual(measured);
+      } else if (record.temporalPhasesV2) {
+        expect(effective).toEqual(
+          phaseTimelinePresentation(record.temporalPhasesV2),
+        );
+      } else {
+        expect(effective).toEqual(measured);
+      }
+      expect(effectivePhaseTimeline(record, analysis)).toEqual(effective);
+    }
+  });
+
+  it('the abstention insight never names a structural modality token', () => {
+    const rng = mulberry32(0xe19_10);
+    const tokens = [
+      'paddle_track_unavailable',
+      'ball_track_unavailable',
+      'court_geometry_unavailable',
+      'checkpoint_unobserved:recovery',
+      'analysis_confidence_below_threshold',
+      'low_pose_confidence',
+    ];
+    for (let run = 0; run < RUNS; run += 1) {
+      const count = int(rng, 0, 5);
+      const factors: string[] = [];
+      for (let i = 0; i < count; i += 1) factors.push(pick(rng, tokens));
+      const insight = selectInsight({ limitingFactors: factors });
+      expect(insight.basis).toBe('abstention');
+      expect(insight.sentence).not.toMatch(
+        /paddle track|ball track|court geometry/,
+      );
+      const firstReal = factors.find(token => !isModalityScopeFactor(token));
+      if (firstReal === undefined) {
+        expect(insight.sentence).toContain('Nothing beyond what is shown');
       }
     }
   });

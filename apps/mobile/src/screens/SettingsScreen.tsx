@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   Linking,
@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   Button,
@@ -196,6 +196,7 @@ export function SettingsScreen() {
   const signOut = useAuthStore(s => s.signOut);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
   const access = useAccessStore(s => s.canonicalAccess);
+  const refreshAccess = useAccessStore(s => s.refreshAccess);
   const consentAvailability = useConsentStore(s => s.availability);
   const modelTrainingActive = useConsentStore(s => s.modelTrainingActive);
   const hydrateConsent = useConsentStore(s => s.hydrate);
@@ -209,6 +210,21 @@ export function SettingsScreen() {
   useEffect(() => {
     void hydrateConsent();
   }, [hydrateConsent, session]);
+
+  // The membership row states the server's free-rating ledger, which moves
+  // every time a scored analysis syncs. Re-read it on every visit instead of
+  // showing the snapshot the rating flow loaded when it first opened; the
+  // previous value stays on screen until the fresh one lands. Guests have no
+  // server account to ask, and an in-flight load is not duplicated.
+  const syncedAccount = session !== null && !session.localOnly;
+  useFocusEffect(
+    useCallback(() => {
+      if (!syncedAccount || useAccessStore.getState().status === 'loading') {
+        return;
+      }
+      void refreshAccess();
+    }, [refreshAccess, syncedAccount]),
+  );
 
   const accountLabel =
     session === null
@@ -234,13 +250,19 @@ export function SettingsScreen() {
       : modelTrainingActive
         ? 'Training: contributing'
         : 'Training: off';
+  // "Left" means ratings the server will still let this account START —
+  // availableToReserve, not remaining: a scored analysis whose permit is
+  // still syncing has already spent its rating even though `remaining`
+  // only drops once the shot lands. This keeps the row in agreement with
+  // the rating gate (canStartRating).
   const membershipLabel = access?.premium
     ? 'Pro active'
     : access
-      ? access.freeRatings.remaining > 0
-        ? `${access.freeRatings.remaining} free rating${
-            access.freeRatings.remaining === 1 ? '' : 's'
-          } left`
+      ? access.canStartRating
+        ? `${access.freeRatings.availableToReserve} free ${plural(
+            access.freeRatings.availableToReserve,
+            'rating',
+          )} left`
         : 'Upgrade required'
       : 'Verify access';
   const notificationsValue = !notificationPrefs.enabled

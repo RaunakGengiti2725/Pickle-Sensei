@@ -46,9 +46,13 @@ const mockRequestAccountDeletion = jest.fn<
 >();
 const mockConfirmAccountDeletion = jest.fn<Promise<void>, unknown[]>();
 jest.mock('../../src/account/deletion', () => {
-  class AccountDeletionError extends Error {}
+  // Only the network calls are stubbed; the survey vocabulary/caps the
+  // dialog renders from (and AccountDeletionError) are the real ones.
+  const actual = jest.requireActual<
+    typeof import('../../src/account/deletion')
+  >('../../src/account/deletion');
   return {
-    AccountDeletionError,
+    ...actual,
     requestAccountDeletion: (...args: unknown[]) =>
       mockRequestAccountDeletion(...args),
     confirmAccountDeletion: (...args: unknown[]) =>
@@ -298,12 +302,22 @@ describe('ManageAccountScreen delete sheet ← deletion api', () => {
     });
   });
 
+  /** The link opens the exit survey first; skip it to reach the
+   * confirmation whose failure paths this suite pins. */
+  async function skipSurvey(renderer: TestRenderer.ReactTestRenderer) {
+    expect(allText(renderer)).toContain("What's making you leave?");
+    await act(async () => {
+      pressables(renderer, 'Skip the survey')[0]!.props.onPress();
+    });
+    expect(allText(renderer)).toContain('Delete your account?');
+  }
+
   async function openSheet() {
     const renderer = render(<ManageAccountScreen />);
     await act(async () => {
       pressables(renderer, 'Delete account')[0]!.props.onPress();
     });
-    expect(allText(renderer)).toContain('Delete your account?');
+    await skipSurvey(renderer);
     return renderer;
   }
 
@@ -360,7 +374,7 @@ describe('ManageAccountScreen delete sheet ← deletion api', () => {
     }
   });
 
-  it('cancel branch: Keep my account closes the sheet and resets it to review', async () => {
+  it('cancel branch: Keep my account closes the dialog and resets it (survey first, then a clean review)', async () => {
     mockRequestAccountDeletion.mockRejectedValue(new Error('x'));
     const renderer = await openSheet();
     await act(async () => {
@@ -374,6 +388,9 @@ describe('ManageAccountScreen delete sheet ← deletion api', () => {
     await act(async () => {
       pressables(renderer, 'Delete account')[0]!.props.onPress();
     });
+    // Reopening starts the survey over, and the confirmation behind it
+    // carries no stale error.
+    await skipSurvey(renderer);
     expect(allText(renderer)).not.toContain('Nothing was deleted.');
     expect(sheetButton(renderer, 'Continue to delete').props.disabled).toBe(
       false,
@@ -402,10 +419,17 @@ describe('ManageAccountScreen delete sheet ← deletion api', () => {
           )
           .every(node => node.props.onPress === undefined),
       ).toBe(true);
-      // …and so is the X during the busy phase (no live dismiss control).
-      expect(
-        pressables(renderer, 'Close account deletion confirmation'),
-      ).toHaveLength(0);
+      // …and so is the X during the busy phase: its Pressable `disabled`
+      // gate is closed (Pressability never fires onPress while disabled) and
+      // the state is announced to assistive tech.
+      const closeControls = pressables(
+        renderer,
+        'Close account deletion confirmation',
+      );
+      expect(closeControls.length).toBeGreaterThan(0);
+      expect(closeControls.every(node => node.props.disabled === true)).toBe(
+        true,
+      );
       const closeHost = renderer.root.findAll(
         node =>
           node.props.accessibilityLabel ===

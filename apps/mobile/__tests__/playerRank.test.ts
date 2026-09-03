@@ -26,6 +26,9 @@ function fact(
     resultKind,
     scoringModelVersion: 'sm-v1',
     shotConfigVersion: `${shotType}@1`,
+    sessionId: null,
+    priorityCheckpoint: null,
+    checkpointScores: {},
   };
 }
 

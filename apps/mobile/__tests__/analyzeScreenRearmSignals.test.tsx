@@ -163,6 +163,7 @@ describe('g22 — live-window signals never leak into the next attempt', () => {
         declaredStroke: null,
         declaredCanonical: null,
         auto: true,
+        sessionId: null,
       });
 
       let renderer!: TestRenderer.ReactTestRenderer;

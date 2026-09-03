@@ -12,9 +12,9 @@ function ok(condition: unknown, message: string): asserts condition {
 
 const MIGRATIONS_DIR = new URL("../../../migrations/", import.meta.url);
 
-const SHOTS_DELETE_REVOKE = "20260902000000_shots_delete_revoke.sql";
-const CASCADE_USER_INDEXES = "20260902000100_cascade_user_indexes.sql";
-const PERMITS_SWEEP_INDEX = "20260902000200_permits_reserved_sweep_index.sql";
+const SHOTS_DELETE_REVOKE = "20260902130000_shots_delete_revoke.sql";
+const CASCADE_USER_INDEXES = "20260902130100_cascade_user_indexes.sql";
+const PERMITS_SWEEP_INDEX = "20260902130200_permits_reserved_sweep_index.sql";
 const SCALE_AND_SECURITY = "20260831000000_scale_and_security.sql";
 
 const REQUIRED_INDEXES: ReadonlyArray<{

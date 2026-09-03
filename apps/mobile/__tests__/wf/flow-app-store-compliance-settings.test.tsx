@@ -33,6 +33,12 @@ jest.mock('react-native-safe-area-context', () => {
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate }),
+  // Settings re-reads the free-rating ledger on every focus; a mount is the
+  // first focus.
+  useFocusEffect: (callback: () => void | (() => void)) => {
+    const React = jest.requireActual<typeof import('react')>('react');
+    React.useEffect(() => callback(), [callback]);
+  },
 }));
 
 const mockRateAppFromSettings = jest.fn<Promise<unknown>, []>(async () => ({

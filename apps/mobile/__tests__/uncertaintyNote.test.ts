@@ -1,8 +1,9 @@
 import type { StrokeIntentEnvelope } from '@pickle/analysis-pipeline';
-import type { ShotAnalysis } from '@pickle/shared-types';
+import type { PhaseKey, PhaseSpan, ShotAnalysis } from '@pickle/shared-types';
 import type { ContactEstimate } from '@pickle/vision-geometry';
 import {
   UNCERTAINTY_COPY,
+  UNCERTAINTY_KINDS,
   uncertaintyNotes,
 } from '../src/components/UncertaintyNote';
 import type {
@@ -13,8 +14,28 @@ import type {
 /**
  * C13 — uncertainty microcopy. Each note appears ONLY when the existing
  * evidence gate already withheld the element it explains; the copy states a
- * limit and never implies unearned certainty.
+ * limit and never implies unearned certainty — and never denies something
+ * the analysis DID measure (its phases, its wrist-peak contact estimate).
  */
+
+function phase(
+  key: PhaseKey,
+  startMs: number,
+  endMs: number,
+  representativeMs = startMs + (endMs - startMs) / 2,
+): PhaseSpan {
+  return { key, startMs, representativeMs, endMs, confidence: 0.8 };
+}
+
+/** The on-device segmenter's output for a scored stroke. */
+const MEASURED_PHASES: PhaseSpan[] = [
+  phase('ready', 2000, 2100),
+  phase('prepare', 2100, 2250),
+  phase('accelerate', 2250, 2384),
+  phase('contact', 2384, 2416, 2400),
+  phase('follow_through', 2416, 2600),
+  phase('recover', 2600, 2700),
+];
 
 function analysisFixture(overrides: Partial<ShotAnalysis> = {}): ShotAnalysis {
   return {
@@ -137,6 +158,121 @@ describe('uncertaintyNotes', () => {
         note => note.kind,
       ),
     ).toEqual(['contact']);
+  });
+
+  it('today’s scored on-device record (no contact/temporalPhasesV2, measured phases) reads as a wrist-peak estimate, not a missing contact', () => {
+    // The shape every scored analysis produces on-device: phases measured
+    // by the wrist-speed segmenter, contactMs at the peak, and no lab-chain
+    // contact/temporalPhasesV2 fields on the record.
+    const analysis = analysisFixture({
+      timestamps: { startMs: 2000, contactMs: 2400, endMs: 2700 },
+      phases: MEASURED_PHASES,
+    });
+    const record: StrokeResultEvidenceRecord = {
+      id: 'r1',
+      strokeIntent: envelope(),
+      result: analysis,
+      uncertainty: {
+        analysisConfidence: 0.82,
+        presentation: 'normal',
+        limitingFactors: [
+          'paddle_track_unavailable',
+          'ball_track_unavailable',
+          'court_geometry_unavailable',
+        ],
+      },
+    };
+    const notes = uncertaintyNotes({ record, analysis });
+    expect(notes).toEqual([
+      { kind: 'contact_estimate', text: UNCERTAINTY_COPY.contact_estimate },
+    ]);
+    expect(notes[0]?.text).toBe(
+      'Contact is estimated from your wrist-speed peak — the paddle and ball ' +
+        'are not tracked, so the exact strike frame may differ by a frame or ' +
+        'two.',
+    );
+    // Never "couldn't measure the phase timing" when the phases ARE there.
+    expect(notes.map(note => note.kind)).not.toContain('phase_timing');
+    expect(notes.map(note => note.kind)).not.toContain('contact');
+    expect(UNCERTAINTY_KINDS).toContain('contact_estimate');
+  });
+
+  it('the wrist-peak note also follows timestamps.contactMs alone (no contact span)', () => {
+    const analysis = analysisFixture({
+      timestamps: { startMs: 2000, contactMs: 2400, endMs: 2700 },
+      phases: MEASURED_PHASES.filter(span => span.key !== 'contact'),
+    });
+    const kinds = uncertaintyNotes({
+      record: { id: 'r1', result: analysis },
+      analysis,
+    }).map(note => note.kind);
+    expect(kinds).toEqual(['contact_estimate']);
+  });
+
+  it('phase_timing appears ONLY when neither the record nor the analysis yields a timeline', () => {
+    const noPhases = analysisFixture({
+      timestamps: { startMs: 2000, contactMs: 2400, endMs: 2700 },
+      phases: [],
+    });
+    expect(
+      uncertaintyNotes({
+        record: { id: 'r1', result: noPhases },
+        analysis: noPhases,
+      }).map(note => note.kind),
+    ).toEqual(['contact_estimate', 'phase_timing']);
+
+    // An abstained record timeline is overruled by measured analysis phases.
+    const measured = analysisFixture({ phases: MEASURED_PHASES });
+    expect(
+      uncertaintyNotes({
+        record: {
+          id: 'r1',
+          result: measured,
+          contact: confirmedContact,
+          temporalPhasesV2: { status: 'abstained', reason: 'no_paddle_track' },
+        },
+        analysis: measured,
+      }),
+    ).toEqual([]);
+  });
+
+  it('an explicit record contact (abstained or weak) keeps the plain contact note even with a wrist peak', () => {
+    const analysis = analysisFixture({
+      timestamps: { startMs: 2000, contactMs: 2400, endMs: 2700 },
+      phases: MEASURED_PHASES,
+    });
+    const abstained = uncertaintyNotes({
+      record: {
+        id: 'r1',
+        result: analysis,
+        contact: { status: 'abstained', reason: 'no_temporal_consensus' },
+      },
+      analysis,
+    }).map(note => note.kind);
+    expect(abstained).toEqual(['contact']);
+
+    const weak = uncertaintyNotes({
+      record: {
+        id: 'r1',
+        result: analysis,
+        contact: { ...confirmedContact, ballConfirmed: false, confidence: 0.3 },
+      },
+      analysis,
+    }).map(note => note.kind);
+    expect(weak).toEqual(['contact']);
+  });
+
+  it('a defensible record marker silences both contact notes', () => {
+    const analysis = analysisFixture({
+      timestamps: { startMs: 2000, contactMs: 2400, endMs: 2700 },
+      phases: MEASURED_PHASES,
+    });
+    const kinds = uncertaintyNotes({
+      record: { id: 'r1', result: analysis, contact: confirmedContact },
+      analysis,
+    }).map(note => note.kind);
+    expect(kinds).not.toContain('contact');
+    expect(kinds).not.toContain('contact_estimate');
   });
 
   it('abstained stroke + missing phases + no score stack in fixed order', () => {

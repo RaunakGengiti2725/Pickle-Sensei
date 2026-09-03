@@ -2,13 +2,15 @@ import Foundation
 
 /// Continuous wrist-motion series for session capture (D-040 Gap 1).
 ///
-/// Computes the SAME per-frame wrist-speed series the guided-capture
-/// instruments compute (`TemporalStrokeDetector.ingest` / the D-029
-/// `StrokeCompletionMonitor` shadow): per pose frame, each wrist with
-/// visibility ≥ 0.35 is compared against its own prior observation
+/// Computes the SAME per-frame wrist-speed sampling the guided-capture
+/// instruments use (the D-029 `StrokeCompletionMonitor` shadow, and the
+/// sampling of `TemporalStrokeDetector.ingest`): per pose frame, each wrist
+/// with visibility ≥ 0.35 is compared against its own prior observation
 /// (elapsed > 0 and ≤ 250 ms), speed is normalized-image units/second, the
 /// fastest wrist wins the frame, and frames with pose confidence < 0.5 yield
-/// nothing. State is two prior wrist points — bounded by construction; the
+/// nothing. (The live trigger itself has since moved to HIP-RELATIVE wrist
+/// speed in body-heights/second — temporal-stroke-heuristic-4; this stream's
+/// schema stays in absolute image units.) State is two prior wrist points — bounded by construction; the
 /// stream never buffers, so a session of any length is safe to run through it.
 ///
 /// The value is camera-relative image-space motion. It is never a physical

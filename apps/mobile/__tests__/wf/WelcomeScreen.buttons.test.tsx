@@ -45,6 +45,7 @@ import { WelcomeScreen } from '../../src/screens/WelcomeScreen';
 import {
   stageAfterGetStarted,
   stageAfterOnboarding,
+  stageWhenLeavingOnboarding,
 } from '../../src/flow/launchGate';
 
 const START_LABEL = 'Start your first read';
@@ -159,7 +160,11 @@ describe('WelcomeScreen button ledger', () => {
     const renderer = render({ onGetStarted: jest.fn(), onSignIn: jest.fn() });
     const signIn = pressableByLabel(renderer, SIGN_IN_LABEL);
     expect(signIn.props.accessibilityRole).toBe('button');
-    expect(signIn.props.accessibilityHint).toBe('Skip setup and go to sign-in');
+    // Setup is never "skipped" (2026-09-01): the link is the returning
+    // player's route to sign-in, and its hint says exactly that.
+    expect(signIn.props.accessibilityHint).toBe(
+      'Sign in to an existing account',
+    );
     expect(signIn.props.disabled).toBeFalsy();
     const style = resolvedStyle(signIn);
     expect(style.minHeight).toBeGreaterThanOrEqual(44);
@@ -199,44 +204,58 @@ describe('WelcomeScreen button ledger', () => {
   });
 
   describe('wired through the App.tsx launch gate', () => {
-    // App.tsx: onGetStarted={() => setPreAuthStage(stageAfterGetStarted(preAuthOnboarded))}
+    // App.tsx: onGetStarted={() => setPreAuthStage(stageAfterGetStarted())}
     //          onSignIn={() => setPreAuthStage('signin')}
-    function renderGate(preAuthOnboarded: boolean) {
+    // The gate takes NO device-history input: the "already onboarded device
+    // → sign-in" short-circuit was removed 2026-09-01 (invest first, then
+    // create the account), so the same button does the same thing on every
+    // phone.
+    function renderGate() {
       const setPreAuthStage = jest.fn();
       const renderer = render({
-        onGetStarted: () =>
-          setPreAuthStage(stageAfterGetStarted(preAuthOnboarded)),
+        onGetStarted: () => setPreAuthStage(stageAfterGetStarted()),
         onSignIn: () => setPreAuthStage('signin'),
       });
       return { renderer, setPreAuthStage };
     }
 
-    test('fresh device: Start -> onboarding questionnaire', () => {
-      const { renderer, setPreAuthStage } = renderGate(false);
+    test('Start -> onboarding questionnaire, always', () => {
+      const { renderer, setPreAuthStage } = renderGate();
       act(() => {
         pressableByLabel(renderer, START_LABEL).props.onPress();
       });
       expect(setPreAuthStage).toHaveBeenCalledWith('onboarding');
+      expect(setPreAuthStage).not.toHaveBeenCalledWith('signin');
+      // Finishing the questionnaire is the only way on to sign-in; leaving
+      // it from step one goes back here.
       expect(stageAfterOnboarding()).toBe('signin');
+      expect(stageWhenLeavingOnboarding()).toBe('welcome');
     });
 
-    test('onboarded device: Start -> sign-in', () => {
-      const { renderer, setPreAuthStage } = renderGate(true);
-      act(() => {
-        pressableByLabel(renderer, START_LABEL).props.onPress();
-      });
-      expect(setPreAuthStage).toHaveBeenCalledWith('signin');
-    });
-
-    test('"I already have an account" -> sign-in regardless of device state', () => {
-      for (const onboarded of [false, true]) {
-        const { renderer, setPreAuthStage } = renderGate(onboarded);
+    test('the primary CTA cannot consult device history: stageAfterGetStarted takes no argument', () => {
+      expect(stageAfterGetStarted.length).toBe(0);
+      // Repeated taps (e.g. after backing out of step one) never drift to
+      // sign-in — there is no state that could flip the answer.
+      const { renderer, setPreAuthStage } = renderGate();
+      for (let tap = 0; tap < 3; tap += 1) {
         act(() => {
-          pressableByLabel(renderer, SIGN_IN_LABEL).props.onPress();
+          pressableByLabel(renderer, START_LABEL).props.onPress();
         });
-        expect(setPreAuthStage).toHaveBeenCalledTimes(1);
-        expect(setPreAuthStage).toHaveBeenCalledWith('signin');
       }
+      expect(setPreAuthStage.mock.calls).toEqual([
+        ['onboarding'],
+        ['onboarding'],
+        ['onboarding'],
+      ]);
+    });
+
+    test('"I already have an account" -> sign-in (the explicit returning-player route)', () => {
+      const { renderer, setPreAuthStage } = renderGate();
+      act(() => {
+        pressableByLabel(renderer, SIGN_IN_LABEL).props.onPress();
+      });
+      expect(setPreAuthStage).toHaveBeenCalledTimes(1);
+      expect(setPreAuthStage).toHaveBeenCalledWith('signin');
     });
   });
 

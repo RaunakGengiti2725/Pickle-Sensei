@@ -23,9 +23,9 @@ import {
   abstentionLedger,
   attemptChips,
   contactMarkerPresentation,
+  effectivePhaseTimeline,
   isAbstainedResult,
   measuredRows,
-  phaseTimelinePresentation,
   selectInsight,
   strokeResultHeader,
   visibleMeasuredRows,
@@ -47,9 +47,11 @@ import {
  * record does not carry.
  *
  * Hierarchy (brief §1): (1) technique title + honest source subtitle,
- * (2) replay card with scrubber / defensible contact marker / phase strip,
- * (3) ONE insight sentence, (4) measured rows with provenance (collapse >4),
- * (5) reserved hidden slot for coach-validated focus+drill, (6) CTA row.
+ * (2) replay card with scrubber / defensible contact marker / phase strip
+ * (from the record, else the analysis' measured phases), then the caller's
+ * `reviewSlot` (form-review entry), (3) ONE insight, then the caller's
+ * `fixSlot` (what to fix / drills), (4) measured rows with provenance
+ * (collapse >4), (5) `children` (validated training), (6) CTA row.
  */
 
 /** Replay clip reference — the real captured video file, when it exists. */
@@ -74,8 +76,20 @@ export interface StrokeResultProps {
   onDone: () => void;
   /** Optional score stage rendered first, directly under the header block. */
   scoreSlot?: React.ReactNode;
+  /** Optional entry card rendered directly under the replay (form review). */
+  reviewSlot?: React.ReactNode;
+  /** Optional coaching content rendered right after the insight card
+   * (what to fix / how to fix it / matched drills). */
+  fixSlot?: React.ReactNode;
   /** Optional sections (e.g. validated training) between rows and the CTAs. */
   children?: React.ReactNode;
+  /**
+   * Omit the §1.6 CTA row. The Result guide pins TRY AGAIN / Done in its own
+   * footer and embeds this surface as the "Full breakdown", so the row would
+   * otherwise render twice. `onTryAgain` / `onDone` stay required so every
+   * host still wires the loop (brief §2).
+   */
+  hideCtaRow?: boolean;
 }
 
 /** Phase colors from the existing palette only — never color-only (legend). */
@@ -115,8 +129,17 @@ function ReplayCard(props: {
 }) {
   const reduced = useReducedMotion();
   const marker = contactMarkerPresentation(props.record?.contact);
-  const timeline = phaseTimelinePresentation(props.record?.temporalPhasesV2);
   const analysis = props.analysis ?? props.record?.result ?? null;
+  // Record-sourced phases first; else the analysis' own measured phases, so
+  // every scored on-device result shows the strip it actually measured.
+  const timeline = effectivePhaseTimeline(props.record, analysis);
+  // The analysis' wrist-speed peak is drawn as a phase tick (named as such
+  // in the legend); it is NOT the usable-result-v1 contact marker, so the
+  // "no contact estimate was recorded" footnote would contradict the strip.
+  const wristPeakTick =
+    timeline.kind === 'segments' &&
+    timeline.origin === 'analysis' &&
+    timeline.contactTickMs !== null;
 
   // Time base: full clip when the real video exists; else the analyzed
   // stroke window; else the measured phase extent. All values are real
@@ -399,7 +422,9 @@ function ReplayCard(props: {
                   style={[styles.legendDot, { backgroundColor: color.onDark }]}
                 />
                 <Text style={[type.micro, { color: color.onDarkMuted }]}>
-                  CONTACT
+                  {timeline.origin === 'analysis'
+                    ? 'CONTACT (WRIST PEAK)'
+                    : 'CONTACT'}
                 </Text>
               </View>
             ) : null}
@@ -416,7 +441,7 @@ function ReplayCard(props: {
         </Text>
       ) : null}
 
-      {marker.kind === 'not_established' ? (
+      {marker.kind === 'not_established' && !wristPeakTick ? (
         <Text style={[type.caption, styles.replayFootnote]}>
           {marker.caption}
         </Text>
@@ -444,7 +469,10 @@ export function StrokeResult(props: StrokeResultProps) {
     contact: props.record?.contact ?? null,
     temporalPhasesV2: props.record?.temporalPhasesV2 ?? null,
     limitingFactors: props.record?.uncertainty?.limitingFactors ?? [],
+    analysis,
   });
+  const insightMeasured =
+    insight.basis === 'measured_fault' || insight.basis === 'measured_clean';
   const rows = measuredRows({ analysis, record: props.record });
   const { visible, hiddenCount } = visibleMeasuredRows(rows, rowsExpanded);
   const chips = attemptChips(props.attempts ?? [], props.currentAnalysisId);
@@ -519,18 +547,27 @@ export function StrokeResult(props: StrokeResultProps) {
       {/* §1.2 — REPLAY card. */}
       <ReplayCard analysis={analysis} record={props.record} clip={props.clip} />
 
-      {/* §1.3 — ONE INSIGHT: a single defensible sentence, never a tip. */}
+      {/* Caller-owned entry into the guided form review (paused replay with
+          the measured stops), directly under the replay it extends. */}
+      {props.reviewSlot}
+
+      {/* §1.3 — ONE INSIGHT: the strongest defensible evidence. For a scored
+          analysis that is the engine's own worst measured checkpoint plus
+          the cue that matches its measured direction. */}
       <Card tone="soft" style={styles.insightCard} testID="stroke-insight">
         <View style={styles.insightHeader}>
           <Icon name="spark" size={17} color={color.court} />
           <Text style={[type.micro, { color: color.court }]}>
-            MEASURED INSIGHT
+            {insightMeasured ? 'WHAT THE CAMERA MEASURED' : 'MEASURED INSIGHT'}
           </Text>
         </View>
         <Text style={[type.bodyBold, styles.insightSentence]}>
           {insight.sentence}
         </Text>
       </Card>
+
+      {/* Caller-owned coaching content: what to fix, how, and which drills. */}
+      {props.fixSlot}
 
       {/* §4 — abstention is a designed state: what held / what we couldn't
           establish, in the same layout, with the retry CTA below. */}
@@ -559,16 +596,31 @@ export function StrokeResult(props: StrokeResultProps) {
               {analysis.guidance}
             </Text>
           ) : null}
+          {ledger.scope ? (
+            // The engine's measurement scope, stated once and calmly: the
+            // paddle/ball/court are not tracked in this version. This is
+            // not a gap this capture could have closed, so it never sits
+            // under "what we couldn't establish".
+            <View
+              style={styles.ledgerScope}
+              accessibilityRole="text"
+              accessibilityLabel="Measurement scope"
+              testID="abstention-ledger-scope"
+            >
+              <Icon name="shield" size={15} color={color.inkSoft} />
+              <Text style={[type.caption, styles.ledgerScopeCopy]}>
+                {ledger.scope}
+              </Text>
+            </View>
+          ) : null}
         </Card>
       ) : null}
 
       {/*
-       * §1.5 — RESERVED SLOT (hidden today): PRIMARY FOCUS + DRILL.
-       * When coach-validated technique scoring unlocks (techniqueEvaluator
-       * is BLOCKED_ON_VALIDATION in the shared profiles), a single
-       * focus-plus-drill card enters HERE, between the insight and the
-       * measured rows. Deliberately not rendered: there is no validated
-       * focus/drill mapping to show, and nothing is faked in its place.
+       * §1.5 — The focus + drill content for scored results arrives through
+       * `fixSlot` above (FixList / RecommendedDrills, injected by the Result
+       * route). Drill matching is by stroke family from the catalog and is
+       * labeled as such — no coach-validated checkpoint mapping is claimed.
        */}
 
       {/* §1.4 — measured rows, provenance-labeled, collapsed beyond 4. */}
@@ -617,21 +669,23 @@ export function StrokeResult(props: StrokeResultProps) {
       {props.children}
 
       {/* §1.6 — CTA row: TRY AGAIN primary, Done secondary (brief §2 loop). */}
-      <View style={styles.ctaRow}>
-        <Button
-          label="Try again"
-          variant="volt"
-          icon="camera"
-          onPress={props.onTryAgain}
-          testID="stroke-result-try-again"
-        />
-        <Button
-          label="Done"
-          variant="ghost"
-          onPress={props.onDone}
-          testID="stroke-result-done"
-        />
-      </View>
+      {props.hideCtaRow ? null : (
+        <View style={styles.ctaRow}>
+          <Button
+            label="Try again"
+            variant="volt"
+            icon="camera"
+            onPress={props.onTryAgain}
+            testID="stroke-result-try-again"
+          />
+          <Button
+            label="Done"
+            variant="ghost"
+            onPress={props.onDone}
+            testID="stroke-result-done"
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -877,6 +931,16 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: color.line,
   },
+  ledgerScope: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: space.sm,
+    marginTop: space.md,
+    paddingTop: space.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.line,
+  },
+  ledgerScopeCopy: { color: color.inkSoft, flex: 1 },
   rowsCard: { marginTop: space.md, paddingHorizontal: space.lg },
   measuredRow: {
     minHeight: 56,

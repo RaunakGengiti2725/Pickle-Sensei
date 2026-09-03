@@ -99,7 +99,9 @@ export const OBSERVER_CONFUSION_CODES_V1 = {
   intent_choice_stall:
     'User stalls >10s on the technique picker or asks what Auto Detect does.',
   start_tap_missed:
-    'User never taps their starting spot, or taps and does not walk to it.',
+    'User does not find or press the record button, or presses it and ' +
+    'does not walk out to the outline (the optional start-spot tap is only ' +
+    'expected when other players share the court).',
   readiness_misread:
     'User swings before Ready, or waits >10s after Ready without swinging.',
   walkout_hesitation:

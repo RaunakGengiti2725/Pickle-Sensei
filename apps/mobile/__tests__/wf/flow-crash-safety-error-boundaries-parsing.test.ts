@@ -65,11 +65,13 @@ const GARBAGE_PAYLOADS = [
 beforeEach(() => {
   mockKvTable.clear();
   setActiveDataOwner(GUEST_DATA_OWNER);
+  // `preAuthOnboarded` is gone (product decision 2026-09-01: no device-level
+  // "already onboarded" marker); `hydrateError` is the launch-gate retry state.
   useAppStore.setState({
     hydrated: false,
     ownerKey: null,
     profile: null,
-    preAuthOnboarded: false,
+    hydrateError: null,
     onboardingBusy: false,
     onboardingError: null,
     lastShotType: 'forehand_drive',

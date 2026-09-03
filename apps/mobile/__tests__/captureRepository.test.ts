@@ -8,6 +8,7 @@ import {
   listCaptureHistory,
   listPendingCaptures,
   savePendingCapture,
+  updateCaptureClipPayload,
 } from '../src/data/repository';
 
 const owner = '11111111-1111-4111-8111-111111111111';
@@ -84,6 +85,44 @@ describe('durable pending capture evidence', () => {
     expect(calls[0]?.params[0]).toBe(owner);
     expect(calls[0]?.sql).toContain('payload');
     expect(JSON.parse(String(calls[0]?.params.at(-1)))).toEqual(clip);
+  });
+
+  it('persists measured pose evidence added after the save (imported-video extraction) onto the same owner-scoped row', async () => {
+    // Without this write an import's exoskeleton lived only for the run that
+    // measured it: the Form Review reopened later read the pre-extraction
+    // payload and drew nothing.
+    setActiveDataOwner(owner);
+    const calls: Array<{ sql: string; params: unknown[] }> = [];
+    const db: LocalDb = {
+      async execute(sql, params = []) {
+        calls.push({ sql, params });
+        return { rows: [] };
+      },
+      close() {},
+    };
+    const enriched: CapturedClip = {
+      ...clip,
+      poseSequence: {
+        schemaVersion: 1,
+        format: 'pickle.pose-sequence.v1',
+        uri: 'file:///private/captures/real.pose.json',
+        frameCount: 120,
+        sha256: 'a'.repeat(64),
+        coordinateSystem: 'normalized_image_top_left',
+        poseModelVersion: 'apple-vision-body-pose-1',
+      },
+    };
+
+    await updateCaptureClipPayload(db, 'capture-1', enriched);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.sql).toMatch(/UPDATE local_capture SET payload/);
+    expect(calls[0]?.params).toEqual([
+      JSON.stringify(enriched),
+      owner,
+      'capture-1',
+    ]);
+    expect(JSON.parse(String(calls[0]?.params[0])).poseSequence).toBeDefined();
   });
 
   it('returns the complete payload only when its metadata still matches the row', async () => {

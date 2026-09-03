@@ -11,10 +11,13 @@ import type { Profile } from '../../src/state/profile';
  * OS scheduler); heavy leaves (RootNavigator, SignInScreen, overlays, splash
  * artwork) are replaced by minimal stand-ins that expose the same handlers.
  *
- * Pins the AGENTS.md launch invariants: order Welcome → onboarding → sign-in,
- * device-once questionnaire (`onboarding.device-complete`), single-use stash
- * adoption by the first writable owner, existing local/server profile beats
- * the stash, and the pending notification choice adoption.
+ * Pins the AGENTS.md launch invariants (product decision 2026-09-01): order
+ * Welcome → onboarding → sign-in; "Start your first read" ALWAYS enters the
+ * questionnaire (no device-level "already onboarded" marker, no skip to
+ * sign-in — step one's Back returns to Welcome); single-use stash adoption
+ * by the first writable owner, the freshly answered stash REPLACING any
+ * profile that owner already had (newest intent wins); and the pending
+ * notification choice adoption.
  */
 
 jest.mock('react-native-safe-area-context', () => {
@@ -281,8 +284,6 @@ import {
   setActiveDataOwner,
 } from '../../src/data/accountScope';
 import {
-  DEVICE_ONBOARDED_KV_KEY,
-  DEVICE_ONBOARDED_VALUE,
   PENDING_ONBOARDING_PROFILE_KV_KEY,
   useAppStore,
 } from '../../src/state/appStore';
@@ -402,6 +403,19 @@ function expectWelcome(renderer: Renderer) {
   expect(text).not.toContain('PLAYER SETUP');
 }
 
+/** Step one of the pre-auth questionnaire: Back to Welcome, no skip. */
+function expectQuestionnaireStepOne(renderer: Renderer) {
+  const text = allText(renderer);
+  expect(text).toContain('PLAYER SETUP');
+  expect(text).toContain('What should we call you?');
+  expect(text).not.toContain('SIGN_IN_SCREEN');
+  expect(text).not.toMatch(/skip/i);
+  expect(pressables(renderer, 'Leave setup')).toHaveLength(0);
+  const back = pressables(renderer, 'Back');
+  expect(back).toHaveLength(1);
+  expect(back[0]!.props.accessibilityHint).toBe('Return to the welcome screen');
+}
+
 describe('flow: launch-onboarding — App Gate end-to-end', () => {
   beforeEach(() => {
     mockKv.clear();
@@ -422,7 +436,7 @@ describe('flow: launch-onboarding — App Gate end-to-end', () => {
       hydrated: false,
       ownerKey: null,
       profile: null,
-      preAuthOnboarded: false,
+      hydrateError: null,
       onboardingBusy: false,
       onboardingError: null,
     });
@@ -447,17 +461,17 @@ describe('flow: launch-onboarding — App Gate end-to-end', () => {
     expect(mockScheduler.cancelAllCalls).toBeGreaterThan(0);
 
     await pressAsync(renderer, 'Start your first read');
-    expect(allText(renderer)).toContain('PLAYER SETUP');
-    expect(allText(renderer)).toContain('What should we call you?');
+    expectQuestionnaireStepOne(renderer);
 
     await answerQuestionnaire(renderer);
     expect(mockScheduler.requestCalls).toBe(0);
     await pressAsync(renderer, 'Not now');
 
-    // "Not now" never asked the OS; the device is marked onboarded; the
-    // answers wait in the stash; the flow moved on to sign-in.
+    // "Not now" never asked the OS; the answers and the reminder choice wait
+    // in their stashes — and those two keys are the ONLY device writes (no
+    // "device onboarded" marker exists any more); the flow moved on to
+    // sign-in.
     expect(mockScheduler.requestCalls).toBe(0);
-    expect(mockKv.get(DEVICE_ONBOARDED_KV_KEY)).toBe(DEVICE_ONBOARDED_VALUE);
     expect(JSON.parse(mockKv.get(PENDING_ONBOARDING_PROFILE_KV_KEY)!)).toEqual({
       version: 1,
       profile: walkedProfile,
@@ -465,13 +479,30 @@ describe('flow: launch-onboarding — App Gate end-to-end', () => {
     expect(
       JSON.parse(mockKv.get(PENDING_NOTIFICATION_ONBOARDING_KV_KEY)!),
     ).toEqual({ version: 1, enabled: false });
+    expect([...mockKv.keys()].sort()).toEqual(
+      [
+        PENDING_NOTIFICATION_ONBOARDING_KV_KEY,
+        PENDING_ONBOARDING_PROFILE_KV_KEY,
+      ].sort(),
+    );
     expect(allText(renderer)).toContain('SIGN_IN_SCREEN');
     expect(allText(renderer)).not.toContain('PLAYER SETUP');
 
-    // Sign-in Back returns to Welcome; Welcome now skips the questionnaire.
+    // Sign-in Back returns to Welcome. Even with the answers stashed, the
+    // primary CTA re-enters the questionnaire — the gate never consults
+    // device history — and step one's Back returns to Welcome leaving the
+    // stash untouched. Sign-in is reached through the explicit link.
     await pressAsync(renderer, 'Back');
     expectWelcome(renderer);
     await pressAsync(renderer, 'Start your first read');
+    expectQuestionnaireStepOne(renderer);
+    await pressAsync(renderer, 'Back');
+    expectWelcome(renderer);
+    expect(JSON.parse(mockKv.get(PENDING_ONBOARDING_PROFILE_KV_KEY)!)).toEqual({
+      version: 1,
+      profile: walkedProfile,
+    });
+    await pressAsync(renderer, 'I already have an account');
     expect(allText(renderer)).toContain('SIGN_IN_SCREEN');
 
     await pressAsync(renderer, 'Continue as guest');
@@ -519,29 +550,37 @@ describe('flow: launch-onboarding — App Gate end-to-end', () => {
     unmount();
   });
 
-  it('returning device (device-complete marker, no stash): "Start your first read" goes straight to sign-in; "I already have an account" too', async () => {
-    mockKv.set(DEVICE_ONBOARDED_KV_KEY, DEVICE_ONBOARDED_VALUE);
+  // The device-level "already onboarded" marker (`onboarding.device-complete`)
+  // that used to short-circuit "Start your first read" to sign-in was removed
+  // 2026-09-01: the primary CTA takes no device-history input.
+  it('returning player (no stash): "Start your first read" still enters the questionnaire; only "I already have an account" reaches sign-in, and a guest with no profile lands in the in-account questionnaire', async () => {
     const renderer = await launch();
     expectWelcome(renderer);
-    expect(useAppStore.getState().preAuthOnboarded).toBe(true);
+    expect(useAppStore.getState()).not.toHaveProperty('preAuthOnboarded');
 
     await pressAsync(renderer, 'Start your first read');
-    expect(allText(renderer)).toContain('SIGN_IN_SCREEN');
-    expect(allText(renderer)).not.toContain('PLAYER SETUP');
+    expectQuestionnaireStepOne(renderer);
     await pressAsync(renderer, 'Back');
     expectWelcome(renderer);
     await pressAsync(renderer, 'I already have an account');
     expect(allText(renderer)).toContain('SIGN_IN_SCREEN');
+    expect(allText(renderer)).not.toContain('PLAYER SETUP');
 
     // Guest with no stash and no profile → in-account questionnaire, never a
     // blank screen or the tab bar without a profile.
     await pressAsync(renderer, 'Continue as guest');
     expect(allText(renderer)).toContain('PLAYER SETUP');
     expect(allText(renderer)).not.toContain('ROOT_NAVIGATOR');
+    // In-account mode: the only exit is signing out — no Back to Welcome.
+    expect(pressables(renderer, 'Back')).toHaveLength(0);
+    expect(pressables(renderer, 'Leave setup')).toHaveLength(1);
     unmount();
   });
 
-  it('pre-auth "Leave setup → Skip to sign-in" reaches sign-in without marking the device onboarded; Back → Welcome → Start re-enters the questionnaire', async () => {
+  // The pre-auth "Leave setup → Skip to sign-in" alert was removed
+  // 2026-09-01 (the questionnaire is required). Step one's control is a plain
+  // Back to Welcome through stageWhenLeavingOnboarding().
+  it('pre-auth step-one Back returns to Welcome without an alert or any write; Start re-enters the questionnaire and sign-in is never reached that way', async () => {
     const { Alert } =
       jest.requireActual<typeof import('react-native')>('react-native');
     const alertSpy = jest
@@ -549,26 +588,31 @@ describe('flow: launch-onboarding — App Gate end-to-end', () => {
       .mockImplementation(() => undefined);
     const renderer = await launch();
     await pressAsync(renderer, 'Start your first read');
-    expect(allText(renderer)).toContain('PLAYER SETUP');
-    await pressAsync(renderer, 'Leave setup');
-    const buttons = alertSpy.mock.calls[0]?.[2] ?? [];
-    await act(async () => {
-      buttons.find(b => b.text === 'Skip to sign-in')!.onPress?.();
-    });
-    await settle();
-    expect(allText(renderer)).toContain('SIGN_IN_SCREEN');
-    expect(mockKv.has(DEVICE_ONBOARDED_KV_KEY)).toBe(false);
-    expect(useAppStore.getState().preAuthOnboarded).toBe(false);
-
+    expectQuestionnaireStepOne(renderer);
     await pressAsync(renderer, 'Back');
+    expect(alertSpy).not.toHaveBeenCalled();
     expectWelcome(renderer);
+    expect(allText(renderer)).not.toContain('SIGN_IN_SCREEN');
+    expect(mockKv.size).toBe(0);
+
     await pressAsync(renderer, 'Start your first read');
-    expect(allText(renderer)).toContain('PLAYER SETUP');
+    expectQuestionnaireStepOne(renderer);
+    // Past step one, Back stays inside the questionnaire.
+    act(() => renderer.root.findByType(TextInput).props.onChangeText('Dana'));
+    await pressAsync(renderer, 'Continue');
+    expect(allText(renderer)).toContain('How do you identify?');
+    await pressAsync(renderer, 'Back');
+    expectQuestionnaireStepOne(renderer);
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(mockKv.size).toBe(0);
     alertSpy.mockRestore();
     unmount();
   });
 
-  it('an existing guest profile always beats a stale stash, and the stash is discarded', async () => {
+  // Newest intent wins (2026-09-01): a freshly answered questionnaire is what
+  // the player meant, so the stash REPLACES an existing profile on adoption
+  // instead of being discarded in its favour.
+  it('a freshly answered stash replaces an existing guest profile on adoption (newest intent wins) and is single-use', async () => {
     const existing: Profile = {
       skillLevel: '4.0',
       handedness: 'left',
@@ -581,19 +625,27 @@ describe('flow: launch-onboarding — App Gate end-to-end', () => {
       PENDING_ONBOARDING_PROFILE_KV_KEY,
       JSON.stringify({ version: 1, profile: walkedProfile }),
     );
-    mockKv.set(DEVICE_ONBOARDED_KV_KEY, DEVICE_ONBOARDED_VALUE);
     const renderer = await launch();
-    expect(useAppStore.getState().preAuthOnboarded).toBe(true);
-    await pressAsync(renderer, 'Start your first read');
+    expectWelcome(renderer);
+    // Signed out, the stash waits.
+    expect(JSON.parse(mockKv.get(PENDING_ONBOARDING_PROFILE_KV_KEY)!)).toEqual({
+      version: 1,
+      profile: walkedProfile,
+    });
+    await pressAsync(renderer, 'I already have an account');
     expect(allText(renderer)).toContain('SIGN_IN_SCREEN');
     await pressAsync(renderer, 'Continue as guest');
     expect(allText(renderer)).toContain('ROOT_NAVIGATOR');
-    expect(useAppStore.getState().profile).toEqual(existing);
+    expect(useAppStore.getState().profile).toEqual(walkedProfile);
+    expect(JSON.parse(mockKv.get(`profile:${GUEST_DATA_OWNER}`)!)).toEqual(
+      walkedProfile,
+    );
     expect(mockKv.get(PENDING_ONBOARDING_PROFILE_KV_KEY)).toBe('');
+    expect(mockSaveCanonical).not.toHaveBeenCalled();
     unmount();
   });
 
-  it('a legacy guest profile with no device marker backfills the marker on hydrate, so a later sign-out goes straight to sign-in', async () => {
+  it('a device that already held a guest profile: hydrate writes no device-level marker, and after sign-out Welcome → Start STILL enters the questionnaire', async () => {
     const existing: Profile = {
       skillLevel: '4.0',
       handedness: 'left',
@@ -603,14 +655,15 @@ describe('flow: launch-onboarding — App Gate end-to-end', () => {
     };
     mockKv.set(`profile:${GUEST_DATA_OWNER}`, JSON.stringify(existing));
     const renderer = await launch();
-    expect(useAppStore.getState().preAuthOnboarded).toBe(false);
     await pressAsync(renderer, 'I already have an account');
     await pressAsync(renderer, 'Continue as guest');
     expect(allText(renderer)).toContain('ROOT_NAVIGATOR');
-    expect(mockKv.get(DEVICE_ONBOARDED_KV_KEY)).toBe(DEVICE_ONBOARDED_VALUE);
-    expect(useAppStore.getState().preAuthOnboarded).toBe(true);
+    expect(useAppStore.getState().profile).toEqual(existing);
+    // Hydrating an existing profile leaves no "this device onboarded"
+    // history behind that a future gate could consult.
+    expect([...mockKv.keys()]).toEqual([`profile:${GUEST_DATA_OWNER}`]);
+    expect(useAppStore.getState()).not.toHaveProperty('preAuthOnboarded');
 
-    // Sign out: the marker survives, so Welcome → Start skips the quiz.
     await act(async () => {
       await useAuthStore.getState().signOut();
     });
@@ -621,9 +674,9 @@ describe('flow: launch-onboarding — App Gate end-to-end', () => {
     expect(mockScheduler.cancelAllCalls).toBeGreaterThan(0);
     await pressAsync(renderer, 'Back');
     expectWelcome(renderer);
+    // Same CTA, same path — the phone having held a profile changes nothing.
     await pressAsync(renderer, 'Start your first read');
-    expect(allText(renderer)).toContain('SIGN_IN_SCREEN');
-    expect(allText(renderer)).not.toContain('PLAYER SETUP');
+    expectQuestionnaireStepOne(renderer);
     unmount();
   });
 
@@ -637,7 +690,10 @@ describe('flow: launch-onboarding — App Gate end-to-end', () => {
       };
     });
 
-    it('server profile wins over the stash; the stash is discarded without a save', async () => {
+    // Newest intent wins (2026-09-01): the answers just given on this device
+    // replace the account's existing server profile — saved through the
+    // canonical endpoint like any onboarding completion.
+    it('a freshly answered stash replaces the existing server profile through the canonical save; the stash is discarded', async () => {
       const server: Profile = {
         skillLevel: '4.5',
         handedness: 'right',
@@ -653,9 +709,40 @@ describe('flow: launch-onboarding — App Gate end-to-end', () => {
       await pressAsync(renderer, 'Sign in with Apple');
       await settle();
       expect(allText(renderer)).toContain('ROOT_NAVIGATOR');
-      expect(useAppStore.getState().profile).toEqual(server);
-      expect(mockSaveCanonical).not.toHaveBeenCalled();
+      expect(mockSaveCanonical).toHaveBeenCalledTimes(1);
+      expect(mockSaveCanonical.mock.calls[0]?.[1]).toEqual(walkedProfile);
+      expect(useAppStore.getState().profile).toEqual(walkedProfile);
+      expect(JSON.parse(mockKv.get(`profile:${CANONICAL_ID}`)!)).toEqual(
+        walkedProfile,
+      );
       expect(mockKv.get(PENDING_ONBOARDING_PROFILE_KV_KEY)).toBe('');
+      unmount();
+    });
+
+    it('when replacing the server profile fails, the account keeps its existing profile and the stash survives for the next hydrate', async () => {
+      const server: Profile = {
+        skillLevel: '4.5',
+        handedness: 'right',
+        goal: 'volleys',
+        biggestProblem: 'contact',
+        focusCheckpoint: 'face_wrist_stability',
+      };
+      mockFetchCanonical.mockResolvedValue(server);
+      mockSaveCanonical.mockRejectedValue(new Error('offline'));
+      const renderer = await launch();
+      await pressAsync(renderer, 'Start your first read');
+      await answerQuestionnaire(renderer);
+      await pressAsync(renderer, 'Not now');
+      await pressAsync(renderer, 'Sign in with Apple');
+      await settle();
+      // Nothing invented and nothing lost: the app opens on the old profile…
+      expect(allText(renderer)).toContain('ROOT_NAVIGATOR');
+      expect(useAppStore.getState().profile).toEqual(server);
+      expect(useAppStore.getState().hydrateError).toBeNull();
+      // …and the answers wait for the next hydrate.
+      expect(
+        JSON.parse(mockKv.get(PENDING_ONBOARDING_PROFILE_KV_KEY)!),
+      ).toEqual({ version: 1, profile: walkedProfile });
       unmount();
     });
 

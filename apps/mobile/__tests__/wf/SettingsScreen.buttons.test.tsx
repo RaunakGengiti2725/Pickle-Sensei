@@ -30,6 +30,12 @@ const mockNavigate = jest.fn();
 const mockGoBack = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate, goBack: mockGoBack }),
+  // Settings re-reads the free-rating ledger on every focus; a mount is the
+  // first focus.
+  useFocusEffect: (callback: () => void | (() => void)) => {
+    const React = jest.requireActual<typeof import('react')>('react');
+    React.useEffect(() => callback(), [callback]);
+  },
 }));
 
 const mockRateAppFromSettings = jest.fn<Promise<string>, unknown[]>();
@@ -64,7 +70,15 @@ import { useNotificationStore } from '../../src/notifications/notificationStore'
 import { DEFAULT_NOTIFICATION_PREFS } from '../../src/notifications/types';
 import { useConsistencyStore } from '../../src/consistency/store';
 import { buildConsistencySnapshot } from '../../src/consistency/engine';
-import { useAccessStore } from '../../src/state/accessStore';
+import {
+  clearAccessStoreConfiguration,
+  configureAccessStore,
+  useAccessStore,
+} from '../../src/state/accessStore';
+import type {
+  BillingAccessDependencies,
+  CanonicalAccessState,
+} from '../../src/billing/types';
 import { useWalkthroughStore } from '../../src/walkthrough/walkthroughStore';
 
 const syncedSession: AuthSession = {
@@ -107,6 +121,57 @@ const snapshot = buildConsistencySnapshot(
 
 let mockSignOut: jest.Mock<Promise<void>, []>;
 let mockHydrateConsent: jest.Mock<Promise<void>, []>;
+
+const ONE_FREE_RATING_LEFT: CanonicalAccessState = {
+  premium: false,
+  entitlements: [],
+  freeRatings: {
+    limit: 2,
+    used: 1,
+    reserved: 0,
+    remaining: 1,
+    availableToReserve: 1,
+  },
+  canStartRating: true,
+  paywallRequired: false,
+};
+
+function backendReturning(
+  getAccess: () => Promise<CanonicalAccessState>,
+): BillingAccessDependencies {
+  return {
+    store: {
+      configure: jest.fn(async () => undefined),
+      loadPlans: jest.fn(async () => {
+        throw new Error('plans are not part of this test');
+      }),
+      purchase: jest.fn(),
+      restore: jest.fn(),
+      readEntitlement: jest.fn(),
+    },
+    backend: {
+      getAccess: jest.fn(getAccess),
+      syncBilling: jest.fn(),
+    },
+  };
+}
+
+/**
+ * Settings re-reads the server's free-rating ledger on every focus (a mount
+ * is the first focus), so a bare `canonicalAccess` snapshot would be replaced
+ * by "Verify access" the moment the screen mounts against an unconfigured
+ * billing backend. Like the canonical harness (settingsMembershipRow.test),
+ * configure a backend that answers with the same state the snapshot holds.
+ * `null` leaves billing unconfigured — exactly the "Verify access" case.
+ */
+function seedAccess(access: CanonicalAccessState | null) {
+  if (access === null) {
+    clearAccessStoreConfiguration();
+    return;
+  }
+  configureAccessStore(backendReturning(async () => access));
+  useAccessStore.setState({ status: 'ready', canonicalAccess: access });
+}
 
 function renderScreen() {
   let renderer!: TestRenderer.ReactTestRenderer;
@@ -217,21 +282,7 @@ describe('SettingsScreen button ledger', () => {
       permission: 'granted',
     });
     useConsistencyStore.setState({ snapshot });
-    useAccessStore.setState({
-      canonicalAccess: {
-        premium: false,
-        entitlements: [],
-        freeRatings: {
-          limit: 2,
-          used: 1,
-          reserved: 0,
-          remaining: 1,
-          availableToReserve: 1,
-        },
-        canStartRating: true,
-        paywallRequired: false,
-      },
-    });
+    seedAccess(ONE_FREE_RATING_LEFT);
     useWalkthroughStore.setState({ visible: false });
   });
 
@@ -260,20 +311,18 @@ describe('SettingsScreen button ledger', () => {
     });
 
     it('Pickle Sensei Pro reflects Pro / exhausted / unverified access honestly', () => {
-      useAccessStore.setState({
-        canonicalAccess: {
-          premium: true,
-          entitlements: ['pickle_sensei_pro'],
-          freeRatings: {
-            limit: 2,
-            used: 2,
-            reserved: 0,
-            remaining: 0,
-            availableToReserve: 0,
-          },
-          canStartRating: true,
-          paywallRequired: false,
+      seedAccess({
+        premium: true,
+        entitlements: ['pickle_sensei_pro'],
+        freeRatings: {
+          limit: 2,
+          used: 2,
+          reserved: 0,
+          remaining: 0,
+          availableToReserve: 0,
         },
+        canStartRating: true,
+        paywallRequired: false,
       });
       let renderer = renderScreen();
       expect(rowLabel(renderer, 'Pickle Sensei Pro')).toBe(
@@ -281,20 +330,18 @@ describe('SettingsScreen button ledger', () => {
       );
       act(() => renderer.unmount());
 
-      useAccessStore.setState({
-        canonicalAccess: {
-          premium: false,
-          entitlements: [],
-          freeRatings: {
-            limit: 2,
-            used: 2,
-            reserved: 0,
-            remaining: 0,
-            availableToReserve: 0,
-          },
-          canStartRating: false,
-          paywallRequired: true,
+      seedAccess({
+        premium: false,
+        entitlements: [],
+        freeRatings: {
+          limit: 2,
+          used: 2,
+          reserved: 0,
+          remaining: 0,
+          availableToReserve: 0,
         },
+        canStartRating: false,
+        paywallRequired: true,
       });
       renderer = renderScreen();
       expect(rowLabel(renderer, 'Pickle Sensei Pro')).toBe(
@@ -302,7 +349,7 @@ describe('SettingsScreen button ledger', () => {
       );
       act(() => renderer.unmount());
 
-      useAccessStore.setState({ canonicalAccess: null });
+      seedAccess(null);
       renderer = renderScreen();
       expect(rowLabel(renderer, 'Pickle Sensei Pro')).toBe(
         'Pickle Sensei Pro, Verify access',
@@ -311,6 +358,51 @@ describe('SettingsScreen button ledger', () => {
       expect(mockNavigate).toHaveBeenCalledWith('Paywall', {
         source: 'settings',
       });
+      act(() => renderer.unmount());
+    });
+
+    it('re-reads the free-rating ledger on focus and words "left" from what can still be started', async () => {
+      // The snapshot the rating flow left behind says one rating is left, but
+      // the server now reports the second scored shot's permit still reserved:
+      // `remaining` is 1 by arithmetic, yet nothing can be started. The row
+      // must follow the re-read, never the stale snapshot.
+      const clients = backendReturning(async () => ({
+        premium: false,
+        entitlements: [],
+        freeRatings: {
+          limit: 2,
+          used: 1,
+          reserved: 1,
+          remaining: 1,
+          availableToReserve: 0,
+        },
+        canStartRating: false,
+        paywallRequired: true,
+      }));
+      configureAccessStore(clients);
+      useAccessStore.setState({
+        status: 'ready',
+        canonicalAccess: ONE_FREE_RATING_LEFT,
+      });
+      const renderer = renderScreen();
+      await flushMicrotasks();
+      expect(clients.backend.getAccess).toHaveBeenCalledTimes(1);
+      expect(rowLabel(renderer, 'Pickle Sensei Pro')).toBe(
+        'Pickle Sensei Pro, Upgrade required',
+      );
+      act(() => renderer.unmount());
+    });
+
+    it('never asks the server about a local-only guest', async () => {
+      const clients = backendReturning(async () => ONE_FREE_RATING_LEFT);
+      configureAccessStore(clients);
+      useAuthStore.setState({ session: guestSession });
+      const renderer = renderScreen();
+      await flushMicrotasks();
+      expect(clients.backend.getAccess).not.toHaveBeenCalled();
+      expect(rowLabel(renderer, 'Pickle Sensei Pro')).toBe(
+        'Pickle Sensei Pro, Sign in first',
+      );
       act(() => renderer.unmount());
     });
 

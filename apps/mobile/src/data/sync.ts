@@ -65,6 +65,10 @@ export function toSyncPayload(
  * consume it (see isPermanentSyncFailure). */
 export const OUTBOX_MAX_ATTEMPTS = 8;
 
+/** Server rejection code for a shot whose sessionId is not (yet) known —
+ * mirrors `apply_synced_shot` / supabase/functions/api "shot.session_not_found". */
+export const SESSION_NOT_FOUND_REJECTION = 'shot.session_not_found';
+
 /**
  * Only failures that can never succeed on retry consume the bounded attempt
  * budget. Everything else — device offline, timeouts, server 5xx, an expired
@@ -87,15 +91,18 @@ export function isPermanentSyncFailure(error: unknown): boolean {
 
 /**
  * Per-item rejections the server itself labels as retryable (its own write
- * failed, or the bearer must be refreshed). They record the reason but keep
- * the row's attempt budget intact, matching how a whole-request 5xx is
- * treated; every other rejection code is a contract verdict that will not
- * change on replay.
+ * failed, or the bearer must be refreshed), plus the ordering artifact of a
+ * shot whose practice-set session has not reached the server yet (the
+ * session.create row drains ahead of it on the next pass — it was queued
+ * moments after the shot). They record the reason but keep the row's attempt
+ * budget intact, matching how a whole-request 5xx is treated; every other
+ * rejection code is a contract verdict that will not change on replay.
  */
 export const TRANSIENT_SYNC_REJECTION_CODES: ReadonlySet<string> = new Set([
   'shot.write_failed',
   'evaluation.trial_write_failed',
   'auth.required',
+  SESSION_NOT_FOUND_REJECTION,
 ]);
 
 export function isTransientSyncRejection(code: string): boolean {
@@ -136,6 +143,46 @@ export async function drainOutbox(
   );
   let synced = 0;
   let failed = 0;
+
+  // Sessions FIRST: `apply_synced_shot` rejects a shot whose sessionId the
+  // server has never seen ("shot.session_not_found"), and a practice set's
+  // session.create row is queued in the same batch as its first shot. Session
+  // creation is idempotent server-side, so draining it ahead of the shots
+  // costs nothing when it was already accepted.
+  for (const r of rows.filter(
+    row => row['kind'] !== 'shot.sync' && row['kind'] !== 'evaluation.trial',
+  )) {
+    let payload: Record<string, unknown>;
+    try {
+      payload = JSON.parse(String(r['payload'])) as Record<string, unknown>;
+      if (r['kind'] !== 'session.create' && r['kind'] !== 'session.finalize') {
+        throw new Error(`unknown outbox kind ${String(r['kind'])}`);
+      }
+    } catch (error) {
+      await recordRowFailure(db, owner, r['id'], error, true);
+      failed++;
+      continue;
+    }
+    try {
+      if (r['kind'] === 'session.create')
+        await transport.createSession(payload);
+      else await transport.finalizeSession(String(payload['id']));
+      await db.execute(`DELETE FROM outbox WHERE owner_key = ? AND id = ?`, [
+        owner,
+        r['id'],
+      ]);
+      synced++;
+    } catch (error) {
+      await recordRowFailure(
+        db,
+        owner,
+        r['id'],
+        error,
+        isPermanentSyncFailure(error),
+      );
+      failed++;
+    }
+  }
 
   const shotRows = rows.filter(r => r['kind'] === 'shot.sync');
   // A row whose payload cannot become a sync request (corrupt JSON, missing
@@ -274,41 +321,6 @@ export async function drainOutbox(
         await recordRowFailure(db, owner, entry.row['id'], error, permanent);
         failed++;
       }
-    }
-  }
-
-  for (const r of rows.filter(
-    row => row['kind'] !== 'shot.sync' && row['kind'] !== 'evaluation.trial',
-  )) {
-    let payload: Record<string, unknown>;
-    try {
-      payload = JSON.parse(String(r['payload'])) as Record<string, unknown>;
-      if (r['kind'] !== 'session.create' && r['kind'] !== 'session.finalize') {
-        throw new Error(`unknown outbox kind ${String(r['kind'])}`);
-      }
-    } catch (error) {
-      await recordRowFailure(db, owner, r['id'], error, true);
-      failed++;
-      continue;
-    }
-    try {
-      if (r['kind'] === 'session.create')
-        await transport.createSession(payload);
-      else await transport.finalizeSession(String(payload['id']));
-      await db.execute(`DELETE FROM outbox WHERE owner_key = ? AND id = ?`, [
-        owner,
-        r['id'],
-      ]);
-      synced++;
-    } catch (error) {
-      await recordRowFailure(
-        db,
-        owner,
-        r['id'],
-        error,
-        isPermanentSyncFailure(error),
-      );
-      failed++;
     }
   }
 

@@ -34,6 +34,7 @@ describe('tryAgainFromResult', () => {
       declaredStroke: 'forehand_drive',
       declaredCanonical: 'FOREHAND_DRIVE',
       auto: false,
+      sessionId: null,
     });
   });
 
@@ -84,6 +85,7 @@ describe('tryAgainFromResult', () => {
       declaredStroke: null,
       declaredCanonical: null,
       auto: true,
+      sessionId: null,
     });
   });
 
@@ -94,6 +96,7 @@ describe('tryAgainFromResult', () => {
       declaredStroke: 'dink',
       declaredCanonical: null,
       auto: false,
+      sessionId: null,
     });
   });
 
@@ -113,6 +116,55 @@ describe('tryAgainFromResult', () => {
     );
     expect(handoff.declaredCanonical).toBeNull();
   });
+
+  it('carries the practice set id so the re-record joins the same sitting', () => {
+    const sessionId = '55555555-5555-4555-8555-555555555555';
+    // Declared run.
+    expect(
+      tryAgainFromResult(
+        {
+          strokeIntent: {
+            declaredStroke: 'forehand_drive',
+            predictedStroke: null,
+            resolutionBasis: 'declared',
+            resolvedProfileId: 'FOREHAND_DRIVE',
+            resolvedProfileVersion: 'technique-profile-v1',
+            disagreement: null,
+          },
+        },
+        { shotType: 'forehand_drive', sessionId },
+      ).sessionId,
+    ).toBe(sessionId);
+    // AUTO run.
+    expect(
+      tryAgainFromResult(
+        {
+          strokeIntent: {
+            declaredStroke: null,
+            predictedStroke: null,
+            resolutionBasis: 'abstained',
+            resolvedProfileId: null,
+            resolvedProfileVersion: null,
+            disagreement: null,
+          },
+        },
+        { shotType: 'dink', sessionId },
+      ).sessionId,
+    ).toBe(sessionId);
+    // Legacy record without an envelope.
+    expect(
+      tryAgainFromResult(null, { shotType: 'dink', sessionId }).sessionId,
+    ).toBe(sessionId);
+  });
+
+  it('never invents a set: no analysis or a set-less analysis re-arms with sessionId null', () => {
+    expect(tryAgainFromResult(null, null).sessionId).toBeNull();
+    expect(
+      tryAgainFromResult(null, { shotType: 'dink', sessionId: null }).sessionId,
+    ).toBeNull();
+    // Callers that only know the shotType (no sessionId field at all).
+    expect(tryAgainFromResult(null, { shotType: 'dink' }).sessionId).toBeNull();
+  });
 });
 
 describe('techniqueIntentFromHandoff', () => {
@@ -122,6 +174,7 @@ describe('techniqueIntentFromHandoff', () => {
       declaredStroke: null,
       declaredCanonical: null,
       auto: true,
+      sessionId: null,
     });
     expect(intent).toEqual({
       version: 'technique-intent-v1',
@@ -138,6 +191,7 @@ describe('techniqueIntentFromHandoff', () => {
       declaredStroke: 'forehand_drive',
       declaredCanonical: 'FOREHAND_DRIVE',
       auto: false,
+      sessionId: null,
     });
     expect(intent?.source).toBe('tap');
     expect(intent?.canonical).toBe('FOREHAND_DRIVE');
@@ -150,6 +204,7 @@ describe('techniqueIntentFromHandoff', () => {
       declaredStroke: 'dink',
       declaredCanonical: null,
       auto: false,
+      sessionId: null,
     });
     expect(intent?.canonical).toBeNull();
     expect(intent?.legacySlug).toBe('dink');
@@ -161,6 +216,7 @@ describe('techniqueIntentFromHandoff', () => {
       declaredStroke: null,
       declaredCanonical: null,
       auto: false,
+      sessionId: null,
     });
     expect(intent).toBeNull();
   });
@@ -173,6 +229,7 @@ describe('handoff lifecycle', () => {
       declaredStroke: 'serve',
       declaredCanonical: 'SERVE',
       auto: false,
+      sessionId: null,
     });
     expect(peekTryAgainHandoff()?.declaredStroke).toBe('serve');
     expect(consumeTryAgainHandoff()?.declaredStroke).toBe('serve');
@@ -186,12 +243,14 @@ describe('handoff lifecycle', () => {
       declaredStroke: 'serve',
       declaredCanonical: 'SERVE',
       auto: false,
+      sessionId: null,
     });
     armTryAgain({
       source: 'camera',
       declaredStroke: null,
       declaredCanonical: null,
       auto: true,
+      sessionId: null,
     });
     expect(consumeTryAgainHandoff()?.auto).toBe(true);
     expect(consumeTryAgainHandoff()).toBeNull();

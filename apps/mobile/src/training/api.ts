@@ -442,7 +442,7 @@ export function createTrainingApi(
     }
     if (response.status === 204) return null;
     if (response.status === 401) {
-      reportApiUnauthorized(config.token ?? values.token);
+      reportApiUnauthorized(values.token);
       config.onUnauthorized?.();
       throw new TrainingError(
         'training.session_expired',

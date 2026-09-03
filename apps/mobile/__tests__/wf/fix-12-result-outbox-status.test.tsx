@@ -1,8 +1,14 @@
 /**
  * A shot whose outbox row was permanently rejected or spent its retry budget
  * is never drained again (sync.ts `attempts < OUTBOX_MAX_ATTEMPTS`). The
- * repository must expose that durable state and ResultScreen must tell the
- * truth instead of promising the shot is "still in the secure outbox".
+ * repository must expose that durable state and the Result surface must tell
+ * the truth instead of promising the shot is "still in the secure outbox".
+ *
+ * The sync gate lives in the Personalized training section of the full
+ * breakdown (`ResultBreakdownSheet`, hosted by the `ResultDetails` route);
+ * the four-page Result guide keeps the plan off its pages, so the gate is
+ * driven through `ResultDetailsScreen` here. Its `SyncEvidenceState` is the
+ * object union derived from `hasShotSyncReceipt` then `getShotOutboxStatus`.
  */
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
@@ -27,6 +33,7 @@ jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({
     navigate: mockNavigate,
     goBack: jest.fn(),
+    popTo: jest.fn(),
     popToTop: jest.fn(),
     replace: jest.fn(),
   }),
@@ -76,7 +83,11 @@ import {
   hasShotSyncReceipt,
 } from '../../src/data/repository';
 import { OUTBOX_MAX_ATTEMPTS } from '../../src/data/sync';
-import { ResultScreen } from '../../src/screens/ResultScreen';
+import { ResultDetailsScreen } from '../../src/screens/ResultDetailsScreen';
+import {
+  clearTryAgainHandoff,
+  peekTryAgainHandoff,
+} from '../../src/screens/tryAgainHandoff';
 
 function analysisFixture(): ShotAnalysis {
   return {
@@ -145,11 +156,14 @@ function textOf(renderer: TestRenderer.ReactTestRenderer): string {
 async function renderResult(): Promise<TestRenderer.ReactTestRenderer> {
   let renderer!: TestRenderer.ReactTestRenderer;
   await act(async () => {
-    renderer = TestRenderer.create(<ResultScreen />);
+    renderer = TestRenderer.create(<ResultDetailsScreen />);
   });
-  await act(async () => {
-    await Promise.resolve();
-  });
+  // Evidence → receipt → outbox status resolve on successive microtask turns.
+  for (let i = 0; i < 4; i += 1) {
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
   return renderer;
 }
 
@@ -222,9 +236,10 @@ describe('fix-12: getShotOutboxStatus', () => {
   });
 });
 
-describe('fix-12: ResultScreen sync gate honesty', () => {
+describe('fix-12: Result breakdown sync gate honesty', () => {
   beforeEach(() => {
     jest.useFakeTimers();
+    clearTryAgainHandoff();
     mockExecute.mockReset();
     mockNavigate.mockClear();
     mockLoadEvidence.mockReset();
@@ -232,6 +247,7 @@ describe('fix-12: ResultScreen sync gate honesty', () => {
       analysis: analysisFixture(),
       record: null,
       clip: null,
+      review: null,
       attempts: [],
     });
   });
@@ -262,8 +278,25 @@ describe('fix-12: ResultScreen sync gate honesty', () => {
     expect(text).toContain(`Sync was refused ${OUTBOX_MAX_ATTEMPTS} times`);
     expect(text).toContain('permit_invalid: used');
     expect(text).not.toContain('still in the secure outbox');
+    // No plan can be built from a read the server will never accept.
+    expect(
+      renderer.root.findAll(
+        n => n.props.accessibilityLabel === 'Build reviewed plan',
+      ),
+    ).toHaveLength(0);
+    // "Capture a new read" is the sheet's own TRY AGAIN: the same-intent
+    // handoff is armed (a legacy row with no record re-declares its analyzed
+    // shot type) and the guided camera opens.
+    expect(peekTryAgainHandoff()).toBeNull();
     pressByLabel(renderer, 'Capture a new read');
     expect(mockNavigate).toHaveBeenCalledWith('Analyze', { source: 'camera' });
+    expect(peekTryAgainHandoff()).toEqual({
+      source: 'camera',
+      declaredStroke: 'forehand_drive',
+      declaredCanonical: null,
+      auto: false,
+      sessionId: null,
+    });
     act(() => renderer.unmount());
   });
 

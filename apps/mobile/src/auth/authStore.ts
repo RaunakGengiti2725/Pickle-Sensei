@@ -3,14 +3,32 @@ import { create } from 'zustand';
 import {
   AccountBootstrapError,
   bootstrapCanonicalAccount,
+  normalizeApiBaseUrl,
 } from '../account/bootstrap';
 import {
+  bearerTokenFor,
   clearApiSession,
   establishApiSession,
+  getApiSession,
   setApiUnauthorizedListener,
   type ApiSession,
 } from '../account/apiSession';
 import { getAccountBootstrapEnvironment } from '../account/deviceContext';
+import {
+  refreshSessionNow,
+  startSessionKeeper,
+  stopSessionKeeper,
+} from '../account/sessionKeeper';
+import {
+  revokeApiSession,
+  type RefreshedTokens,
+} from '../account/sessionLifecycle';
+import {
+  clearPersistedSession,
+  loadPersistedSession,
+  savePersistedSession,
+  type PersistedSession,
+} from '../account/sessionVault';
 import {
   GOOGLE_IOS_CLIENT_ID,
   GOOGLE_WEB_CLIENT_ID,
@@ -39,8 +57,11 @@ import {
 /**
  * A UI-safe account descriptor. For synced accounts `subject` is retained only
  * for compatibility with existing display code and is the canonical backend
- * UUID—not an Apple user identifier or Google subject. Provider tokens live in
- * the in-memory ApiSession store and are never persisted in SQLite.
+ * UUID—not an Apple user identifier or Google subject. Bearer material lives
+ * in the in-memory ApiSession store; the only durable credential is the
+ * refresh token in the device Keychain (sessionVault.ts), which is what lets a
+ * relaunch come back signed in. Nothing about a synced account is ever
+ * persisted in SQLite.
  */
 export type AuthProvider = 'apple' | 'google' | 'guest';
 
@@ -174,10 +195,142 @@ async function persistLastProvider(provider: 'google' | null): Promise<void> {
 }
 
 function clearSyncedRuntime(): void {
+  stopSessionKeeper();
   clearSyncRuntime();
   clearApiSession();
   clearAccessStoreConfiguration();
   clearTrainingStoreConfiguration();
+}
+
+/**
+ * Makes an API session the live one: data owner, bearer store, and the
+ * long-lived clients (billing, training, sync). Those clients resolve the
+ * bearer through `bearerTokenFor` on every request, so a later rotation only
+ * has to update the ApiSession store — they are configured exactly once per
+ * sign-in and never reset by a token refresh.
+ */
+function installApiSession(apiSession: ApiSession): void {
+  const config = getRuntimePublicConfig();
+  const canonicalAppUserId = apiSession.canonicalAppUserId;
+  setActiveDataOwner(canonicalDataOwner(canonicalAppUserId));
+  establishApiSession(apiSession);
+  configureAccessStore(
+    createBillingAccessDependencies({
+      revenueCatPublicSdkKey: config.revenueCatPublicSdkKey,
+      canonicalAppUserId,
+      apiBaseUrl: apiSession.apiBaseUrl,
+      get apiToken() {
+        return bearerTokenFor(canonicalAppUserId);
+      },
+    }),
+  );
+  configureTrainingStore(
+    createTrainingApi({
+      baseUrl: apiSession.apiBaseUrl,
+      get token() {
+        return bearerTokenFor(canonicalAppUserId);
+      },
+    }),
+  );
+  configureSyncRuntime(apiSession);
+  setApiUnauthorizedListener(handleApiUnauthorized);
+}
+
+/** The Keychain record for a synced session — only when the server minted a
+ * refresh token (a legacy provider-token session has nothing durable). */
+async function persistSession(
+  session: AuthSession,
+  apiSession: ApiSession,
+): Promise<void> {
+  if (!apiSession.refreshToken || !session.canonicalAppUserId) return;
+  await savePersistedSession({
+    version: 1,
+    provider: apiSession.provider,
+    canonicalAppUserId: session.canonicalAppUserId,
+    refreshToken: apiSession.refreshToken,
+    email: session.email,
+    displayName: session.displayName,
+  });
+}
+
+/**
+ * The session died server-side (refresh token revoked or rotated away, or
+ * the account is gone): the only implicit sign-out in the app. Everything
+ * local is cleared, including the Google silent-restore flag — an explicit
+ * sign-in is required to come back.
+ */
+async function dropRevokedSession(): Promise<void> {
+  clearSyncedRuntime();
+  setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
+  useAuthStore.setState({ session: null, error: null, busy: false });
+  await clearPersistedSession();
+  await persistLocalGuest(false);
+  await persistLastProvider(null);
+}
+
+/**
+ * Applies rotated tokens for the signed-in account: updates the live
+ * ApiSession (or installs the first one of this run when the launch refresh
+ * only landed later), then re-persists the rotated refresh token. Ignored if
+ * the account is no longer the signed-in one.
+ */
+function adoptRotatedTokens(
+  session: AuthSession,
+  apiBaseUrl: string,
+  tokens: RefreshedTokens,
+): void {
+  const canonicalAppUserId = session.canonicalAppUserId;
+  if (
+    !canonicalAppUserId ||
+    session.provider === 'guest' ||
+    useAuthStore.getState().session?.canonicalAppUserId !== canonicalAppUserId
+  ) {
+    return;
+  }
+  const next: ApiSession = {
+    apiBaseUrl,
+    bearerToken: tokens.bearerToken,
+    canonicalAppUserId,
+    provider: session.provider,
+    refreshToken: tokens.refreshToken,
+    bearerExpiresAtMs: tokens.bearerExpiresAtMs,
+  };
+  if (getApiSession()?.canonicalAppUserId === canonicalAppUserId) {
+    establishApiSession(next);
+  } else {
+    installApiSession(next);
+  }
+  void persistSession(session, next);
+}
+
+type RestoreOutcome = 'online' | 'offline' | 'revoked';
+
+function keepSessionAlive(
+  session: AuthSession,
+  apiSession: Pick<
+    ApiSession,
+    'apiBaseUrl' | 'refreshToken' | 'bearerExpiresAtMs'
+  >,
+  onOutcome?: (outcome: RestoreOutcome) => void,
+): void {
+  if (!apiSession.refreshToken) {
+    stopSessionKeeper();
+    return;
+  }
+  startSessionKeeper({
+    apiBaseUrl: apiSession.apiBaseUrl,
+    refreshToken: apiSession.refreshToken,
+    bearerExpiresAtMs: apiSession.bearerExpiresAtMs ?? null,
+    onRotated: tokens => {
+      adoptRotatedTokens(session, apiSession.apiBaseUrl, tokens);
+      onOutcome?.('online');
+    },
+    onRevoked: async () => {
+      await dropRevokedSession();
+      onOutcome?.('revoked');
+    },
+    onDeferred: () => onOutcome?.('offline'),
+  });
 }
 
 async function establishSyncedAccount(input: {
@@ -193,26 +346,9 @@ async function establishSyncedAccount(input: {
     provider: input.provider,
     environment: getAccountBootstrapEnvironment(config),
   });
-  setActiveDataOwner(canonicalDataOwner(result.account.id));
-  establishApiSession(result.apiSession);
-  configureAccessStore(
-    createBillingAccessDependencies({
-      revenueCatPublicSdkKey: config.revenueCatPublicSdkKey,
-      canonicalAppUserId: result.apiSession.canonicalAppUserId,
-      apiBaseUrl: result.apiSession.apiBaseUrl,
-      apiToken: result.apiSession.bearerToken,
-    }),
-  );
-  configureTrainingStore(
-    createTrainingApi({
-      baseUrl: result.apiSession.apiBaseUrl,
-      token: result.apiSession.bearerToken,
-    }),
-  );
-  configureSyncRuntime(result.apiSession);
-  setApiUnauthorizedListener(handleApiUnauthorized);
+  installApiSession(result.apiSession);
   await persistLocalGuest(false);
-  return {
+  const session: AuthSession = {
     provider: input.provider,
     subject: result.account.id,
     canonicalAppUserId: result.account.id,
@@ -220,6 +356,67 @@ async function establishSyncedAccount(input: {
     displayName: input.displayName,
     email: result.account.email ?? input.providerEmail,
   };
+  await persistSession(session, result.apiSession);
+  keepSessionAlive(session, result.apiSession);
+  return session;
+}
+
+function sessionFromPersisted(persisted: PersistedSession): AuthSession {
+  return {
+    provider: persisted.provider,
+    subject: persisted.canonicalAppUserId,
+    canonicalAppUserId: persisted.canonicalAppUserId,
+    localOnly: false,
+    displayName: persisted.displayName,
+    email: persisted.email,
+  };
+}
+
+/** How long a launch waits for the restore refresh before showing the app
+ * signed in with local data while the refresh keeps going in the background
+ * (the keeper adopts the tokens when they land). */
+const LAUNCH_REFRESH_WAIT_MS = 8_000;
+
+/**
+ * Brings a persisted session back: the user is signed in from the Keychain
+ * record alone, and the refresh token is exchanged for a live bearer. Only an
+ * explicit refusal from the server ('revoked') ends the session; offline or
+ * flaky launches stay signed in and keep retrying.
+ */
+async function restorePersistedSession(
+  persisted: PersistedSession,
+): Promise<RestoreOutcome> {
+  const session = sessionFromPersisted(persisted);
+  setActiveDataOwner(canonicalDataOwner(persisted.canonicalAppUserId));
+  // Signed in from the record alone (hydrated flips later, in hydrate()); the
+  // keeper's first rotation needs this to be the current account to adopt.
+  useAuthStore.setState({ session });
+  let apiBaseUrl: string;
+  try {
+    apiBaseUrl = normalizeApiBaseUrl(getRuntimePublicConfig().apiBaseUrl);
+  } catch {
+    // No usable API in this build: signed in with local data, nothing to
+    // refresh against.
+    return 'offline';
+  }
+  return new Promise<RestoreOutcome>(resolve => {
+    const deadline = setTimeout(
+      () => resolve('offline'),
+      LAUNCH_REFRESH_WAIT_MS,
+    );
+    keepSessionAlive(
+      session,
+      {
+        apiBaseUrl,
+        refreshToken: persisted.refreshToken,
+        bearerExpiresAtMs: null,
+      },
+      outcome => {
+        clearTimeout(deadline);
+        resolve(outcome);
+      },
+    );
+  });
 }
 
 type GoogleSigninModule =
@@ -286,10 +483,16 @@ async function restoreGoogleSessionSilently(
 }
 
 /**
- * The backend rejected the current bearer (provider ID tokens expire after
- * about an hour). Stop every retry loop immediately, then try a silent Google
- * refresh; when that is impossible, land signed out with an honest reason so
- * the user is never left tapping controls that fail against a dead token.
+ * An API route rejected the CURRENT bearer (apiSession.ts already ignores
+ * late 401s for a token that was rotated or cleared since). With a refresh
+ * token this is the keeper's job: rotate right now, and let its `onRevoked`
+ * — the ONE implicit sign-out — end the session only if the server refuses
+ * the refresh token too; the durable sign-in is never dropped for a 401 on
+ * its own. A legacy provider-token session (an older server returned no
+ * session, so there is nothing to rotate and the ID token dies after about
+ * an hour) stops every retry loop immediately, tries a silent Google
+ * refresh, and otherwise lands signed out with an honest reason so the user
+ * is never left tapping controls that fail against a dead token.
  */
 function handleApiUnauthorized(expired: ApiSession): void {
   const state = useAuthStore.getState();
@@ -300,6 +503,10 @@ function handleApiUnauthorized(expired: ApiSession): void {
     current.localOnly ||
     current.canonicalAppUserId !== expired.canonicalAppUserId
   ) {
+    return;
+  }
+  if (expired.refreshToken) {
+    refreshSessionNow();
     return;
   }
   clearSyncedRuntime();
@@ -323,6 +530,7 @@ function handleApiUnauthorized(expired: ApiSession): void {
       busy: false,
       error: { code: 'auth.session_expired', message: SESSION_EXPIRED_MESSAGE },
     });
+    await clearPersistedSession();
     await persistLocalGuest(false);
   })();
 }
@@ -350,9 +558,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return;
       }
       setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
-      // Silent restore is Google-only (see restoreGoogleSessionSilently for
-      // why Apple cannot have one) and only worth attempting when the web
-      // client id needed for a backend-verifiable token is configured.
+      // The durable session: whoever signed in on this device last stays
+      // signed in across relaunches, backgrounding and reboots, for any
+      // provider, until they sign out or the server refuses the refresh
+      // token. No provider SDK is consulted for this.
+      const persisted = await loadPersistedSession();
+      if (persisted) {
+        const outcome = await restorePersistedSession(persisted);
+        if (outcome !== 'revoked') {
+          set({ hydrated: true });
+          return;
+        }
+      }
+      // Legacy fallback for devices that signed in before sessions were
+      // persisted: silent restore is Google-only (see
+      // restoreGoogleSessionSilently for why Apple cannot have one) and only
+      // worth attempting when the web client id needed for a
+      // backend-verifiable token is configured. A success bootstraps a new
+      // session, which IS persisted — so this path runs at most once.
       const lastProvider = await getKv(db, LAST_PROVIDER_KV_KEY);
       if (lastProvider === LAST_PROVIDER_GOOGLE_VALUE && GOOGLE_WEB_CLIENT_ID) {
         try {
@@ -372,6 +595,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
       set({ session: null, hydrated: true });
     } catch {
+      clearSyncedRuntime();
       setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
       set({ session: null, hydrated: true });
     }
@@ -478,12 +702,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     const provider = get().session?.provider;
+    const apiSession = getApiSession();
     clearSyncedRuntime();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     set({ session: null, error: null, busy: false });
+    // The persisted session goes first: whatever else fails below, the next
+    // launch must not restore an account the user just signed out of.
+    await clearPersistedSession();
     await persistLocalGuest(false);
     // Explicit sign-out always disarms the silent restore on the next launch.
     await persistLastProvider(null);
+    // Kill this device's session server-side too (best effort — offline, the
+    // refresh token still dies at its natural rotation/expiry).
+    if (apiSession?.refreshToken) await revokeApiSession(apiSession);
     if (provider === 'google') {
       try {
         const { GoogleSignin } = await loadGoogleSignin();
@@ -504,6 +735,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     clearSyncedRuntime();
     setActiveDataOwner(SIGNED_OUT_DATA_OWNER);
     set({ session: null, error: null, busy: false, deletionCleanup: null });
+    // The account (and every server-side session) is already gone; the
+    // Keychain record must go with it or the next launch would try — and
+    // fail — to refresh a deleted account.
+    await clearPersistedSession();
     await persistLocalGuest(false);
     await persistLastProvider(null);
     let localPurge: AccountDeletionCleanup['localPurge'] = 'not_needed';

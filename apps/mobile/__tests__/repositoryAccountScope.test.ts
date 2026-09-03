@@ -8,8 +8,11 @@ import {
 import {
   getAnalysis,
   hasShotSyncReceipt,
+  listRealAnalysisFacts,
+  OWNER_SCOPED_KV_NAMESPACES,
   saveAnalysis,
 } from '../src/data/repository';
+import { practiceSetKeyForOwner } from '../src/analysis/practiceSet';
 
 const ownerA = '11111111-1111-4111-8111-111111111111';
 const permitId = '22222222-2222-4222-8222-222222222222';
@@ -113,5 +116,96 @@ describe('account-scoped local repository', () => {
   it('keeps legacy local use in its explicit guest bucket', () => {
     setActiveDataOwner(GUEST_DATA_OWNER);
     expect(GUEST_DATA_OWNER).toBe('device-guest');
+  });
+
+  it('pins every owner-scoped kv namespace to its key builder', () => {
+    // A namespace missing here escapes account deletion; a key builder that
+    // drifts from the list leaves orphaned rows behind.
+    expect(OWNER_SCOPED_KV_NAMESPACES).toEqual([
+      'profile',
+      'rank.celebrated',
+      'notifications',
+      'consistency',
+      'practice.set',
+    ]);
+    expect(practiceSetKeyForOwner(ownerA)).toBe(`practice.set:${ownerA}`);
+  });
+
+  it('exposes the practice-set tie, priority checkpoint, and applicable checkpoint scores as facts', async () => {
+    setActiveDataOwner(ownerA);
+    const sessionId = '33333333-3333-4333-8333-333333333333';
+    const withSet: ShotAnalysis = {
+      ...analysis,
+      sessionId,
+      priorityFix: {
+        checkpoint: 'contact_position',
+        reasonKey: 'lowest_applicable',
+        severity: 0.6,
+        confidence: 0.8,
+      },
+      checkpoints: [
+        {
+          key: 'contact_position',
+          score: 48,
+          confidence: 0.8,
+          band: 'red',
+          direction: 'late',
+          severity: 0.6,
+          applicable: true,
+        },
+        {
+          key: 'follow_through',
+          score: 81,
+          confidence: 0.8,
+          band: 'green',
+          direction: 'none',
+          severity: 0,
+          applicable: true,
+        },
+        // Non-applicable and unobserved checkpoints never become scores.
+        {
+          key: 'recovery',
+          score: 90,
+          confidence: 0.8,
+          band: 'green',
+          direction: 'none',
+          severity: 0,
+          applicable: false,
+        },
+        {
+          key: 'paddle_set',
+          score: null,
+          confidence: 0,
+          band: 'unscored',
+          direction: 'none',
+          severity: 0,
+          applicable: true,
+        },
+      ],
+    };
+    const db: LocalDb = {
+      async execute() {
+        return {
+          rows: [
+            { payload: JSON.stringify(withSet) },
+            { payload: JSON.stringify(analysis) },
+          ],
+        };
+      },
+      close() {},
+    };
+    const facts = await listRealAnalysisFacts(db);
+    expect(facts).toHaveLength(2);
+    expect(facts[0]).toMatchObject({
+      id: analysis.id,
+      sessionId,
+      priorityCheckpoint: 'contact_position',
+      checkpointScores: { contact_position: 48, follow_through: 81 },
+    });
+    expect(facts[1]).toMatchObject({
+      sessionId: null,
+      priorityCheckpoint: null,
+      checkpointScores: {},
+    });
   });
 });

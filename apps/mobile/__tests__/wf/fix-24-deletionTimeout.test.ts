@@ -56,7 +56,9 @@ describe('account deletion request deadline', () => {
 
   it('step 1 aborts a hung delete-request after 15s with retryable offline copy', async () => {
     const fetchFn = hangingFetch();
-    const pending = requestAccountDeletion(session, fetchFn);
+    // Skipped survey (null) — the survey rides as the second argument, the
+    // transport as the third.
+    const pending = requestAccountDeletion(session, null, fetchFn);
     const settled = pending.then(
       () => 'resolved',
       (error: unknown) => error,
@@ -76,6 +78,47 @@ describe('account deletion request deadline', () => {
       message:
         'Account deletion is temporarily offline. Nothing was deleted — please try again.',
     });
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('step 1 with an exit survey is bounded by the same deadline (the survey never extends it)', async () => {
+    const fetchFn = hangingFetch();
+    const settled = requestAccountDeletion(
+      session,
+      {
+        reason: 'too_expensive',
+        wanted: 'price',
+        details: null,
+        platform: 'ios',
+        appVersion: '1.0',
+      },
+      fetchFn,
+    ).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    // The survey went out in the body of the very request that hung…
+    expect(JSON.parse(String(fetchFn.mock.calls[0]?.[1]?.body))).toEqual({
+      survey: {
+        reason: 'too_expensive',
+        wanted: 'price',
+        details: null,
+        platform: 'ios',
+        appVersion: '1.0',
+      },
+    });
+
+    await jest.advanceTimersByTimeAsync(15_000);
+    expect(fetchFn.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+
+    // …and the failure is the same retryable, typed "nothing was deleted".
+    const error = await settled;
+    expect(error).toBeInstanceOf(AccountDeletionError);
+    expect(error).toMatchObject({
+      code: 'deletion.unavailable',
+      retryable: true,
+    });
+    expect(jest.getTimerCount()).toBe(0);
   });
 
   it('step 2 aborts a hung delete-confirm after 15s with retryable offline copy', async () => {

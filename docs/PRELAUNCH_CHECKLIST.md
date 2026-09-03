@@ -80,7 +80,12 @@ release. Evidence pointers reference the code so re-verification is fast.
   `pickle_sensei_pro`, target prices $7.99/$59.99/$159.99 (app only ever
   displays store-returned prices).
 - ☐ Sandbox test: purchase, restore, cancel, lapse → app access follows the
-  server verdict each time.
+  server verdict each time. Prerequisite on the test device: sign a Sandbox
+  Apple Account (App Store Connect → Users and Access → Sandbox) into
+  Settings → Developer → Sandbox Apple Account. Until then every purchase
+  attempt in an Xcode build raises iOS's "Sign in to Apple Account"
+  credential dialog — that is StoreKit's sandbox sign-in, not the app's;
+  App Store builds show the normal Face ID payment sheet instead.
 
 ## 5. Accounts & privacy
 

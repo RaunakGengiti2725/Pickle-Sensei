@@ -235,7 +235,7 @@ describe('OnboardingScreen', () => {
       const renderer = renderScreen({
         mode: 'preauth',
         onFinished,
-        onExitToSignIn: jest.fn(),
+        onBack: jest.fn(),
       });
       walkToReveal(renderer);
       expect(allText(renderer)).toContain('Built for Dana.');
@@ -257,7 +257,7 @@ describe('OnboardingScreen', () => {
       const renderer = renderScreen({
         mode: 'preauth',
         onFinished,
-        onExitToSignIn: jest.fn(),
+        onBack: jest.fn(),
       });
       walkToReveal(renderer);
       press(renderer, 'Continue');
@@ -275,7 +275,7 @@ describe('OnboardingScreen', () => {
       const renderer = renderScreen({
         mode: 'preauth',
         onFinished,
-        onExitToSignIn: jest.fn(),
+        onBack: jest.fn(),
       });
       walkToReveal(renderer);
       press(renderer, 'Continue');
@@ -285,28 +285,70 @@ describe('OnboardingScreen', () => {
       act(() => renderer.unmount());
     });
 
-    it('escapes to sign-in from step one without touching the session', () => {
+    it('step one only goes BACK to Welcome — no alert, no skip to sign-in, session untouched', () => {
       const alertSpy = jest
         .spyOn(Alert, 'alert')
         .mockImplementation(() => undefined);
-      const onExitToSignIn = jest.fn();
-      const renderer = renderScreen({
-        mode: 'preauth',
-        onFinished: jest.fn(),
-        onExitToSignIn,
-      });
+      const onBack = jest.fn();
+      const onFinished = jest.fn();
+      const renderer = renderScreen({ mode: 'preauth', onFinished, onBack });
 
-      press(renderer, 'Leave setup');
-      expect(alertSpy).toHaveBeenCalledTimes(1);
-      const buttons = alertSpy.mock.calls[0]?.[2] ?? [];
-      const skip = buttons.find(button => button.text === 'Skip to sign-in');
-      expect(skip).toBeDefined();
-      act(() => skip!.onPress?.());
+      // The only control besides Continue on step one is Back; nothing is
+      // labelled as leaving or skipping setup.
+      expect(
+        renderer.root.findAll(
+          node => node.props?.accessibilityLabel === 'Leave setup',
+        ),
+      ).toHaveLength(0);
+      expect(allText(renderer)).not.toMatch(/skip/i);
 
-      expect(onExitToSignIn).toHaveBeenCalledTimes(1);
+      press(renderer, 'Back');
+
+      expect(onBack).toHaveBeenCalledTimes(1);
+      expect(alertSpy).not.toHaveBeenCalled();
+      expect(onFinished).not.toHaveBeenCalled();
+      expect(mockCompletePreAuthOnboarding).not.toHaveBeenCalled();
       expect(mockSignOut).not.toHaveBeenCalled();
       alertSpy.mockRestore();
       act(() => renderer.unmount());
     });
+
+    it('offers no skip on any later step either: Back always returns to the previous question', () => {
+      const onBack = jest.fn();
+      const renderer = renderScreen({
+        mode: 'preauth',
+        onFinished: jest.fn(),
+        onBack,
+      });
+      act(() => renderer.root.findByType(TextInput).props.onChangeText('Dana'));
+      press(renderer, 'Continue');
+      expect(allText(renderer)).not.toMatch(/skip/i);
+
+      press(renderer, 'Back');
+      // Back inside the flow never leaves it.
+      expect(onBack).not.toHaveBeenCalled();
+      expect(renderer.root.findAllByType(TextInput)).toHaveLength(1);
+      act(() => renderer.unmount());
+    });
+  });
+
+  it('in-account mode keeps sign-out as the only exit and never offers a skip', () => {
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation(() => undefined);
+    const renderer = renderScreen();
+
+    expect(allText(renderer)).not.toMatch(/skip/i);
+    press(renderer, 'Leave setup');
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+    const buttons = alertSpy.mock.calls[0]?.[2] ?? [];
+    expect(buttons.map(button => button.text)).toEqual([
+      'Keep setting up',
+      'Sign out',
+    ]);
+    act(() => buttons.find(b => b.text === 'Sign out')!.onPress?.());
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
+    alertSpy.mockRestore();
+    act(() => renderer.unmount());
   });
 });

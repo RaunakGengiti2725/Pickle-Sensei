@@ -1,4 +1,5 @@
 import type { ShotAnalysis } from '@pickle/shared-types';
+import type { PoseSequenceSidecarRef } from '../camera/capture';
 import { getActiveDataOwner } from '../data/accountScope';
 import type { LocalDb } from '../data/db';
 import { getAnalysis, getPendingCapture, listShots } from '../data/repository';
@@ -18,7 +19,9 @@ import type {
  *  - local_analysis_record → the immutable full record (strokeIntent
  *                          envelope, uncertainty, and — when a future engine
  *                          writes them — contact / temporalPhasesV2);
- *  - local_capture       → the real captured clip file for replay.
+ *  - local_capture       → the real captured clip file for replay, plus
+ *                          the frame size and the hash-addressed pose
+ *                          sidecar ref the Form Review replays over it.
  *
  * The record row is looked up by its own id (analysisId IS the record id for
  * every runCaptureAnalysis outcome). Reading it here — owner-scoped exactly
@@ -26,10 +29,24 @@ import type {
  * this workstream inside its allowed file set.
  */
 
+/**
+ * What the Form Review needs beyond the clip: the recorded frame size (the
+ * pose sidecar's normalized coordinates map onto it) and the sidecar ref
+ * itself — null when the capture predates pose retention. The sidecar is
+ * only referenced here; loading and verifying it is the review's job.
+ */
+export interface StrokeReviewEvidence {
+  width: number;
+  height: number;
+  poseSequence: PoseSequenceSidecarRef | null;
+}
+
 export interface StrokeResultEvidence {
   analysis: ShotAnalysis | null;
   record: StrokeResultEvidenceRecord | null;
   clip: StrokeResultClip | null;
+  /** Null when no capture row exists for the record (legacy rating rows). */
+  review: StrokeReviewEvidence | null;
   attempts: AttemptRef[];
 }
 
@@ -92,6 +109,7 @@ export async function loadStrokeResultEvidence(
   ]);
 
   let clip: StrokeResultClip | null = null;
+  let review: StrokeReviewEvidence | null = null;
   if (record?.captureId) {
     const capture = await getPendingCapture(db, record.captureId).catch(
       () => null,
@@ -104,8 +122,17 @@ export async function loadStrokeResultEvidence(
         ...(posterUri !== undefined ? { posterUri } : {}),
       };
     }
+    if (capture) {
+      // Same capture row as the clip: its recorded frame size and the pose
+      // sidecar ref (absent → null, never a reconstructed sequence).
+      review = {
+        width: capture.width,
+        height: capture.height,
+        poseSequence: capture.clip?.poseSequence ?? null,
+      };
+    }
   }
 
   const attempts = await loadSessionAttempts(db, analysis).catch(() => []);
-  return { analysis, record, clip, attempts };
+  return { analysis, record, clip, review, attempts };
 }

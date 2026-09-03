@@ -44,6 +44,9 @@ import {
   DUPR_ESTIMATE_NOTE,
   formatDuprEstimate,
 } from '../progress/duprEstimate';
+import { DashSectionHeader } from '../progress/DashSectionHeader';
+import { PracticeSetCard } from '../progress/PracticeSetCard';
+import { latestPracticeSet } from '../progress/practiceSetProgress';
 import { PracticeVolumeChart } from '../progress/PracticeVolumeChart';
 import { ScoreTrendChart } from '../progress/ScoreTrendChart';
 import { StatDeltaRow } from '../progress/StatDeltaRow';
@@ -166,18 +169,6 @@ function basisLabel(count: number, basis: 'daily averages' | 'scored reads') {
     : plural(count, 'scored read', 'scored reads');
 }
 
-/** WHOOP-style section header: uppercase title, right-aligned context. */
-function DashSectionHeader(props: { title: string; right?: string }) {
-  return (
-    <View style={styles.dashHeader}>
-      <Text style={[type.micro, styles.dashHeaderTitle]}>{props.title}</Text>
-      {props.right ? (
-        <Text style={[type.micro, styles.dashHeaderRight]}>{props.right}</Text>
-      ) : null}
-    </View>
-  );
-}
-
 function EvidenceMetric(props: {
   label: string;
   value: number | null;
@@ -270,6 +261,13 @@ export function ProgressScreen() {
   const dashboard = useMemo(
     () => buildTechniqueDashboard(facts, { asOfIso, timeZone, range }),
     [asOfIso, facts, range, timeZone],
+  );
+  // The sitting the player just had: shown only when it holds two or more
+  // comparable reads landed within the last day (nothing older masquerades
+  // as "this set"). Independent of the selected range on purpose.
+  const practiceSet = useMemo(
+    () => latestPracticeSet(facts, { asOfIso }),
+    [asOfIso, facts],
   );
   const selectedDefinition = PRACTICE_HISTORY_RANGES.find(
     candidate => candidate.key === range,
@@ -797,6 +795,15 @@ export function ProgressScreen() {
               )}
             </Card>
 
+            {practiceSet ? (
+              <PracticeSetCard
+                summary={practiceSet}
+                onOpenAttempt={analysisId =>
+                  navigation.navigate('Result', { analysisId })
+                }
+              />
+            ) : null}
+
             <DashSectionHeader
               title="KEY STATISTICS"
               right={vsPriorLabel(range)}
@@ -1139,16 +1146,6 @@ const styles = StyleSheet.create({
   rangeOptionActive: { backgroundColor: color.volt },
   rangeLabel: { color: color.onDarkMuted },
   rangeLabelActive: { color: color.onVolt },
-  dashHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: space.md,
-    marginTop: space.xl,
-    marginBottom: space.sm + 4,
-  },
-  dashHeaderTitle: { color: color.onDarkMuted, letterSpacing: 1.2 },
-  dashHeaderRight: { color: color.onDarkFaint, letterSpacing: 1.2 },
   statRows: { gap: 8 },
   practiceHero: {
     marginTop: space.md,

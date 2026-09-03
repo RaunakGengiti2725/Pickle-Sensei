@@ -4,8 +4,9 @@ import type { ShotAnalysis } from '@pickle/shared-types';
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import {
+  analysisContactMs,
   contactMarkerPresentation,
-  phaseTimelinePresentation,
+  effectivePhaseTimeline,
   type StrokeResultEvidenceRecord,
 } from './strokeResultModel';
 
@@ -13,15 +14,18 @@ import {
  * Uncertainty microcopy for Result surfaces — honest, human sentences about
  * what this attempt could NOT establish (MOBBIN brief §4). Copy states the
  * limit of the evidence and never implies a certainty that does not exist:
- * no hedged score, no "approximate" marker, no softened prediction.
+ * no hedged score, no "approximate" marker, no softened prediction — and,
+ * just as strictly, no "couldn't measure" claim about something the
+ * analysis DID measure (its phases, its wrist-peak contact estimate).
  *
  * The selectors here are read-only consumers of the existing evidence gates
- * (contactMarkerPresentation, phaseTimelinePresentation, strokeIntent); they
- * never change what those gates admit or draw.
+ * (contactMarkerPresentation, effectivePhaseTimeline, analysisContactMs,
+ * strokeIntent); they never change what those gates admit or draw.
  */
 
 export const UNCERTAINTY_KINDS = [
   'contact',
+  'contact_estimate',
   'stroke_identity',
   'phase_timing',
   'technique_score',
@@ -32,6 +36,9 @@ export type UncertaintyKind = (typeof UNCERTAINTY_KINDS)[number];
 export const UNCERTAINTY_COPY: Record<UncertaintyKind, string> = {
   contact:
     'Contact wasn’t located on this attempt, so no contact marker is shown.',
+  contact_estimate:
+    'Contact is estimated from your wrist-speed peak — the paddle and ball ' +
+    'are not tracked, so the exact strike frame may differ by a frame or two.',
   stroke_identity:
     'This stroke couldn’t be identified, so no label was applied.',
   phase_timing:
@@ -63,9 +70,20 @@ export function uncertaintyNotes(input: {
   const notes: UncertaintyNoteView[] = [];
   const record = input.record;
   if (!record) return notes;
+  const analysis = input.analysis ?? record.result ?? null;
 
   if (contactMarkerPresentation(record.contact).kind === 'not_established') {
-    notes.push({ kind: 'contact', text: UNCERTAINTY_COPY.contact });
+    // No defensible (ball/paddle/high-confidence) contact marker. When the
+    // record carries no contact estimate at all but the analysis measured a
+    // wrist-speed peak, that peak IS the contact estimate on the surface —
+    // the note names its limit instead of denying it exists.
+    const wristPeak =
+      (record.contact ?? null) === null && analysisContactMs(analysis) !== null;
+    notes.push(
+      wristPeak
+        ? { kind: 'contact_estimate', text: UNCERTAINTY_COPY.contact_estimate }
+        : { kind: 'contact', text: UNCERTAINTY_COPY.contact },
+    );
   }
   if (record.strokeIntent?.resolutionBasis === 'abstained') {
     notes.push({
@@ -73,10 +91,11 @@ export function uncertaintyNotes(input: {
       text: UNCERTAINTY_COPY.stroke_identity,
     });
   }
-  if (phaseTimelinePresentation(record.temporalPhasesV2).kind === 'none') {
+  // Phase timing is "not measured" ONLY when neither the record nor the
+  // analysis yields a timeline — the same gate the replay strip draws by.
+  if (effectivePhaseTimeline(record, analysis).kind === 'none') {
     notes.push({ kind: 'phase_timing', text: UNCERTAINTY_COPY.phase_timing });
   }
-  const analysis = input.analysis ?? record.result ?? null;
   const scoreWithheld = !analysis || analysis.overallScore === null;
   if (scoreWithheld) {
     notes.push({

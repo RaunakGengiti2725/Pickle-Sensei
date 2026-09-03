@@ -486,6 +486,7 @@ describe('D12 — TechniqueIntent + capture configuration survive every rearm', 
         declaredStroke: null,
         declaredCanonical: null,
         auto: true,
+        sessionId: null,
       });
       expect(techniqueIntentFromHandoff(handoff)).toEqual({
         version: 'technique-intent-v1',

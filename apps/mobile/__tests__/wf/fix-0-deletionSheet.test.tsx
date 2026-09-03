@@ -1,10 +1,11 @@
 /**
- * Deletion sheet guards: the close/backdrop/back controls cannot dismiss the
- * sheet while a request is in flight (a silent tap during a server round-trip
- * would leave the user unsure whether anything happened), a non-retryable
- * confirm failure returns to review instead of leaving a dead "Permanently
- * delete" button, and a failed on-device purge after a confirmed server
- * deletion is told to the user.
+ * Deletion dialog guards (confirmation page, reached past the skippable exit
+ * survey): the close/backdrop/back controls cannot dismiss the dialog while a
+ * request is in flight (a silent tap during a server round-trip would leave
+ * the user unsure whether anything happened), a non-retryable confirm
+ * failure returns to review instead of leaving a dead "Permanently delete"
+ * button, and a failed on-device purge after a confirmed server deletion is
+ * told to the user.
  */
 import React from 'react';
 import { Alert, Text } from 'react-native';
@@ -24,7 +25,12 @@ jest.mock('../../src/data/db', () => ({
 jest.mock('react-native-safe-area-context', () => {
   const { View } =
     jest.requireActual<typeof import('react-native')>('react-native');
-  return { SafeAreaView: View };
+  const insets = { top: 0, bottom: 0, left: 0, right: 0 };
+  return {
+    SafeAreaView: View,
+    useSafeAreaInsets: () => insets,
+    initialWindowMetrics: null,
+  };
 });
 
 jest.mock('@react-navigation/native', () => ({
@@ -37,17 +43,13 @@ const mockRequestAccountDeletion = jest.fn<
 >();
 const mockConfirmAccountDeletion = jest.fn<Promise<void>, unknown[]>();
 jest.mock('../../src/account/deletion', () => {
-  class AccountDeletionError extends Error {
-    code: string;
-    retryable: boolean;
-    constructor(code: string, message: string, retryable: boolean) {
-      super(message);
-      this.code = code;
-      this.retryable = retryable;
-    }
-  }
+  // Only the network calls are stubbed; the survey vocabulary/caps the
+  // dialog renders from (and AccountDeletionError) are the real ones.
+  const actual = jest.requireActual<
+    typeof import('../../src/account/deletion')
+  >('../../src/account/deletion');
   return {
-    AccountDeletionError,
+    ...actual,
     requestAccountDeletion: (...args: unknown[]) =>
       mockRequestAccountDeletion(...args),
     confirmAccountDeletion: (...args: unknown[]) =>
@@ -112,9 +114,15 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+/** The link opens the exit survey first; skipping it lands on the
+ * confirmation whose guards this suite pins. */
 async function openSheet(renderer: TestRenderer.ReactTestRenderer) {
   await act(async () => {
     labeled(renderer, 'Delete account').props.onPress();
+  });
+  expect(allText(renderer)).toContain("What's making you leave?");
+  await act(async () => {
+    labeled(renderer, 'Skip the survey').props.onPress();
   });
   expect(allText(renderer)).toContain('Delete your account?');
 }

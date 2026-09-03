@@ -2,14 +2,16 @@
  * App Store compliance sweep — in-app account deletion (App Review 5.1.1(v)).
  *
  * Drives Settings → Manage account → "Delete account" as a user would and
- * pins the branches the happy-path suite does not: every cancel affordance
- * (Keep my account, backdrop, close X, hardware back), request-phase and
- * confirm-phase failures with honest "nothing was deleted" copy, the
- * double-tap guard while a request is in flight, and that no phase leaves
- * the sheet spinning forever.
+ * pins the branches the happy-path suite does not: the exit survey never
+ * stands between the user and deletion (skippable on both questions, no
+ * server call of its own), every cancel affordance (Keep my account,
+ * backdrop, close X, hardware back), request-phase and confirm-phase
+ * failures with honest "nothing was deleted" copy, the double-tap guard
+ * while a request is in flight, and that no phase leaves the sheet spinning
+ * forever.
  */
 import React from 'react';
-import { Modal, Text } from 'react-native';
+import { Modal, Text, TextInput } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 jest.mock('../../src/config/authConfig', () => ({
@@ -26,7 +28,12 @@ jest.mock('../../src/data/db', () => ({
 jest.mock('react-native-safe-area-context', () => {
   const { View } =
     jest.requireActual<typeof import('react-native')>('react-native');
-  return { SafeAreaView: View };
+  const insets = { top: 0, bottom: 0, left: 0, right: 0 };
+  return {
+    SafeAreaView: View,
+    useSafeAreaInsets: () => insets,
+    initialWindowMetrics: null,
+  };
 });
 
 const mockGoBack = jest.fn();
@@ -40,17 +47,13 @@ const mockRequestAccountDeletion = jest.fn<
 >();
 const mockConfirmAccountDeletion = jest.fn<Promise<void>, unknown[]>();
 jest.mock('../../src/account/deletion', () => {
-  class AccountDeletionError extends Error {
-    code: string;
-    retryable: boolean;
-    constructor(code: string, message: string, retryable: boolean) {
-      super(message);
-      this.code = code;
-      this.retryable = retryable;
-    }
-  }
+  // Only the network calls are stubbed; the survey vocabulary/caps the
+  // dialog renders from (and AccountDeletionError) are the real ones.
+  const actual = jest.requireActual<
+    typeof import('../../src/account/deletion')
+  >('../../src/account/deletion');
   return {
-    AccountDeletionError,
+    ...actual,
     requestAccountDeletion: (...args: unknown[]) =>
       mockRequestAccountDeletion(...args),
     confirmAccountDeletion: (...args: unknown[]) =>
@@ -117,9 +120,18 @@ function sheetVisible(renderer: TestRenderer.ReactTestRenderer): boolean {
   return renderer.root.findByType(Modal).props.visible === true;
 }
 
-async function openSheet(renderer: TestRenderer.ReactTestRenderer) {
+/** Tap the link: the dialog opens on exit-survey question 1. */
+async function openSurvey(renderer: TestRenderer.ReactTestRenderer) {
   await press(renderer, 'Delete account');
   expect(sheetVisible(renderer)).toBe(true);
+  expect(allText(renderer)).toContain("What's making you leave?");
+  expect(allText(renderer)).not.toContain('Delete your account?');
+}
+
+/** Open the dialog and skip the survey straight to the confirmation page. */
+async function openSheet(renderer: TestRenderer.ReactTestRenderer) {
+  await openSurvey(renderer);
+  await press(renderer, 'Skip the survey');
   expect(allText(renderer)).toContain('Delete your account?');
 }
 
@@ -161,10 +173,13 @@ describe('Manage account → Delete account (App Review 5.1.1(v))', () => {
     const [link] = pressables(renderer, 'Delete account');
     expect(link).toBeDefined();
     expect(link!.props.accessibilityRole).toBe('button');
-    // Nothing destructive happens on the first tap: only the sheet opens.
+    // Nothing destructive happens on the first tap: only the exit survey
+    // opens, and it is not even the confirmation yet.
     await press(renderer, 'Delete account');
     expect(mockRequestAccountDeletion).not.toHaveBeenCalled();
     expect(sheetVisible(renderer)).toBe(true);
+    expect(allText(renderer)).toContain("What's making you leave?");
+    expect(allText(renderer)).not.toContain('Delete your account?');
     act(() => renderer.unmount());
   });
 
@@ -180,6 +195,125 @@ describe('Manage account → Delete account (App Review 5.1.1(v))', () => {
     ).toBeFalsy();
     expect(mockRequestAccountDeletion).not.toHaveBeenCalled();
     act(() => renderer.unmount());
+  });
+
+  describe('exit survey never obstructs deletion', () => {
+    it('question 1 can be skipped outright: the confirmation opens and step 1 sends no survey', async () => {
+      mockRequestAccountDeletion.mockResolvedValue({
+        challenge: 'challenge-skip',
+        expiresAt: '2026-09-01T00:00:00.000Z',
+      });
+      const renderer = renderScreen();
+      await openSurvey(renderer);
+      // Next is gated on an answer; Skip and the close X never are.
+      expect(sheetButton(renderer, 'Next').props.disabled).toBe(true);
+      expect(pressables(renderer, 'Skip the survey').length).toBeGreaterThan(0);
+      expect(
+        pressables(renderer, 'Close and keep my account').length,
+      ).toBeGreaterThan(0);
+      await press(renderer, 'Skip the survey');
+      expect(allText(renderer)).toContain('Delete your account?');
+      expect(mockRequestAccountDeletion).not.toHaveBeenCalled();
+
+      await act(async () => {
+        sheetButton(renderer, 'Continue to delete').props.onPress();
+      });
+      expect(mockRequestAccountDeletion).toHaveBeenCalledWith(null, null);
+      act(() => renderer.unmount());
+    });
+
+    it('question 2 can be skipped too: step 1 then carries only the first answer', async () => {
+      mockRequestAccountDeletion.mockResolvedValue({
+        challenge: 'challenge-q1',
+        expiresAt: '2026-09-01T00:00:00.000Z',
+      });
+      const renderer = renderScreen();
+      await openSurvey(renderer);
+      await press(renderer, 'Privacy or data concerns');
+      await act(async () => {
+        sheetButton(renderer, 'Next').props.onPress();
+      });
+      expect(allText(renderer)).toContain('What would have kept you?');
+      expect(sheetButton(renderer, 'Continue').props.disabled).toBe(true);
+      expect(pressables(renderer, 'Skip this question').length).toBeGreaterThan(
+        0,
+      );
+      await press(renderer, 'Skip this question');
+      expect(allText(renderer)).toContain('Delete your account?');
+
+      await act(async () => {
+        sheetButton(renderer, 'Continue to delete').props.onPress();
+      });
+      expect(mockRequestAccountDeletion).toHaveBeenCalledWith(
+        null,
+        expect.objectContaining({
+          reason: 'privacy',
+          wanted: null,
+          details: null,
+        }),
+      );
+      act(() => renderer.unmount());
+    });
+
+    it('answers ride along with step 1 (never a call of their own) and the comment is optional', async () => {
+      mockRequestAccountDeletion.mockResolvedValue({
+        challenge: 'challenge-survey',
+        expiresAt: '2026-09-01T00:00:00.000Z',
+      });
+      const renderer = renderScreen();
+      await openSurvey(renderer);
+      await press(renderer, "It's too expensive");
+      await act(async () => {
+        sheetButton(renderer, 'Next').props.onPress();
+      });
+      await press(renderer, 'A lower price or a free tier');
+      const input = renderer.root.findByType(TextInput);
+      expect(input.props.accessibilityHint).toBe('Optional');
+      await act(async () => {
+        input.props.onChangeText('  $60 a year is steep for a rec player.  ');
+      });
+      await act(async () => {
+        sheetButton(renderer, 'Continue').props.onPress();
+      });
+      expect(allText(renderer)).toContain('Delete your account?');
+      expect(mockRequestAccountDeletion).not.toHaveBeenCalled();
+
+      await act(async () => {
+        sheetButton(renderer, 'Continue to delete').props.onPress();
+      });
+      expect(mockRequestAccountDeletion).toHaveBeenCalledWith(null, {
+        reason: 'too_expensive',
+        wanted: 'price',
+        details: '$60 a year is steep for a rec player.',
+        platform: 'ios',
+        appVersion: '1.0',
+      });
+      act(() => renderer.unmount());
+    });
+
+    it('closing the survey from either question keeps the account and forgets the answers', async () => {
+      const renderer = renderScreen();
+      await openSurvey(renderer);
+      await press(renderer, "I don't use it enough");
+      await press(renderer, 'Close and keep my account');
+      expect(sheetVisible(renderer)).toBe(false);
+
+      await openSurvey(renderer);
+      expect(sheetButton(renderer, 'Next').props.disabled).toBe(true);
+      await press(renderer, "I don't use it enough");
+      await act(async () => {
+        sheetButton(renderer, 'Next').props.onPress();
+      });
+      await press(renderer, 'Close and keep my account');
+      expect(sheetVisible(renderer)).toBe(false);
+
+      await openSurvey(renderer);
+      await press(renderer, 'Cancel account deletion');
+      expect(sheetVisible(renderer)).toBe(false);
+      expect(mockRequestAccountDeletion).not.toHaveBeenCalled();
+      expect(mockConfirmAccountDeletion).not.toHaveBeenCalled();
+      act(() => renderer.unmount());
+    });
   });
 
   describe('cancel branches', () => {

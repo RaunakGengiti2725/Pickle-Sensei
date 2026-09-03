@@ -20,6 +20,8 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { AnalyzeScreen } from '../screens/AnalyzeScreen';
 import { DrillLibraryScreen } from '../screens/DrillLibraryScreen';
 import { ResultScreen } from '../screens/ResultScreen';
+import { ResultDetailsScreen } from '../screens/ResultDetailsScreen';
+import { FormReviewScreen } from '../screens/FormReviewScreen';
 import { StreakCalendarScreen } from '../screens/StreakCalendarScreen';
 import { PaywallScreen } from '../screens/PaywallScreen';
 import { SignInScreen } from '../screens/SignInScreen';
@@ -201,7 +203,28 @@ export function RootNavigator() {
         <Stack.Screen
           name="Result"
           component={ResultScreen}
-          options={{ title: 'Result' }}
+          options={{
+            title: 'Result',
+            contentStyle: { backgroundColor: color.surfaceDark },
+          }}
+        />
+        <Stack.Screen
+          name="ResultDetails"
+          component={ResultDetailsScreen}
+          options={{
+            title: 'Full breakdown',
+            // Light sheet (the evidence cards' own surface) — the default
+            // screen contentStyle already matches, stated here on purpose.
+            contentStyle: { backgroundColor: color.surface },
+          }}
+        />
+        <Stack.Screen
+          name="FormReview"
+          component={FormReviewScreen}
+          options={{
+            title: 'Form review',
+            contentStyle: { backgroundColor: color.surfaceDark },
+          }}
         />
         <Stack.Screen
           name="DrillLibrary"

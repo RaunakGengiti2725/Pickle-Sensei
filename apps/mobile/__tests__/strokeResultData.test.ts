@@ -113,6 +113,57 @@ describe('loadStrokeResultEvidence', () => {
       uri: 'file:///private/clip.mov',
       durationMs: 4200,
     });
+    // Legacy capture row (no payload): the frame size is real, the pose
+    // sidecar honestly absent.
+    expect(evidence.review).toEqual({
+      width: 720,
+      height: 1280,
+      poseSequence: null,
+    });
+  });
+
+  it('carries the pose sidecar ref from the capture payload for the form review', async () => {
+    const poseSequence = {
+      schemaVersion: 1,
+      format: 'pickle.pose-sequence.v1',
+      uri: 'file:///private/clip.pose.json',
+      frameCount: 126,
+      sha256: 'ab'.repeat(32),
+      coordinateSystem: 'normalized_image_top_left',
+      poseModelVersion: 'apple-vision-bodypose-1',
+    };
+    const evidence = await loadStrokeResultEvidence(
+      fakeDb({
+        record: JSON.stringify(RECORD),
+        capture: {
+          ...CAPTURE_ROW,
+          payload: JSON.stringify({
+            uri: 'file:///private/clip.mov',
+            durationMs: 4200,
+            fps: 59.94,
+            width: 720,
+            height: 1280,
+            capturedAtIso: '2026-08-30T10:00:00.000Z',
+            captureMode: 'imported_video',
+            recognition: { status: 'unknown', reason: 'analysis_not_run' },
+            ballSpeed: { status: 'unavailable', reason: 'analysis_not_run' },
+            posterUri: 'file:///private/clip.poster.jpg',
+            poseSequence,
+          }),
+        },
+      }),
+      'analysis-1',
+    );
+    expect(evidence.clip).toEqual({
+      uri: 'file:///private/clip.mov',
+      durationMs: 4200,
+      posterUri: 'file:///private/clip.poster.jpg',
+    });
+    expect(evidence.review).toEqual({
+      width: 720,
+      height: 1280,
+      poseSequence,
+    });
   });
 
   it('a session-less analysis yields a solo attempt list (no invented grouping)', async () => {
@@ -146,6 +197,7 @@ describe('loadStrokeResultEvidence', () => {
       analysis: null,
       record: null,
       clip: null,
+      review: null,
       attempts: [],
     });
   });

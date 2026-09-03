@@ -7,13 +7,19 @@ import TestRenderer, { act } from 'react-test-renderer';
  *
  * App.tsx owns no Pressable of its own: every interactive element it wires is
  * a callback handed to a child screen (Welcome → Start / I already have an
- * account, pre-auth Onboarding → finished / Leave setup → Skip to sign-in,
+ * account, pre-auth Onboarding → finished / step-one Back → Welcome,
  * SignIn → Back, Splash → onFinished) plus the AppState background listener.
  * This suite mounts the REAL App with the real Welcome / SignIn / Onboarding
  * screens and presses each of those controls, asserting the stage the Gate
  * renders next. Stores are replaced by controllable zustand instances (no
  * SQLite under jest); RootNavigator, the three global overlays and the splash
  * are stubbed so the assertions stay on App.tsx's own wiring.
+ *
+ * Launch contract (product decision 2026-09-01): "Start your first read"
+ * ALWAYS enters the questionnaire — there is no device-level "already
+ * onboarded" marker and no skip-to-sign-in escape. The only way to sign-in
+ * through the flow is finishing it; returning players take "I already have
+ * an account".
  */
 
 jest.mock('react-native-safe-area-context', () => {
@@ -50,7 +56,7 @@ jest.mock('../../src/state/appStore', () => {
       hydrated: false,
       ownerKey: null,
       profile: null,
-      preAuthOnboarded: false,
+      hydrateError: null,
       onboardingBusy: false,
       onboardingError: null,
       lastShotType: 'forehand_drive',
@@ -163,10 +169,10 @@ jest.mock('../../src/walkthrough/FirstRunWalkthrough', () => {
   };
 });
 
-// The real splash finishes through an Animated.timing on the native driver,
-// whose completion callback never fires under jest's NativeAnimatedModule
-// mock. The stub exposes exactly the two props App.tsx wires (`ready`,
-// `onFinished`) so the handoff can be driven and asserted.
+// The real splash (an MP4 intro) finishes through an Animated.timing on the
+// native driver, whose completion callback never fires under jest's
+// NativeAnimatedModule mock. The stub exposes exactly the two props App.tsx
+// wires (`ready`, `onFinished`) so the handoff can be driven and asserted.
 jest.mock('../../src/screens/SplashScreen', () => {
   const ReactActual = require('react');
   const { View: RNView } = require('react-native');
@@ -175,7 +181,6 @@ jest.mock('../../src/screens/SplashScreen', () => {
     SplashScreen: (props: { ready: boolean; onFinished: () => void }) =>
       ReactActual.createElement(RNView, {
         testID: 'SplashScreen',
-        accessibilityLabel: 'Pickle Sensei is starting',
         ready: props.ready,
         onFinished: props.onFinished,
       }),
@@ -219,14 +224,25 @@ const setContextSpy = jest.spyOn(stabilitySlo, 'setContext');
 const recordSpy = jest.spyOn(stabilitySlo, 'record');
 const appStateListener = AppState.addEventListener as jest.Mock;
 
+const onboardedProfile = {
+  skillLevel: '3.5',
+  handedness: 'right',
+  goal: 'drops',
+  biggestProblem: 'control',
+  focusCheckpoint: 'paddle_set',
+} as const;
+
 /** Mimics the real appStore.hydrate: marks the given owner hydrated. */
-function hydrateAppAs(owner: string, preAuthOnboarded = false) {
+function hydrateAppAs(
+  owner: string,
+  profile: typeof onboardedProfile | null = null,
+) {
   mockHydrateApp.mockImplementation(async () => {
     useAppStore.setState({
       hydrated: true,
       ownerKey: owner,
-      profile: null,
-      preAuthOnboarded,
+      profile,
+      hydrateError: null,
     });
   });
 }
@@ -236,7 +252,7 @@ function resetStores() {
     hydrated: false,
     ownerKey: null,
     profile: null,
-    preAuthOnboarded: false,
+    hydrateError: null,
     onboardingBusy: false,
     onboardingError: null,
   });
@@ -320,8 +336,8 @@ function press(renderer: Renderer, label: string) {
 }
 
 /** Signed-out, hydrated, first screen painted, splash still overlaid. */
-async function renderReadyWelcome(preAuthOnboarded = false) {
-  hydrateAppAs(SIGNED_OUT_DATA_OWNER, preAuthOnboarded);
+async function renderReadyWelcome() {
+  hydrateAppAs(SIGNED_OUT_DATA_OWNER);
   const renderer = render();
   await act(async () => {
     useAuthStore.setState({ hydrated: true, session: null });
@@ -334,6 +350,7 @@ function onWelcome(renderer: Renderer) {
   expect(allText(renderer)).toContain('See the stroke.');
   expect(pressableCount(renderer, 'Start your first read')).toBe(1);
   expect(pressableCount(renderer, 'I already have an account')).toBe(1);
+  expect(allText(renderer)).not.toContain('What should we call you?');
 }
 
 function onSignIn(renderer: Renderer) {
@@ -341,14 +358,22 @@ function onSignIn(renderer: Renderer) {
   expect(pressableCount(renderer, 'Back')).toBe(1);
   expect(pressableCount(renderer, 'Continue with Google')).toBe(1);
   expect(allText(renderer)).not.toContain('See the stroke.');
+  expect(allText(renderer)).not.toContain('What should we call you?');
 }
 
+/**
+ * Step one of the pre-auth questionnaire: its only control besides Continue
+ * is a plain Back to Welcome. There is no "Leave setup" / skip affordance
+ * anywhere in pre-auth mode (product decision 2026-09-01).
+ */
 function onPreAuthOnboarding(renderer: Renderer) {
   expect(allText(renderer)).toContain('What should we call you?');
-  const leave = findPressable(renderer, 'Leave setup');
-  expect(leave.props.accessibilityHint).toBe(
-    'Skip ahead to the sign-in screen',
-  );
+  expect(allText(renderer)).not.toContain('See the stroke.');
+  expect(allText(renderer)).not.toContain('Your ratings,');
+  expect(allText(renderer)).not.toMatch(/skip/i);
+  expect(pressableCount(renderer, 'Leave setup')).toBe(0);
+  const back = findPressable(renderer, 'Back');
+  expect(back.props.accessibilityHint).toBe('Return to the welcome screen');
 }
 
 /** Answers every questionnaire step so the notification step is reachable. */
@@ -449,7 +474,7 @@ describe('App.tsx — launch gate and splash', () => {
 
     // A later owner switch re-hydrates the app store but never brings the
     // splash back.
-    hydrateAppAs(CANONICAL_OWNER, true);
+    hydrateAppAs(CANONICAL_OWNER);
     await act(async () => {
       useAuthStore.setState({ session: googleSession });
     });
@@ -479,12 +504,13 @@ describe('App.tsx — launch gate and splash', () => {
 
   it('a hydrate() that lands in its catch path (hydrated with no profile) still readies the gate — no infinite splash', async () => {
     mockHydrateApp.mockImplementation(async () => {
-      // Mirrors appStore.hydrate's catch branch.
+      // Mirrors appStore.hydrate's catch branch: hydrated, no profile, the
+      // failure recorded in hydrateError.
       useAppStore.setState({
         hydrated: true,
         ownerKey: SIGNED_OUT_DATA_OWNER,
         profile: null,
-        preAuthOnboarded: false,
+        hydrateError: 'Your coaching profile could not be loaded.',
       });
     });
     const renderer = render();
@@ -493,32 +519,52 @@ describe('App.tsx — launch gate and splash', () => {
     });
     const [splash] = markers(renderer, 'SplashScreen');
     expect(splash!.props.ready).toBe(true);
+    // Signed out, the retry state is never shown: Welcome paints as usual.
     onWelcome(renderer);
+    expect(allText(renderer)).not.toContain(
+      'Your coaching profile couldn’t load',
+    );
     unmount(renderer);
   });
 });
 
 describe('App.tsx — WelcomeScreen callbacks', () => {
   it('"Start your first read" -> onGetStarted: fresh device goes to the pre-auth questionnaire', async () => {
-    const renderer = await renderReadyWelcome(false);
+    const renderer = await renderReadyWelcome();
     press(renderer, 'Start your first read');
     onPreAuthOnboarding(renderer);
     expect(pressableCount(renderer, 'Start your first read')).toBe(0);
     unmount(renderer);
   });
 
-  it('"Start your first read" -> onGetStarted: an already-onboarded device skips straight to sign-in', async () => {
-    const renderer = await renderReadyWelcome(true);
+  // The device-level "already onboarded" short-circuit to sign-in was removed
+  // 2026-09-01 (invest first, then create the account): the primary CTA takes
+  // no device-history input, so a phone that has already held a fully
+  // onboarded account gets exactly the same path as a fresh one.
+  it('"Start your first read" -> onGetStarted: a device that already held an onboarded profile STILL enters the questionnaire (no device-history short-circuit)', async () => {
+    const renderer = await renderReadyWelcome();
+
+    // Sign in with a finished profile (the main app mounts), then sign out.
+    hydrateAppAs(CANONICAL_OWNER, onboardedProfile);
+    await act(async () => {
+      useAuthStore.setState({ session: googleSession });
+    });
+    expect(markers(renderer, 'RootNavigator')).toHaveLength(1);
+    hydrateAppAs(SIGNED_OUT_DATA_OWNER);
+    await act(async () => {
+      useAuthStore.setState({ session: null });
+    });
+    onWelcome(renderer);
+
     press(renderer, 'Start your first read');
-    onSignIn(renderer);
-    expect(allText(renderer)).not.toContain('What should we call you?');
+    onPreAuthOnboarding(renderer);
     unmount(renderer);
   });
 
-  it('"I already have an account" -> onSignIn: goes to sign-in regardless of onboarding state', async () => {
-    const renderer = await renderReadyWelcome(false);
+  it('"I already have an account" -> onSignIn: the explicit returning-player route goes straight to sign-in', async () => {
+    const renderer = await renderReadyWelcome();
     const link = findPressable(renderer, 'I already have an account');
-    expect(link.props.accessibilityHint).toBe('Skip setup and go to sign-in');
+    expect(link.props.accessibilityHint).toBe('Sign in to an existing account');
     press(renderer, 'I already have an account');
     onSignIn(renderer);
     unmount(renderer);
@@ -527,7 +573,7 @@ describe('App.tsx — WelcomeScreen callbacks', () => {
 
 describe('App.tsx — SignInScreen callback', () => {
   it('"Back" -> onBack: returns to Welcome from sign-in (both entry paths)', async () => {
-    const renderer = await renderReadyWelcome(false);
+    const renderer = await renderReadyWelcome();
     press(renderer, 'I already have an account');
     onSignIn(renderer);
     const back = findPressable(renderer, 'Back');
@@ -535,27 +581,23 @@ describe('App.tsx — SignInScreen callback', () => {
     press(renderer, 'Back');
     onWelcome(renderer);
 
-    // Reaching sign-in via the questionnaire skip also backs out to Welcome,
-    // not into the questionnaire.
-    const alertSpy = jest
-      .spyOn(Alert, 'alert')
-      .mockImplementation(() => undefined);
+    // Reaching sign-in the other way — by FINISHING the questionnaire (the
+    // only route through it) — also backs out to Welcome, never back into
+    // the questionnaire.
     press(renderer, 'Start your first read');
-    press(renderer, 'Leave setup');
-    const skip = (alertSpy.mock.calls[0]?.[2] ?? []).find(
-      button => button.text === 'Skip to sign-in',
-    );
-    act(() => skip!.onPress?.());
+    walkToNotifications(renderer);
+    press(renderer, 'Not now');
+    await act(async () => {});
     onSignIn(renderer);
     press(renderer, 'Back');
     onWelcome(renderer);
-    alertSpy.mockRestore();
     unmount(renderer);
   });
 
   it('sign-in provider buttons on the App-mounted screen reach the auth store (no dead controls)', async () => {
-    const renderer = await renderReadyWelcome(true);
-    press(renderer, 'Start your first read');
+    const renderer = await renderReadyWelcome();
+    press(renderer, 'I already have an account');
+    onSignIn(renderer);
     press(renderer, 'Continue with Google');
     expect(mockSignInWithGoogle).toHaveBeenCalledTimes(1);
     press(renderer, 'Continue with Apple');
@@ -565,39 +607,56 @@ describe('App.tsx — SignInScreen callback', () => {
 });
 
 describe('App.tsx — pre-auth OnboardingScreen callbacks', () => {
-  it('"Leave setup" -> Alert "Skip to sign-in" -> onExitToSignIn: lands on sign-in without touching the session', async () => {
+  // The former "Leave setup" → Alert → "Skip to sign-in" escape
+  // (onExitToSignIn) was removed 2026-09-01: the questionnaire is required.
+  // Step one's control is now a plain Back that returns to Welcome through
+  // stageWhenLeavingOnboarding() — no alert, no sign-in, session untouched.
+  it('step-one "Back" -> onBack -> stageWhenLeavingOnboarding: returns to Welcome without an alert, never to sign-in', async () => {
     const alertSpy = jest
       .spyOn(Alert, 'alert')
       .mockImplementation(() => undefined);
-    const renderer = await renderReadyWelcome(false);
+    const renderer = await renderReadyWelcome();
     press(renderer, 'Start your first read');
     onPreAuthOnboarding(renderer);
 
-    const leave = findPressable(renderer, 'Leave setup');
-    expect(leave.props.hitSlop).toBe(12);
-    press(renderer, 'Leave setup');
-    expect(alertSpy).toHaveBeenCalledTimes(1);
-    expect(alertSpy.mock.calls[0]?.[0]).toBe('Skip setup?');
-    const buttons = alertSpy.mock.calls[0]?.[2] ?? [];
-    expect(buttons.map(b => b.text)).toEqual([
-      'Keep setting up',
-      'Skip to sign-in',
-    ]);
-
-    // Cancel keeps the questionnaire.
-    act(() => buttons[0]!.onPress?.());
-    onPreAuthOnboarding(renderer);
-
-    act(() => buttons[1]!.onPress?.());
-    onSignIn(renderer);
+    const back = findPressable(renderer, 'Back');
+    expect(back.props.hitSlop).toBe(12);
+    press(renderer, 'Back');
+    expect(alertSpy).not.toHaveBeenCalled();
+    onWelcome(renderer);
     expect(mockSignOut).not.toHaveBeenCalled();
     expect(mockCompletePreAuthOnboarding).not.toHaveBeenCalled();
+
+    // Re-entering starts the questionnaire over at step one — the CTA never
+    // skips ahead, however many times the device has been here.
+    press(renderer, 'Start your first read');
+    onPreAuthOnboarding(renderer);
     alertSpy.mockRestore();
     unmount(renderer);
   });
 
+  it('"Back" past step one returns to the previous question — it never leaves the questionnaire or reaches sign-in', async () => {
+    const renderer = await renderReadyWelcome();
+    press(renderer, 'Start your first read');
+    act(() => renderer.root.findByType(TextInput).props.onChangeText('Dana'));
+    press(renderer, 'Continue');
+    expect(allText(renderer)).toContain('How do you identify?');
+    expect(allText(renderer)).not.toMatch(/skip/i);
+    const back = findPressable(renderer, 'Back');
+    expect(back.props.accessibilityHint).toBe(
+      'Return to the previous question',
+    );
+
+    press(renderer, 'Back');
+    // Back on step one again — still inside the flow, name preserved.
+    onPreAuthOnboarding(renderer);
+    expect(renderer.root.findByType(TextInput).props.value).toBe('Dana');
+    expect(mockCompletePreAuthOnboarding).not.toHaveBeenCalled();
+    unmount(renderer);
+  });
+
   it('"Not now" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in', async () => {
-    const renderer = await renderReadyWelcome(false);
+    const renderer = await renderReadyWelcome();
     press(renderer, 'Start your first read');
     walkToNotifications(renderer);
 
@@ -611,7 +670,7 @@ describe('App.tsx — pre-auth OnboardingScreen callbacks', () => {
   });
 
   it('"Turn on reminders" -> completePreAuthOnboarding ok -> onFinished: hands off to sign-in', async () => {
-    const renderer = await renderReadyWelcome(false);
+    const renderer = await renderReadyWelcome();
     press(renderer, 'Start your first read');
     walkToNotifications(renderer);
 
@@ -631,7 +690,7 @@ describe('App.tsx — pre-auth OnboardingScreen callbacks', () => {
       });
       return false;
     });
-    const renderer = await renderReadyWelcome(false);
+    const renderer = await renderReadyWelcome();
     press(renderer, 'Start your first read');
     walkToNotifications(renderer);
 
@@ -663,11 +722,13 @@ describe('App.tsx — pre-auth OnboardingScreen callbacks', () => {
 
 describe('App.tsx — signed-in routing', () => {
   it('canonical session without a profile: hydrates the canonical owner and shows the in-account OnboardingScreen', async () => {
-    const renderer = await renderReadyWelcome(true);
-    press(renderer, 'Start your first read');
+    // A returning player who never finished setup signs in via the explicit
+    // link — and still lands in the (in-account) questionnaire afterwards.
+    const renderer = await renderReadyWelcome();
+    press(renderer, 'I already have an account');
     onSignIn(renderer);
 
-    hydrateAppAs(CANONICAL_OWNER, true);
+    hydrateAppAs(CANONICAL_OWNER);
     await act(async () => {
       useAuthStore.setState({ session: googleSession });
     });
@@ -679,31 +740,52 @@ describe('App.tsx — signed-in routing', () => {
       sessionKey: expect.any(String),
     });
     expect(allText(renderer)).toContain('What should we call you?');
-    // Account mode: the escape route signs out instead of skipping ahead.
+    // Account mode: the only exit besides finishing is signing out; there is
+    // no Back to Welcome (there is no Welcome to go back to) and no skip.
     expect(findPressable(renderer, 'Leave setup').props.accessibilityHint).toBe(
       'Sign out and return to the sign-in screen',
     );
+    expect(pressableCount(renderer, 'Back')).toBe(0);
+    expect(allText(renderer)).not.toMatch(/skip/i);
     expect(markers(renderer, 'RootNavigator')).toHaveLength(0);
     expect(mockMaybeShowFirstRun).not.toHaveBeenCalled();
     unmount(renderer);
   });
 
-  it('session + profile: mounts RootNavigator and raises the first-run walkthrough exactly once', async () => {
-    const renderer = await renderReadyWelcome(true);
+  it('canonical session without a profile whose hydrate failed: shows the retry state instead of re-asking the questionnaire', async () => {
+    const renderer = await renderReadyWelcome();
     mockHydrateApp.mockImplementation(async () => {
       useAppStore.setState({
         hydrated: true,
         ownerKey: CANONICAL_OWNER,
-        preAuthOnboarded: true,
-        profile: {
-          skillLevel: '3.5',
-          handedness: 'right',
-          goal: 'drops',
-          biggestProblem: 'control',
-          focusCheckpoint: 'paddle_set',
-        },
+        profile: null,
+        hydrateError:
+          'Pickle Sensei could not reach your account to load your coaching profile. Check your connection and try again.',
       });
     });
+    await act(async () => {
+      useAuthStore.setState({ session: googleSession });
+    });
+    expect(mockHydrateApp).toHaveBeenCalledTimes(2);
+    expect(allText(renderer)).toContain('Your coaching profile couldn’t load');
+    expect(allText(renderer)).not.toContain('What should we call you?');
+    expect(markers(renderer, 'RootNavigator')).toHaveLength(0);
+
+    // "Try again" -> hydrateApp: a successful re-hydrate lands in the
+    // in-account questionnaire.
+    hydrateAppAs(CANONICAL_OWNER);
+    const retry = findPressable(renderer, 'Try again');
+    await act(async () => {
+      retry.props.onPress();
+    });
+    expect(mockHydrateApp).toHaveBeenCalledTimes(3);
+    expect(allText(renderer)).toContain('What should we call you?');
+    unmount(renderer);
+  });
+
+  it('session + profile: mounts RootNavigator and raises the first-run walkthrough exactly once', async () => {
+    const renderer = await renderReadyWelcome();
+    hydrateAppAs(CANONICAL_OWNER, onboardedProfile);
     await act(async () => {
       useAuthStore.setState({ session: googleSession });
     });
@@ -719,7 +801,7 @@ describe('App.tsx — signed-in routing', () => {
     expect(mockMaybeShowFirstRun).toHaveBeenCalledTimes(1);
 
     // Signing out drops the navigator and returns to the pre-auth gate.
-    hydrateAppAs(SIGNED_OUT_DATA_OWNER, true);
+    hydrateAppAs(SIGNED_OUT_DATA_OWNER);
     await act(async () => {
       useAuthStore.setState({ session: null });
     });
@@ -731,7 +813,7 @@ describe('App.tsx — signed-in routing', () => {
   });
 
   it('guest session resolves the device-guest owner', async () => {
-    hydrateAppAs(GUEST_DATA_OWNER, true);
+    hydrateAppAs(GUEST_DATA_OWNER);
     const renderer = render();
     await act(async () => {
       useAuthStore.setState({ hydrated: true, session: guestSession });

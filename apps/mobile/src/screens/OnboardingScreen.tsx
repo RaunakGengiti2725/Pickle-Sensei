@@ -283,16 +283,21 @@ function ChoiceCard(props: {
 export function OnboardingScreen(props: {
   /**
    * 'account' (default): the signed-in flow — answers save to the active
-   * owner (server-synced for canonical accounts) and the escape route signs
-   * out. 'preauth': the questionnaire runs BEFORE the login flow — answers
-   * are stashed device-level for adoption after sign-in, completion hands
-   * off through onFinished, and the escape route skips ahead to sign-in.
+   * owner (server-synced for canonical accounts) and the only way out short
+   * of finishing is signing out. 'preauth': the questionnaire runs BEFORE
+   * the login flow — answers are stashed device-level for adoption after
+   * sign-in, completion hands off through onFinished, and step one's back
+   * control returns to the screen the questionnaire was entered from.
+   *
+   * There is deliberately NO way to skip the questionnaire in either mode:
+   * the app is personalized from these answers, so every path a player can
+   * take leads back here until they have finished it once.
    */
   mode?: 'account' | 'preauth';
   /** Pre-auth only: called after the answers were durably stashed. */
   onFinished?: () => void;
-  /** Pre-auth only: "already have an account" escape to the sign-in screen. */
-  onExitToSignIn?: () => void;
+  /** Pre-auth only: step one's back control — returns to Welcome. */
+  onBack?: () => void;
 }) {
   const preAuth = props.mode === 'preauth';
   const insets = useReliableSafeAreaInsets();
@@ -361,23 +366,14 @@ export function OnboardingScreen(props: {
     }
   };
 
-  // Step one has nothing to go back to inside the flow, so the escape route
-  // leaves the flow entirely: pre-auth it skips ahead to sign-in (existing
-  // users shouldn't be quizzed before they can log in); in-account it exits
-  // the account itself — otherwise the user is stranded here.
+  // Step one has nothing to go back to inside the flow. Pre-auth, back simply
+  // returns to the screen the player came from (Welcome) — nothing has been
+  // answered yet and no confirmation is needed. In-account the only way out
+  // is signing out of the account itself — otherwise the user is stranded
+  // here. Neither path skips the questionnaire: it is required.
   const leaveOnboarding = () => {
     if (preAuth) {
-      Alert.alert(
-        'Skip setup?',
-        'You can sign in now and personalize your coaching later.',
-        [
-          { text: 'Keep setting up', style: 'cancel' },
-          {
-            text: 'Skip to sign-in',
-            onPress: () => props.onExitToSignIn?.(),
-          },
-        ],
-      );
+      props.onBack?.();
       return;
     }
     Alert.alert(
@@ -411,14 +407,20 @@ export function OnboardingScreen(props: {
             >
               <Icon name="back" size={20} color={color.onDark} />
             </PressableScale>
+          ) : preAuth ? (
+            <PressableScale
+              accessibilityLabel="Back"
+              accessibilityHint="Return to the welcome screen"
+              hitSlop={12}
+              onPress={leaveOnboarding}
+              style={styles.headerButton}
+            >
+              <Icon name="back" size={20} color={color.onDark} />
+            </PressableScale>
           ) : (
             <PressableScale
               accessibilityLabel="Leave setup"
-              accessibilityHint={
-                preAuth
-                  ? 'Skip ahead to the sign-in screen'
-                  : 'Sign out and return to the sign-in screen'
-              }
+              accessibilityHint="Sign out and return to the sign-in screen"
               hitSlop={12}
               onPress={leaveOnboarding}
               style={styles.headerButton}

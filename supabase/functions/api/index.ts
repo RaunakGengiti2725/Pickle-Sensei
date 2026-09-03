@@ -2,11 +2,20 @@
 // account + onboarding + access + sync + consent API contracts on top of
 // Supabase Auth.
 //
-//   All endpoints:   Authorization: Bearer <Google/Apple ID TOKEN (OIDC)>
+//   POST /v1/account/bootstrap takes Authorization: Bearer <Google/Apple ID
+//   TOKEN (OIDC)>, exchanges it with Supabase Auth, and returns a durable
+//   Supabase session { accessToken, refreshToken, expiresAt } beside the
+//   account. Every other endpoint takes Authorization: Bearer <Supabase
+//   ACCESS TOKEN> (a provider ID token is still accepted there transitionally
+//   for app builds that predate the session contract — see authenticate()).
 //     → 401/403 { error: { message } }   (app maps to rejected)
 //     → 5xx     { error: { message } }   (app maps to retryable unavailable)
 //
-//   POST /v1/account/bootstrap → { user:{id,email}, onboardingState }
+//   POST /v1/account/bootstrap → { user:{id,email}, onboardingState, session }
+//   POST /v1/auth/refresh      → { session } (rotates the refresh token; 401
+//                                when it was revoked or already rotated away)
+//   POST /v1/auth/logout       → 204; revokes THIS device's session so its
+//                                refresh token is dead server-side
 //   GET  /v1/me                → + profile { skill_level, handedness, … }
 //   PUT  /v1/me/onboarding     → { plan:{focusCheckpoint}, recommendedCheckpoint }
 //   GET  /v1/me/access         → free-ratings/premium access state (used is
@@ -28,7 +37,8 @@
 //                                per-technique scores it averages
 //   GET  /v1/me/consent/status, POST /v1/me/consent/grant|withdraw
 //   GET/PUT/DELETE /v1/me/saved-drills[/:slug]
-//   POST /v1/me/delete-request  → two-step account deletion, step 1
+//   POST /v1/me/delete-request  → two-step account deletion, step 1 (body may
+//                                carry the optional exit survey)
 //   POST /v1/me/delete-confirm  → step 2 (requires the step-1 challenge)
 //
 //   Public (no auth):
@@ -50,13 +60,17 @@
 //     no-store/nosniff headers; request bodies are size-capped.
 //
 // The app (apps/mobile/src/account/bootstrap.ts) sends the provider ID token
-// as the bearer; this function exchanges it with Supabase Auth
+// to bootstrap; this function exchanges it with Supabase Auth
 // (signInWithIdToken), which verifies it against the Google/Apple provider
 // configuration and creates/returns the auth.users row. The profiles trigger
-// (see migrations) provisions the canonical account row.
+// (see migrations) provisions the canonical account row. From then on the
+// app bears the Supabase access token, keeps the refresh token in the device
+// Keychain (apps/mobile/src/account/sessionVault.ts) so a relaunch restores
+// the session through /v1/auth/refresh instead of a fresh provider sign-in,
+// and calls /v1/auth/logout on explicit sign-out.
 //
-// Deploy with JWT verification OFF (the bearer is a provider token, not a
-// Supabase JWT):   supabase functions deploy api --no-verify-jwt
+// Deploy with JWT verification OFF (bootstrap's bearer is a provider token,
+// not a Supabase JWT):   supabase functions deploy api --no-verify-jwt
 //
 // UNVERIFIED-HERE: written locally without a Supabase project attached; the
 // TypeScript is Deno-targeted (not part of the pnpm workspace typecheck).
@@ -257,18 +271,17 @@ interface AuthedUser {
   provider: "google" | "apple";
   // Supabase client acting AS this user (RLS enforced on every query).
   db: ReturnType<typeof createClient>;
-  // Cache key of the verified-session entry behind this bearer, so account
-  // deletion can revoke it immediately instead of waiting for its TTL.
-  authCacheKey: string;
 }
 
-/** Cached, verified session material keyed by SHA-256 of the provider token.
- * The exchange with Supabase Auth (signInWithIdToken) verifies the token
- * cryptographically and mints a Supabase session — that is the expensive,
- * auth-service-bound step. Caching the VERIFIED result for a few minutes
- * (never past either token's own expiry) removes an auth round trip from
- * every request, which is the difference between Supabase Auth seeing every
- * API call and seeing ~one call per user per ten minutes. */
+/** Cached, verified session material keyed by SHA-256 of the bearer. For a
+ * provider ID token the exchange with Supabase Auth (signInWithIdToken)
+ * verifies it cryptographically and mints a Supabase session; for a Supabase
+ * access token getUser() verifies it and confirms its session still exists.
+ * Either way that is the expensive, auth-service-bound step. Caching the
+ * VERIFIED result for a few minutes (never past either token's own expiry)
+ * removes an auth round trip from every request, which is the difference
+ * between Supabase Auth seeing every API call and seeing ~one call per user
+ * per ten minutes. */
 interface CachedAuthSession {
   userId: string;
   email: string | null;
@@ -286,82 +299,255 @@ function userScopedClient(accessToken: string): ReturnType<typeof createClient> 
   });
 }
 
-/** Verify the provider ID token with Supabase Auth and return a client that
- * acts as that user under RLS. Every endpoint authenticates this way — the
- * bearer the app holds IS the provider token (bootstrap contract). */
-async function authenticate(request: Request): Promise<AuthedUser | Response> {
-  const authorization = request.headers.get("Authorization") ?? "";
-  const token = authorization.startsWith("Bearer ")
-    ? authorization.slice("Bearer ".length).trim()
-    : "";
-  if (!token) return errorJson(401, "Missing bearer token.");
-
-  const payload = decodeJwtPayload(token);
-  const provider = providerForIssuer(payload?.iss);
-  if (!provider) {
-    return errorJson(401, "Bearer token is not a Google or Apple ID token.");
-  }
-  if (typeof payload?.exp === "number" && payload.exp * 1_000 <= Date.now()) {
-    return errorJson(401, "The identity token has expired.");
-  }
-
-  const cacheKey = `auth:${await sha256Hex(token)}`;
-  const cachedRaw = await cacheGet(cacheKey);
-  if (cachedRaw) {
-    try {
-      const cached = JSON.parse(cachedRaw) as CachedAuthSession;
-      if (cached.provider === provider && cached.expiresAtMs > Date.now() + 5_000) {
-        return {
-          id: cached.userId,
-          email: cached.email,
-          provider,
-          db: userScopedClient(cached.accessToken),
-          authCacheKey: cacheKey,
-        };
-      }
-    } catch {
-      // Corrupt cache entry — fall through to a real verification.
-    }
-  }
-
-  const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+function anonAuthClient(): ReturnType<typeof createClient> {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
-  const signIn = await authClient.auth.signInWithIdToken({ provider, token });
-  if (signIn.error || !signIn.data.user || !signIn.data.session) {
-    return errorJson(401, "The identity token could not be verified.");
-  }
+}
 
-  // Cache lifetime: bounded by the PROVIDER token's own exp (the credential
-  // the client actually holds), the Supabase session's expiry, and a hard
-  // ten-minute cap. Sub-minute remainders are not worth caching.
-  const providerExpMs = typeof payload?.exp === "number" ? payload.exp * 1_000 : 0;
-  const sessionExpMs =
-    typeof signIn.data.session.expires_at === "number" ? signIn.data.session.expires_at * 1_000 : 0;
+/** A bearer whose own `exp` has passed is dead whatever else is true of it:
+ * refuse it before the auth cache or Supabase Auth is consulted (a cached
+ * verification is bounded by this exp anyway, so this is a round trip saved
+ * and a stale-cache defense, not a new rule). */
+function bearerExpired(payload: Record<string, unknown> | null): boolean {
+  return typeof payload?.exp === "number" && payload.exp * 1_000 <= Date.now();
+}
+
+function bearerOf(request: Request): string {
+  const authorization = request.headers.get("Authorization") ?? "";
+  return authorization.startsWith("Bearer ") ? authorization.slice("Bearer ".length).trim() : "";
+}
+
+const authCacheKey = async (token: string): Promise<string> => `auth:${await sha256Hex(token)}`;
+
+async function readAuthCache(
+  cacheKey: string,
+  provider: "google" | "apple" | null,
+): Promise<AuthedUser | null> {
+  const cachedRaw = await cacheGet(cacheKey);
+  if (!cachedRaw) return null;
+  try {
+    const cached = JSON.parse(cachedRaw) as CachedAuthSession;
+    if (
+      (provider === null || cached.provider === provider) &&
+      cached.expiresAtMs > Date.now() + 5_000
+    ) {
+      return {
+        id: cached.userId,
+        email: cached.email,
+        provider: cached.provider,
+        db: userScopedClient(cached.accessToken),
+      };
+    }
+  } catch {
+    // Corrupt cache entry — fall through to a real verification.
+  }
+  return null;
+}
+
+/** Cache lifetime: bounded by the bearer's own exp (the credential the
+ * client actually holds), the Supabase session's expiry, and a hard
+ * ten-minute cap. Sub-minute remainders are not worth caching. */
+async function writeAuthCache(
+  cacheKey: string,
+  entry: Omit<CachedAuthSession, "expiresAtMs">,
+  bearerExpSeconds: unknown,
+  sessionExpSeconds: unknown,
+): Promise<void> {
+  const bearerExpMs = typeof bearerExpSeconds === "number" ? bearerExpSeconds * 1_000 : 0;
+  const sessionExpMs = typeof sessionExpSeconds === "number" ? sessionExpSeconds * 1_000 : 0;
   const expiresAtMs = Math.min(
-    providerExpMs > 0 ? providerExpMs : Number.MAX_SAFE_INTEGER,
+    bearerExpMs > 0 ? bearerExpMs : Number.MAX_SAFE_INTEGER,
     sessionExpMs > 0 ? sessionExpMs : Number.MAX_SAFE_INTEGER,
     Date.now() + AUTH_CACHE_MAX_TTL_SECONDS * 1_000,
   );
   const ttlSeconds = Math.floor((expiresAtMs - Date.now()) / 1_000) - 30;
   if (ttlSeconds >= 60) {
-    const entry: CachedAuthSession = {
-      userId: signIn.data.user.id,
+    await cacheSet(cacheKey, JSON.stringify({ ...entry, expiresAtMs }), ttlSeconds);
+  }
+}
+
+interface SupabaseSessionLike {
+  access_token: string;
+  refresh_token: string;
+  expires_at?: number;
+  expires_in?: number;
+}
+
+/** The session shape returned to the app: the access token it bears from now
+ * on, the rotating refresh token that keeps it alive across relaunches, and
+ * the access token's expiry (unix seconds) so the app can rotate ahead of it. */
+function sessionView(session: SupabaseSessionLike) {
+  return {
+    accessToken: session.access_token,
+    refreshToken: session.refresh_token,
+    expiresAt: session.expires_at ?? Math.floor(Date.now() / 1000) + (session.expires_in ?? 3600),
+  };
+}
+
+/** A Supabase user's sign-in provider, from app_metadata. `provider` is the
+ * first identity; `providers` lists every linked one. */
+function providerOfUser(user: {
+  app_metadata?: Record<string, unknown>;
+}): "google" | "apple" | null {
+  const meta = user.app_metadata ?? {};
+  const candidates = [meta.provider, ...(Array.isArray(meta.providers) ? meta.providers : [])];
+  for (const candidate of candidates) {
+    if (candidate === "google" || candidate === "apple") return candidate;
+  }
+  return null;
+}
+
+/** Bootstrap-only: verify the provider ID token with Supabase Auth (the
+ * signInWithIdToken exchange) and return the user plus the freshly minted
+ * Supabase session the app will bear and persist from now on. Every
+ * bootstrap mints a NEW session on purpose — one per device sign-in — so
+ * this path never reads the auth cache. */
+async function authenticateProviderToken(
+  request: Request,
+): Promise<{ authed: AuthedUser; session: SupabaseSessionLike } | Response> {
+  const token = bearerOf(request);
+  if (!token) return errorJson(401, "Missing bearer token.");
+  const payload = decodeJwtPayload(token);
+  const provider = providerForIssuer(payload?.iss);
+  if (!provider) {
+    return errorJson(401, "Bearer token is not a Google or Apple ID token.");
+  }
+  if (bearerExpired(payload)) return errorJson(401, "The identity token has expired.");
+  const signIn = await anonAuthClient().auth.signInWithIdToken({ provider, token });
+  if (signIn.error || !signIn.data.user || !signIn.data.session) {
+    return errorJson(401, "The identity token could not be verified.");
+  }
+  return {
+    authed: {
+      id: signIn.data.user.id,
       email: signIn.data.user.email ?? null,
       provider,
-      accessToken: signIn.data.session.access_token,
-      expiresAtMs,
-    };
-    await cacheSet(cacheKey, JSON.stringify(entry), ttlSeconds);
+      db: userScopedClient(signIn.data.session.access_token),
+    },
+    session: signIn.data.session,
+  };
+}
+
+/** Authenticate the bearer and return a client that acts as that user under
+ * RLS. Two bearer kinds are accepted:
+ *
+ *  - a Supabase ACCESS token issued by bootstrap or /v1/auth/refresh (the
+ *    contract since 2026-09-01): verified with getUser(), which also fails
+ *    once the session behind it was logged out or the account deleted;
+ *  - transitionally, a Google/Apple ID token, for app builds that predate
+ *    the session contract and still bear the provider token on every call.
+ *    Remove this branch once no such build is in the field. */
+async function authenticate(request: Request): Promise<AuthedUser | Response> {
+  const token = bearerOf(request);
+  if (!token) return errorJson(401, "Missing bearer token.");
+
+  const payload = decodeJwtPayload(token);
+  const provider = providerForIssuer(payload?.iss);
+  const supabaseIssued = typeof payload?.iss === "string" && payload.iss.endsWith("/auth/v1");
+  if (!provider && !supabaseIssued) {
+    return errorJson(401, "Bearer token is not a session token or a Google/Apple ID token.");
+  }
+  if (bearerExpired(payload)) {
+    return errorJson(
+      401,
+      provider ? "The identity token has expired." : "The session token has expired.",
+    );
   }
 
+  const cacheKey = await authCacheKey(token);
+  const cached = await readAuthCache(cacheKey, provider);
+  if (cached) return cached;
+
+  if (provider) {
+    const signIn = await anonAuthClient().auth.signInWithIdToken({ provider, token });
+    if (signIn.error || !signIn.data.user || !signIn.data.session) {
+      return errorJson(401, "The identity token could not be verified.");
+    }
+    await writeAuthCache(
+      cacheKey,
+      {
+        userId: signIn.data.user.id,
+        email: signIn.data.user.email ?? null,
+        provider,
+        accessToken: signIn.data.session.access_token,
+      },
+      payload?.exp,
+      signIn.data.session.expires_at,
+    );
+    return {
+      id: signIn.data.user.id,
+      email: signIn.data.user.email ?? null,
+      provider,
+      db: userScopedClient(signIn.data.session.access_token),
+    };
+  }
+
+  const verified = await anonAuthClient().auth.getUser(token);
+  if (verified.error || !verified.data.user) {
+    return errorJson(401, "The session is no longer valid. Sign in again.");
+  }
+  const sessionProvider = providerOfUser(verified.data.user);
+  if (!sessionProvider) {
+    return errorJson(401, "The session does not belong to a Google or Apple account.");
+  }
+  await writeAuthCache(
+    cacheKey,
+    {
+      userId: verified.data.user.id,
+      email: verified.data.user.email ?? null,
+      provider: sessionProvider,
+      accessToken: token,
+    },
+    payload?.exp,
+    payload?.exp,
+  );
   return {
-    id: signIn.data.user.id,
-    email: signIn.data.user.email ?? null,
-    provider,
-    db: userScopedClient(signIn.data.session.access_token),
-    authCacheKey: cacheKey,
+    id: verified.data.user.id,
+    email: verified.data.user.email ?? null,
+    provider: sessionProvider,
+    db: userScopedClient(token),
   };
+}
+
+/** POST /v1/auth/refresh — rotate { refreshToken } into a fresh Supabase
+ * session. 401 means the refresh token was revoked or already rotated away:
+ * the app must sign in again. Anything else is transient for the app. */
+async function refreshSessionRoute(request: Request): Promise<Response> {
+  const body = await readBody(request);
+  const refreshToken = body.refreshToken;
+  if (typeof refreshToken !== "string" || !refreshToken.trim()) {
+    return codedError(400, "validation.refresh", "refreshToken is required.");
+  }
+  const refreshed = await anonAuthClient().auth.refreshSession({
+    refresh_token: refreshToken.trim(),
+  });
+  if (refreshed.error || !refreshed.data.session) {
+    const status = refreshed.error?.status;
+    if (status !== undefined && status >= 500) {
+      return serviceUnavailable("Session refresh", refreshed.error?.message);
+    }
+    return errorJson(401, "The session could not be refreshed. Sign in again.");
+  }
+  return json(200, { session: sessionView(refreshed.data.session) });
+}
+
+/** POST /v1/auth/logout — revoke the calling device's session (scope=local:
+ * its refresh token dies now; other devices stay signed in) and drop this
+ * bearer from the auth cache so it stops working at this edge immediately. */
+async function logoutRoute(request: Request): Promise<Response> {
+  const token = bearerOf(request);
+  await cacheDel(await authCacheKey(token));
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/logout?scope=local`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+  });
+  // 401/403/404 here mean the session is already gone — the outcome the
+  // caller wanted. Only a server-side failure is worth reporting.
+  if (!response.ok && response.status >= 500) {
+    return serviceUnavailable("Sign-out", `status ${response.status}`);
+  }
+  return noContent();
 }
 
 interface ProfileRow {
@@ -2102,7 +2288,7 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
 // ─────────────────────────────────────────────────────────────────────────────
 // Two-step account deletion.
 //
-//   POST /v1/me/delete-request → { challenge, expiresAt }
+//   POST /v1/me/delete-request { survey? } → { challenge, expiresAt }
 //   POST /v1/me/delete-confirm { challenge } → { deleted: true }
 //
 // The confirm call must present the challenge minted by a SEPARATE prior
@@ -2110,12 +2296,117 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
 // can destroy an account. The actual deletion uses the service-role Auth
 // admin API; the auth.users → profiles cascade removes every user row
 // (shots, sessions, permits, consent, trials, feedback, saved drills,
-// billing entitlement, rank state, deletion request itself).
+// billing entitlement, rank state, deletion request itself). The one row
+// that outlives the account is the optional exit survey
+// (account_deletion_feedback, FK ON DELETE SET NULL → anonymized, kept).
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DELETE_CONFIRM_MIN_AGE_MS = 3_000;
 
-async function requestAccountDeletion(authed: AuthedUser): Promise<Response> {
+/** Exit-survey vocabularies — mirror apps/mobile/src/account/deletion.ts
+ * ACCOUNT_DELETION_REASONS / ACCOUNT_DELETION_WANTED verbatim. The database
+ * bounds only the length (20260902000000 + 20260902120000), so these sets
+ * are the authority; an unknown reason drops the survey and an unknown
+ * "wanted" drops just that answer — never the deletion. */
+const DELETION_SURVEY_REASONS = new Set([
+  "not_using",
+  "not_helpful",
+  "scores_inaccurate",
+  "technical_issues",
+  "too_expensive",
+  "privacy",
+  "other",
+]);
+const DELETION_SURVEY_WANTED = new Set([
+  "accuracy",
+  "price",
+  "content",
+  "stability",
+  "switched",
+  "nothing",
+]);
+const DELETION_SURVEY_DETAILS_MAX = 500;
+const DELETION_SURVEY_PLATFORMS = new Set(["ios", "android"]);
+
+interface DeletionSurvey {
+  reason: string;
+  wanted: string | null;
+  details: string | null;
+  platform: string | null;
+  appVersion: string | null;
+}
+
+/** body.survey → validated survey, or null when absent/unusable. Free text
+ * is sanitized (control/zero-width/bidi stripped, whitespace collapsed) and
+ * capped; an empty remainder is stored as null, not "". */
+function parseDeletionSurvey(body: Record<string, unknown>): DeletionSurvey | null {
+  const survey = body.survey;
+  if (!isRecord(survey)) return null;
+  const reason = survey.reason;
+  if (typeof reason !== "string" || !DELETION_SURVEY_REASONS.has(reason)) {
+    console.warn("[api] delete-request: exit survey ignored (unknown reason)");
+    return null;
+  }
+  const wanted = survey.wanted;
+  const details =
+    typeof survey.details === "string"
+      ? sanitizeUserText(survey.details, DELETION_SURVEY_DETAILS_MAX)
+      : "";
+  const platform = survey.platform;
+  const appVersion =
+    typeof survey.appVersion === "string" ? sanitizeUserText(survey.appVersion, 64) : "";
+  return {
+    reason,
+    wanted: typeof wanted === "string" && DELETION_SURVEY_WANTED.has(wanted) ? wanted : null,
+    details: details.length > 0 ? details : null,
+    platform:
+      typeof platform === "string" && DELETION_SURVEY_PLATFORMS.has(platform) ? platform : null,
+    appVersion: appVersion.length > 0 ? appVersion : null,
+  };
+}
+
+/** Best-effort: the survey is our nicety, the deletion is the user's right.
+ * Every failure here is logged and swallowed — it must never turn a
+ * successful delete-request into an error the app shows. Churn context
+ * (tenure, membership, how many reads they got) is stamped from the
+ * user's own rows under RLS, so nothing here is client-asserted. */
+async function recordDeletionSurvey(authed: AuthedUser, survey: DeletionSurvey): Promise<void> {
+  const [stateQ, profileQ] = await Promise.all([
+    authed.db.rpc("access_state"),
+    authed.db.from("profiles").select("created_at").eq("id", authed.id).maybeSingle(),
+  ]);
+  const state = (stateQ.data as Array<{ premium: boolean; scored_count: number }> | null)?.[0];
+  const createdAt = (profileQ.data as { created_at: string } | null)?.created_at;
+  const createdAtMs = createdAt ? Date.parse(createdAt) : Number.NaN;
+  const accountAgeDays = Number.isFinite(createdAtMs)
+    ? Math.max(0, Math.floor((Date.now() - createdAtMs) / 86_400_000))
+    : null;
+  if (stateQ.error || profileQ.error) {
+    console.warn(
+      "[api] delete-request: survey context partial:",
+      stateQ.error?.message ?? profileQ.error?.message,
+    );
+  }
+  const inserted = await authed.db.from("account_deletion_feedback").insert({
+    user_id: authed.id,
+    reason: survey.reason,
+    wanted: survey.wanted,
+    details: survey.details,
+    provider: authed.provider,
+    platform: survey.platform,
+    app_version: survey.appVersion,
+    account_age_days: accountAgeDays,
+    was_premium: state ? Boolean(state.premium) : null,
+    scored_count: state && Number.isFinite(state.scored_count) ? state.scored_count : null,
+  });
+  if (inserted.error) {
+    console.error("[api] delete-request: exit survey not recorded:", inserted.error.message);
+  }
+}
+
+async function requestAccountDeletion(authed: AuthedUser, request: Request): Promise<Response> {
+  const body = await readBody(request);
+  const survey = parseDeletionSurvey(body);
   const challenge = crypto.randomUUID();
   const expiresAt = new Date(Date.now() + 15 * 60_000).toISOString();
   const upserted = await authed.db.from("account_deletion_requests").upsert(
@@ -2130,6 +2421,9 @@ async function requestAccountDeletion(authed: AuthedUser): Promise<Response> {
   if (upserted.error) {
     return serviceUnavailable("Account deletion", upserted.error.message);
   }
+  // Only after the challenge is safely minted: a 503 above makes the app
+  // retry this whole request, and the survey must not be double-counted.
+  if (survey) await recordDeletionSurvey(authed, survey);
   return json(200, { challenge, expiresAt });
 }
 
@@ -2183,9 +2477,15 @@ async function confirmAccountDeletion(authed: AuthedUser, request: Request): Pro
     return serviceUnavailable("Account deletion", deleted.error.message);
   }
 
-  // Drop this user's cached derived state AND the verified-session entry, so
-  // the bearer that just deleted the account cannot keep authenticating.
-  await cacheDel(rankCacheKey(authed.id), progressCacheKey(authed.id), authed.authCacheKey);
+  // Drop this user's cached derived state AND this bearer's verified-auth
+  // entry, so the bearer that just deleted the account cannot keep
+  // authenticating (any other cached bearer ages out within ≤10 min, and
+  // every query behind it hits RLS-empty rows).
+  await cacheDel(
+    rankCacheKey(authed.id),
+    progressCacheKey(authed.id),
+    await authCacheKey(bearerOf(request)),
+  );
   console.warn(`[api] account deleted: ${authed.id}`);
   return json(200, { deleted: true });
 }
@@ -2253,8 +2553,31 @@ const GENERAL_USER_LIMIT = { limit: 240, windowSeconds: 60 };
  * handful of players behind one address each get their full user budget. */
 const IP_LIMIT = { limit: 1_200, windowSeconds: 60 };
 const AUTH_FAILURE_LIMIT = { limit: 30, windowSeconds: 300 };
+/** Refresh is anonymous (authenticated by the body's refresh token) and a
+ * healthy device needs it about once per access-token lifetime, so a tight
+ * per-IP budget costs real users nothing and starves refresh-token guessing. */
+const AUTH_REFRESH_LIMIT = { limit: 30, windowSeconds: 60 };
 const PUBLIC_PAGE_LIMIT = { limit: 60, windowSeconds: 60 };
 const WEBHOOK_LIMIT = { limit: 240, windowSeconds: 60 };
+
+/** POST /v1/account/bootstrap — the canonical account for a freshly
+ * exchanged provider token, plus the Supabase session the app bears and
+ * persists from now on. */
+async function bootstrapAccount(
+  authed: AuthedUser,
+  session: SupabaseSessionLike,
+): Promise<Response> {
+  const profile = await readProfile(authed);
+  if (profile instanceof Response) return profile;
+  if (profile.provider !== authed.provider) {
+    await authed.db.from("profiles").update({ provider: authed.provider }).eq("id", authed.id);
+  }
+  return json(200, {
+    user: { id: profile.id, email: profile.email },
+    onboardingState: profile.onboarding_state === "complete" ? "complete" : "pending",
+    session: sessionView(session),
+  });
+}
 
 Deno.serve(async (request: Request): Promise<Response> => {
   try {
@@ -2342,16 +2665,47 @@ async function handleRequest(request: Request): Promise<Response> {
   const path = v1 >= 0 ? url.pathname.slice(v1) : url.pathname;
   const route = `${request.method} ${path}`;
 
+  // Atomic INCR on the aligned auth-failure window (peeked above) — never a
+  // read-then-write, so concurrent bad bearers cannot under-count.
+  const recordAuthFailure = () =>
+    enforceRateLimit("authfail", ip, AUTH_FAILURE_LIMIT.limit, AUTH_FAILURE_LIMIT.windowSeconds);
+
+  // ── Session establishment and rotation run BEFORE general authentication:
+  // bootstrap is the one route that spends a provider ID token (and mints
+  // the session the app persists), and refresh authenticates by the refresh
+  // token in its body. Both count toward the per-IP auth-failure budget so
+  // token stuffing is throttled exactly like a bad bearer.
+  if (route === "POST /v1/account/bootstrap") {
+    const exchanged = await authenticateProviderToken(request);
+    if (exchanged instanceof Response) {
+      if (exchanged.status === 401) await recordAuthFailure();
+      return exchanged;
+    }
+    const userLimit = await enforceRateLimit(
+      "user",
+      exchanged.authed.id,
+      GENERAL_USER_LIMIT.limit,
+      GENERAL_USER_LIMIT.windowSeconds,
+    );
+    if (!userLimit.allowed) return rateLimitResponse(userLimit);
+    return bootstrapAccount(exchanged.authed, exchanged.session);
+  }
+  if (route === "POST /v1/auth/refresh") {
+    const rl = await enforceRateLimit(
+      "auth_refresh",
+      ip,
+      AUTH_REFRESH_LIMIT.limit,
+      AUTH_REFRESH_LIMIT.windowSeconds,
+    );
+    if (!rl.allowed) return rateLimitResponse(rl);
+    const refreshed = await refreshSessionRoute(request);
+    if (refreshed.status === 401) await recordAuthFailure();
+    return refreshed;
+  }
+
   const authed = await authenticate(request);
   if (authed instanceof Response) {
-    if (authed.status === 401) {
-      await enforceRateLimit(
-        "authfail",
-        ip,
-        AUTH_FAILURE_LIMIT.limit,
-        AUTH_FAILURE_LIMIT.windowSeconds,
-      );
-    }
+    if (authed.status === 401) await recordAuthFailure();
     return authed;
   }
 
@@ -2410,17 +2764,8 @@ async function handleRequest(request: Request): Promise<Response> {
   }
 
   switch (route) {
-    case "POST /v1/account/bootstrap": {
-      const profile = await readProfile(authed);
-      if (profile instanceof Response) return profile;
-      if (profile.provider !== authed.provider) {
-        await authed.db.from("profiles").update({ provider: authed.provider }).eq("id", authed.id);
-      }
-      return json(200, {
-        user: { id: profile.id, email: profile.email },
-        onboardingState: profile.onboarding_state === "complete" ? "complete" : "pending",
-      });
-    }
+    case "POST /v1/auth/logout":
+      return logoutRoute(request);
 
     case "GET /v1/me": {
       const profile = await readProfile(authed);
@@ -2624,7 +2969,7 @@ async function handleRequest(request: Request): Promise<Response> {
       return withdrawConsent(authed, request);
 
     case "POST /v1/me/delete-request":
-      return requestAccountDeletion(authed);
+      return requestAccountDeletion(authed, request);
 
     case "POST /v1/me/delete-confirm":
       return confirmAccountDeletion(authed, request);

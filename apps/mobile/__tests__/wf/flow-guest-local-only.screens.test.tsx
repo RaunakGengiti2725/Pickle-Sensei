@@ -53,6 +53,12 @@ const mockNavigate = jest.fn();
 const mockGoBack = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate, goBack: mockGoBack }),
+  // SettingsScreen re-reads server access on every focus (synced sessions
+  // only); under the test renderer "focus" is simply mount.
+  useFocusEffect: (callback: () => void | (() => void)) => {
+    const React = jest.requireActual<typeof import('react')>('react');
+    React.useEffect(() => callback(), [callback]);
+  },
 }));
 
 jest.mock('react-native-reanimated', () => {
@@ -143,9 +149,13 @@ const mockRequestAccountDeletion = jest.fn<
 >();
 const mockConfirmAccountDeletion = jest.fn<Promise<void>, unknown[]>();
 jest.mock('../../src/account/deletion', () => {
-  class AccountDeletionError extends Error {}
+  // Only the network calls are stubbed; the survey vocabulary/caps the
+  // screen renders from are the real ones.
+  const actual = jest.requireActual<
+    typeof import('../../src/account/deletion')
+  >('../../src/account/deletion');
   return {
-    AccountDeletionError,
+    ...actual,
     requestAccountDeletion: (...args: unknown[]) =>
       mockRequestAccountDeletion(...args),
     confirmAccountDeletion: (...args: unknown[]) =>
@@ -298,7 +308,7 @@ beforeEach(() => {
       biggestProblem: 'control',
       focusCheckpoint: 'paddle_set',
     },
-    preAuthOnboarded: true,
+    hydrateError: null,
     onboardingBusy: false,
     onboardingError: null,
     lastShotType: 'forehand_drive',
@@ -688,6 +698,31 @@ describe('PremiumTabBar capture actions — guest', () => {
 
 // ─── Manage account: guests never see deletion; synced failure branches ──────
 
+/**
+ * The deletion dialog opens on a two-question exit survey ("What's making
+ * you leave?" → "What would have kept you?") before the confirmation page.
+ * These guest-flow cases care about the confirmation's failure branches, so
+ * they take the survey's "Skip the survey" link (nothing is sent: the request
+ * carries a `null` survey) to reach "Delete your account?".
+ */
+async function openDeletionConfirmation(
+  renderer: TestRenderer.ReactTestRenderer,
+) {
+  await press(renderer, 'Delete account');
+  expect(visibleModal(renderer)).toBe(true);
+  expect(allText(renderer)).toContain("What's making you leave?");
+  await press(renderer, 'Skip the survey');
+  expect(allText(renderer)).toContain('Delete your account?');
+}
+
+function visibleModalOf(renderer: TestRenderer.ReactTestRenderer) {
+  const modal = renderer.root
+    .findAllByType(Modal)
+    .find(node => node.props.visible === true);
+  expect(modal).toBeTruthy();
+  return modal!;
+}
+
 describe('ManageAccountScreen', () => {
   it('a guest sees LOCAL details and no Delete account control', () => {
     asGuest();
@@ -699,20 +734,59 @@ describe('ManageAccountScreen', () => {
     act(() => renderer.unmount());
   });
 
-  it('synced: cancelling the deletion sheet three ways deletes nothing', async () => {
+  it('synced: cancelling the deletion dialog from every page and control deletes nothing, and re-opening starts the survey over', async () => {
     asSynced();
     const renderer = render(<ManageAccountScreen />);
 
-    for (const cancel of [
-      'Keep my account',
-      'Cancel account deletion',
-      'Close account deletion confirmation',
-    ]) {
+    const cancelPaths: Array<{ reach: () => Promise<void>; cancel: string }> = [
+      // Question 1: header close + backdrop.
+      { reach: async () => {}, cancel: 'Close and keep my account' },
+      { reach: async () => {}, cancel: 'Cancel account deletion' },
+      // Question 2 (needs a reason to get there): header close.
+      {
+        reach: async () => {
+          await press(renderer, "I don't use it enough");
+          await press(renderer, 'Next');
+          expect(allText(renderer)).toContain('What would have kept you?');
+        },
+        cancel: 'Close and keep my account',
+      },
+      // Confirmation page: primary "Keep my account", header close, backdrop.
+      {
+        reach: async () => press(renderer, 'Skip the survey'),
+        cancel: 'Keep my account',
+      },
+      {
+        reach: async () => press(renderer, 'Skip the survey'),
+        cancel: 'Close account deletion confirmation',
+      },
+      {
+        reach: async () => press(renderer, 'Skip the survey'),
+        cancel: 'Cancel account deletion',
+      },
+    ];
+    for (const { reach, cancel } of cancelPaths) {
       await press(renderer, 'Delete account');
       expect(visibleModal(renderer)).toBe(true);
+      // Every presentation starts over at question 1 with nothing selected.
+      expect(allText(renderer)).toContain("What's making you leave?");
+      expect(pressable(renderer, 'Next').props.disabled).toBe(true);
+      await reach();
+      const control = pressable(renderer, cancel);
+      expect(control.props.accessibilityRole).toBe('button');
+      expect(control.props.disabled).toBeFalsy();
       await press(renderer, cancel);
       expect(visibleModal(renderer)).toBe(false);
     }
+    // Android back (onRequestClose) is a cancel too while nothing is busy.
+    await press(renderer, 'Delete account');
+    const modal = visibleModalOf(renderer);
+    expect(typeof modal.props.onRequestClose).toBe('function');
+    await act(async () => {
+      modal.props.onRequestClose();
+    });
+    expect(visibleModal(renderer)).toBe(false);
+
     expect(mockRequestAccountDeletion).not.toHaveBeenCalled();
     expect(mockConfirmAccountDeletion).not.toHaveBeenCalled();
     expect(useAuthStore.getState().session).toEqual(syncedSession);
@@ -724,12 +798,15 @@ describe('ManageAccountScreen', () => {
     mockRequestAccountDeletion.mockRejectedValue(new Error('boom'));
     const renderer = render(<ManageAccountScreen />);
 
-    await press(renderer, 'Delete account');
+    await openDeletionConfirmation(renderer);
     await press(renderer, 'Continue to delete');
     await act(async () => {
       await Promise.resolve();
     });
 
+    // A skipped survey sends nothing: the request carries a null survey.
+    expect(mockRequestAccountDeletion).toHaveBeenCalledTimes(1);
+    expect(mockRequestAccountDeletion).toHaveBeenCalledWith(null, null);
     expect(allText(renderer)).toContain(
       'The deletion request could not be completed. Nothing was deleted.',
     );
@@ -741,7 +818,7 @@ describe('ManageAccountScreen', () => {
     act(() => renderer.unmount());
   });
 
-  it('synced: while requesting, both sheet buttons are disabled (double-tap guard) and busy ends on failure', async () => {
+  it('synced: while requesting, every dialog control is disabled (double-tap guard, no dismiss) and busy ends on failure', async () => {
     asSynced();
     let rejectRequest!: (error: Error) => void;
     mockRequestAccountDeletion.mockReturnValue(
@@ -751,11 +828,25 @@ describe('ManageAccountScreen', () => {
     );
     const renderer = render(<ManageAccountScreen />);
 
-    await press(renderer, 'Delete account');
+    await openDeletionConfirmation(renderer);
     await press(renderer, 'Continue to delete');
 
     expect(pressable(renderer, 'Requesting…').props.disabled).toBe(true);
     expect(pressable(renderer, 'Keep my account').props.disabled).toBe(true);
+    // Neither the header close, the backdrop, nor Android back can dismiss a
+    // dialog with a request in flight.
+    expect(
+      pressable(renderer, 'Close account deletion confirmation').props.disabled,
+    ).toBe(true);
+    // The backdrop is not merely disabled — it has no handler at all.
+    const backdrop = renderer.root.find(
+      node =>
+        typeof node.type === 'string' &&
+        node.props.accessibilityLabel === 'Cancel account deletion',
+    );
+    expect(backdrop.props.accessibilityState?.disabled).toBe(true);
+    expect(pressables(renderer, 'Cancel account deletion')).toHaveLength(0);
+    expect(visibleModalOf(renderer).props.onRequestClose).toBeUndefined();
     expect(mockRequestAccountDeletion).toHaveBeenCalledTimes(1);
 
     await act(async () => {
@@ -765,6 +856,12 @@ describe('ManageAccountScreen', () => {
     expect(pressable(renderer, 'Keep my account').props.disabled).toBe(false);
     expect(pressable(renderer, 'Continue to delete').props.disabled).toBe(
       false,
+    );
+    expect(
+      pressable(renderer, 'Close account deletion confirmation').props.disabled,
+    ).toBe(false);
+    expect(typeof visibleModalOf(renderer).props.onRequestClose).toBe(
+      'function',
     );
     act(() => renderer.unmount());
   });
@@ -779,7 +876,7 @@ describe('ManageAccountScreen', () => {
     mockConfirmAccountDeletion.mockRejectedValue(new Error('server 500'));
     const renderer = render(<ManageAccountScreen />);
 
-    await press(renderer, 'Delete account');
+    await openDeletionConfirmation(renderer);
     await press(renderer, 'Continue to delete');
     await act(async () => {
       await Promise.resolve();

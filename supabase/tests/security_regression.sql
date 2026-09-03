@@ -14,7 +14,8 @@
 --   B. cross-user SELECT/UPDATE/DELETE/RPC are denied by RLS
 --   C. anonymous access is denied outright (tables, views, RPCs)
 --   D. consent/evaluation/feedback ledgers are append-only (grant AND trigger
---      layers, every role), while account-deletion cascades still pass
+--      layers, every role), while account-deletion cascades still pass — and
+--      the exit survey (account_deletion_feedback) is anonymized, not removed
 --   E. column-level grants: identity/score/bookkeeping columns are not
 --      client-writable even in the owner's own rows
 --   F. payload size caps reject oversized text/jsonb
@@ -176,6 +177,23 @@ insert into public.analysis_feedback (user_id, analysis_id, rating)
 values ('00000000-0000-4000-8000-00000000000a',
         '00000000-0000-4000-8000-0000000000e1', 'accurate');
 
+-- A9: the exit survey (POST /v1/me/delete-request body.survey) is a plain
+-- owner INSERT — with context columns — and is write-only from a client
+-- session: there is no SELECT grant, so even the owner cannot read it back.
+insert into public.account_deletion_feedback
+  (user_id, reason, wanted, details, provider, platform, app_version,
+   account_age_days, was_premium, scored_count)
+values ('00000000-0000-4000-8000-00000000000a', 'too_expensive', 'price',
+        'Steep for a rec player.', 'google', 'ios', '1.0', 12, false, 1);
+do $$
+begin
+  begin
+    perform 1 from public.account_deletion_feedback limit 1;
+    raise exception 'A9: exit survey must not be client-readable, even by its owner';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
 -- ──────────────────────── B: cross-user is denied ──────────────────────────
 
 -- B1: Bob cannot see Alice's rows
@@ -224,6 +242,19 @@ begin
     raise exception 'B4: insert-as-other-user must be denied';
   exception when insufficient_privilege or check_violation then null;
   end;
+  begin
+    insert into public.account_deletion_feedback (user_id, reason)
+    values ('00000000-0000-4000-8000-00000000000a', 'other');
+    raise exception 'B4: exit survey insert-as-other-user must be denied';
+  exception when insufficient_privilege or check_violation then null;
+  end;
+  -- Nor an anonymous row: only the FK's SET NULL may ever produce one.
+  begin
+    insert into public.account_deletion_feedback (user_id, reason)
+    values (null, 'other');
+    raise exception 'B4: exit survey insert with null owner must be denied';
+  exception when insufficient_privilege or check_violation then null;
+  end;
 end $$;
 
 -- B5: Bob cannot spend Alice's permit through the sync RPC
@@ -261,7 +292,7 @@ begin
     'evaluation_trials','analysis_feedback','user_saved_drills',
     'player_rank_state','progress_daily','practice_days',
     'player_technique_rating','billing_entitlements',
-    'account_deletion_requests','webhook_events'
+    'account_deletion_requests','account_deletion_feedback','webhook_events'
   ] loop
     begin
       execute format('select 1 from public.%I limit 1', t);
@@ -298,7 +329,8 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'consent_records', 'evaluation_trials', 'analysis_feedback'
+    'consent_records', 'evaluation_trials', 'analysis_feedback',
+    'account_deletion_feedback'
   ] loop
     begin
       execute format('update public.%I set user_id = user_id', t);
@@ -333,6 +365,16 @@ begin
     raise exception 'D2c: feedback DELETE must be trigger-blocked for all roles';
   exception when insufficient_privilege then null;
   end;
+  begin
+    update public.account_deletion_feedback set reason = 'other';
+    raise exception 'D2d: exit survey UPDATE must be trigger-blocked for all roles';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.account_deletion_feedback;
+    raise exception 'D2e: exit survey DELETE must be trigger-blocked for all roles';
+  exception when insufficient_privilege then null;
+  end;
 end $$;
 
 -- D3: account-deletion cascade still removes ledger rows (GDPR path)
@@ -344,6 +386,24 @@ begin
     where user_id = '00000000-0000-4000-8000-00000000000a';
   if remaining <> 0 then
     raise exception 'D3: account deletion must cascade through the ledgers';
+  end if;
+end $$;
+
+-- D4: the exit survey is the ONE row that outlives the account — anonymized
+-- (FK ON DELETE SET NULL passes the append-only trigger because it runs at
+-- trigger depth > 1), never deleted, answer and context intact.
+do $$
+begin
+  if exists (select 1 from public.account_deletion_feedback
+             where user_id = '00000000-0000-4000-8000-00000000000a') then
+    raise exception 'D4: deletion must anonymize the exit survey (user_id → null)';
+  end if;
+  if not exists (select 1 from public.account_deletion_feedback
+                 where user_id is null
+                   and reason = 'too_expensive' and wanted = 'price'
+                   and details = 'Steep for a rec player.'
+                   and provider = 'google' and account_age_days = 12) then
+    raise exception 'D4: the anonymized exit survey must survive account deletion';
   end if;
 end $$;
 
@@ -593,6 +653,17 @@ begin
   end;
 end $$;
 
+-- F4b: oversized exit-survey comment rejected (API caps at 500; DB at 1000)
+do $$
+begin
+  begin
+    insert into public.account_deletion_feedback (user_id, reason, details)
+    values ('00000000-0000-4000-8000-00000000000a', 'other', repeat('x', 1500));
+    raise exception 'F4b: oversized exit-survey details must be rejected';
+  exception when check_violation then null;
+  end;
+end $$;
+
 reset role;
 
 -- F5: the caps bind every role, not just clients (oversized guidance as owner)
@@ -631,6 +702,11 @@ begin
   begin
     perform public.reject_ledger_mutation();
     raise exception 'G2: reject_ledger_mutation must not be client-executable';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.reject_deletion_feedback_mutation();
+    raise exception 'G2b: reject_deletion_feedback_mutation must not be client-executable';
   exception when insufficient_privilege then null;
   end;
   begin

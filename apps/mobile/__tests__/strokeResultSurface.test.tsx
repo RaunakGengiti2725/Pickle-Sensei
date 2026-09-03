@@ -1,22 +1,96 @@
 import React from 'react';
+import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
-import type { ShotAnalysis } from '@pickle/shared-types';
+import type {
+  CheckpointKey,
+  CheckpointScore,
+  FaultDirection,
+  PhaseKey,
+  PhaseSpan,
+  ScoreBand,
+  ShotAnalysis,
+} from '@pickle/shared-types';
 import {
   StrokeResult,
   StrokeResultAnalyzing,
 } from '../src/components/StrokeResult';
 import {
+  ANALYSIS_TIMELINE_CAPTION,
   ANCHOR_FREE_CAPTION,
+  MEASUREMENT_SCOPE_NOTE,
   type StrokeResultEvidenceRecord,
 } from '../src/components/strokeResultModel';
+import { UNCERTAINTY_COPY } from '../src/components/UncertaintyNote';
 
 /**
  * W8 — canonical StrokeResult surface (ONE component, consumed by both the
  * Stroke Analysis result route and Session event cards). These tests pin
  * the honest-evidence gating at the rendered level: no marker without the
- * usable-result-v1 gate, no phase strip without segmented temporalPhasesV2,
- * no invented score, abstention as a designed state with a retry path.
+ * usable-result-v1 gate, a phase strip only from segmented temporalPhasesV2
+ * or the analysis' own measured phases, no invented score, abstention as a
+ * designed state with a retry path, and — for scored results — an insight
+ * that states the measured fault rather than the engine's modality scope.
  */
+
+function phase(
+  key: PhaseKey,
+  startMs: number,
+  endMs: number,
+  representativeMs = startMs + (endMs - startMs) / 2,
+): PhaseSpan {
+  return { key, startMs, representativeMs, endMs, confidence: 0.8 };
+}
+
+const MEASURED_PHASES: PhaseSpan[] = [
+  phase('ready', 2000, 2100),
+  phase('prepare', 2100, 2250),
+  phase('accelerate', 2250, 2384),
+  phase('contact', 2384, 2416, 2400),
+  phase('follow_through', 2416, 2600),
+  phase('recover', 2600, 2700),
+];
+
+function checkpoint(
+  key: CheckpointKey,
+  score: number | null,
+  band: ScoreBand,
+  direction: FaultDirection,
+  overrides: Partial<CheckpointScore> = {},
+): CheckpointScore {
+  return {
+    key,
+    score,
+    confidence: 0.8,
+    band,
+    direction,
+    severity: score === null ? 0 : (100 - score) / 100,
+    applicable: true,
+    ...overrides,
+  };
+}
+
+const SCORED_CHECKPOINTS: CheckpointScore[] = [
+  checkpoint('ready_position', 85, 'green', 'none'),
+  checkpoint('athletic_base', 72, 'yellow', 'narrow'),
+  checkpoint('preparation', 88, 'green', 'none'),
+  checkpoint('paddle_set', 90, 'green', 'none'),
+  checkpoint('swing_length', null, 'unscored', 'none'),
+  checkpoint('sequencing', 82, 'green', 'none'),
+  checkpoint('paddle_path', 61, 'red', 'low'),
+  checkpoint('contact_position', 48, 'red', 'late'),
+  checkpoint('face_wrist_stability', 30, 'red', 'unstable', {
+    applicable: false,
+  }),
+  checkpoint('follow_through', 80, 'green', 'none'),
+  checkpoint('recovery', 92, 'green', 'none'),
+];
+
+/** Every on-device scored record carries these three structural tokens. */
+const STRUCTURAL_FACTORS = [
+  'paddle_track_unavailable',
+  'ball_track_unavailable',
+  'court_geometry_unavailable',
+];
 
 function analysisFixture(overrides: Partial<ShotAnalysis> = {}): ShotAnalysis {
   return {
@@ -50,6 +124,22 @@ function analysisFixture(overrides: Partial<ShotAnalysis> = {}): ShotAnalysis {
   };
 }
 
+/** A scored on-device read exactly as the pipeline produces it today. */
+function scoredAnalysis(overrides: Partial<ShotAnalysis> = {}): ShotAnalysis {
+  return analysisFixture({
+    timestamps: { startMs: 2000, contactMs: 2400, endMs: 2700 },
+    phases: MEASURED_PHASES.map(span => ({ ...span })),
+    checkpoints: SCORED_CHECKPOINTS.map(cp => ({ ...cp })),
+    priorityFix: {
+      checkpoint: 'contact_position',
+      reasonKey: 'lowest_score',
+      severity: 0.52,
+      confidence: 0.8,
+    },
+    ...overrides,
+  });
+}
+
 const declaredRecord: StrokeResultEvidenceRecord = {
   id: 'analysis-1',
   captureId: 'capture-1',
@@ -66,6 +156,16 @@ const declaredRecord: StrokeResultEvidenceRecord = {
     analysisConfidence: 0.82,
     presentation: 'normal',
     limitingFactors: [],
+  },
+};
+
+/** The declared record with the structural tokens every on-device record has. */
+const onDeviceScoredRecord: StrokeResultEvidenceRecord = {
+  ...declaredRecord,
+  uncertainty: {
+    analysisConfidence: 0.82,
+    presentation: 'normal',
+    limitingFactors: STRUCTURAL_FACTORS,
   },
 };
 
@@ -213,6 +313,132 @@ describe('StrokeResult — scored declared run', () => {
   });
 });
 
+describe('StrokeResult — scored on-device read (measured phases, structural tokens)', () => {
+  it('shows the measured phase strip + wrist-peak tick, and the insight is the measured fault — never the paddle-track scope', async () => {
+    const renderer = await render(
+      <StrokeResult
+        analysis={scoredAnalysis()}
+        record={onDeviceScoredRecord}
+        clip={{ uri: 'file:///clip.mov', durationMs: 4200 }}
+        currentAnalysisId="analysis-1"
+        onTryAgain={jest.fn()}
+        onDone={jest.fn()}
+      />,
+    );
+    const rendered = textOf(renderer);
+
+    // P3 — the replay lights up from analysis.phases.
+    expect(
+      renderer.root.findAll(
+        node =>
+          typeof node.type === 'string' &&
+          node.props.accessibilityLabel === 'Phase timeline',
+      ),
+    ).toHaveLength(1);
+    expect(rendered).toContain('PREP');
+    expect(rendered).toContain('ACCEL');
+    expect(rendered).toContain('FOLLOW');
+    expect(rendered).toContain('RECOVERY');
+    expect(rendered).toContain('CONTACT (WRIST PEAK)');
+    expect(rendered).toContain(ANALYSIS_TIMELINE_CAPTION);
+    // The wrist peak is a phase tick, not the usable-result-v1 marker, and
+    // the "no contact estimate was recorded" line no longer contradicts it.
+    expect(
+      renderer.root.findAll(
+        node =>
+          typeof node.props.accessibilityLabel === 'string' &&
+          node.props.accessibilityLabel.startsWith('Contact marker'),
+      ),
+    ).toHaveLength(0);
+    expect(rendered).not.toContain('no contact estimate was recorded');
+
+    // P1 — the ONE insight is the engine's worst measured checkpoint + cue.
+    const [insightCard] = renderer.root.findAll(
+      node =>
+        typeof node.type === 'string' && node.props.testID === 'stroke-insight',
+    );
+    const insightText = JSON.stringify(
+      insightCard!.findAllByType(Text).map(node => node.props.children),
+    );
+    expect(insightText).toContain('WHAT THE CAMERA MEASURED');
+    expect(insightText).toContain(
+      'Contact position scored 48 — contact came late.',
+    );
+    expect(insightText).toContain('Meet the ball further out in front');
+    expect(insightText).not.toContain('MEASURED INSIGHT');
+    expect(insightText.toLowerCase()).not.toContain('paddle track');
+    expect(insightText).not.toContain('couldn’t establish');
+
+    // P2 — no "couldn't measure the phase timing" / "contact wasn't located"
+    // on a result that measured both; the wrist-peak note states the limit.
+    expect(rendered).not.toContain(UNCERTAINTY_COPY.phase_timing);
+    expect(rendered).not.toContain(UNCERTAINTY_COPY.contact);
+    expect(rendered).toContain(UNCERTAINTY_COPY.contact_estimate);
+
+    // Measured rows carry exactly one phase row, from wrist motion.
+    expect(rendered.match(/Swing phases/g)).toHaveLength(1);
+    expect(rendered).toContain('4 measured from wrist motion');
+    await unmount(renderer);
+  });
+
+  it('an all-green scored read states that every measured checkpoint held', async () => {
+    const renderer = await render(
+      <StrokeResult
+        analysis={scoredAnalysis({
+          checkpoints: [
+            checkpoint('ready_position', 85, 'green', 'none'),
+            checkpoint('contact_position', 91, 'green', 'none'),
+            checkpoint('follow_through', 83, 'green', 'none'),
+          ],
+          priorityFix: null,
+        })}
+        record={onDeviceScoredRecord}
+        clip={null}
+        currentAnalysisId="analysis-1"
+        onTryAgain={jest.fn()}
+        onDone={jest.fn()}
+      />,
+    );
+    const rendered = textOf(renderer);
+    expect(rendered).toContain('WHAT THE CAMERA MEASURED');
+    expect(rendered).toContain(
+      'Every measured checkpoint held its target — strongest was Contact position at 91.',
+    );
+    expect(rendered).not.toContain('paddle track');
+    await unmount(renderer);
+  });
+
+  it('renders reviewSlot under the replay and fixSlot right after the insight', async () => {
+    const renderer = await render(
+      <StrokeResult
+        analysis={scoredAnalysis()}
+        record={onDeviceScoredRecord}
+        clip={null}
+        currentAnalysisId="analysis-1"
+        onTryAgain={jest.fn()}
+        onDone={jest.fn()}
+        reviewSlot={<Text testID="review-slot">REVIEW SLOT</Text>}
+        fixSlot={<Text testID="fix-slot">FIX SLOT</Text>}
+      />,
+    );
+    const rendered = textOf(renderer);
+    expect(rendered).toContain('REVIEW SLOT');
+    expect(rendered).toContain('FIX SLOT');
+    // Order: replay → reviewSlot → insight → fixSlot → measured rows.
+    const replayAt = rendered.indexOf('"stroke-result-replay"');
+    const reviewAt = rendered.indexOf('REVIEW SLOT');
+    const insightAt = rendered.indexOf('"stroke-insight"');
+    const fixAt = rendered.indexOf('FIX SLOT');
+    const rowsAt = rendered.indexOf('"measured-rows"');
+    expect(replayAt).toBeGreaterThan(-1);
+    expect(reviewAt).toBeGreaterThan(replayAt);
+    expect(insightAt).toBeGreaterThan(reviewAt);
+    expect(fixAt).toBeGreaterThan(insightAt);
+    expect(rowsAt).toBeGreaterThan(fixAt);
+    await unmount(renderer);
+  });
+});
+
 describe('StrokeResult — honest abstention (same layout)', () => {
   it('family-level AUTO read with result:null shows what held / what could not be established, replay and retry stay', async () => {
     const familyRecord: StrokeResultEvidenceRecord = {
@@ -276,6 +502,54 @@ describe('StrokeResult — honest abstention (same layout)', () => {
     ).toBeGreaterThan(0);
     expect(rendered).not.toContain('out of 10');
     expect(rendered).not.toContain('score of');
+    await unmount(renderer);
+  });
+
+  it('structural modality tokens render as ONE calm scope footnote, not as "couldn’t establish" lines', async () => {
+    const renderer = await render(
+      <StrokeResult
+        analysis={analysisFixture({
+          resultKind: 'low_confidence',
+          overallScore: null,
+          guidance: 'Step back so your whole body stays in frame.',
+        })}
+        record={{
+          ...declaredRecord,
+          uncertainty: {
+            analysisConfidence: 0.3,
+            presentation: 'abstain',
+            limitingFactors: [
+              ...STRUCTURAL_FACTORS,
+              'analysis_confidence_below_threshold',
+            ],
+          },
+        }}
+        clip={null}
+        currentAnalysisId="analysis-1"
+        onTryAgain={jest.fn()}
+        onDone={jest.fn()}
+      />,
+    );
+    const rendered = textOf(renderer);
+    expect(rendered).toContain('WHAT WE COULDN’T ESTABLISH');
+    expect(rendered).toContain(
+      'Enough analysis confidence to clear the scoring threshold.',
+    );
+    expect(rendered).toContain(MEASUREMENT_SCOPE_NOTE);
+    expect(
+      renderer.root.findAll(
+        node =>
+          typeof node.type === 'string' &&
+          node.props.testID === 'abstention-ledger-scope',
+      ),
+    ).toHaveLength(1);
+    expect(rendered).not.toContain('A paddle track for this swing.');
+    expect(rendered).not.toContain('A ball track for this swing.');
+    expect(rendered).not.toContain('Court geometry for this camera view.');
+    // The insight never phrases the scope as a per-capture failure.
+    expect(rendered).not.toContain('couldn’t establish a paddle track');
+    // The engine's real guidance still leads the retry.
+    expect(rendered).toContain('Step back so your whole body stays in frame.');
     await unmount(renderer);
   });
 });

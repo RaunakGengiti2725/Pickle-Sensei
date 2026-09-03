@@ -56,6 +56,7 @@ describe('abandoned TRY AGAIN handoff', () => {
       declaredStroke: 'forehand_drive',
       declaredCanonical: 'FOREHAND_DRIVE',
       auto: false,
+      sessionId: null,
     });
   });
 

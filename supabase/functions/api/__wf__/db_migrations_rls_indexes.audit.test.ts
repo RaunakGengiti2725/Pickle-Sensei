@@ -219,7 +219,7 @@ Deno.test({
           `);
           const out = lines(r.stdout);
           const grants = out[out.indexOf("GRANTS") + 1];
-          // 20260902000000_shots_delete_revoke.sql revokes DELETE and drops shots_delete_own.
+          // 20260902130000_shots_delete_revoke.sql revokes DELETE and drops shots_delete_own.
           assert(!grants.includes("DELETE"), `DELETE must be revoked, grants: ${grants}`);
           const before = out.slice(out.indexOf("BEFORE") + 1, out.indexOf("END"));
           assertEquals(before, ["2", "access.paywall_required"], "both lifetime ratings consumed");
@@ -385,7 +385,7 @@ Deno.test({
           `);
           const out = r.stdout;
           const section = (a: string, b: string) => out.slice(out.indexOf(a), out.indexOf(b));
-          // 20260902000100_cascade_user_indexes.sql: user_id-leading indexes on
+          // 20260902130100_cascade_user_indexes.sql: user_id-leading indexes on
           // the three cascade children, so each probe is index-backed.
           const indexed = (plan: string, table: string) =>
             new RegExp(`(Index|Index Only|Bitmap Index) Scan .*${table}`).test(plan) &&
@@ -407,7 +407,7 @@ Deno.test({
             explain (costs off) update public.analysis_permits set status = 'released', outcome = 'expired'
               where status = 'reserved' and created_at < now() - interval '24 hours';
           `);
-          // 20260902000200_permits_reserved_sweep_index.sql: partial (created_at)
+          // 20260902130200_permits_reserved_sweep_index.sql: partial (created_at)
           // index where status='reserved'.
           assert(!r.stdout.includes("Seq Scan on analysis_permits"), r.stdout);
           assert(/(Index|Bitmap Index) Scan .*analysis_permits/.test(r.stdout), r.stdout);

@@ -2,10 +2,14 @@ import React from 'react';
 import { Alert, Linking } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { StrokeIntentEnvelope } from '@pickle/analysis-pipeline';
-import type { ShotAnalysis } from '@pickle/shared-types';
+import type { CheckpointScore, ShotAnalysis } from '@pickle/shared-types';
 import type { StrokeResultEvidenceRecord } from '../../src/components/strokeResultModel';
 import type { StrokeResultEvidence } from '../../src/components/strokeResultData';
-import type { ShotOutboxStatus } from '../../src/data/repository';
+import type {
+  RealAnalysisFact,
+  ShotOutboxStatus,
+} from '../../src/data/repository';
+import type { CatalogDrill } from '../../src/training/api';
 import type {
   DrillDetail,
   TrainingApi,
@@ -14,11 +18,22 @@ import type {
 } from '../../src/training/types';
 
 /**
- * Button ledger for ResultScreen: every pressable the route renders (directly
- * or through StrokeResult / PlanDrillCard / AnalysisFeedbackPrompt) is pressed
- * here and its real observable effect asserted — navigation target + params,
- * training API calls through the real training store, Linking / Alert
- * calls, and the copy the user sees on both the success and failure paths.
+ * Button ledger for the Result routes. The Result route (`ResultScreen`) is
+ * a four-page guide — SCORE → THE PROBLEM → DRILLS → NEXT, pages without
+ * evidence skipped — whose own controls are the top-row Close, the
+ * descriptive Next, Back / Done and the last page's "Try it again", plus the
+ * THIS SET attempt pills (score page) and the catalog drills' Save toggles /
+ * "Open drill library" (drills page). EVERYTHING the former one-page surface
+ * held — the canonical StrokeResult (attempt tabs, replay, measured rows),
+ * the personalized training section (Build reviewed plan, PlanDrillCard
+ * controls, Use as reassessment) and the AnalysisFeedbackPrompt — is
+ * `ResultBreakdownSheet`, hosted by the `ResultDetails` route
+ * (`ResultDetailsScreen`) and, inline, by the guide's abstained page.
+ *
+ * Every pressable either host renders is pressed here and its real
+ * observable effect asserted — navigation target + params, training API
+ * calls through the real training store, Linking / Alert calls, and the copy
+ * the user sees on both the success and failure paths.
  */
 
 jest.mock('../../src/data/db', () => ({
@@ -37,9 +52,33 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
+jest.mock('react-native-svg', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  const Mock = (props: { children?: React.ReactNode }) =>
+    React.createElement(View, null, props.children);
+  return {
+    __esModule: true,
+    default: Mock,
+    Svg: Mock,
+    Circle: Mock,
+    Defs: Mock,
+    G: Mock,
+    Line: Mock,
+    Path: Mock,
+    Polygon: Mock,
+    Polyline: Mock,
+    RadialGradient: Mock,
+    LinearGradient: Mock,
+    Rect: Mock,
+    Stop: Mock,
+  };
+});
+
 const mockNavigation = {
   navigate: jest.fn(),
   replace: jest.fn(),
+  popTo: jest.fn(),
   goBack: jest.fn(),
   popToTop: jest.fn(),
 };
@@ -56,9 +95,15 @@ jest.mock('../../src/components/strokeResultData', () => ({
 
 const mockHasShotSyncReceipt = jest.fn<Promise<boolean>, unknown[]>();
 const mockGetShotOutboxStatus = jest.fn<Promise<ShotOutboxStatus>, unknown[]>();
+const mockListRealAnalysisFacts = jest.fn<
+  Promise<RealAnalysisFact[]>,
+  unknown[]
+>();
 jest.mock('../../src/data/repository', () => ({
   hasShotSyncReceipt: (...args: unknown[]) => mockHasShotSyncReceipt(...args),
   getShotOutboxStatus: (...args: unknown[]) => mockGetShotOutboxStatus(...args),
+  listRealAnalysisFacts: (...args: unknown[]) =>
+    mockListRealAnalysisFacts(...args),
 }));
 
 const mockConsistencyState = {
@@ -93,7 +138,17 @@ jest.mock('../../src/data/api', () => {
   };
 });
 
+// The guide's DRILLS page reads the catalog through the training API client;
+// the training STORE (saves, plans) keeps its injected api below.
+const mockListCatalogDrills = jest.fn<Promise<CatalogDrill[]>, unknown[]>();
+jest.mock('../../src/training/api', () => ({
+  createTrainingApi: () => ({
+    listCatalogDrills: (...args: unknown[]) => mockListCatalogDrills(...args),
+  }),
+}));
+
 import { ResultScreen } from '../../src/screens/ResultScreen';
+import { ResultDetailsScreen } from '../../src/screens/ResultDetailsScreen';
 import {
   configureTrainingStore,
   useTrainingStore,
@@ -163,6 +218,39 @@ function analysisFixture(overrides: Partial<ShotAnalysis> = {}): ShotAnalysis {
   };
 }
 
+function checkpoint(
+  key: CheckpointScore['key'],
+  score: number,
+  band: CheckpointScore['band'],
+  direction: CheckpointScore['direction'],
+): CheckpointScore {
+  return {
+    key,
+    score,
+    confidence: 0.8,
+    band,
+    direction,
+    severity: (100 - score) / 100,
+    applicable: true,
+  };
+}
+
+/** A scored read with ONE measured fault: THE PROBLEM and DRILLS pages exist. */
+function faultedAnalysis(): ShotAnalysis {
+  return analysisFixture({
+    checkpoints: [
+      checkpoint('ready_position', 85, 'green', 'none'),
+      checkpoint('contact_position', 48, 'red', 'late'),
+    ],
+    priorityFix: {
+      checkpoint: 'contact_position',
+      reasonKey: 'lowest_score',
+      severity: 0.52,
+      confidence: 0.8,
+    },
+  });
+}
+
 const declaredEnvelope: StrokeIntentEnvelope = {
   declaredStroke: 'forehand_drive',
   predictedStroke: null,
@@ -205,10 +293,94 @@ function evidenceFixture(
     analysis: analysisFixture(),
     record: recordFixture,
     clip: null,
+    review: null,
     attempts: attemptRefs,
     ...overrides,
   };
 }
+
+/** The honest abstention: the classifier would not commit, nothing scored. */
+function abstainedEvidence(
+  overrides: Partial<StrokeResultEvidence> = {},
+): StrokeResultEvidence {
+  return evidenceFixture({
+    analysis: null,
+    record: {
+      ...recordFixture,
+      strokeIntent: {
+        ...declaredEnvelope,
+        declaredStroke: null,
+        resolutionBasis: 'abstained',
+        resolvedProfileId: null,
+        resolvedProfileVersion: null,
+      },
+      uncertainty: {
+        analysisConfidence: 0,
+        presentation: 'abstain',
+        limitingFactors: ['paddle_track_missing'],
+      },
+      contact: {
+        status: 'abstained',
+        reason: 'insufficient evidence mass',
+        limitingFactors: ['insufficient_evidence_mass'],
+      },
+    },
+    attempts: [],
+    ...overrides,
+  });
+}
+
+/** Set `s1` as the repository reports it: two comparable scored attempts. */
+function setFacts(): RealAnalysisFact[] {
+  const base = {
+    shotType: 'forehand_drive',
+    confidence: 0.82,
+    resultKind: 'scored' as const,
+    scoringModelVersion: 'scoring-1',
+    shotConfigVersion: 'config-1',
+    sessionId: 's1',
+    priorityCheckpoint: null,
+    checkpointScores: {},
+  };
+  return [
+    {
+      ...base,
+      id: 'a1',
+      capturedAt: '2026-08-30T10:00:00.000Z',
+      overallScore: 7.4,
+    },
+    {
+      ...base,
+      id: 'a2',
+      capturedAt: '2026-08-30T10:05:00.000Z',
+      overallScore: 8.1,
+    },
+  ];
+}
+
+function drill(slug: string, families: string[]): CatalogDrill {
+  return {
+    id: `id-${slug}`,
+    slug,
+    title: slug
+      .split('-')
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' '),
+    description: `Description for ${slug}.`,
+    coachName: 'Pickle Sensei Training Library',
+    equipment: ['paddle', 'balls'],
+    difficultyMin: null,
+    difficultyMax: null,
+    families,
+    validationState: 'UNVALIDATED',
+    saved: false,
+  };
+}
+
+const CATALOG: CatalogDrill[] = [
+  drill('drive-and-recover', ['drive']),
+  drill('shadow-swing-ladder', ['global']),
+];
 
 function planItem(overrides: Partial<TrainingPlanItem> = {}): TrainingPlanItem {
   return {
@@ -352,6 +524,13 @@ function detailFixture(slug: string): DrillDetail {
   };
 }
 
+const session = {
+  apiBaseUrl: 'https://api.test',
+  bearerToken: 'token-1',
+  canonicalAppUserId: 'user-1',
+  provider: 'apple',
+};
+
 // ─── Harness ────────────────────────────────────────────────────────────────
 
 type Renderer = TestRenderer.ReactTestRenderer;
@@ -371,16 +550,31 @@ let alertSpy: jest.SpyInstance;
 let canOpenSpy: jest.SpyInstance;
 let openUrlSpy: jest.SpyInstance;
 
+/** Evidence → receipt → outbox / plan / catalog resolve on successive
+ * microtask turns (timers are faked, so no Animated tick outlives a test). */
 async function flush() {
-  await act(async () => {
-    await Promise.resolve();
-  });
+  for (let i = 0; i < 4; i += 1) {
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
 }
 
+/** The Result route: the four-page guide. */
 async function render(): Promise<Renderer> {
   let renderer!: Renderer;
   await act(async () => {
     renderer = TestRenderer.create(<ResultScreen />);
+  });
+  await flush();
+  return renderer;
+}
+
+/** The ResultDetails route: the full breakdown sheet. */
+async function renderDetails(): Promise<Renderer> {
+  let renderer!: Renderer;
+  await act(async () => {
+    renderer = TestRenderer.create(<ResultDetailsScreen />);
   });
   await flush();
   return renderer;
@@ -428,6 +622,10 @@ function byTestID(renderer: Renderer, testID: string) {
   return matches[0]!;
 }
 
+function hasTestID(renderer: Renderer, testID: string): boolean {
+  return pressables(renderer).some(node => node.props.testID === testID);
+}
+
 async function press(node: TestRenderer.ReactTestInstance) {
   await act(async () => {
     node.props.onPress();
@@ -440,6 +638,35 @@ function isDisabled(node: TestRenderer.ReactTestInstance): boolean {
     node.props.disabled === true &&
     node.props.accessibilityState?.disabled === true
   );
+}
+
+/** The guide's "n OF m · PAGE" label. */
+function stepLabel(renderer: Renderer): string {
+  const [label] = renderer.root.findAll(
+    node =>
+      typeof node.type === 'string' &&
+      node.props.testID === 'result-guide-step-label',
+  );
+  if (!label) return '';
+  const children = label.props.children;
+  return Array.isArray(children) ? children.join('') : String(children);
+}
+
+/** Labels of every pressable currently on screen (feedback chips carry a
+ * descriptive testID instead of a label), sorted. */
+function ledger(renderer: Renderer): string[] {
+  const seen = new Set<string>();
+  for (const node of pressables(renderer)) {
+    expect(['button', 'tab']).toContain(node.props.accessibilityRole);
+    const label: unknown = node.props.accessibilityLabel;
+    const testID: unknown = node.props.testID;
+    if (typeof label !== 'string') {
+      expect(typeof testID).toBe('string');
+      expect(String(testID).startsWith('feedback-')).toBe(true);
+    }
+    seen.add(typeof label === 'string' ? label : String(testID));
+  }
+  return [...seen].sort();
 }
 
 function alertButton(title: string, buttonText: string) {
@@ -460,9 +687,10 @@ function pendingForever<T>() {
 }
 
 beforeEach(() => {
-  jest.useRealTimers();
+  jest.useFakeTimers();
   mockNavigation.navigate.mockClear();
   mockNavigation.replace.mockClear();
+  mockNavigation.popTo.mockClear();
   mockNavigation.goBack.mockClear();
   mockNavigation.popToTop.mockClear();
   mockRoute.params = { analysisId: 'a1' };
@@ -476,6 +704,10 @@ beforeEach(() => {
     attempts: 0,
     lastError: null,
   });
+  mockListRealAnalysisFacts.mockReset();
+  mockListRealAnalysisFacts.mockResolvedValue([]);
+  mockListCatalogDrills.mockReset();
+  mockListCatalogDrills.mockResolvedValue(CATALOG);
   mockConsistencyState.refresh.mockClear();
   mockConsistencyState.recordDrillCompletion.mockClear();
   mockGetApiSession.mockReset();
@@ -505,7 +737,7 @@ afterEach(() => {
 
 // ─── Loading + missing states ───────────────────────────────────────────────
 
-describe('ResultScreen buttons — loading and missing states', () => {
+describe('Result guide buttons — loading and missing states', () => {
   it('Close (while evidence loads) pops to the top of the stack', async () => {
     mockLoadEvidence.mockReturnValue(pendingForever());
     const renderer = await render();
@@ -523,6 +755,7 @@ describe('ResultScreen buttons — loading and missing states', () => {
       analysis: null,
       record: null,
       clip: null,
+      review: null,
       attempts: [],
     });
     const renderer = await render();
@@ -542,20 +775,329 @@ describe('ResultScreen buttons — loading and missing states', () => {
     expect(textOf(renderer)).toContain('Result missing');
     await unmount(renderer);
   });
+
+  it('ResultDetails: Back (while evidence loads) goes back; a gone result offers Go back', async () => {
+    mockLoadEvidence.mockReturnValue(pendingForever());
+    const loading = await renderDetails();
+    expect(textOf(loading)).toContain('Opening your result…');
+    expect(textOf(loading)).toContain('Full breakdown');
+    const back = control(loading, 'Back');
+    expect(back.props.accessibilityRole).toBe('button');
+    expect(back.props.hitSlop).toBe(8);
+    await press(back);
+    expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
+    await unmount(loading);
+
+    mockLoadEvidence.mockRejectedValue(new Error('sqlite'));
+    const missing = await renderDetails();
+    expect(textOf(missing)).toContain('Result missing');
+    expect(byLabel(missing, 'Try again')).toHaveLength(0);
+    await press(control(missing, 'Go back'));
+    expect(mockNavigation.goBack).toHaveBeenCalledTimes(2);
+    await unmount(missing);
+  });
 });
 
-// ─── Result surface controls (StrokeResult) ─────────────────────────────────
+// ─── The guide's own controls (ResultScreen) ────────────────────────────────
 
-describe('ResultScreen buttons — result surface', () => {
-  it('Close pops to the top of the stack', async () => {
+describe('Result guide buttons — Close / Next / Back / Done', () => {
+  it('Close pops to the top of the stack from any page', async () => {
     const renderer = await render();
-    await press(control(renderer, 'Close'));
+    const close = byTestID(renderer, 'result-guide-close');
+    expect(close.props.accessibilityLabel).toBe('Close');
+    expect(close.props.hitSlop).toBe(8);
+    await press(close);
+    expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
+    await press(byTestID(renderer, 'result-guide-next'));
+    await press(byTestID(renderer, 'result-guide-close'));
+    expect(mockNavigation.popToTop).toHaveBeenCalledTimes(2);
+    await unmount(renderer);
+  });
+
+  it('Next names the coming page, Back returns, and Done (last page only) pops to top', async () => {
+    const renderer = await render();
+    // No fault, no replay, no drill focus → SCORE → NEXT is the whole guide.
+    expect(stepLabel(renderer)).toBe('1 OF 2 · SCORE');
+    const next = byTestID(renderer, 'result-guide-next');
+    expect(next.props.accessibilityLabel).toBe('Continue');
+    expect(next.props.accessibilityRole).toBe('button');
+    expect(hasTestID(renderer, 'result-guide-back')).toBe(false);
+    expect(hasTestID(renderer, 'result-guide-done')).toBe(false);
+    expect(hasTestID(renderer, 'result-guide-try-again')).toBe(false);
+
+    await press(next);
+    expect(stepLabel(renderer)).toBe('2 OF 2 · NEXT');
+    expect(textOf(renderer)).toContain('Ready for another swing?');
+    expect(hasTestID(renderer, 'result-guide-next')).toBe(false);
+    const back = byTestID(renderer, 'result-guide-back');
+    expect(back.props.accessibilityLabel).toBe('Back');
+    await press(back);
+    expect(stepLabel(renderer)).toBe('1 OF 2 · SCORE');
+    expect(mockNavigation.popToTop).not.toHaveBeenCalled();
+
+    await press(byTestID(renderer, 'result-guide-next'));
+    const done = byTestID(renderer, 'result-guide-done');
+    expect(done.props.accessibilityLabel).toBe('Done');
+    expect(done.props.accessibilityRole).toBe('button');
+    await press(done);
     expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
     await unmount(renderer);
   });
 
-  it('attempt tabs replace the Result route with the tapped attempt; the current one is inert', async () => {
+  it('a faulted read walks SCORE → THE PROBLEM → DRILLS → NEXT with descriptive Next labels', async () => {
+    mockLoadEvidence.mockResolvedValue(
+      evidenceFixture({ analysis: faultedAnalysis() }),
+    );
     const renderer = await render();
+    expect(stepLabel(renderer)).toBe('1 OF 4 · SCORE');
+    expect(
+      byTestID(renderer, 'result-guide-next').props.accessibilityLabel,
+    ).toBe('See what to fix');
+    await press(byTestID(renderer, 'result-guide-next'));
+    expect(stepLabel(renderer)).toBe('2 OF 4 · THE PROBLEM');
+    // No replay evidence on this device: the fix cards stand in for the
+    // player, and none of them is a pressable (no form review to open).
+    expect(textOf(renderer)).toContain('THE PROBLEM · PRIORITY');
+    expect(textOf(renderer)).toContain('Contact position');
+    expect(ledger(renderer)).toEqual(['Back', 'Close', 'Fix it with drills']);
+    await press(byTestID(renderer, 'result-guide-next'));
+    expect(stepLabel(renderer)).toBe('3 OF 4 · DRILLS');
+    expect(
+      byTestID(renderer, 'result-guide-next').props.accessibilityLabel,
+    ).toBe('Continue');
+    await press(byTestID(renderer, 'result-guide-next'));
+    expect(stepLabel(renderer)).toBe('4 OF 4 · NEXT');
+    expect(ledger(renderer)).toEqual(['Back', 'Close', 'Done', 'Try it again']);
+    await unmount(renderer);
+  });
+});
+
+describe('Result guide buttons — Try it again', () => {
+  it('arms the same declared intent (and practice set) and opens the camera', async () => {
+    const renderer = await render();
+    await press(byTestID(renderer, 'result-guide-next'));
+    const tryAgain = byTestID(renderer, 'result-guide-try-again');
+    expect(tryAgain.props.accessibilityLabel).toBe('Try it again');
+    expect(tryAgain.props.accessibilityRole).toBe('button');
+    await press(tryAgain);
+    expect(mockNavigation.navigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Analyze', {
+      source: 'camera',
+    });
+    expect(consumeTryAgainHandoff()).toEqual({
+      source: 'camera',
+      declaredStroke: 'forehand_drive',
+      declaredCanonical: 'FOREHAND_DRIVE',
+      auto: false,
+      sessionId: 's1',
+    });
+    await unmount(renderer);
+  });
+
+  it('on an AUTO run re-arms AUTO, never a fabricated declaration', async () => {
+    mockLoadEvidence.mockResolvedValue(
+      evidenceFixture({
+        record: {
+          ...recordFixture,
+          strokeIntent: {
+            ...declaredEnvelope,
+            declaredStroke: null,
+            resolutionBasis: 'predicted_l3',
+          },
+        },
+      }),
+    );
+    const renderer = await render();
+    await press(byTestID(renderer, 'result-guide-next'));
+    await press(byTestID(renderer, 'result-guide-try-again'));
+    expect(consumeTryAgainHandoff()).toEqual({
+      source: 'camera',
+      declaredStroke: null,
+      declaredCanonical: null,
+      auto: true,
+      sessionId: 's1',
+    });
+    await unmount(renderer);
+  });
+
+  it('the abstained (result-null) path collapses to ONE page with the same footer and the sheet inline', async () => {
+    mockLoadEvidence.mockResolvedValue(
+      abstainedEvidence({ attempts: attemptRefs }),
+    );
+    const renderer = await render();
+    expect(textOf(renderer)).toContain('RESULT · NOT SCORED');
+    // The inline sheet's training section is honest about the missing score.
+    expect(textOf(renderer)).toContain('A score is required.');
+    expect(hasTestID(renderer, 'result-guide-next')).toBe(false);
+    expect(hasTestID(renderer, 'result-guide-back')).toBe(false);
+    // ONE CTA pair — the guide's footer; the sheet renders no second row.
+    expect(hasTestID(renderer, 'stroke-result-try-again')).toBe(false);
+    expect(hasTestID(renderer, 'stroke-result-done')).toBe(false);
+
+    // The inline sheet's attempt tabs repoint THIS route (replace).
+    await press(control(renderer, 'Attempt 1'));
+    expect(mockNavigation.replace).not.toHaveBeenCalled();
+    await press(control(renderer, 'Attempt 2'));
+    expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
+      analysisId: 'a2',
+    });
+
+    await press(byTestID(renderer, 'result-guide-try-again'));
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Analyze', {
+      source: 'camera',
+    });
+    expect(consumeTryAgainHandoff()).toEqual({
+      source: 'camera',
+      declaredStroke: null,
+      declaredCanonical: null,
+      auto: true,
+      sessionId: null,
+    });
+    await press(byTestID(renderer, 'result-guide-done'));
+    expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
+    await unmount(renderer);
+  });
+});
+
+describe('Result guide buttons — THIS SET attempt pills (score page)', () => {
+  it('open the other attempt via replace; the attempt on screen is inert', async () => {
+    mockListRealAnalysisFacts.mockResolvedValue(setFacts());
+    const renderer = await render();
+    expect(mockListRealAnalysisFacts).toHaveBeenCalledWith(
+      expect.anything(),
+      200,
+    );
+    expect(textOf(renderer)).toContain('THIS SET');
+    const current = byTestID(renderer, 'practice-set-attempt-a1');
+    const other = byTestID(renderer, 'practice-set-attempt-a2');
+    expect(current.props.accessibilityLabel).toBe('Attempt 1 of 2, score 7.4');
+    expect(other.props.accessibilityLabel).toBe(
+      'Attempt 2 of 2, score 8.1, latest',
+    );
+    expect(current.props.accessibilityRole).toBe('button');
+    await press(current);
+    expect(mockNavigation.replace).not.toHaveBeenCalled();
+    await press(other);
+    expect(mockNavigation.replace).toHaveBeenCalledTimes(1);
+    expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
+      analysisId: 'a2',
+    });
+    await unmount(renderer);
+  });
+
+  it('are absent until two comparable attempts exist (nothing is compared to nothing)', async () => {
+    const renderer = await render();
+    expect(textOf(renderer)).not.toContain('THIS SET');
+    expect(
+      pressables(renderer).filter(
+        node =>
+          typeof node.props.testID === 'string' &&
+          node.props.testID.startsWith('practice-set-attempt-'),
+      ),
+    ).toHaveLength(0);
+    await unmount(renderer);
+  });
+});
+
+describe('Result guide buttons — DRILLS page', () => {
+  beforeEach(() => {
+    mockGetApiSession.mockReturnValue(session);
+    mockLoadEvidence.mockResolvedValue(
+      evidenceFixture({ analysis: faultedAnalysis() }),
+    );
+  });
+
+  async function openDrills(): Promise<Renderer> {
+    const renderer = await render();
+    await press(byTestID(renderer, 'result-guide-next'));
+    await press(byTestID(renderer, 'result-guide-next'));
+    expect(stepLabel(renderer)).toBe('3 OF 4 · DRILLS');
+    expect(mockListCatalogDrills).toHaveBeenCalledWith({ family: 'drive' });
+    return renderer;
+  }
+
+  it('Open drill library navigates to DrillLibrary', async () => {
+    const renderer = await openDrills();
+    const open = byTestID(renderer, 'recommended-drills-open-library');
+    expect(open.props.accessibilityLabel).toBe('Open drill library');
+    expect(open.props.accessibilityRole).toBe('button');
+    await press(open);
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('DrillLibrary');
+    await unmount(renderer);
+  });
+
+  it('Save bookmarks the drill through the training store and flips the toggle', async () => {
+    const renderer = await openDrills();
+    const save = byTestID(renderer, 'recommended-drill-drive-and-recover-save');
+    expect(save.props.accessibilityLabel).toBe(
+      'Save Drive And Recover to your library',
+    );
+    expect(save.props.accessibilityState).toMatchObject({ selected: false });
+    expect(isDisabled(save)).toBe(false);
+    await press(save);
+    expect(api.saveDrill).toHaveBeenCalledWith('drive-and-recover');
+    const saved = byTestID(
+      renderer,
+      'recommended-drill-drive-and-recover-save',
+    );
+    expect(saved.props.accessibilityLabel).toBe(
+      'Remove Drive And Recover from your library',
+    );
+    expect(saved.props.accessibilityState).toMatchObject({ selected: true });
+    await press(saved);
+    expect(api.unsaveDrill).toHaveBeenCalledWith('drive-and-recover');
+    await unmount(renderer);
+  });
+
+  it('a failed save reports honestly, keeps the toggle unflipped, and Dismiss clears the error', async () => {
+    api.saveDrill.mockRejectedValue(new Error('offline'));
+    const renderer = await openDrills();
+    await press(byTestID(renderer, 'recommended-drill-drive-and-recover-save'));
+    expect(
+      byTestID(renderer, 'recommended-drill-drive-and-recover-save').props
+        .accessibilityState,
+    ).toMatchObject({ selected: false });
+    expect(textOf(renderer)).toContain('Training not changed');
+    await press(control(renderer, 'Dismiss'));
+    expect(textOf(renderer)).not.toContain('Training not changed');
+    await unmount(renderer);
+  });
+
+  it('every pressable on the page has a role and a label', async () => {
+    const renderer = await openDrills();
+    expect(ledger(renderer)).toEqual([
+      'Back',
+      'Close',
+      'Continue',
+      'Open drill library',
+      'Save Drive And Recover to your library',
+      'Save Shadow Swing Ladder to your library',
+    ]);
+    await unmount(renderer);
+  });
+});
+
+// ─── Result surface controls (StrokeResult, on the ResultDetails route) ─────
+
+describe('ResultDetails buttons — result surface', () => {
+  it('Back returns to the guide', async () => {
+    const renderer = await renderDetails();
+    expect(textOf(renderer)).toContain('Full breakdown');
+    await press(control(renderer, 'Back'));
+    expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
+    await unmount(renderer);
+  });
+
+  it('renders no second CTA row: Try again and Done belong to the guide', async () => {
+    const renderer = await renderDetails();
+    expect(hasTestID(renderer, 'stroke-result-try-again')).toBe(false);
+    expect(hasTestID(renderer, 'stroke-result-done')).toBe(false);
+    expect(byLabel(renderer, 'Done')).toHaveLength(0);
+    await unmount(renderer);
+  });
+
+  it('attempt tabs pop back to the guide repointed at the tapped attempt; the current one is inert', async () => {
+    const renderer = await renderDetails();
     const tabs = pressables(renderer).filter(
       node => node.props.accessibilityRole === 'tab',
     );
@@ -568,13 +1110,15 @@ describe('ResultScreen buttons — result surface', () => {
     )!;
     expect(current.props.accessibilityLabel).toBe('Attempt 1');
     await press(current);
-    expect(mockNavigation.replace).not.toHaveBeenCalled();
+    expect(mockNavigation.popTo).not.toHaveBeenCalled();
 
     await press(control(renderer, 'Attempt 2'));
-    expect(mockNavigation.replace).toHaveBeenCalledTimes(1);
-    expect(mockNavigation.replace).toHaveBeenCalledWith('Result', {
+    // Never a second Result on the stack.
+    expect(mockNavigation.popTo).toHaveBeenCalledTimes(1);
+    expect(mockNavigation.popTo).toHaveBeenCalledWith('Result', {
       analysisId: 'a2',
     });
+    expect(mockNavigation.replace).not.toHaveBeenCalled();
     await unmount(renderer);
   });
 
@@ -582,7 +1126,7 @@ describe('ResultScreen buttons — result surface', () => {
     mockLoadEvidence.mockResolvedValue(
       evidenceFixture({ attempts: [attemptRefs[0]!] }),
     );
-    const renderer = await render();
+    const renderer = await renderDetails();
     expect(
       pressables(renderer).filter(
         node => node.props.accessibilityRole === 'tab',
@@ -592,8 +1136,7 @@ describe('ResultScreen buttons — result surface', () => {
   });
 
   it('Play replay starts the measured-timeline playback and Pause stops it', async () => {
-    const renderer = await render();
-    jest.useFakeTimers();
+    const renderer = await renderDetails();
     const play = control(renderer, 'Play replay');
     expect(play.props.accessibilityRole).toBe('button');
     expect(textOf(renderer)).toContain('0.00s');
@@ -615,12 +1158,11 @@ describe('ResultScreen buttons — result surface', () => {
     });
     expect(textOf(renderer)).toContain(clockAfterPause);
     expect(byLabel(renderer, 'Play replay')).toHaveLength(1);
-    jest.useRealTimers();
     await unmount(renderer);
   });
 
   it('the replay scrubber seeks the playhead from the touch position', async () => {
-    const renderer = await render();
+    const renderer = await renderDetails();
     const [scrubber] = renderer.root.findAll(
       node =>
         typeof node.type === 'string' &&
@@ -645,7 +1187,7 @@ describe('ResultScreen buttons — result surface', () => {
   });
 
   it('See N more expands the measured rows and Show fewer collapses them', async () => {
-    const renderer = await render();
+    const renderer = await renderDetails();
     expect(textOf(renderer)).not.toContain('Knee bend');
     const [seeMore] = pressables(renderer).filter(
       node =>
@@ -660,104 +1202,14 @@ describe('ResultScreen buttons — result surface', () => {
     expect(textOf(renderer)).not.toContain('Knee bend');
     await unmount(renderer);
   });
-
-  it('Try again arms the same declared intent and opens the camera', async () => {
-    const renderer = await render();
-    const tryAgain = byTestID(renderer, 'stroke-result-try-again');
-    expect(tryAgain.props.accessibilityLabel).toBe('Try again');
-    expect(tryAgain.props.accessibilityRole).toBe('button');
-    await press(tryAgain);
-    expect(mockNavigation.navigate).toHaveBeenCalledTimes(1);
-    expect(mockNavigation.navigate).toHaveBeenCalledWith('Analyze', {
-      source: 'camera',
-    });
-    expect(consumeTryAgainHandoff()).toEqual({
-      source: 'camera',
-      declaredStroke: 'forehand_drive',
-      declaredCanonical: 'FOREHAND_DRIVE',
-      auto: false,
-    });
-    await unmount(renderer);
-  });
-
-  it('Try again on an AUTO run re-arms AUTO, never a fabricated declaration', async () => {
-    mockLoadEvidence.mockResolvedValue(
-      evidenceFixture({
-        record: {
-          ...recordFixture,
-          strokeIntent: {
-            ...declaredEnvelope,
-            declaredStroke: null,
-            resolutionBasis: 'predicted_l3',
-          },
-        },
-      }),
-    );
-    const renderer = await render();
-    await press(byTestID(renderer, 'stroke-result-try-again'));
-    expect(consumeTryAgainHandoff()).toEqual({
-      source: 'camera',
-      declaredStroke: null,
-      declaredCanonical: null,
-      auto: true,
-    });
-    await unmount(renderer);
-  });
-
-  it('Done pops to the top of the stack', async () => {
-    const renderer = await render();
-    const done = byTestID(renderer, 'stroke-result-done');
-    expect(done.props.accessibilityLabel).toBe('Done');
-    await press(done);
-    expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
-    await unmount(renderer);
-  });
-
-  it('CTAs are present on the abstained (result-null) path too', async () => {
-    mockLoadEvidence.mockResolvedValue(
-      evidenceFixture({
-        analysis: null,
-        record: {
-          ...recordFixture,
-          strokeIntent: {
-            ...declaredEnvelope,
-            declaredStroke: null,
-            resolutionBasis: 'abstained',
-            resolvedProfileId: null,
-            resolvedProfileVersion: null,
-          },
-          uncertainty: {
-            analysisConfidence: 0,
-            presentation: 'abstain',
-            limitingFactors: ['paddle_track_missing'],
-          },
-          contact: {
-            status: 'abstained',
-            reason: 'insufficient evidence mass',
-            limitingFactors: ['insufficient_evidence_mass'],
-          },
-        },
-        attempts: [],
-      }),
-    );
-    const renderer = await render();
-    expect(textOf(renderer)).toContain('A score is required.');
-    await press(byTestID(renderer, 'stroke-result-try-again'));
-    expect(mockNavigation.navigate).toHaveBeenCalledWith('Analyze', {
-      source: 'camera',
-    });
-    await press(byTestID(renderer, 'stroke-result-done'));
-    expect(mockNavigation.popToTop).toHaveBeenCalledTimes(1);
-    await unmount(renderer);
-  });
 });
 
 // ─── Personalized training: plan creation ───────────────────────────────────
 
-describe('ResultScreen buttons — Build reviewed plan', () => {
+describe('ResultDetails buttons — Build reviewed plan', () => {
   it('creates a plan from this read and renders it', async () => {
     api.createPlan.mockResolvedValue(planFixture());
-    const renderer = await render();
+    const renderer = await renderDetails();
     expect(textOf(renderer)).toContain('Turn this read into a plan.');
     const build = control(renderer, 'Build reviewed plan');
     expect(build.props.accessibilityRole).toBe('button');
@@ -773,7 +1225,7 @@ describe('ResultScreen buttons — Build reviewed plan', () => {
 
   it('is disabled with pending copy while the server builds (double-tap guard)', async () => {
     api.createPlan.mockReturnValue(pendingForever());
-    const renderer = await render();
+    const renderer = await renderDetails();
     const build = control(renderer, 'Build reviewed plan');
     await act(async () => {
       build.props.onPress();
@@ -790,7 +1242,7 @@ describe('ResultScreen buttons — Build reviewed plan', () => {
 
   it('shows the server error and re-enables the button when creation fails', async () => {
     api.createPlan.mockRejectedValue(new Error('boom'));
-    const renderer = await render();
+    const renderer = await renderDetails();
     await press(control(renderer, 'Build reviewed plan'));
     const rendered = textOf(renderer);
     expect(rendered).toContain('Training not changed');
@@ -811,7 +1263,7 @@ describe('ResultScreen buttons — Build reviewed plan', () => {
       planFixture({ id: 'plan-other', sourceShotId: 'other-shot' }),
     );
     api.createPlan.mockResolvedValue(planFixture());
-    const renderer = await render();
+    const renderer = await renderDetails();
     expect(textOf(renderer)).toContain('Build from this read instead?');
     await press(control(renderer, 'Build reviewed plan'));
     expect(api.createPlan).not.toHaveBeenCalled();
@@ -839,7 +1291,7 @@ describe('ResultScreen buttons — Build reviewed plan', () => {
       attempts: 0,
       lastError: null,
     });
-    const renderer = await render();
+    const renderer = await renderDetails();
     expect(textOf(renderer)).toContain('Sync this read first.');
     expect(textOf(renderer)).toContain('secure outbox');
     expect(byLabel(renderer, 'Build reviewed plan')).toHaveLength(0);
@@ -853,7 +1305,7 @@ describe('ResultScreen buttons — Build reviewed plan', () => {
       attempts: 2,
       lastError: 'HTTP 422',
     });
-    const renderer = await render();
+    const renderer = await renderDetails();
     expect(textOf(renderer)).toContain('Sync this read first.');
     expect(textOf(renderer)).toContain('refused this read 2 of');
     expect(textOf(renderer)).toContain('HTTP 422');
@@ -868,21 +1320,30 @@ describe('ResultScreen buttons — Build reviewed plan', () => {
       attempts: 8,
       lastError: null,
     });
-    const renderer = await render();
+    const renderer = await renderDetails();
     expect(textOf(renderer)).toContain('The server did not accept this read.');
     expect(byLabel(renderer, 'Build reviewed plan')).toHaveLength(0);
-    await press(control(renderer, 'Capture a new read'));
-    expect(mockNavigation.navigate).toHaveBeenCalledWith(
-      'Analyze',
-      expect.anything(),
-    );
+    const capture = control(renderer, 'Capture a new read');
+    expect(capture.props.accessibilityRole).toBe('button');
+    await press(capture);
+    // The sheet's own TRY AGAIN: same-intent handoff + the guided camera.
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Analyze', {
+      source: 'camera',
+    });
+    expect(consumeTryAgainHandoff()).toEqual({
+      source: 'camera',
+      declaredStroke: 'forehand_drive',
+      declaredCanonical: 'FOREHAND_DRIVE',
+      auto: false,
+      sessionId: 's1',
+    });
     await unmount(renderer);
   });
 
   it('is unreachable with honest copy when no outbox record exists for the shot', async () => {
     mockHasShotSyncReceipt.mockResolvedValue(false);
     mockGetShotOutboxStatus.mockResolvedValue({ state: 'absent' });
-    const renderer = await render();
+    const renderer = await renderDetails();
     expect(textOf(renderer)).toContain('could not verify');
     expect(byLabel(renderer, 'Build reviewed plan')).toHaveLength(0);
     await unmount(renderer);
@@ -890,7 +1351,7 @@ describe('ResultScreen buttons — Build reviewed plan', () => {
 
   it('is unreachable when the sync receipt lookup itself fails', async () => {
     mockHasShotSyncReceipt.mockRejectedValue(new Error('sqlite'));
-    const renderer = await render();
+    const renderer = await renderDetails();
     expect(textOf(renderer)).toContain('could not verify');
     expect(byLabel(renderer, 'Build reviewed plan')).toHaveLength(0);
     await unmount(renderer);
@@ -899,19 +1360,19 @@ describe('ResultScreen buttons — Build reviewed plan', () => {
 
 // ─── Personalized training: plan load retry ─────────────────────────────────
 
-describe('ResultScreen buttons — plan load Try again', () => {
+describe('ResultDetails buttons — plan load Try again', () => {
   it('reloads the current plan after a failed load', async () => {
     api.getCurrentPlan.mockRejectedValueOnce(new Error('offline'));
-    const renderer = await render();
+    const renderer = await renderDetails();
     expect(textOf(renderer)).toContain('Training could not be verified.');
-    const retry = byLabel(renderer, 'Try again').find(
-      node => node.props.testID === undefined,
-    )!;
-    expect(retry).toBeDefined();
+    // The sheet has no camera CTA row: this is the ONLY "Try again".
+    expect(byLabel(renderer, 'Try again')).toHaveLength(1);
+    const retry = control(renderer, 'Try again');
     expect(retry.props.accessibilityRole).toBe('button');
     api.getCurrentPlan.mockResolvedValueOnce(null);
     await press(retry);
     expect(api.getCurrentPlan).toHaveBeenCalledTimes(2);
+    expect(mockNavigation.navigate).not.toHaveBeenCalled();
     expect(textOf(renderer)).not.toContain('Training could not be verified.');
     expect(textOf(renderer)).toContain('Turn this read into a plan.');
     await unmount(renderer);
@@ -919,11 +1380,8 @@ describe('ResultScreen buttons — plan load Try again', () => {
 
   it('shows the honest error again when the retry also fails', async () => {
     api.getCurrentPlan.mockRejectedValue(new Error('offline'));
-    const renderer = await render();
-    const retry = byLabel(renderer, 'Try again').find(
-      node => node.props.testID === undefined,
-    )!;
-    await press(retry);
+    const renderer = await renderDetails();
+    await press(control(renderer, 'Try again'));
     expect(api.getCurrentPlan).toHaveBeenCalledTimes(2);
     expect(textOf(renderer)).toContain('Training could not be verified.');
     expect(textOf(renderer)).toContain('Training is temporarily unavailable.');
@@ -933,13 +1391,13 @@ describe('ResultScreen buttons — plan load Try again', () => {
 
 // ─── Personalized training: plan drill cards ────────────────────────────────
 
-describe('ResultScreen buttons — PlanDrillCard controls', () => {
+describe('ResultDetails buttons — PlanDrillCard controls', () => {
   beforeEach(() => {
     api.getCurrentPlan.mockResolvedValue(planFixture());
   });
 
   it('Save bookmarks the drill on the server and flips the label', async () => {
-    const renderer = await render();
+    const renderer = await renderDetails();
     const save = control(renderer, 'Save Shadow swings');
     expect(save.props.accessibilityRole).toBe('button');
     expect(isDisabled(save)).toBe(false);
@@ -951,7 +1409,7 @@ describe('ResultScreen buttons — PlanDrillCard controls', () => {
   });
 
   it('Remove unsaves a saved drill', async () => {
-    const renderer = await render();
+    const renderer = await renderDetails();
     await press(control(renderer, 'Remove Wall drive'));
     expect(api.unsaveDrill).toHaveBeenCalledWith('wall-drive');
     expect(byLabel(renderer, 'Save Wall drive')).toHaveLength(1);
@@ -960,7 +1418,7 @@ describe('ResultScreen buttons — PlanDrillCard controls', () => {
 
   it('save failure shows the error and re-enables the bookmark', async () => {
     api.saveDrill.mockRejectedValue(new Error('offline'));
-    const renderer = await render();
+    const renderer = await renderDetails();
     await press(control(renderer, 'Save Shadow swings'));
     expect(textOf(renderer)).toContain('Training not changed');
     const save = control(renderer, 'Save Shadow swings');
@@ -970,7 +1428,7 @@ describe('ResultScreen buttons — PlanDrillCard controls', () => {
 
   it('every card control is disabled while a mutation is pending', async () => {
     api.saveDrill.mockReturnValue(pendingForever());
-    const renderer = await render();
+    const renderer = await renderDetails();
     await act(async () => {
       control(renderer, 'Save Shadow swings').props.onPress();
     });
@@ -987,7 +1445,7 @@ describe('ResultScreen buttons — PlanDrillCard controls', () => {
   });
 
   it('Watch form opens the canonical watch URL for an embed (never /embed/)', async () => {
-    const renderer = await render();
+    const renderer = await renderDetails();
     const watch = control(
       renderer,
       'Watch reviewed instruction for Shadow swings',
@@ -1008,7 +1466,7 @@ describe('ResultScreen buttons — PlanDrillCard controls', () => {
   });
 
   it('Watch form opens the playback URL for hosted media', async () => {
-    const renderer = await render();
+    const renderer = await renderDetails();
     await press(control(renderer, 'Watch reviewed instruction for Wall drive'));
     expect(openUrlSpy).toHaveBeenCalledWith(
       'https://cdn.example.test/wall-drive.mp4',
@@ -1017,7 +1475,7 @@ describe('ResultScreen buttons — PlanDrillCard controls', () => {
   });
 
   it('Watch form is absent when no media is published', async () => {
-    const renderer = await render();
+    const renderer = await renderDetails();
     expect(
       byLabel(renderer, 'Watch reviewed instruction for Timing toss'),
     ).toHaveLength(0);
@@ -1026,7 +1484,7 @@ describe('ResultScreen buttons — PlanDrillCard controls', () => {
 
   it('Watch form alerts when the URL cannot be opened', async () => {
     canOpenSpy.mockResolvedValue(false);
-    const renderer = await render();
+    const renderer = await renderDetails();
     await press(
       control(renderer, 'Watch reviewed instruction for Shadow swings'),
     );
@@ -1040,7 +1498,7 @@ describe('ResultScreen buttons — PlanDrillCard controls', () => {
 
   it('Watch form alerts when opening rejects', async () => {
     openUrlSpy.mockRejectedValue(new Error('no handler'));
-    const renderer = await render();
+    const renderer = await renderDetails();
     await press(
       control(renderer, 'Watch reviewed instruction for Shadow swings'),
     );
@@ -1053,7 +1511,7 @@ describe('ResultScreen buttons — PlanDrillCard controls', () => {
 
   it('Confirm completion asks first, then logs the prescribed work on the server', async () => {
     api.completeDrill.mockResolvedValue(completion);
-    const renderer = await render();
+    const renderer = await renderDetails();
     const confirm = control(renderer, 'Confirm completion of Shadow swings');
     expect(confirm.props.accessibilityRole).toBe('button');
     expect(isDisabled(confirm)).toBe(false);
@@ -1100,7 +1558,7 @@ describe('ResultScreen buttons — PlanDrillCard controls', () => {
       actualDurationSeconds: 135,
       qualifiesForStreak: false,
     });
-    const renderer = await render();
+    const renderer = await renderDetails();
     await press(control(renderer, 'Confirm completion of Wall drive'));
     await act(async () => {
       alertButton('Log real practice?', 'I completed it').onPress!();
@@ -1120,7 +1578,7 @@ describe('ResultScreen buttons — PlanDrillCard controls', () => {
 
   it('completion failure shows the error and re-enables the control', async () => {
     api.completeDrill.mockRejectedValue(new Error('offline'));
-    const renderer = await render();
+    const renderer = await renderDetails();
     await press(control(renderer, 'Confirm completion of Shadow swings'));
     await act(async () => {
       alertButton('Log real practice?', 'I completed it').onPress!();
@@ -1135,7 +1593,7 @@ describe('ResultScreen buttons — PlanDrillCard controls', () => {
   });
 
   it('a prescription without a valid target renders honest copy instead of a dead completion control', async () => {
-    const renderer = await render();
+    const renderer = await renderDetails();
     expect(byLabel(renderer, 'Confirm completion of Timing toss')).toHaveLength(
       0,
     );
@@ -1151,7 +1609,7 @@ describe('ResultScreen buttons — PlanDrillCard controls', () => {
 
 // ─── Personalized training: reassessment ────────────────────────────────────
 
-describe('ResultScreen buttons — Use as reassessment', () => {
+describe('ResultDetails buttons — Use as reassessment', () => {
   const newerRead = () =>
     evidenceFixture({
       analysis: analysisFixture({
@@ -1175,7 +1633,7 @@ describe('ResultScreen buttons — Use as reassessment', () => {
       reassessmentShotId: 'a9',
       scoreDelta: 0.6,
     });
-    const renderer = await render();
+    const renderer = await renderDetails();
     expect(textOf(renderer)).toContain('Measure the change.');
     const reassess = control(renderer, 'Use as reassessment');
     expect(reassess.props.accessibilityRole).toBe('button');
@@ -1189,7 +1647,7 @@ describe('ResultScreen buttons — Use as reassessment', () => {
 
   it('is disabled with pending copy while verifying', async () => {
     api.reassessPlan.mockReturnValue(pendingForever());
-    const renderer = await render();
+    const renderer = await renderDetails();
     await act(async () => {
       control(renderer, 'Use as reassessment').props.onPress();
     });
@@ -1204,7 +1662,7 @@ describe('ResultScreen buttons — Use as reassessment', () => {
 
   it('failure shows the error and re-enables the button', async () => {
     api.reassessPlan.mockRejectedValue(new Error('offline'));
-    const renderer = await render();
+    const renderer = await renderDetails();
     await press(control(renderer, 'Use as reassessment'));
     expect(textOf(renderer)).toContain('Training not changed');
     expect(isDisabled(control(renderer, 'Use as reassessment'))).toBe(false);
@@ -1221,7 +1679,7 @@ describe('ResultScreen buttons — Use as reassessment', () => {
         index === 2 ? { ...item, completion: null } : item,
       ),
     });
-    const renderer = await render();
+    const renderer = await renderDetails();
     expect(byLabel(renderer, 'Use as reassessment')).toHaveLength(0);
     // The read is newer than an active plan for another shot, so the honest
     // alternative is the replace-plan offer, not a dead end.
@@ -1232,16 +1690,9 @@ describe('ResultScreen buttons — Use as reassessment', () => {
 
 // ─── Analysis feedback prompt ───────────────────────────────────────────────
 
-describe('ResultScreen buttons — AnalysisFeedbackPrompt', () => {
-  const session = {
-    apiBaseUrl: 'https://api.test',
-    bearerToken: 'token-1',
-    canonicalAppUserId: 'user-1',
-    provider: 'apple',
-  };
-
+describe('ResultDetails buttons — AnalysisFeedbackPrompt', () => {
   it('is absent without an API session', async () => {
-    const renderer = await render();
+    const renderer = await renderDetails();
     expect(textOf(renderer)).not.toContain('Was this analysis accurate?');
     await unmount(renderer);
   });
@@ -1249,7 +1700,7 @@ describe('ResultScreen buttons — AnalysisFeedbackPrompt', () => {
   it('Yes submits an accurate rating for this analysis', async () => {
     mockGetApiSession.mockReturnValue(session);
     mockSubmitAnalysisFeedback.mockResolvedValue({ reviewEligible: false });
-    const renderer = await render();
+    const renderer = await renderDetails();
     const yes = byTestID(renderer, 'feedback-yes');
     expect(yes.props.accessibilityRole).toBe('button');
     await press(yes);
@@ -1266,7 +1717,7 @@ describe('ResultScreen buttons — AnalysisFeedbackPrompt', () => {
   it('Not quite → category chip submits a not_quite rating with the category', async () => {
     mockGetApiSession.mockReturnValue(session);
     mockSubmitAnalysisFeedback.mockResolvedValue({ reviewEligible: true });
-    const renderer = await render();
+    const renderer = await renderDetails();
     await press(byTestID(renderer, 'feedback-not-quite'));
     expect(mockSubmitAnalysisFeedback).not.toHaveBeenCalled();
     expect(textOf(renderer)).toContain('What looked off?');
@@ -1296,7 +1747,7 @@ describe('ResultScreen buttons — AnalysisFeedbackPrompt', () => {
   it('a failed submission shows error copy and Try again returns to the question', async () => {
     mockGetApiSession.mockReturnValue(session);
     mockSubmitAnalysisFeedback.mockRejectedValue(new Error('offline'));
-    const renderer = await render();
+    const renderer = await renderDetails();
     await press(byTestID(renderer, 'feedback-yes'));
     expect(textOf(renderer)).toContain('Feedback could not be sent right now.');
     const retry = byTestID(renderer, 'feedback-retry');
@@ -1310,50 +1761,51 @@ describe('ResultScreen buttons — AnalysisFeedbackPrompt', () => {
   it('is absent (no dead button) when the shot has not synced', async () => {
     mockGetApiSession.mockReturnValue(session);
     mockHasShotSyncReceipt.mockResolvedValue(false);
+    const renderer = await renderDetails();
+    expect(textOf(renderer)).not.toContain('Was this analysis accurate?');
+    await unmount(renderer);
+  });
+
+  it('never renders on the guide — the prompt belongs to the breakdown', async () => {
+    mockGetApiSession.mockReturnValue(session);
     const renderer = await render();
     expect(textOf(renderer)).not.toContain('Was this analysis accurate?');
+    await press(byTestID(renderer, 'result-guide-next'));
+    expect(textOf(renderer)).not.toContain('Was this analysis accurate?');
+    expect(hasTestID(renderer, 'feedback-yes')).toBe(false);
     await unmount(renderer);
   });
 });
 
 // ─── Ledger: no pressable escapes this file ─────────────────────────────────
 
-describe('ResultScreen buttons — ledger', () => {
-  it('every rendered pressable on the plan surface has a button/tab role and a label', async () => {
-    mockGetApiSession.mockReturnValue({
-      apiBaseUrl: 'https://api.test',
-      bearerToken: 'token-1',
-      canonicalAppUserId: 'user-1',
-      provider: 'apple',
-    });
-    api.getCurrentPlan.mockResolvedValue(planFixture());
+describe('Result buttons — ledger', () => {
+  it('every rendered pressable on the guide has a button role and a label, page by page', async () => {
+    mockGetApiSession.mockReturnValue(session);
     const renderer = await render();
-    const seen = new Set<string>();
-    for (const node of pressables(renderer)) {
-      expect(['button', 'tab']).toContain(node.props.accessibilityRole);
-      const label: unknown = node.props.accessibilityLabel;
-      const testID: unknown = node.props.testID;
-      // Feedback chips carry descriptive visible text instead of a label.
-      if (typeof label !== 'string') {
-        expect(typeof testID).toBe('string');
-        expect(String(testID).startsWith('feedback-')).toBe(true);
-      }
-      seen.add(typeof label === 'string' ? label : String(testID));
-    }
-    expect([...seen].sort()).toEqual(
+    expect(ledger(renderer)).toEqual(['Close', 'Continue']);
+    await press(byTestID(renderer, 'result-guide-next'));
+    expect(ledger(renderer)).toEqual(['Back', 'Close', 'Done', 'Try it again']);
+    await unmount(renderer);
+  });
+
+  it('every rendered pressable on the breakdown sheet has a button/tab role and a label', async () => {
+    mockGetApiSession.mockReturnValue(session);
+    api.getCurrentPlan.mockResolvedValue(planFixture());
+    const renderer = await renderDetails();
+    // No Close / Done / Try again here: the guide owns the loop's CTAs.
+    expect(ledger(renderer)).toEqual(
       [
         'Attempt 1',
         'Attempt 2',
-        'Close',
+        'Back',
         'Confirm completion of Shadow swings',
         'Confirm completion of Wall drive',
-        'Done',
         'Play replay',
         'Remove Wall drive',
         'Save Shadow swings',
         'Save Timing toss',
         'See 2 more',
-        'Try again',
         'Watch reviewed instruction for Shadow swings',
         'Watch reviewed instruction for Wall drive',
         'feedback-not-quite',

@@ -7,10 +7,15 @@ import type { PermissionState } from '../../src/notifications/service';
  * Drives the OnboardingScreen through every control with the REAL appStore
  * and notificationStore behind it (in-memory kv, fake OS scheduler), so the
  * assertions cover what a tap actually persists — not just which callback
- * fired. Covers: every question option, Continue gating, Back, Leave setup
- * (both alert branches, both modes), the reveal, and the notification step's
- * "Turn on reminders" vs "Not now" permission invariant, including OS denial,
+ * fired. Covers: every question option, Continue gating, Back (pre-auth step
+ * one → Welcome, later steps → previous question), the in-account "Leave
+ * setup" sign-out alert, the reveal, and the notification step's "Turn on
+ * reminders" vs "Not now" permission invariant, including OS denial,
  * scheduler failure, stash-write failure + retry, and the double-tap guard.
+ *
+ * The questionnaire cannot be skipped (product decision 2026-09-01): there is
+ * no "Skip to sign-in" escape and no device-level "already onboarded" marker;
+ * finishing it is the only way forward to sign-in.
  */
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -99,7 +104,6 @@ import {
   setActiveDataOwner,
 } from '../../src/data/accountScope';
 import {
-  DEVICE_ONBOARDED_KV_KEY,
   PENDING_ONBOARDING_PROFILE_KV_KEY,
   useAppStore,
 } from '../../src/state/appStore';
@@ -292,7 +296,7 @@ describe('flow: launch-onboarding — OnboardingScreen controls', () => {
       hydrated: true,
       ownerKey: SIGNED_OUT_DATA_OWNER,
       profile: null,
-      preAuthOnboarded: false,
+      hydrateError: null,
       onboardingBusy: false,
       onboardingError: null,
     });
@@ -372,15 +376,20 @@ describe('flow: launch-onboarding — OnboardingScreen controls', () => {
     act(() => renderer.unmount());
   });
 
-  it('Back returns to the previous step keeping the earlier answer; step one shows Leave setup instead of Back', () => {
-    const renderer = renderScreen({ mode: 'preauth' });
-    expect(pressables(renderer, 'Back')).toHaveLength(0);
-    expect(pressables(renderer, 'Leave setup')).toHaveLength(1);
-    const leave = findPressable(renderer, 'Leave setup');
-    expect(leave.props.accessibilityHint).toBe(
-      'Skip ahead to the sign-in screen',
+  it('Back returns to the previous step keeping the earlier answer; pre-auth step one shows a Back to Welcome (never a Leave setup / skip)', () => {
+    const onBack = jest.fn();
+    const renderer = renderScreen({ mode: 'preauth', onBack });
+    // Step one: exactly one Back control, pointed at Welcome. There is no
+    // "Leave setup" in pre-auth mode (the skip-to-sign-in escape was removed
+    // 2026-09-01).
+    expect(pressables(renderer, 'Leave setup')).toHaveLength(0);
+    expect(pressables(renderer, 'Back')).toHaveLength(1);
+    const backToWelcome = findPressable(renderer, 'Back');
+    expect(backToWelcome.props.accessibilityHint).toBe(
+      'Return to the welcome screen',
     );
-    expect(leave.props.accessibilityRole).toBe('button');
+    expect(backToWelcome.props.accessibilityRole).toBe('button');
+    expect(backToWelcome.props.hitSlop).toBe(12);
 
     typeName(renderer, 'Dana');
     press(renderer, 'Continue');
@@ -403,9 +412,14 @@ describe('flow: launch-onboarding — OnboardingScreen controls', () => {
     press(renderer, 'Back');
     expect(allText(renderer)).toContain('What should we call you?');
     expect(renderer.root.findByType(TextInput).props.value).toBe('Dana');
-    // Step one: Back is gone again, Leave setup is back.
-    expect(pressables(renderer, 'Back')).toHaveLength(0);
-    expect(pressables(renderer, 'Leave setup')).toHaveLength(1);
+    // Back inside the flow never left it.
+    expect(onBack).not.toHaveBeenCalled();
+    // Step one again: the Back control points at Welcome once more.
+    expect(pressables(renderer, 'Back')).toHaveLength(1);
+    expect(findPressable(renderer, 'Back').props.accessibilityHint).toBe(
+      'Return to the welcome screen',
+    );
+    expect(pressables(renderer, 'Leave setup')).toHaveLength(0);
     act(() => renderer.unmount());
   });
 
@@ -453,52 +467,76 @@ describe('flow: launch-onboarding — OnboardingScreen controls', () => {
     act(() => renderer.unmount());
   });
 
-  describe('pre-auth Leave setup alert', () => {
-    it('"Keep setting up" is a cancel action that leaves the user on the questionnaire', () => {
+  // The pre-auth "Leave setup" alert ("Skip setup?" → "Skip to sign-in" →
+  // onExitToSignIn) was removed 2026-09-01: the questionnaire is required.
+  // Step one's control is now a plain Back that returns to Welcome.
+  describe('pre-auth step-one Back (no skip to sign-in)', () => {
+    it('Back on step one calls onBack once — no alert, no sign-out, nothing written to kv', () => {
       const alertSpy = jest
         .spyOn(Alert, 'alert')
         .mockImplementation(() => undefined);
-      const onExitToSignIn = jest.fn();
+      const onBack = jest.fn();
+      const onFinished = jest.fn();
       const renderer = renderScreen({
         mode: 'preauth',
-        onFinished: jest.fn(),
-        onExitToSignIn,
+        onFinished,
+        onBack,
       });
-      press(renderer, 'Leave setup');
-      expect(alertSpy).toHaveBeenCalledTimes(1);
-      expect(alertSpy.mock.calls[0]?.[0]).toBe('Skip setup?');
-      const buttons = alertSpy.mock.calls[0]?.[2] ?? [];
-      expect(buttons.map(b => b.text)).toEqual([
-        'Keep setting up',
-        'Skip to sign-in',
-      ]);
-      const keep = buttons.find(b => b.text === 'Keep setting up')!;
-      expect(keep.style).toBe('cancel');
-      act(() => keep.onPress?.());
-      expect(onExitToSignIn).not.toHaveBeenCalled();
+      press(renderer, 'Back');
+      expect(onBack).toHaveBeenCalledTimes(1);
+      expect(alertSpy).not.toHaveBeenCalled();
+      expect(onFinished).not.toHaveBeenCalled();
       expect(mockSignOut).not.toHaveBeenCalled();
-      expect(allText(renderer)).toContain('What should we call you?');
+      // Leaving writes neither a profile stash nor any device marker.
+      expect(mockKv.size).toBe(0);
+      expect(useAppStore.getState().onboardingBusy).toBe(false);
       alertSpy.mockRestore();
       act(() => renderer.unmount());
     });
 
-    it('"Skip to sign-in" hands off without touching the session or the stash', () => {
-      const alertSpy = jest
-        .spyOn(Alert, 'alert')
-        .mockImplementation(() => undefined);
-      const onExitToSignIn = jest.fn();
+    it('offers no skip on any step: nothing reads "skip", "Leave setup" never renders, and Back past step one stays inside the flow', () => {
+      const onBack = jest.fn();
+      const onFinished = jest.fn();
       const renderer = renderScreen({
         mode: 'preauth',
-        onFinished: jest.fn(),
-        onExitToSignIn,
+        onFinished,
+        onBack,
       });
-      press(renderer, 'Leave setup');
-      const buttons = alertSpy.mock.calls[0]?.[2] ?? [];
-      act(() => buttons.find(b => b.text === 'Skip to sign-in')!.onPress?.());
-      expect(onExitToSignIn).toHaveBeenCalledTimes(1);
-      expect(mockSignOut).not.toHaveBeenCalled();
+      const assertNoSkip = () => {
+        expect(allText(renderer)).not.toMatch(/skip/i);
+        expect(pressables(renderer, 'Leave setup')).toHaveLength(0);
+        expect(
+          renderer.root.findAll(n => /skip/i.test(n.props?.accessibilityHint)),
+        ).toHaveLength(0);
+      };
+      assertNoSkip();
+      typeName(renderer, 'Dana');
+      press(renderer, 'Continue');
+      QUESTION_STEPS.forEach(question => {
+        expect(allText(renderer)).toContain(question.title);
+        assertNoSkip();
+        press(renderer, question.options[0]!);
+        press(renderer, 'Continue');
+      });
+      expect(allText(renderer)).toContain('YOUR STARTING PLAN');
+      assertNoSkip();
+      press(renderer, 'Continue');
+      expect(allText(renderer)).toContain('Stay match-ready.');
+      assertNoSkip();
+
+      // Walk all the way back: every Back stays inside the questionnaire
+      // until step one, where the same label hands off to Welcome.
+      for (let step = 8; step > 1; step -= 1) {
+        expect(progressNow(renderer)).toBe(step);
+        press(renderer, 'Back');
+        expect(onBack).not.toHaveBeenCalled();
+      }
+      expect(progressNow(renderer)).toBe(1);
+      expect(allText(renderer)).toContain('What should we call you?');
+      press(renderer, 'Back');
+      expect(onBack).toHaveBeenCalledTimes(1);
+      expect(onFinished).not.toHaveBeenCalled();
       expect(mockKv.size).toBe(0);
-      alertSpy.mockRestore();
       act(() => renderer.unmount());
     });
   });
@@ -531,12 +569,12 @@ describe('flow: launch-onboarding — OnboardingScreen controls', () => {
   });
 
   describe('notification step (pre-auth)', () => {
-    it('"Not now" NEVER requests OS permission, stashes {enabled:false}, writes the profile stash + device marker, then hands off once', async () => {
+    it('"Not now" NEVER requests OS permission, stashes {enabled:false}, writes the profile stash (and nothing else — no device marker), then hands off once', async () => {
       const onFinished = jest.fn();
       const renderer = renderScreen({
         mode: 'preauth',
         onFinished,
-        onExitToSignIn: jest.fn(),
+        onBack: jest.fn(),
       });
       walkToNotifications(renderer);
       const notNow = findPressable(renderer, 'Not now');
@@ -555,17 +593,20 @@ describe('flow: launch-onboarding — OnboardingScreen controls', () => {
         enabled: false,
       });
       expect(pendingProfile()).toEqual({ version: 1, profile: walkedProfile });
-      expect(mockKv.get(DEVICE_ONBOARDED_KV_KEY)).toBe(
-        JSON.stringify({ version: 1 }),
+      // The two pre-auth stashes are the ONLY writes: no owner-scoped prefs
+      // while signed out, and no device-level "already onboarded" marker
+      // (that marker was removed 2026-09-01 — the launch gate must never be
+      // able to consult device history).
+      expect([...mockKv.keys()].sort()).toEqual(
+        [
+          PENDING_NOTIFICATION_ONBOARDING_KV_KEY,
+          PENDING_ONBOARDING_PROFILE_KV_KEY,
+        ].sort(),
       );
-      expect(useAppStore.getState().preAuthOnboarded).toBe(true);
+      expect(useAppStore.getState()).not.toHaveProperty('preAuthOnboarded');
       expect(useAppStore.getState().onboardingBusy).toBe(false);
       expect(useAppStore.getState().onboardingError).toBeNull();
       expect(onFinished).toHaveBeenCalledTimes(1);
-      // No owner-scoped prefs are written while signed out.
-      expect(
-        [...mockKv.keys()].filter(k => k.startsWith('notifications')),
-      ).toEqual([]);
       act(() => renderer.unmount());
     });
 
@@ -574,7 +615,7 @@ describe('flow: launch-onboarding — OnboardingScreen controls', () => {
       const renderer = renderScreen({
         mode: 'preauth',
         onFinished,
-        onExitToSignIn: jest.fn(),
+        onBack: jest.fn(),
       });
       walkToNotifications(renderer);
       expect(mockScheduler.requestCalls).toBe(0);
@@ -597,7 +638,7 @@ describe('flow: launch-onboarding — OnboardingScreen controls', () => {
       const renderer = renderScreen({
         mode: 'preauth',
         onFinished,
-        onExitToSignIn: jest.fn(),
+        onBack: jest.fn(),
       });
       walkToNotifications(renderer);
       press(renderer, 'Turn on reminders');
@@ -618,7 +659,7 @@ describe('flow: launch-onboarding — OnboardingScreen controls', () => {
       const renderer = renderScreen({
         mode: 'preauth',
         onFinished,
-        onExitToSignIn: jest.fn(),
+        onBack: jest.fn(),
       });
       walkToNotifications(renderer);
       press(renderer, 'Turn on reminders');
@@ -641,7 +682,7 @@ describe('flow: launch-onboarding — OnboardingScreen controls', () => {
       const renderer = renderScreen({
         mode: 'preauth',
         onFinished,
-        onExitToSignIn: jest.fn(),
+        onBack: jest.fn(),
       });
       walkToNotifications(renderer);
 
@@ -685,7 +726,7 @@ describe('flow: launch-onboarding — OnboardingScreen controls', () => {
       const renderer = renderScreen({
         mode: 'preauth',
         onFinished,
-        onExitToSignIn: jest.fn(),
+        onBack: jest.fn(),
       });
       walkToNotifications(renderer);
 
@@ -743,16 +784,20 @@ describe('flow: launch-onboarding — OnboardingScreen controls', () => {
         walkedProfile,
       );
       expect(useAppStore.getState().profile).toEqual(walkedProfile);
-      expect(useAppStore.getState().preAuthOnboarded).toBe(true);
-      expect(mockKv.get(DEVICE_ONBOARDED_KV_KEY)).toBe(
-        JSON.stringify({ version: 1 }),
-      );
       const prefs = JSON.parse(
         mockKv.get(`notifications:${GUEST_DATA_OWNER}`)!,
       ) as { enabled: boolean; promptDismissed: boolean };
       expect(prefs.enabled).toBe(false);
       expect(prefs.promptDismissed).toBe(true);
       expect(pendingNotificationChoice()).toBeNull();
+      // Owner-scoped writes only: no pre-auth stash and no device-level
+      // "already onboarded" marker (removed 2026-09-01).
+      expect([...mockKv.keys()].sort()).toEqual(
+        [
+          `profile:${GUEST_DATA_OWNER}`,
+          `notifications:${GUEST_DATA_OWNER}`,
+        ].sort(),
+      );
       // Disabled → nothing may be scheduled.
       expect(mockScheduler.appliedPlans).toEqual([]);
       act(() => renderer.unmount());

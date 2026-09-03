@@ -83,7 +83,6 @@ beforeEach(() => {
     hydrated: false,
     ownerKey: null,
     profile: null,
-    preAuthOnboarded: false,
     hydrateError: null,
   });
   setActiveDataOwner(CANONICAL_OWNER);
@@ -103,10 +102,19 @@ describe('appStore.hydrate — canonical profile fetch failure', () => {
     expect(state.hydrated).toBe(true);
     expect(state.ownerKey).toBe(CANONICAL_OWNER);
     expect(state.profile).toBeNull();
-    expect(state.preAuthOnboarded).toBe(true);
     expect(state.hydrateError).toBe(CANONICAL_PROFILE_UNAVAILABLE_MESSAGE);
     expect(mockSaveCanonical).not.toHaveBeenCalled();
-    expect(pendingRaw()).not.toBeNull();
+    // The stash is untouched — still exactly what was answered — and it is
+    // the only device-level onboarding row (there is no "device onboarded"
+    // marker any more; the launch gate never consults device history).
+    expect(JSON.parse(pendingRaw() ?? '')).toEqual({
+      version: 1,
+      profile: answers,
+    });
+    expect([...mockKvTable.keys()]).toEqual([
+      PENDING_ONBOARDING_PROFILE_KV_KEY,
+    ]);
+    expect(state).not.toHaveProperty('preAuthOnboarded');
   });
 
   it('reports hydrateError for a returning account too, so the server profile is never overwritten by a re-answer', async () => {

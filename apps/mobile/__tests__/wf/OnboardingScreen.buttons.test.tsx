@@ -7,6 +7,11 @@ import TestRenderer, { act } from 'react-test-renderer';
  * here and its observable effect asserted (step change, selection state,
  * store call with the exact payload, Alert wiring, busy/disabled guards and
  * the failure path of the async finish handlers).
+ *
+ * Step one's header control differs by mode: in-account it is "Leave setup"
+ * (sign-out alert); pre-auth it is a plain "Back" to Welcome (`onBack`). There
+ * is deliberately NO skip-to-sign-in in either mode (product decision
+ * 2026-09-01: the questionnaire is required).
  */
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -264,32 +269,57 @@ describe('OnboardingScreen button ledger', () => {
       act(() => renderer.unmount());
     });
 
-    it('preauth mode: confirms, then "Skip to sign-in" calls onExitToSignIn without signing out', () => {
-      const onExitToSignIn = jest.fn();
+    // The pre-auth "Leave setup" → "Skip setup?" → "Skip to sign-in"
+    // (onExitToSignIn) escape was removed 2026-09-01: pre-auth step one has
+    // no "Leave setup" at all — its control is a plain Back to Welcome.
+    it('preauth mode: step one has no Leave setup — a plain "Back" calls onBack once, with no alert and no sign-out', () => {
+      const onBack = jest.fn();
+      const onFinished = jest.fn();
+      const renderer = renderScreen({
+        mode: 'preauth',
+        onFinished,
+        onBack,
+      });
+      expect(hasPressable(renderer, 'Leave setup')).toBe(false);
+      expect(allText(renderer)).not.toMatch(/skip/i);
+      const back = hostPressable(renderer, 'Back');
+      expect(back.props.accessibilityRole).toBe('button');
+      expect(back.props.hitSlop).toBe(12);
+      expect(back.props.accessibilityHint).toBe('Return to the welcome screen');
+
+      press(renderer, 'Back');
+      expect(onBack).toHaveBeenCalledTimes(1);
+      expect(alertSpy).not.toHaveBeenCalled();
+      expect(onFinished).not.toHaveBeenCalled();
+      expect(mockSignOut).not.toHaveBeenCalled();
+      expect(mockCompletePreAuthOnboarding).not.toHaveBeenCalled();
+      act(() => renderer.unmount());
+    });
+
+    it('preauth mode: past step one, Back returns to the previous question and never calls onBack', () => {
+      const onBack = jest.fn();
       const renderer = renderScreen({
         mode: 'preauth',
         onFinished: jest.fn(),
-        onExitToSignIn,
+        onBack,
       });
-      expect(
-        hostPressable(renderer, 'Leave setup').props.accessibilityHint,
-      ).toBe('Skip ahead to the sign-in screen');
-      press(renderer, 'Leave setup');
+      typeName(renderer, 'Jo');
+      press(renderer, 'Continue');
+      expect(stepNow(renderer)).toBe(2);
+      expect(hostPressable(renderer, 'Back').props.accessibilityHint).toBe(
+        'Return to the previous question',
+      );
+      expect(allText(renderer)).not.toMatch(/skip/i);
 
-      expect(alertSpy).toHaveBeenCalledTimes(1);
-      expect(alertSpy.mock.calls[0]?.[0]).toBe('Skip setup?');
-      const buttons = alertButtons();
-      expect(buttons.map(b => b.text)).toEqual([
-        'Keep setting up',
-        'Skip to sign-in',
-      ]);
-
-      act(() => buttons[0]!.onPress?.());
-      expect(onExitToSignIn).not.toHaveBeenCalled();
-
-      act(() => buttons[1]!.onPress?.());
-      expect(onExitToSignIn).toHaveBeenCalledTimes(1);
-      expect(mockSignOut).not.toHaveBeenCalled();
+      press(renderer, 'Back');
+      expect(stepNow(renderer)).toBe(1);
+      expect(onBack).not.toHaveBeenCalled();
+      expect(renderer.root.findByType(TextInput).props.value).toBe('Jo');
+      // Step one again: the Back control now points at Welcome.
+      expect(hostPressable(renderer, 'Back').props.accessibilityHint).toBe(
+        'Return to the welcome screen',
+      );
+      expect(hasPressable(renderer, 'Leave setup')).toBe(false);
       act(() => renderer.unmount());
     });
   });
@@ -525,7 +555,7 @@ describe('OnboardingScreen button ledger', () => {
         const renderer = renderScreen({
           mode: 'preauth',
           onFinished,
-          onExitToSignIn: jest.fn(),
+          onBack: jest.fn(),
         });
         walkToNotifications(renderer);
         press(renderer, label);
@@ -549,7 +579,7 @@ describe('OnboardingScreen button ledger', () => {
       const renderer = renderScreen({
         mode: 'preauth',
         onFinished,
-        onExitToSignIn: jest.fn(),
+        onBack: jest.fn(),
       });
       walkToNotifications(renderer);
       press(renderer, 'Turn on reminders');
@@ -573,7 +603,7 @@ describe('OnboardingScreen button ledger', () => {
       const renderer = renderScreen({
         mode: 'preauth',
         onFinished,
-        onExitToSignIn: jest.fn(),
+        onBack: jest.fn(),
       });
       walkToNotifications(renderer);
       press(renderer, 'Not now');

@@ -1,6 +1,15 @@
 import type { StrokeIntentEnvelope } from '@pickle/analysis-pipeline';
-import type { EnvelopeVerdict, ShotAnalysis } from '@pickle/shared-types';
+import type {
+  EnvelopeVerdict,
+  PhaseKey,
+  PhaseSpan,
+  ShotAnalysis,
+} from '@pickle/shared-types';
 import type { ContactEstimate } from '@pickle/vision-geometry';
+// formReviewModel imports CHECKPOINT_NAMES/humanizeToken from this module;
+// both sides only touch the other's exports inside function bodies, so the
+// cycle is evaluation-order safe (no module-level reads either way).
+import { fixList, strengthList } from '../review/formReviewModel';
 
 /**
  * STROKE RESULT view model — pure selectors for the canonical Result surface
@@ -8,8 +17,10 @@ import type { ContactEstimate } from '@pickle/vision-geometry';
  *
  * HONESTY CONTRACT (hard rule): every derived element traces to a record
  * field that exists — strokeIntent, contact, temporalPhasesV2, uncertainty,
- * result-or-null. A missing field renders as an explicit "not established"
- * statement, never as an invented marker, score, label or drill.
+ * result-or-null — or to a field the on-device ShotAnalysis always carries
+ * (measured `phases`, `timestamps.contactMs`, scored `checkpoints`). A
+ * missing field renders as an explicit "not established" statement, never as
+ * an invented marker, score, label or drill.
  *
  * All functions are pure (no React, no IO) so jest pins them directly.
  */
@@ -52,8 +63,11 @@ export type TemporalPhasesV2 =
  *    (W4 risk note: stored-record readers must treat it as optional);
  *  - today's on-device fusion records carry NO `contact`/`temporalPhasesV2`
  *    (those are produced by the offline/lab evidence chain); when a future
- *    record carries them, the replay card lights up — until then their
- *    absence renders the honest "not established" state, never a marker.
+ *    record carries them, the replay card prefers them. Until then the
+ *    replay strip reads the analysis' own measured `phases`
+ *    (effectivePhaseTimeline), and the exact-contact marker stays honest:
+ *    the wrist-speed peak is drawn as a phase tick, never as a confirmed
+ *    strike marker.
  */
 export interface StrokeResultEvidenceRecord {
   id: string;
@@ -187,6 +201,30 @@ function knownLimitingFactor(factor: string): boolean {
     ].includes(factor)
   );
 }
+
+/**
+ * Structural modality tokens. This version of the engine tracks 13 body
+ * joints and NO paddle, ball or court lines (packages/scoring config/v1
+ * measures the paddle-side checkpoints at the hitting wrist), so EVERY
+ * record carries these three tokens. They describe the engine's scope, not
+ * a per-analysis gap: the surface never phrases them as something this
+ * capture failed to establish, and never picks one as the ONE insight.
+ */
+export const MODALITY_SCOPE_FACTORS = [
+  'paddle_track_unavailable',
+  'ball_track_unavailable',
+  'court_geometry_unavailable',
+] as const;
+
+export function isModalityScopeFactor(token: string): boolean {
+  return (MODALITY_SCOPE_FACTORS as readonly string[]).includes(token);
+}
+
+/** Calm scope footnote shown once, in place of per-token modality lines. */
+export const MEASUREMENT_SCOPE_NOTE =
+  'Measured from 13 tracked body joints. Paddle-side checkpoints use your ' +
+  'hitting wrist; the paddle, ball and court lines are not tracked in this ' +
+  'version.';
 
 // ─── §1.1 WHAT WAS THE STROKE — title + honest source subtitle ─────────────
 
@@ -384,7 +422,7 @@ export function contactMarkerPresentation(
   };
 }
 
-// ─── §1.2 REPLAY — phase-colored segments (temporalPhasesV2 only) ───────────
+// ─── §1.2 REPLAY — phase-colored segments (record OR measured analysis) ─────
 
 export type PhaseSegmentKey =
   'preparation' | 'acceleration' | 'follow_through' | 'recovery' | 'swing';
@@ -398,6 +436,10 @@ export interface PhaseSegmentView {
 export const ANCHOR_FREE_CAPTION =
   'Timeline from motion evidence — exact contact not established.';
 
+/** Caption for a timeline read from the analysis' own measured phases. */
+export const ANALYSIS_TIMELINE_CAPTION =
+  'Timeline from measured wrist motion — contact marks the wrist-speed peak.';
+
 export type PhaseTimelinePresentation =
   | {
       kind: 'segments';
@@ -406,6 +448,12 @@ export type PhaseTimelinePresentation =
       contactTickMs: number | null;
       anchorFree: boolean;
       source: 'paddle' | 'wrist';
+      /**
+       * Which evidence the strip was read from: the lab-chain
+       * `temporalPhasesV2` record or the on-device analysis' `phases`. The
+       * legend names the analysis tick "contact (wrist peak)".
+       */
+      origin: 'record' | 'analysis';
       /** Motion-evidence caption, required in anchor-free mode. */
       caption: string | null;
     }
@@ -482,8 +530,118 @@ export function phaseTimelinePresentation(
     contactTickMs: anchorFree ? null : (b.contactMs as number),
     anchorFree,
     source: b.source,
+    origin: 'record',
     caption: anchorFree ? ANCHOR_FREE_CAPTION : null,
   };
+}
+
+/** Analysis phase → strip segment. `ready` and `contact` are not segments:
+ * ready is the pre-swing stance, contact is the tick drawn over the strip. */
+const ANALYSIS_SEGMENT_KEY: Partial<Record<PhaseKey, PhaseSegmentKey>> = {
+  prepare: 'preparation',
+  accelerate: 'acceleration',
+  follow_through: 'follow_through',
+  recover: 'recovery',
+};
+
+/** Phase spans with finite bounds, first occurrence per key, in record order. */
+function measuredPhaseSpans(
+  analysis: ShotAnalysis | null | undefined,
+): PhaseSpan[] {
+  const raw = Array.isArray(analysis?.phases) ? analysis.phases : [];
+  const seen = new Set<string>();
+  const spans: PhaseSpan[] = [];
+  for (const span of raw) {
+    if (!span || typeof span.key !== 'string' || seen.has(span.key)) continue;
+    if (!finite(span.startMs) || !finite(span.endMs)) continue;
+    if (span.endMs < span.startMs) continue;
+    seen.add(span.key);
+    spans.push(span);
+  }
+  return spans;
+}
+
+/**
+ * The analysis' own contact estimate, in clip-relative ms: the measured
+ * contact span's representative frame (the wrist-speed peak the on-device
+ * segmenter cuts phases around), else `timestamps.contactMs` (the same peak
+ * as recorded by the stroke trigger), else null. Never interpolated.
+ */
+export function analysisContactMs(
+  analysis: ShotAnalysis | null | undefined,
+): number | null {
+  if (!analysis) return null;
+  const contact = measuredPhaseSpans(analysis).find(
+    span => span.key === 'contact',
+  );
+  if (contact && finite(contact.representativeMs)) {
+    return contact.representativeMs;
+  }
+  const recorded = analysis.timestamps?.contactMs;
+  return finite(recorded) ? recorded : null;
+}
+
+/**
+ * Phase strip from the on-device analysis' MEASURED phases (every scored
+ * ShotAnalysis carries them — packages/vision-geometry phaseSegmenter cuts
+ * them at wrist-speed landmarks). Renders only when at least two spans have
+ * finite, non-overlapping times in order; a missing prepare/recover simply
+ * yields fewer segments. The contact tick is the wrist-speed peak, so the
+ * caption names it as such — the paddle is not tracked, and nothing here
+ * claims a paddle- or ball-confirmed strike.
+ */
+export function phaseTimelineFromAnalysis(
+  analysis: ShotAnalysis | null | undefined,
+): PhaseTimelinePresentation {
+  const spans = measuredPhaseSpans(analysis);
+  if (spans.length < 2) return { kind: 'none', reason: null };
+  for (let i = 1; i < spans.length; i += 1) {
+    const previous = spans[i - 1];
+    const current = spans[i];
+    if (!previous || !current || current.startMs < previous.endMs) {
+      return { kind: 'none', reason: 'phase spans out of order' };
+    }
+  }
+
+  const segments: PhaseSegmentView[] = [];
+  for (const span of spans) {
+    const key = ANALYSIS_SEGMENT_KEY[span.key];
+    if (key && span.endMs > span.startMs) {
+      segments.push({ key, startMs: span.startMs, endMs: span.endMs });
+    }
+  }
+  if (segments.length === 0) return { kind: 'none', reason: null };
+
+  const contactTickMs = analysisContactMs(analysis);
+  return {
+    kind: 'segments',
+    segments,
+    contactTickMs,
+    anchorFree: contactTickMs === null,
+    source: 'wrist',
+    origin: 'analysis',
+    caption:
+      contactTickMs === null ? ANCHOR_FREE_CAPTION : ANALYSIS_TIMELINE_CAPTION,
+  };
+}
+
+/**
+ * The ONE phase timeline a Result surface draws: the lab-chain
+ * `temporalPhasesV2` record when it segments (richer provenance), else the
+ * analysis' measured phases. When neither yields segments, an explicit
+ * record abstention reason wins over the analysis' silence.
+ */
+export function effectivePhaseTimeline(
+  record: StrokeResultEvidenceRecord | null | undefined,
+  analysis: ShotAnalysis | null | undefined,
+): PhaseTimelinePresentation {
+  const recorded = phaseTimelinePresentation(record?.temporalPhasesV2);
+  if (recorded.kind === 'segments') return recorded;
+  const measured = phaseTimelineFromAnalysis(
+    analysis ?? record?.result ?? null,
+  );
+  if (measured.kind === 'segments') return measured;
+  return recorded.reason !== null ? recorded : measured;
 }
 
 // ─── §1.3 ONE INSIGHT — a single defensible sentence ────────────────────────
@@ -493,18 +651,34 @@ export interface InsightInput {
   contact?: ContactEstimate | null;
   temporalPhasesV2?: TemporalPhasesV2 | null;
   limitingFactors?: readonly string[];
+  /**
+   * The scored analysis, when one exists. Its measured checkpoints are the
+   * strongest evidence a scored result carries and outrank the lab-chain
+   * contact/timeline records (which today's on-device records never hold).
+   */
+  analysis?: ShotAnalysis | null;
 }
 
 export interface StrokeInsight {
   basis:
-    'disagreement' | 'contact_confirmation' | 'phase_timeline' | 'abstention';
+    | 'disagreement'
+    | 'measured_fault'
+    | 'measured_clean'
+    | 'contact_confirmation'
+    | 'phase_timeline'
+    | 'abstention';
   sentence: string;
 }
 
 /**
- * Exactly ONE plain-language sentence from the strongest DEFENSIBLE evidence.
- * Priority (fixed): disagreement > contact confirmation > phase timeline >
- * abstention explanation. Never a coaching tip, never fabricated.
+ * ONE plain-language insight (two short sentences at most) from the
+ * strongest DEFENSIBLE evidence. Priority (fixed): disagreement > scored
+ * analysis (measured fault, else every checkpoint clean) > contact
+ * confirmation > phase timeline > abstention explanation. The scored branch
+ * reads the engine's own checkpoint numbers through the form-review model,
+ * so the headline states a measured fact and the cue matches the measured
+ * direction — never a guess. Structural modality tokens (no paddle/ball/
+ * court tracker in this version) are never chosen as the insight.
  */
 export function selectInsight(input: InsightInput): StrokeInsight {
   const disagreement = input.strokeIntent?.disagreement ?? null;
@@ -516,6 +690,28 @@ export function selectInsight(input: InsightInput): StrokeInsight {
         `camera read ${disagreement.predictedLabel} — both records are ` +
         'kept, and neither overwrote the other.',
     };
+  }
+
+  const analysis = input.analysis ?? null;
+  if (techniqueScoreSectionVisible(analysis)) {
+    const [fault] = fixList(analysis, 1);
+    if (fault) {
+      return {
+        basis: 'measured_fault',
+        sentence: `${fault.headline}. ${fault.cue}`,
+      };
+    }
+    const [strongest] = strengthList(analysis, 1);
+    if (strongest) {
+      return {
+        basis: 'measured_clean',
+        sentence:
+          'Every measured checkpoint held its target — strongest was ' +
+          `${strongest.name} at ${Math.round(strongest.score)}.`,
+      };
+    }
+    // A scored result whose checkpoints carry no readable score claims
+    // nothing about them; the remaining evidence chain decides.
   }
 
   const marker = contactMarkerPresentation(input.contact);
@@ -545,7 +741,11 @@ export function selectInsight(input: InsightInput): StrokeInsight {
     };
   }
 
-  const factor = (input.limitingFactors ?? [])[0];
+  // Modality tokens are the engine's scope, not this capture's failure: the
+  // first PER-ANALYSIS limiting factor (if any) explains the abstention.
+  const factor = (input.limitingFactors ?? []).find(
+    token => !isModalityScopeFactor(token),
+  );
   if (input.strokeIntent?.resolutionBasis === 'abstained') {
     return {
       basis: 'abstention',
@@ -618,7 +818,9 @@ export function measuredRows(input: {
     });
   }
 
-  const timeline = phaseTimelinePresentation(input.record?.temporalPhasesV2);
+  // ONE phase row, from whichever evidence the replay strip draws (record
+  // first, else the analysis' measured phases) — never both.
+  const timeline = effectivePhaseTimeline(input.record, analysis);
   if (timeline.kind === 'segments') {
     rows.push({
       key: 'phase_timeline',
@@ -719,6 +921,12 @@ export function attemptChips(
 export interface AbstentionLedger {
   held: string[];
   notEstablished: string[];
+  /**
+   * MEASUREMENT_SCOPE_NOTE when the record carried any structural modality
+   * token (paddle / ball / court not tracked in this version), else null.
+   * Rendered once as a calm footnote — never as "couldn't establish" lines.
+   */
+  scope: string | null;
 }
 
 /** True when this record/analysis pair is an honest abstention surface. */
@@ -782,7 +990,7 @@ export function abstentionLedger(input: {
       `Your declaration (${humanizeToken(intent.declaredStroke)}) was kept.`,
     );
   }
-  const timeline = phaseTimelinePresentation(input.record?.temporalPhasesV2);
+  const timeline = effectivePhaseTimeline(input.record, analysis);
   if (timeline.kind === 'segments') {
     held.push('Swing phases were measured from real motion.');
   }
@@ -808,9 +1016,16 @@ export function abstentionLedger(input: {
       'A technique score — scoring stays withheld rather than invented.',
     );
   }
+  let scope: string | null = null;
   for (const factor of input.record?.uncertainty?.limitingFactors ?? []) {
+    if (isModalityScopeFactor(factor)) {
+      // The engine's scope, stated once as a footnote — not a gap this
+      // capture could have closed.
+      scope = MEASUREMENT_SCOPE_NOTE;
+      continue;
+    }
     const line = limitingFactorCopy(factor).ledger;
     if (line && !notEstablished.includes(line)) notEstablished.push(line);
   }
-  return { held, notEstablished };
+  return { held, notEstablished, scope };
 }

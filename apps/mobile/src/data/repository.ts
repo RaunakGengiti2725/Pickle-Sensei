@@ -1,5 +1,6 @@
 import {
   SHOT_TYPES,
+  type CheckpointScore,
   type ShotAnalysis,
   type ShotTypeSlug,
 } from '@pickle/shared-types';
@@ -37,6 +38,14 @@ export interface RealAnalysisFact {
   resultKind: ShotAnalysis['resultKind'];
   scoringModelVersion: string;
   shotConfigVersion: string;
+  /** Practice set (sitting) the analysis was recorded in; null when none. */
+  sessionId: string | null;
+  /** The checkpoint the analysis named as the one thing to fix; null when
+   * the analysis named none (abstentions, legacy payloads). */
+  priorityCheckpoint: string | null;
+  /** Applicable checkpoints with a finite 0–100 score, keyed by checkpoint.
+   * Non-applicable or unobserved checkpoints are absent, never zero. */
+  checkpointScores: Record<string, number>;
 }
 
 export interface PendingCapture {
@@ -99,12 +108,14 @@ const OWNER_SCOPED_TABLES = [
  *   rank.celebrated   → progress/rankCelebration.ts rankCelebrationKeyForOwner
  *   notifications     → notifications/types.ts notificationPrefsKeyForOwner
  *   consistency       → consistency/store.ts consistencyKeyForOwner
+ *   practice.set      → analysis/practiceSet.ts practiceSetKeyForOwner
  * (pinned by repositoryAccountScope tests). */
 export const OWNER_SCOPED_KV_NAMESPACES = [
   'profile',
   'rank.celebrated',
   'notifications',
   'consistency',
+  'practice.set',
 ] as const;
 
 /**
@@ -332,12 +343,42 @@ export async function listRealAnalysisFacts(
         resultKind: analysis.resultKind,
         scoringModelVersion: analysis.versionVector.scoringModelVersion,
         shotConfigVersion: analysis.versionVector.shotConfigVersion,
+        sessionId:
+          typeof analysis.sessionId === 'string' && analysis.sessionId !== ''
+            ? analysis.sessionId
+            : null,
+        priorityCheckpoint:
+          typeof analysis.priorityFix?.checkpoint === 'string'
+            ? analysis.priorityFix.checkpoint
+            : null,
+        checkpointScores: applicableCheckpointScores(analysis.checkpoints),
       });
     } catch {
       // Corrupt local payloads are excluded rather than guessed or coerced.
     }
   }
   return facts;
+}
+
+/** Applicable checkpoints with a finite numeric score only — an unobserved
+ * or non-applicable checkpoint is absent from the map, never coerced to 0. */
+function applicableCheckpointScores(
+  checkpoints: unknown,
+): Record<string, number> {
+  const scores: Record<string, number> = {};
+  if (!Array.isArray(checkpoints)) return scores;
+  for (const checkpoint of checkpoints as Array<Partial<CheckpointScore>>) {
+    if (
+      checkpoint &&
+      typeof checkpoint.key === 'string' &&
+      checkpoint.applicable === true &&
+      typeof checkpoint.score === 'number' &&
+      Number.isFinite(checkpoint.score)
+    ) {
+      scores[checkpoint.key] = checkpoint.score;
+    }
+  }
+  return scores;
 }
 
 /**
@@ -535,6 +576,28 @@ export async function setCaptureTargetSeed(
     `UPDATE local_capture SET target_seed = ?
      WHERE owner_key = ? AND id = ?`,
     [JSON.stringify(seed), owner, captureId],
+  );
+}
+
+/**
+ * Replaces the stored clip payload after MEASURED evidence was added to it —
+ * today the imported-video pose extraction. Without this, an import's
+ * exoskeleton existed only for the analysis run that measured it: the row
+ * kept the pre-extraction payload, so the Form Review reopened later had no
+ * pose sequence to draw. Only a clip that passed the strict parser reaches
+ * this function (the caller built it from a validated clip plus the native
+ * extraction result); the row's identity columns are not touched.
+ */
+export async function updateCaptureClipPayload(
+  db: LocalDb,
+  captureId: string,
+  clip: CapturedClip,
+): Promise<void> {
+  const owner = requireWritableDataOwner();
+  await db.execute(
+    `UPDATE local_capture SET payload = ?
+     WHERE owner_key = ? AND id = ?`,
+    [JSON.stringify(clip), owner, captureId],
   );
 }
 

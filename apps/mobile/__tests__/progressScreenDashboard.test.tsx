@@ -112,6 +112,9 @@ function fact(overrides: Partial<RealAnalysisFact>): RealAnalysisFact {
     resultKind: 'scored',
     scoringModelVersion: 'model-2',
     shotConfigVersion: 'config-1',
+    sessionId: null,
+    priorityCheckpoint: null,
+    checkpointScores: {},
     ...overrides,
   };
 }
@@ -577,6 +580,81 @@ describe('ProgressScreen dashboard', () => {
     expect(renderedText(renderer)).toContain(
       'Average score +1.5 vs the prior 4 weeks.',
     );
+    act(() => renderer.unmount());
+  });
+
+  it('shows THIS SET for two comparable reads from one sitting and opens an attempt', async () => {
+    const sessionId = 'aaaaaaaa-0000-4000-8000-000000000001';
+    mockListRealAnalysisFacts.mockResolvedValue([
+      // Newest first, as the repository returns them.
+      fact({
+        id: 'set-2',
+        capturedAt: daysAgoIso(0.01), // ~14 min ago
+        overallScore: 7.4,
+        sessionId,
+        priorityCheckpoint: 'recovery',
+        checkpointScores: { contact_position: 81 },
+      }),
+      fact({
+        id: 'set-1',
+        capturedAt: daysAgoIso(0.02),
+        overallScore: 6.6,
+        sessionId,
+        priorityCheckpoint: 'contact_position',
+        checkpointScores: { contact_position: 48 },
+      }),
+      // Unrelated older history stays out of the set.
+      fact({ capturedAt: daysAgoIso(5), overallScore: 5 }),
+    ]);
+    const renderer = await renderScreen();
+    await pressByLabel(renderer, 'technique progress');
+    const text = renderedText(renderer);
+
+    expect(findByTestId(renderer, 'practice-set-card')).not.toBeNull();
+    expect(text).toContain('THIS SET');
+    expect(text).toContain('+0.8 in this set');
+    expect(text).toContain(
+      '2 attempts · best 7.4 · contact position improved from 48 to 81',
+    );
+    // Both attempts render as pills, in order, the latest ringed.
+    expect(findByTestId(renderer, 'practice-set-attempt-set-1')).not.toBeNull();
+    expect(findByTestId(renderer, 'practice-set-attempt-set-2')).not.toBeNull();
+    expect(findByTestId(renderer, 'practice-set-latest-pill')).not.toBeNull();
+
+    await pressByLabel(renderer, 'Attempt 1 of 2, score 6.6');
+    expect(mockNavigate).toHaveBeenCalledWith('Result', {
+      analysisId: 'set-1',
+    });
+    act(() => renderer.unmount());
+  });
+
+  it('renders no THIS SET card for a single-attempt sitting', async () => {
+    mockListRealAnalysisFacts.mockResolvedValue([
+      fact({
+        capturedAt: daysAgoIso(0.01),
+        overallScore: 7.4,
+        sessionId: 'aaaaaaaa-0000-4000-8000-000000000001',
+      }),
+      // Two reads without any set tie never form one.
+      fact({ capturedAt: daysAgoIso(0.03), overallScore: 6.1 }),
+      fact({ capturedAt: daysAgoIso(0.04), overallScore: 6.0 }),
+    ]);
+    const renderer = await renderScreen();
+    await pressByLabel(renderer, 'technique progress');
+    expect(findByTestId(renderer, 'practice-set-card')).toBeNull();
+    expect(renderedText(renderer)).not.toContain('THIS SET');
+    act(() => renderer.unmount());
+  });
+
+  it('renders no THIS SET card once the sitting is older than a day', async () => {
+    const sessionId = 'aaaaaaaa-0000-4000-8000-000000000001';
+    mockListRealAnalysisFacts.mockResolvedValue([
+      fact({ capturedAt: daysAgoIso(1.1), overallScore: 7.4, sessionId }),
+      fact({ capturedAt: daysAgoIso(1.2), overallScore: 6.6, sessionId }),
+    ]);
+    const renderer = await renderScreen();
+    await pressByLabel(renderer, 'technique progress');
+    expect(findByTestId(renderer, 'practice-set-card')).toBeNull();
     act(() => renderer.unmount());
   });
 
