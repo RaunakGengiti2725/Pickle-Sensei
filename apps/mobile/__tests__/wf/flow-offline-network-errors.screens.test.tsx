@@ -74,12 +74,12 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
-import { Modal, Switch, Text } from 'react-native';
+import { Modal, Text } from 'react-native';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { ConsentSettingsScreen } from '../../src/screens/ConsentSettingsScreen';
 import { ManageAccountScreen } from '../../src/screens/ManageAccountScreen';
 import { PaywallScreen } from '../../src/screens/PaywallScreen';
-import { Button } from '../../src/design/components';
+import { BrandToggle, Button } from '../../src/design/components';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
 import { useConsentStore } from '../../src/state/consentStore';
 import {
@@ -209,13 +209,10 @@ describe('ConsentSettingsScreen — consent server unreachable', () => {
     expect(allText(renderer)).toContain(
       'Consent settings are temporarily unavailable.',
     );
-    const toggle = renderer.root.findByType(Switch);
+    const toggle = renderer.root.findByType(BrandToggle);
     expect(toggle.props.value).toBe(false);
     expect(toggle.props.disabled).toBe(true);
-    expect(toggle.props.accessibilityState).toEqual({ disabled: true });
-    expect(toggle.props.accessibilityLabel).toBe(
-      'Use my video to improve models',
-    );
+    expect(toggle.props.label).toBe('Use my video to improve models');
     await act(async () => {
       renderer.unmount();
     });
@@ -235,13 +232,13 @@ describe('ConsentSettingsScreen — consent server unreachable', () => {
       renderer = TestRenderer.create(<ConsentSettingsScreen />);
     });
     await flush();
-    let toggle = renderer.root.findByType(Switch);
+    let toggle = renderer.root.findByType(BrandToggle);
     expect(toggle.props.disabled).toBe(false);
     await act(async () => {
       toggle.props.onValueChange(true);
     });
     await flush();
-    toggle = renderer.root.findByType(Switch);
+    toggle = renderer.root.findByType(BrandToggle);
     expect(toggle.props.value).toBe(false);
     expect(toggle.props.disabled).toBe(false);
     expect(allText(renderer)).toContain(

@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
   Linking,
   Modal,
   Platform,
@@ -37,25 +36,30 @@ import { DUPR_ESTIMATE_NOTE } from '../progress/duprEstimate';
 import { rateAppFromSettings } from '../review/appStoreReview';
 import { useWalkthroughStore } from '../walkthrough/walkthroughStore';
 import type { RootStackParams } from '../navigation/params';
+import { showBrandNotice } from '../design/BrandNotice';
 
 async function openLegalPage(label: string, url: string): Promise<void> {
   try {
     await Linking.openURL(url);
   } catch {
-    Alert.alert(
-      `${label} could not be opened`,
-      `Your phone could not open the page. You can read it in a browser at ${url}`,
-    );
+    showBrandNotice({
+      title: `${label} could not be opened`,
+      detail: `Your phone could not open the page. You can read it in a browser at ${url}`,
+      tone: 'danger',
+      eyebrow: 'LINK UNAVAILABLE',
+    });
   }
 }
 
 async function rateApp(): Promise<void> {
   const outcome = await rateAppFromSettings();
   if (outcome === 'unavailable') {
-    Alert.alert(
-      'Rating unavailable right now',
-      'The App Store rating sheet could not be opened on this device. You can rate Pickle Sensei from its App Store page instead.',
-    );
+    showBrandNotice({
+      title: 'Rating unavailable right now',
+      detail:
+        'The App Store rating sheet could not be opened on this device. You can rate Pickle Sensei from its App Store page instead.',
+      eyebrow: 'APP STORE',
+    });
   }
 }
 

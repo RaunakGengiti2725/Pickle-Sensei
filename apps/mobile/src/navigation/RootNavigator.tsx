@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Alert, Linking, View } from 'react-native';
+import { Linking, View } from 'react-native';
 import {
   NavigationContainer,
   DefaultTheme,
@@ -33,6 +33,7 @@ import { LoadingState } from '../design/components';
 import { useAccessStore } from '../state/accessStore';
 import { useAuthStore } from '../auth/authStore';
 import { getRuntimePublicConfig } from '../config/runtimeConfig';
+import { showBrandNotice } from '../design/BrandNotice';
 
 const Stack = createNativeStackNavigator<RootStackParams>();
 const Tabs = createBottomTabNavigator<MainTabParams>();
@@ -63,10 +64,12 @@ async function openLegalPage(label: string, url: string): Promise<void> {
   try {
     await Linking.openURL(url);
   } catch {
-    Alert.alert(
-      `${label} could not be opened`,
-      `Your phone could not open the page. You can read it in a browser at ${url}`,
-    );
+    showBrandNotice({
+      title: `${label} could not be opened`,
+      detail: `Your phone could not open the page. You can read it in a browser at ${url}`,
+      tone: 'danger',
+      eyebrow: 'LINK UNAVAILABLE',
+    });
   }
 }
 

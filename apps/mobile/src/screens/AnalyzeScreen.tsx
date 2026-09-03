@@ -18,7 +18,12 @@ import {
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, PressableScale, ScreenHeader } from '../design/components';
 import { Icon, type IconName } from '../design/icons';
-import { color, radius, shadow, space, type } from '../design/tokens';
+import {
+  MascotMoment,
+  MascotStage,
+  type MascotPose,
+} from '../design/MascotMoment';
+import { color, radius, space, type } from '../design/tokens';
 import {
   cancelCameraOperation,
   captureStrokeVideo,
@@ -104,6 +109,16 @@ type Phase =
       stage: 'capture' | 'analysis';
       recovery: 'retry' | 'upgrade';
     };
+
+/** The four poses left after onboarding and deletion each own one analysis
+ * role. Reusing a role on closely related states keeps the mascot language
+ * coherent instead of turning every screen into a sticker collection. */
+export const ANALYSIS_MASCOT_POSES = {
+  ready: 'forehand',
+  working: 'sprint',
+  recovery: 'lunge',
+  outcome: 'reach',
+} satisfies Record<string, MascotPose>;
 
 export const READINESS_COPY: Record<CameraReadinessState, string> = {
   no_person: 'Step fully into frame',
@@ -1098,13 +1113,12 @@ export function AnalyzeScreen() {
           />
         ) : (
           <View style={styles.workingBody} accessibilityLiveRegion="polite">
-            <View style={styles.processingOrb}>
-              <Icon
-                name={source === 'library' ? 'upload' : 'camera'}
-                color={color.onVolt}
-                size={30}
-              />
-            </View>
+            <MascotStage
+              dark
+              pose={ANALYSIS_MASCOT_POSES.working}
+              tone="volt"
+              testID="analysis-mascot-working"
+            />
             <Text style={[type.h2, styles.workingTitle]}>{phase.message}</Text>
             <Text style={[type.body, styles.workingCopy]}>
               {source === 'library'
@@ -1133,9 +1147,12 @@ export function AnalyzeScreen() {
           onClose={() => navigation.goBack()}
         />
         <View style={styles.stateBody} accessibilityRole="alert">
-          <View style={[styles.stateIcon, { backgroundColor: color.badSoft }]}>
-            <Icon name="close" color={color.bad} size={23} />
-          </View>
+          <MascotStage
+            compact
+            pose={ANALYSIS_MASCOT_POSES.recovery}
+            tone="danger"
+            testID="analysis-mascot-error"
+          />
           <Text style={[type.h1, styles.stateTitle]}>Nothing was rated.</Text>
           <Text style={[type.body, styles.stateCopy]}>{phase.message}</Text>
           <View style={styles.stateActions}>
@@ -1179,23 +1196,13 @@ export function AnalyzeScreen() {
           onClose={() => navigation.popToTop()}
         />
         <View style={styles.stateBody} accessibilityLiveRegion="polite">
-          <View
-            style={[
-              styles.stateIcon,
-              {
-                backgroundColor:
-                  presentation.tone === 'warn'
-                    ? color.warnSoft
-                    : color.goodSoft,
-              },
-            ]}
-          >
-            <Icon
-              name={presentation.tone === 'warn' ? 'shield' : 'spark'}
-              color={toneColor}
-              size={23}
-            />
-          </View>
+          <MascotStage
+            compact
+            pose={ANALYSIS_MASCOT_POSES.outcome}
+            tone={presentation.tone === 'warn' ? 'warn' : 'court'}
+            accessibilityLabel="Pickle Sensei mascot reaching for the next ball"
+            testID="analysis-mascot-outcome"
+          />
           <Text
             style={[type.micro, styles.intentEyebrow, { color: toneColor }]}
           >
@@ -1258,9 +1265,12 @@ export function AnalyzeScreen() {
               )} free analyses`}
               style={styles.freeLimitDialog}
             >
-              <View style={styles.freeLimitIcon}>
-                <Icon name="spark" color={color.court} size={24} />
-              </View>
+              <MascotStage
+                compact
+                pose={ANALYSIS_MASCOT_POSES.outcome}
+                tone="volt"
+                testID="analysis-mascot-free-limit"
+              />
               <Text style={[type.h2, styles.freeLimitTitle]}>
                 That was your last free analysis.
               </Text>
@@ -1344,6 +1354,16 @@ export function AnalyzeScreen() {
           <Text style={[type.body, styles.savedCopy]}>
             {clipExplanation(clip)}
           </Text>
+
+          <MascotMoment
+            pose={ANALYSIS_MASCOT_POSES.outcome}
+            tone={clip.recognition.status === 'recognized' ? 'court' : 'warn'}
+            eyebrow="CAPTURE IN HAND"
+            caption="Review the evidence, then choose how you want this swing analyzed."
+            accessibilityLabel="Pickle Sensei mascot reaching for a shot"
+            testID="analysis-mascot-saved"
+            style={styles.savedMascot}
+          />
 
           <CaptureEvidenceCard clip={clip} />
 
@@ -1456,6 +1476,17 @@ export function AnalyzeScreen() {
           to analyze what you have.
         </Text>
 
+        <MascotMoment
+          dark
+          pose={ANALYSIS_MASCOT_POSES.ready}
+          tone="volt"
+          eyebrow="YOUR COURT-SIDE COACH"
+          caption="Choose a technique, frame one natural swing, and Sensei handles the read."
+          accessibilityLabel="Pickle Sensei mascot demonstrating a forehand"
+          testID="analysis-mascot-ready"
+          style={styles.readyMascot}
+        />
+
         <Text style={[type.micro, styles.declareEyebrow]}>
           WHAT ARE YOU WORKING ON?
         </Text>
@@ -1539,14 +1570,6 @@ const styles = StyleSheet.create({
     padding: space.lg,
     alignItems: 'center',
   },
-  freeLimitIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: color.goodSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   freeLimitTitle: {
     color: color.ink,
     marginTop: space.md,
@@ -1562,7 +1585,7 @@ const styles = StyleSheet.create({
     marginTop: space.lg,
     gap: space.sm,
   },
-  declareEyebrow: { color: color.onDarkSubtle, marginTop: space.xl },
+  declareEyebrow: { color: color.onDarkSubtle, marginTop: space.lg },
   strokeChips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1596,6 +1619,7 @@ const styles = StyleSheet.create({
   },
   hero: { color: color.onDark, marginTop: space.sm },
   heroCopy: { color: color.onDarkSubtle, marginTop: space.sm, maxWidth: 340 },
+  readyMascot: { marginTop: space.xl },
   preview: {
     height: PREVIEW_HEIGHT,
     marginTop: space.xl,
@@ -1706,15 +1730,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: space.xl,
   },
-  processingOrb: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: color.volt,
-    ...shadow.floating,
-  },
   workingTitle: {
     color: color.onDark,
     textAlign: 'center',
@@ -1731,13 +1746,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: space.xl,
-  },
-  stateIcon: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   stateTitle: { color: color.ink, textAlign: 'center', marginTop: space.lg },
   intentEyebrow: { textAlign: 'center', marginTop: space.lg },
@@ -1765,5 +1773,6 @@ const styles = StyleSheet.create({
   },
   savedTitle: { color: color.ink, marginTop: space.lg },
   savedCopy: { color: color.inkSoft, marginTop: space.md, maxWidth: 370 },
+  savedMascot: { marginTop: space.lg },
   savedActions: { gap: 10, marginTop: space.xl },
 });

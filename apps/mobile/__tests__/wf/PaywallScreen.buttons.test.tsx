@@ -38,13 +38,7 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
-import {
-  ActivityIndicator,
-  BackHandler,
-  StyleSheet,
-  Text,
-  type ViewStyle,
-} from 'react-native';
+import { BackHandler, StyleSheet, Text, type ViewStyle } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import {
   BillingError,
@@ -59,7 +53,7 @@ import {
   configureAccessStore,
   useAccessStore,
 } from '../../src/state/accessStore';
-import { PressableScale } from '../../src/design/components';
+import { BrandSpinner, PressableScale } from '../../src/design/components';
 import {
   PaywallScreen,
   type PaywallScreenProps,
@@ -613,7 +607,7 @@ describe('PaywallScreen buttons — purchase CTA', () => {
     const renderer = await renderPaywall(props);
     await openPricing(renderer);
 
-    expect(renderer.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+    expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(0);
     await act(async () => {
       byTestId(renderer, 'paywall-continue').props.onPress();
     });
@@ -623,7 +617,7 @@ describe('PaywallScreen buttons — purchase CTA', () => {
     expect(continueButton.props.disabled).toBe(true);
     expect(hostOf(continueButton).props.accessibilityState.disabled).toBe(true);
     expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(true);
-    expect(renderer.root.findAllByType(ActivityIndicator)).toHaveLength(1);
+    expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(1);
 
     // A second tap while pending must not start another purchase.
     await act(async () => {
@@ -661,7 +655,7 @@ describe('PaywallScreen buttons — purchase CTA', () => {
     );
     expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(false);
     expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(false);
-    expect(renderer.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+    expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(0);
     // Server access still verified, so no retry prompt is needed.
     expect(maybeByTestId(renderer, 'paywall-retry')).toHaveLength(0);
 
@@ -822,7 +816,7 @@ describe('PaywallScreen buttons — restore purchases', () => {
     expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(true);
     expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(true);
     expect(
-      byTestId(renderer, 'paywall-restore').findAllByType(ActivityIndicator),
+      byTestId(renderer, 'paywall-restore').findAllByType(BrandSpinner),
     ).toHaveLength(1);
 
     await act(async () => {
@@ -859,7 +853,7 @@ describe('PaywallScreen buttons — restore purchases', () => {
     expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(false);
     expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(false);
     expect(
-      byTestId(renderer, 'paywall-restore').findAllByType(ActivityIndicator),
+      byTestId(renderer, 'paywall-restore').findAllByType(BrandSpinner),
     ).toHaveLength(0);
 
     act(() => renderer.unmount());

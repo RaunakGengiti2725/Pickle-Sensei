@@ -1,5 +1,5 @@
 import React from 'react';
-import { Linking, Switch, Text } from 'react-native';
+import { Linking, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 jest.mock('../../src/data/db', () => ({ getDb: jest.fn(() => ({})) }));
@@ -59,6 +59,7 @@ jest.mock('../../src/notifications/service', () => ({
 }));
 
 import { NotificationSettingsScreen } from '../../src/screens/NotificationSettingsScreen';
+import { BrandToggle } from '../../src/design/components';
 import { useNotificationStore } from '../../src/notifications/notificationStore';
 import type { PermissionState } from '../../src/notifications/service';
 import {
@@ -147,8 +148,8 @@ function pressableAbsent(
 
 function switchFor(renderer: TestRenderer.ReactTestRenderer, label: string) {
   const matches = renderer.root
-    .findAllByType(Switch)
-    .filter(node => node.props.accessibilityLabel === label);
+    .findAllByType(BrandToggle)
+    .filter(node => node.props.label === label);
   expect(matches).toHaveLength(1);
   return matches[0]!;
 }
@@ -239,7 +240,7 @@ describe('NotificationSettingsScreen buttons', () => {
       const renderer = renderScreen();
       pressable(renderer, 'Turn on reminders');
       pressableAbsent(renderer, 'Open system settings');
-      expect(renderer.root.findAllByType(Switch)).toHaveLength(0);
+      expect(renderer.root.findAllByType(BrandToggle)).toHaveLength(0);
       act(() => renderer.unmount());
     });
 
@@ -409,7 +410,7 @@ describe('NotificationSettingsScreen buttons', () => {
       expect(mockScheduler.cancelAllPlanned).toHaveBeenCalled();
       expect(mockScheduler.applyPlan).not.toHaveBeenCalled();
       pressable(renderer, 'Turn on reminders');
-      expect(renderer.root.findAllByType(Switch)).toHaveLength(0);
+      expect(renderer.root.findAllByType(BrandToggle)).toHaveLength(0);
       act(() => renderer.unmount());
     });
 
@@ -443,8 +444,8 @@ describe('NotificationSettingsScreen buttons', () => {
     it('every switch is labelled and not disabled while reminders are on', async () => {
       const renderer = renderScreen();
       await flush();
-      const switches = renderer.root.findAllByType(Switch);
-      expect(switches.map(s => s.props.accessibilityLabel)).toEqual([
+      const switches = renderer.root.findAllByType(BrandToggle);
+      expect(switches.map(s => s.props.label)).toEqual([
         'All reminders',
         'Practice nudge',
         'Streak defense',

@@ -1,17 +1,11 @@
 import React, { useCallback, useState } from 'react';
-import {
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
-} from 'react-native';
+import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   Button,
+  BrandToggle,
   Card,
   PressableScale,
   ScreenHeader,
@@ -63,9 +57,8 @@ function ReminderRow(props: {
         <Text style={[type.bodyBold, { color: color.ink }]}>{props.label}</Text>
         <Text style={[type.caption, styles.rowCaption]}>{props.caption}</Text>
       </View>
-      <Switch
-        accessibilityLabel={props.label}
-        accessibilityState={{ disabled: props.disabled }}
+      <BrandToggle
+        label={props.label}
         disabled={props.disabled}
         value={props.value}
         onValueChange={props.onChange}

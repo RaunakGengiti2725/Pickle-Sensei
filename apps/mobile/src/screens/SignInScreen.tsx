@@ -1,12 +1,11 @@
 import React from 'react';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import {
-  ActivityIndicator,
-  Platform,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { BrandMark, PressableScale, ScreenHeader } from '../design/components';
+  BrandMark,
+  BrandSpinner,
+  PressableScale,
+  ScreenHeader,
+} from '../design/components';
 import { Icon } from '../design/icons';
 import { color, font, radius, space, type } from '../design/tokens';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
@@ -100,7 +99,7 @@ export function SignInScreen(props: { onBack: () => void }) {
 
         {busy ? (
           <View style={styles.busyRow}>
-            <ActivityIndicator color={color.court} />
+            <BrandSpinner color={color.court} />
             <Text style={[type.caption, { color: color.inkSoft }]}>
               Signing in securely…
             </Text>

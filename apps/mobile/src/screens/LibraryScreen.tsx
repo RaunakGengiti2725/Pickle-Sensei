@@ -1,6 +1,5 @@
 import React, { useCallback, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Linking,
   Pressable,
@@ -36,6 +35,7 @@ import { useTrainingStore } from '../training/store';
 import type { InstructionalMedia } from '../training/types';
 import { useAuthStore } from '../auth/authStore';
 import { plural } from '../util/plural';
+import { showBrandNotice } from '../design/BrandNotice';
 
 type LibraryTab = 'reads' | 'saved';
 
@@ -140,10 +140,13 @@ export function LibraryScreen() {
       }
       await Linking.openURL(url);
     } catch {
-      Alert.alert(
-        'Video unavailable',
-        'This reviewed video could not be opened. Refresh the library and try again.',
-      );
+      showBrandNotice({
+        title: 'Video unavailable',
+        detail:
+          'This reviewed video could not be opened. Refresh the library and try again.',
+        tone: 'danger',
+        eyebrow: 'COACHING VIDEO',
+      });
     }
   }, []);
 

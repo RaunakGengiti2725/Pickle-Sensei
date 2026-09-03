@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Linking } from 'react-native';
+import { Linking } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { StrokeIntentEnvelope } from '@pickle/analysis-pipeline';
 import type { CheckpointScore, ShotAnalysis } from '@pickle/shared-types';
@@ -16,6 +16,7 @@ import type {
   TrainingPlan,
   TrainingPlanItem,
 } from '../../src/training/types';
+import { BrandDialog } from '../../src/design/components';
 
 /**
  * Button ledger for the Result routes. The Result route (`ResultScreen`) is
@@ -546,7 +547,6 @@ const api: jest.Mocked<TrainingApi> = {
   reassessPlan: jest.fn(),
 };
 
-let alertSpy: jest.SpyInstance;
 let canOpenSpy: jest.SpyInstance;
 let openUrlSpy: jest.SpyInstance;
 
@@ -669,15 +669,17 @@ function ledger(renderer: Renderer): string[] {
   return [...seen].sort();
 }
 
-function alertButton(title: string, buttonText: string) {
-  const call = alertSpy.mock.calls.find(args => args[0] === title);
-  expect(call).toBeDefined();
-  const buttons = call![2] as {
-    text: string;
-    style?: string;
-    onPress?: () => void;
-  }[];
-  const button = buttons.find(entry => entry.text === buttonText);
+function trainingDialog(renderer: Renderer) {
+  return renderer.root.findByType(BrandDialog);
+}
+
+function dialogButton(renderer: Renderer, title: string, buttonText: string) {
+  const dialog = trainingDialog(renderer);
+  expect(dialog.props.visible).toBe(true);
+  expect(dialog.props.title).toBe(title);
+  const button = dialog.props.actions.find(
+    (entry: { label: string }) => entry.label === buttonText,
+  );
   expect(button).toBeDefined();
   return button!;
 }
@@ -723,13 +725,11 @@ beforeEach(() => {
   api.getCurrentPlan.mockResolvedValue(null);
   configureTrainingStore(api);
 
-  alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   canOpenSpy = jest.spyOn(Linking, 'canOpenURL').mockResolvedValue(true);
   openUrlSpy = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
 });
 
 afterEach(() => {
-  alertSpy.mockRestore();
   canOpenSpy.mockRestore();
   openUrlSpy.mockRestore();
   jest.useRealTimers();
@@ -1267,16 +1267,20 @@ describe('ResultDetails buttons — Build reviewed plan', () => {
     expect(textOf(renderer)).toContain('Build from this read instead?');
     await press(control(renderer, 'Build reviewed plan'));
     expect(api.createPlan).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(
+    expect(trainingDialog(renderer).props.title).toBe(
       'Replace the current plan?',
-      expect.stringContaining('supersede'),
-      expect.any(Array),
     );
+    expect(trainingDialog(renderer).props.detail).toContain('supersede');
     expect(
-      alertButton('Replace the current plan?', 'Keep current plan').style,
-    ).toBe('cancel');
+      dialogButton(renderer, 'Replace the current plan?', 'Keep current plan')
+        .variant,
+    ).toBe('dark');
     await act(async () => {
-      alertButton('Replace the current plan?', 'Replace plan').onPress!();
+      dialogButton(
+        renderer,
+        'Replace the current plan?',
+        'Replace plan',
+      ).onPress();
     });
     await flush();
     expect(api.createPlan).toHaveBeenCalledWith('a1');
@@ -1461,7 +1465,7 @@ describe('ResultDetails buttons — PlanDrillCard controls', () => {
     expect(openUrlSpy).not.toHaveBeenCalledWith(
       expect.stringContaining('/embed/'),
     );
-    expect(alertSpy).not.toHaveBeenCalled();
+    expect(trainingDialog(renderer).props.visible).toBe(false);
     await unmount(renderer);
   });
 
@@ -1489,9 +1493,9 @@ describe('ResultDetails buttons — PlanDrillCard controls', () => {
       control(renderer, 'Watch reviewed instruction for Shadow swings'),
     );
     expect(openUrlSpy).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Video unavailable',
-      expect.stringContaining('could not be opened'),
+    expect(trainingDialog(renderer).props.title).toBe('Video unavailable');
+    expect(trainingDialog(renderer).props.detail).toContain(
+      'could not be opened',
     );
     await unmount(renderer);
   });
@@ -1502,10 +1506,8 @@ describe('ResultDetails buttons — PlanDrillCard controls', () => {
     await press(
       control(renderer, 'Watch reviewed instruction for Shadow swings'),
     );
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Video unavailable',
-      expect.any(String),
-    );
+    expect(trainingDialog(renderer).props.title).toBe('Video unavailable');
+    expect(typeof trainingDialog(renderer).props.detail).toBe('string');
     await unmount(renderer);
   });
 
@@ -1517,14 +1519,15 @@ describe('ResultDetails buttons — PlanDrillCard controls', () => {
     expect(isDisabled(confirm)).toBe(false);
     await press(confirm);
     expect(api.completeDrill).not.toHaveBeenCalled();
-    expect(alertSpy).toHaveBeenCalledWith(
-      'Log real practice?',
+    expect(trainingDialog(renderer).props.title).toBe('Log real practice?');
+    expect(trainingDialog(renderer).props.detail).toBe(
       'Confirm only if you completed 3 × 10 reps of “Shadow swings.”',
-      expect.any(Array),
     );
-    expect(alertButton('Log real practice?', 'Not yet').style).toBe('cancel');
+    expect(
+      dialogButton(renderer, 'Log real practice?', 'Not yet').variant,
+    ).toBe('dark');
     await act(async () => {
-      alertButton('Log real practice?', 'I completed it').onPress!();
+      dialogButton(renderer, 'Log real practice?', 'I completed it').onPress();
     });
     await flush();
     expect(api.completeDrill).toHaveBeenCalledTimes(1);
@@ -1561,7 +1564,7 @@ describe('ResultDetails buttons — PlanDrillCard controls', () => {
     const renderer = await renderDetails();
     await press(control(renderer, 'Confirm completion of Wall drive'));
     await act(async () => {
-      alertButton('Log real practice?', 'I completed it').onPress!();
+      dialogButton(renderer, 'Log real practice?', 'I completed it').onPress();
     });
     await flush();
     expect(api.completeDrill).toHaveBeenCalledWith(
@@ -1581,7 +1584,7 @@ describe('ResultDetails buttons — PlanDrillCard controls', () => {
     const renderer = await renderDetails();
     await press(control(renderer, 'Confirm completion of Shadow swings'));
     await act(async () => {
-      alertButton('Log real practice?', 'I completed it').onPress!();
+      dialogButton(renderer, 'Log real practice?', 'I completed it').onPress();
     });
     await flush();
     expect(textOf(renderer)).toContain('Training not changed');
@@ -1601,7 +1604,7 @@ describe('ResultDetails buttons — PlanDrillCard controls', () => {
     expect(textOf(renderer)).toContain(
       'No sets, reps, or time were prescribed for this drill',
     );
-    expect(alertSpy).not.toHaveBeenCalled();
+    expect(trainingDialog(renderer).props.visible).toBe(false);
     expect(api.completeDrill).not.toHaveBeenCalled();
     await unmount(renderer);
   });

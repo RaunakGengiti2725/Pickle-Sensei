@@ -1,16 +1,15 @@
 import React, { useEffect } from 'react';
-import {
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
-} from 'react-native';
+import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Button, Card, ScreenHeader, SectionTitle } from '../design/components';
+import {
+  BrandToggle,
+  Button,
+  Card,
+  ScreenHeader,
+  SectionTitle,
+} from '../design/components';
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import { useAuthStore } from '../auth/authStore';
@@ -84,9 +83,8 @@ export function ConsentSettingsScreen() {
             <Text style={[type.h3, { color: color.ink, flex: 1 }]}>
               Use my video to improve models
             </Text>
-            <Switch
-              accessibilityLabel="Use my video to improve models"
-              accessibilityState={{ disabled: toggleDisabled }}
+            <BrandToggle
+              label="Use my video to improve models"
               disabled={toggleDisabled}
               value={active}
               onValueChange={next => void setConsent(next)}

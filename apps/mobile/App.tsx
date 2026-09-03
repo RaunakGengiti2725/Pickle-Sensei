@@ -33,6 +33,7 @@ import {
   type PreAuthStage,
 } from './src/flow/launchGate';
 import { makeUuid } from './src/util/uuid';
+import { BrandNoticeHost } from './src/design/BrandNotice';
 
 const queryClient = new QueryClient();
 
@@ -238,6 +239,9 @@ function Gate() {
       {/* First-run walkthrough: one tour per device, raised on the first
           signed-in landing; Settings → About replays it. */}
       <FirstRunWalkthrough />
+      {/* Product-owned notice surface for errors that can outlive the screen
+          which raised them (for example after account deletion). */}
+      <BrandNoticeHost />
       {splashDone ? null : (
         <SplashScreen ready={ready} onFinished={handleSplashFinished} />
       )}

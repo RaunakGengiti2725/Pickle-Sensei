@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Linking, StyleSheet, Text } from 'react-native';
+import { Linking, StyleSheet, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { LocalShotRow, PendingCapture } from '../../src/data/repository';
 import {
@@ -37,6 +37,11 @@ jest.mock('@react-navigation/native', () => ({
 
 jest.mock('../../src/data/db', () => ({
   getDb: jest.fn(() => ({})),
+}));
+
+const mockShowBrandNotice = jest.fn();
+jest.mock('../../src/design/BrandNotice', () => ({
+  showBrandNotice: (notice: unknown) => mockShowBrandNotice(notice),
 }));
 
 const mockListShots = jest.fn<Promise<LocalShotRow[]>, [unknown, number]>();
@@ -349,7 +354,7 @@ beforeEach(() => {
   mockListPendingCaptures.mockReset();
   mockListShots.mockResolvedValue([shotScored, shotNotRead]);
   mockListPendingCaptures.mockResolvedValue([]);
-  jest.spyOn(Alert, 'alert').mockClear();
+  mockShowBrandNotice.mockClear();
   jest.spyOn(Linking, 'canOpenURL').mockClear();
   jest.spyOn(Linking, 'canOpenURL').mockResolvedValue(true);
   jest.spyOn(Linking, 'openURL').mockClear();
@@ -784,7 +789,7 @@ describe('LibraryScreen · saved drill card actions (real training store)', () =
     expect(Linking.openURL).toHaveBeenCalledTimes(1);
     expect(Linking.openURL).toHaveBeenCalledWith(embedMedia.sourceUrl);
     expect(Linking.openURL).not.toHaveBeenCalledWith(embedMedia.embedUrl);
-    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(mockShowBrandNotice).not.toHaveBeenCalled();
 
     act(() => renderer.unmount());
   });
@@ -804,7 +809,7 @@ describe('LibraryScreen · saved drill card actions (real training store)', () =
     await pressByLabel(renderer, watchLabel);
     await settle();
     expect(Linking.openURL).toHaveBeenCalledWith(hostedMedia.playbackUrl);
-    expect(Alert.alert).not.toHaveBeenCalled();
+    expect(mockShowBrandNotice).not.toHaveBeenCalled();
 
     act(() => renderer.unmount());
   });
@@ -817,9 +822,11 @@ describe('LibraryScreen · saved drill card actions (real training store)', () =
     await pressByLabel(renderer, watchLabel);
     await settle();
     expect(Linking.openURL).not.toHaveBeenCalled();
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Video unavailable',
-      expect.stringContaining('could not be opened'),
+    expect(mockShowBrandNotice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Video unavailable',
+        detail: expect.stringContaining('could not be opened'),
+      }),
     );
     // The control stays usable for another attempt.
     expect(findByLabel(renderer, watchLabel)!.props.disabled).toBeFalsy();
@@ -835,10 +842,12 @@ describe('LibraryScreen · saved drill card actions (real training store)', () =
     await pressByLabel(renderer, watchLabel);
     await settle();
     expect(Linking.openURL).toHaveBeenCalledWith(embedMedia.sourceUrl);
-    expect(Alert.alert).toHaveBeenCalledTimes(1);
-    expect(Alert.alert).toHaveBeenCalledWith(
-      'Video unavailable',
-      expect.stringContaining('Refresh the library and try again'),
+    expect(mockShowBrandNotice).toHaveBeenCalledTimes(1);
+    expect(mockShowBrandNotice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Video unavailable',
+        detail: expect.stringContaining('Refresh the library and try again'),
+      }),
     );
 
     act(() => renderer.unmount());

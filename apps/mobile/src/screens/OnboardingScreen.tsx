@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -11,8 +10,13 @@ import {
   View,
 } from 'react-native';
 import type { Handedness } from '@pickle/shared-types';
-import { Button, PressableScale } from '../design/components';
+import { BrandDialog, Button, PressableScale } from '../design/components';
 import { Icon } from '../design/icons';
+import {
+  MascotMoment,
+  type MascotPose,
+  type MascotTone,
+} from '../design/MascotMoment';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, space, type } from '../design/tokens';
 import { focusForGoal, useAppStore, type Gender } from '../state/appStore';
@@ -40,6 +44,67 @@ const STEPS = [
   'notifications',
 ] as const;
 type Step = (typeof STEPS)[number];
+
+/** One distinct supplied pose per step; the copy explains why that moment is
+ * relevant instead of using the mascot as decorative confetti. */
+export const ONBOARDING_MASCOT_MOMENTS: Record<
+  Step,
+  {
+    pose: MascotPose;
+    tone: MascotTone;
+    eyebrow: string;
+    caption: string;
+  }
+> = {
+  name: {
+    pose: 'bounce',
+    tone: 'volt',
+    eyebrow: 'LET’S WARM UP',
+    caption: 'A few quick answers shape your first session around you.',
+  },
+  gender: {
+    pose: 'greet',
+    tone: 'court',
+    eyebrow: 'COACHING THAT FITS',
+    caption: 'Your references should feel natural and respectful.',
+  },
+  level: {
+    pose: 'ready',
+    tone: 'volt',
+    eyebrow: 'START AT YOUR LEVEL',
+    caption: 'The right baseline keeps every cue clear and useful.',
+  },
+  handedness: {
+    pose: 'backhand',
+    tone: 'court',
+    eyebrow: 'MIRRORED FOR YOU',
+    caption: 'Every checkpoint follows your real hitting side.',
+  },
+  goal: {
+    pose: 'smash',
+    tone: 'volt',
+    eyebrow: 'A TARGET WORTH CHASING',
+    caption: 'Your first training focus starts with what matters most.',
+  },
+  problem: {
+    pose: 'question',
+    tone: 'warn',
+    eyebrow: 'FIND THE PATTERN',
+    caption: 'Tell Sensei where the rally usually slips away.',
+  },
+  reveal: {
+    pose: 'celebrate',
+    tone: 'volt',
+    eyebrow: 'PLAN READY',
+    caption: 'Your answers are now one focused place to begin.',
+  },
+  notifications: {
+    pose: 'serve',
+    tone: 'court',
+    eyebrow: 'ON YOUR SCHEDULE',
+    caption: 'A timely nudge can keep the next session in rhythm.',
+  },
+};
 
 interface Choice {
   value: string;
@@ -314,6 +379,7 @@ export function OnboardingScreen(props: {
   const [stepIndex, setStepIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [notificationBusy, setNotificationBusy] = useState(false);
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
   const [notificationChoice, setNotificationChoice] =
     useState<NotificationOnboardingChoice | null>(null);
 
@@ -322,6 +388,7 @@ export function OnboardingScreen(props: {
   const goal = answers['goal'] ?? 'all-around';
   const focus = focusForGoal(goal);
   const focusCopy = FOCUS_COPY[focus] ?? FOCUS_COPY['contact_position']!;
+  const mascotMoment = ONBOARDING_MASCOT_MOMENTS[step];
   const answeredProfile = {
     firstName: firstName || undefined,
     gender: answers['gender'] as Gender | undefined,
@@ -376,18 +443,7 @@ export function OnboardingScreen(props: {
       props.onBack?.();
       return;
     }
-    Alert.alert(
-      'Leave setup?',
-      'You will be returned to the sign-in screen. Your answers so far are not saved.',
-      [
-        { text: 'Keep setting up', style: 'cancel' },
-        {
-          text: 'Sign out',
-          style: 'destructive',
-          onPress: () => void signOut(),
-        },
-      ],
-    );
+    setConfirmingLeave(true);
   };
 
   return (
@@ -456,35 +512,59 @@ export function OnboardingScreen(props: {
               {step === 'name' ? NAME_QUESTION.sub : QUESTIONS[step].sub}
             </Text>
             {step === 'name' ? (
-              <TextInput
-                accessibilityLabel="First name"
-                autoFocus
-                autoCapitalize="words"
-                autoComplete="given-name"
-                textContentType="givenName"
-                autoCorrect={false}
-                returnKeyType="next"
-                maxLength={40}
-                placeholder="First name"
-                placeholderTextColor={color.inkSoft}
-                value={answers['name'] ?? ''}
-                onChangeText={text => select('name', text)}
-                // The keyboard's Next key mirrors the Continue button, but
-                // never past an empty name.
-                onSubmitEditing={() => {
-                  if (firstName.length >= 1) goForward();
-                }}
-                style={styles.nameInput}
-              />
-            ) : (
-              QUESTIONS[step].choices.map(choice => (
-                <ChoiceCard
-                  key={choice.value}
-                  choice={choice}
-                  selected={answers[step] === choice.value}
-                  onPress={() => select(step, choice.value)}
+              <>
+                <TextInput
+                  accessibilityLabel="First name"
+                  autoFocus
+                  autoCapitalize="words"
+                  autoComplete="given-name"
+                  textContentType="givenName"
+                  autoCorrect={false}
+                  returnKeyType="next"
+                  maxLength={40}
+                  placeholder="First name"
+                  placeholderTextColor={color.inkSoft}
+                  value={answers['name'] ?? ''}
+                  onChangeText={text => select('name', text)}
+                  // The keyboard's Next key mirrors the Continue button, but
+                  // never past an empty name.
+                  onSubmitEditing={() => {
+                    if (firstName.length >= 1) goForward();
+                  }}
+                  style={styles.nameInput}
                 />
-              ))
+                <MascotMoment
+                  compact
+                  pose={mascotMoment.pose}
+                  tone={mascotMoment.tone}
+                  eyebrow={mascotMoment.eyebrow}
+                  caption={mascotMoment.caption}
+                  accessibilityLabel={`Pickle Sensei mascot. ${mascotMoment.caption}`}
+                  testID="onboarding-mascot-name"
+                  style={styles.nameMascot}
+                />
+              </>
+            ) : (
+              <>
+                <MascotMoment
+                  compact
+                  pose={mascotMoment.pose}
+                  tone={mascotMoment.tone}
+                  eyebrow={mascotMoment.eyebrow}
+                  caption={mascotMoment.caption}
+                  accessibilityLabel={`Pickle Sensei mascot. ${mascotMoment.caption}`}
+                  testID={`onboarding-mascot-${step}`}
+                  style={styles.mascotMoment}
+                />
+                {QUESTIONS[step].choices.map(choice => (
+                  <ChoiceCard
+                    key={choice.value}
+                    choice={choice}
+                    selected={answers[step] === choice.value}
+                    onPress={() => select(step, choice.value)}
+                  />
+                ))}
+              </>
             )}
           </LockedScroll>
           <View
@@ -517,6 +597,16 @@ export function OnboardingScreen(props: {
                 Built for {firstName}.
               </Text>
             ) : null}
+
+            <MascotMoment
+              pose={mascotMoment.pose}
+              tone={mascotMoment.tone}
+              eyebrow={mascotMoment.eyebrow}
+              caption={mascotMoment.caption}
+              accessibilityLabel={`Pickle Sensei mascot. ${mascotMoment.caption}`}
+              testID="onboarding-mascot-reveal"
+              style={styles.revealMascot}
+            />
 
             <View style={styles.focusCard}>
               <View style={styles.focusTop}>
@@ -609,6 +699,16 @@ export function OnboardingScreen(props: {
               Get a useful nudge when it can help—never a stream of noise.
             </Text>
 
+            <MascotMoment
+              pose={mascotMoment.pose}
+              tone={mascotMoment.tone}
+              eyebrow={mascotMoment.eyebrow}
+              caption={mascotMoment.caption}
+              accessibilityLabel={`Pickle Sensei mascot. ${mascotMoment.caption}`}
+              testID="onboarding-mascot-notifications"
+              style={styles.notificationMascot}
+            />
+
             <View style={styles.notificationPreview}>
               <View style={styles.notificationPreviewHeader}>
                 <View style={styles.notificationPreviewIcon}>
@@ -693,6 +793,30 @@ export function OnboardingScreen(props: {
           </View>
         </>
       )}
+      <BrandDialog
+        visible={confirmingLeave}
+        title="Leave setup?"
+        detail="You will be returned to the sign-in screen. Your answers so far are not saved."
+        eyebrow="SETUP IN PROGRESS"
+        tone="danger"
+        onDismiss={() => setConfirmingLeave(false)}
+        testID="onboarding-leave-dialog"
+        actions={[
+          {
+            label: 'Keep setting up',
+            variant: 'dark',
+            onPress: () => setConfirmingLeave(false),
+          },
+          {
+            label: 'Sign out',
+            variant: 'danger',
+            onPress: () => {
+              setConfirmingLeave(false);
+              void signOut();
+            },
+          },
+        ]}
+      />
     </View>
   );
 }
@@ -755,6 +879,9 @@ const styles = StyleSheet.create({
     maxWidth: 340,
     marginBottom: space.lg,
   },
+  mascotMoment: { marginBottom: space.lg },
+  nameMascot: { marginTop: space.lg },
+  revealMascot: { marginTop: space.lg },
   choiceCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -855,8 +982,9 @@ const styles = StyleSheet.create({
     marginTop: space.sm,
     maxWidth: 340,
   },
+  notificationMascot: { marginTop: space.lg },
   notificationPreview: {
-    marginTop: space.xl,
+    marginTop: space.lg,
     padding: space.lg,
     borderRadius: radius.xl,
     backgroundColor: color.surfaceDark,

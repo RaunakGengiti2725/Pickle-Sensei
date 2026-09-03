@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   BackHandler,
   Easing,
@@ -11,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import { PressableScale } from '../design/components';
+import { BrandSpinner, PressableScale } from '../design/components';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { Icon, type IconName } from '../design/icons';
 import { color, font, radius, shadow, space, type } from '../design/tokens';
@@ -481,7 +480,10 @@ export function PaywallScreen(props: PaywallScreenProps) {
                     accessibilityLabel="Loading App Store pricing"
                     style={styles.loadingCard}
                   >
-                    <ActivityIndicator color={color.volt} />
+                    <BrandSpinner
+                      color={color.volt}
+                      trackColor={color.lineDark}
+                    />
                     <Text style={styles.loadingText}>
                       Loading secure store pricing…
                     </Text>
@@ -537,7 +539,7 @@ export function PaywallScreen(props: PaywallScreenProps) {
                 style={styles.primaryButton}
               >
                 {operation === 'purchasing' || operation === 'syncing' ? (
-                  <ActivityIndicator color={color.onVolt} />
+                  <BrandSpinner color={color.onVolt} trackColor={color.court} />
                 ) : (
                   <>
                     <Text style={styles.primaryButtonText}>
@@ -556,7 +558,10 @@ export function PaywallScreen(props: PaywallScreenProps) {
                 style={styles.restoreButton}
               >
                 {operation === 'restoring' ? (
-                  <ActivityIndicator color={color.onDark} />
+                  <BrandSpinner
+                    color={color.onDark}
+                    trackColor={color.lineStrongDark}
+                  />
                 ) : (
                   <Text style={styles.restoreText}>Restore purchases</Text>
                 )}

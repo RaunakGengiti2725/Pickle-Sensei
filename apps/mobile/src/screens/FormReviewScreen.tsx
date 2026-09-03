@@ -8,16 +8,14 @@ import {
 } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { ShotAnalysis } from '@pickle/shared-types';
-import {
-  Button,
-  ErrorState,
-  LoadingState,
-  ScreenHeader,
-} from '../design/components';
+import { Button, ErrorState, ScreenHeader } from '../design/components';
 import { color, space, type } from '../design/tokens';
 import { getDb } from '../data/db';
 import type { RootStackParams } from '../navigation/params';
-import type { StrokeResultClip } from '../components/StrokeResult';
+import {
+  StrokeResultAnalyzing,
+  type StrokeResultClip,
+} from '../components/StrokeResult';
 import {
   loadStrokeResultEvidence,
   type StrokeReviewEvidence,
@@ -114,7 +112,7 @@ export function FormReviewScreen() {
           dark
           onClose={() => navigation.goBack()}
         />
-        <LoadingState label="Preparing your form review…" dark />
+        <StrokeResultAnalyzing caption="Preparing your form review…" dark />
       </SafeAreaView>
     );
   }

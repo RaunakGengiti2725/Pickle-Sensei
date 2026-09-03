@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Linking } from 'react-native';
+import { Linking } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { DrillDetail, SavedDrill } from '../../src/training/types';
 import { useTrainingStore } from '../../src/training/store';
@@ -73,6 +73,11 @@ jest.mock('../../src/auth/authStore', () => ({
   ) => selector({ session: { localOnly: true } }),
 }));
 
+const mockShowBrandNotice = jest.fn();
+jest.mock('../../src/design/BrandNotice', () => ({
+  showBrandNotice: (notice: unknown) => mockShowBrandNotice(notice),
+}));
+
 import { ResultScreen } from '../../src/screens/ResultScreen';
 import { LibraryScreen } from '../../src/screens/LibraryScreen';
 
@@ -122,6 +127,7 @@ beforeEach(() => {
   mockNavigation.popToTop.mockClear();
   mockNavigation.replace.mockClear();
   mockDbMode = 'empty';
+  mockShowBrandNotice.mockClear();
   setActiveDataOwner(GUEST_DATA_OWNER);
   useTrainingStore.setState({
     savedStatus: 'ready',
@@ -267,8 +273,6 @@ describe('LibraryScreen: external video failure branches surface copy', () => {
   it('OS refuses the URL (canOpenURL=false) → "Video unavailable" alert, no throw', async () => {
     jest.spyOn(Linking, 'canOpenURL').mockResolvedValue(false);
     const openUrl = jest.spyOn(Linking, 'openURL').mockResolvedValue();
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-
     const renderer = await renderLibrarySavedTab();
     pressByLabel(
       renderer,
@@ -277,9 +281,12 @@ describe('LibraryScreen: external video failure branches surface copy', () => {
     await flush();
 
     expect(openUrl).not.toHaveBeenCalled();
-    expect(alert).toHaveBeenCalledWith(
-      'Video unavailable',
-      'This reviewed video could not be opened. Refresh the library and try again.',
+    expect(mockShowBrandNotice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Video unavailable',
+        detail:
+          'This reviewed video could not be opened. Refresh the library and try again.',
+      }),
     );
     act(() => renderer.unmount());
   });
@@ -289,8 +296,6 @@ describe('LibraryScreen: external video failure branches surface copy', () => {
     jest
       .spyOn(Linking, 'openURL')
       .mockRejectedValue(new Error('No handler for URL'));
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-
     const renderer = await renderLibrarySavedTab();
     pressByLabel(
       renderer,
@@ -298,8 +303,10 @@ describe('LibraryScreen: external video failure branches surface copy', () => {
     );
     await flush();
 
-    expect(alert).toHaveBeenCalledTimes(1);
-    expect(alert.mock.calls[0]![0]).toBe('Video unavailable');
+    expect(mockShowBrandNotice).toHaveBeenCalledTimes(1);
+    expect(mockShowBrandNotice.mock.calls[0]![0]).toEqual(
+      expect.objectContaining({ title: 'Video unavailable' }),
+    );
     expect(renderedText(renderer)).toContain(savedDrill.title);
     act(() => renderer.unmount());
   });
@@ -307,8 +314,6 @@ describe('LibraryScreen: external video failure branches surface copy', () => {
   it('a successful open uses the canonical watch page, never the raw embed URL', async () => {
     jest.spyOn(Linking, 'canOpenURL').mockResolvedValue(true);
     const openUrl = jest.spyOn(Linking, 'openURL').mockResolvedValue();
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
-
     const renderer = await renderLibrarySavedTab();
     pressByLabel(
       renderer,
@@ -319,7 +324,7 @@ describe('LibraryScreen: external video failure branches surface copy', () => {
     expect(openUrl).toHaveBeenCalledWith(
       'https://www.youtube.com/watch?v=abc123',
     );
-    expect(alert).not.toHaveBeenCalled();
+    expect(mockShowBrandNotice).not.toHaveBeenCalled();
     act(() => renderer.unmount());
   });
 });

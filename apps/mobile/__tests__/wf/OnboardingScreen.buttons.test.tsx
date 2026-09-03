@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Text, TextInput } from 'react-native';
+import { Text, TextInput } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 /**
@@ -70,9 +70,12 @@ jest.mock('../../src/notifications/notificationStore', () => {
 
 import { useAppStore } from '../../src/state/appStore';
 import { OnboardingScreen } from '../../src/screens/OnboardingScreen';
+import {
+  BrandDialog,
+  type BrandDialogAction,
+} from '../../src/design/components';
 
 type Renderer = TestRenderer.ReactTestRenderer;
-type AlertButton = { text?: string; style?: string; onPress?: () => void };
 
 const STEP_TITLES = {
   name: 'What should we call you?',
@@ -209,10 +212,12 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-let alertSpy: jest.SpyInstance;
+function leaveDialog(renderer: Renderer) {
+  return renderer.root.findByType(BrandDialog);
+}
 
-function alertButtons(call = 0): AlertButton[] {
-  return (alertSpy.mock.calls[call]?.[2] ?? []) as AlertButton[];
+function dialogActions(renderer: Renderer): readonly BrandDialogAction[] {
+  return leaveDialog(renderer).props.actions;
 }
 
 describe('OnboardingScreen button ledger', () => {
@@ -227,11 +232,6 @@ describe('OnboardingScreen button ledger', () => {
     act(() =>
       useAppStore.setState({ onboardingBusy: false, onboardingError: null }),
     );
-    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    alertSpy.mockRestore();
   });
 
   describe('header: Leave setup (step 1 only)', () => {
@@ -251,19 +251,25 @@ describe('OnboardingScreen button ledger', () => {
       const renderer = renderScreen();
       press(renderer, 'Leave setup');
 
-      expect(alertSpy).toHaveBeenCalledTimes(1);
-      expect(alertSpy.mock.calls[0]?.[0]).toBe('Leave setup?');
-      const buttons = alertButtons();
-      expect(buttons.map(b => b.text)).toEqual(['Keep setting up', 'Sign out']);
+      expect(leaveDialog(renderer).props.visible).toBe(true);
+      expect(leaveDialog(renderer).props.title).toBe('Leave setup?');
+      const buttons = dialogActions(renderer);
+      expect(buttons.map(b => b.label)).toEqual([
+        'Keep setting up',
+        'Sign out',
+      ]);
 
-      const keep = buttons.find(b => b.text === 'Keep setting up')!;
-      expect(keep.style).toBe('cancel');
+      const keep = buttons.find(b => b.label === 'Keep setting up')!;
+      expect(keep.variant).toBe('dark');
       act(() => keep.onPress?.());
       expect(mockSignOut).not.toHaveBeenCalled();
       expect(allText(renderer)).toContain(STEP_TITLES.name);
 
-      const signOut = buttons.find(b => b.text === 'Sign out')!;
-      expect(signOut.style).toBe('destructive');
+      press(renderer, 'Leave setup');
+      const signOut = dialogActions(renderer).find(
+        b => b.label === 'Sign out',
+      )!;
+      expect(signOut.variant).toBe('danger');
       act(() => signOut.onPress?.());
       expect(mockSignOut).toHaveBeenCalledTimes(1);
       act(() => renderer.unmount());
@@ -289,7 +295,7 @@ describe('OnboardingScreen button ledger', () => {
 
       press(renderer, 'Back');
       expect(onBack).toHaveBeenCalledTimes(1);
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(leaveDialog(renderer).props.visible).toBe(false);
       expect(onFinished).not.toHaveBeenCalled();
       expect(mockSignOut).not.toHaveBeenCalled();
       expect(mockCompletePreAuthOnboarding).not.toHaveBeenCalled();

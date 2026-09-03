@@ -39,7 +39,7 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
-import { ActivityIndicator, Text } from 'react-native';
+import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import {
   BillingError,
@@ -56,6 +56,7 @@ import {
   useAccessStore,
 } from '../../src/state/accessStore';
 import { PaywallScreen } from '../../src/screens/PaywallScreen';
+import { BrandSpinner } from '../../src/design/components';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -410,7 +411,7 @@ function hasTestId(renderer: TestRenderer.ReactTestRenderer, testID: string) {
 }
 
 function spinnerCount(renderer: TestRenderer.ReactTestRenderer) {
-  return renderer.root.findAllByType(ActivityIndicator).length;
+  return renderer.root.findAllByType(BrandSpinner).length;
 }
 
 function progressbars(renderer: TestRenderer.ReactTestRenderer) {

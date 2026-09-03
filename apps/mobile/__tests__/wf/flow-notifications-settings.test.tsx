@@ -1,5 +1,5 @@
 import React from 'react';
-import { Switch, Text } from 'react-native';
+import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type {
   PermissionState,
@@ -121,6 +121,7 @@ jest.mock('../../src/consistency/store', () => ({
 
 import { useNotificationStore } from '../../src/notifications/notificationStore';
 import { NotificationSettingsScreen } from '../../src/screens/NotificationSettingsScreen';
+import { BrandToggle } from '../../src/design/components';
 
 const owner = '55555555-5555-4555-8555-555555555555';
 
@@ -216,8 +217,8 @@ function findSwitch(
   label: string,
 ): TestRenderer.ReactTestInstance {
   const matches = renderer.root
-    .findAllByType(Switch)
-    .filter(node => node.props.accessibilityLabel === label);
+    .findAllByType(BrandToggle)
+    .filter(node => node.props.label === label);
   expect(matches).toHaveLength(1);
   return matches[0]!;
 }
@@ -289,7 +290,7 @@ describe('notification settings — opt-in', () => {
     expect(body).toContain('Off by default.');
     expect(body).toContain('Reminders are scheduled on this phone.');
     // Off state shows no per-reminder switches yet.
-    expect(renderer.root.findAllByType(Switch)).toHaveLength(0);
+    expect(renderer.root.findAllByType(BrandToggle)).toHaveLength(0);
     await unmountScreen(renderer);
   });
 
@@ -422,7 +423,6 @@ describe('notification settings — enabled controls', () => {
     const renderer = await renderEnabled();
     const master = findSwitch(renderer, 'All reminders');
     expect(master.props.value).toBe(true);
-    expect(master.props.accessibilityState).toEqual({ disabled: undefined });
 
     await flip(master, false);
 
@@ -430,7 +430,7 @@ describe('notification settings — enabled controls', () => {
     expect(storedPrefs().enabled).toBe(false);
     expect(mockScheduler.cancelAllCalls).toBeGreaterThan(0);
     expect(mockScheduler.appliedPlans).toEqual([]);
-    expect(renderer.root.findAllByType(Switch)).toHaveLength(0);
+    expect(renderer.root.findAllByType(BrandToggle)).toHaveLength(0);
     expect(queryByLabel(renderer, 'Turn on reminders')).not.toBeNull();
     await unmountScreen(renderer);
   });

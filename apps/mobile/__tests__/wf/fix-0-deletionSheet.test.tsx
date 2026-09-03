@@ -8,7 +8,7 @@
  * told to the user.
  */
 import React from 'react';
-import { Alert, Text } from 'react-native';
+import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 jest.mock('../../src/config/authConfig', () => ({
@@ -35,6 +35,11 @@ jest.mock('react-native-safe-area-context', () => {
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: jest.fn() }),
+}));
+
+const mockShowBrandNotice = jest.fn();
+jest.mock('../../src/design/BrandNotice', () => ({
+  showBrandNotice: (notice: unknown) => mockShowBrandNotice(notice),
 }));
 
 const mockRequestAccountDeletion = jest.fn<
@@ -128,12 +133,10 @@ async function openSheet(renderer: TestRenderer.ReactTestRenderer) {
 }
 
 describe('ManageAccountScreen deletion sheet guards', () => {
-  let alertSpy: jest.SpyInstance;
-
   beforeEach(() => {
     mockRequestAccountDeletion.mockReset();
     mockConfirmAccountDeletion.mockReset();
-    alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    mockShowBrandNotice.mockClear();
     act(() => {
       useAuthStore.setState({
         hydrated: true,
@@ -144,10 +147,6 @@ describe('ManageAccountScreen deletion sheet guards', () => {
         completeAccountDeletion: jest.fn(() => Promise.resolve()),
       });
     });
-  });
-
-  afterEach(() => {
-    alertSpy.mockRestore();
   });
 
   it('disables the close control and backdrop while the request is in flight', async () => {
@@ -313,9 +312,11 @@ describe('ManageAccountScreen deletion sheet guards', () => {
       await act(async () => {
         await Promise.resolve();
       });
-      expect(alertSpy).toHaveBeenCalledTimes(1);
-      expect(String(alertSpy.mock.calls[0][1])).toContain(
-        'could not be removed',
+      expect(mockShowBrandNotice).toHaveBeenCalledTimes(1);
+      expect(mockShowBrandNotice).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: expect.stringContaining('could not be removed'),
+        }),
       );
       act(() => renderer.unmount());
     } finally {

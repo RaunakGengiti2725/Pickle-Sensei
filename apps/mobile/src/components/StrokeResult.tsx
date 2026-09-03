@@ -17,6 +17,7 @@ import {
   useReducedMotion,
 } from '../design/components';
 import { Icon } from '../design/icons';
+import { MascotStage } from '../design/MascotMoment';
 import { color, radius, space, type } from '../design/tokens';
 import { ClipPlayer, clipPlaybackAvailable } from './ClipPlayer';
 import {
@@ -690,7 +691,7 @@ export function StrokeResult(props: StrokeResultProps) {
   );
 }
 
-// ─── ANALYZING state — single-state arc + honest stage captions ─────────────
+// ─── ANALYZING state — mascot motion + honest stage captions ────────────────
 
 export function StrokeResultAnalyzing(props: {
   caption: string;
@@ -734,30 +735,48 @@ export function StrokeResultAnalyzing(props: {
       accessibilityLabel={`${props.caption} Keep Pickle Sensei open.`}
       testID="stroke-result-analyzing"
     >
-      <Animated.View style={{ transform: [{ rotate }] }}>
-        <Svg width={84} height={84} viewBox="0 0 84 84">
-          <Circle
-            cx="42"
-            cy="42"
-            r="36"
-            stroke={track}
-            strokeWidth="6"
-            fill="none"
-          />
-          <Circle
-            cx="42"
-            cy="42"
-            r="36"
-            stroke={arc}
-            strokeWidth="6"
-            fill="none"
-            strokeLinecap="round"
-            strokeDasharray={`${2 * Math.PI * 36 * 0.72} ${
-              2 * Math.PI * 36 * 0.28
-            }`}
-          />
-        </Svg>
-      </Animated.View>
+      <View style={styles.analyzingVisual}>
+        <MascotStage
+          dark={props.dark}
+          pose="sprint"
+          tone="volt"
+          testID="stroke-result-analyzing-mascot"
+        />
+        <Animated.View
+          style={[
+            styles.analyzingArc,
+            {
+              backgroundColor: props.dark
+                ? color.surfaceDark
+                : color.surfaceElevated,
+              transform: [{ rotate }],
+            },
+          ]}
+        >
+          <Svg width={60} height={60} viewBox="0 0 60 60">
+            <Circle
+              cx="30"
+              cy="30"
+              r="24"
+              stroke={track}
+              strokeWidth="5"
+              fill="none"
+            />
+            <Circle
+              cx="30"
+              cy="30"
+              r="24"
+              stroke={arc}
+              strokeWidth="5"
+              fill="none"
+              strokeLinecap="round"
+              strokeDasharray={`${2 * Math.PI * 24 * 0.72} ${
+                2 * Math.PI * 24 * 0.28
+              }`}
+            />
+          </Svg>
+        </Animated.View>
+      </View>
       <Text
         style={[
           type.h2,
@@ -965,6 +984,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: space.xl,
+  },
+  analyzingVisual: { width: 194, height: 166 },
+  analyzingArc: {
+    position: 'absolute',
+    right: -10,
+    bottom: 0,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
   },
   analyzingCaption: { textAlign: 'center', marginTop: space.lg },
   analyzingDetail: { textAlign: 'center', marginTop: space.sm, maxWidth: 320 },

@@ -8,7 +8,7 @@
  * against the current code so the evidence is executable.
  */
 import React from 'react';
-import { Modal, Switch, Text } from 'react-native';
+import { Modal, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 jest.mock('../../src/config/authConfig', () => ({
@@ -63,7 +63,7 @@ jest.mock('../../src/account/deletion', () => {
 import { ConsentSettingsScreen } from '../../src/screens/ConsentSettingsScreen';
 import { ManageAccountScreen } from '../../src/screens/ManageAccountScreen';
 import { SignInScreen } from '../../src/screens/SignInScreen';
-import { Button } from '../../src/design/components';
+import { BrandToggle, Button } from '../../src/design/components';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
 import { useConsentStore } from '../../src/state/consentStore';
 
@@ -99,7 +99,8 @@ function controlLabels(renderer: TestRenderer.ReactTestRenderer): string[] {
     .findAll(
       node =>
         typeof node.props.accessibilityLabel === 'string' &&
-        typeof node.props.onPress === 'function',
+        typeof node.props.onPress === 'function' &&
+        node.props.accessibilityRole !== 'switch',
     )
     .map(node => node.props.accessibilityLabel as string);
   return Array.from(new Set(labels));
@@ -155,16 +156,13 @@ describe('ConsentSettingsScreen ← consentStore', () => {
   it('toggle is disabled while a change is in flight (double-tap guard) and re-enabled after', () => {
     useConsentStore.setState({ busy: true });
     const renderer = render(<ConsentSettingsScreen />);
-    let toggle = renderer.root.findByType(Switch);
+    let toggle = renderer.root.findByType(BrandToggle);
     expect(toggle.props.disabled).toBe(true);
-    expect(toggle.props.accessibilityState).toEqual({ disabled: true });
-    expect(toggle.props.accessibilityLabel).toBe(
-      'Use my video to improve models',
-    );
+    expect(toggle.props.label).toBe('Use my video to improve models');
     act(() => {
       useConsentStore.setState({ busy: false });
     });
-    toggle = renderer.root.findByType(Switch);
+    toggle = renderer.root.findByType(BrandToggle);
     expect(toggle.props.disabled).toBe(false);
     act(() => renderer.unmount());
   });
@@ -178,7 +176,7 @@ describe('ConsentSettingsScreen ← consentStore', () => {
     expect(allText(renderer)).toContain(
       'Consent settings are temporarily unavailable.',
     );
-    expect(renderer.root.findByType(Switch).props.value).toBe(false);
+    expect(renderer.root.findByType(BrandToggle).props.value).toBe(false);
     act(() => renderer.unmount());
   });
 
@@ -191,7 +189,7 @@ describe('ConsentSettingsScreen ← consentStore', () => {
     expect(allText(renderer)).toContain(
       'Consent settings are temporarily unavailable.',
     );
-    expect(renderer.root.findByType(Switch).props.disabled).toBe(true);
+    expect(renderer.root.findByType(BrandToggle).props.disabled).toBe(true);
     expect(controlLabels(renderer)).toEqual(['Back', 'Try again']);
     expect(useConsentStore.getState().hydrate).toHaveBeenCalledTimes(1);
     await act(async () => {

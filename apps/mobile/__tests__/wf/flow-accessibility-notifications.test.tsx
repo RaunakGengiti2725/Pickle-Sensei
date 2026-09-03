@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Switch, Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 /**
@@ -37,6 +37,7 @@ jest.mock('../../src/notifications/service', () => ({
 }));
 
 import { NotificationSettingsScreen } from '../../src/screens/NotificationSettingsScreen';
+import { BrandToggle } from '../../src/design/components';
 import { useNotificationStore } from '../../src/notifications/notificationStore';
 import { DEFAULT_NOTIFICATION_PREFS } from '../../src/notifications/types';
 
@@ -119,8 +120,8 @@ describe('Notification settings — accessibility workflow', () => {
 
   it('every switch is labelled, mirrors disabled state, and patches one pref', () => {
     const renderer = renderScreen();
-    const switches = renderer.root.findAllByType(Switch);
-    expect(switches.map(s => s.props.accessibilityLabel)).toEqual([
+    const switches = renderer.root.findAllByType(BrandToggle);
+    expect(switches.map(s => s.props.label)).toEqual([
       'All reminders',
       'Practice nudge',
       'Streak defense',
@@ -128,7 +129,6 @@ describe('Notification settings — accessibility workflow', () => {
       'Welcome back',
     ]);
     for (const s of switches) {
-      expect(s.props.accessibilityState).toEqual({ disabled: undefined });
       expect(s.props.disabled).toBeFalsy();
     }
     act(() => {
@@ -225,7 +225,7 @@ describe('Notification settings — accessibility workflow', () => {
       });
     });
     const renderer = renderScreen();
-    expect(renderer.root.findAllByType(Switch)).toHaveLength(0);
+    expect(renderer.root.findAllByType(BrandToggle)).toHaveLength(0);
     expect(allText(renderer)).toContain('Off by default.');
     const turnOn = byLabel(renderer, 'Turn on reminders');
     expect(turnOn.props.accessibilityRole).toBe('button');

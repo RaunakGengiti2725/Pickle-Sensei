@@ -1,11 +1,5 @@
 import React from 'react';
-import {
-  StyleSheet,
-  Switch,
-  Text,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import { StyleSheet, Text, type StyleProp, type ViewStyle } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 /**
@@ -66,6 +60,7 @@ jest.mock('../../src/account/consentApi', () => {
 });
 
 import { ConsentSettingsScreen } from '../../src/screens/ConsentSettingsScreen';
+import { BrandToggle } from '../../src/design/components';
 import { useConsentStore } from '../../src/state/consentStore';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
 import {
@@ -161,7 +156,8 @@ function pressables(renderer: TestRenderer.ReactTestRenderer) {
   return renderer.root.findAll(
     node =>
       typeof node.props.onPress === 'function' &&
-      typeof node.props.accessibilityRole === 'string',
+      typeof node.props.accessibilityRole === 'string' &&
+      node.props.accessibilityRole !== 'switch',
   );
 }
 
@@ -174,7 +170,7 @@ function backButton(renderer: TestRenderer.ReactTestRenderer) {
 }
 
 function toggle(renderer: TestRenderer.ReactTestRenderer) {
-  return renderer.root.findByType(Switch);
+  return renderer.root.findByType(BrandToggle);
 }
 
 function controlLabels(renderer: TestRenderer.ReactTestRenderer): string[] {
@@ -231,7 +227,7 @@ describe('ConsentSettingsScreen button ledger', () => {
     expect(
       renderer.root.findAll(n => typeof n.props.onSubmitEditing === 'function'),
     ).toHaveLength(0);
-    expect(renderer.root.findAllByType(Switch)).toHaveLength(1);
+    expect(renderer.root.findAllByType(BrandToggle)).toHaveLength(1);
   });
 
   describe('ScreenHeader "Back"', () => {
@@ -291,10 +287,7 @@ describe('ConsentSettingsScreen button ledger', () => {
       expect(mockFetchConsentStatus).toHaveBeenCalledTimes(1);
       expect(mockFetchConsentStatus.mock.calls[0]?.[0]).toEqual(apiSession);
       const sw = toggle(renderer);
-      expect(sw.props.accessibilityLabel).toBe(
-        'Use my video to improve models',
-      );
-      expect(sw.props.accessibilityState).toEqual({ disabled: false });
+      expect(sw.props.label).toBe('Use my video to improve models');
       expect(sw.props.value).toBe(false);
       expect(sw.props.disabled).toBe(false);
     });
@@ -354,9 +347,6 @@ describe('ConsentSettingsScreen button ledger', () => {
         toggle(renderer).props.onValueChange(true);
       });
       expect(toggle(renderer).props.disabled).toBe(true);
-      expect(toggle(renderer).props.accessibilityState).toEqual({
-        disabled: true,
-      });
       expect(toggle(renderer).props.value).toBe(false);
 
       await act(async () => {

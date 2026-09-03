@@ -1,5 +1,5 @@
 import React from 'react';
-import { Switch, Text } from 'react-native';
+import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { PermissionState } from '../../src/notifications/service';
 import type { PlannedNotification } from '../../src/notifications/types';
@@ -72,7 +72,7 @@ jest.mock('../../src/consistency/store', () => ({
 
 import { NotificationSettingsScreen } from '../../src/screens/NotificationSettingsScreen';
 import { useNotificationStore } from '../../src/notifications/notificationStore';
-import { Button } from '../../src/design/components';
+import { BrandToggle, Button } from '../../src/design/components';
 
 const owner = '66666666-6666-4666-8666-666666666666';
 
@@ -104,8 +104,8 @@ function buttons(renderer: TestRenderer.ReactTestRenderer, label: string) {
 
 function switchFor(renderer: TestRenderer.ReactTestRenderer, label: string) {
   return renderer.root
-    .findAllByType(Switch)
-    .find(node => node.props.accessibilityLabel === label)!;
+    .findAllByType(BrandToggle)
+    .find(node => node.props.label === label)!;
 }
 
 async function flush() {

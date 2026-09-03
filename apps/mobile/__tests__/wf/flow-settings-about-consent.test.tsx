@@ -1,5 +1,5 @@
 import React from 'react';
-import { Switch, Text } from 'react-native';
+import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 /**
@@ -23,6 +23,7 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 import { ConsentSettingsScreen } from '../../src/screens/ConsentSettingsScreen';
+import { BrandToggle } from '../../src/design/components';
 import { useConsentStore } from '../../src/state/consentStore';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
 import {
@@ -108,7 +109,7 @@ function isPressable(node: TestRenderer.ReactTestInstance): boolean {
 }
 
 function toggle(renderer: TestRenderer.ReactTestRenderer) {
-  return renderer.root.findByType(Switch);
+  return renderer.root.findByType(BrandToggle);
 }
 
 beforeEach(() => {
@@ -175,9 +176,6 @@ describe('Data & consent — hydrate on open', () => {
     expect(useConsentStore.getState().availability).toBe('ready');
     expect(toggle(renderer).props.value).toBe(true);
     expect(toggle(renderer).props.disabled).toBe(false);
-    expect(toggle(renderer).props.accessibilityState).toEqual({
-      disabled: false,
-    });
     act(() => renderer.unmount());
   });
 
@@ -351,9 +349,6 @@ describe('Data & consent — toggling', () => {
     await flush();
     expect(useConsentStore.getState().busy).toBe(true);
     expect(toggle(renderer).props.disabled).toBe(true);
-    expect(toggle(renderer).props.accessibilityState).toEqual({
-      disabled: true,
-    });
     // Second tap (e.g. via assistive tech) while busy must not issue a request.
     await act(async () => {
       await useConsentStore.getState().setModelTrainingConsent(false);

@@ -3,10 +3,10 @@ import {
   AccessibilityInfo,
   type AccessibilityRole,
   type AccessibilityState,
-  ActivityIndicator,
   Animated,
   Easing,
   Image,
+  Modal,
   Pressable,
   ScrollView,
   StatusBar,
@@ -126,6 +126,142 @@ export function PressableScale(props: {
         {props.children}
       </Pressable>
     </Animated.View>
+  );
+}
+
+/** Branded motion indicator: a partial court-green/volt orbit instead of the
+ * platform activity wheel. It only animates for real in-progress work and
+ * becomes a static progress mark when Reduce Motion is enabled. */
+export function BrandSpinner(props: {
+  size?: number;
+  color?: string;
+  trackColor?: string;
+  accessibilityLabel?: string;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const reduced = useReducedMotion();
+  const spin = useRef(new Animated.Value(0)).current;
+  const size = props.size ?? 24;
+  const stroke = Math.max(2.5, size * 0.12);
+  const ringRadius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * ringRadius;
+
+  useEffect(() => {
+    // Jest's fake-timer assertions should observe the feature's timers, not
+    // an ornamental infinite animation. The native app still animates.
+    const nodeEnv = (
+      globalThis as typeof globalThis & {
+        process?: { env?: { NODE_ENV?: string } };
+      }
+    ).process?.env?.NODE_ENV;
+    if (reduced || nodeEnv === 'test') {
+      spin.setValue(0);
+      return;
+    }
+    const loop = Animated.loop(
+      Animated.timing(spin, {
+        toValue: 1,
+        duration: 1_100,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduced, spin]);
+
+  const rotate = spin.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  return (
+    <Animated.View
+      accessible={Boolean(props.accessibilityLabel)}
+      accessibilityRole={props.accessibilityLabel ? 'progressbar' : undefined}
+      accessibilityLabel={props.accessibilityLabel}
+      style={[
+        { width: size, height: size, transform: [{ rotate }] },
+        props.style,
+      ]}
+    >
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={ringRadius}
+          fill="none"
+          stroke={props.trackColor ?? color.line}
+          strokeWidth={stroke}
+        />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={ringRadius}
+          fill="none"
+          stroke={props.color ?? color.court}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={`${circumference * 0.64} ${circumference * 0.36}`}
+        />
+      </Svg>
+    </Animated.View>
+  );
+}
+
+/** Brand-owned switch with the same semantics and 44pt target as a native
+ * switch, but the court/volt treatment used throughout Pickle Sensei. */
+export function BrandToggle(props: {
+  label: string;
+  value: boolean;
+  onValueChange: (next: boolean) => void;
+  disabled?: boolean;
+  testID?: string;
+}) {
+  const reduced = useReducedMotion();
+  const progress = useRef(new Animated.Value(props.value ? 1 : 0)).current;
+
+  useEffect(() => {
+    if (reduced) {
+      progress.setValue(props.value ? 1 : 0);
+      return;
+    }
+    Animated.timing(progress, {
+      toValue: props.value ? 1 : 0,
+      duration: 190,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [progress, props.value, reduced]);
+
+  return (
+    <PressableScale
+      accessibilityRole="switch"
+      accessibilityLabel={props.label}
+      accessibilityState={{ checked: props.value, disabled: props.disabled }}
+      disabled={props.disabled}
+      onPress={() => props.onValueChange(!props.value)}
+      testID={props.testID}
+      hitSlop={5}
+      containerStyle={styles.toggleContainer}
+      style={[styles.toggle, props.value ? styles.toggleOn : styles.toggleOff]}
+    >
+      <Animated.View
+        style={[
+          styles.toggleKnob,
+          {
+            transform: [
+              {
+                translateX: progress.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 22],
+                }),
+              },
+            ],
+          },
+        ]}
+      />
+    </PressableScale>
   );
 }
 
@@ -297,6 +433,111 @@ export function Button(props: {
         ) : null}
       </View>
     </PressableScale>
+  );
+}
+
+export interface BrandDialogAction {
+  label: string;
+  onPress: () => void;
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'volt' | 'dark';
+  disabled?: boolean;
+}
+
+/** Product-owned confirmation/notice surface for in-app decisions. System
+ * permission, StoreKit, and provider-auth sheets remain system-owned. */
+export function BrandDialog(props: {
+  visible: boolean;
+  title: string;
+  detail: string;
+  actions: readonly BrandDialogAction[];
+  onDismiss?: () => void;
+  tone?: 'neutral' | 'danger' | 'success';
+  eyebrow?: string;
+  testID?: string;
+}) {
+  const tone = props.tone ?? 'neutral';
+  const palette = {
+    neutral: {
+      soft: color.courtSoft,
+      accent: color.court,
+      icon: 'shield' as IconName,
+    },
+    danger: {
+      soft: color.badSoft,
+      accent: color.bad,
+      icon: 'close' as IconName,
+    },
+    success: {
+      soft: color.voltSoft,
+      accent: color.courtDeep,
+      icon: 'check' as IconName,
+    },
+  }[tone];
+
+  const dismissible = Boolean(props.onDismiss);
+  return (
+    <Modal
+      visible={props.visible}
+      transparent
+      animationType="fade"
+      onRequestClose={props.onDismiss}
+    >
+      <View style={styles.dialogRoot}>
+        <Pressable
+          accessible={false}
+          disabled={!dismissible}
+          onPress={props.onDismiss}
+          style={StyleSheet.absoluteFill}
+        />
+        <View
+          accessibilityViewIsModal
+          testID={props.testID}
+          style={styles.dialogCard}
+        >
+          <View style={styles.dialogTopRow}>
+            <View
+              style={[styles.dialogGlyph, { backgroundColor: palette.soft }]}
+            >
+              <Icon name={palette.icon} size={21} color={palette.accent} />
+            </View>
+            {dismissible ? (
+              <PressableScale
+                accessibilityLabel="Close dialog"
+                onPress={props.onDismiss}
+                containerStyle={styles.dialogCloseContainer}
+                style={styles.dialogClose}
+              >
+                <Icon name="close" size={18} color={color.ink} />
+              </PressableScale>
+            ) : null}
+          </View>
+          {props.eyebrow ? (
+            <Text
+              style={[
+                type.micro,
+                styles.dialogEyebrow,
+                { color: palette.accent },
+              ]}
+            >
+              {props.eyebrow.toUpperCase()}
+            </Text>
+          ) : null}
+          <Text style={[type.h1, styles.dialogTitle]}>{props.title}</Text>
+          <Text style={[type.body, styles.dialogDetail]}>{props.detail}</Text>
+          <View style={styles.dialogActions}>
+            {props.actions.map(action => (
+              <Button
+                key={action.label}
+                label={action.label}
+                variant={action.variant}
+                disabled={action.disabled}
+                onPress={action.onPress}
+              />
+            ))}
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -750,9 +991,10 @@ export function LoadingState(props: { label: string; dark?: boolean }) {
           props.dark && { borderColor: color.lineDark },
         ]}
       >
-        <ActivityIndicator
+        <BrandSpinner
           color={props.dark ? color.volt : color.court}
-          size="small"
+          trackColor={props.dark ? color.lineDark : color.line}
+          size={24}
         />
       </View>
       <Text
@@ -884,6 +1126,49 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: space.sm,
   },
+  dialogRoot: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: space.lg,
+    backgroundColor: color.overlayStrong,
+  },
+  dialogCard: {
+    width: '100%',
+    maxWidth: 380,
+    padding: space.lg,
+    borderRadius: radius.xl,
+    backgroundColor: color.surface,
+    ...shadow.floating,
+  },
+  dialogTopRow: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  dialogGlyph: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dialogCloseContainer: { width: 44, alignSelf: 'center' },
+  dialogClose: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.line,
+    backgroundColor: color.surfaceElevated,
+  },
+  dialogEyebrow: { marginTop: space.lg },
+  dialogTitle: { color: color.ink, marginTop: space.sm },
+  dialogDetail: { color: color.inkSoft, marginTop: space.sm },
+  dialogActions: { gap: 10, marginTop: space.xl },
   card: {
     backgroundColor: color.surfaceElevated,
     borderRadius: radius.lg,
@@ -938,6 +1223,39 @@ const styles = StyleSheet.create({
     borderColor: color.line,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  toggleContainer: {
+    width: 54,
+    height: 44,
+    alignSelf: 'center',
+    justifyContent: 'center',
+  },
+  toggle: {
+    width: 54,
+    height: 34,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 3,
+    alignItems: 'flex-start',
+  },
+  toggleOff: {
+    backgroundColor: color.surfaceAlt,
+    borderColor: color.line,
+  },
+  toggleOn: {
+    backgroundColor: color.court,
+    borderColor: color.court,
+  },
+  toggleKnob: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: color.surfaceElevated,
+    shadowColor: color.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 4,
+    elevation: 2,
   },
   pill: {
     paddingHorizontal: 10,

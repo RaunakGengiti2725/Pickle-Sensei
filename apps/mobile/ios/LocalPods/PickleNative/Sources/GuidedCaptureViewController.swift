@@ -65,6 +65,69 @@ final class CaptureGlassView: UIView {
   }
 }
 
+/// Three-segment read rail inside the status card: FRAME → TRACK → READ.
+/// It gives the distant athlete a spatial sense of camera state without a
+/// fake percentage or another sentence competing with the main instruction.
+final class CaptureStageRailView: UIView {
+  private let segments = [CALayer(), CALayer(), CALayer()]
+  private var activeIndex = 0
+  private var activeColor = CaptureChromePalette.mint
+
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    isUserInteractionEnabled = false
+    isAccessibilityElement = false
+    translatesAutoresizingMaskIntoConstraints = false
+    segments.forEach {
+      $0.cornerRadius = 2
+      layer.addSublayer($0)
+    }
+    render()
+  }
+
+  required init?(coder: NSCoder) { nil }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let gap: CGFloat = 6
+    let segmentWidth = max(0, (bounds.width - gap * 2) / 3)
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    for (index, segment) in segments.enumerated() {
+      segment.frame = CGRect(x: CGFloat(index) * (segmentWidth + gap), y: 0, width: segmentWidth, height: bounds.height)
+    }
+    CATransaction.commit()
+  }
+
+  func setActiveIndex(_ index: Int, color: UIColor, animated: Bool) {
+    activeIndex = min(2, max(0, index))
+    activeColor = color
+    guard animated, !UIAccessibility.isReduceMotionEnabled else {
+      render()
+      return
+    }
+    UIView.transition(
+      with: self,
+      duration: 0.18,
+      options: [.transitionCrossDissolve, .beginFromCurrentState, .allowUserInteraction],
+      animations: { self.render() }
+    )
+  }
+
+  private func render() {
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    for (index, segment) in segments.enumerated() {
+      segment.backgroundColor = (
+        index <= activeIndex
+          ? activeColor
+          : CaptureChromePalette.onDark.withAlphaComponent(0.16)
+      ).cgColor
+    }
+    CATransaction.commit()
+  }
+}
+
 /// Press feedback shared by the chrome: an immediate 0.94 scale so a control
 /// feels heard, released with a slightly slower ease-out.
 private func installPressScale(on control: UIControl) {
@@ -540,7 +603,8 @@ final class GuidedCaptureViewController: UIViewController {
   private let statusDot = UIView()
   private let statusLabel = UILabel()
   private let detailLabel = UILabel()
-  private static let statusCardHeight: CGFloat = 68
+  private let stageRail = CaptureStageRailView()
+  private static let statusCardHeight: CGFloat = 88
   private let closeButton = CaptureGlyphButton(
     glyph: .close,
     accessibilityLabel: "Close camera",
@@ -556,6 +620,7 @@ final class GuidedCaptureViewController: UIViewController {
   // Bottom row: AUTO FRAME chip (when supported) · shutter · flip.
   private let shutterButton = CaptureShutterButton()
   private let shutterHint = UILabel()
+  private let controlDock = CaptureGlassView(cornerRadius: 32)
   private let recChip = CaptureGlassView(cornerRadius: 18)
   private let recDot = UIView()
   private let recTimerLabel = UILabel()
@@ -576,6 +641,8 @@ final class GuidedCaptureViewController: UIViewController {
   private static let controlMint = CaptureChromePalette.mint
   private static let controlVolt = CaptureChromePalette.volt
   private static let recordRed = CaptureChromePalette.flame
+  private let topChromeShade = CAGradientLayer()
+  private let bottomChromeShade = CAGradientLayer()
 
   private var observationURL: URL?
   private var observationTimer: Timer?
@@ -661,6 +728,14 @@ final class GuidedCaptureViewController: UIViewController {
     let band = guideBand()
     silhouetteView.frame = band.insetBy(dx: view.bounds.width * 0.08, dy: 0)
     overlayView.guideRect = band.insetBy(dx: view.bounds.width * 0.06, dy: 0)
+    topChromeShade.frame = CGRect(x: 0, y: 0, width: view.bounds.width, height: min(230, view.bounds.height * 0.3))
+    let bottomHeight = min(260, view.bounds.height * 0.34)
+    bottomChromeShade.frame = CGRect(
+      x: 0,
+      y: view.bounds.height - bottomHeight,
+      width: view.bounds.width,
+      height: bottomHeight
+    )
   }
 
   deinit {
@@ -690,11 +765,11 @@ final class GuidedCaptureViewController: UIViewController {
     let statusBottom = statusContainer.frame.maxY > 0
       ? statusContainer.frame.maxY
       : view.safeAreaInsets.top + 8 + CaptureGlyphButton.diameter + 10 + Self.statusCardHeight
-    let shutterTop = shutterButton.frame.minY > 0
-      ? shutterButton.frame.minY
-      : bounds.height - view.safeAreaInsets.bottom - 24 - CaptureShutterButton.ringDiameter
+    let controlsTop = controlDock.frame.minY > 0
+      ? controlDock.frame.minY
+      : bounds.height - view.safeAreaInsets.bottom - 8 - 124
     let top = statusBottom + 14
-    let bottom = shutterTop - 18
+    let bottom = controlsTop - 14
     guard bottom > top + 120 else {
       // Degenerate layout (not laid out yet, or a tiny window): a safe band.
       return CGRect(x: 0, y: bounds.height * 0.24, width: bounds.width, height: bounds.height * 0.56)
@@ -706,6 +781,21 @@ final class GuidedCaptureViewController: UIViewController {
     view.backgroundColor = .black
     previewLayer = engine.makePreviewLayer()
     view.layer.addSublayer(previewLayer)
+
+    // Purposeful edge fades keep the branded chrome legible over any court
+    // while leaving the tracking area completely unobscured.
+    topChromeShade.colors = [
+      CaptureChromePalette.surfaceDark.withAlphaComponent(0.82).cgColor,
+      CaptureChromePalette.surfaceDark.withAlphaComponent(0).cgColor,
+    ]
+    topChromeShade.locations = [0, 1]
+    bottomChromeShade.colors = [
+      CaptureChromePalette.surfaceDark.withAlphaComponent(0).cgColor,
+      CaptureChromePalette.surfaceDark.withAlphaComponent(0.88).cgColor,
+    ]
+    bottomChromeShade.locations = [0, 1]
+    view.layer.insertSublayer(topChromeShade, above: previewLayer)
+    view.layer.insertSublayer(bottomChromeShade, above: topChromeShade)
 
     silhouetteView.image = UIImage(named: "CaptureSilhouette")?.withRenderingMode(.alwaysTemplate)
     silhouetteView.tintColor = .white
@@ -751,6 +841,8 @@ final class GuidedCaptureViewController: UIViewController {
     detailLabel.text = "Starting on-device body tracking…"
     detailLabel.translatesAutoresizingMaskIntoConstraints = false
     statusContainer.addSubview(detailLabel)
+
+    statusContainer.addSubview(stageRail)
 
     closeButton.addTarget(self, action: #selector(closePressed), for: .touchUpInside)
     view.addSubview(closeButton)
@@ -805,7 +897,12 @@ final class GuidedCaptureViewController: UIViewController {
       detailLabel.leadingAnchor.constraint(equalTo: statusContainer.leadingAnchor, constant: 16),
       detailLabel.trailingAnchor.constraint(equalTo: statusContainer.trailingAnchor, constant: -16),
       detailLabel.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 4),
-      detailLabel.bottomAnchor.constraint(lessThanOrEqualTo: statusContainer.bottomAnchor, constant: -8),
+      detailLabel.bottomAnchor.constraint(lessThanOrEqualTo: stageRail.topAnchor, constant: -6),
+
+      stageRail.leadingAnchor.constraint(equalTo: statusContainer.leadingAnchor, constant: 16),
+      stageRail.trailingAnchor.constraint(equalTo: statusContainer.trailingAnchor, constant: -16),
+      stageRail.bottomAnchor.constraint(equalTo: statusContainer.bottomAnchor, constant: -10),
+      stageRail.heightAnchor.constraint(equalToConstant: 4),
     ])
 
     updateCapturePresentation(
@@ -846,7 +943,8 @@ final class GuidedCaptureViewController: UIViewController {
     shutterButton.translatesAutoresizingMaskIntoConstraints = false
     shutterButton.isEnabled = false
     shutterButton.addTarget(self, action: #selector(shutterPressed), for: .touchUpInside)
-    view.addSubview(shutterButton)
+    view.addSubview(controlDock)
+    controlDock.addSubview(shutterButton)
 
     shutterHint.font = CaptureChromePalette.manrope("Medium", 12)
     shutterHint.textColor = CaptureChromePalette.onDark.withAlphaComponent(0.78)
@@ -859,16 +957,16 @@ final class GuidedCaptureViewController: UIViewController {
     shutterHint.layer.shadowOffset = CGSize(width: 0, height: 1)
     shutterHint.alpha = 0
     shutterHint.translatesAutoresizingMaskIntoConstraints = false
-    view.addSubview(shutterHint)
+    controlDock.addSubview(shutterHint)
 
     flipButton.addTarget(self, action: #selector(flipPressed), for: .touchUpInside)
-    view.addSubview(flipButton)
+    controlDock.addSubview(flipButton)
 
     centerStageButton.accessibilityLabel = "Auto frame"
     centerStageButton.accessibilityHint = "Automatically keeps you framed while you move"
     centerStageButton.addTarget(self, action: #selector(centerStagePressed), for: .touchUpInside)
     centerStageButton.isHidden = true
-    view.addSubview(centerStageButton)
+    controlDock.addSubview(centerStageButton)
 
     zoomContainer.clipsToBounds = false
     view.addSubview(zoomContainer)
@@ -899,21 +997,26 @@ final class GuidedCaptureViewController: UIViewController {
 
     let safe = view.safeAreaLayoutGuide
     NSLayoutConstraint.activate([
-      shutterButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-      shutterButton.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -24),
+      controlDock.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 12),
+      controlDock.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -12),
+      controlDock.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -8),
+      controlDock.heightAnchor.constraint(equalToConstant: 124),
+
+      shutterButton.centerXAnchor.constraint(equalTo: controlDock.centerXAnchor),
+      shutterButton.topAnchor.constraint(equalTo: controlDock.topAnchor, constant: 10),
       shutterButton.widthAnchor.constraint(equalToConstant: CaptureShutterButton.ringDiameter),
       shutterButton.heightAnchor.constraint(equalToConstant: CaptureShutterButton.ringDiameter),
 
-      shutterHint.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+      shutterHint.centerXAnchor.constraint(equalTo: controlDock.centerXAnchor),
       shutterHint.topAnchor.constraint(equalTo: shutterButton.bottomAnchor, constant: 4),
-      shutterHint.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
-      shutterHint.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
+      shutterHint.leadingAnchor.constraint(greaterThanOrEqualTo: controlDock.leadingAnchor, constant: 16),
+      shutterHint.trailingAnchor.constraint(lessThanOrEqualTo: controlDock.trailingAnchor, constant: -16),
 
       flipButton.centerYAnchor.constraint(equalTo: shutterButton.centerYAnchor),
-      flipButton.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -28),
+      flipButton.trailingAnchor.constraint(equalTo: controlDock.trailingAnchor, constant: -18),
 
       centerStageButton.centerYAnchor.constraint(equalTo: shutterButton.centerYAnchor),
-      centerStageButton.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 24),
+      centerStageButton.leadingAnchor.constraint(equalTo: controlDock.leadingAnchor, constant: 14),
 
       // Zoom presets share the top bar with the close button (left) and the
       // REC chip (right): centered when there is room, otherwise pushed off
@@ -2303,16 +2406,28 @@ final class GuidedCaptureViewController: UIViewController {
     // the body is locked / the swing is caught, chalk while saving. Carried
     // by both the kicker and the status dot.
     let titleColor: UIColor
+    let railIndex: Int
     switch stage {
     case .starting, .composing:
       titleColor = Self.controlMint
+      railIndex = 0
     case .positioning:
       titleColor = Self.recordRed
+      railIndex = 1
     case .bodyLocked, .capturing:
       titleColor = Self.controlVolt
+      railIndex = 2
     case .saving:
       titleColor = CaptureChromePalette.onDark
+      railIndex = 2
     }
+
+    stageRail.setActiveIndex(
+      railIndex,
+      color: titleColor,
+      animated: stageChanged && hadPresentedStage
+    )
+    statusContainer.layer.borderColor = titleColor.withAlphaComponent(0.38).cgColor
 
     let applyText = {
       self.statusLabel.text = title
@@ -2415,7 +2530,7 @@ extension GuidedCaptureViewController: UIGestureRecognizerDelegate {
   /// gestures — the shutter, close, flip, zoom and auto-frame controls must
   /// always receive their own taps.
   private var chromeSurfaces: [UIView] {
-    [statusContainer, zoomContainer, recChip]
+    [statusContainer, zoomContainer, recChip, controlDock]
   }
 
   func gestureRecognizer(

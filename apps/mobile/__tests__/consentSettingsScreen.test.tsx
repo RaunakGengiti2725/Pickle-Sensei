@@ -1,5 +1,5 @@
 import React from 'react';
-import { Switch, Text } from 'react-native';
+import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 jest.mock('../src/data/db', () => ({ getDb: jest.fn() }));
@@ -16,6 +16,7 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 import { ConsentSettingsScreen } from '../src/screens/ConsentSettingsScreen';
+import { BrandToggle } from '../src/design/components';
 import { useConsentStore } from '../src/state/consentStore';
 
 /**
@@ -56,7 +57,7 @@ describe('ConsentSettingsScreen', () => {
 
   it('renders the training toggle OFF by default and disabled when signed out', () => {
     const renderer = renderScreen();
-    const toggle = renderer.root.findByType(Switch);
+    const toggle = renderer.root.findByType(BrandToggle);
     expect(toggle.props.value).toBe(false);
     expect(toggle.props.disabled).toBe(true);
     expect(allText(renderer)).toContain(
@@ -81,7 +82,7 @@ describe('ConsentSettingsScreen', () => {
       setModelTrainingConsent: setConsent,
     });
     const renderer = renderScreen();
-    const toggle = renderer.root.findByType(Switch);
+    const toggle = renderer.root.findByType(BrandToggle);
     expect(toggle.props.disabled).toBe(false);
     act(() => {
       toggle.props.onValueChange(true);
@@ -98,7 +99,7 @@ describe('ConsentSettingsScreen', () => {
       setModelTrainingConsent: setConsent,
     });
     const renderer = renderScreen();
-    const toggle = renderer.root.findByType(Switch);
+    const toggle = renderer.root.findByType(BrandToggle);
     expect(toggle.props.value).toBe(true);
     act(() => {
       toggle.props.onValueChange(false);

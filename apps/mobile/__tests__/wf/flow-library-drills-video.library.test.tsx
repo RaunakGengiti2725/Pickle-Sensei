@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Linking, Text } from 'react-native';
+import { Linking, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { LocalShotRow, PendingCapture } from '../../src/data/repository';
 import type {
@@ -31,6 +31,11 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 jest.mock('../../src/data/db', () => ({ getDb: jest.fn(() => ({})) }));
+
+const mockShowBrandNotice = jest.fn();
+jest.mock('../../src/design/BrandNotice', () => ({
+  showBrandNotice: (notice: unknown) => mockShowBrandNotice(notice),
+}));
 
 const mockListShots = jest.fn<Promise<LocalShotRow[]>, [unknown, number]>();
 const mockListPendingCaptures = jest.fn<
@@ -619,7 +624,7 @@ describe('Library flow · Saved drills tab', () => {
   it('video hand-off opens the canonical watch page (never /embed/) and alerts on failure', async () => {
     const canOpen = jest.spyOn(Linking, 'canOpenURL').mockResolvedValue(true);
     const openUrl = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
-    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    mockShowBrandNotice.mockClear();
     const renderer = await renderLibrary();
     await openSavedTab(renderer);
     const label = 'Watch reviewed instruction for Dink Target Ladder';
@@ -632,28 +637,30 @@ describe('Library flow · Saved drills tab', () => {
     for (const call of openUrl.mock.calls) {
       expect(String(call[0])).not.toContain('/embed/');
     }
-    expect(alert).not.toHaveBeenCalled();
+    expect(mockShowBrandNotice).not.toHaveBeenCalled();
 
     // Failure branch: no handler → honest alert, no crash.
     canOpen.mockResolvedValue(false);
     openUrl.mockClear();
     await pressByLabel(renderer, label);
     expect(openUrl).not.toHaveBeenCalled();
-    expect(alert).toHaveBeenCalledWith(
-      'Video unavailable',
-      'This reviewed video could not be opened. Refresh the library and try again.',
+    expect(mockShowBrandNotice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Video unavailable',
+        detail:
+          'This reviewed video could not be opened. Refresh the library and try again.',
+      }),
     );
 
     // openURL itself rejecting is also caught.
     canOpen.mockResolvedValue(true);
     openUrl.mockRejectedValue(new Error('no handler'));
-    alert.mockClear();
+    mockShowBrandNotice.mockClear();
     await pressByLabel(renderer, label);
-    expect(alert).toHaveBeenCalledTimes(1);
+    expect(mockShowBrandNotice).toHaveBeenCalledTimes(1);
     act(() => renderer.unmount());
     canOpen.mockRestore();
     openUrl.mockRestore();
-    alert.mockRestore();
   });
 
   it('a saved drill without a playable video says so instead of faking one', async () => {

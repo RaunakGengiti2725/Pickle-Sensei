@@ -11,9 +11,10 @@
  * (react-test-renderer + act, accessibilityLabel lookups).
  */
 import React from 'react';
-import { ActivityIndicator, NativeModules, Text } from 'react-native';
+import { NativeModules, Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import type { LocalDb } from '../../src/data/db';
+import { BrandSpinner } from '../../src/design/components';
 
 // ─── Module seams ────────────────────────────────────────────────────────────
 
@@ -239,7 +240,7 @@ function expectIdleButtons(renderer: TestRenderer.ReactTestRenderer) {
     expect(button.props.accessibilityState.disabled).toBe(false);
     expect(typeof button.props.onPress).toBe('function');
   }
-  expect(renderer.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+  expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(0);
   expect(allText(renderer)).not.toContain('Signing in securely…');
 }
 
@@ -249,7 +250,7 @@ function expectBusyButtons(renderer: TestRenderer.ReactTestRenderer) {
     expect(button.props.disabled).toBe(true);
     expect(button.props.accessibilityState.disabled).toBe(true);
   }
-  expect(renderer.root.findAllByType(ActivityIndicator)).toHaveLength(1);
+  expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(1);
   expect(allText(renderer)).toContain('Signing in securely…');
 }
 

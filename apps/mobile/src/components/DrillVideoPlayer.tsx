@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Linking,
   Modal,
   Pressable,
@@ -10,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
-import { PressableScale } from '../design/components';
+import { BrandSpinner, PressableScale } from '../design/components';
 import { Icon } from '../design/icons';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, space, type } from '../design/tokens';
@@ -417,7 +416,11 @@ export function DrillVideoPlayer(props: {
                   startInLoadingState
                   renderLoading={() => (
                     <View style={styles.loadingWrap}>
-                      <ActivityIndicator size="large" color={color.volt} />
+                      <BrandSpinner
+                        size={44}
+                        color={color.volt}
+                        trackColor={color.lineDark}
+                      />
                     </View>
                   )}
                   onMessage={onEmbedMessage}
@@ -430,7 +433,11 @@ export function DrillVideoPlayer(props: {
                     style={styles.loadingWrap}
                     testID="drill-video-embed-loading"
                   >
-                    <ActivityIndicator size="large" color={color.volt} />
+                    <BrandSpinner
+                      size={44}
+                      color={color.volt}
+                      trackColor={color.lineDark}
+                    />
                   </View>
                 ) : null}
               </>

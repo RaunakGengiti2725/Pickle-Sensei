@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   Animated,
   Easing,
   Linking,
@@ -20,6 +19,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { PhaseKey, ShotAnalysis } from '@pickle/shared-types';
 import {
   Button,
+  BrandDialog,
   Card,
   CheckpointRow,
   ErrorState,
@@ -1331,6 +1331,13 @@ function TrainingPlanSection(props: {
   const clearMutationError = useTrainingStore(
     state => state.clearMutationError,
   );
+  const [dialog, setDialog] = useState<{
+    title: string;
+    detail: string;
+    tone: 'neutral' | 'danger';
+    confirmLabel?: string;
+    onConfirm?: () => void;
+  } | null>(null);
 
   const planForThisRead =
     analysis !== null && currentPlan?.sourceShotId === analysis.id;
@@ -1361,44 +1368,38 @@ function TrainingPlanSection(props: {
       if (!(await Linking.canOpenURL(url))) throw new Error('unsupported');
       await Linking.openURL(url);
     } catch {
-      Alert.alert(
-        'Video unavailable',
-        'This rights-cleared coaching video could not be opened. Refresh the plan and try again.',
-      );
+      setDialog({
+        title: 'Video unavailable',
+        detail:
+          'This rights-cleared coaching video could not be opened. Refresh the plan and try again.',
+        tone: 'danger',
+      });
     }
   };
 
   const confirmCompletion = (item: TrainingPlanItem) => {
     const target = prescriptionLabel(item);
     if (!item.drill || !target) return;
-    Alert.alert(
-      'Log real practice?',
-      `Confirm only if you completed ${target} of “${item.drill.title}.”`,
-      [
-        { text: 'Not yet', style: 'cancel' },
-        {
-          text: 'I completed it',
-          onPress: () => void completePlanItem(item),
-        },
-      ],
-    );
+    setDialog({
+      title: 'Log real practice?',
+      detail: `Confirm only if you completed ${target} of “${item.drill.title}.”`,
+      tone: 'neutral',
+      confirmLabel: 'I completed it',
+      onConfirm: () => void completePlanItem(item),
+    });
   };
 
   const requestPlan = () => {
     if (!analysis || !syncedScoredReal) return;
     if (currentPlan?.status === 'active' && !planForThisRead) {
-      Alert.alert(
-        'Replace the current plan?',
-        'The server will supersede your current plan and build reviewed work from this scored read.',
-        [
-          { text: 'Keep current plan', style: 'cancel' },
-          {
-            text: 'Replace plan',
-            style: 'destructive',
-            onPress: () => void createPlan(analysis.id),
-          },
-        ],
-      );
+      setDialog({
+        title: 'Replace the current plan?',
+        detail:
+          'The server will supersede your current plan and build reviewed work from this scored read.',
+        tone: 'danger',
+        confirmLabel: 'Replace plan',
+        onConfirm: () => void createPlan(analysis.id),
+      });
       return;
     }
     void createPlan(analysis.id);
@@ -1651,6 +1652,47 @@ function TrainingPlanSection(props: {
           onDismiss={clearMutationError}
         />
       ) : null}
+      <BrandDialog
+        visible={dialog !== null}
+        title={dialog?.title ?? ''}
+        detail={dialog?.detail ?? ''}
+        tone={dialog?.tone ?? 'neutral'}
+        eyebrow={dialog?.onConfirm ? 'CONFIRM ACTION' : 'COACHING VIDEO'}
+        onDismiss={() => setDialog(null)}
+        testID="training-plan-dialog"
+        actions={
+          dialog?.onConfirm
+            ? [
+                {
+                  label:
+                    dialog.confirmLabel === 'Replace plan'
+                      ? 'Keep current plan'
+                      : 'Not yet',
+                  variant: 'dark',
+                  onPress: () => setDialog(null),
+                },
+                {
+                  label: dialog.confirmLabel ?? 'Confirm',
+                  variant:
+                    dialog.confirmLabel === 'Replace plan'
+                      ? 'danger'
+                      : 'secondary',
+                  onPress: () => {
+                    const confirm = dialog.onConfirm;
+                    setDialog(null);
+                    confirm?.();
+                  },
+                },
+              ]
+            : [
+                {
+                  label: 'Got it',
+                  variant: 'dark',
+                  onPress: () => setDialog(null),
+                },
+              ]
+        }
+      />
     </View>
   );
 }

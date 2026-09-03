@@ -40,7 +40,7 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
-import { ActivityIndicator, Text } from 'react-native';
+import { Text } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 import {
   BillingError,
@@ -55,6 +55,7 @@ import {
   useAccessStore,
 } from '../../src/state/accessStore';
 import { PaywallScreen } from '../../src/screens/PaywallScreen';
+import { BrandSpinner } from '../../src/design/components';
 
 const freeAccess: CanonicalAccessState = {
   premium: false,
@@ -368,7 +369,7 @@ describe('Paywall — purchase branches', () => {
     expect(useAccessStore.getState().operation).toBe('idle');
     expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(false);
     expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(false);
-    expect(renderer.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+    expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(0);
     act(() => renderer.unmount());
   });
 
@@ -397,7 +398,7 @@ describe('Paywall — purchase branches', () => {
     expect(dismiss.props.accessibilityHint).toBe(
       'The app store could not complete the purchase.',
     );
-    expect(renderer.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+    expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(0);
     expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(false);
 
     await act(async () => dismiss.props.onPress());
@@ -428,7 +429,7 @@ describe('Paywall — purchase branches', () => {
     );
     expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(false);
     expect(byTestId(renderer, 'paywall-retry')).toBeTruthy();
-    expect(renderer.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+    expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(0);
     act(() => renderer.unmount());
   });
 
@@ -444,7 +445,7 @@ describe('Paywall — purchase branches', () => {
     expect(useAccessStore.getState().operation).toBe('purchasing');
     expect(byTestId(renderer, 'paywall-continue').props.disabled).toBe(true);
     expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(true);
-    expect(renderer.root.findAllByType(ActivityIndicator).length).toBe(1);
+    expect(renderer.root.findAllByType(BrandSpinner).length).toBe(1);
 
     // A second tap (or a programmatic re-entry) is a no-op at the store.
     await act(async () =>
@@ -493,7 +494,7 @@ describe('Paywall — restore branches', () => {
     expect(allText(renderer)).toContain(
       'No active Pickle Sensei membership was found for this store account.',
     );
-    expect(renderer.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+    expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(0);
     expect(byTestId(renderer, 'paywall-restore').props.disabled).toBe(false);
     act(() => renderer.unmount());
   });
@@ -541,7 +542,7 @@ describe('Paywall — pricing unavailable and premium states', () => {
     expect(continueButton.props.accessibilityLabel).toBe(
       'Store pricing unavailable',
     );
-    expect(renderer.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+    expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(0);
 
     const retry = byTestId(renderer, 'paywall-retry');
     expect(retry.props.accessibilityLabel).toBe('Retry loading membership');

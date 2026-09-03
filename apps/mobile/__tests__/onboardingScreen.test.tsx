@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Text, TextInput } from 'react-native';
+import { Text, TextInput } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -57,6 +57,7 @@ jest.mock('../src/notifications/notificationStore', () => {
 });
 
 import { OnboardingScreen } from '../src/screens/OnboardingScreen';
+import { BrandDialog, type BrandDialogAction } from '../src/design/components';
 
 /**
  * Walks the 8-step onboarding flow (name → gender → level → handedness →
@@ -286,9 +287,6 @@ describe('OnboardingScreen', () => {
     });
 
     it('step one only goes BACK to Welcome — no alert, no skip to sign-in, session untouched', () => {
-      const alertSpy = jest
-        .spyOn(Alert, 'alert')
-        .mockImplementation(() => undefined);
       const onBack = jest.fn();
       const onFinished = jest.fn();
       const renderer = renderScreen({ mode: 'preauth', onFinished, onBack });
@@ -305,11 +303,10 @@ describe('OnboardingScreen', () => {
       press(renderer, 'Back');
 
       expect(onBack).toHaveBeenCalledTimes(1);
-      expect(alertSpy).not.toHaveBeenCalled();
+      expect(renderer.root.findByType(BrandDialog).props.visible).toBe(false);
       expect(onFinished).not.toHaveBeenCalled();
       expect(mockCompletePreAuthOnboarding).not.toHaveBeenCalled();
       expect(mockSignOut).not.toHaveBeenCalled();
-      alertSpy.mockRestore();
       act(() => renderer.unmount());
     });
 
@@ -333,22 +330,19 @@ describe('OnboardingScreen', () => {
   });
 
   it('in-account mode keeps sign-out as the only exit and never offers a skip', () => {
-    const alertSpy = jest
-      .spyOn(Alert, 'alert')
-      .mockImplementation(() => undefined);
     const renderer = renderScreen();
 
     expect(allText(renderer)).not.toMatch(/skip/i);
     press(renderer, 'Leave setup');
-    expect(alertSpy).toHaveBeenCalledTimes(1);
-    const buttons = alertSpy.mock.calls[0]?.[2] ?? [];
-    expect(buttons.map(button => button.text)).toEqual([
+    const dialog = renderer.root.findByType(BrandDialog);
+    expect(dialog.props.visible).toBe(true);
+    const buttons = dialog.props.actions as readonly BrandDialogAction[];
+    expect(buttons.map(button => button.label)).toEqual([
       'Keep setting up',
       'Sign out',
     ]);
-    act(() => buttons.find(b => b.text === 'Sign out')!.onPress?.());
+    act(() => buttons.find(b => b.label === 'Sign out')!.onPress());
     expect(mockSignOut).toHaveBeenCalledTimes(1);
-    alertSpy.mockRestore();
     act(() => renderer.unmount());
   });
 });

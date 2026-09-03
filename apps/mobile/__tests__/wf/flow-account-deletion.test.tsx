@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Modal, Text, TextInput } from 'react-native';
+import { Modal, Text, TextInput } from 'react-native';
 import TestRenderer, { act } from 'react-test-renderer';
 
 /**
@@ -58,7 +58,7 @@ jest.mock('../../src/review/appStoreReview', () => ({
 
 import { ManageAccountScreen } from '../../src/screens/ManageAccountScreen';
 import { SettingsScreen } from '../../src/screens/SettingsScreen';
-import { Button } from '../../src/design/components';
+import { BrandSpinner, Button } from '../../src/design/components';
 import { useAuthStore, type AuthSession } from '../../src/auth/authStore';
 import {
   clearApiSession,
@@ -607,7 +607,7 @@ describe('Delete account sheet — cancel paths', () => {
     expect(
       renderer.root.findByType(Modal).props.onRequestClose,
     ).toBeUndefined();
-    expect(renderer.root.findAllByType(ActivityIndicator)).toHaveLength(1);
+    expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(1);
 
     await act(async () => {
       resolveRequest(
@@ -617,7 +617,7 @@ describe('Delete account sheet — cancel paths', () => {
         }),
       );
     });
-    expect(renderer.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+    expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(0);
     expect(sheetButton(renderer, 'Keep my account').props.disabled).toBe(false);
     act(() => renderer.unmount());
   });
@@ -694,7 +694,7 @@ describe('Delete account sheet — step 1 request', () => {
     expect(allText(renderer)).toContain(
       'Account deletion is temporarily offline. Nothing was deleted — please try again.',
     );
-    expect(renderer.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+    expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(0);
     const cont = sheetButton(renderer, 'Continue to delete');
     expect(cont.props.disabled).toBe(false);
     expect(sheetButton(renderer, 'Keep my account').props.disabled).toBe(false);
@@ -835,7 +835,7 @@ describe('Delete account sheet — step 2 confirm', () => {
     const deleting = sheetButton(renderer, 'Deleting…');
     expect(deleting.props.disabled).toBe(true);
     expect(sheetButton(renderer, 'Keep my account').props.disabled).toBe(true);
-    expect(renderer.root.findAllByType(ActivityIndicator)).toHaveLength(1);
+    expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(1);
     expect(
       renderer.root.findByType(Modal).props.onRequestClose,
     ).toBeUndefined();
@@ -873,7 +873,7 @@ describe('Delete account sheet — step 2 confirm', () => {
     expect(allText(renderer)).toContain(
       'The deletion request expired. Start again from Settings.',
     );
-    expect(renderer.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+    expect(renderer.root.findAllByType(BrandSpinner)).toHaveLength(0);
     expect(
       useAuthStore.getState().completeAccountDeletion,
     ).not.toHaveBeenCalled();

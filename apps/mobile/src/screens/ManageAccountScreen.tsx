@@ -1,7 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
   Animated,
   Easing,
   Keyboard,
@@ -22,6 +20,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
   Button,
+  BrandSpinner,
   Card,
   Pill,
   PressableScale,
@@ -29,8 +28,14 @@ import {
   useReducedMotion,
 } from '../design/components';
 import { Icon } from '../design/icons';
+import {
+  MascotMoment,
+  type MascotPose,
+  type MascotTone,
+} from '../design/MascotMoment';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, shadow, space, type } from '../design/tokens';
+import { showBrandNotice } from '../design/BrandNotice';
 import { useAuthStore, type AuthProvider } from '../auth/authStore';
 import { getApiSession } from '../account/apiSession';
 import {
@@ -84,6 +89,35 @@ const DELETION_WANTED_OPTIONS: ReadonlyArray<{
 ];
 
 const SURVEY_QUESTION_COUNT = 2;
+
+export const DELETION_MASCOT_MOMENTS: Record<
+  'why' | 'kept' | 'review',
+  {
+    pose: MascotPose;
+    tone: MascotTone;
+    eyebrow: string;
+    caption: string;
+  }
+> = {
+  why: {
+    pose: 'rest',
+    tone: 'warn',
+    eyebrow: 'OPTIONAL FEEDBACK',
+    caption: 'Pick the closest answer—or skip and continue.',
+  },
+  kept: {
+    pose: 'stretch',
+    tone: 'court',
+    eyebrow: 'ONE MORE, IF USEFUL',
+    caption: 'Add context only if you want to. Deletion stays available.',
+  },
+  review: {
+    pose: 'volley',
+    tone: 'danger',
+    eyebrow: 'FINAL REVIEW',
+    caption: 'Check what will be removed before you decide.',
+  },
+};
 
 /** The 36 pt header glyph buttons keep their compact look; the slop brings
  * the touch target to the 44 pt minimum without changing the layout. */
@@ -439,6 +473,13 @@ function DeleteAccountDialog(props: {
             Pick the closest one. Nothing you share here stays tied to you after
             deletion.
           </Text>
+          <MascotMoment
+            compact
+            {...DELETION_MASCOT_MOMENTS.why}
+            accessibilityLabel={`Pickle Sensei mascot. ${DELETION_MASCOT_MOMENTS.why.caption}`}
+            testID="deletion-mascot-why"
+            style={styles.dialogMascot}
+          />
           <View accessibilityRole="radiogroup">
             {DELETION_REASON_OPTIONS.map(option => (
               <ChoiceRow
@@ -490,6 +531,13 @@ function DeleteAccountDialog(props: {
           <Text style={[type.body, styles.sub]}>
             Pick one, and add anything you want us to know.
           </Text>
+          <MascotMoment
+            compact
+            {...DELETION_MASCOT_MOMENTS.kept}
+            accessibilityLabel={`Pickle Sensei mascot. ${DELETION_MASCOT_MOMENTS.kept.caption}`}
+            testID="deletion-mascot-kept"
+            style={styles.dialogMascot}
+          />
           <View accessibilityRole="radiogroup">
             {DELETION_WANTED_OPTIONS.map(option => (
               <ChoiceRow
@@ -556,9 +604,12 @@ function DeleteAccountDialog(props: {
           contentContainerStyle={styles.body}
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.shield}>
-            <Icon name="shield" size={22} color={color.bad} />
-          </View>
+          <MascotMoment
+            compact
+            {...DELETION_MASCOT_MOMENTS.review}
+            accessibilityLabel={`Pickle Sensei mascot. ${DELETION_MASCOT_MOMENTS.review.caption}`}
+            testID="deletion-mascot-review"
+          />
           <Text
             style={[
               type.h1,
@@ -637,8 +688,9 @@ function DeleteAccountDialog(props: {
             />
           )}
           {busy ? (
-            <ActivityIndicator
+            <BrandSpinner
               color={color.bad}
+              trackColor={color.line}
               style={{ marginTop: space.xs }}
             />
           ) : null}
@@ -788,10 +840,13 @@ export function ManageAccountScreen() {
           void completeAccountDeletion().then(() => {
             const cleanup = useAuthStore.getState().deletionCleanup;
             if (cleanup?.localPurge === 'failed') {
-              Alert.alert(
-                'Account deleted',
-                'Your account and synced data were deleted. Some data saved on this phone could not be removed — delete the app to clear it.',
-              );
+              showBrandNotice({
+                title: 'Account deleted',
+                detail:
+                  'Your account and synced data were deleted. Some data saved on this phone could not be removed — delete the app to clear it.',
+                tone: 'danger',
+                eyebrow: 'LOCAL CLEANUP NEEDED',
+              });
             }
           });
         }}
@@ -916,6 +971,7 @@ const styles = StyleSheet.create({
   },
   title: { color: color.ink },
   sub: { color: color.inkSoft, marginTop: space.sm, marginBottom: space.md },
+  dialogMascot: { marginBottom: space.md },
   // Same input family as onboarding's ChoiceCard/nameInput (elevated
   // surface, hairline border, court fill when selected), sized as a compact
   // single-line row so a question reads as one quick pick.
@@ -973,15 +1029,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: space.lg,
     marginTop: space.xs,
-  },
-  shield: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: color.badSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
-    marginTop: space.sm,
   },
 });
