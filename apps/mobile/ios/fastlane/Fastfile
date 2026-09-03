@@ -17,6 +17,13 @@ default_platform(:ios)
 platform :ios do
   desc "Build a signed release archive (Mac-only)"
   lane :build do |options|
+    # Keep profile acquisition and export in the same lane context. Fastlane
+    # then reads the exact profile returned by sigh and supplies its real name
+    # to ExportOptions. Apple may suffix a replacement profile name when an
+    # expired profile still owns the canonical name, so a hardcoded profile
+    # specifier eventually breaks release builds.
+    prep_signing unless lane_context[SharedValues::SIGH_PROFILE_PATHS]&.any?
+
     # With the ASC API key in the environment, let xcodebuild do automatic
     # (cloud-managed) signing headlessly: it can mint/refresh the Apple
     # Distribution certificate and App Store profile without an Apple ID
@@ -44,18 +51,16 @@ platform :ios do
       configuration: "Release",
       output_directory: "build",
       xcargs: xcargs.join(" "),
-      # The export re-signs with the Apple Distribution identity that
-      # prep_signing installed. Manual style, because cloud-managed signing
-      # (automatic style at export) requires an Admin ASC key — the repo's
-      # App Manager key can create classic certs/profiles but not cloud-sign.
+      # The export re-signs with the Apple Distribution identity and exact
+      # profile that prep_signing installed. get_provisioning_profile records
+      # that profile in lane_context, and build_app adds the matching bundle-id
+      # mapping. Manual style avoids cloud-managed signing, which requires an
+      # Admin ASC key; the repo intentionally uses an App Manager key.
       export_options: {
         method: "app-store-connect",
         destination: "export",
         signingStyle: "manual",
         signingCertificate: "Apple Distribution",
-        provisioningProfiles: {
-          "com.picklesensei" => "com.picklesensei AppStore",
-        },
       },
     )
   end

@@ -81,16 +81,18 @@ npm ci
 bundle install                 # installs cocoapods + fastlane (Gemfile)
 cd ios
 bundle exec pod install
-bundle exec fastlane ios prep_signing  # once per Mac: distribution cert + profile
+bundle exec fastlane ios prep_signing  # optional explicit signing preflight
 bundle exec fastlane ios beta  # bump build number → archive → TestFlight internal
 ```
 
-Signing model detail: the archive step uses automatic signing (with the ASC
-key passed via `-authenticationKey…` xcargs); the export step re-signs with
-the `Apple Distribution` certificate + `com.picklesensei AppStore` profile
-that `prep_signing` created, using MANUAL signing. Cloud-managed signing
-(automatic at export) is deliberately not used — it requires an Admin ASC
-key, and this repo's key is App Manager on purpose (least privilege).
+Signing model detail: every build lane runs `prep_signing` in the same lane
+context before archiving. The archive step uses automatic signing with the ASC
+key passed via `-authenticationKey…` xcargs. The export step re-signs with the
+`Apple Distribution` certificate and the exact App Store profile returned by
+`prep_signing`, using MANUAL signing. This matters when Apple adds a suffix to
+a replacement profile because an expired profile still owns the canonical
+name. Cloud-managed signing at export is deliberately not used because it
+requires an Admin ASC key, and this repo's key is App Manager on purpose.
 First upload (build 1.0/1) shipped 2026-08-30 this way.
 
 `beta` uploads to **internal testing only** (`distribute_external: false`);
