@@ -24,6 +24,9 @@
 --      backstop, and no client path that shrinks the scored-shot count)
 --   I. account-deletion cascades, owner reads and the permit sweep are
 --      index-backed
+--   J. the free-rating limit follows the SIGN-IN IDENTITY across account
+--      deletion (delete → sign in again → still no free ratings), with no
+--      false positives for new identities and no client path to the ledger
 -- ============================================================================
 
 \set ON_ERROR_STOP on
@@ -32,13 +35,20 @@
 begin;
 
 -- Seed two users through the auth trigger path (exactly how Supabase creates
--- them in production: insert into auth.users fires handle_new_user()).
+-- them in production: insert into auth.users fires handle_new_user()), each
+-- with the provider identity signInWithIdToken records alongside the user.
 insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
 values
   ('00000000-0000-4000-8000-00000000000a', 'alice@example.com',
    '{"full_name":"Alice"}', '{"provider":"google"}'),
   ('00000000-0000-4000-8000-00000000000b', 'bob@example.com',
    '{"full_name":"Bob"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-alice', '00000000-0000-4000-8000-00000000000a',
+   '{"sub":"google-sub-alice","email":"alice@example.com"}'),
+  ('apple', 'apple-sub-bob', '00000000-0000-4000-8000-00000000000b',
+   '{"sub":"apple-sub-bob","email":"bob@example.com"}');
 
 do $$
 begin
@@ -310,7 +320,7 @@ begin
     'player_rank_state','progress_daily','practice_days',
     'player_technique_rating','billing_entitlements',
     'account_deletion_requests','account_deletion_feedback','webhook_events',
-    'account_external_credentials'
+    'account_external_credentials','free_rating_ledger'
   ] loop
     begin
       execute format('select 1 from public.%I limit 1', t);
@@ -429,6 +439,9 @@ end $$;
 insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
 values ('00000000-0000-4000-8000-00000000000a', 'alice@example.com',
         '{"full_name":"Alice"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-alice', '00000000-0000-4000-8000-00000000000a',
+        '{"sub":"google-sub-alice","email":"alice@example.com"}');
 
 -- ───────────────────────── E: column-level grants ──────────────────────────
 
@@ -752,6 +765,9 @@ reset role;
 insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
 values ('00000000-0000-4000-8000-00000000000c', 'carol@example.com',
         '{"full_name":"Carol"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-carol', '00000000-0000-4000-8000-00000000000c',
+        '{"sub":"google-sub-carol","email":"carol@example.com"}');
 
 set local role authenticated;
 set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000c';
@@ -1017,6 +1033,294 @@ begin
   end if;
 end $$;
 reset enable_seqscan;
+
+-- ──────── J: the free-rating limit follows the sign-in identity ─────────────
+--
+-- Account deletion is a right the app must offer, and every row the free
+-- limit used to count hangs off auth.users. Before 20260902150000 that made
+-- "delete → sign in again with the same Apple ID / Google account → two more
+-- free ratings" a repeatable loop. These cases pin the closure: the ledger
+-- keyed by the provider identity survives the cascade and every decision
+-- point (access_state, reserve, sync backstop) honours it — while a genuinely
+-- new identity is untouched and no client session can see or edit the ledger.
+
+reset role;
+
+-- J1: Carol (at the limit since H3: both ratings scored) deletes her account.
+-- Every account row cascades away — shots, permits, the auth identity — but
+-- the identity ledger row does not, and still says 2.
+do $$
+begin
+  delete from auth.users where id = '00000000-0000-4000-8000-00000000000c';
+  if exists (select 1 from public.shots
+             where user_id = '00000000-0000-4000-8000-00000000000c')
+     or exists (select 1 from public.analysis_permits
+                where user_id = '00000000-0000-4000-8000-00000000000c')
+     or exists (select 1 from auth.identities
+                where user_id = '00000000-0000-4000-8000-00000000000c') then
+    raise exception 'J1: account deletion must cascade through shots, permits and identities';
+  end if;
+  if not exists (select 1 from public.free_rating_ledger
+                 where identity_hash = public.free_rating_identity_hash('google', 'google-sub-carol')
+                   and scored_count = 2) then
+    raise exception 'J1: the identity ledger must survive account deletion at 2 scored';
+  end if;
+end $$;
+
+-- J2: she signs in again. Supabase mints a NEW auth.users row, but the
+-- provider identity (sub) is the same — so her free-rating state is too:
+-- access_state reports the inherited 2, and the reserve RPC refuses.
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-00000000000d', 'carol@example.com',
+        '{"full_name":"Carol"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('google', 'google-sub-carol', '00000000-0000-4000-8000-00000000000d',
+        '{"sub":"google-sub-carol","email":"carol@example.com"}');
+
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000d';
+do $$
+declare rec record; r record;
+begin
+  select * into rec from public.access_state();
+  if rec.premium or rec.scored_count <> 2 or rec.reserved_count <> 0 then
+    raise exception
+      'J2: a re-created account must inherit its identity''s 2 scored ratings (got %, %, %)',
+      rec.premium, rec.scored_count, rec.reserved_count;
+  end if;
+  select * into r from public.reserve_analysis_permit('carol-second-life-1');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'J2: reserve must refuse the re-created account (got %)', r.result;
+  end if;
+  if exists (select 1 from public.analysis_permits where user_id = (select auth.uid())) then
+    raise exception 'J2: no permit may be issued to the re-created account';
+  end if;
+end $$;
+
+-- J3: the sync backstop holds too — a permit that got around the reserve RPC
+-- (the over-issue artifact H3 simulates) still cannot become a free rating
+-- for the re-created account.
+do $$
+declare v text;
+begin
+  insert into public.analysis_permits (id, user_id, idempotency_key)
+  values ('00000000-0000-4000-8000-0000000000d1',
+          '00000000-0000-4000-8000-00000000000d', 'carol-second-life-forged');
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000d2',
+    'analysisPermitId', '00000000-0000-4000-8000-0000000000d1',
+    'resultKind', 'scored',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.1, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'access.paywall_required' then
+    raise exception
+      'J3: the sync backstop must refuse a scored shot for the re-created account (got %)', v;
+  end if;
+  if exists (select 1 from public.shots where user_id = (select auth.uid())) then
+    raise exception 'J3: no scored shot may be recorded for the re-created account';
+  end if;
+  if not exists (select 1 from public.analysis_permits
+                 where id = '00000000-0000-4000-8000-0000000000d1'
+                   and status = 'released' and outcome = 'free_limit_exceeded') then
+    raise exception 'J3: the refused permit must be released, not left reserved';
+  end if;
+end $$;
+
+-- J4: an abstention is still free for the re-created account (unscored
+-- attempts never cost a rating, before or after deletion) and does not move
+-- the ledger.
+do $$
+declare v text;
+begin
+  insert into public.analysis_permits (id, user_id, idempotency_key)
+  values ('00000000-0000-4000-8000-0000000000d3',
+          '00000000-0000-4000-8000-00000000000d', 'carol-second-life-abstain');
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000d4',
+    'analysisPermitId', '00000000-0000-4000-8000-0000000000d3',
+    'resultKind', 'low_confidence',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', null, 'confidence', 0.2,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'accepted' then
+    raise exception 'J4: an abstention must sync for the re-created account (got %)', v;
+  end if;
+  if public.identity_scored_count() <> 2 then
+    raise exception 'J4: an abstention must not move the identity ledger (got %)',
+      public.identity_scored_count();
+  end if;
+end $$;
+
+-- J5: paying still wins — membership bypasses the inherited history exactly
+-- as it bypasses an account's own count.
+reset role;
+insert into public.billing_entitlements (user_id, premium)
+values ('00000000-0000-4000-8000-00000000000d', true);
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000d';
+do $$
+declare r record;
+begin
+  select * into r from public.reserve_analysis_permit('carol-second-life-pro');
+  if r.result <> 'accepted' then
+    raise exception 'J5: a member must reserve despite the identity ledger (got %)', r.result;
+  end if;
+end $$;
+reset role;
+
+-- J6: no false positives — a genuinely new identity starts at zero and gets
+-- its first free rating.
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-00000000000e', 'erin@example.com',
+        '{"full_name":"Erin"}', '{"provider":"apple"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values ('apple', 'apple-sub-erin', '00000000-0000-4000-8000-00000000000e',
+        '{"sub":"apple-sub-erin","email":"erin@example.com"}');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000e';
+do $$
+declare rec record; r record;
+begin
+  select * into rec from public.access_state();
+  if rec.scored_count <> 0 then
+    raise exception 'J6: a new identity must start at 0 scored (got %)', rec.scored_count;
+  end if;
+  select * into r from public.reserve_analysis_permit('erin-key-1');
+  if r.result <> 'accepted' then
+    raise exception 'J6: a new identity must get its first free rating (got %)', r.result;
+  end if;
+end $$;
+
+-- J7: the ledger is written by the sync itself (trigger on the scored shot
+-- insert), so it is complete the moment a rating is spent — no deletion-path
+-- bookkeeping involved.
+do $$
+declare v text; p uuid;
+begin
+  select permit_id into p from public.reserve_analysis_permit('erin-key-1');
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000e5',
+    'analysisPermitId', p,
+    'resultKind', 'scored',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.1, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'accepted' then
+    raise exception 'J7: a first-life scored sync must be accepted (got %)', v;
+  end if;
+  if public.identity_scored_count() <> 1 or public.lifetime_scored_count() <> 1 then
+    raise exception 'J7: the ledger must record the scored sync (identity %, lifetime %)',
+      public.identity_scored_count(), public.lifetime_scored_count();
+  end if;
+end $$;
+
+-- J8: the ledger is invisible and unwritable from a client session, and its
+-- writer/hash helpers are not client-executable. (identity_scored_count and
+-- lifetime_scored_count ARE callable — they only ever report the caller.)
+do $$
+begin
+  begin
+    perform 1 from public.free_rating_ledger limit 1;
+    raise exception 'J8a: free_rating_ledger must not be client-readable';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.free_rating_ledger (identity_hash, scored_count)
+    values (repeat('0', 64), 0);
+    raise exception 'J8b: free_rating_ledger must not be client-insertable';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    update public.free_rating_ledger set scored_count = 0;
+    raise exception 'J8c: free_rating_ledger must not be client-updatable';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    delete from public.free_rating_ledger;
+    raise exception 'J8d: free_rating_ledger must not be client-deletable';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.free_rating_identity_hash('google', 'google-sub-carol');
+    raise exception 'J8e: free_rating_identity_hash must not be client-executable';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.record_scored_shot_in_ledger();
+    raise exception 'J8f: record_scored_shot_in_ledger must not be client-executable';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+reset role;
+
+-- J9: an account with two linked identities keeps both ledger rows in step,
+-- so whichever provider the player returns with carries the same history.
+insert into auth.users (id, email, raw_user_meta_data, raw_app_meta_data)
+values ('00000000-0000-4000-8000-00000000000f', 'finn@example.com',
+        '{"full_name":"Finn"}', '{"provider":"google"}');
+insert into auth.identities (provider, provider_id, user_id, identity_data)
+values
+  ('google', 'google-sub-finn', '00000000-0000-4000-8000-00000000000f',
+   '{"sub":"google-sub-finn","email":"finn@example.com"}'),
+  ('apple', 'apple-sub-finn', '00000000-0000-4000-8000-00000000000f',
+   '{"sub":"apple-sub-finn","email":"finn@example.com"}');
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000f';
+do $$
+declare v text; p uuid;
+begin
+  select permit_id into p from public.reserve_analysis_permit('finn-key-1');
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-0000000000f5',
+    'analysisPermitId', p,
+    'resultKind', 'scored',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:00:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.1, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'accepted' then
+    raise exception 'J9: the linked-identity sync must be accepted (got %)', v;
+  end if;
+end $$;
+reset role;
+do $$
+begin
+  if (select count(*) from public.free_rating_ledger
+      where identity_hash in (
+        public.free_rating_identity_hash('google', 'google-sub-finn'),
+        public.free_rating_identity_hash('apple', 'apple-sub-finn'))
+        and scored_count = 1) <> 2 then
+    raise exception 'J9: every identity of the account must carry the scored count';
+  end if;
+end $$;
 
 rollback;
 

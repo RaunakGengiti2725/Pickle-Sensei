@@ -189,6 +189,12 @@ describe('Manage account → Delete account (App Review 5.1.1(v))', () => {
     const copy = allText(renderer);
     expect(copy).toContain('permanently deletes your account and all synced');
     expect(copy).toContain('This cannot be undone.');
+    // The free-rating ledger (migration 20260902150000) follows the sign-in
+    // identity across deletion; the confirmation must say so before the
+    // player deletes expecting a fresh allowance.
+    expect(copy).toContain(
+      "Free ratings you've already used stay used — a new account with the same Apple or Google sign-in won't get them again.",
+    );
     expect(copy).toContain('does not cancel a subscription or issue a refund');
     const [manageSubscription] = pressables(
       renderer,

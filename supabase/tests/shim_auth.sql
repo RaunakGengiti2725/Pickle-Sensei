@@ -11,6 +11,25 @@ create table if not exists auth.users (
   raw_app_meta_data jsonb default '{}'::jsonb
 );
 
+-- One row per provider identity (the columns the migrations read; hosted
+-- shape as of GoTrue 2.x). provider_id is the provider's stable subject —
+-- Apple team-scoped `sub` / Google account `sub` — and cascades away with the
+-- user exactly like production, which is what the identity ledger cases in
+-- security_regression.sql rely on.
+create table if not exists auth.identities (
+  id uuid primary key default gen_random_uuid(),
+  provider_id text not null,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  identity_data jsonb not null default '{}'::jsonb,
+  provider text not null,
+  email text generated always as (lower(identity_data ->> 'email')) stored,
+  last_sign_in_at timestamptz,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  constraint identities_provider_id_provider_unique unique (provider_id, provider)
+);
+create index if not exists identities_user_id_idx on auth.identities (user_id);
+
 create or replace function auth.uid()
 returns uuid
 language sql

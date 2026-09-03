@@ -665,9 +665,13 @@ interface VerifiedBilling {
 
 /** Access state (GET /v1/me/access contract; parsed by
  * apps/mobile/src/billing/accessApi.ts parseAccess with strict arithmetic
- * invariants). `used` is derived from real server-side accepted scored shots;
- * `reserved` from still-reserved, unexpired permits — never invented client
- * state. reserved is clamped to `remaining` so the client invariants
+ * invariants). `used` is derived from real server-side accepted scored shots
+ * — counted per SIGN-IN IDENTITY, not per account row (migration
+ * 20260902150000: public.free_rating_ledger survives account deletion, so
+ * deleting and re-creating the account with the same Apple ID / Google
+ * account does not mint two new free ratings); `reserved` from
+ * still-reserved, unexpired permits — never invented client state.
+ * reserved is clamped to `remaining` so the client invariants
  * (reserved <= remaining, availableToReserve = remaining - reserved) hold
  * even if stale holds linger. premium comes from the server-verified
  * billing_entitlements row (or the just-verified state the billing sync
@@ -2326,9 +2330,13 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
 // can destroy an account. The actual deletion uses the service-role Auth
 // admin API; the auth.users → profiles cascade removes every user row
 // (shots, sessions, permits, consent, trials, feedback, saved drills,
-// billing entitlement, rank state, deletion request itself). The one row
-// that outlives the account is the optional exit survey
-// (account_deletion_feedback, FK ON DELETE SET NULL → anonymized, kept).
+// billing entitlement, rank state, deletion request itself). Two things
+// outlive the account, both disclosed in the privacy policy (legal.ts §7/§8):
+// the optional exit survey (account_deletion_feedback, FK ON DELETE SET NULL
+// → anonymized, kept) and the free-rating identity ledger
+// (free_rating_ledger: SHA-256 of the provider sign-in identifier → lifetime
+// scored count, no FK by design, migration 20260902150000), which is what
+// stops delete-and-recreate from re-earning the two free ratings.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DELETE_CONFIRM_MIN_AGE_MS = 3_000;

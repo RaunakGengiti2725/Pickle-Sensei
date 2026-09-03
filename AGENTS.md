@@ -84,6 +84,31 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   `access_state()` (1 round trip) and `apply_synced_shot(jsonb)` (atomic
   shot+details+permit write, SECURITY INVOKER so RLS applies). Rank/progress
   responses cache 60s and are invalidated by accepted shot syncs.
+- Free ratings follow the SIGN-IN IDENTITY, not the account row
+  (`20260902150000_free_rating_identity_ledger.sql`, 2026-09-02). Deleting
+  the account used to reset the two lifetime free ratings (every counted
+  row cascades from auth.users; sign in again with the same Apple ID /
+  Google account → fresh zero). `public.free_rating_ledger` keeps
+  `sha256('provider:provider_id')` (the auth.identities subject — stable per
+  Apple ID / Google account, Apple's even after the revocation deletion
+  performs) → lifetime scored count, with NO FK anywhere, written by the
+  definer trigger `shots_record_free_rating_ledger` on every scored shot
+  insert (every identity of the user is set to identity-max + 1). ALL THREE
+  decision points — `access_state()`, `reserve_analysis_permit()`,
+  `apply_synced_shot()`'s backstop — count through
+  `public.lifetime_scored_count()` = greatest(own scored shots,
+  `identity_scored_count()`); never write `count(*) from public.shots` in
+  any of them again (static pin: `__wf__/db_migrations_rls_indexes.test.ts`;
+  live: security_regression.sql J1–J9). The table is service-only (RLS on,
+  no policies, no client grants); `identity_scored_count()` is the one
+  definer reader and is auth.uid()-scoped with no parameters. Premium
+  bypasses it exactly as before; abstentions never touch it. Retention past
+  deletion is disclosed in `legal.ts` §7/§8 + the support page, and the
+  in-app deletion confirmation says used free ratings stay used — keep all
+  three in step with the behaviour. Known limit: a different provider with
+  a different subject (e.g. Apple then Google) is a different identity.
+  `access_state().scored_count` is therefore identity-lifetime (the exit
+  survey's `scored_count` stamp inherits that meaning).
 - 5xx bodies are generic (detail only in function logs). Free-text inputs are
   sanitized (`http.ts sanitizeUserText`). pg_cron sweeps stale permits,
   expired deletion requests, old webhook events.
@@ -785,10 +810,11 @@ Debug for fast-refresh development. TestFlight: `apps/mobile/ios/fastlane`
   the edge fn's `DELETION_SURVEY_REASONS` / `DELETION_SURVEY_WANTED` —
   change both sides together. Table `public.account_deletion_feedback`
   (`20260902000000_account_deletion_feedback.sql`, `wanted` column added by
-  `20260902120000_…_wanted.sql`) is the ONE user row that outlives
-  deletion: FK `ON DELETE SET NULL` anonymizes it (`user_id` null ⇒ actually
-  deleted; non-null ⇒ requested but kept), insert-only from clients (no
-  SELECT), append-only via its own trigger (the generic
+  `20260902120000_…_wanted.sql`) is one of the TWO rows that outlive
+  deletion (the other is the free-rating identity ledger, see "Scale &
+  security"): FK `ON DELETE SET NULL` anonymizes it (`user_id` null ⇒
+  actually deleted; non-null ⇒ requested but kept), insert-only from clients
+  (no SELECT), append-only via its own trigger (the generic
   `reject_ledger_mutation` would block the SET NULL and break deletion).
   Server stamps churn context (provider, platform, app_version,
   account_age_days, was_premium, scored_count). Disclosed in the privacy

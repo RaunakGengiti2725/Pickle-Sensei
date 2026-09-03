@@ -71,7 +71,9 @@ PRIVACY CHOICES AND ACCOUNT DELETION
 
 To permanently delete a synced account, open Settings, Account, Manage account,
 then Delete account. The exit survey is optional and may be skipped. Deleting
-an account does not cancel an Apple subscription.
+an account does not cancel an Apple subscription, and it does not restore free
+ratings that were already used: signing in again with the same Apple or Google
+account continues from the free ratings already spent.
 
 To request access to, correction of, deletion of, or a portable copy of your
 personal information, email ${SUPPORT_EMAIL}. You may also ask to object to or
@@ -385,6 +387,15 @@ We use the following retention rules:
   in Section 2.D, may be retained for longitudinal product research until it
   is no longer useful. It is not used to contact you or recreate your
   identity.
+• To keep the two free ratings a once-per-person offer, we retain a one-way
+  hash (SHA-256) of your sign-in provider's account identifier together with
+  the number of scored analyses recorded under it. This free-rating record
+  contains no email address, name, or Pickle Sensei account identifier and
+  cannot be turned back into the identifier. It is used only to recognize
+  that a sign-in identity has already used its free ratings, is retained on
+  the legitimate-interest basis of preventing free-tier abuse, survives
+  account deletion for that reason, and is not used to contact you or to
+  recreate your account.
 • Raw clips and other device-only data remain in app-private storage until
   removed by normal app cleanup or until you delete the app. Deleting your
   server account does not itself erase a clip file already stored on the
@@ -416,6 +427,11 @@ an Apple revocation credential may require you to remove Pickle Sensei
 manually in your Apple Account's Sign in with Apple settings; the app tells
 you when this exceptional step is needed. We fulfill the account deletion
 even if a legacy Apple credential is unavailable.
+
+Free ratings you have already used are not restored by deleting the account.
+If you later sign in again with the same Apple or Google account, the hashed
+free-rating record described in Section 7 applies to the new account, so the
+two free ratings are not offered a second time.
 
 Deleting a Pickle Sensei account does not cancel an auto-renewing subscription
 managed by Apple or Google, does not itself create a refund, and does not
