@@ -28,13 +28,13 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10.15.1
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: pnpm
@@ -72,10 +72,10 @@ jobs:
   mobile:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
       - name: Install app deps (npm-managed — see DECISIONS D-013)
         working-directory: apps/mobile
         run: npm ci
@@ -89,7 +89,7 @@ jobs:
   supabase-security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Supabase RLS + security regression matrix
         run: ./supabase/tests/run_rls_tests.sh
 
@@ -98,7 +98,7 @@ jobs:
     needs: [verify]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build api image
         run: docker build -f services/api/Dockerfile -t pickle-api:${{ github.sha }} .
       - name: Build media-worker image
