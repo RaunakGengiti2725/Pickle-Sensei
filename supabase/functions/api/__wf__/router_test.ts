@@ -72,6 +72,14 @@ Deno.test({
     const terms = await fetch(`${API_BASE}/functions/v1/api/terms`);
     assertEquals(terms.status, 200);
     assertStringIncludes(await terms.text(), "auto-renewing");
+
+    for (const path of ["healthz", "support", "privacy", "terms"]) {
+      const head = await fetch(`${API_BASE}/functions/v1/api/${path}`, {
+        method: "HEAD",
+      });
+      assertEquals(head.status, 200);
+      assertEquals(await head.text(), "");
+    }
   },
 });
 

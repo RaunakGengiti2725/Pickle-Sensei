@@ -2800,10 +2800,13 @@ Deno.serve(async (request: Request): Promise<Response> => {
 async function handleRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const ip = clientIp(request);
+  const isPublicRead = request.method === "GET" || request.method === "HEAD";
 
   // ── Public, pre-auth routes (matched on the RAW pathname suffix — these
   // paths never contain "/v1/", so the gateway's mount prefix is irrelevant).
-  if (request.method === "GET" && url.pathname.endsWith("/healthz")) {
+  // HEAD is required because App Store Connect and other link validators use
+  // it before accepting public listing URLs.
+  if (isPublicRead && url.pathname.endsWith("/healthz")) {
     const rl = await enforceRateLimit(
       "healthz",
       ip,
@@ -2813,7 +2816,7 @@ async function handleRequest(request: Request): Promise<Response> {
     if (!rl.allowed) return rateLimitResponse(rl);
     return json(200, { ok: true });
   }
-  if (request.method === "GET" && url.pathname.endsWith("/support")) {
+  if (isPublicRead && url.pathname.endsWith("/support")) {
     const rl = await enforceRateLimit(
       "legal",
       ip,
@@ -2823,7 +2826,7 @@ async function handleRequest(request: Request): Promise<Response> {
     if (!rl.allowed) return rateLimitResponse(rl);
     return legalTextResponse(SUPPORT_TEXT);
   }
-  if (request.method === "GET" && url.pathname.endsWith("/privacy")) {
+  if (isPublicRead && url.pathname.endsWith("/privacy")) {
     const rl = await enforceRateLimit(
       "legal",
       ip,
@@ -2833,7 +2836,7 @@ async function handleRequest(request: Request): Promise<Response> {
     if (!rl.allowed) return rateLimitResponse(rl);
     return legalTextResponse(PRIVACY_POLICY_TEXT);
   }
-  if (request.method === "GET" && url.pathname.endsWith("/terms")) {
+  if (isPublicRead && url.pathname.endsWith("/terms")) {
     const rl = await enforceRateLimit(
       "legal",
       ip,

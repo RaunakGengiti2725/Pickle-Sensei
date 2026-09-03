@@ -10,7 +10,7 @@ export const JSON_SECURITY_HEADERS: Record<string, string> = {
   "Referrer-Policy": "no-referrer",
 };
 
-/** Public legal documents (privacy/terms). Plain text on purpose: the
+/** Public support and legal documents. Plain text on purpose: the
  * Supabase functions gateway rewrites Content-Type to text/plain and forces
  * a sandbox CSP on *.supabase.co, so HTML would display as raw source. The
  * gateway layers its own nosniff/CSP on top of these headers. */
