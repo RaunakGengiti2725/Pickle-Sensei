@@ -100,6 +100,7 @@ interface NativePickleAuth {
   signInWithApple(): Promise<{
     user: string;
     identityToken?: string;
+    authorizationCode?: string;
     email?: string;
     givenName?: string;
     familyName?: string;
@@ -336,6 +337,7 @@ function keepSessionAlive(
 async function establishSyncedAccount(input: {
   provider: 'apple' | 'google';
   identityToken: string | null | undefined;
+  appleAuthorizationCode?: string | null;
   displayName: string | null;
   providerEmail: string | null;
 }): Promise<AuthSession> {
@@ -344,6 +346,7 @@ async function establishSyncedAccount(input: {
     apiBaseUrl: config.apiBaseUrl,
     bearerToken: input.identityToken,
     provider: input.provider,
+    appleAuthorizationCode: input.appleAuthorizationCode,
     environment: getAccountBootstrapEnvironment(config),
   });
   installApiSession(result.apiSession);
@@ -624,6 +627,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const session = await establishSyncedAccount({
         provider: 'apple',
         identityToken: result.identityToken,
+        appleAuthorizationCode: result.authorizationCode,
         displayName: name,
         providerEmail: result.email ?? null,
       });

@@ -70,7 +70,8 @@ describe('ConsentSettingsScreen', () => {
     const renderer = renderScreen();
     const copy = allText(renderer);
     expect(copy).toContain('Analyze my video');
-    expect(copy).toContain('Use my video to improve models');
+    expect(copy).toContain('Use my feedback to improve scoring');
+    expect(copy).toContain('Raw video, audio, frames, and pose landmarks');
     expect(copy).toContain('never used to train models under this');
     act(() => renderer.unmount());
   });

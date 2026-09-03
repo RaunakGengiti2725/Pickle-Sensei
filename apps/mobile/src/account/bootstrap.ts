@@ -23,6 +23,10 @@ export interface AccountBootstrapInput {
   apiBaseUrl: string | null | undefined;
   bearerToken: string | null | undefined;
   provider: AccountProvider;
+  /** One-use credential returned beside an Apple identity token. It is sent
+   * directly to the backend for Apple's token exchange and is never persisted
+   * by the app. Google bootstrap leaves this absent. */
+  appleAuthorizationCode?: string | null;
   environment: AccountBootstrapEnvironment;
   fetchFn?: AccountBootstrapFetch;
 }
@@ -201,7 +205,12 @@ export async function bootstrapCanonicalAccount(
         Authorization: `Bearer ${bearerToken}`,
         'X-Client-Version': input.environment.device.appVersion,
       },
-      body: JSON.stringify(input.environment),
+      body: JSON.stringify({
+        ...input.environment,
+        ...(input.provider === 'apple' && input.appleAuthorizationCode?.trim()
+          ? { appleAuthorizationCode: input.appleAuthorizationCode.trim() }
+          : {}),
+      }),
     });
   } catch {
     throw new AccountBootstrapError(

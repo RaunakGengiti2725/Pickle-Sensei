@@ -119,6 +119,29 @@ describe('canonical account bootstrap', () => {
     );
   });
 
+  it('sends the one-use Apple authorization code only in Apple bootstrap', async () => {
+    const fetchFn = jest.fn().mockResolvedValue(
+      response({
+        user: { id: canonicalId, email: 'relay@example.com' },
+        onboardingState: 'complete',
+      }),
+    );
+
+    await bootstrapCanonicalAccount({
+      apiBaseUrl: 'https://api.pickle.example',
+      bearerToken: 'apple-identity-token',
+      provider: 'apple',
+      appleAuthorizationCode: '  one-use-apple-code  ',
+      environment,
+      fetchFn,
+    });
+
+    expect(JSON.parse(String(fetchFn.mock.calls[0]?.[1]?.body))).toEqual({
+      ...environment,
+      appleAuthorizationCode: 'one-use-apple-code',
+    });
+  });
+
   it('fails closed when release public configuration is missing or insecure', async () => {
     await expect(
       bootstrapCanonicalAccount({

@@ -41,15 +41,23 @@ describe('account deletion request deadline', () => {
     const fetchFn = jest.fn(async (_input: string, init?: RequestInit) => {
       expect(init?.signal).toBeInstanceOf(AbortSignal);
       expect(init?.signal?.aborted).toBe(false);
-      return new Response(JSON.stringify({ deleted: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return new Response(
+        JSON.stringify({
+          deleted: true,
+          appleAuthorizationRevocation: 'not_applicable',
+        }),
+        {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
     });
 
     await expect(
       confirmAccountDeletion(session, 'challenge', fetchFn),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({
+      appleAuthorizationRevocation: 'not_applicable',
+    });
     expect(fetchFn).toHaveBeenCalledTimes(1);
     expect(jest.getTimerCount()).toBe(0);
   });

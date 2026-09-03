@@ -9,8 +9,9 @@ private let appleAuthLogger = Logger(
 )
 
 /// Sign in with Apple (spec p. 5: OIDC sign-in, Apple first).
-/// Returns the raw Apple identity token (a JWT from appleid.apple.com) plus
-/// profile fields; the app/backend exchange happens in JS. Typed failures:
+/// Returns the raw Apple identity token (a JWT from appleid.apple.com), the
+/// one-use authorization code, and profile fields; the app/backend exchange
+/// happens immediately in JS. Neither Apple credential is persisted. Typed failures:
 ///   auth.canceled        — user dismissed the sheet
 ///   auth.not_configured  — native bridge unavailable (reported by JS)
 ///   auth.failed          — anything else, message attached
@@ -123,12 +124,29 @@ private final class AppleSignInDelegate: NSObject, ASAuthorizationControllerDele
       onFailure("auth.failed", error.localizedDescription, error)
       return
     }
+    guard let codeData = credential.authorizationCode,
+      let authorizationCode = String(data: codeData, encoding: .utf8),
+      !authorizationCode.isEmpty
+    else {
+      let error = NSError(
+        domain: "com.picklesensei.auth",
+        code: 4,
+        userInfo: [
+          NSLocalizedDescriptionKey:
+            "Apple returned a credential without a usable authorization code."
+        ]
+      )
+      appleAuthLogger.error("stage=credential authorization_code=false")
+      onFailure("auth.failed", error.localizedDescription, error)
+      return
+    }
     appleAuthLogger.notice(
-      "stage=credential user=\(!credential.user.isEmpty, privacy: .public) bytes=\(tokenData.count, privacy: .public)"
+      "stage=credential user=\(!credential.user.isEmpty, privacy: .public) token_bytes=\(tokenData.count, privacy: .public) code_bytes=\(codeData.count, privacy: .public)"
     )
     var payload: [String: Any] = [
       "user": credential.user,
       "identityToken": token,
+      "authorizationCode": authorizationCode,
     ]
     if let email = credential.email { payload["email"] = email }
     if let name = credential.fullName {

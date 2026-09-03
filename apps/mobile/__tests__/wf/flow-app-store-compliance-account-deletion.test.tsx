@@ -189,6 +189,13 @@ describe('Manage account → Delete account (App Review 5.1.1(v))', () => {
     const copy = allText(renderer);
     expect(copy).toContain('permanently deletes your account and all synced');
     expect(copy).toContain('This cannot be undone.');
+    expect(copy).toContain('does not cancel a subscription or issue a refund');
+    const [manageSubscription] = pressables(
+      renderer,
+      'Manage subscription in the App Store',
+    );
+    expect(manageSubscription).toBeDefined();
+    expect(manageSubscription!.props.accessibilityRole).toBe('link');
     expect(sheetButton(renderer, 'Keep my account').props.disabled).toBeFalsy();
     expect(
       sheetButton(renderer, 'Continue to delete').props.disabled,

@@ -257,6 +257,23 @@ begin
   end;
 end $$;
 
+-- B4b: even an owner cannot read or mutate the server-only external credential
+-- row. The service role is the only path to Apple ciphertext/checkpoints.
+do $$
+begin
+  begin
+    perform 1 from public.account_external_credentials limit 1;
+    raise exception 'B4b: authenticated must not read external credentials';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.account_external_credentials (user_id)
+    values ('00000000-0000-4000-8000-00000000000b');
+    raise exception 'B4b: authenticated must not write external credentials';
+  exception when insufficient_privilege then null;
+  end;
+end $$;
+
 -- B5: Bob cannot spend Alice's permit through the sync RPC
 do $$
 declare v text;
@@ -292,7 +309,8 @@ begin
     'evaluation_trials','analysis_feedback','user_saved_drills',
     'player_rank_state','progress_daily','practice_days',
     'player_technique_rating','billing_entitlements',
-    'account_deletion_requests','account_deletion_feedback','webhook_events'
+    'account_deletion_requests','account_deletion_feedback','webhook_events',
+    'account_external_credentials'
   ] loop
     begin
       execute format('select 1 from public.%I limit 1', t);

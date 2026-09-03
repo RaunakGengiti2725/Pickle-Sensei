@@ -203,6 +203,7 @@ beforeEach(() => {
     signInWithApple: jest.fn().mockResolvedValue({
       user: 'apple-user-opaque',
       identityToken: 'apple-identity-token',
+      authorizationCode: 'one-use-apple-code',
       email: 'pat@privaterelay.example',
       givenName: 'Pat',
       familyName: 'Player',
@@ -224,8 +225,14 @@ afterEach(() => {
 describe('signing in persists a durable session', () => {
   it('Apple sign-in bears the Supabase access token and stores ONLY the refresh token + descriptor in the Keychain', async () => {
     installRoutes({
-      '/v1/account/bootstrap': () =>
-        response(bootstrapBody({ access: 'access-1', refresh: 'refresh-1' })),
+      '/v1/account/bootstrap': init => {
+        expect(JSON.parse(String(init?.body))).toMatchObject({
+          appleAuthorizationCode: 'one-use-apple-code',
+        });
+        return response(
+          bootstrapBody({ access: 'access-1', refresh: 'refresh-1' }),
+        );
+      },
     });
 
     await useAuthStore.getState().signInWithApple();
@@ -257,10 +264,12 @@ describe('signing in persists a durable session', () => {
     const durable = JSON.stringify([...__keychainStore.values()]);
     expect(durable).not.toContain('access-1');
     expect(durable).not.toContain('apple-identity-token');
+    expect(durable).not.toContain('one-use-apple-code');
     for (const value of mockKv.values()) {
       expect(value).not.toContain('refresh-1');
       expect(value).not.toContain('access-1');
       expect(value).not.toContain('apple-identity-token');
+      expect(value).not.toContain('one-use-apple-code');
     }
     // Apple gets no legacy silent-restore flag: the vault IS the restore.
     expect(mockKv.get('auth.last-provider') ?? '').toBe('');

@@ -94,7 +94,7 @@ const DISCLOSED_BY_PRIVACY_POLICY = [
   'NSPrivacyCollectedDataTypeFitness',
   'NSPrivacyCollectedDataTypeOtherDataTypes',
   'NSPrivacyCollectedDataTypePurchaseHistory',
-  'NSPrivacyCollectedDataTypeOtherDiagnosticData',
+  'NSPrivacyCollectedDataTypeOtherUsageData',
 ];
 
 const KNOWN_PURPOSES = new Set([
@@ -130,6 +130,42 @@ describe('PrivacyInfo.xcprivacy collected-data disclosure (fix-9)', () => {
         expect(KNOWN_PURPOSES.has(purpose)).toBe(true);
       }
     }
+  });
+
+  it('matches the App Store Connect purpose matrix exactly', () => {
+    const purposesByType = Object.fromEntries(
+      collected.map(entry => [entry.type, new Set(entry.purposes)]),
+    );
+    const appFunctionality =
+      'NSPrivacyCollectedDataTypePurposeAppFunctionality';
+    const analytics = 'NSPrivacyCollectedDataTypePurposeAnalytics';
+    const personalization =
+      'NSPrivacyCollectedDataTypePurposeProductPersonalization';
+    expect(purposesByType).toEqual({
+      NSPrivacyCollectedDataTypeEmailAddress: new Set([appFunctionality]),
+      NSPrivacyCollectedDataTypeName: new Set([
+        appFunctionality,
+        personalization,
+      ]),
+      NSPrivacyCollectedDataTypeUserID: new Set([appFunctionality, analytics]),
+      NSPrivacyCollectedDataTypeFitness: new Set([
+        appFunctionality,
+        personalization,
+        analytics,
+      ]),
+      NSPrivacyCollectedDataTypeOtherDataTypes: new Set([
+        appFunctionality,
+        personalization,
+      ]),
+      NSPrivacyCollectedDataTypePurchaseHistory: new Set([
+        appFunctionality,
+        analytics,
+      ]),
+      NSPrivacyCollectedDataTypeOtherUsageData: new Set([
+        analytics,
+        appFunctionality,
+      ]),
+    });
   });
 
   it('claims no advertising purpose and keeps NSPrivacyTracking false (policy §2: no ad profiles, no data sale)', () => {

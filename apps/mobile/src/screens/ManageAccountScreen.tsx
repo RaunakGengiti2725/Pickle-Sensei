@@ -5,6 +5,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   LayoutAnimation,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -41,6 +42,7 @@ import { getApiSession } from '../account/apiSession';
 import {
   ACCOUNT_DELETION_DETAILS_MAX,
   AccountDeletionError,
+  type AccountDeletionResult,
   type AccountDeletionReason,
   type AccountDeletionSurvey,
   type AccountDeletionWanted,
@@ -59,6 +61,21 @@ const PROVIDER_LABELS: Record<AuthProvider, string> = {
 /** Final-confirm hold-off (ms). Must exceed the server's 3s minimum age
  * between delete-request and delete-confirm; also honest UX friction. */
 const DELETE_ARM_DELAY_MS = 5_000;
+
+const SUBSCRIPTION_MANAGEMENT =
+  Platform.OS === 'ios'
+    ? {
+        storeName: 'App Store',
+        accessibilityLabel: 'Manage subscription in the App Store',
+        url: 'https://apps.apple.com/account/subscriptions',
+      }
+    : Platform.OS === 'android'
+      ? {
+          storeName: 'Google Play',
+          accessibilityLabel: 'Manage subscription in Google Play',
+          url: 'https://play.google.com/store/account/subscriptions',
+        }
+      : null;
 
 /** Exit survey, question 1 — display order; values are the wire vocabulary
  * (deletion.ts ACCOUNT_DELETION_REASONS). "Something else" stays last. */
@@ -284,7 +301,7 @@ function ChoiceRow(props: {
 function DeleteAccountDialog(props: {
   visible: boolean;
   onCancel: () => void;
-  onDeleted: () => void;
+  onDeleted: (result: AccountDeletionResult) => void;
 }) {
   const insets = useReliableSafeAreaInsets();
   const reduced = useReducedMotion();
@@ -425,8 +442,8 @@ function DeleteAccountDialog(props: {
     setError(null);
     setStep({ phase: 'deleting', challenge });
     try {
-      await confirmAccountDeletion(getApiSession(), challenge);
-      props.onDeleted();
+      const result = await confirmAccountDeletion(getApiSession(), challenge);
+      props.onDeleted(result);
     } catch (e) {
       if (presentation !== presentationRef.current) return;
       const canRetrySameChallenge =
@@ -449,6 +466,18 @@ function DeleteAccountDialog(props: {
     // The comment field is the last thing on the page; bring it above the
     // keyboard once the avoiding view has made room.
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+  };
+
+  const openSubscriptionManagement = () => {
+    if (!SUBSCRIPTION_MANAGEMENT) return;
+    void Linking.openURL(SUBSCRIPTION_MANAGEMENT.url).catch(() => {
+      showBrandNotice({
+        title: 'Could not open subscriptions',
+        detail: `Open ${SUBSCRIPTION_MANAGEMENT.storeName} account settings to manage or cancel your subscription.`,
+        tone: 'danger',
+        eyebrow: 'STORE UNAVAILABLE',
+      });
+    });
   };
 
   let header: React.ReactNode;
@@ -633,6 +662,26 @@ function DeleteAccountDialog(props: {
             cannot be undone. Clips saved on this phone stay on this phone until
             you delete the app.
           </Text>
+          {SUBSCRIPTION_MANAGEMENT ? (
+            <>
+              <Text style={[type.caption, styles.subscriptionWarning]}>
+                Deleting your account does not cancel a subscription or issue a
+                refund. If you subscribe through{' '}
+                {SUBSCRIPTION_MANAGEMENT.storeName}, cancel before deleting or
+                billing can continue.
+              </Text>
+              <PressableScale
+                accessibilityRole="link"
+                accessibilityLabel={SUBSCRIPTION_MANAGEMENT.accessibilityLabel}
+                onPress={openSubscriptionManagement}
+                style={styles.subscriptionLink}
+              >
+                <Text style={[type.bodyBold, { color: color.court }]}>
+                  Manage subscription
+                </Text>
+              </PressableScale>
+            </>
+          ) : null}
           {error ? (
             <Text
               style={[
@@ -832,7 +881,7 @@ export function ManageAccountScreen() {
       <DeleteAccountDialog
         visible={confirmingDeletion}
         onCancel={() => setConfirmingDeletion(false)}
-        onDeleted={() => {
+        onDeleted={result => {
           setConfirmingDeletion(false);
           // The server account is gone; unlike a plain sign-out this also
           // purges the deleted owner's local rows and fully disconnects the
@@ -846,6 +895,16 @@ export function ManageAccountScreen() {
                   'Your account and synced data were deleted. Some data saved on this phone could not be removed — delete the app to clear it.',
                 tone: 'danger',
                 eyebrow: 'LOCAL CLEANUP NEEDED',
+              });
+            } else if (
+              result?.appleAuthorizationRevocation === 'manual_action_required'
+            ) {
+              showBrandNotice({
+                title: 'Account deleted',
+                detail:
+                  'This older account had no Apple revocation token. To disconnect it manually, open iPhone Settings → your name → Sign in with Apple → Pickle Sensei → Stop Using Apple ID.',
+                tone: 'neutral',
+                eyebrow: 'ONE APPLE STEP',
               });
             }
           });
@@ -971,6 +1030,19 @@ const styles = StyleSheet.create({
   },
   title: { color: color.ink },
   sub: { color: color.inkSoft, marginTop: space.sm, marginBottom: space.md },
+  subscriptionWarning: {
+    color: color.inkSoft,
+    textAlign: 'center',
+    marginTop: space.md,
+  },
+  subscriptionLink: {
+    minHeight: 44,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: space.lg,
+    marginTop: space.xs,
+  },
   dialogMascot: { marginBottom: space.md },
   // Same input family as onboarding's ChoiceCard/nameInput (elevated
   // surface, hairline border, court fill when selected), sized as a compact

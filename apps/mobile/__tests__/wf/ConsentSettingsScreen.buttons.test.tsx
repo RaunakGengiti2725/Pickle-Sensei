@@ -10,7 +10,7 @@ import TestRenderer, { act } from 'react-test-renderer';
  *
  * Ledger:
  *   1. ScreenHeader "Back"                      -> navigation.goBack()
- *   2. Switch "Use my video to improve models"  -> setModelTrainingConsent()
+ *   2. Switch "Use my feedback to improve scoring" -> setModelTrainingConsent()
  *      -> grantModelTrainingConsent / withdrawModelTrainingConsent
  *   3. Button "Connect account" (signed out)    -> navigate('ConnectAccount')
  *   4. Button "Try again" (unavailable)         -> hydrate() -> fetchConsentStatus
@@ -277,7 +277,7 @@ describe('ConsentSettingsScreen button ledger', () => {
     });
   });
 
-  describe('Switch "Use my video to improve models"', () => {
+  describe('Switch "Use my feedback to improve scoring"', () => {
     it('is a labelled switch, hydrates from the server on mount and defaults OFF', async () => {
       establishApiSession(apiSession);
       useAuthStore.setState({ session: authSession });
@@ -287,7 +287,7 @@ describe('ConsentSettingsScreen button ledger', () => {
       expect(mockFetchConsentStatus).toHaveBeenCalledTimes(1);
       expect(mockFetchConsentStatus.mock.calls[0]?.[0]).toEqual(apiSession);
       const sw = toggle(renderer);
-      expect(sw.props.label).toBe('Use my video to improve models');
+      expect(sw.props.label).toBe('Use my feedback to improve scoring');
       expect(sw.props.value).toBe(false);
       expect(sw.props.disabled).toBe(false);
     });

@@ -137,6 +137,7 @@ const mockAppleSignIn = jest.fn<
   Promise<{
     user: string;
     identityToken?: string;
+    authorizationCode?: string;
     email?: string;
     givenName?: string;
     familyName?: string;
@@ -296,6 +297,7 @@ describe('SignInScreen button ledger', () => {
     const apple = deferred<{
       user: string;
       identityToken?: string;
+      authorizationCode?: string;
       email?: string;
       givenName?: string;
       familyName?: string;
@@ -324,6 +326,7 @@ describe('SignInScreen button ledger', () => {
       apple.resolve({
         user: 'apple-user-1',
         identityToken: 'apple-identity-token',
+        authorizationCode: 'one-use-apple-code',
         email: 'pat@privaterelay.example',
         givenName: 'Pat',
         familyName: 'Player',
@@ -334,6 +337,7 @@ describe('SignInScreen button ledger', () => {
       apiBaseUrl: 'https://api.example.test',
       bearerToken: 'apple-identity-token',
       provider: 'apple',
+      appleAuthorizationCode: 'one-use-apple-code',
     });
     const state = useAuthStore.getState();
     expect(state.busy).toBe(false);

@@ -89,24 +89,30 @@ import {
   sanitizeUserText,
 } from "./http.ts";
 import { PRIVACY_POLICY_TEXT, TERMS_TEXT } from "./legal.ts";
+import {
+  ExternalAccountError,
+  decryptAppleRefreshToken,
+  deleteRevenueCatCustomer,
+  encryptAppleRefreshToken,
+  exchangeAppleAuthorizationCode,
+  revokeAppleRefreshToken,
+  type AppleServerConfiguration,
+} from "./externalAccounts.ts";
 
 // Publishable key (sb_publishable_…) set via `supabase secrets set
 // SB_PUBLISHABLE_KEY=…`, falling back to the platform-injected legacy anon
 // key. After signInWithIdToken we hold the USER's own session, and data
-// access runs as that user under row-level security — with ONE deliberate
-// exception: the billing_entitlements verdict is written with the
-// platform-injected service-role key (billingAdminDb below). That table has
-// no user write policies, so a user can never PostgREST themselves into
-// premium; only this function's RevenueCat-verified sync can. (The only
-// non-Supabase secret is the RevenueCat REST key read inside the billing
-// sync route: REVENUECAT_SECRET_API_KEY.)
+// access runs as that user under row-level security. Narrow administrative
+// operations (verified billing writes, webhook audit, encrypted Apple-token
+// storage, external-deletion checkpoints, and Auth user deletion) use the
+// platform-injected service-role key through billingAdminDb below. The client
+// has no write policy to any of those server-owned records.
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SB_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
 
-/** Service-role client for exactly three verified paths: the
- * billing_entitlements upsert (billing sync + webhook), the webhook_events
- * audit log, and the Auth admin deleteUser behind the two-step account
- * deletion. Lazy so the rest of the function never depends on the key. */
+/** Service-role client for verified billing/webhook writes, encrypted Apple
+ * revocation-token storage, retry-safe external-deletion checkpoints, and
+ * Auth admin deleteUser. Lazy so unrelated routes do not depend on the key. */
 let billingAdminClient: ReturnType<typeof createClient> | null = null;
 function billingAdminDb(): ReturnType<typeof createClient> | null {
   if (billingAdminClient) return billingAdminClient;
@@ -116,6 +122,19 @@ function billingAdminDb(): ReturnType<typeof createClient> | null {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   return billingAdminClient;
+}
+
+/** Secrets required for Apple's server-to-server token exchange/revocation.
+ * Read lazily so Google sign-in and unrelated routes do not depend on them. */
+function appleServerConfiguration(): AppleServerConfiguration | null {
+  const config: AppleServerConfiguration = {
+    clientId: Deno.env.get("APPLE_SIGN_IN_CLIENT_ID") ?? "",
+    teamId: Deno.env.get("APPLE_SIGN_IN_TEAM_ID") ?? "",
+    keyId: Deno.env.get("APPLE_SIGN_IN_KEY_ID") ?? "",
+    privateKeyPem: Deno.env.get("APPLE_SIGN_IN_PRIVATE_KEY") ?? "",
+    tokenEncryptionKey: Deno.env.get("APPLE_TOKEN_ENCRYPTION_KEY") ?? "",
+  };
+  return Object.values(config).every((value) => value.trim()) ? config : null;
 }
 
 const json = (status: number, body: unknown): Response =>
@@ -403,9 +422,14 @@ function providerOfUser(user: {
  * Supabase session the app will bear and persist from now on. Every
  * bootstrap mints a NEW session on purpose — one per device sign-in — so
  * this path never reads the auth cache. */
-async function authenticateProviderToken(
-  request: Request,
-): Promise<{ authed: AuthedUser; session: SupabaseSessionLike } | Response> {
+async function authenticateProviderToken(request: Request): Promise<
+  | {
+      authed: AuthedUser;
+      session: SupabaseSessionLike;
+      providerSubject: string;
+    }
+  | Response
+> {
   const token = bearerOf(request);
   if (!token) return errorJson(401, "Missing bearer token.");
   const payload = decodeJwtPayload(token);
@@ -414,6 +438,10 @@ async function authenticateProviderToken(
     return errorJson(401, "Bearer token is not a Google or Apple ID token.");
   }
   if (bearerExpired(payload)) return errorJson(401, "The identity token has expired.");
+  const providerSubject = payload?.sub;
+  if (typeof providerSubject !== "string" || !providerSubject) {
+    return errorJson(401, "The identity token has no subject.");
+  }
   const signIn = await anonAuthClient().auth.signInWithIdToken({ provider, token });
   if (signIn.error || !signIn.data.user || !signIn.data.session) {
     return errorJson(401, "The identity token could not be verified.");
@@ -426,6 +454,7 @@ async function authenticateProviderToken(
       db: userScopedClient(signIn.data.session.access_token),
     },
     session: signIn.data.session,
+    providerSubject,
   };
 }
 
@@ -2427,6 +2456,95 @@ async function requestAccountDeletion(authed: AuthedUser, request: Request): Pro
   return json(200, { challenge, expiresAt });
 }
 
+interface ExternalCredentialRow {
+  apple_refresh_token_encrypted: string | null;
+  apple_revoked_at: string | null;
+  revenuecat_deleted_at: string | null;
+}
+
+type AppleDeletionOutcome = "revoked" | "not_applicable" | "manual_action_required";
+
+/** Complete provider-side erasure before removing the Supabase identity. A
+ * successful external step is checkpointed in the service-role-only row so a
+ * later provider/database failure can be retried safely. */
+async function deleteExternalAccounts(
+  authed: AuthedUser,
+  adminDb: ReturnType<typeof createClient>,
+): Promise<AppleDeletionOutcome | Response> {
+  const externalQ = await adminDb
+    .from("account_external_credentials")
+    .select("apple_refresh_token_encrypted, apple_revoked_at, revenuecat_deleted_at")
+    .eq("user_id", authed.id)
+    .maybeSingle();
+  if (externalQ.error) {
+    return serviceUnavailable("Account deletion", externalQ.error.message);
+  }
+  const external = externalQ.data as ExternalCredentialRow | null;
+  let appleOutcome: AppleDeletionOutcome = "not_applicable";
+
+  if (authed.provider === "apple") {
+    if (external?.apple_revoked_at) {
+      appleOutcome = "revoked";
+    } else if (external?.apple_refresh_token_encrypted) {
+      const config = appleServerConfiguration();
+      if (!config) {
+        return serviceUnavailable("Account deletion", "Apple server secrets unavailable");
+      }
+      try {
+        const refreshToken = await decryptAppleRefreshToken(
+          external.apple_refresh_token_encrypted,
+          authed.id,
+          config.tokenEncryptionKey,
+        );
+        await revokeAppleRefreshToken(refreshToken, config);
+      } catch (error) {
+        const detail = error instanceof ExternalAccountError ? error.message : error;
+        return serviceUnavailable("Account deletion", detail);
+      }
+      const marked = await adminDb
+        .from("account_external_credentials")
+        .update({
+          apple_revoked_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", authed.id);
+      if (marked.error) {
+        return serviceUnavailable("Account deletion", marked.error.message);
+      }
+      appleOutcome = "revoked";
+    } else {
+      // Accounts created by an older app build have no stored Apple refresh
+      // token. Apple explicitly says deletion must still be fulfilled; the
+      // response tells the client to direct that user to Apple's manual
+      // Sign in with Apple authorization controls.
+      appleOutcome = "manual_action_required";
+      console.warn(`[api] account deletion has no Apple revocation token: ${authed.id}`);
+    }
+  }
+
+  if (!external?.revenuecat_deleted_at) {
+    const revenueCatSecret = Deno.env.get("REVENUECAT_SECRET_API_KEY") ?? "";
+    try {
+      await deleteRevenueCatCustomer(authed.id, revenueCatSecret);
+    } catch (error) {
+      const detail = error instanceof ExternalAccountError ? error.message : error;
+      return serviceUnavailable("Account deletion", detail);
+    }
+    const now = new Date().toISOString();
+    const marked = await adminDb
+      .from("account_external_credentials")
+      .upsert(
+        { user_id: authed.id, revenuecat_deleted_at: now, updated_at: now },
+        { onConflict: "user_id" },
+      );
+    if (marked.error) {
+      return serviceUnavailable("Account deletion", marked.error.message);
+    }
+  }
+
+  return appleOutcome;
+}
+
 async function confirmAccountDeletion(authed: AuthedUser, request: Request): Promise<Response> {
   const body = await readBody(request);
   const challenge = body.challenge;
@@ -2472,8 +2590,21 @@ async function confirmAccountDeletion(authed: AuthedUser, request: Request): Pro
   if (!adminDb) {
     return serviceUnavailable("Account deletion", "service role unavailable");
   }
+  const appleAuthorizationRevocation = await deleteExternalAccounts(authed, adminDb);
+  if (appleAuthorizationRevocation instanceof Response) return appleAuthorizationRevocation;
+
   const deleted = await adminDb.auth.admin.deleteUser(authed.id);
-  if (deleted.error) {
+  const authError = deleted.error as {
+    status?: number;
+    code?: string;
+    error_code?: string;
+    message?: string;
+  } | null;
+  const alreadyDeleted =
+    authError?.status === 404 ||
+    authError?.code === "user_not_found" ||
+    authError?.error_code === "user_not_found";
+  if (authError && !alreadyDeleted) {
     return serviceUnavailable("Account deletion", deleted.error.message);
   }
 
@@ -2487,7 +2618,7 @@ async function confirmAccountDeletion(authed: AuthedUser, request: Request): Pro
     await authCacheKey(bearerOf(request)),
   );
   console.warn(`[api] account deleted: ${authed.id}`);
-  return json(200, { deleted: true });
+  return json(200, { deleted: true, appleAuthorizationRevocation });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2566,12 +2697,78 @@ const WEBHOOK_LIMIT = { limit: 240, windowSeconds: 60 };
 async function bootstrapAccount(
   authed: AuthedUser,
   session: SupabaseSessionLike,
+  providerSubject: string,
+  request: Request,
 ): Promise<Response> {
   const profile = await readProfile(authed);
   if (profile instanceof Response) return profile;
   if (profile.provider !== authed.provider) {
     await authed.db.from("profiles").update({ provider: authed.provider }).eq("id", authed.id);
   }
+
+  if (authed.provider === "apple") {
+    const body = await readBody(request);
+    const authorizationCode = body.appleAuthorizationCode;
+    if (
+      typeof authorizationCode !== "string" ||
+      !authorizationCode.trim() ||
+      authorizationCode.length > 4_096
+    ) {
+      return codedError(
+        400,
+        "auth.apple_authorization_code_required",
+        "Apple did not provide the authorization needed to finish secure sign-in. Try again.",
+      );
+    }
+    const config = appleServerConfiguration();
+    const adminDb = billingAdminDb();
+    if (!config || !adminDb) {
+      return serviceUnavailable(
+        "Apple sign-in",
+        "Apple server secrets or service role unavailable",
+      );
+    }
+    try {
+      const grant = await exchangeAppleAuthorizationCode(authorizationCode.trim(), config);
+      if (grant.subject !== providerSubject) {
+        return codedError(
+          401,
+          "auth.apple_authorization_mismatch",
+          "Apple returned authorization for a different account. Try again.",
+        );
+      }
+      const encrypted = await encryptAppleRefreshToken(
+        grant.refreshToken,
+        authed.id,
+        config.tokenEncryptionKey,
+      );
+      const now = new Date().toISOString();
+      const stored = await adminDb.from("account_external_credentials").upsert(
+        {
+          user_id: authed.id,
+          apple_refresh_token_encrypted: encrypted,
+          apple_token_captured_at: now,
+          apple_revoked_at: null,
+          updated_at: now,
+        },
+        { onConflict: "user_id" },
+      );
+      if (stored.error) {
+        return serviceUnavailable("Apple sign-in", stored.error.message);
+      }
+    } catch (error) {
+      if (error instanceof ExternalAccountError && error.kind === "invalid_grant") {
+        return codedError(
+          401,
+          "auth.apple_authorization_invalid",
+          "Apple could not validate this sign-in authorization. Try again.",
+        );
+      }
+      const detail = error instanceof ExternalAccountError ? error.message : error;
+      return serviceUnavailable("Apple sign-in", detail);
+    }
+  }
+
   return json(200, {
     user: { id: profile.id, email: profile.email },
     onboardingState: profile.onboarding_state === "complete" ? "complete" : "pending",
@@ -2688,7 +2885,12 @@ async function handleRequest(request: Request): Promise<Response> {
       GENERAL_USER_LIMIT.windowSeconds,
     );
     if (!userLimit.allowed) return rateLimitResponse(userLimit);
-    return bootstrapAccount(exchanged.authed, exchanged.session);
+    return bootstrapAccount(
+      exchanged.authed,
+      exchanged.session,
+      exchanged.providerSubject,
+      request,
+    );
   }
   if (route === "POST /v1/auth/refresh") {
     const rl = await enforceRateLimit(

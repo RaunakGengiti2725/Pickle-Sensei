@@ -212,7 +212,7 @@ describe('ConsentSettingsScreen — consent server unreachable', () => {
     const toggle = renderer.root.findByType(BrandToggle);
     expect(toggle.props.value).toBe(false);
     expect(toggle.props.disabled).toBe(true);
-    expect(toggle.props.label).toBe('Use my video to improve models');
+    expect(toggle.props.label).toBe('Use my feedback to improve scoring');
     await act(async () => {
       renderer.unmount();
     });

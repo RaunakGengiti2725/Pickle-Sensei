@@ -166,6 +166,26 @@ describe('PrivacyInfo.xcprivacy required-reason APIs', () => {
     const pbxproj = read('ios/PickleSensei.xcodeproj/project.pbxproj');
     expect(pbxproj).toMatch(/PrivacyInfo\.xcprivacy in Resources/);
   });
+
+  it('declares RevenueCat purchase history and linked user id for functionality and analytics', () => {
+    const entryFor = (type: string) => {
+      const match = new RegExp(
+        `<string>${type}</string>[\\s\\S]*?<key>NSPrivacyCollectedDataTypePurposes</key>\\s*<array>([\\s\\S]*?)</array>`,
+      ).exec(manifest);
+      expect(match).not.toBeNull();
+      return match![1]!;
+    };
+    for (const type of [
+      'NSPrivacyCollectedDataTypeUserID',
+      'NSPrivacyCollectedDataTypePurchaseHistory',
+    ]) {
+      const purposes = entryFor(type);
+      expect(purposes).toContain(
+        'NSPrivacyCollectedDataTypePurposeAppFunctionality',
+      );
+      expect(purposes).toContain('NSPrivacyCollectedDataTypePurposeAnalytics');
+    }
+  });
 });
 
 describe('runtime config: paywall legal links (App Review 3.1.2)', () => {

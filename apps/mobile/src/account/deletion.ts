@@ -6,7 +6,8 @@ import type { ApiSession } from './apiSession';
  * account deletion):
  *
  *   POST /v1/me/delete-request { survey? } → { challenge, expiresAt }
- *   POST /v1/me/delete-confirm { challenge } → { deleted: true }
+ *   POST /v1/me/delete-confirm { challenge } →
+ *     { deleted: true, appleAuthorizationRevocation }
  *
  * The confirm call must present the challenge minted by a separate prior
  * request, so no single tap — accidental or scripted — can destroy an
@@ -85,6 +86,11 @@ export class AccountDeletionError extends Error {
 export interface AccountDeletionChallenge {
   challenge: string;
   expiresAt: string;
+}
+
+export interface AccountDeletionResult {
+  appleAuthorizationRevocation:
+    'revoked' | 'not_applicable' | 'manual_action_required';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -193,7 +199,7 @@ export async function confirmAccountDeletion(
   session: ApiSession | null,
   challenge: string,
   fetchFn: AccountDeletionFetch = globalThis.fetch,
-): Promise<void> {
+): Promise<AccountDeletionResult> {
   if (!session) {
     throw new AccountDeletionError(
       'deletion.not_configured',
@@ -211,4 +217,15 @@ export async function confirmAccountDeletion(
       false,
     );
   }
+  const appleAuthorizationRevocation = payload['appleAuthorizationRevocation'];
+  if (
+    appleAuthorizationRevocation !== 'revoked' &&
+    appleAuthorizationRevocation !== 'not_applicable' &&
+    appleAuthorizationRevocation !== 'manual_action_required'
+  ) {
+    // Compatibility with a briefly deployed pre-revocation backend. New
+    // servers always return the explicit outcome.
+    return { appleAuthorizationRevocation: 'not_applicable' };
+  }
+  return { appleAuthorizationRevocation };
 }

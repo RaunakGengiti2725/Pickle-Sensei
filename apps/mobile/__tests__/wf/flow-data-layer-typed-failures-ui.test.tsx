@@ -158,7 +158,7 @@ describe('ConsentSettingsScreen ← consentStore', () => {
     const renderer = render(<ConsentSettingsScreen />);
     let toggle = renderer.root.findByType(BrandToggle);
     expect(toggle.props.disabled).toBe(true);
-    expect(toggle.props.label).toBe('Use my video to improve models');
+    expect(toggle.props.label).toBe('Use my feedback to improve scoring');
     act(() => {
       useConsentStore.setState({ busy: false });
     });

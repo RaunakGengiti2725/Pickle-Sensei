@@ -21,6 +21,8 @@ export interface Harness {
   tables: Record<string, unknown[]>;
   /** Rows returned for PostgREST RPC POST by function name. */
   rpcs: Record<string, unknown>;
+  /** Test-only copy of the generated AES key used by the lazy edge config. */
+  appleTokenEncryptionKey: string;
   reset(): void;
   callsTo(fragment: string): RecordedCall[];
 }
@@ -51,6 +53,37 @@ export function fakeGoogleIdToken(sub = TEST_USER_ID): string {
   return `${header}.${payload}.sig`;
 }
 
+export function fakeAppleIdToken(sub = TEST_USER_ID): string {
+  const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const payload = b64url(
+    JSON.stringify({
+      iss: "https://appleid.apple.com",
+      sub,
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    }),
+  );
+  return `${header}.${payload}.sig`;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+async function testApplePrivateKeyPem(): Promise<string> {
+  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+    "sign",
+    "verify",
+  ]);
+  const pkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", pair.privateKey));
+  const encoded =
+    bytesToBase64(pkcs8)
+      .match(/.{1,64}/g)
+      ?.join("\n") ?? "";
+  return `-----BEGIN PRIVATE KEY-----\n${encoded}\n-----END PRIVATE KEY-----`;
+}
+
 let harness: Harness | null = null;
 
 export async function loadHarness(): Promise<Harness> {
@@ -64,6 +97,12 @@ export async function loadHarness(): Promise<Harness> {
   Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "service-role-test-key");
   Deno.env.set("REVENUECAT_WEBHOOK_AUTH", WEBHOOK_SECRET);
   Deno.env.set("REVENUECAT_SECRET_API_KEY", "sk_test_revenuecat");
+  const appleTokenEncryptionKey = bytesToBase64(crypto.getRandomValues(new Uint8Array(32)));
+  Deno.env.set("APPLE_SIGN_IN_CLIENT_ID", "com.picklesensei");
+  Deno.env.set("APPLE_SIGN_IN_TEAM_ID", "TEAMID1234");
+  Deno.env.set("APPLE_SIGN_IN_KEY_ID", "KEYID12345");
+  Deno.env.set("APPLE_SIGN_IN_PRIVATE_KEY", await testApplePrivateKeyPem());
+  Deno.env.set("APPLE_TOKEN_ENCRYPTION_KEY", appleTokenEncryptionKey);
   Deno.env.delete("UPSTASH_REDIS_REST_URL");
   Deno.env.delete("UPSTASH_REDIS_REST_TOKEN");
 
@@ -77,6 +116,7 @@ export async function loadHarness(): Promise<Harness> {
     subscriber: {},
     tables: {},
     rpcs: {},
+    appleTokenEncryptionKey,
     reset() {
       state.calls = [];
       state.subscriber = {};
@@ -119,6 +159,15 @@ export async function loadHarness(): Promise<Harness> {
         subscriber: state.subscriber,
       });
     }
+    if (url === "https://appleid.apple.com/auth/token") {
+      return jsonResponse(200, {
+        refresh_token: "apple-refresh-token-from-grant",
+        id_token: fakeAppleIdToken(),
+      });
+    }
+    if (url === "https://appleid.apple.com/auth/revoke") {
+      return new Response(null, { status: 200 });
+    }
     if (url.startsWith(`${SUPABASE_URL}/auth/v1/token`)) {
       const payload = isRecord(body) ? body : {};
       const token = typeof payload.id_token === "string" ? payload.id_token : "";
@@ -148,6 +197,9 @@ export async function loadHarness(): Promise<Harness> {
           created_at: new Date().toISOString(),
         },
       });
+    }
+    if (request.method === "DELETE" && url.startsWith(`${SUPABASE_URL}/auth/v1/admin/users/`)) {
+      return jsonResponse(200, {});
     }
     if (url.startsWith(`${SUPABASE_URL}/rest/v1/`)) {
       const table = new URL(url).pathname.slice("/rest/v1/".length);

@@ -912,7 +912,7 @@ describe('RECOVERY a rejected bearer is recovered in-app', () => {
     expect(persistedShape).toBeDefined();
     expect(persistedShape).toMatch(/refreshToken: string;/);
     expect(persistedShape).not.toMatch(
-      /accessToken|bearerToken|identityToken|idToken/,
+      /accessToken|bearerToken|identityToken|idToken|authorizationCode/,
     );
     // No other durable store is in play for anything: AsyncStorage is not a
     // dependency of the app's sources at all.

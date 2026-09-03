@@ -123,7 +123,10 @@ describe('account deletion client', () => {
       expect(JSON.parse(String(init?.body))).toEqual({
         challenge: '33333333-3333-4333-8333-333333333333',
       });
-      return jsonResponse(200, { deleted: true });
+      return jsonResponse(200, {
+        deleted: true,
+        appleAuthorizationRevocation: 'revoked',
+      });
     });
 
     await expect(
@@ -132,7 +135,7 @@ describe('account deletion client', () => {
         '33333333-3333-4333-8333-333333333333',
         fetchFn,
       ),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ appleAuthorizationRevocation: 'revoked' });
   });
 
   it('step 2 surfaces a stale/foreign challenge as non-retryable', async () => {

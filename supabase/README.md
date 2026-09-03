@@ -44,6 +44,25 @@ supabase db push
 
 ## 4. Deploy the bootstrap function
 
+Before deploying, configure the server-only credentials used to retain and
+revoke Sign in with Apple authorization and to erase RevenueCat customers:
+
+```bash
+supabase secrets set \
+  APPLE_SIGN_IN_CLIENT_ID=com.picklesensei \
+  APPLE_SIGN_IN_TEAM_ID=<10-character-team-id> \
+  APPLE_SIGN_IN_KEY_ID=<key-id> \
+  APPLE_SIGN_IN_PRIVATE_KEY='<contents-of-AuthKey_KEYID.p8>' \
+  APPLE_TOKEN_ENCRYPTION_KEY=<base64-encoded-32-random-bytes> \
+  REVENUECAT_SECRET_API_KEY=<RevenueCat-secret-key>
+```
+
+The Apple private key must be a Sign in with Apple key associated with the
+app's primary App ID. Never use a RevenueCat public SDK key for deletion.
+Generate the encryption key with a cryptographically secure generator and
+store it outside the repository; losing it prevents automatic revocation of
+previously stored Apple refresh tokens.
+
 ```bash
 supabase functions deploy api --no-verify-jwt
 ```
@@ -93,7 +112,8 @@ deploying:
 supabase secrets set REVENUECAT_SECRET_API_KEY=sk_…
 ```
 
-(`REVENUECAT_PUBLIC_SDK_KEY` is honored as a fallback.) Without a key the
+(`REVENUECAT_PUBLIC_SDK_KEY` is honored as a fallback for subscriber reads,
+but account deletion requires `REVENUECAT_SECRET_API_KEY`.) Without a key the
 endpoint returns a typed 503 `billing_unconfigured`. Recognized entitlement
 identifiers: `pickle_sensei_pro` (canonical) and `premium` (alias); an
 entitlement counts while `expires_date` is null (lifetime) or in the future.

@@ -17,9 +17,10 @@ import { useConsentStore } from '../state/consentStore';
 import type { RootStackParams } from '../navigation/params';
 
 /**
- * First-party consent surface. "Analyze my video" and "use my video to
- * improve models" are deliberately separate: analysis is what the product
- * does; model training happens ONLY behind the explicit opt-in below.
+ * First-party consent surface. "Analyze my video" and the optional use of
+ * submitted feedback + linked structured results are deliberately separate:
+ * analysis is what the product does; model improvement happens ONLY behind
+ * the explicit opt-in below. Raw media never leaves the device.
  * No dark patterns: the toggle defaults off, both directions use the same
  * neutral copy weight, and failures never pretend the change was saved.
  */
@@ -81,20 +82,21 @@ export function ConsentSettingsScreen() {
               <Icon name="spark" size={20} color={color.court} />
             </View>
             <Text style={[type.h3, { color: color.ink, flex: 1 }]}>
-              Use my video to improve models
+              Use my feedback to improve scoring
             </Text>
             <BrandToggle
-              label="Use my video to improve models"
+              label="Use my feedback to improve scoring"
               disabled={toggleDisabled}
               value={active}
               onValueChange={next => void setConsent(next)}
             />
           </View>
           <Text style={[type.body, styles.bodyText]}>
-            You choose whether anonymized capture data helps improve the scoring
-            model. Off unless you turn it on. You can turn it off at any time
-            and new training use stops; a record of your choice is kept for
-            accountability.
+            You choose whether feedback you submit and its linked, structured
+            analysis results may be reviewed to improve scoring. Raw video,
+            audio, frames, and pose landmarks still never leave this device. Off
+            unless you turn it on; you can turn it off at any time. A record of
+            your choice is kept for accountability.
           </Text>
           {signedOut ? (
             <>

@@ -26,6 +26,7 @@ interface FakeState {
   /** Queue of statuses for DELETE /auth/v1/admin/users/:id. */
   adminDeleteStatuses: number[];
   adminDeleteCalls: number;
+  revenueCatDeleteCalls: number;
   profileRows: Array<Record<string, unknown>>;
 }
 
@@ -36,6 +37,7 @@ const state: FakeState = {
   lastUpsert: null,
   adminDeleteStatuses: [],
   adminDeleteCalls: 0,
+  revenueCatDeleteCalls: 0,
   profileRows: [],
 };
 
@@ -46,6 +48,7 @@ function resetState(): void {
   state.lastUpsert = null;
   state.adminDeleteStatuses = [];
   state.adminDeleteCalls = 0;
+  state.revenueCatDeleteCalls = 0;
   state.profileRows = [];
 }
 
@@ -116,6 +119,13 @@ async function fakeSupabase(request: Request): Promise<Response> {
     if (request.method === "GET") return jsonResponse(200, state.deletionRows);
   }
 
+  if (path === "/rest/v1/account_external_credentials") {
+    if (request.method === "GET") return jsonResponse(200, []);
+    if (request.method === "POST" || request.method === "PATCH") {
+      return new Response(null, { status: 201 });
+    }
+  }
+
   if (path === "/rest/v1/profiles" && request.method === "GET") {
     return jsonResponse(200, state.profileRows);
   }
@@ -135,6 +145,19 @@ const fakeUrl = `http://127.0.0.1:${fake.addr.port}`;
 Deno.env.set("SUPABASE_URL", fakeUrl);
 Deno.env.set("SUPABASE_ANON_KEY", "anon-key");
 Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "service-role-key");
+Deno.env.set("REVENUECAT_SECRET_API_KEY", "sk_test_revenuecat");
+
+const realFetch = globalThis.fetch;
+globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+  const request = new Request(input, init);
+  if (request.url.startsWith("https://api.revenuecat.com/v1/subscribers/")) {
+    state.revenueCatDeleteCalls += 1;
+    assertEquals(request.method, "DELETE");
+    assertEquals(request.headers.get("authorization"), "Bearer sk_test_revenuecat");
+    return Promise.resolve(new Response(null, { status: 200 }));
+  }
+  return realFetch(input, init);
+}) as typeof fetch;
 
 type Handler = (request: Request) => Promise<Response> | Response;
 let handler: Handler | null = null;
@@ -243,7 +266,7 @@ Deno.test(
 // ─── REPRO: delete-confirm is not idempotent under duplicate requests ────────
 
 Deno.test(
-  "REPRO: two concurrent delete-confirms → one 200 and one 503 'temporarily unavailable'",
+  "two concurrent delete-confirms are idempotent even when GoTrue reports one user already gone",
   async () => {
     resetState();
     const token = providerToken(crypto.randomUUID());
@@ -259,22 +282,15 @@ Deno.test(
       call("POST", "/v1/me/delete-confirm", token, { challenge }),
     ]);
     const statuses = [a.status, b.status].sort();
-    assertEquals(statuses, [200, 503]);
-    const failed = a.status === 503 ? a : b;
-    const ok = a.status === 200 ? a : b;
-    assertEquals(((await ok.json()) as { deleted: boolean }).deleted, true);
-    // The loser is told the deletion is "temporarily unavailable" (retryable)
-    // even though the account IS deleted.
-    assertStringIncludes(
-      ((await failed.json()) as { error: { message: string } }).error.message,
-      "temporarily unavailable",
-    );
+    assertEquals(statuses, [200, 200]);
+    assertEquals(((await a.json()) as { deleted: boolean }).deleted, true);
+    assertEquals(((await b.json()) as { deleted: boolean }).deleted, true);
     assertEquals(state.adminDeleteCalls, 2);
   },
 );
 
 Deno.test(
-  "REPRO: replaying delete-confirm after deleteUser succeeded is a 503, not idempotent",
+  "replaying delete-confirm after deleteUser succeeded remains a successful deletion",
   async () => {
     resetState();
     const token = providerToken(crypto.randomUUID());
@@ -287,7 +303,8 @@ Deno.test(
     // or the two requests interleave). GoTrue answers 404 user_not_found.
     state.adminDeleteStatuses = [404];
     const res = await call("POST", "/v1/me/delete-confirm", token, { challenge });
-    assertEquals(res.status, 503);
+    assertEquals(res.status, 200);
+    assertEquals(((await res.json()) as { deleted: boolean }).deleted, true);
   },
 );
 
@@ -334,6 +351,7 @@ Deno.test({
   name: "teardown fake supabase",
   fn: async () => {
     await fake.shutdown();
+    globalThis.fetch = realFetch;
   },
   sanitizeResources: false,
   sanitizeOps: false,

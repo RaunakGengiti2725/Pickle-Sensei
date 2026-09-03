@@ -28,12 +28,16 @@ backend is the Supabase Edge Function in `supabase/functions/api/` (Deno);
 - Secrets: `supabase secrets set REVENUECAT_SECRET_API_KEY=…` (billing sync falls
   back to `REVENUECAT_PUBLIC_SDK_KEY`, currently set to the Test Store key),
   `REVENUECAT_WEBHOOK_AUTH=…` (shared secret the RevenueCat webhook must send
-  as its Authorization header), and optionally `UPSTASH_REDIS_REST_URL` +
+  as its Authorization header), `APPLE_SIGN_IN_CLIENT_ID=com.picklesensei`,
+  `APPLE_SIGN_IN_TEAM_ID=…`, `APPLE_SIGN_IN_KEY_ID=…`,
+  `APPLE_SIGN_IN_PRIVATE_KEY=…` (the Sign in with Apple `.p8` PEM), and
+  `APPLE_TOKEN_ENCRYPTION_KEY=…` (base64-encoded 32 random bytes). The Apple
+  values are required for server-side authorization-code exchange and account-
+  deletion revocation. Optionally set `UPSTASH_REDIS_REST_URL` +
   `UPSTASH_REDIS_REST_TOKEN` (cross-instance cache + rate limits; without
   them the function falls back to per-isolate memory).
-  `SUPABASE_SERVICE_ROLE_KEY` is platform-injected (used ONLY for the
-  billing_entitlements upsert, the webhook_events audit log, and the Auth
-  admin deleteUser behind two-step account deletion).
+  `SUPABASE_SERVICE_ROLE_KEY` is platform-injected (used only for server-owned
+  billing/audit/external-credential rows and Auth admin deleteUser).
 
 ## Auth sessions (durable sign-in — closing the app must NEVER sign out)
 
