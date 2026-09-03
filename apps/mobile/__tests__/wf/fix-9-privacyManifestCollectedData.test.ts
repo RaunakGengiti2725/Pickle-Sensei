@@ -1,10 +1,9 @@
 /**
- * PrivacyInfo.xcprivacy must disclose every data category the shipping
- * backend collects (supabase/functions/api/legal.ts §1) whenever the build
- * points at a live API origin. Xcode's generated privacy report — the source
- * for the App Store nutrition labels — reads exactly this manifest, so an
- * empty NSPrivacyCollectedDataTypes with apiBaseUrl set understates
- * collection (release manifest step `privacy_disclosure_sync`).
+ * PrivacyInfo.xcprivacy must disclose every data category collected by the
+ * shipping app code and its embedded video surface (see legal.ts §1).
+ * Linked SDKs publish separate manifests; Xcode aggregates those with this
+ * file so the App Store Connect answers can be audited against the complete
+ * binary (release manifest step `privacy_disclosure_sync`).
  */
 import { getRuntimePublicConfig } from '../../src/config/runtimeConfig';
 
@@ -86,15 +85,24 @@ function parseCollectedDataTypes(xml: string): CollectedDataType[] {
   }));
 }
 
-/** legal.ts §1 → Apple privacy-manifest data categories. */
-const DISCLOSED_BY_PRIVACY_POLICY = [
+/**
+ * legal.ts §1 → data collected by Pickle Sensei and the embedded video
+ * surface. Linked SDKs publish their own manifests, so their additional
+ * categories (for example Google Sign-In's phone number and device ID) do
+ * not belong in this app-target manifest.
+ */
+const APP_TARGET_DISCLOSURES = [
   'NSPrivacyCollectedDataTypeEmailAddress',
   'NSPrivacyCollectedDataTypeName',
   'NSPrivacyCollectedDataTypeUserID',
   'NSPrivacyCollectedDataTypeFitness',
   'NSPrivacyCollectedDataTypeOtherDataTypes',
+  'NSPrivacyCollectedDataTypeOtherUserContent',
+  'NSPrivacyCollectedDataTypeBrowsingHistory',
   'NSPrivacyCollectedDataTypePurchaseHistory',
   'NSPrivacyCollectedDataTypeOtherUsageData',
+  'NSPrivacyCollectedDataTypeProductInteraction',
+  'NSPrivacyCollectedDataTypeAdvertisingData',
 ];
 
 const KNOWN_PURPOSES = new Set([
@@ -110,11 +118,11 @@ describe('PrivacyInfo.xcprivacy collected-data disclosure (fix-9)', () => {
   const xml = readFileSync(MANIFEST_PATH, 'utf8');
   const collected = parseCollectedDataTypes(xml);
 
-  it('declares every category the privacy policy says the backend collects when a live API origin ships', () => {
+  it('declares every app-level category covered by the privacy policy', () => {
     const { apiBaseUrl } = getRuntimePublicConfig();
     expect(apiBaseUrl).not.toBeNull();
     const declared = collected.map(entry => entry.type);
-    for (const type of DISCLOSED_BY_PRIVACY_POLICY) {
+    for (const type of APP_TARGET_DISCLOSURES) {
       expect(declared).toContain(type);
     }
     expect(new Set(declared).size).toBe(declared.length);
@@ -141,6 +149,8 @@ describe('PrivacyInfo.xcprivacy collected-data disclosure (fix-9)', () => {
     const analytics = 'NSPrivacyCollectedDataTypePurposeAnalytics';
     const personalization =
       'NSPrivacyCollectedDataTypePurposeProductPersonalization';
+    const thirdPartyAdvertising =
+      'NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising';
     expect(purposesByType).toEqual({
       NSPrivacyCollectedDataTypeEmailAddress: new Set([appFunctionality]),
       NSPrivacyCollectedDataTypeName: new Set([
@@ -156,6 +166,13 @@ describe('PrivacyInfo.xcprivacy collected-data disclosure (fix-9)', () => {
       NSPrivacyCollectedDataTypeOtherDataTypes: new Set([
         appFunctionality,
         personalization,
+        analytics,
+      ]),
+      NSPrivacyCollectedDataTypeOtherUserContent: new Set([analytics]),
+      NSPrivacyCollectedDataTypeBrowsingHistory: new Set([
+        thirdPartyAdvertising,
+        analytics,
+        appFunctionality,
       ]),
       NSPrivacyCollectedDataTypePurchaseHistory: new Set([
         appFunctionality,
@@ -165,16 +182,34 @@ describe('PrivacyInfo.xcprivacy collected-data disclosure (fix-9)', () => {
         analytics,
         appFunctionality,
       ]),
+      NSPrivacyCollectedDataTypeProductInteraction: new Set([
+        thirdPartyAdvertising,
+        analytics,
+        personalization,
+        appFunctionality,
+      ]),
+      NSPrivacyCollectedDataTypeAdvertisingData: new Set([
+        thirdPartyAdvertising,
+        analytics,
+      ]),
     });
   });
 
-  it('claims no advertising purpose and keeps NSPrivacyTracking false (policy §2: no ad profiles, no data sale)', () => {
+  it('limits advertising disclosure to the external video provider and keeps tracking false', () => {
+    const thirdPartyAdvertising =
+      'NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising';
+    const thirdPartyAdvertisingTypes = new Set([
+      'NSPrivacyCollectedDataTypeBrowsingHistory',
+      'NSPrivacyCollectedDataTypeProductInteraction',
+      'NSPrivacyCollectedDataTypeAdvertisingData',
+    ]);
+
     for (const entry of collected) {
       expect(entry.purposes).not.toContain(
         'NSPrivacyCollectedDataTypePurposeDeveloperAdvertising',
       );
-      expect(entry.purposes).not.toContain(
-        'NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising',
+      expect(entry.purposes.includes(thirdPartyAdvertising)).toBe(
+        thirdPartyAdvertisingTypes.has(entry.type),
       );
     }
     expect(readBool(xml, 'NSPrivacyTracking')).toBe(false);
