@@ -1100,7 +1100,7 @@ under 1 million USD in prior-year proceeds; enrollment is a separate request.
 | No in-app account deletion                                         | 5.1.1(v)  | Settings → Account → Manage account → Delete account, two-step                                               |
 | Privacy label does not match behaviour                             | 5.1       | Label built from the actual data flows; manifest snippet mirrors it                                          |
 | Paid Apps Agreement not Active, products fail to load in review    | 3.1.1     | Pre-flight §2.1 of the dossier                                                                               |
-| Regulated Medical Device declaration missing                       | ASC rule  | Required because Health & Fitness is the secondary category; answer No                                       |
+| Inaccurate app category                                            | 2.3       | Sports is the sole category; the optional secondary category is blank                                        |
 
 ---
 

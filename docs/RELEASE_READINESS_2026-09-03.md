@@ -63,7 +63,12 @@ the app public until the Account Holder releases it.
     email has been verified. The address identification document was submitted
     on September 3, 2026, and Apple reports the trader verification as In Review.
 
-12. The release checks passed: workspace lint and type checks, 247 mobile test
+12. Sports is the sole App Store category. The optional Health & Fitness
+    secondary category was removed because the product is a sport-specific
+    pickleball technique coach, not a health, wellness, or medical app. The
+    existing regulated-medical-device declaration truthfully remains No.
+
+13. The release checks passed: workspace lint and type checks, 247 mobile test
     suites with 2,872 tests, 23 backend legal and router tests, 56 native vision
     tests, CocoaPods installation, the distribution configuration check, signed
     archive export, Apple upload, and App Store metadata precheck.
