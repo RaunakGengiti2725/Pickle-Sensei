@@ -60,8 +60,8 @@ the app public until the Account Holder releases it.
     are active. The app is selected for all 175 current App Store countries or
     regions, and automatic availability is enabled for future storefronts. The
     Digital Services Act declaration has been changed to trader, and the contact
-    email has been verified. Apple still requires an address identification
-    document before trader verification is complete.
+    email has been verified. The address identification document was submitted
+    on September 3, 2026, and Apple reports the trader verification as In Review.
 
 12. The release checks passed: workspace lint and type checks, 247 mobile test
     suites with 2,872 tests, 23 backend legal and router tests, 56 native vision
@@ -70,9 +70,10 @@ the app public until the Account Holder releases it.
 
 ## Required before submission
 
-1. Upload an address identification document in Business, Digital Services Act,
-   and complete Apple's trader verification. The document must confirm the
-   public trader address and be a PDF, JPEG, or PNG no larger than 10 MB.
+1. Wait for Apple to approve the Digital Services Act trader verification, then
+   confirm its status is Active before releasing in European Union storefronts.
+   No further action is available while Apple reports the submission as In
+   Review.
 
 2. Upload at least one App Store screenshot in the iPhone 6.5 inch screenshot
    section. App Store Connect currently shows zero screenshots.
