@@ -73,6 +73,16 @@ export interface TechniquePersonalBest {
   day: string;
 }
 
+/** One comparable scored read — the dot plot's individual point. */
+export interface ScoredReadPoint {
+  id: string;
+  shotType: string;
+  capturedAtMs: number;
+  /** Calendar day (device zone) the read landed. */
+  day: string;
+  score: number;
+}
+
 export interface TechniqueDashboard {
   windowDays: number;
   scoredReps: CountStat;
@@ -81,6 +91,9 @@ export interface TechniqueDashboard {
   bestScore: ScoreStat;
   /** Ascending, zero-filled, compacted to at most 13 bars. */
   buckets: ScoreTrendBucket[];
+  /** Every comparable scored read inside the current window, ascending by
+   * time (ties by id) — the same reads the buckets and stats aggregate. */
+  reads: ScoredReadPoint[];
   personalBest: TechniquePersonalBest | null;
   insight: string | null;
 }
@@ -99,6 +112,7 @@ export function formatSignedDelta(value: number, decimals = 1): string {
 }
 
 interface ComparableRead {
+  id: string;
   shotType: string;
   capturedAtMs: number;
   day: string;
@@ -154,6 +168,7 @@ export function buildTechniqueDashboard(
       previous: hasHistory ? maxScore(previous) : null,
     },
     buckets: trendBuckets(current, currentStartOrdinal, asOfOrdinal),
+    reads: readPoints(current),
     personalBest: personalBest(current, beforeWindow),
     insight: insightLine(
       meanScore(current),
@@ -202,6 +217,7 @@ function comparableReads(
     }
     const day = dayForInstant(fact.capturedAtMs, dayFormatter);
     reads.push({
+      id: fact.id,
       shotType: fact.shotType,
       capturedAtMs: fact.capturedAtMs,
       day,
@@ -219,6 +235,24 @@ function comparableReads(
 
 function distinctDays(reads: readonly ComparableRead[]): number {
   return new Set(reads.map(read => read.day)).size;
+}
+
+/** Chronological point list; the id tiebreak keeps same-instant reads
+ * (a burst of imports) in one stable order across renders. */
+function readPoints(reads: readonly ComparableRead[]): ScoredReadPoint[] {
+  return [...reads]
+    .sort(
+      (left, right) =>
+        left.capturedAtMs - right.capturedAtMs ||
+        left.id.localeCompare(right.id),
+    )
+    .map(read => ({
+      id: read.id,
+      shotType: read.shotType,
+      capturedAtMs: read.capturedAtMs,
+      day: read.day,
+      score: read.score,
+    }));
 }
 
 function meanScore(reads: readonly ComparableRead[]): number | null {

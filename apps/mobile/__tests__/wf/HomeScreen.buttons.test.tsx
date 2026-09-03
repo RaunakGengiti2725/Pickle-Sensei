@@ -38,10 +38,15 @@ jest.mock('../../src/data/db', () => ({
 }));
 
 const mockListShots = jest.fn<Promise<unknown[]>, unknown[]>();
-const mockListCaptureHistory = jest.fn<Promise<unknown[]>, unknown[]>();
+const mockListRealAnalysisFacts = jest.fn<Promise<unknown[]>, unknown[]>();
+const mockGetKv = jest.fn<Promise<string | null>, unknown[]>();
+const mockSetKv = jest.fn<Promise<void>, unknown[]>();
 jest.mock('../../src/data/repository', () => ({
   listShots: (...args: unknown[]) => mockListShots(...args),
-  listCaptureHistory: (...args: unknown[]) => mockListCaptureHistory(...args),
+  listRealAnalysisFacts: (...args: unknown[]) =>
+    mockListRealAnalysisFacts(...args),
+  getKv: (...args: unknown[]) => mockGetKv(...args),
+  setKv: (...args: unknown[]) => mockSetKv(...args),
 }));
 
 const mockGetApiSession = jest.fn<unknown, []>(() => null);
@@ -109,7 +114,7 @@ jest.mock('../../src/notifications/notificationStore', () => ({
 }));
 
 import { HomeScreen } from '../../src/screens/HomeScreen';
-import type { LocalShotRow } from '../../src/data/repository';
+import type { LocalShotRow, RealAnalysisFact } from '../../src/data/repository';
 
 const MIN_HIT_TARGET = 44;
 
@@ -124,6 +129,27 @@ function shot(overrides: Partial<LocalShotRow>): LocalShotRow {
     resultKind: 'scored',
     source: 'real',
     favorite: false,
+    ...overrides,
+  };
+}
+
+/** A real scored analysis `hoursAgo` before now — inside the week window. */
+function fact(
+  hoursAgo: number,
+  overrides: Partial<RealAnalysisFact> = {},
+): RealAnalysisFact {
+  return {
+    id: `fact-${hoursAgo}`,
+    shotType: 'forehand_drive',
+    capturedAt: new Date(Date.now() - hoursAgo * 3_600_000).toISOString(),
+    overallScore: 3.7,
+    confidence: 0.9,
+    resultKind: 'scored',
+    scoringModelVersion: 'model-1',
+    shotConfigVersion: 'config-1',
+    sessionId: null,
+    priorityCheckpoint: null,
+    checkpointScores: {},
     ...overrides,
   };
 }
@@ -224,8 +250,12 @@ describe('HomeScreen button ledger', () => {
     mockGetDb.mockReturnValue({ execute: jest.fn() });
     mockListShots.mockReset();
     mockListShots.mockResolvedValue([]);
-    mockListCaptureHistory.mockReset();
-    mockListCaptureHistory.mockResolvedValue([]);
+    mockListRealAnalysisFacts.mockReset();
+    mockListRealAnalysisFacts.mockResolvedValue([]);
+    mockGetKv.mockReset();
+    mockGetKv.mockResolvedValue(null);
+    mockSetKv.mockReset();
+    mockSetKv.mockResolvedValue(undefined);
     mockGetApiSession.mockReset();
     mockGetApiSession.mockReturnValue(null);
     mockFetchCanonicalProgress.mockReset();
@@ -451,11 +481,131 @@ describe('HomeScreen button ledger', () => {
     });
   });
 
+  describe('This week card (scored reads, two chart lenses)', () => {
+    const scoresTab = (renderer: Renderer) =>
+      pressableByTestId(renderer, 'home-week-chart-scores')!;
+    const readsTab = (renderer: Renderer) =>
+      pressableByTestId(renderer, 'home-week-chart-reads')!;
+    const chartLabel = (renderer: Renderer, testID: string) =>
+      renderer.root.findAll(
+        n => typeof n.type === 'string' && n.props.testID === testID,
+      )[0]?.props.accessibilityLabel as string | undefined;
+
+    it('counts the first scored read whatever path captured it (the scan-not-showing bug)', async () => {
+      // One scored analysis exists (imported video OR guided camera — the
+      // card no longer cares which); the capture-evidence table is not read.
+      mockListRealAnalysisFacts.mockResolvedValue([fact(2)]);
+      const renderer = await renderHome();
+      expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(1);
+      const text = allText(renderer);
+      expect(text).toContain('THIS WEEK');
+      expect(text).toContain('Scored technique reads on this device');
+      expect(text).toMatch(/1 scored read\b/);
+      expect(text).not.toContain('Your court is ready.');
+      // Footer: one scored day, avg and best both 3.7 — nothing invented.
+      expect(text).toContain('1 scored day');
+      expect(text.match(/3\.7/g)?.length).toBeGreaterThanOrEqual(2);
+      // Default lens is the dot plot, summarized for screen readers.
+      expect(chartLabel(renderer, 'score-dot-plot')).toBe(
+        'Seven day technique scores: 1 scored read across 1 day, latest 3.7 out of 10.',
+      );
+      expect(chartLabel(renderer, 'practice-volume-chart')).toBeUndefined();
+      act(() => renderer.unmount());
+    });
+
+    it('toggle switches to the reads-per-day bars and remembers the choice on device', async () => {
+      mockListRealAnalysisFacts.mockResolvedValue([
+        fact(30, { id: 'a', overallScore: 5.2 }),
+        fact(2, { id: 'b', overallScore: 6.1 }),
+      ]);
+      const renderer = await renderHome();
+      const scores = scoresTab(renderer);
+      const reads = readsTab(renderer);
+      for (const tab of [scores, reads]) {
+        expect(tab.props.accessibilityRole).toBe('tab');
+        expect(meetsHitTarget(tab)).toBe(true);
+      }
+      expect(scores.props.accessibilityState).toMatchObject({ selected: true });
+      expect(reads.props.accessibilityState).toMatchObject({ selected: false });
+
+      await press(reads);
+      expect(mockSetKv).toHaveBeenCalledWith(
+        expect.anything(),
+        'home.week-chart',
+        'reads',
+      );
+      expect(readsTab(renderer).props.accessibilityState).toMatchObject({
+        selected: true,
+      });
+      expect(chartLabel(renderer, 'practice-volume-chart')).toBe(
+        'Seven day read volume: 2 scored reads across 2 scored days.',
+      );
+      expect(chartLabel(renderer, 'score-dot-plot')).toBeUndefined();
+      // The hero count is the same number in both lenses.
+      expect(allText(renderer)).toMatch(/2 scored reads\b/);
+
+      await press(scoresTab(renderer));
+      expect(mockSetKv).toHaveBeenLastCalledWith(
+        expect.anything(),
+        'home.week-chart',
+        'scores',
+      );
+      expect(chartLabel(renderer, 'score-dot-plot')).toBe(
+        'Seven day technique scores: 2 scored reads across 2 days, latest 6.1 out of 10.',
+      );
+      act(() => renderer.unmount());
+    });
+
+    it('opens on the remembered lens', async () => {
+      mockGetKv.mockResolvedValue('reads');
+      mockListRealAnalysisFacts.mockResolvedValue([fact(1)]);
+      const renderer = await renderHome();
+      expect(mockGetKv).toHaveBeenCalledWith(
+        expect.anything(),
+        'home.week-chart',
+      );
+      expect(readsTab(renderer).props.accessibilityState).toMatchObject({
+        selected: true,
+      });
+      expect(chartLabel(renderer, 'practice-volume-chart')).toBeDefined();
+      act(() => renderer.unmount());
+    });
+
+    it('a broken preference read never fails the Home load', async () => {
+      mockGetKv.mockRejectedValue(new Error('kv missing'));
+      const renderer = await renderHome();
+      expect(allText(renderer)).toContain('THIS WEEK');
+      expect(pressableByLabel(renderer, 'Try again')).toBeNull();
+      act(() => renderer.unmount());
+    });
+
+    it('tells a first week and a quiet week apart honestly', async () => {
+      const first = await renderHome();
+      let text = allText(first);
+      expect(text).toContain('Your court is ready.');
+      expect(text).toContain('Your first scored read starts this record.');
+      expect(text).toContain('—');
+      expect(chartLabel(first, 'score-dot-plot')).toBe(
+        'No scored reads in this window yet.',
+      );
+      act(() => first.unmount());
+
+      // Comparable reads exist, but all of them predate this week.
+      mockListRealAnalysisFacts.mockResolvedValue([fact(24 * 12)]);
+      const quiet = await renderHome();
+      text = allText(quiet);
+      expect(text).toContain('Quiet week so far.');
+      expect(text).toContain('Your next scored read lands here.');
+      expect(text).not.toContain('Your court is ready.');
+      act(() => quiet.unmount());
+    });
+  });
+
   describe('pull-to-refresh', () => {
-    it('reloads shots and captures, then clears the refreshing flag', async () => {
+    it('reloads shots and analyses, then clears the refreshing flag', async () => {
       const renderer = await renderHome();
       expect(mockListShots).toHaveBeenCalledTimes(1);
-      expect(mockListCaptureHistory).toHaveBeenCalledTimes(1);
+      expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(1);
 
       let release!: (rows: unknown[]) => void;
       mockListShots.mockImplementationOnce(
@@ -642,10 +792,18 @@ describe('HomeScreen button ledger', () => {
         'Not now',
         'Stroke Analysis. Analyze one movement with fast, detailed feedback.',
         'Drill Library. Guided drills you can search.',
+        'Scores chart: every scored read at its score',
+        'Reads chart: scored reads per day',
         'Open dink result',
       ]);
       for (const node of controls) {
-        expect(node.props.accessibilityRole).toBe('button');
+        // The week-card lenses are a two-tab segmented control; every other
+        // control is a button.
+        expect(node.props.accessibilityRole).toBe(
+          String(node.props.testID).startsWith('home-week-chart-')
+            ? 'tab'
+            : 'button',
+        );
         expect(node.props.disabled ?? false).toBe(false);
         expect(hostOf(node).props.accessibilityState?.disabled ?? false).toBe(
           false,

@@ -231,7 +231,104 @@ describe('buildTechniqueDashboard', () => {
     expect(dashboard.scoredReps).toEqual({ current: 0, previous: null });
     expect(dashboard.avgScore).toEqual({ current: null, previous: null });
     expect(dashboard.buckets).toHaveLength(7);
+    expect(dashboard.reads).toEqual([]);
     expect(dashboard.personalBest).toBeNull();
     expect(dashboard.insight).toBeNull();
+  });
+
+  describe('reads (the dot plot points)', () => {
+    it('lists every comparable read in the current window, oldest first, with its device-zone day', () => {
+      const dashboard = buildTechniqueDashboard(
+        [
+          fact({
+            id: 'later',
+            capturedAt: '2026-08-30T11:00:00.000Z',
+            overallScore: 6,
+          }),
+          fact({
+            id: 'earlier',
+            capturedAt: '2026-08-30T10:00:00.000Z',
+            overallScore: 8,
+          }),
+          fact({
+            id: 'first',
+            capturedAt: '2026-08-26T10:00:00.000Z',
+            overallScore: 7,
+          }),
+          // Prior window: never a point in the current picture.
+          fact({ id: 'prior', capturedAt: '2026-08-20T10:00:00.000Z' }),
+        ],
+        OPTIONS,
+      );
+      expect(dashboard.reads).toEqual([
+        {
+          id: 'first',
+          shotType: 'dink',
+          capturedAtMs: Date.parse('2026-08-26T10:00:00.000Z'),
+          day: '2026-08-26',
+          score: 7,
+        },
+        {
+          id: 'earlier',
+          shotType: 'dink',
+          capturedAtMs: Date.parse('2026-08-30T10:00:00.000Z'),
+          day: '2026-08-30',
+          score: 8,
+        },
+        {
+          id: 'later',
+          shotType: 'dink',
+          capturedAtMs: Date.parse('2026-08-30T11:00:00.000Z'),
+          day: '2026-08-30',
+          score: 6,
+        },
+      ]);
+      // The points and the aggregates describe the same reads.
+      expect(dashboard.reads).toHaveLength(dashboard.scoredReps.current);
+    });
+
+    it('applies the stroke comparability rule: a read from an older model never plots', () => {
+      const dashboard = buildTechniqueDashboard(
+        [
+          fact({ id: 'new-model', capturedAt: '2026-08-31T10:00:00.000Z' }),
+          fact({
+            id: 'old-model',
+            capturedAt: '2026-08-30T10:00:00.000Z',
+            scoringModelVersion: 'model-1',
+          }),
+          fact({
+            id: 'abstained',
+            capturedAt: '2026-08-30T12:00:00.000Z',
+            resultKind: 'low_confidence',
+            overallScore: null,
+          }),
+        ],
+        OPTIONS,
+      );
+      expect(dashboard.reads.map(read => read.id)).toEqual(['new-model']);
+    });
+
+    it('orders same-instant reads by id so the trace is stable across renders', () => {
+      const dashboard = buildTechniqueDashboard(
+        [
+          fact({ id: 'b', capturedAt: '2026-08-31T10:00:00.000Z' }),
+          fact({ id: 'a', capturedAt: '2026-08-31T10:00:00.000Z' }),
+        ],
+        OPTIONS,
+      );
+      expect(dashboard.reads.map(read => read.id)).toEqual(['a', 'b']);
+    });
+
+    it('lands a late-evening read on the local calendar day the dashboard buckets use', () => {
+      const dashboard = buildTechniqueDashboard(
+        [fact({ id: 'evening', capturedAt: '2026-08-31T03:30:00.000Z' })],
+        { ...OPTIONS, timeZone: 'America/Los_Angeles' },
+      );
+      expect(dashboard.reads[0]?.day).toBe('2026-08-30');
+      expect(
+        dashboard.buckets.find(bucket => bucket.key === '2026-08-30:2026-08-30')
+          ?.count,
+      ).toBe(1);
+    });
   });
 });

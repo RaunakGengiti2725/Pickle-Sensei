@@ -321,6 +321,56 @@ Lord Howe, window edges, seeded invariants, order-independence, 5k-fact
 volume), `__tests__/progressChartsComponents.test.tsx` (chart/stat-row
 honesty).
 
+## Practice tab — what counts as verified practice (2026-09-03)
+
+`practiceHistory.ts isVerifiedPracticeCapture()` is the ONE rule, used by the
+aggregation AND the "Recent captures" list: payload passed the strict parser,
+still matches the row metadata, and carries measured pose evidence — a guided
+capture always does (trigger + capture evidence); an IMPORTED clip counts once
+`clip.poseSequence` is on the row (`updateCaptureClipPayload` right after
+extraction, i.e. every scored import). A raw import nobody analyzed is a video
+file, not practice. Before this, imports were excluded outright ("automatic
+captures only") and a scored Import Video scan left every Practice number at
+zero while Technique showed the score. Imports count toward captures, active
+days, streak and the volume bars; the camera-only instrumentation (pose
+tracked, pose availability, joint coverage) aggregates guided captures only
+and renders "—" (not 0.0s) when the window has none (`cameraCaptureCount`).
+The hero discloses stored clips the chart refuses to count
+(`excludedCaptureCount` → `excludedCapturesNote`, testID
+`practice-excluded-note`) so an exclusion is never silent again. Pinned:
+`practiceHistory.test.ts` (measured import counts / raw import excluded),
+`progressScreenDashboard.test.tsx` ("counts a scored IMPORTED clip"),
+`progressScreenCopy.test.ts`.
+
+## Home "This week" card (scored reads, two lenses)
+
+Rebased 2026-09-03 from capture evidence to SCORED READS. The card reads
+`listRealAnalysisFacts` + `buildTechniqueDashboard(range: '7d')` — the same
+comparable-reads rule Progress applies — so a scored analysis shows up
+whatever path captured it (guided camera or imported video). It previously
+counted only `automatic_pose_trigger` captures with valid pose evidence: the
+first scan (an import) scored 3.7 while the card still read "Your court is
+ready". `listCaptureHistory`/`buildPracticeHistory` (pose tracked, capture
+streak) stay on Progress → Practice only (see the Practice-tab rule above for
+which captures count there). Two lenses on the SAME reads:
+`src/progress/ScoreDotPlot.tsx` (one dot per read at its exact score in its
+day column, same-day reads fanned out chronologically, newest read volt +
+halo, faint time-order trace via react-native-svg once `onLayout` knows the
+width, direct value labels while ≤ 8 reads — alternating sides inside a fan
+and never outside the plot) and `PracticeVolumeChart` (reads per day,
+`accessibilityLabel` override). Toggle = two `tab`s in a `tablist` in the
+card header (`home-week-chart-scores|reads`, 28pt segments + vertical
+hitSlop 8 = 44pt); the choice is a DEVICE-level kv `home.week-chart`
+(`WEEK_CHART_KV_KEY`, default scores; a failed kv read never fails the Home
+load). Both plots are 82pt tall so toggling never moves the card. Footer:
+scored days / avg score / best score. Empty copy tells a first week ("Your
+court is ready.") from a quiet week ("Quiet week so far." — comparable reads
+exist before the window, i.e. `scoredReps.previous !== null`).
+`TechniqueDashboard.reads` (`ScoredReadPoint[]`, ascending, id tiebreak)
+feeds the dots. Pinned: `__tests__/scoreDotPlot.test.tsx`,
+`techniqueDashboard.test.ts` (reads), `wf/HomeScreen.buttons.test.tsx`
+("This week card").
+
 ## Consistency (streak / Momentum XP / achievements)
 
 `apps/mobile/src/consistency/`: pure engine (`engine.ts`) replays the FULL

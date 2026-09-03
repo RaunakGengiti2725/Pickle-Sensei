@@ -43,10 +43,13 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 const mockListShots = jest.fn<Promise<unknown[]>, unknown[]>();
-const mockListCaptureHistory = jest.fn<Promise<unknown[]>, unknown[]>();
+const mockListRealAnalysisFacts = jest.fn<Promise<unknown[]>, unknown[]>();
 jest.mock('../../src/data/repository', () => ({
   listShots: (...args: unknown[]) => mockListShots(...args),
-  listCaptureHistory: (...args: unknown[]) => mockListCaptureHistory(...args),
+  listRealAnalysisFacts: (...args: unknown[]) =>
+    mockListRealAnalysisFacts(...args),
+  getKv: jest.fn(async () => null),
+  setKv: jest.fn(async () => {}),
 }));
 
 const mockGetApiSession = jest.fn<unknown, []>(() => null);
@@ -205,7 +208,7 @@ beforeEach(() => {
   mockFetchCanonicalProgress.mockReset();
   mockGetApiSession.mockReset().mockReturnValue(null);
   mockListShots.mockReset().mockResolvedValue([]);
-  mockListCaptureHistory.mockReset().mockResolvedValue([]);
+  mockListRealAnalysisFacts.mockReset().mockResolvedValue([]);
   mockAppState.profile = null;
   mockConsistencyState.snapshot = null;
   mockConsistencyState.refresh.mockClear();
@@ -420,7 +423,7 @@ describe('Home — controls', () => {
     const renderer = await renderHome();
     const copy = allText(renderer);
     expect(copy).toContain('Your court is ready.');
-    expect(copy).toContain('The first verified capture starts this record.');
+    expect(copy).toContain('Your first scored read starts this record.');
     expect(copy).toContain('No scored technique yet');
     expect(copy).toContain(
       'Camera practice still counts. Scores appear only after validated analysis.',

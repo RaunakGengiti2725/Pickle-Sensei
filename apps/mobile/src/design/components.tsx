@@ -6,6 +6,7 @@ import {
   Animated,
   Easing,
   Image,
+  type Insets,
   Modal,
   Pressable,
   ScrollView,
@@ -79,7 +80,7 @@ export function PressableScale(props: {
   accessibilityState?: AccessibilityState;
   accessibilityRole?: AccessibilityRole;
   testID?: string;
-  hitSlop?: number;
+  hitSlop?: number | Insets;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const reduced = useReducedMotion();

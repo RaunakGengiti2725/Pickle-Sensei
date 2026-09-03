@@ -256,7 +256,7 @@ describe('flow: progress dashboard', () => {
 
     await pressByLabel(renderer, 'practice progress');
     let text = renderedText(renderer);
-    expect(text).toContain('VERIFIED CAMERA PRACTICE');
+    expect(text).toContain('VERIFIED PRACTICE');
     expect(text).not.toContain('SCORE TREND');
     expect(
       hostByLabel(renderer, 'practice progress')!.props.accessibilityState
@@ -265,7 +265,7 @@ describe('flow: progress dashboard', () => {
 
     // Re-pressing the active tab is a no-op, never a crash or a reload.
     await pressByLabel(renderer, 'practice progress');
-    expect(renderedText(renderer)).toContain('VERIFIED CAMERA PRACTICE');
+    expect(renderedText(renderer)).toContain('VERIFIED PRACTICE');
     expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(1);
 
     await pressByLabel(renderer, 'technique progress');

@@ -3,6 +3,7 @@ import type { PendingCapture } from '../src/data/repository';
 import {
   aggregatePracticeHistory,
   buildPracticeHistory,
+  isVerifiedPracticeCapture,
   PRACTICE_HISTORY_RANGES,
 } from '../src/progress/practiceHistory';
 
@@ -163,7 +164,7 @@ describe('practice history from persisted capture evidence', () => {
     });
   });
 
-  it('excludes untrusted, imported, mismatched, and future captures', () => {
+  it('excludes untrusted, unmeasured imported, mismatched, and future captures', () => {
     const real = pending('real', '2026-08-27T12:00:00.000Z');
     const legacy: PendingCapture = {
       ...real,
@@ -182,6 +183,7 @@ describe('practice history from persisted capture evidence', () => {
       id: 'mismatch',
       uri: 'file:///captures/not-the-clip.mov',
     };
+    // A raw import nobody analyzed: a video file, not measured practice.
     const imported = importedPending('imported', '2026-08-27T10:00:00.000Z');
     const future = pending('future', '2026-08-28T12:00:00.000Z');
 
@@ -193,11 +195,85 @@ describe('practice history from persisted capture evidence', () => {
     expect(history.sourceCaptureCount).toBe(6);
     expect(history.excludedCaptureCount).toBe(5);
     expect(history.lifetime.eligibleCaptureCount).toBe(1);
+    expect(history.lifetime.cameraCaptureCount).toBe(1);
+    expect(history.lifetime.importedCaptureCount).toBe(0);
     expect(history.lifetime.trackedPoseDurationMs).toBe(
       real.clip?.captureMode === 'automatic_pose_trigger'
         ? real.clip.captureEvidence.trackedDurationMs
         : -1,
     );
+    expect(isVerifiedPracticeCapture(real)).toBe(true);
+    for (const rejected of [legacy, corrupt, mismatch, imported]) {
+      expect(isVerifiedPracticeCapture(rejected)).toBe(false);
+    }
+  });
+
+  it('counts an imported clip once its pose sequence was measured — volume and days, never pose metrics', () => {
+    // The scan-not-showing bug: an import that was extracted and scored
+    // used to leave every Practice number untouched.
+    const measured = importedPending(
+      'measured-import',
+      '2026-08-27T09:00:00.000Z',
+      true,
+    );
+    const camera = pending('camera', '2026-08-26T12:00:00.000Z');
+
+    const history = aggregatePracticeHistory([measured, camera], options);
+
+    expect(isVerifiedPracticeCapture(measured)).toBe(true);
+    expect(history.excludedCaptureCount).toBe(0);
+    expect(history.rangeBuckets.current).toMatchObject({
+      eligibleCaptureCount: 2,
+      cameraCaptureCount: 1,
+      importedCaptureCount: 1,
+      activeDayCount: 2,
+      // Pose instrumentation aggregates the guided capture ONLY.
+      trackedPoseDurationMs: 300,
+      poseAvailability: { analysisInputFrameCount: 5, rate: 0.8 },
+    });
+    expect(history.streak).toMatchObject({
+      currentDays: 2,
+      practicedToday: true,
+    });
+    expect(
+      history.dayBuckets.map(bucket => [
+        bucket.day,
+        bucket.eligibleCaptureCount,
+      ]),
+    ).toEqual([
+      ['2026-08-25', 0],
+      ['2026-08-26', 1],
+      ['2026-08-27', 1],
+    ]);
+
+    // An import alone: real volume, honest nulls for camera-only metrics.
+    const alone = aggregatePracticeHistory([measured], options);
+    expect(alone.lifetime).toMatchObject({
+      eligibleCaptureCount: 1,
+      cameraCaptureCount: 0,
+      importedCaptureCount: 1,
+      trackedPoseDurationMs: 0,
+      poseAvailability: { rate: null },
+      jointTracking: { meanCoverage: null, minimumCoverage: null },
+    });
+  });
+
+  it('surfaces camera/imported/excluded counts in the UI-ready result', () => {
+    const result = buildPracticeHistory(
+      [
+        pending('camera', '2026-08-27T12:00:00.000Z'),
+        importedPending('measured', '2026-08-27T10:00:00.000Z', true),
+        importedPending('raw', '2026-08-27T11:00:00.000Z'),
+      ],
+      { asOfIso: options.asOfIso, timeZone: 'UTC', range: '7d' },
+    );
+    expect(result).toMatchObject({
+      captureCount: 2,
+      cameraCaptureCount: 1,
+      importedCaptureCount: 1,
+      excludedCaptureCount: 1,
+      activeDays: 1,
+    });
   });
 
   it('keeps a current streak through yesterday and expires it after a gap', () => {
@@ -495,7 +571,13 @@ function pending(
   };
 }
 
-function importedPending(id: string, capturedAtIso: string): PendingCapture {
+/** An imported clip; `measured` attaches the pose-sequence sidecar ref the
+ * extraction pass persists onto the row right before scoring. */
+function importedPending(
+  id: string,
+  capturedAtIso: string,
+  measured = false,
+): PendingCapture {
   const uri = `file:///captures/${id}.mov`;
   const clip: CapturedClip = {
     uri,
@@ -507,6 +589,19 @@ function importedPending(id: string, capturedAtIso: string): PendingCapture {
     captureMode: 'imported_video',
     recognition: { status: 'unknown', reason: 'analysis_not_run' },
     ballSpeed: { status: 'unavailable', reason: 'analysis_not_run' },
+    ...(measured
+      ? {
+          poseSequence: {
+            schemaVersion: 1 as const,
+            format: 'pickle.pose-sequence.v1' as const,
+            uri: `file:///captures/${id}.pose.json`,
+            frameCount: 96,
+            sha256: 'b'.repeat(64),
+            coordinateSystem: 'normalized_image_top_left' as const,
+            poseModelVersion: 'apple-vision-bodypose-1',
+          },
+        }
+      : {}),
   };
   return {
     id,

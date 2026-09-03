@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   RefreshControl,
   ScrollView,
@@ -25,9 +25,12 @@ import { color, radius, space, type } from '../design/tokens';
 import { useAppStore } from '../state/appStore';
 import { getDb } from '../data/db';
 import {
-  listCaptureHistory,
+  getKv,
+  listRealAnalysisFacts,
   listShots,
+  setKv,
   type LocalShotRow,
+  type RealAnalysisFact,
 } from '../data/repository';
 import type { RootStackParams } from '../navigation/params';
 import { getApiSession } from '../account/apiSession';
@@ -35,11 +38,9 @@ import {
   fetchCanonicalProgress,
   type CanonicalProgress,
 } from '../progress/api';
-import {
-  buildPracticeHistory,
-  type PracticeHistoryResult,
-} from '../progress/practiceHistory';
+import { buildTechniqueDashboard } from '../progress/techniqueDashboard';
 import { PracticeVolumeChart } from '../progress/PracticeVolumeChart';
+import { ScoreDotPlot } from '../progress/ScoreDotPlot';
 import { PlayerRankBanner } from '../components/PlayerRankBanner';
 import { NotificationPrimingCard } from '../notifications/NotificationPrimingCard';
 import { flameIntensityForStreak } from '../consistency/engine';
@@ -57,17 +58,33 @@ function deviceTimeZone() {
   }
 }
 
-function formatTrackedTime(milliseconds: number) {
-  const seconds = milliseconds / 1_000;
-  return seconds < 10 ? `${seconds.toFixed(1)}s` : `${Math.round(seconds)}s`;
-}
+/**
+ * The "This week" card's two lenses on the SAME comparable scored reads:
+ * every read as a dot at its score (the progress picture) or reads per day
+ * as bars (the volume picture). The choice is a device-level view
+ * preference, remembered across launches.
+ */
+export type WeekChart = 'scores' | 'reads';
+export const WEEK_CHART_KV_KEY = 'home.week-chart';
+const WEEK_CHART_OPTIONS: ReadonlyArray<{
+  key: WeekChart;
+  label: string;
+  accessibilityLabel: string;
+}> = [
+  {
+    key: 'scores',
+    label: 'SCORES',
+    accessibilityLabel: 'Scores chart: every scored read at its score',
+  },
+  {
+    key: 'reads',
+    label: 'READS',
+    accessibilityLabel: 'Reads chart: scored reads per day',
+  },
+];
 
-function emptyPracticeHistory(): PracticeHistoryResult {
-  return buildPracticeHistory([], {
-    asOfIso: new Date().toISOString(),
-    timeZone: deviceTimeZone(),
-    range: '7d',
-  });
+export function parseWeekChart(value: string | null): WeekChart {
+  return value === 'reads' ? 'reads' : 'scores';
 }
 
 export function HomeScreen() {
@@ -80,20 +97,27 @@ export function HomeScreen() {
   const [recent, setRecent] = useState<LocalShotRow[]>([]);
   const [allShots, setAllShots] = useState<LocalShotRow[]>([]);
   const [latestScored, setLatestScored] = useState<LocalShotRow | null>(null);
-  const [practice, setPractice] =
-    useState<PracticeHistoryResult>(emptyPracticeHistory);
+  const [facts, setFacts] = useState<RealAnalysisFact[]>([]);
+  const [asOfIso, setAsOfIso] = useState(() => new Date().toISOString());
+  const [weekChart, setWeekChart] = useState<WeekChart>('scores');
   const [canonicalProgress, setCanonicalProgress] =
     useState<CanonicalProgress | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const timeZone = useMemo(deviceTimeZone, []);
 
   const load = useCallback(async () => {
     try {
       const db = getDb();
-      const [shots, captureHistory] = await Promise.all([
+      // The week card reads the SAME real analyses the Progress dashboard
+      // does, whatever path produced them (guided camera or imported video):
+      // a scored read is progress the moment it exists. A missing view
+      // preference is never a load failure.
+      const [shots, analysisFacts, storedChart] = await Promise.all([
         listShots(db, 250),
-        listCaptureHistory(db, null),
+        listRealAnalysisFacts(db),
+        getKv(db, WEEK_CHART_KV_KEY).catch(() => null),
       ]);
       setRecent(shots.slice(0, 5));
       setAllShots(shots);
@@ -102,13 +126,9 @@ export function HomeScreen() {
           shot => shot.resultKind === 'scored' && shot.overallScore !== null,
         ) ?? null,
       );
-      setPractice(
-        buildPracticeHistory(captureHistory, {
-          asOfIso: new Date().toISOString(),
-          timeZone: deviceTimeZone(),
-          range: '7d',
-        }),
-      );
+      setFacts(analysisFacts);
+      setAsOfIso(new Date().toISOString());
+      setWeekChart(parseWeekChart(storedChart));
       const apiSession = getApiSession();
       if (apiSession) {
         try {
@@ -136,6 +156,28 @@ export function HomeScreen() {
       void refreshConsistency();
     }, [load, refreshConsistency]),
   );
+
+  const selectWeekChart = useCallback((next: WeekChart) => {
+    setWeekChart(next);
+    // Best-effort persistence: the toggle already applied on screen.
+    try {
+      void setKv(getDb(), WEEK_CHART_KV_KEY, next).catch(() => {});
+    } catch {
+      // No database — the choice lives for this session only.
+    }
+  }, []);
+
+  // Seven-day technique dashboard: the comparability rule (per stroke, only
+  // reads sharing the newest read's model + config versions) is the same one
+  // Progress applies, so Home and Progress never disagree about a number.
+  const week = useMemo(
+    () => buildTechniqueDashboard(facts, { asOfIso, timeZone, range: '7d' }),
+    [asOfIso, facts, timeZone],
+  );
+  const weekReads = week.scoredReps.current;
+  const weekDays = week.scoredDays.current;
+  // Comparable reads exist BEFORE this window: a quiet week, not a first one.
+  const weekHasHistory = week.scoredReps.previous !== null;
 
   // The product streak: meaningful training days (analyses, sessions,
   // drills) from the consistency engine — never mere app opens or captures.
@@ -316,60 +358,108 @@ export function HomeScreen() {
             <View style={{ flex: 1 }}>
               <Text style={[type.micro, { color: color.volt }]}>THIS WEEK</Text>
               <Text style={[type.caption, styles.practiceCardSource]}>
-                Verified automatic camera captures
+                Scored technique reads on this device
               </Text>
             </View>
-            <Pill label="ON DEVICE" tone="dark" />
+            <View accessibilityRole="tablist" style={styles.chartToggle}>
+              {WEEK_CHART_OPTIONS.map(option => {
+                const active = weekChart === option.key;
+                return (
+                  <PressableScale
+                    key={option.key}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: active }}
+                    accessibilityLabel={option.accessibilityLabel}
+                    hitSlop={{ top: 8, bottom: 8 }}
+                    onPress={() => selectWeekChart(option.key)}
+                    style={[
+                      styles.chartToggleOption,
+                      active && styles.chartToggleOptionActive,
+                    ]}
+                    testID={`home-week-chart-${option.key}`}
+                  >
+                    <Text
+                      style={[
+                        type.micro,
+                        styles.chartToggleLabel,
+                        active && styles.chartToggleLabelActive,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </PressableScale>
+                );
+              })}
+            </View>
           </View>
-          {practice.captureCount === 0 ? (
+          {weekReads === 0 ? (
             <View style={styles.practiceZeroStage}>
               <View style={styles.practiceZeroIcon}>
                 <Icon name="spark" color={color.volt} size={20} />
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={[type.h3, styles.practiceZeroTitle]}>
-                  Your court is ready.
+                  {weekHasHistory
+                    ? 'Quiet week so far.'
+                    : 'Your court is ready.'}
                 </Text>
                 <Text style={[type.caption, styles.practiceZeroCopy]}>
-                  The first verified capture starts this record.
+                  {weekHasHistory
+                    ? 'Your next scored read lands here.'
+                    : 'Your first scored read starts this record.'}
                 </Text>
               </View>
             </View>
           ) : (
             <View style={styles.practiceCountRow}>
-              <Text style={styles.practiceCount}>{practice.captureCount}</Text>
+              <Text style={styles.practiceCount}>{weekReads}</Text>
               <Text style={[type.h3, styles.practiceCountLabel]}>
-                camera {practice.captureCount === 1 ? 'capture' : 'captures'}
+                scored {plural(weekReads, 'read')}
               </Text>
             </View>
           )}
-          <PracticeVolumeChart
-            activeDays={practice.activeDays}
-            buckets={practice.buckets}
-            rangeLabel="Seven day"
-          />
+          {weekChart === 'scores' ? (
+            <ScoreDotPlot
+              buckets={week.buckets}
+              reads={week.reads}
+              rangeLabel="Seven day"
+            />
+          ) : (
+            <PracticeVolumeChart
+              accessibilityLabel={`Seven day read volume: ${weekReads} scored ${plural(
+                weekReads,
+                'read',
+              )} across ${weekDays} scored ${plural(weekDays, 'day')}.`}
+              activeDays={weekDays}
+              buckets={week.buckets}
+              rangeLabel="Seven day"
+              testID="practice-volume-chart"
+            />
+          )}
           <View style={styles.practiceFooter}>
             <View style={styles.practiceFooterItem}>
-              <Text style={styles.practiceFooterValue}>
-                {practice.activeDays}
-              </Text>
+              <Text style={styles.practiceFooterValue}>{weekDays}</Text>
               <Text style={styles.practiceFooterLabel}>
-                {practice.activeDays === 1 ? 'active day' : 'active days'}
+                {plural(weekDays, 'scored day')}
               </Text>
             </View>
             <View style={styles.practiceFooterDivider} />
             <View style={styles.practiceFooterItem}>
               <Text style={styles.practiceFooterValue}>
-                {formatTrackedTime(practice.trackedDurationMs)}
+                {week.avgScore.current === null
+                  ? '—'
+                  : week.avgScore.current.toFixed(1)}
               </Text>
-              <Text style={styles.practiceFooterLabel}>pose tracked</Text>
+              <Text style={styles.practiceFooterLabel}>avg score</Text>
             </View>
             <View style={styles.practiceFooterDivider} />
             <View style={styles.practiceFooterItem}>
               <Text style={styles.practiceFooterValue}>
-                {practice.currentStreak}
+                {week.bestScore.current === null
+                  ? '—'
+                  : week.bestScore.current.toFixed(1)}
               </Text>
-              <Text style={styles.practiceFooterLabel}>capture streak</Text>
+              <Text style={styles.practiceFooterLabel}>best score</Text>
             </View>
           </View>
         </View>
@@ -630,6 +720,27 @@ const styles = StyleSheet.create({
     gap: space.md,
   },
   practiceCardSource: { color: color.onDarkSubtle, marginTop: 4 },
+  // Two-lens segmented control (the Progress range bar's dark idiom, sized
+  // to the header stack); vertical hitSlop lifts each 28pt segment to 44pt
+  // without the neighbours' touch areas overlapping.
+  chartToggle: {
+    flexDirection: 'row',
+    padding: 3,
+    borderRadius: radius.pill,
+    backgroundColor: color.onDarkTint,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: color.lineMutedDark,
+  },
+  chartToggleOption: {
+    minHeight: 28,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radius.pill,
+  },
+  chartToggleOptionActive: { backgroundColor: color.volt },
+  chartToggleLabel: { color: color.onDarkMuted },
+  chartToggleLabelActive: { color: color.onVolt },
   practiceCountRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',

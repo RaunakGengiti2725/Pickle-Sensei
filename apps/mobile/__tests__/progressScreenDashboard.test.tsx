@@ -194,6 +194,53 @@ function capture(
   };
 }
 
+/** Repository-shaped IMPORTED clip. `measured` = the extraction pass ran and
+ * persisted the pose-sequence ref onto the row (what every scored import
+ * looks like); without it the row is a raw, never-analyzed video. */
+function importedCapture(
+  id: string,
+  capturedAtIso: string,
+  measured: boolean,
+  declaredStroke: string | null = 'forehand_drive',
+) {
+  const uri = `file:///captures/${id}.mov`;
+  const base = {
+    uri,
+    capturedAtIso,
+    durationMs: 3_900,
+    fps: 30,
+    width: 1_080,
+    height: 1_920,
+  };
+  return {
+    id,
+    shotType: 'unrecognized',
+    declaredStroke,
+    ...base,
+    evidenceStatus: 'valid',
+    status: 'analyzed',
+    clip: {
+      ...base,
+      captureMode: 'imported_video',
+      recognition: { status: 'unknown', reason: 'analysis_not_run' },
+      ballSpeed: { status: 'unavailable', reason: 'analysis_not_run' },
+      ...(measured
+        ? {
+            poseSequence: {
+              schemaVersion: 1,
+              format: 'pickle.pose-sequence.v1',
+              uri: `file:///captures/${id}.pose.json`,
+              frameCount: 117,
+              sha256: 'c'.repeat(64),
+              coordinateSystem: 'normalized_image_top_left',
+              poseModelVersion: 'apple-vision-bodypose-1',
+            },
+          }
+        : {}),
+    },
+  };
+}
+
 /** A minimal-but-complete consistency snapshot for the technique tab. */
 function consistencySnapshot() {
   return {
@@ -351,6 +398,71 @@ describe('ProgressScreen dashboard', () => {
     expect(text).toContain('LATEST 4');
     expect(text).toContain('ANALYZED');
     expect(text).toContain('SAVED');
+    // Every stored clip counted → nothing to disclose.
+    expect(findByTestId(renderer, 'practice-excluded-note')).toBeNull();
+    act(() => renderer.unmount());
+  });
+
+  it('counts a scored IMPORTED clip as practice (the scan that never showed up)', async () => {
+    // Exactly the user's situation: one Import Video scan, extracted and
+    // scored 3.7. Before the fix every Practice number stayed at zero.
+    mockListRealAnalysisFacts.mockResolvedValue([
+      fact({ shotType: 'forehand_drive', overallScore: 3.7 }),
+    ]);
+    mockListCaptureHistory.mockResolvedValue([
+      importedCapture('scan', daysAgoIso(0), true),
+    ]);
+    const renderer = await renderScreen();
+    await pressByLabel(renderer, 'practice progress');
+    const text = renderedText(renderer);
+
+    expect(text).toContain('VERIFIED PRACTICE');
+    expect(text).not.toContain('This chart is waiting on you.');
+    expect(text).toMatch(/1\s+captured/);
+    expect(text).toContain('· 1 imported');
+    expect(text).toContain('First measured period on this device.');
+    expect(
+      findByTestId(renderer, 'practice-stat-captures')!.props
+        .accessibilityLabel,
+    ).toBe('CAPTURES: 1');
+    expect(
+      findByTestId(renderer, 'practice-stat-active-days')!.props
+        .accessibilityLabel,
+    ).toBe('ACTIVE DAYS: 1');
+    // Camera-only instrumentation is not faked for an import: "—", not 0.0s.
+    expect(
+      findByTestId(renderer, 'practice-stat-pose-tracked')!.props
+        .accessibilityLabel,
+    ).toBe('POSE TRACKED: —');
+    expect(text).not.toContain('0.0s');
+    // It is listed as what it is, titled by the user's declaration.
+    expect(text).toContain('RECENT CAPTURES');
+    expect(text).toContain('forehand drive');
+    expect(text).toContain('3.9s imported clip · pose sequence measured');
+    expect(text).toContain('ANALYZED');
+    expect(text).not.toContain('No measured captures yet');
+    expect(findByTestId(renderer, 'practice-excluded-note')).toBeNull();
+    act(() => renderer.unmount());
+  });
+
+  it('never counts a raw, unmeasured import — and says so instead of staying silent', async () => {
+    mockListRealAnalysisFacts.mockResolvedValue([]);
+    mockListCaptureHistory.mockResolvedValue([
+      importedCapture('raw', daysAgoIso(1), false, null),
+    ]);
+    const renderer = await renderScreen();
+    await pressByLabel(renderer, 'practice progress');
+    const text = renderedText(renderer);
+
+    expect(text).toContain('This chart is waiting on you.');
+    expect(
+      findByTestId(renderer, 'practice-stat-captures')!.props
+        .accessibilityLabel,
+    ).toBe('CAPTURES: 0');
+    expect(text).toContain(
+      '1 saved clip without measured pose evidence is not counted.',
+    );
+    expect(text).toContain('No measured captures yet');
     act(() => renderer.unmount());
   });
 

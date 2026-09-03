@@ -37,6 +37,7 @@ import {
 } from '../progress/api';
 import {
   buildPracticeHistory,
+  isVerifiedPracticeCapture,
   PRACTICE_HISTORY_RANGES,
   type PracticeHistoryRangeKey,
 } from '../progress/practiceHistory';
@@ -157,9 +158,29 @@ export function percent(value: number | null) {
 
 export function displayCaptureTitle(capture: CaptureHistoryEntry) {
   const recognition = capture.clip?.recognition;
-  return recognition?.status === 'recognized'
-    ? recognition.shotType.replace(/_/g, ' ')
-    : 'Practice clip';
+  if (recognition?.status === 'recognized') {
+    return recognition.shotType.replace(/_/g, ' ');
+  }
+  // The user's own declaration is the next-best honest label (imports carry
+  // no live recognition at all); it is their statement, never a prediction.
+  if (capture.declaredStroke) return capture.declaredStroke.replace(/_/g, ' ');
+  return 'Practice clip';
+}
+
+/** Row detail: how the clip got here and what it measures. */
+export function captureSourceDetail(capture: CaptureHistoryEntry) {
+  const seconds = (capture.durationMs / 1_000).toFixed(1);
+  return capture.clip?.captureMode === 'imported_video'
+    ? `${seconds}s imported clip · pose sequence measured`
+    : `${seconds}s saved clip · ${Math.round(capture.fps)} recorded fps`;
+}
+
+/** Discloses stored clips the chart refuses to count; empty when none. */
+export function excludedCapturesNote(count: number) {
+  if (count <= 0) return null;
+  return `${count} saved ${plural(count, 'clip')} without measured pose evidence ${
+    count === 1 ? 'is' : 'are'
+  } not counted.`;
 }
 
 /** Count-correct label for a stroke card's comparison basis. */
@@ -362,17 +383,13 @@ export function ProgressScreen() {
     }).filter((item): item is NonNullable<typeof item> => Boolean(item));
   }, [selectedFacts, selectedSeries]);
 
+  // The SAME rule the aggregation applies, so the list and the count can
+  // never disagree about what is verified practice.
   const eligibleRecentCaptures = useMemo(
-    () =>
-      captures
-        .filter(
-          capture =>
-            capture.evidenceStatus === 'valid' &&
-            capture.clip?.captureMode === 'automatic_pose_trigger',
-        )
-        .slice(0, 4),
+    () => captures.filter(isVerifiedPracticeCapture).slice(0, 4),
     [captures],
   );
+  const excludedNote = excludedCapturesNote(practice.excludedCaptureCount);
   const previousCaptureCount =
     practice.captureCount - practice.priorPeriodDelta.captureCount;
   const comparisonCopy =
@@ -392,6 +409,12 @@ export function ProgressScreen() {
     practice.activeDays - practice.priorPeriodDelta.activeDays;
   const previousTrackedMs =
     practice.trackedDurationMs - practice.priorPeriodDelta.trackedDurationMs;
+  // Pose duration is guided-camera instrumentation. With no camera capture
+  // in the window there is nothing measured — "—", never a fabricated 0.0s.
+  const hasCameraEvidence = practice.cameraCaptureCount > 0;
+  const trackedTimeCopy = hasCameraEvidence
+    ? formatTrackedTime(practice.trackedDurationMs)
+    : '—';
 
   const reps = dashboard.scoredReps;
   const repsDelta =
@@ -526,13 +549,13 @@ export function ProgressScreen() {
               <View style={styles.practiceHeroTop}>
                 <View style={styles.practiceHeroHeading}>
                   <Text style={[type.micro, styles.heroEyebrow]}>
-                    VERIFIED CAMERA PRACTICE
+                    VERIFIED PRACTICE
                   </Text>
                   <Text
                     numberOfLines={2}
                     style={[type.caption, styles.heroSource]}
                   >
-                    On this device · automatic captures only
+                    On this device · camera captures and measured imports
                   </Text>
                 </View>
               </View>
@@ -547,8 +570,8 @@ export function ProgressScreen() {
                       This chart is waiting on you.
                     </Text>
                     <Text style={[type.caption, styles.captureZeroDetail]}>
-                      Step into frame — verified captures land here
-                      automatically.
+                      Step into frame or import a clip — every measured swing
+                      lands here.
                     </Text>
                   </View>
                 </View>
@@ -567,11 +590,14 @@ export function ProgressScreen() {
                           style={[type.caption, { color: color.onDarkSubtle }]}
                         >
                           in {selectedDefinition.label.toLowerCase()}
+                          {practice.importedCaptureCount > 0
+                            ? ` · ${practice.importedCaptureCount} imported`
+                            : ''}
                         </Text>
                       </View>
                     </View>
                     <View
-                      accessibilityLabel={`${practice.currentStreak} day automatic capture streak`}
+                      accessibilityLabel={`${practice.currentStreak} day verified capture streak`}
                       style={styles.streakChip}
                     >
                       <View style={styles.streakIcon}>
@@ -590,6 +616,14 @@ export function ProgressScreen() {
                   </Text>
                 </>
               )}
+              {excludedNote ? (
+                <Text
+                  style={[type.caption, styles.excludedNote]}
+                  testID="practice-excluded-note"
+                >
+                  {excludedNote}
+                </Text>
+              ) : null}
 
               <PracticeVolumeChart
                 activeDays={practice.activeDays}
@@ -604,9 +638,7 @@ export function ProgressScreen() {
                 </View>
                 <View style={styles.practiceDivider} />
                 <View style={styles.practiceFooterItem}>
-                  <Text style={styles.footerValue}>
-                    {formatTrackedTime(practice.trackedDurationMs)}
-                  </Text>
+                  <Text style={styles.footerValue}>{trackedTimeCopy}</Text>
                   <Text style={styles.footerLabel}>pose tracked</Text>
                 </View>
                 <View style={styles.practiceDivider} />
@@ -651,12 +683,14 @@ export function ProgressScreen() {
               <StatDeltaRow
                 icon="person"
                 label="POSE TRACKED"
-                value={formatTrackedTime(practice.trackedDurationMs)}
+                value={trackedTimeCopy}
                 previous={
-                  practiceHasPrior ? formatTrackedTime(previousTrackedMs) : null
+                  practiceHasPrior && hasCameraEvidence
+                    ? formatTrackedTime(previousTrackedMs)
+                    : null
                 }
                 delta={
-                  practiceHasPrior
+                  practiceHasPrior && hasCameraEvidence
                     ? practice.priorPeriodDelta.trackedDurationMs
                     : null
                 }
@@ -683,14 +717,16 @@ export function ProgressScreen() {
             <View style={styles.evidenceDisclosure}>
               <Icon name="shield" color={color.mint} size={18} />
               <Text style={[type.caption, styles.evidenceDisclosureCopy]}>
-                These are camera-read measurements, not form scores. Imports,
-                corrupt evidence, and unverified legacy clips never enter the
-                chart.
+                These are camera-read measurements, not form scores. Pose
+                tracking and coverage come from guided captures only; imported
+                clips count toward captures and days once their pose sequence
+                has been measured. Corrupt evidence and unverified legacy clips
+                never enter the chart.
               </Text>
             </View>
 
             <DashSectionHeader
-              title="RECENT CAMERA EVIDENCE"
+              title="RECENT CAPTURES"
               right={
                 eligibleRecentCaptures.length
                   ? `LATEST ${eligibleRecentCaptures.length}`
@@ -704,11 +740,11 @@ export function ProgressScreen() {
                 </View>
                 <View style={styles.flex}>
                   <Text style={[type.bodyBold, { color: color.onDark }]}>
-                    No verified motion captured yet
+                    No measured captures yet
                   </Text>
                   <Text style={[type.caption, styles.emptyPracticeCopy]}>
-                    Open Coach, step fully into frame, and the camera will save
-                    a motion window automatically.
+                    Open Coach and record with the guided camera or import a
+                    clip. Every swing with a measured pose sequence lands here.
                   </Text>
                 </View>
               </Card>
@@ -724,8 +760,7 @@ export function ProgressScreen() {
                         {displayCaptureTitle(capture)}
                       </Text>
                       <Text style={[type.caption, styles.captureMeta]}>
-                        {(capture.durationMs / 1_000).toFixed(1)}s saved clip ·{' '}
-                        {Math.round(capture.fps)} recorded fps
+                        {captureSourceDetail(capture)}
                       </Text>
                       <Text style={[type.caption, styles.captureDate]}>
                         {new Date(capture.capturedAtIso).toLocaleString(
@@ -1245,6 +1280,7 @@ const styles = StyleSheet.create({
   captureZeroCopy: { flex: 1, minWidth: 0 },
   captureZeroDetail: { color: color.onDarkSubtle, marginTop: 3 },
   comparisonCopy: { color: color.onDarkSubtle, marginTop: 3 },
+  excludedNote: { color: color.onDarkFaint, marginTop: space.sm },
   practiceFooter: {
     minHeight: 58,
     flexDirection: 'row',

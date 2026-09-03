@@ -45,6 +45,13 @@ export interface PracticeHistoryResult {
   buckets: PracticeHistoryChartBucket[];
   /** All values except streaks describe the selected current range. */
   captureCount: number;
+  /** Guided-camera captures (the only ones carrying pose evidence). */
+  cameraCaptureCount: number;
+  /** Imported clips whose pose sequence was measured. */
+  importedCaptureCount: number;
+  /** Stored clips (any date) with no verified evidence — legacy, corrupt,
+   * mismatched, or imports never measured. Disclosed, never counted. */
+  excludedCaptureCount: number;
   activeDays: number;
   currentStreak: number;
   longestStreak: number;
@@ -88,6 +95,12 @@ export interface JointTrackingMetrics {
 
 export interface PracticeMetrics {
   eligibleCaptureCount: number;
+  /** Guided captures with trigger + pose evidence; the pose metrics below
+   * aggregate exactly these. */
+  cameraCaptureCount: number;
+  /** Imported clips with a measured pose sequence; they count toward volume
+   * and days but carry no capture evidence, so never toward pose metrics. */
+  importedCaptureCount: number;
   activeDayCount: number;
   /** Sum of evidence-window pose duration, not clip or session duration. */
   trackedPoseDurationMs: number;
@@ -140,11 +153,14 @@ interface EligibleCapture {
   id: string;
   capturedAtMs: number;
   day: string;
-  evidence: CaptureEvidenceV1;
+  /** Present for guided captures only; imports have no capture evidence. */
+  evidence: CaptureEvidenceV1 | null;
 }
 
 interface MutableMetrics {
   captureCount: number;
+  cameraCaptureCount: number;
+  importedCaptureCount: number;
   activeDays: Set<string>;
   trackedPoseDurationMs: number;
   analysisInputFrameCount: number;
@@ -181,6 +197,9 @@ export function buildPracticeHistory(
       count: bucket.eligibleCaptureCount,
     })),
     captureCount: current.eligibleCaptureCount,
+    cameraCaptureCount: current.cameraCaptureCount,
+    importedCaptureCount: current.importedCaptureCount,
+    excludedCaptureCount: history.excludedCaptureCount,
     activeDays: current.activeDayCount,
     currentStreak: history.streak.currentDays,
     longestStreak: history.streak.longestDays,
@@ -198,8 +217,10 @@ export function buildPracticeHistory(
 }
 
 /**
- * Builds practice history solely from repository-validated automatic captures.
- * It intentionally does not expose stroke labels, scores, form, power, or MPH:
+ * Builds practice history solely from repository-validated captures with
+ * measured pose evidence: guided captures (trigger + capture evidence) and
+ * imported clips whose pose sequence the extraction pass has recorded. It
+ * intentionally does not expose stroke labels, scores, form, power, or MPH:
  * the pending-capture evidence contract cannot substantiate those metrics.
  */
 export function aggregatePracticeHistory(
@@ -289,18 +310,18 @@ export function aggregatePracticeHistory(
   };
 }
 
-function eligibleCapture(
-  capture: PendingCapture,
-  asOfMs: number,
-  dayFormatter: Intl.DateTimeFormat,
-): EligibleCapture | null {
-  if (
-    capture.evidenceStatus !== 'valid' ||
-    capture.clip?.captureMode !== 'automatic_pose_trigger'
-  ) {
-    return null;
-  }
+/**
+ * The ONE verified-practice rule, shared by the aggregation and every list
+ * that shows "what counts". A capture is verified practice when its stored
+ * payload passed the strict parser AND still matches the row's metadata, AND
+ * it carries measured pose evidence: a guided capture always does (trigger +
+ * capture evidence written at capture time); an imported clip does only once
+ * the extraction pass recorded its pose sequence onto the row — a raw import
+ * nobody analyzed is a video file, not practice.
+ */
+export function isVerifiedPracticeCapture(capture: PendingCapture): boolean {
   const clip = capture.clip;
+  if (capture.evidenceStatus !== 'valid' || !clip) return false;
   // Recheck the repository's metadata-match invariant at this pure boundary.
   if (
     clip.uri !== capture.uri ||
@@ -310,21 +331,39 @@ function eligibleCapture(
     clip.width !== capture.width ||
     clip.height !== capture.height
   ) {
-    return null;
+    return false;
   }
+  return (
+    clip.captureMode === 'automatic_pose_trigger' ||
+    clip.poseSequence !== undefined
+  );
+}
+
+function eligibleCapture(
+  capture: PendingCapture,
+  asOfMs: number,
+  dayFormatter: Intl.DateTimeFormat,
+): EligibleCapture | null {
+  if (!isVerifiedPracticeCapture(capture) || !capture.clip) return null;
+  const clip = capture.clip;
   const capturedAtMs = parseOptionalExplicitInstant(capture.capturedAtIso);
   if (capturedAtMs === null || capturedAtMs > asOfMs) return null;
   return {
     id: capture.id,
     capturedAtMs,
     day: dayForInstant(capturedAtMs, dayFormatter),
-    evidence: clip.captureEvidence,
+    evidence:
+      clip.captureMode === 'automatic_pose_trigger'
+        ? clip.captureEvidence
+        : null,
   };
 }
 
 function emptyMetrics(): MutableMetrics {
   return {
     captureCount: 0,
+    cameraCaptureCount: 0,
+    importedCaptureCount: 0,
     activeDays: new Set<string>(),
     trackedPoseDurationMs: 0,
     analysisInputFrameCount: 0,
@@ -341,6 +380,13 @@ function addCapture(metrics: MutableMetrics, capture: EligibleCapture): void {
   const evidence = capture.evidence;
   metrics.captureCount += 1;
   metrics.activeDays.add(capture.day);
+  // Volume and days count every verified capture; the pose metrics below
+  // aggregate ONLY captures that carry capture evidence (guided camera).
+  if (evidence === null) {
+    metrics.importedCaptureCount += 1;
+    return;
+  }
+  metrics.cameraCaptureCount += 1;
   metrics.trackedPoseDurationMs += evidence.trackedDurationMs;
   metrics.analysisInputFrameCount += evidence.analysisInputFrameCount;
   metrics.poseFrameCount += evidence.poseFrameCount;
@@ -363,6 +409,8 @@ function finalizeMetrics(metrics: MutableMetrics): PracticeMetrics {
   );
   return {
     eligibleCaptureCount: metrics.captureCount,
+    cameraCaptureCount: metrics.cameraCaptureCount,
+    importedCaptureCount: metrics.importedCaptureCount,
     activeDayCount: metrics.activeDays.size,
     trackedPoseDurationMs: metrics.trackedPoseDurationMs,
     poseAvailability: {

@@ -36,12 +36,15 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 const mockListShots = jest.fn<Promise<unknown[]>, unknown[]>(async () => []);
-const mockListCaptureHistory = jest.fn<Promise<unknown[]>, unknown[]>(
+const mockListRealAnalysisFacts = jest.fn<Promise<unknown[]>, unknown[]>(
   async () => [],
 );
 jest.mock('../../src/data/repository', () => ({
   listShots: (...args: unknown[]) => mockListShots(...args),
-  listCaptureHistory: (...args: unknown[]) => mockListCaptureHistory(...args),
+  listRealAnalysisFacts: (...args: unknown[]) =>
+    mockListRealAnalysisFacts(...args),
+  getKv: jest.fn(async () => null),
+  setKv: jest.fn(async () => {}),
 }));
 
 jest.mock('../../src/account/apiSession', () => ({
@@ -111,7 +114,7 @@ function hostPressable(
 describe('Home streak badge hit target (wf fix-21)', () => {
   beforeEach(() => {
     mockNavigate.mockClear();
-    mockListCaptureHistory.mockClear();
+    mockListRealAnalysisFacts.mockClear();
   });
 
   it('extends the 32pt chip to at least a 44pt touch target via hitSlop', async () => {
@@ -144,9 +147,9 @@ describe('Home streak badge hit target (wf fix-21)', () => {
     act(() => renderer.unmount());
   });
 
-  it('renders the seven-day practice card from the capture history read', async () => {
+  it('renders the seven-day week card from the real analysis facts read', async () => {
     const renderer = await renderHome();
-    expect(mockListCaptureHistory).toHaveBeenCalledTimes(1);
+    expect(mockListRealAnalysisFacts).toHaveBeenCalledTimes(1);
     const texts = renderer.root
       .findAllByType(Text)
       .map(node => String(node.props.children));

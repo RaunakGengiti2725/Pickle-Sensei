@@ -269,7 +269,7 @@ describe('ProgressScreen button ledger', () => {
     await pressByLabel(renderer, 'practice progress');
     expect(hostByTestId(renderer, 'practice-stat-captures')).not.toBeNull();
     expect(hostByTestId(renderer, 'technique-stat-reps')).toBeNull();
-    expect(renderedText(renderer)).toContain('VERIFIED CAMERA PRACTICE');
+    expect(renderedText(renderer)).toContain('VERIFIED PRACTICE');
     expect(
       pressableByLabel(renderer, 'practice progress').props.accessibilityState
         .selected,

@@ -37,6 +37,10 @@ export function PracticeVolumeChart(props: {
   buckets: readonly PracticeHistoryChartBucket[];
   rangeLabel: string;
   activeDays: number;
+  /** Replaces the default capture-volume summary when the bars count
+   * something else (Home's scored reads). */
+  accessibilityLabel?: string;
+  testID?: string;
 }) {
   const reducedMotion = useReducedMotion();
   const reveal = useRef(new Animated.Value(1)).current;
@@ -73,14 +77,16 @@ export function PracticeVolumeChart(props: {
   return (
     <View
       accessible
-      accessibilityLabel={`${
-        props.rangeLabel
-      } capture volume: ${total} verified automatic ${
-        total === 1 ? 'capture' : 'captures'
-      } across ${props.activeDays} active ${
-        props.activeDays === 1 ? 'day' : 'days'
-      }.`}
+      accessibilityLabel={
+        props.accessibilityLabel ??
+        `${props.rangeLabel} capture volume: ${total} verified ${
+          total === 1 ? 'capture' : 'captures'
+        } across ${props.activeDays} active ${
+          props.activeDays === 1 ? 'day' : 'days'
+        }.`
+      }
       style={styles.root}
+      testID={props.testID}
     >
       <View importantForAccessibility="no-hide-descendants" style={styles.plot}>
         {compacted.map((bucket, index) => {
