@@ -195,6 +195,7 @@ export async function bootstrapCanonicalAccount(
   let response: Response;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
+  const appleAuthorizationCode = input.appleAuthorizationCode?.trim();
   try {
     response = await fetchFn(`${apiBaseUrl}/v1/account/bootstrap`, {
       method: 'POST',
@@ -204,11 +205,14 @@ export async function bootstrapCanonicalAccount(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${bearerToken}`,
         'X-Client-Version': input.environment.device.appVersion,
+        ...(input.provider === 'apple' && appleAuthorizationCode
+          ? { 'X-Apple-Revocation-Protocol': '1' }
+          : {}),
       },
       body: JSON.stringify({
         ...input.environment,
-        ...(input.provider === 'apple' && input.appleAuthorizationCode?.trim()
-          ? { appleAuthorizationCode: input.appleAuthorizationCode.trim() }
+        ...(input.provider === 'apple' && appleAuthorizationCode
+          ? { appleAuthorizationCode }
           : {}),
       }),
     });

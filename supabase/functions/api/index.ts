@@ -2709,63 +2709,71 @@ async function bootstrapAccount(
   if (authed.provider === "apple") {
     const body = await readBody(request);
     const authorizationCode = body.appleAuthorizationCode;
-    if (
-      typeof authorizationCode !== "string" ||
-      !authorizationCode.trim() ||
-      authorizationCode.length > 4_096
-    ) {
-      return codedError(
-        400,
-        "auth.apple_authorization_code_required",
-        "Apple did not provide the authorization needed to finish secure sign-in. Try again.",
-      );
-    }
-    const config = appleServerConfiguration();
-    const adminDb = billingAdminDb();
-    if (!config || !adminDb) {
-      return serviceUnavailable(
-        "Apple sign-in",
-        "Apple server secrets or service role unavailable",
-      );
-    }
-    try {
-      const grant = await exchangeAppleAuthorizationCode(authorizationCode.trim(), config);
-      if (grant.subject !== providerSubject) {
+    const supportsRevocationProtocol = request.headers.get("X-Apple-Revocation-Protocol") === "1";
+    const usableAuthorizationCode =
+      typeof authorizationCode === "string" &&
+      Boolean(authorizationCode.trim()) &&
+      authorizationCode.length <= 4_096;
+    if (!usableAuthorizationCode) {
+      if (supportsRevocationProtocol) {
         return codedError(
-          401,
-          "auth.apple_authorization_mismatch",
-          "Apple returned authorization for a different account. Try again.",
+          400,
+          "auth.apple_authorization_code_required",
+          "Apple did not provide the authorization needed to finish secure sign-in. Try again.",
         );
       }
-      const encrypted = await encryptAppleRefreshToken(
-        grant.refreshToken,
-        authed.id,
-        config.tokenEncryptionKey,
-      );
-      const now = new Date().toISOString();
-      const stored = await adminDb.from("account_external_credentials").upsert(
-        {
-          user_id: authed.id,
-          apple_refresh_token_encrypted: encrypted,
-          apple_token_captured_at: now,
-          apple_revoked_at: null,
-          updated_at: now,
-        },
-        { onConflict: "user_id" },
-      );
-      if (stored.error) {
-        return serviceUnavailable("Apple sign-in", stored.error.message);
-      }
-    } catch (error) {
-      if (error instanceof ExternalAccountError && error.kind === "invalid_grant") {
-        return codedError(
-          401,
-          "auth.apple_authorization_invalid",
-          "Apple could not validate this sign-in authorization. Try again.",
+      // Deployment must precede the new mobile build. A pre-protocol build
+      // has no authorization code to send, so keep it working and let its
+      // eventual deletion use Apple's documented manual-disconnect path.
+      console.warn(`[api] legacy Apple bootstrap has no revocation credential: ${authed.id}`);
+    } else {
+      const config = appleServerConfiguration();
+      const adminDb = billingAdminDb();
+      if (!config || !adminDb) {
+        return serviceUnavailable(
+          "Apple sign-in",
+          "Apple server secrets or service role unavailable",
         );
       }
-      const detail = error instanceof ExternalAccountError ? error.message : error;
-      return serviceUnavailable("Apple sign-in", detail);
+      try {
+        const grant = await exchangeAppleAuthorizationCode(authorizationCode.trim(), config);
+        if (grant.subject !== providerSubject) {
+          return codedError(
+            401,
+            "auth.apple_authorization_mismatch",
+            "Apple returned authorization for a different account. Try again.",
+          );
+        }
+        const encrypted = await encryptAppleRefreshToken(
+          grant.refreshToken,
+          authed.id,
+          config.tokenEncryptionKey,
+        );
+        const now = new Date().toISOString();
+        const stored = await adminDb.from("account_external_credentials").upsert(
+          {
+            user_id: authed.id,
+            apple_refresh_token_encrypted: encrypted,
+            apple_token_captured_at: now,
+            apple_revoked_at: null,
+            updated_at: now,
+          },
+          { onConflict: "user_id" },
+        );
+        if (stored.error) {
+          return serviceUnavailable("Apple sign-in", stored.error.message);
+        }
+      } catch (error) {
+        if (error instanceof ExternalAccountError && error.kind === "invalid_grant") {
+          return codedError(
+            401,
+            "auth.apple_authorization_invalid",
+            "Apple could not validate this sign-in authorization. Try again.",
+          );
+        }
+        const detail = error instanceof ExternalAccountError ? error.message : error;
+        return serviceUnavailable("Apple sign-in", detail);
+      }
     }
   }
 

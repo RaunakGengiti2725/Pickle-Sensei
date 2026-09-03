@@ -284,11 +284,17 @@ export function webhookRequest(
 export function userRequest(
   method: string,
   path: string,
-  options: { token?: string; ip?: string; body?: unknown } = {},
+  options: {
+    token?: string;
+    ip?: string;
+    body?: unknown;
+    headers?: Record<string, string>;
+  } = {},
 ): Request {
   const headers = new Headers({
     Authorization: `Bearer ${options.token ?? fakeGoogleIdToken()}`,
     "x-forwarded-for": options.ip ?? "203.0.113.20",
+    ...options.headers,
   });
   if (options.body !== undefined) {
     headers.set("Content-Type", "application/json");

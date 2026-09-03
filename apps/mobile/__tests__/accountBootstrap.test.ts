@@ -140,6 +140,11 @@ describe('canonical account bootstrap', () => {
       ...environment,
       appleAuthorizationCode: 'one-use-apple-code',
     });
+    expect(fetchFn.mock.calls[0]?.[1]?.headers).toEqual(
+      expect.objectContaining({
+        'X-Apple-Revocation-Protocol': '1',
+      }),
+    );
   });
 
   it('fails closed when release public configuration is missing or insecure', async () => {

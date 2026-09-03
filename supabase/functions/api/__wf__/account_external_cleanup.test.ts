@@ -49,6 +49,41 @@ Deno.test(
   },
 );
 
+Deno.test("legacy Apple bootstrap remains compatible before the mobile update ships", async () => {
+  h.reset();
+  h.tables.profiles = [profile()];
+
+  const response = await h.handler(
+    userRequest("POST", "/v1/account/bootstrap", {
+      token: fakeAppleIdToken(),
+      body: {},
+    }),
+  );
+
+  assertEquals(response.status, 200);
+  assertEquals(h.callsTo("appleid.apple.com/auth/token").length, 0);
+});
+
+Deno.test(
+  "revocation-capable Apple clients fail closed if the one-use code is missing",
+  async () => {
+    h.reset();
+    h.tables.profiles = [profile()];
+
+    const response = await h.handler(
+      userRequest("POST", "/v1/account/bootstrap", {
+        token: fakeAppleIdToken(),
+        headers: { "X-Apple-Revocation-Protocol": "1" },
+        body: {},
+      }),
+    );
+
+    assertEquals(response.status, 400);
+    assertEquals((await response.json()).error.code, "auth.apple_authorization_code_required");
+    assertEquals(h.callsTo("appleid.apple.com/auth/token").length, 0);
+  },
+);
+
 Deno.test(
   "delete-confirm revokes Apple and erases RevenueCat before deleting Supabase auth",
   async () => {
