@@ -15,7 +15,7 @@ the app public until the Account Holder releases it.
 
 ## Completed production checks
 
-1. Main is clean and pushed through commit `0252771`.
+1. Main is clean and synchronized with `origin/main`.
 
 2. Build 2 was archived with the production App Store certificate and a valid
    App Store provisioning profile. Apple reports the binary as Validated. The
@@ -56,11 +56,12 @@ the app public until the Account Holder releases it.
     and $159.99 lifetime purchase match the app and repository configuration.
     The monthly and yearly products are in the same subscription group.
 
-11. Free Apps and Paid Apps agreements, banking, the United States tax form,
-    and Digital Services Act compliance are active. The app is currently
-    available in Australia, Canada, New Zealand, the United Kingdom, and the
-    United States. No European Union storefront is enabled, so the current
-    nontrader declaration is consistent with the selected availability.
+11. Free Apps and Paid Apps agreements, banking, and the United States tax form
+    are active. The app is selected for all 175 current App Store countries or
+    regions, and automatic availability is enabled for future storefronts. The
+    Digital Services Act declaration has been changed to trader, and the contact
+    email has been verified. Apple still requires an address identification
+    document before trader verification is complete.
 
 12. The release checks passed: workspace lint and type checks, 247 mobile test
     suites with 2,872 tests, 23 backend legal and router tests, 56 native vision
@@ -69,14 +70,18 @@ the app public until the Account Holder releases it.
 
 ## Required before submission
 
-1. Upload at least one App Store screenshot in the iPhone 6.5 inch screenshot
+1. Upload an address identification document in Business, Digital Services Act,
+   and complete Apple's trader verification. The document must confirm the
+   public trader address and be a PDF, JPEG, or PNG no larger than 10 MB.
+
+2. Upload at least one App Store screenshot in the iPhone 6.5 inch screenshot
    section. App Store Connect currently shows zero screenshots.
 
-2. Upload one review screenshot to `pickle_sensei_pro_monthly`.
+3. Upload one review screenshot to `pickle_sensei_pro_monthly`.
 
-3. Upload one review screenshot to `pickle_sensei_pro_yearly`.
+4. Upload one review screenshot to `pickle_sensei_pro_yearly`.
 
-4. Upload one review screenshot to `pickle_sensei_pro_lifetime`.
+5. Upload one review screenshot to `pickle_sensei_pro_lifetime`.
 
 After those uploads, add the two subscriptions and the lifetime purchase for
 review, add version 1.0 for review, inspect the final submission summary, and
