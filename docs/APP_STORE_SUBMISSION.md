@@ -49,7 +49,7 @@ Hard rules for the agent filling this in:
 | Platform                     | iOS, iPhone only (`TARGETED_DEVICE_FAMILY = 1`), portrait only                                                                                                                                                                                                                                                                                 | `project.pbxproj`, `Info.plist`                                     |
 | Minimum iOS                  | 15.1                                                                                                                                                                                                                                                                                                                                           | `IPHONEOS_DEPLOYMENT_TARGET`, RN 0.87 `min_ios_version_supported`   |
 | Marketing version            | 1.0                                                                                                                                                                                                                                                                                                                                            | `MARKETING_VERSION`, `runtimeConfig.ts` `APP_VERSION`               |
-| Build number                 | Assigned by fastlane (`latest_testflight_build_number + 1`). Build 1 was uploaded 2026-08-30.                                                                                                                                                                                                                                                  | `ios/fastlane/Fastfile`, `docs/DISTRIBUTION.md`                     |
+| Build number                 | Assigned by fastlane (`latest_testflight_build_number + 1`). Build 3 was validated and attached to version 1.0 on 2026-09-03.                                                                                                                                                                                                                  | `ios/fastlane/Fastfile`, `docs/DISTRIBUTION.md`                     |
 | Primary language             | English (U.S.)                                                                                                                                                                                                                                                                                                                                 | `CFBundleDevelopmentRegion = en`; the app ships English copy only   |
 | Capabilities / entitlements  | Sign in with Apple (`com.apple.developer.applesignin`), In-App Purchase. No push notifications entitlement (reminders are local only).                                                                                                                                                                                                         | `PickleSensei.entitlements`, `docs/DISTRIBUTION.md`                 |
 | Permission strings           | Camera (used), Photo Library (used, system picker), Microphone (declared, never requested: the capture session is video only)                                                                                                                                                                                                                  | `Info.plist`, `PickleAudioCoach.swift` line 17                      |
@@ -228,13 +228,13 @@ Path: ASC → Apps → Pickle Sensei → General → **App Information**.
 
 ### 3.1 Localizable Information (English (U.S.))
 
-| Field               | Value                                                                                                                                     |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Name (30 max)       | `ENTER:` `Pickle Sensei` (13 chars). Alternative if you want a keyword in the name: `Pickle Sensei: Stroke Coach` (27). Do not exceed 30. |
-| Subtitle (30 max)   | `ENTER:` `Pickleball technique coach` (26). Alternatives: `Private pickleball form coach` (29), `Film a stroke. Get the fix.` (27).       |
-| Privacy Policy URL  | `ENTER:` `https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api/privacy`                                                              |
-| Privacy Choices URL | `SKIP:` (only for apps offering a "Do Not Sell" style choice page; none exists and none is needed)                                        |
-| Other localizations | `SKIP:` English (U.S.) only for 1.0.                                                                                                      |
+| Field               | Value                                                                                                                                           |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Name (30 max)       | `ENTER:` `Pickle Sensei` (13 chars). Alternative if you want a keyword in the name: `Pickle Sensei: Stroke Coach` (27). Do not exceed 30.       |
+| Subtitle (30 max)   | `ENTER:` `Pickleball technique coach` (26). Alternatives: `Private pickleball form coach` (29), `Film a stroke. Get the fix.` (27).             |
+| Privacy Policy URL  | `ENTER:` `https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api/privacy`                                                                    |
+| Privacy Choices URL | `ENTER:` `https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api/support` (privacy-request contact and in-app account-deletion instructions) |
+| Other localizations | `SKIP:` English (U.S.) only for 1.0.                                                                                                            |
 
 ### 3.2 General Information
 
@@ -317,63 +317,77 @@ Path: sidebar → **App Privacy** → Get Started / Edit.
 Read from `apps/mobile/src/account/*.ts`, `src/evaluation/trialCapture.ts`,
 `src/data/api.ts`, `supabase/functions/api/index.ts`, and the migrations:
 
-| Data                                                                                                                                 | Where it goes                                                                 | Linked to account?                                     | Purpose                                        |
-| ------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------- |
-| Email address and display name from Apple/Google sign-in                                                                             | Supabase Auth + `public.profiles` (`email`, `display_name`, `avatar_url`)     | Yes (it is the account)                                | Authentication, account                        |
-| Account ID (Supabase UUID). Also used as the RevenueCat `appUserID`.                                                                 | Supabase, RevenueCat                                                          | Yes                                                    | Account, entitlement verification              |
-| Coaching profile: skill level, dominant hand, goal, biggest problem, optional first name, optional gender                            | `public.profiles` via `PUT /v1/me/onboarding`                                 | Yes                                                    | Personalizing coaching                         |
-| Analysis results: stroke type, technique score, checkpoint scores, phases, confidence, timestamps, model/config versions, session id | `public.shots`, `public.sessions` via `POST /v1/shots:sync`                   | Yes                                                    | Progress history, rank, free-rating accounting |
-| Purchase/entitlement state: premium yes/no, product key, expiry, verified_at; RevenueCat holds the StoreKit transaction history      | `public.billing_entitlements`, RevenueCat                                     | Yes                                                    | Unlocking Pro, fraud prevention                |
-| Consent ledger rows (scope, grant/withdraw, version, source, client device string)                                                   | `public.consent_records`                                                      | Yes                                                    | Accountability for opt-in programs             |
-| Evaluation telemetry (claims/abstentions, timings, versions), **only after opt-in** in Settings → Data & consent                     | `public.evaluation_trials` (row carries `user_id`)                            | Yes (the row has a user id, despite "anonymized" copy) | Model evaluation (analytics)                   |
-| "Was this analysis accurate?" feedback                                                                                               | `public.analysis_feedback`                                                    | Yes                                                    | Product improvement                            |
-| Saved drill slugs                                                                                                                    | `public.user_saved_drills`                                                    | Yes                                                    | App functionality                              |
-| Account-deletion exit survey (reason + optional comment + server-stamped app version, platform, account age, premium flag)           | `public.account_deletion_feedback`, anonymized (`user_id` set NULL) on delete | No after deletion                                      | Churn analysis; optional, skippable form       |
-| Bootstrap `environment` body (locale, timezone, OS version, app version, "iOS phone")                                                | Sent to `/v1/account/bootstrap`, **not stored** (handler ignores the body)    | n/a                                                    | Not "collected" under Apple's definition       |
-| Court video, camera frames, pose landmarks, imported clips                                                                           | **Never leave the device** (no storage bucket exists; no upload endpoint)     | n/a                                                    | Not collected                                  |
-| Crash/stability events                                                                                                               | In-memory recorder only (`stabilityTelemetry.ts`); nothing transmitted        | n/a                                                    | Not collected                                  |
-| Advertising identifier, device ID, precise/coarse location, contacts, browsing/search history, health records, audio                 | Not accessed                                                                  | n/a                                                    | Not collected                                  |
+| Data                                                                                                                                   | Where it goes                                                                 | Linked to account?                                     | Purpose                                          |
+| -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------ |
+| Email address and display name from Apple/Google sign-in                                                                               | Supabase Auth + `public.profiles` (`email`, `display_name`, `avatar_url`)     | Yes (it is the account)                                | Authentication, account                          |
+| Account ID (Supabase UUID). Also used as the RevenueCat `appUserID`.                                                                   | Supabase, RevenueCat                                                          | Yes                                                    | Account, entitlement verification                |
+| Coaching profile: skill level, dominant hand, goal, biggest problem, optional first name, optional gender                              | `public.profiles` via `PUT /v1/me/onboarding`                                 | Yes                                                    | Personalizing coaching                           |
+| Analysis results: stroke type, technique score, checkpoint scores, phases, confidence, timestamps, model/config versions, session id   | `public.shots`, `public.sessions` via `POST /v1/shots:sync`                   | Yes                                                    | Progress history, rank, free-rating accounting   |
+| Purchase/entitlement state: premium yes/no, product key, expiry, verified_at; RevenueCat holds the StoreKit transaction history        | `public.billing_entitlements`, RevenueCat                                     | Yes                                                    | Unlocking Pro, fraud prevention                  |
+| Consent ledger rows (scope, grant/withdraw, version, source, client device string)                                                     | `public.consent_records`                                                      | Yes                                                    | Accountability for opt-in programs               |
+| Evaluation telemetry (claims/abstentions, timings, versions), **only after opt-in** in Settings → Data & consent                       | `public.evaluation_trials` (row carries `user_id`)                            | Yes (the row has a user id, despite "anonymized" copy) | Model evaluation (analytics)                     |
+| "Was this analysis accurate?" feedback                                                                                                 | `public.analysis_feedback`                                                    | Yes                                                    | Product improvement                              |
+| Saved drill slugs                                                                                                                      | `public.user_saved_drills`                                                    | Yes                                                    | App functionality                                |
+| Account-deletion exit survey (reason + optional comment + server-stamped app version, platform, account age, premium flag)             | `public.account_deletion_feedback`, anonymized (`user_id` set NULL) on delete | No after deletion                                      | Churn analysis; optional, skippable form         |
+| Bootstrap `environment` body (locale, timezone, OS version, app version, "iOS phone")                                                  | Sent to `/v1/account/bootstrap`, **not stored** (handler ignores the body)    | n/a                                                    | Not "collected" under Apple's definition         |
+| Court video, camera frames, pose landmarks, imported clips                                                                             | **Never leave the device** (no storage bucket exists; no upload endpoint)     | n/a                                                    | Not collected                                    |
+| Crash/stability events                                                                                                                 | In-memory recorder only (`stabilityTelemetry.ts`); nothing transmitted        | n/a                                                    | Not collected                                    |
+| Google Sign-In SDK declarations: name, email, phone number, coarse location, user/device identifiers, other authentication data, usage | Google identity services; exact fields depend on provider behavior            | Conservatively treated as linked                       | Sign-in, security, functionality, analytics      |
+| Embedded YouTube/Vimeo page or video, playback interaction, device/browser identifier, network-derived coarse location, ad data        | YouTube or Vimeo when the user opens a hosted drill video                     | Conservatively treated as linked                       | Playback, functionality, analytics, provider ads |
+| Advertising identifier, precise GPS location, contacts, search history, health records                                                 | Not accessed by Pickle Sensei                                                 | n/a                                                    | Not collected                                    |
 
 ### 5.2 Answers to enter
 
 **Step 1: "Do you or your third-party partners collect data from this app?"**
 `SELECT:` Yes.
 
-**Step 2: data types to tick.** Tick exactly these, nothing else:
+**Step 2: data types to tick.** Tick exactly these fourteen types. This is the
+published September 3, 2026 answer and includes data declared by embedded SDKs
+and WebViews, not only fields stored in Pickle Sensei's own database:
 
-| Category         | Data type        | Tick |
-| ---------------- | ---------------- | ---- |
-| Contact Info     | Name             | ✅   |
-| Contact Info     | Email Address    | ✅   |
-| Health & Fitness | Fitness          | ✅   |
-| Purchases        | Purchase History | ✅   |
-| Identifiers      | User ID          | ✅   |
-| Usage Data       | Other Usage Data | ✅   |
-| Other Data       | Other Data Types | ✅   |
+| Category         | Data types                                              |
+| ---------------- | ------------------------------------------------------- |
+| Contact Info     | Name; Email Address; Phone Number                       |
+| Health & Fitness | Fitness                                                 |
+| Location         | Coarse Location                                         |
+| User Content     | Other User Content                                      |
+| Browsing History | Browsing History                                        |
+| Purchases        | Purchase History                                        |
+| Identifiers      | User ID; Device ID                                      |
+| Usage Data       | Product Interaction; Advertising Data; Other Usage Data |
+| Other Data       | Other Data Types                                        |
 
-Everything else (Photos or Videos, Audio Data, Location, Contacts, Device ID,
-Diagnostics, Browsing/Search History, Sensitive Info, Financial Info, Body,
-Surroundings, Product Interaction, Advertising Data, Customer Support, Other
-User Content, Emails or Text Messages, Gameplay Content) stays unticked.
+Do not tick Photos or Videos, Audio Data, Precise Location, Contacts, Search
+History, Sensitive Info, Financial Info, Body, Surroundings, Diagnostics,
+Customer Support, Emails or Text Messages, or Gameplay Content unless the
+shipping binary's behavior changes.
 
 **Step 3: per data type.** For every type below, answer the "tracking" question
 `SELECT:` **No, we do not use this data for tracking purposes**.
 
-| Data type        | Usage purposes to tick                                | Linked to the user's identity? | What it covers (for your own records)                                                                                            |
-| ---------------- | ----------------------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| Name             | App Functionality, Product Personalization            | `SELECT:` Yes                  | Display name from the identity provider; optional first name used to greet the player                                            |
-| Email Address    | App Functionality                                     | `SELECT:` Yes                  | Account identity from Apple/Google (Hide My Email relay addresses included)                                                      |
-| Fitness          | App Functionality, Product Personalization, Analytics | `SELECT:` Yes                  | Stroke technique scores, checkpoint measurements, phases, session records. Analytics covers the opt-in evaluation program.       |
-| Purchase History | App Functionality, Analytics                          | `SELECT:` Yes                  | RevenueCat requires both purposes; entitlement state is tied to the account UUID                                                 |
-| User ID          | App Functionality, Analytics                          | `SELECT:` Yes                  | Supabase account UUID, also the RevenueCat app user ID; RevenueCat uses it for subscriber analytics                              |
-| Other Usage Data | Analytics, App Functionality                          | `SELECT:` Yes                  | Opt-in evaluation telemetry, analysis-accuracy feedback, consent ledger                                                          |
-| Other Data Types | App Functionality, Product Personalization            | `SELECT:` Yes                  | Coaching profile: skill level, handedness, goal, biggest problem, optional gender (gender is not on Apple's Sensitive Info list) |
+| Data type           | Usage purposes to tick                                                         | Linked to identity? | What it covers                                                                                 |
+| ------------------- | ------------------------------------------------------------------------------ | ------------------- | ---------------------------------------------------------------------------------------------- |
+| Name                | Product Personalization; App Functionality                                     | Yes                 | Provider/display name and optional first name                                                  |
+| Email Address       | App Functionality                                                              | Yes                 | Apple/Google account identity                                                                  |
+| Phone Number        | App Functionality                                                              | Yes                 | Google Sign-In SDK declaration                                                                 |
+| Fitness             | Product Personalization; Analytics; App Functionality                          | Yes                 | Structured stroke, technique, session, and evaluation records                                  |
+| Coarse Location     | App Functionality                                                              | Yes                 | Google Sign-In and network-derived coarse location declarations; no device location permission |
+| Other User Content  | Analytics                                                                      | Yes                 | Optional free-form feedback and exit-survey content while associated with the account          |
+| Browsing History    | Third-Party Advertising; Analytics; App Functionality                          | Yes                 | Externally hosted video/page viewed in the drill WebView                                       |
+| User ID             | Analytics; App Functionality                                                   | Yes                 | Supabase UUID and RevenueCat app user ID                                                       |
+| Device ID           | Analytics                                                                      | Yes                 | Google Sign-In and embedded-provider SDK declaration                                           |
+| Purchase History    | App Functionality; Analytics                                                   | Yes                 | RevenueCat purchase and entitlement history tied to the account                                |
+| Product Interaction | App Functionality; Product Personalization; Analytics; Third-Party Advertising | Yes                 | Drill/video interactions and app feature interactions                                          |
+| Advertising Data    | Third-Party Advertising; Analytics                                             | Yes                 | Ads that an external video provider may display; no Pickle Sensei ad SDK                       |
+| Other Usage Data    | Analytics; App Functionality                                                   | Yes                 | Evaluation telemetry, feedback, consent, and SDK usage data                                    |
+| Other Data Types    | Product Personalization; Analytics; App Functionality                          | Yes                 | Coaching profile and other authentication/provider data                                        |
 
-**Step 4: Publish.** The label preview should read **"Data Linked to You:
-Contact Info, Health & Fitness, Purchases, Identifiers, Usage Data, Other
-Data"** and **"Data Not Collected"** should not appear. Apple lets you update
-these answers without a new build; do so the moment any analytics or crash SDK
-is added (`docs/PRELAUNCH_CHECKLIST.md` §8 records that none ships today).
+**Step 4: Publish.** The published label currently shows Data Linked to You for
+Usage Data, Other Data, Health & Fitness, Contact Info, Browsing History, User
+Content, Purchases, Identifiers, and Location. The preview may also show
+provider-declared Identifiers or Other Data as Data Not Linked to You because
+Apple aggregates individual SDK manifests. Tracking is No for every type.
+Update these answers whenever the binary, providers, or data flows change.
 
 ### 5.3 Why these classifications
 
@@ -386,9 +400,13 @@ is added (`docs/PRELAUNCH_CHECKLIST.md` §8 records that none ships today).
   `user_id`. Apple's optional-disclosure exemption needs the collection to be
   infrequent and outside primary functionality; per-analysis telemetry is
   neither, even when opt-in.
-- The exit-survey comment is a genuine optional feedback form (user-initiated,
-  infrequent, clearly labelled) and qualifies for optional disclosure, so no
-  "Other User Content" entry is needed.
+- **Other User Content** is included conservatively because free-form feedback
+  can be linked to the account when submitted, even though the exit-survey row
+  is anonymized during deletion.
+- **Phone Number, Coarse Location, Device ID, Product Interaction, Advertising
+  Data, and Browsing History** account for Google Sign-In and the constrained
+  external-video WebView. Pickle Sensei does not request device location, use
+  IDFA, or run its own advertising SDK.
 - Bootstrap device context is not stored server-side, so it is not
   "collected".
 
@@ -439,21 +457,21 @@ Path: sidebar → **Pricing and Availability**.
 
 ### 8.2 Availability
 
-| Field                                     | Value                                                                                                                                                                                                                                                                                                                                                                 |
-| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Countries or regions                      | `HUMAN:` decision. Recommended default for 1.0: **United States, Canada, United Kingdom, Australia, New Zealand** (English-only app, English-speaking pickleball markets, no EU trader publication yet). Alternative: all 175 countries/regions, which requires verified DSA trader information (§8.3) and publishes your address/phone/email on the EU product page. |
-| Distribution methods                      | `SELECT:` App Store (public). No alternative distribution, no custom app distribution.                                                                                                                                                                                                                                                                                |
-| Make available on Macs with Apple silicon | `SELECT:` **Off** (uncheck "Make this app available"). The product is a rear-camera capture flow; on a Mac it would fail its core task.                                                                                                                                                                                                                               |
-| Make available on Apple Vision Pro        | `SELECT:` **Off** for the same reason.                                                                                                                                                                                                                                                                                                                                |
-| Pre-order                                 | `SKIP:`                                                                                                                                                                                                                                                                                                                                                               |
+| Field                                     | Value                                                                                                                                                                                                                                                                                      |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Countries or regions                      | `VERIFIED:` **All 175 countries or regions**, each currently marked Available on App Release. Automatic availability for future App Store countries or regions is enabled. Worldwide selection does not remove local legal duties; see `docs/WORLDWIDE_LEGAL_RISK_REGISTER_2026-09-03.md`. |
+| Distribution methods                      | `SELECT:` App Store (public). No alternative distribution, no custom app distribution.                                                                                                                                                                                                     |
+| Make available on Macs with Apple silicon | `SELECT:` **Off** (uncheck "Make this app available"). The product is a rear-camera capture flow; on a Mac it would fail its core task.                                                                                                                                                    |
+| Make available on Apple Vision Pro        | `SELECT:` **Off** for the same reason.                                                                                                                                                                                                                                                     |
+| Pre-order                                 | `SKIP:`                                                                                                                                                                                                                                                                                    |
 
 ### 8.3 Digital Services Act trader status (Business section, asked at first submission)
 
-| Question                    | Answer                                                                                                                                                                                                                                                                                                                                                                                          |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Are you a trader (EU law)?  | `HUMAN:` If the app is sold in any EU storefront and has in-app purchases, Apple treats you as a **trader**: you must provide and verify a public address (P.O. box allowed for individuals), phone number, and email, which Apple displays on the EU product page. If you exclude all 27 EU countries in §8.2, you are not acting as a trader on the App Store and can declare **non-trader**. |
-| Trader contact information  | `HUMAN:` address, phone, email (use a monitored mailbox; `picklesenseidev@gmail.com` is fine).                                                                                                                                                                                                                                                                                                  |
-| EU compliance certification | `SELECT:` confirm you only offer products/services compliant with applicable EU law (required for traders).                                                                                                                                                                                                                                                                                     |
+| Question                    | Answer                                                                                                                                                         |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Are you a trader (EU law)?  | `VERIFIED:` **Trader**. Pickle Sensei is monetized and offered in EU storefronts.                                                                              |
+| Trader contact information  | `VERIFIED:` real individual name, San Diego mailing address, App Review phone, and `picklesenseidev@gmail.com`; email verified and address document submitted. |
+| EU compliance certification | `VERIFIED:` submitted September 3, 2026. Apple status is **In Review** for 27 countries or regions. Do not release in the EU until status becomes Active.      |
 
 EU-27 for the exclusion list, if needed: Austria, Belgium, Bulgaria, Croatia,
 Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary,
@@ -796,109 +814,18 @@ Account.
 | Lifetime description    | 45    | Unlimited validated ratings, pay once       | 37     |
 | Review notes            | 4000  | Appendix D                                  | < 4000 |
 
-## Appendix B. `PrivacyInfo.xcprivacy` collected-data block (mirror of §5)
+## Appendix B. `PrivacyInfo.xcprivacy` mirror of §5
 
-Replace the empty `<key>NSPrivacyCollectedDataTypes</key><array/>` in
-`apps/mobile/ios/PickleSensei/PrivacyInfo.xcprivacy` with:
-
-```xml
-<key>NSPrivacyCollectedDataTypes</key>
-<array>
-	<dict>
-		<key>NSPrivacyCollectedDataType</key>
-		<string>NSPrivacyCollectedDataTypeName</string>
-		<key>NSPrivacyCollectedDataTypeLinked</key>
-		<true/>
-		<key>NSPrivacyCollectedDataTypeTracking</key>
-		<false/>
-		<key>NSPrivacyCollectedDataTypePurposes</key>
-		<array>
-			<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
-			<string>NSPrivacyCollectedDataTypePurposeProductPersonalization</string>
-		</array>
-	</dict>
-	<dict>
-		<key>NSPrivacyCollectedDataType</key>
-		<string>NSPrivacyCollectedDataTypeEmailAddress</string>
-		<key>NSPrivacyCollectedDataTypeLinked</key>
-		<true/>
-		<key>NSPrivacyCollectedDataTypeTracking</key>
-		<false/>
-		<key>NSPrivacyCollectedDataTypePurposes</key>
-		<array>
-			<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
-		</array>
-	</dict>
-	<dict>
-		<key>NSPrivacyCollectedDataType</key>
-		<string>NSPrivacyCollectedDataTypeFitness</string>
-		<key>NSPrivacyCollectedDataTypeLinked</key>
-		<true/>
-		<key>NSPrivacyCollectedDataTypeTracking</key>
-		<false/>
-		<key>NSPrivacyCollectedDataTypePurposes</key>
-		<array>
-			<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
-			<string>NSPrivacyCollectedDataTypePurposeProductPersonalization</string>
-			<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
-		</array>
-	</dict>
-	<dict>
-		<key>NSPrivacyCollectedDataType</key>
-		<string>NSPrivacyCollectedDataTypePurchaseHistory</string>
-		<key>NSPrivacyCollectedDataTypeLinked</key>
-		<true/>
-		<key>NSPrivacyCollectedDataTypeTracking</key>
-		<false/>
-		<key>NSPrivacyCollectedDataTypePurposes</key>
-		<array>
-			<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
-			<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
-		</array>
-	</dict>
-	<dict>
-		<key>NSPrivacyCollectedDataType</key>
-		<string>NSPrivacyCollectedDataTypeUserID</string>
-		<key>NSPrivacyCollectedDataTypeLinked</key>
-		<true/>
-		<key>NSPrivacyCollectedDataTypeTracking</key>
-		<false/>
-		<key>NSPrivacyCollectedDataTypePurposes</key>
-		<array>
-			<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
-		</array>
-	</dict>
-	<dict>
-		<key>NSPrivacyCollectedDataType</key>
-		<string>NSPrivacyCollectedDataTypeOtherUsageData</string>
-		<key>NSPrivacyCollectedDataTypeLinked</key>
-		<true/>
-		<key>NSPrivacyCollectedDataTypeTracking</key>
-		<false/>
-		<key>NSPrivacyCollectedDataTypePurposes</key>
-		<array>
-			<string>NSPrivacyCollectedDataTypePurposeAnalytics</string>
-			<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
-		</array>
-	</dict>
-	<dict>
-		<key>NSPrivacyCollectedDataType</key>
-		<string>NSPrivacyCollectedDataTypeOtherDataTypes</string>
-		<key>NSPrivacyCollectedDataTypeLinked</key>
-		<true/>
-		<key>NSPrivacyCollectedDataTypeTracking</key>
-		<false/>
-		<key>NSPrivacyCollectedDataTypePurposes</key>
-		<array>
-			<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
-			<string>NSPrivacyCollectedDataTypePurposeProductPersonalization</string>
-		</array>
-	</dict>
-</array>
-```
-
-Keep `NSPrivacyTracking` `false` and the existing `NSPrivacyAccessedAPITypes`
-block unchanged. Run `npm run check:distribution` afterwards.
+The authoritative app-target manifest is
+`apps/mobile/ios/PickleSensei/PrivacyInfo.xcprivacy`. It declares data collected
+by Pickle Sensei and WebView partners that do not ship a separate manifest,
+keeps `NSPrivacyTracking` false, and retains the required-reason API
+declarations. Google Sign-In and RevenueCat supply their own manifests; Apple
+combines all manifests into the archive privacy report. Do not duplicate their
+provider-only Phone Number, Coarse Location, or Device ID entries in the app
+target. The combined report and App Store Connect answers cover all fourteen
+types in §5. Validate changes with `plutil -lint` and
+`npm run check:distribution`.
 
 ## Appendix C. Screenshot shot list (6.9", 1320 × 2868, portrait)
 

@@ -32,6 +32,8 @@ Deno.test("support page provides real contact, troubleshooting, and account dele
     "restore purchases",
     "Stop and Analyze",
     "Deleting an account does not cancel an Apple subscription",
+    "To request access to, correction of, deletion of, or a portable copy",
+    "does not sell personal information",
     "/privacy",
     "/terms",
   ]) {
@@ -88,6 +90,8 @@ Deno.test(
       "sent to our servers",
       "do not contain the raw video, raw audio, camera frames, or pose-landmark file",
       "protected Keychain or Keystore",
+      "Google Sign-In software included in the app declares that it may process",
+      "does not request device location permission for Google sign-in",
     ]) {
       assertStringIncludes(text, needle);
     }
@@ -120,6 +124,8 @@ Deno.test(
       "RevenueCat receives an internal account identifier and purchase-related information",
       "Upstash may provide short-lived cache and rate-limit infrastructure",
       "YouTube or Vimeo may receive ordinary web-request information",
+      "network-derived coarse location",
+      "may show its own advertisements",
       "normally expire within ten minutes",
       "scheduled for deletion after 90 days",
       "Settings → Manage account → Delete account",
@@ -142,6 +148,7 @@ Deno.test("privacy policy states important negative disclosures", () => {
     "address-book contacts",
     "do not request the advertising identifier",
     "do not track activity across other companies' apps or websites for advertising",
+    "does not use this information for cross-app tracking",
     "do not sell personal information",
     "not directed to children under 13",
     "No storage or transmission system is completely secure",

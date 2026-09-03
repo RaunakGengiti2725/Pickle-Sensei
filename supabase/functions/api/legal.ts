@@ -16,7 +16,7 @@
 // not the retired services/api implementation. Keep them synchronized with
 // actual data flows, App Store Connect privacy answers, and purchase screens.
 
-const LAST_UPDATED = "September 2, 2026";
+const LAST_UPDATED = "September 3, 2026";
 const SUPPORT_EMAIL = "picklesenseidev@gmail.com";
 const LEGAL_OWNER = "Raunak Gengiti";
 const CONTACT_ADDRESS = "6737 Elegante Way, San Diego, California 92130, United States";
@@ -67,11 +67,19 @@ Camera video and body pose processing stay on the device. Raw court video is
 not uploaded to Pickle Sensei servers.
 
 
-ACCOUNT DELETION AND PRIVACY
+PRIVACY CHOICES AND ACCOUNT DELETION
 
 To permanently delete a synced account, open Settings, Account, Manage account,
 then Delete account. The exit survey is optional and may be skipped. Deleting
 an account does not cancel an Apple subscription.
+
+To request access to, correction of, deletion of, or a portable copy of your
+personal information, email ${SUPPORT_EMAIL}. You may also ask to object to or
+restrict processing, withdraw an optional consent, or appeal a privacy-request
+decision where applicable law provides that right. We may need to verify that
+the request relates to your account. Pickle Sensei does not sell personal
+information or share it for cross-context behavioral advertising, so there is
+no sale or targeted-advertising opt-out to submit.
 
 Privacy Policy:
 https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api/privacy
@@ -123,6 +131,14 @@ When you sign in with Apple or Google, we receive the information that the
 provider makes available and that is needed to create or access your account.
 This may include your email address, display name, sign-in provider, provider
 account identifier, and an internal Pickle Sensei account identifier.
+
+The Google Sign-In software included in the app declares that it may process
+name, email address, phone number, network-derived coarse location, user and
+device identifiers, other authentication data, and usage data for sign-in,
+security, service operation, and analytics. Pickle Sensei requests only the
+basic sign-in identity needed to authenticate your account and does not request
+device location permission for Google sign-in. Google controls its own
+provider-side processing under its privacy notice.
 
 The provider identity token is used to establish a session and is not stored
 on your device by Pickle Sensei. A refresh credential is stored in the
@@ -228,6 +244,16 @@ We do not use a third-party advertising SDK, do not request the advertising
 identifier, and do not track activity across other companies' apps or
 websites for advertising.
 
+When you choose an externally hosted drill video, the embedded YouTube or
+Vimeo player may process the selected video or page, playback interactions,
+device or browser identifiers, network-derived coarse location, and
+information about advertisements displayed by the provider. The provider may
+show its own advertisements. YouTube embeds use its privacy-enhanced mode
+where supported, which Google states prevents the embedded view from being
+used to personalize the viewer's YouTube browsing experience or advertising
+outside the app. Pickle Sensei does not receive a provider advertising profile
+and does not use this information for cross-app tracking.
+
 I. Information kept only on your device
 
 The following is processed or stored locally by the app and is not uploaded
@@ -300,10 +326,12 @@ We disclose information only as needed for the purposes in this policy:
   enabled. Cached values are derived service state, token hashes, and
   short-lived request counters rather than raw court media.
 • YouTube or Vimeo may receive ordinary web-request information, such as IP
-  address, device/browser information, cookies or similar storage, and video
-  interactions when you choose to open or play an externally hosted drill
-  video. YouTube embeds use its privacy-enhanced domain where supported, but
-  the video provider remains an independent third party.
+  address, device/browser identifiers, network-derived coarse location,
+  cookies or similar storage, the video or page viewed, playback interactions,
+  and advertising data when you choose to open or play an externally hosted
+  drill video. YouTube embeds use its privacy-enhanced domain where supported,
+  but the video provider remains an independent third party and may show its
+  own advertisements.
 • Professional advisers, authorities, or other parties may receive
   information when reasonably necessary to comply with law, protect rights
   and safety, investigate fraud or security incidents, or establish or defend
