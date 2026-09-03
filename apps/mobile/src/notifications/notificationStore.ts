@@ -44,6 +44,12 @@ interface NotificationState {
   ownerKey: string | null;
   prefs: NotificationPrefs;
   permission: PermissionState | 'unknown';
+  /** The last preference write to the device kv failed; in-memory prefs
+   *  drive this session but will not survive a restart until a write lands. */
+  persistFailed: boolean;
+  /** The last reconcile against the OS scheduler failed; what is queued may
+   *  not match the preferences until the next successful sync. */
+  scheduleFailed: boolean;
   hydrate: (deps?: NotificationStoreDeps) => Promise<void>;
   refreshPermission: (deps?: NotificationStoreDeps) => Promise<void>;
   /** System prompt → on grant, flips the master switch on and schedules. */
@@ -130,6 +136,8 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   ownerKey: null,
   prefs: { ...DEFAULT_NOTIFICATION_PREFS },
   permission: 'unknown',
+  persistFailed: false,
+  scheduleFailed: false,
 
   hydrate: async deps => {
     const owner = deps?.expectedOwnerKey ?? getActiveDataOwner();
@@ -144,6 +152,8 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         ownerKey: owner,
         prefs: { ...DEFAULT_NOTIFICATION_PREFS },
         permission: get().permission,
+        persistFailed: false,
+        scheduleFailed: false,
       });
       return;
     }
@@ -240,9 +250,11 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     set({ prefs, ownerKey: owner });
     try {
       await persistPrefs(owner, prefs);
+      set({ persistFailed: false });
     } catch {
       // The in-memory prefs still drive this session; the next successful
       // save persists them. Scheduling below reflects what the user chose.
+      set({ persistFailed: true });
     }
     await get().syncNow(deps);
   },
@@ -264,15 +276,18 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         permission !== 'granted'
       ) {
         await scheduler.cancelAllPlanned();
+        set({ scheduleFailed: false });
         return;
       }
       const loadContext = deps?.loadContext ?? defaultLoadContext;
       const plan = buildNotificationPlan(prefs, await loadContext());
       if (getActiveDataOwner() !== owner || get().ownerKey !== owner) return;
       await scheduler.applyPlan(plan);
+      set({ scheduleFailed: false });
     } catch {
       // Scheduling is best-effort by design: a failed sync never breaks the
       // app, and the next foreground pass retries with fresh facts.
+      set({ scheduleFailed: true });
     }
   },
 }));

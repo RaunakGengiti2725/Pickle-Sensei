@@ -6,6 +6,7 @@ import {
   type PlayerRankSummary,
 } from '@pickle/shared-types';
 import type { ApiSession } from '../account/apiSession';
+import { getRuntimePublicConfig } from '../config/runtimeConfig';
 
 /**
  * Personal player rank (Bronze → Diamond) — client side.
@@ -140,7 +141,7 @@ export async function fetchPlayerRank(
       headers: {
         Accept: 'application/json',
         Authorization: `Bearer ${session.bearerToken}`,
-        'X-Client-Version': '0.1.0',
+        'X-Client-Version': getRuntimePublicConfig().appVersion,
       },
     });
   } catch {

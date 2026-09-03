@@ -40,8 +40,11 @@ import { plural } from '../util/plural';
 type LibraryTab = 'reads' | 'saved';
 
 /** Pending-clips group header + pill, exported so tests pin the copy. */
-export const PENDING_SECTION_LABEL = 'SAVED CLIPS · READY TO ANALYZE';
+export const PENDING_SECTION_LABEL = 'SAVED CLIPS · NOT ANALYZED';
 export const PENDING_SECTION_PILL = 'NOT SCORED';
+export const PENDING_SECTION_NOTE =
+  'Saved clips aren’t scored from the library. Record a new stroke to get a score.';
+export const MUTATION_ERROR_DISMISS_HINT = 'Dismisses this message';
 
 /**
  * Embeds open their canonical watch page, never the raw /embed/ URL: YouTube
@@ -402,7 +405,9 @@ export function LibraryScreen() {
 
           {mutationError ? (
             <Pressable
-              accessibilityRole="alert"
+              accessibilityRole="button"
+              accessibilityLabel={mutationError.message}
+              accessibilityHint={MUTATION_ERROR_DISMISS_HINT}
               onPress={clearMutationError}
               style={styles.inlineError}
             >
@@ -410,6 +415,7 @@ export function LibraryScreen() {
               <Text style={[type.caption, { color: color.bad, flex: 1 }]}>
                 {mutationError.message}
               </Text>
+              <Text style={[type.micro, { color: color.bad }]}>DISMISS</Text>
             </Pressable>
           ) : null}
         </ScrollView>
@@ -487,9 +493,11 @@ export function LibraryScreen() {
                               ).toLocaleDateString()}
                             </Text>
                           </View>
-                          <Icon name="lock" size={17} color={color.inkSoft} />
                         </View>
                       ))}
+                      <Text style={[type.caption, styles.pendingNote]}>
+                        {PENDING_SECTION_NOTE}
+                      </Text>
                     </View>
                   ) : null}
                   <View style={styles.filterRow}>
@@ -501,20 +509,18 @@ export function LibraryScreen() {
             </>
           }
           ListEmptyComponent={
-            captures.length === 0 ? (
-              <EmptyState
-                title="Your measured reads, in one place."
-                body="Validated analyses appear here with their real score and model trace. Unscored captures stay clearly marked."
-                action={
-                  <Button
-                    label="Analyze your first stroke"
-                    variant="dark"
-                    icon="camera"
-                    onPress={() => navigation.navigate('Analyze')}
-                  />
-                }
-              />
-            ) : undefined
+            <EmptyState
+              title="Your measured reads, in one place."
+              body="Validated analyses appear here with their real score and model trace. Unscored captures stay clearly marked."
+              action={
+                <Button
+                  label="Analyze your first stroke"
+                  variant="dark"
+                  icon="camera"
+                  onPress={() => navigation.navigate('Analyze')}
+                />
+              }
+            />
           }
           renderItem={({ item, index }) => (
             <PressableScale
@@ -642,6 +648,12 @@ const styles = StyleSheet.create({
   pendingTitle: { color: color.ink },
   pendingMeta: { color: color.inkSoft, marginTop: 2 },
   pendingDate: { color: color.inkSoft, opacity: 0.72, marginTop: 1 },
+  pendingNote: {
+    color: color.inkSoft,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.line,
+    paddingTop: space.sm,
+  },
   row: {
     minHeight: 104,
     borderRadius: radius.lg,

@@ -266,7 +266,7 @@ describe.skipIf(!hasFfmpeg)("f22 envelope bypass regressions", { timeout: 120_00
       base,
       "-vf",
       "setpts=floor(N/2)*2/30/TB",
-      "-fps_mode",
+      "-vsync",
       "passthrough",
       "-enc_time_base",
       "1/90000",

@@ -96,7 +96,8 @@ describe('StreakCelebration', () => {
       renderer = TestRenderer.create(<StreakCelebration />);
     });
     const copy = allText(renderer);
-    expect(copy).toContain('serve Specialist');
+    expect(copy).toContain('Serve Specialist');
+    expect(copy).not.toContain('serve Specialist');
     expect(copy).toContain('25 scored serve analyses');
     act(() => renderer.unmount());
   });

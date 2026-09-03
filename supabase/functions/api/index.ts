@@ -80,7 +80,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { drillCatalogEntry, searchDrillCatalog } from "./drills.ts";
 import { drillInstructionalMedia } from "./drillMedia.ts";
 import { cacheDel, cacheGet, cacheSet, sha256Hex } from "./cache.ts";
-import { enforceRateLimit, rateLimitResponse } from "./rateLimit.ts";
+import { enforceRateLimit, peekRateLimit, rateLimitResponse } from "./rateLimit.ts";
 import {
   JSON_SECURITY_HEADERS,
   clientIp,
@@ -163,14 +163,66 @@ const isIsoDate = (value: unknown): value is string =>
  * same ceiling (their per-trial cap is enforced separately). */
 const MAX_JSON_BODY_BYTES = 5_000_000;
 
+/** Thrown while streaming a body that exceeds MAX_JSON_BODY_BYTES; the
+ * outermost handler turns it into a 413 so no route buffers past the cap. */
+class RequestBodyTooLarge extends Error {
+  constructor() {
+    super("Request body is too large.");
+    this.name = "RequestBodyTooLarge";
+  }
+}
+
+/** Read the body as text while counting BYTES on the wire, cancelling the
+ * stream the moment it passes the cap (Content-Length is advisory only —
+ * chunked uploads carry none). */
+async function readBoundedText(request: Request, maxBytes: number): Promise<string> {
+  const declared = Number(request.headers.get("content-length") ?? "0");
+  if (Number.isFinite(declared) && declared > maxBytes) throw new RequestBodyTooLarge();
+  if (!request.body) return "";
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      if (received > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new RequestBodyTooLarge();
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof RequestBodyTooLarge) throw error;
+    return "";
+  }
+  const bytes = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
 async function readBody(request: Request): Promise<Record<string, unknown>> {
-  const text = await request.text().catch(() => "");
-  if (text.length > MAX_JSON_BODY_BYTES) return {};
+  const text = await readBoundedText(request, MAX_JSON_BODY_BYTES);
   try {
     const body = JSON.parse(text) as unknown;
     return isRecord(body) ? body : {};
   } catch {
     return {};
+  }
+}
+
+/** decodeURIComponent that reports a malformed escape as a 400 instead of
+ * letting URIError escape the handler. */
+function decodePathSegment(segment: string): string | Response {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return errorJson(400, "Malformed path segment.");
   }
 }
 
@@ -251,6 +303,14 @@ function anonAuthClient(): ReturnType<typeof createClient> {
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+}
+
+/** A bearer whose own `exp` has passed is dead whatever else is true of it:
+ * refuse it before the auth cache or Supabase Auth is consulted (a cached
+ * verification is bounded by this exp anyway, so this is a round trip saved
+ * and a stale-cache defense, not a new rule). */
+function bearerExpired(payload: Record<string, unknown> | null): boolean {
+  return typeof payload?.exp === "number" && payload.exp * 1_000 <= Date.now();
 }
 
 function bearerOf(request: Request): string {
@@ -353,6 +413,7 @@ async function authenticateProviderToken(
   if (!provider) {
     return errorJson(401, "Bearer token is not a Google or Apple ID token.");
   }
+  if (bearerExpired(payload)) return errorJson(401, "The identity token has expired.");
   const signIn = await anonAuthClient().auth.signInWithIdToken({ provider, token });
   if (signIn.error || !signIn.data.user || !signIn.data.session) {
     return errorJson(401, "The identity token could not be verified.");
@@ -386,6 +447,12 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
   const supabaseIssued = typeof payload?.iss === "string" && payload.iss.endsWith("/auth/v1");
   if (!provider && !supabaseIssued) {
     return errorJson(401, "Bearer token is not a session token or a Google/Apple ID token.");
+  }
+  if (bearerExpired(payload)) {
+    return errorJson(
+      401,
+      provider ? "The identity token has expired." : "The session token has expired.",
+    );
   }
 
   const cacheKey = await authCacheKey(token);
@@ -838,7 +905,10 @@ interface SyncShot {
   versionVector: Record<(typeof VERSION_VECTOR_KEYS)[number], string>;
 }
 
-const isMs = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
+/** Millisecond offsets land in Postgres `int` columns (shot_phases, shots). */
+const MAX_MS = 2_147_483_647;
+const isMs = (v: unknown): v is number =>
+  Number.isInteger(v) && (v as number) >= 0 && (v as number) <= MAX_MS;
 const isUnit = (v: unknown): v is number =>
   typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1;
 
@@ -903,6 +973,7 @@ function parseSyncShot(
   if (!Array.isArray(value.phases)) return invalid("phases must be an array.");
   const phases: SyncShot["phases"] = [];
   if (value.phases.length > 32) return invalid("Too many phases.");
+  const phaseKeys = new Set<string>();
   for (const p of value.phases) {
     if (
       !isRecord(p) ||
@@ -916,6 +987,8 @@ function parseSyncShot(
     ) {
       return invalid("Each phase needs key, startMs, representativeMs, endMs, confidence.");
     }
+    if (phaseKeys.has(p.key)) return invalid(`Duplicate phase key: ${p.key}.`);
+    phaseKeys.add(p.key);
     phases.push({
       key: p.key,
       startMs: p.startMs,
@@ -929,13 +1002,17 @@ function parseSyncShot(
   }
   const checkpoints: SyncShot["checkpoints"] = [];
   if (value.checkpoints.length > 64) return invalid("Too many checkpoints.");
+  const checkpointKeys = new Set<string>();
   for (const c of value.checkpoints) {
     if (
       !isRecord(c) ||
       typeof c.key !== "string" ||
       !c.key.trim() ||
       c.key.length > 64 ||
-      !(c.score === null || (typeof c.score === "number" && c.score >= 0 && c.score <= 100)) ||
+      !(
+        c.score === null ||
+        (typeof c.score === "number" && Number.isFinite(c.score) && c.score >= 0 && c.score <= 100)
+      ) ||
       !isUnit(c.confidence) ||
       typeof c.band !== "string" ||
       !CHECKPOINT_BANDS.has(c.band) ||
@@ -948,6 +1025,8 @@ function parseSyncShot(
         "Each checkpoint needs key, score|null, confidence, band, direction, severity, applicable.",
       );
     }
+    if (checkpointKeys.has(c.key)) return invalid(`Duplicate checkpoint key: ${c.key}.`);
+    checkpointKeys.add(c.key);
     checkpoints.push({
       key: c.key,
       score: c.score,
@@ -963,8 +1042,8 @@ function parseSyncShot(
   const versionVector = {} as SyncShot["versionVector"];
   for (const key of VERSION_VECTOR_KEYS) {
     const v = vv[key];
-    if (typeof v !== "string" || !v.trim() || v.length > 128) {
-      return invalid(`versionVector.${key} is required (max 128 characters).`);
+    if (typeof v !== "string" || !v.trim() || v.length > 64) {
+      return invalid(`versionVector.${key} is required (max 64 characters).`);
     }
     versionVector[key] = v;
   }
@@ -993,6 +1072,46 @@ function parseSyncShot(
  * every accepted shot write so cached responses can never go stale. */
 const rankCacheKey = (userId: string): string => `rank:${userId}`;
 const progressCacheKey = (userId: string): string => `progress:${userId}`;
+
+/** Per-isolate single-flight for cache misses: concurrent requests for the
+ * same key share one DB read instead of each re-running it. Every caller
+ * gets its own clone because a Response body can be sent only once. */
+const inflightBuilds = new Map<string, Promise<Response>>();
+function coalesce(key: string, build: () => Promise<Response>): Promise<Response> {
+  let pending = inflightBuilds.get(key);
+  if (!pending) {
+    pending = build().finally(() => {
+      inflightBuilds.delete(key);
+    });
+    inflightBuilds.set(key, pending);
+  }
+  return pending.then((response) => response.clone());
+}
+
+/** PostgREST silently truncates unpaged reads at its max_rows (1000 on the
+ * hosted platform); page in that unit until a short page arrives. */
+const PAGE_ROWS = 1_000;
+const MAX_PAGES = 20;
+async function readAllRows(
+  page: (
+    from: number,
+    to: number,
+  ) => PromiseLike<{
+    data: unknown[] | null;
+    error: { message: string } | null;
+  }>,
+): Promise<{ rows: Array<Record<string, unknown>> } | { error: string }> {
+  const rows: Array<Record<string, unknown>> = [];
+  for (let index = 0; index < MAX_PAGES; index += 1) {
+    const from = index * PAGE_ROWS;
+    const result = await page(from, from + PAGE_ROWS - 1);
+    if (result.error) return { error: result.error.message };
+    const batch = (result.data ?? []) as Array<Record<string, unknown>>;
+    rows.push(...batch);
+    if (batch.length < PAGE_ROWS) break;
+  }
+  return { rows };
+}
 
 /** Rejection copy per apply_synced_shot status. Statuses map verbatim to the
  * client contract codes; DB detail never reaches the response. */
@@ -1313,6 +1432,9 @@ async function withdrawConsent(authed: AuthedUser, request: Request): Promise<Re
 // Evaluation trials
 // ─────────────────────────────────────────────────────────────────────────────
 
+const TRIAL_WRITE_FAILED_MESSAGE =
+  "The trial could not be saved right now. It stays on this device and will retry.";
+
 /** POST /v1/me/evaluation/trials — mirrors apps/mobile/src/data/sync.ts
  * drainOutbox trials branch (lines 206-253): body { trials:[…] }, response
  * { acceptedTrialIds, rejected:[{trialId,code,message}] }. Trials are
@@ -1373,10 +1495,11 @@ async function uploadEvaluationTrials(authed: AuthedUser, request: Request): Pro
         { onConflict: "id", ignoreDuplicates: true },
       );
     if (upserted.error) {
+      console.error("[api] evaluation trial write failed:", upserted.error.message);
       rejected.push({
         trialId,
         code: "evaluation.trial_write_failed",
-        message: upserted.error.message,
+        message: TRIAL_WRITE_FAILED_MESSAGE,
       });
       continue;
     }
@@ -1387,10 +1510,11 @@ async function uploadEvaluationTrials(authed: AuthedUser, request: Request): Pro
       .eq("user_id", authed.id)
       .maybeSingle();
     if (owned.error) {
+      console.error("[api] evaluation trial ownership read failed:", owned.error.message);
       rejected.push({
         trialId,
         code: "evaluation.trial_write_failed",
-        message: owned.error.message,
+        message: TRIAL_WRITE_FAILED_MESSAGE,
       });
       continue;
     }
@@ -1579,26 +1703,38 @@ async function getProgress(authed: AuthedUser): Promise<Response> {
       // Fall through to a fresh read.
     }
   }
+  return coalesce(cacheKey, () => buildProgress(authed, cacheKey));
+}
+
+async function buildProgress(authed: AuthedUser, cacheKey: string): Promise<Response> {
   const [seriesQ, daysQ] = await Promise.all([
-    authed.db
-      .from("progress_daily")
-      .select("day, shot_type, scoring_model_version, shot_count, avg_score, best_score")
-      .eq("user_id", authed.id)
-      .order("day", { ascending: true }),
-    authed.db
-      .from("practice_days")
-      .select("day")
-      .eq("user_id", authed.id)
-      .order("day", { ascending: true }),
+    readAllRows((from, to) =>
+      authed.db
+        .from("progress_daily")
+        .select("day, shot_type, scoring_model_version, shot_count, avg_score, best_score")
+        .eq("user_id", authed.id)
+        .order("day", { ascending: true })
+        .order("shot_type", { ascending: true })
+        .order("scoring_model_version", { ascending: true })
+        .range(from, to),
+    ),
+    readAllRows((from, to) =>
+      authed.db
+        .from("practice_days")
+        .select("day")
+        .eq("user_id", authed.id)
+        .order("day", { ascending: true })
+        .range(from, to),
+    ),
   ]);
-  if (seriesQ.error) {
-    return serviceUnavailable("Progress", seriesQ.error.message);
+  if ("error" in seriesQ) {
+    return serviceUnavailable("Progress", seriesQ.error);
   }
-  if (daysQ.error) {
-    return serviceUnavailable("Progress", daysQ.error.message);
+  if ("error" in daysQ) {
+    return serviceUnavailable("Progress", daysQ.error);
   }
 
-  const series = ((seriesQ.data ?? []) as Array<Record<string, unknown>>).map((row) => ({
+  const series = seriesQ.rows.map((row) => ({
     day: String(row.day),
     shot_type: String(row.shot_type),
     scoring_model_version: String(row.scoring_model_version),
@@ -1609,7 +1745,7 @@ async function getProgress(authed: AuthedUser): Promise<Response> {
     best_score: Math.round(Number(row.best_score) * 100) / 10,
   }));
   const streak = computePracticeStreak(
-    ((daysQ.data ?? []) as Array<Record<string, unknown>>).map((row) => String(row.day)),
+    daysQ.rows.map((row) => String(row.day)),
     new Date().toISOString().slice(0, 10),
   );
   const payload = { series, improving: [], needsAttention: [], streak };
@@ -1676,6 +1812,10 @@ async function getPlayerRank(authed: AuthedUser): Promise<Response> {
       // Fall through to a fresh read.
     }
   }
+  return coalesce(cacheKey, () => buildPlayerRank(authed, cacheKey));
+}
+
+async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Response> {
   const [techniquesQ, stateQ] = await Promise.all([
     authed.db
       .from("player_technique_rating")
@@ -2066,53 +2206,83 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
   const eventId = typeof event.id === "string" ? event.id : crypto.randomUUID();
   const eventType = typeof event.type === "string" ? event.type : "unknown";
 
-  // The subscriber to re-verify: app_user_id, falling back to any alias that
-  // parses as our canonical uuid.
-  let appUserId: string | null = isUuid(event.app_user_id) ? event.app_user_id : null;
-  if (!appUserId && Array.isArray(event.aliases)) {
-    appUserId = (event.aliases as unknown[]).find(isUuid) ?? null;
+  // The subscribers to re-verify: app_user_id, falling back to any alias that
+  // parses as our canonical uuid. TRANSFER events carry no app_user_id — both
+  // sides of the transfer (transferred_from / transferred_to) are re-verified
+  // so the source account loses premium as soon as RevenueCat moves it.
+  const uuidList = (value: unknown): string[] =>
+    Array.isArray(value) ? (value as unknown[]).filter(isUuid) : [];
+  const subjectIds = new Set<string>();
+  if (isUuid(event.app_user_id)) {
+    subjectIds.add(event.app_user_id);
+  } else {
+    const alias = uuidList(event.aliases)[0];
+    if (alias) subjectIds.add(alias);
   }
+  for (const id of uuidList(event.transferred_from)) subjectIds.add(id);
+  for (const id of uuidList(event.transferred_to)) subjectIds.add(id);
+  const appUserId: string | null = subjectIds.values().next().value ?? null;
 
   const adminDb = billingAdminDb();
   if (!adminDb) {
     return errorJson(503, "Webhook processing is not configured.");
   }
 
-  // Audit log first (idempotent by event id) — an already-seen event is
-  // acknowledged without another RevenueCat round trip.
-  const logged = await adminDb.from("webhook_events").upsert(
-    {
-      id: eventId,
-      provider: "revenuecat",
-      event_type: eventType,
-      app_user_id: appUserId,
-      payload: body,
-    },
-    { onConflict: "id", ignoreDuplicates: true },
-  );
-  if (logged.error) {
-    console.error("[api] webhook event log failed:", logged.error.message);
+  // The audit row is written only once an event has been handled to
+  // completion, so its presence means "already processed": replays are
+  // acknowledged without another RevenueCat round trip, while a delivery
+  // that failed (503 below) leaves no row and is fully re-processed.
+  const seen = await adminDb.from("webhook_events").select("id").eq("id", eventId).maybeSingle();
+  if (seen.error) {
+    console.error("[api] webhook event lookup failed:", seen.error.message);
+  } else if (seen.data) {
+    return json(200, { received: true, duplicate: true });
   }
+  const logEvent = async () => {
+    const logged = await adminDb.from("webhook_events").upsert(
+      {
+        id: eventId,
+        provider: "revenuecat",
+        event_type: eventType,
+        app_user_id: appUserId,
+        payload: body,
+      },
+      { onConflict: "id", ignoreDuplicates: true },
+    );
+    if (logged.error) {
+      console.error("[api] webhook event log failed:", logged.error.message);
+    }
+  };
 
   if (!appUserId) {
     // Nothing to verify (e.g. an anonymous-only subscriber). Acknowledge so
     // RevenueCat stops retrying; the audit row preserves the event.
+    await logEvent();
     return json(200, { received: true, verified: false });
   }
 
-  const verdict = await verifyRevenueCatSubscriber(appUserId);
-  if (!verdict) {
-    // RevenueCat unreachable: 503 makes RevenueCat retry with backoff.
-    return errorJson(503, "Verification is temporarily unavailable.");
+  const verdicts: Array<{ userId: string; verdict: BillingVerdict }> = [];
+  for (const userId of subjectIds) {
+    const verdict = await verifyRevenueCatSubscriber(userId);
+    if (!verdict) {
+      // RevenueCat unreachable: 503 makes RevenueCat retry with backoff.
+      return errorJson(503, "Verification is temporarily unavailable.");
+    }
+    verdicts.push({ userId, verdict });
   }
-  const persistError = await persistBillingVerdict(appUserId, verdict, new Date().toISOString());
-  if (persistError) {
-    // A user who has never bootstrapped has no profiles row (FK target); log
-    // and acknowledge — their state will be written on first billing sync.
-    console.error("[api] webhook verdict persist failed:", persistError);
-    return json(200, { received: true, verified: false });
+  const verifiedAt = new Date().toISOString();
+  let verified = true;
+  for (const { userId, verdict } of verdicts) {
+    const persistError = await persistBillingVerdict(userId, verdict, verifiedAt);
+    if (persistError) {
+      // A user who has never bootstrapped has no profiles row (FK target); log
+      // and acknowledge — their state will be written on first billing sync.
+      console.error("[api] webhook verdict persist failed:", persistError);
+      verified = false;
+    }
   }
-  return json(200, { received: true, verified: true });
+  await logEvent();
+  return json(200, { received: true, verified });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2307,9 +2477,10 @@ async function confirmAccountDeletion(authed: AuthedUser, request: Request): Pro
     return serviceUnavailable("Account deletion", deleted.error.message);
   }
 
-  // Drop this user's cached derived state and this bearer's verified-auth
-  // entry (any other cached bearer ages out within ≤10 min, and every query
-  // behind it hits RLS-empty rows).
+  // Drop this user's cached derived state AND this bearer's verified-auth
+  // entry, so the bearer that just deleted the account cannot keep
+  // authenticating (any other cached bearer ages out within ≤10 min, and
+  // every query behind it hits RLS-empty rows).
   await cacheDel(
     rankCacheKey(authed.id),
     progressCacheKey(authed.id),
@@ -2378,7 +2549,9 @@ const ROUTE_LIMITS: Array<{
 ];
 
 const GENERAL_USER_LIMIT = { limit: 240, windowSeconds: 60 };
-const IP_LIMIT = { limit: 300, windowSeconds: 60 };
+/** Per-IP budget sized for shared egress (carrier-grade NAT, club Wi-Fi): a
+ * handful of players behind one address each get their full user budget. */
+const IP_LIMIT = { limit: 1_200, windowSeconds: 60 };
 const AUTH_FAILURE_LIMIT = { limit: 30, windowSeconds: 300 };
 /** Refresh is anonymous (authenticated by the body's refresh token) and a
  * healthy device needs it about once per access-token lifetime, so a tight
@@ -2407,6 +2580,18 @@ async function bootstrapAccount(
 }
 
 Deno.serve(async (request: Request): Promise<Response> => {
+  try {
+    return await handleRequest(request);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLarge) {
+      return errorJson(413, "Request body is too large.");
+    }
+    console.error("[api] unhandled error:", error);
+    return errorJson(500, "Something went wrong. Please try again.");
+  }
+});
+
+async function handleRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const ip = clientIp(request);
 
@@ -2464,16 +2649,13 @@ Deno.serve(async (request: Request): Promise<Response> => {
   // probing) — those never even reach Supabase Auth once tripped.
   const ipLimit = await enforceRateLimit("ip", ip, IP_LIMIT.limit, IP_LIMIT.windowSeconds);
   if (!ipLimit.allowed) return rateLimitResponse(ipLimit);
-  const failKey = `authfail:${ip}`;
-  const failedRecently = Number((await cacheGet(failKey)) ?? "0");
-  if (failedRecently >= AUTH_FAILURE_LIMIT.limit) {
-    return rateLimitResponse({
-      allowed: false,
-      limit: AUTH_FAILURE_LIMIT.limit,
-      remaining: 0,
-      retryAfterSeconds: AUTH_FAILURE_LIMIT.windowSeconds,
-    });
-  }
+  const authFailures = await peekRateLimit(
+    "authfail",
+    ip,
+    AUTH_FAILURE_LIMIT.limit,
+    AUTH_FAILURE_LIMIT.windowSeconds,
+  );
+  if (!authFailures.allowed) return rateLimitResponse(authFailures);
 
   // The gateway may present the pathname as /functions/v1/api/v1/… or /api/v1/…
   // depending on where it strips the mount prefix — route on everything from
@@ -2483,8 +2665,10 @@ Deno.serve(async (request: Request): Promise<Response> => {
   const path = v1 >= 0 ? url.pathname.slice(v1) : url.pathname;
   const route = `${request.method} ${path}`;
 
+  // Atomic INCR on the aligned auth-failure window (peeked above) — never a
+  // read-then-write, so concurrent bad bearers cannot under-count.
   const recordAuthFailure = () =>
-    cacheSet(failKey, String(failedRecently + 1), AUTH_FAILURE_LIMIT.windowSeconds);
+    enforceRateLimit("authfail", ip, AUTH_FAILURE_LIMIT.limit, AUTH_FAILURE_LIMIT.windowSeconds);
 
   // ── Session establishment and rotation run BEFORE general authentication:
   // bootstrap is the one route that spends a provider ID token (and mints
@@ -2541,19 +2725,28 @@ Deno.serve(async (request: Request): Promise<Response> => {
   if (request.method === "POST") {
     let m = /^\/v1\/analysis-permits\/([^/]+)\/finalize$/.exec(path);
     if (m) {
-      return finalizeAnalysisPermitRoute(authed, request, decodeURIComponent(m[1]));
+      const permitId = decodePathSegment(m[1]);
+      if (permitId instanceof Response) return permitId;
+      return finalizeAnalysisPermitRoute(authed, request, permitId);
     }
     m = /^\/v1\/sessions\/([^/]+)\/finalize$/.exec(path);
-    if (m) return finalizeSession(authed, decodeURIComponent(m[1]));
+    if (m) {
+      const sessionId = decodePathSegment(m[1]);
+      if (sessionId instanceof Response) return sessionId;
+      return finalizeSession(authed, sessionId);
+    }
     m = /^\/v1\/analyses\/([^/]+)\/feedback$/.exec(path);
     if (m) {
-      return submitAnalysisFeedback(authed, request, decodeURIComponent(m[1]));
+      const analysisId = decodePathSegment(m[1]);
+      if (analysisId instanceof Response) return analysisId;
+      return submitAnalysisFeedback(authed, request, analysisId);
     }
   }
   if (request.method === "PUT" || request.method === "DELETE") {
     const m = /^\/v1\/me\/saved-drills\/([^/]+)$/.exec(path);
     if (m) {
-      const slug = decodeURIComponent(m[1]);
+      const slug = decodePathSegment(m[1]);
+      if (slug instanceof Response) return slug;
       return request.method === "PUT" ? saveDrill(authed, slug) : unsaveDrill(authed, slug);
     }
   }
@@ -2564,7 +2757,9 @@ Deno.serve(async (request: Request): Promise<Response> => {
     }
     const m = /^\/v1\/catalog\/drills\/([^/]+)$/.exec(path);
     if (m) {
-      return getCatalogDrill(authed, decodeURIComponent(m[1]));
+      const slug = decodePathSegment(m[1]);
+      if (slug instanceof Response) return slug;
+      return getCatalogDrill(authed, slug);
     }
   }
 
@@ -2591,21 +2786,20 @@ Deno.serve(async (request: Request): Promise<Response> => {
     }
 
     case "PUT /v1/me/onboarding": {
-      const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-      const skillLevel = body?.skillLevel;
-      const handedness = body?.handedness;
-      const goal = body?.goal;
-      const biggestProblem = body?.biggestProblem;
+      const body = await readBody(request);
+      const handedness = body.handedness;
+      const skillLevel =
+        typeof body.skillLevel === "string" ? sanitizeUserText(body.skillLevel, 200) : "";
+      const goal = typeof body.goal === "string" ? sanitizeUserText(body.goal, 200) : "";
+      const biggestProblem =
+        typeof body.biggestProblem === "string" ? sanitizeUserText(body.biggestProblem, 1_000) : "";
       if (
-        typeof skillLevel !== "string" ||
-        !skillLevel.trim() ||
+        !skillLevel ||
         skillLevel.length > 64 ||
         (handedness !== "right" && handedness !== "left") ||
-        typeof goal !== "string" ||
-        !goal.trim() ||
+        !goal ||
         goal.length > 64 ||
-        typeof biggestProblem !== "string" ||
-        !biggestProblem.trim() ||
+        !biggestProblem ||
         biggestProblem.length > 256
       ) {
         return errorJson(400, "Invalid onboarding payload.");
@@ -2613,7 +2807,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
       // Optional personal fields: firstName (trimmed, 1-40 chars) and gender
       // (fixed vocabulary). Absent/null means "not stated" — the columns are
       // left untouched; present-but-invalid is rejected, never coerced.
-      const firstNameRaw = body?.firstName;
+      const firstNameRaw = body.firstName;
       let firstName: string | undefined;
       if (firstNameRaw !== undefined && firstNameRaw !== null) {
         if (typeof firstNameRaw !== "string") {
@@ -2628,7 +2822,7 @@ Deno.serve(async (request: Request): Promise<Response> => {
         }
         firstName = cleaned;
       }
-      const genderRaw = body?.gender;
+      const genderRaw = body.gender;
       let gender: string | undefined;
       if (genderRaw !== undefined && genderRaw !== null) {
         if (typeof genderRaw !== "string" || !GENDER_OPTIONS.has(genderRaw)) {
@@ -2803,4 +2997,4 @@ Deno.serve(async (request: Request): Promise<Response> => {
     default:
       return errorJson(404, `Unknown endpoint: ${route}.`);
   }
-});
+}

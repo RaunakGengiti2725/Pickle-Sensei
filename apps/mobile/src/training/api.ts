@@ -1,3 +1,5 @@
+import { reportApiUnauthorized } from '../account/apiSession';
+import { getRuntimePublicConfig } from '../config/runtimeConfig';
 import {
   TrainingError,
   type DrillCompletion,
@@ -19,6 +21,8 @@ export interface TrainingApiConfig {
   baseUrl: string | null | undefined;
   token: string | null | undefined;
   fetchFn?: TrainingFetch;
+  /** Invoked once per 401 so the caller can leave the signed-in state. */
+  onUnauthorized?: () => void;
 }
 
 /**
@@ -425,7 +429,7 @@ export function createTrainingApi(
           Accept: 'application/json',
           'Content-Type': 'application/json',
           Authorization: `Bearer ${values.token}`,
-          'X-Client-Version': '0.1.0',
+          'X-Client-Version': getRuntimePublicConfig().appVersion,
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
@@ -437,6 +441,16 @@ export function createTrainingApi(
       );
     }
     if (response.status === 204) return null;
+    if (response.status === 401) {
+      reportApiUnauthorized(values.token);
+      config.onUnauthorized?.();
+      throw new TrainingError(
+        'training.session_expired',
+        'Your sign-in expired. Sign in again to continue.',
+        false,
+        401,
+      );
+    }
     const payload = await readJson(response);
     if (!response.ok) {
       const error =

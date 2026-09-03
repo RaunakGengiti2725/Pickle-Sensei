@@ -20,6 +20,10 @@
 --      client-writable even in the owner's own rows
 --   F. payload size caps reject oversized text/jsonb
 --   G. privileged functions are not client-executable
+--   H. the lifetime free-rating limit is unforgeable (atomic reserve, sync
+--      backstop, and no client path that shrinks the scored-shot count)
+--   I. account-deletion cascades, owner reads and the permit sweep are
+--      index-backed
 -- ============================================================================
 
 \set ON_ERROR_STOP on
@@ -898,6 +902,103 @@ begin
   end;
 end $$;
 reset role;
+
+-- H7: the counter cannot be reset from a client session. Carol sits at the
+-- limit (two scored shots from H3); deleting her own shots must be denied at
+-- the grant layer, leave the count untouched, and keep the paywall closed.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000c';
+do $$
+declare r record;
+begin
+  if exists (select 1 from information_schema.role_table_grants
+             where grantee = 'authenticated' and table_schema = 'public'
+               and table_name = 'shots' and privilege_type = 'DELETE') then
+    raise exception 'H7: authenticated must hold no DELETE grant on shots';
+  end if;
+  if exists (select 1 from pg_policies
+             where schemaname = 'public' and tablename = 'shots'
+               and cmd = 'DELETE') then
+    raise exception 'H7: shots must carry no client DELETE policy';
+  end if;
+  begin
+    delete from public.shots where user_id = (select auth.uid());
+    raise exception 'H7: owner DELETE on shots must be denied';
+  exception when insufficient_privilege then null;
+  end;
+  select * into r from public.access_state();
+  if r.scored_count <> 2 then
+    raise exception 'H7: scored_count must still be 2 after the attempt (got %)', r.scored_count;
+  end if;
+  select * into r from public.reserve_analysis_permit('carol-key-after-delete');
+  if r.result <> 'access.paywall_required' then
+    raise exception 'H7: the paywall must stay closed after a delete attempt (got %)', r.result;
+  end if;
+end $$;
+reset role;
+
+-- ──────── I: account-deletion cascades and owner reads are index-backed ────
+--
+-- Every profiles-cascade child is looked up by user_id both when
+-- auth.admin.deleteUser fires the FK cascade and when RLS scopes an owner
+-- read. With enable_seqscan off the planner only falls back to a sequential
+-- scan when NO usable index exists, and only walks a non-leading index when
+-- no leading one exists — so the plan text is a deterministic witness even on
+-- the tiny fixture this matrix builds.
+
+-- I1: the expected indexes exist
+do $$
+declare idx text;
+begin
+  foreach idx in array array[
+    'shot_phases_user_idx', 'shot_measurements_user_idx',
+    'analysis_feedback_user_created_idx',
+    'analysis_permits_reserved_created_idx'
+  ] loop
+    if not exists (select 1 from pg_indexes
+                   where schemaname = 'public' and indexname = idx) then
+      raise exception 'I1: index % must exist', idx;
+    end if;
+  end loop;
+end $$;
+
+-- I2: owner-scoped reads of the cascade children (the same user_id lookup the
+-- FK cascade performs) go through the user_id-leading index — not a Seq Scan,
+-- and not a full walk of a shot_id-/analysis_id-leading index
+set local enable_seqscan = off;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-00000000000a';
+do $$
+declare pair text[]; plan jsonb;
+begin
+  foreach pair slice 1 in array array[
+    ['shot_phases', 'shot_phases_user_idx'],
+    ['shot_measurements', 'shot_measurements_user_idx'],
+    ['analysis_feedback', 'analysis_feedback_user_created_idx']
+  ] loop
+    execute format(
+      'explain (format json) select 1 from public.%I where user_id = (select auth.uid())',
+      pair[1]) into plan;
+    if plan::text like '%Seq Scan%' or plan::text not like '%' || pair[2] || '%' then
+      raise exception 'I2: owner read of % must use %, got %', pair[1], pair[2], plan;
+    end if;
+  end loop;
+end $$;
+reset role;
+
+-- I3: the hourly pg_cron stale-permit sweep predicate is index-backed
+do $$
+declare plan jsonb;
+begin
+  execute 'explain (format json) update public.analysis_permits '
+       || 'set status = ''released'', outcome = ''expired'' '
+       || 'where status = ''reserved'' and created_at < now() - interval ''24 hours'''
+    into plan;
+  if plan::text like '%Seq Scan%' then
+    raise exception 'I3: the stale-permit sweep must be index-backed, got %', plan;
+  end if;
+end $$;
+reset enable_seqscan;
 
 rollback;
 

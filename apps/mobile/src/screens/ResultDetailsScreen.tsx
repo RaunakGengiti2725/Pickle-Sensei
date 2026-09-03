@@ -62,6 +62,7 @@ export function ResultDetailsScreen() {
         title="Result missing"
         detail="This analysis is no longer on this device."
         onRetry={() => navigation.goBack()}
+        retryLabel="Go back"
       />
     );
   }

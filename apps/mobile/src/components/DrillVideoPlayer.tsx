@@ -43,6 +43,12 @@ import type {
  * The creator name and license attribution are always rendered below the
  * player — attribution is a license obligation — and a source link keeps
  * the original page one tap away in every stage.
+ *
+ * The player surface has no URL bar and no back control, so the WebView's
+ * top frame is confined to the app's own shell and the video's provider
+ * (`shouldLoadInPlayer`). Third-party links, store nudges and app deep links
+ * inside a watch page are dropped rather than navigating the player or
+ * being handed to the OS; the "Watch on …" link is the one deliberate exit.
  */
 
 /**
@@ -153,6 +159,74 @@ function stageSource(media: InstructionalMedia, stage: Stage) {
   return { uri: media.playbackUrl };
 }
 
+const PROVIDER_HOSTS: Record<
+  EmbeddedInstructionalMedia['provider'],
+  readonly string[]
+> = {
+  youtube: [
+    'youtube.com',
+    'youtube-nocookie.com',
+    'googlevideo.com',
+    'ytimg.com',
+  ],
+  vimeo: ['vimeo.com', 'vimeocdn.com'],
+};
+
+/**
+ * Hands every request to `shouldLoadInPlayer`; the library's own whitelist
+ * would otherwise pass anything outside it straight to `Linking.openURL`.
+ */
+const GATE_ALL_ORIGINS = ['*'];
+
+/** Lower-cased host of an https URL (userinfo and port stripped); null otherwise. */
+function httpsHost(url: string): string | null {
+  const match = /^https:\/\/([^/?#]*)/i.exec(url);
+  if (!match) return null;
+  const authority = match[1] ?? '';
+  const host = authority
+    .slice(authority.lastIndexOf('@') + 1)
+    .replace(/:\d*$/, '')
+    .toLowerCase();
+  return host.length > 0 ? host : null;
+}
+
+/** Hosts the top frame may show: the app's shell plus the video's provider. */
+function playbackHosts(media: InstructionalMedia): string[] {
+  const urls = [
+    VIDEO_EMBED_REFERER,
+    media.sourceUrl,
+    media.kind === 'embed' ? media.embedUrl : media.playbackUrl,
+  ];
+  const hosts = urls
+    .map(httpsHost)
+    .filter((host): host is string => host !== null);
+  if (media.kind === 'embed') hosts.push(...PROVIDER_HOSTS[media.provider]);
+  return hosts;
+}
+
+function hostAllowed(host: string, allowed: readonly string[]): boolean {
+  return allowed.some(
+    candidate => host === candidate || host.endsWith(`.${candidate}`),
+  );
+}
+
+/**
+ * Navigation gate for the player WebView. Only https (and about:) requests
+ * ever load; sub-frames belong to the provider's player and pass, while the
+ * top frame must stay on the shell or the provider's own hosts. Everything
+ * else is dropped so the user simply stays in the player.
+ */
+export function shouldLoadInPlayer(
+  media: InstructionalMedia,
+  request: { url: string; isTopFrame?: boolean },
+): boolean {
+  if (request.url.startsWith('about:')) return true;
+  const host = httpsHost(request.url);
+  if (host === null) return false;
+  if (request.isTopFrame === false) return true;
+  return hostAllowed(host, playbackHosts(media));
+}
+
 /** Human name of the original host, used by the source-link affordances. */
 function sourceName(media: InstructionalMedia): string {
   if (media.kind === 'embed') {
@@ -170,6 +244,7 @@ export function DrillVideoPlayer(props: {
   const insets = useReliableSafeAreaInsets();
   const [stage, setStage] = useState<Stage>('embed');
   const [embedReady, setEmbedReady] = useState(false);
+  const [sourceError, setSourceError] = useState<string | null>(null);
 
   // A newly opened video must not inherit the previous one's progress
   // through the fallback ladder.
@@ -177,6 +252,7 @@ export function DrillVideoPlayer(props: {
   useEffect(() => {
     setStage('embed');
     setEmbedReady(false);
+    setSourceError(null);
   }, [mediaId]);
 
   const youtube = media !== null && isYoutubeEmbed(media);
@@ -236,9 +312,23 @@ export function DrillVideoPlayer(props: {
     setStage('embed');
   }, []);
 
-  const openSource = useCallback(() => {
-    if (media) void Linking.openURL(media.sourceUrl);
+  const openSource = useCallback(async () => {
+    if (!media) return;
+    setSourceError(null);
+    try {
+      await Linking.openURL(media.sourceUrl);
+    } catch {
+      setSourceError(
+        `${sourceName(media)} could not be opened on this device.`,
+      );
+    }
   }, [media]);
+
+  const onShouldStartLoadWithRequest = useCallback(
+    (request: { url: string; isTopFrame?: boolean }) =>
+      media !== null && shouldLoadInPlayer(media, request),
+    [media],
+  );
 
   if (!media) return null;
 
@@ -289,7 +379,7 @@ export function DrillVideoPlayer(props: {
                 <PressableScale
                   testID="drill-video-open-source"
                   accessibilityLabel={`Open on ${sourceName(media)}`}
-                  onPress={openSource}
+                  onPress={() => void openSource()}
                   containerStyle={styles.errorButtonContainer}
                   style={styles.errorButton}
                 >
@@ -321,6 +411,9 @@ export function DrillVideoPlayer(props: {
                   javaScriptEnabled
                   domStorageEnabled
                   allowsFullscreenVideo
+                  originWhitelist={GATE_ALL_ORIGINS}
+                  onShouldStartLoadWithRequest={onShouldStartLoadWithRequest}
+                  setSupportMultipleWindows={false}
                   startInLoadingState
                   renderLoading={() => (
                     <View style={styles.loadingWrap}>
@@ -354,7 +447,7 @@ export function DrillVideoPlayer(props: {
             <PressableScale
               testID="drill-video-source-link"
               accessibilityLabel={`Watch on ${sourceName(media)}`}
-              onPress={openSource}
+              onPress={() => void openSource()}
               containerStyle={styles.sourceLinkContainer}
               style={styles.sourceLink}
             >
@@ -363,6 +456,15 @@ export function DrillVideoPlayer(props: {
               </Text>
               <Icon name="arrow" size={14} color={color.volt} />
             </PressableScale>
+            {sourceError ? (
+              <Text
+                accessibilityRole="alert"
+                testID="drill-video-source-error"
+                style={[type.caption, styles.sourceError]}
+              >
+                {sourceError}
+              </Text>
+            ) : null}
           </View>
         </View>
       </View>
@@ -456,4 +558,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
   },
   sourceLinkText: { color: color.volt },
+  sourceError: {
+    color: color.flame,
+    textAlign: 'center',
+    marginTop: space.xs,
+  },
 });

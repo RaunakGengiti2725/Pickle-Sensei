@@ -1,4 +1,5 @@
 import type { ApiSession } from '../account/apiSession';
+import { getRuntimePublicConfig } from '../config/runtimeConfig';
 
 export interface CanonicalProgressSeriesPoint {
   day: string;
@@ -25,6 +26,8 @@ export type ProgressFetch = (
   input: string,
   init?: RequestInit,
 ) => Promise<Response>;
+
+export const PROGRESS_REQUEST_TIMEOUT_MS = 15_000;
 
 export class ProgressApiError extends Error {
   constructor(message: string) {
@@ -135,18 +138,26 @@ export async function fetchCanonicalProgress(
   session: ApiSession,
   fetchFn: ProgressFetch = globalThis.fetch,
 ): Promise<CanonicalProgress> {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    PROGRESS_REQUEST_TIMEOUT_MS,
+  );
   let response: Response;
   try {
     response = await fetchFn(`${session.apiBaseUrl}/v1/progress`, {
       method: 'GET',
+      signal: controller.signal,
       headers: {
         Accept: 'application/json',
         Authorization: `Bearer ${session.bearerToken}`,
-        'X-Client-Version': '0.1.0',
+        'X-Client-Version': getRuntimePublicConfig().appVersion,
       },
     });
   } catch {
     throw new ProgressApiError('Account progress is temporarily unavailable.');
+  } finally {
+    clearTimeout(timeout);
   }
   const payload = (await response.json().catch(() => null)) as unknown;
   if (!response.ok) {

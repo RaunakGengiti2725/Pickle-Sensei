@@ -1,3 +1,4 @@
+import { getRuntimePublicConfig } from '../config/runtimeConfig';
 import type { ApiSession } from './apiSession';
 
 /**
@@ -31,6 +32,8 @@ export type ConsentFetch = (
   input: string,
   init?: RequestInit,
 ) => Promise<Response>;
+
+export const CONSENT_REQUEST_TIMEOUT_MS = 15_000;
 
 export class ConsentApiError extends Error {
   constructor(message: string) {
@@ -108,19 +111,27 @@ async function consentRequest(
   body?: unknown,
 ): Promise<ConsentStatus> {
   let response: Response;
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    CONSENT_REQUEST_TIMEOUT_MS,
+  );
   try {
     response = await fetchFn(`${session.apiBaseUrl}${path}`, {
       method,
+      signal: controller.signal,
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
         Authorization: `Bearer ${session.bearerToken}`,
-        'X-Client-Version': '0.1.0',
+        'X-Client-Version': getRuntimePublicConfig().appVersion,
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
   } catch {
     throw new ConsentApiError('Consent settings are temporarily unavailable.');
+  } finally {
+    clearTimeout(timeout);
   }
   const payload = (await response.json().catch(() => null)) as unknown;
   if (!response.ok) {

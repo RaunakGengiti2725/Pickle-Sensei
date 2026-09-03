@@ -167,6 +167,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     paddingHorizontal: space.md,
     paddingVertical: space.xs,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   chipLabel: {
     color: color.ink,

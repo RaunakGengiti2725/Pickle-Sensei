@@ -34,7 +34,13 @@ import {
 import { Icon } from '../design/icons';
 import { color, radius, space, type } from '../design/tokens';
 import { getDb } from '../data/db';
-import { hasShotSyncReceipt, listRealAnalysisFacts } from '../data/repository';
+import {
+  getShotOutboxStatus,
+  hasShotSyncReceipt,
+  listRealAnalysisFacts,
+  type ShotOutboxStatus,
+} from '../data/repository';
+import { OUTBOX_MAX_ATTEMPTS } from '../data/sync';
 import type { RootStackParams } from '../navigation/params';
 import {
   FixList,
@@ -124,7 +130,32 @@ import { armTryAgain, tryAgainFromResult } from './tryAgainHandoff';
  * and `ResultBreakdownSheet` are shared with `ResultDetailsScreen`.
  */
 
-export type SyncEvidenceState = 'checking' | 'synced' | 'pending' | 'unknown';
+export type SyncEvidenceState =
+  | { kind: 'checking' }
+  | { kind: 'synced' }
+  | { kind: 'pending' }
+  | { kind: 'unknown' }
+  | {
+      kind: 'rejected' | 'exhausted';
+      attempts: number;
+      lastError: string | null;
+    };
+
+function syncEvidenceFromOutbox(status: ShotOutboxStatus): SyncEvidenceState {
+  switch (status.state) {
+    case 'rejected':
+    case 'exhausted':
+      return {
+        kind: status.state,
+        attempts: status.attempts,
+        lastError: status.lastError,
+      };
+    case 'queued':
+      return { kind: 'pending' };
+    case 'absent':
+      return { kind: 'unknown' };
+  }
+}
 
 type GuideStep = 'score' | 'problem' | 'drills' | 'next';
 
@@ -178,8 +209,9 @@ export function useStrokeResultEvidence(analysisId: string): {
   const [evidence, setEvidence] = useState<StrokeResultEvidence | undefined>(
     undefined,
   );
-  const [syncEvidence, setSyncEvidence] =
-    useState<SyncEvidenceState>('checking');
+  const [syncEvidence, setSyncEvidence] = useState<SyncEvidenceState>({
+    kind: 'checking',
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -236,18 +268,25 @@ export function useStrokeResultEvidence(analysisId: string): {
 
   useEffect(() => {
     let cancelled = false;
-    setSyncEvidence('checking');
+    setSyncEvidence({ kind: 'checking' });
     if (!analysis) {
       return () => {
         cancelled = true;
       };
     }
-    hasShotSyncReceipt(getDb(), analysis.id)
-      .then(accepted => {
-        if (!cancelled) setSyncEvidence(accepted ? 'synced' : 'pending');
+    const db = getDb();
+    hasShotSyncReceipt(db, analysis.id)
+      .then(async accepted => {
+        if (accepted) return { kind: 'synced' } as const;
+        return syncEvidenceFromOutbox(
+          await getShotOutboxStatus(db, analysis.id),
+        );
+      })
+      .then(next => {
+        if (!cancelled) setSyncEvidence(next);
       })
       .catch(() => {
-        if (!cancelled) setSyncEvidence('unknown');
+        if (!cancelled) setSyncEvidence({ kind: 'unknown' });
       });
     return () => {
       cancelled = true;
@@ -320,6 +359,7 @@ export function ResultScreen() {
         title="Result missing"
         detail="This analysis is no longer on this device."
         onRetry={() => navigation.goBack()}
+        retryLabel="Go back"
         dark
       />
     );
@@ -687,9 +727,10 @@ export function ResultBreakdownSheet(props: ResultBreakdownSheetProps) {
           scoredReal={scoredReal}
           syncEvidence={props.syncEvidence}
           shotLabel={shotLabel}
+          onCaptureNewRead={props.onTryAgain}
         />
 
-        {props.syncEvidence === 'synced' ? (
+        {props.syncEvidence.kind === 'synced' ? (
           <AnalysisFeedbackPrompt analysisId={props.analysisId} />
         ) : null}
       </StrokeResult>
@@ -1269,6 +1310,9 @@ function TrainingPlanSection(props: {
   scoredReal: boolean;
   syncEvidence: SyncEvidenceState;
   shotLabel: string;
+  /** Re-arm the camera — the only way forward once the server has refused
+   * this read for good (its retry budget is spent). */
+  onCaptureNewRead: () => void;
 }) {
   const { analysis, scoredReal, syncEvidence, shotLabel } = props;
   const planStatus = useTrainingStore(state => state.planStatus);
@@ -1296,7 +1340,7 @@ function TrainingPlanSection(props: {
   const completedItems = prescribedItems.filter(item => item.completion);
   const allPrescribedComplete =
     prescribedItems.length === 3 && completedItems.length === 3;
-  const syncedScoredReal = scoredReal && syncEvidence === 'synced';
+  const syncedScoredReal = scoredReal && syncEvidence.kind === 'synced';
   const newerThanPlan =
     analysis !== null && currentPlan
       ? new Date(analysis.capturedAtIso).getTime() >
@@ -1524,11 +1568,34 @@ function TrainingPlanSection(props: {
             />
           </View>
         </Card>
-      ) : syncEvidence === 'checking' ? (
+      ) : syncEvidence.kind === 'checking' ? (
         <View style={styles.planLoading}>
           <LoadingState label="Checking sync evidence…" />
         </View>
-      ) : syncEvidence !== 'synced' ? (
+      ) : syncEvidence.kind === 'exhausted' ? (
+        <Card tone="soft" style={styles.trainingStateCard}>
+          <View style={styles.trainingStateIcon}>
+            <Icon name="close" size={22} color={color.bad} />
+          </View>
+          <Text style={[type.h2, styles.trainingStateTitle]}>
+            The server did not accept this read.
+          </Text>
+          <Text style={[type.body, styles.trainingStateBody]}>
+            {`Sync was refused ${syncEvidence.attempts} times and this read will not be sent again${
+              syncEvidence.lastError
+                ? ` (last response: ${syncEvidence.lastError})`
+                : ''
+            }. It stays on this device; capture a new read to build training.`}
+          </Text>
+          <View style={styles.trainingAction}>
+            <Button
+              label="Capture a new read"
+              variant="secondary"
+              onPress={props.onCaptureNewRead}
+            />
+          </View>
+        </Card>
+      ) : syncEvidence.kind !== 'synced' ? (
         <Card tone="soft" style={styles.trainingStateCard}>
           <View style={styles.trainingStateIcon}>
             <Icon name="upload" size={22} color={color.court} />
@@ -1537,9 +1604,15 @@ function TrainingPlanSection(props: {
             Sync this read first.
           </Text>
           <Text style={[type.body, styles.trainingStateBody]}>
-            {syncEvidence === 'pending'
+            {syncEvidence.kind === 'pending'
               ? 'This real score is still in the secure outbox. Personalized training unlocks after the server accepts the shot.'
-              : 'The app could not verify whether this shot reached the server, so plan creation is paused.'}
+              : syncEvidence.kind === 'rejected'
+                ? `The server refused this read ${syncEvidence.attempts} of ${OUTBOX_MAX_ATTEMPTS} times${
+                    syncEvidence.lastError
+                      ? ` (last response: ${syncEvidence.lastError})`
+                      : ''
+                  }. It stays in the secure outbox and will be retried; training unlocks only if the server accepts it.`
+                : 'The app could not verify whether this shot reached the server, so plan creation is paused.'}
           </Text>
         </Card>
       ) : (

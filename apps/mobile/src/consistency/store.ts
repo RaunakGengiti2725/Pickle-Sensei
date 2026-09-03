@@ -133,6 +133,8 @@ interface ConsistencyState {
   hydrated: boolean;
   ownerKey: string | null;
   snapshot: ConsistencySnapshot | null;
+  /** True when the last refresh could not read the activity history. */
+  loadError: boolean;
   celebration: ConsistencyCelebration | null;
   /** Pending "Day N secured" moment; consumed once by the result surface. */
   daySecured: DaySecuredMoment | null;
@@ -272,6 +274,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
   hydrated: false,
   ownerKey: null,
   snapshot: null,
+  loadError: false,
   celebration: null,
   daySecured: null,
 
@@ -282,6 +285,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         hydrated: true,
         ownerKey: owner,
         snapshot: null,
+        loadError: false,
         celebration: null,
         daySecured: null,
       });
@@ -296,7 +300,12 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
     const run = async () => {
       const owner = getActiveDataOwner();
       if (owner === SIGNED_OUT_DATA_OWNER) {
-        set({ ownerKey: owner, snapshot: null, daySecured: null });
+        set({
+          ownerKey: owner,
+          snapshot: null,
+          loadError: false,
+          daySecured: null,
+        });
         return;
       }
       let activities: TrainingActivityInput[];
@@ -306,6 +315,8 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
         activities = loaded.activities;
         ledger = loaded.ledger;
       } catch {
+        if (getActiveDataOwner() !== owner) return;
+        set({ ownerKey: owner, loadError: true });
         return;
       }
       const snapshot = buildConsistencySnapshot(activities, {
@@ -335,7 +346,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
           // Could not persist: skip the ceremony rather than risk replaying
           // it forever. The next successful refresh retries.
           if (getActiveDataOwner() !== owner) return;
-          set({ ownerKey: owner, snapshot });
+          set({ ownerKey: owner, snapshot, loadError: false });
           return;
         }
       }
@@ -363,6 +374,7 @@ export const useConsistencyStore = create<ConsistencyState>((set, get) => ({
       set(state => ({
         ownerKey: owner,
         snapshot,
+        loadError: false,
         daySecured,
         celebration: state.celebration ?? celebration,
       }));

@@ -34,6 +34,9 @@ export { focusForGoal, type Gender, type Profile } from './profile';
  */
 export const PENDING_ONBOARDING_PROFILE_KV_KEY = 'onboarding.pending-profile';
 
+export const CANONICAL_PROFILE_UNAVAILABLE_MESSAGE =
+  'Pickle Sensei could not reach your account to load your coaching profile. Check your connection and try again.';
+
 function parsePendingProfile(raw: string | null): Profile | null {
   if (!raw) return null;
   try {
@@ -66,6 +69,10 @@ interface AppState {
   hydrated: boolean;
   ownerKey: string | null;
   profile: Profile | null;
+  /** Set when hydrate() finished without a profile because the owner's data
+   * could not be read (canonical fetch or local read failed) — the Gate shows
+   * a retry state instead of re-asking the questionnaire. */
+  hydrateError: string | null;
   onboardingBusy: boolean;
   onboardingError: string | null;
   lastShotType: ShotTypeSlug;
@@ -94,12 +101,18 @@ export const useAppStore = create<AppState>(set => ({
   hydrated: false,
   ownerKey: null,
   profile: null,
+  hydrateError: null,
   onboardingBusy: false,
   onboardingError: null,
   lastShotType: 'forehand_drive',
   hydrate: async () => {
     const owner = getActiveDataOwner();
-    set({ hydrated: false, ownerKey: owner, profile: null });
+    set({
+      hydrated: false,
+      ownerKey: owner,
+      profile: null,
+      hydrateError: null,
+    });
     try {
       const db = getDb();
       let pending = parsePendingProfile(
@@ -120,8 +133,20 @@ export const useAppStore = create<AppState>(set => ({
         apiSession &&
         canonicalDataOwner(apiSession.canonicalAppUserId) === owner
       ) {
-        const canonicalProfile =
-          await fetchCanonicalOnboardingProfile(apiSession);
+        let canonicalProfile: Profile | null;
+        try {
+          canonicalProfile = await fetchCanonicalOnboardingProfile(apiSession);
+        } catch {
+          if (getActiveDataOwner() === owner) {
+            set({
+              hydrated: true,
+              ownerKey: owner,
+              profile: null,
+              hydrateError: CANONICAL_PROFILE_UNAVAILABLE_MESSAGE,
+            });
+          }
+          return;
+        }
         if (canonicalProfile) {
           raw = JSON.stringify(canonicalProfile);
           await setKv(db, profileKeyForOwner(owner), raw);
@@ -157,13 +182,22 @@ export const useAppStore = create<AppState>(set => ({
         profile: raw ? (JSON.parse(raw) as Profile) : null,
         hydrated: true,
         ownerKey: owner,
+        hydrateError: null,
         lastShotType: 'forehand_drive',
         onboardingBusy: false,
         onboardingError: null,
       });
-    } catch {
+    } catch (error) {
       if (getActiveDataOwner() === owner) {
-        set({ hydrated: true, ownerKey: owner, profile: null });
+        set({
+          hydrated: true,
+          ownerKey: owner,
+          profile: null,
+          hydrateError:
+            error instanceof Error
+              ? error.message
+              : 'Your coaching profile could not be loaded.',
+        });
       }
     }
   },

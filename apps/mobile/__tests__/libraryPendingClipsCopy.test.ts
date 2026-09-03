@@ -4,6 +4,7 @@ jest.mock('../src/data/db', () => ({ getDb: jest.fn() }));
 
 import {
   PENDING_SECTION_LABEL,
+  PENDING_SECTION_NOTE,
   PENDING_SECTION_PILL,
   pendingCaptureTitle,
   pendingEvidenceCopy,
@@ -36,9 +37,16 @@ function capture(overrides: Partial<PendingCapture>): PendingCapture {
 
 describe('pending section header', () => {
   it('describes saved clips without implying a model is coming for them', () => {
-    expect(PENDING_SECTION_LABEL).toBe('SAVED CLIPS · READY TO ANALYZE');
+    expect(PENDING_SECTION_LABEL).toBe('SAVED CLIPS · NOT ANALYZED');
     expect(PENDING_SECTION_LABEL).not.toMatch(/awaiting/i);
     expect(PENDING_SECTION_PILL).toBe('NOT SCORED');
+  });
+
+  it('never promises an analyze action the library cannot perform', () => {
+    expect(PENDING_SECTION_LABEL).not.toMatch(/ready/i);
+    expect(PENDING_SECTION_NOTE).toBe(
+      'Saved clips aren’t scored from the library. Record a new stroke to get a score.',
+    );
   });
 });
 

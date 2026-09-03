@@ -3,6 +3,8 @@ import type {
   AnalysisFeedbackRating,
 } from '@pickle/shared-types';
 import type { SyncTransport } from './sync';
+import { reportApiUnauthorized } from '../account/apiSession';
+import { getRuntimePublicConfig } from '../config/runtimeConfig';
 
 /**
  * API client. Base URL/token come from app state; in development the API's
@@ -69,14 +71,17 @@ async function request<T>(
 ): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS);
+  // Read the bearer once: it is resolved per request and may rotate while
+  // this call is in flight, and a 401 must name the token that was SENT.
+  const token = config.token;
   let response: Response;
   try {
     response = await fetch(`${config.baseUrl}${path}`, {
       method,
       headers: {
         'content-type': 'application/json',
-        ...(config.token ? { authorization: `Bearer ${config.token}` } : {}),
-        'x-client-version': '0.1.0',
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        'x-client-version': getRuntimePublicConfig().appVersion,
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       signal: controller.signal,
@@ -96,6 +101,9 @@ async function request<T>(
   const json = (await response.json().catch(() => null)) as
     (T & { error?: { code: string; message: string } }) | null;
   if (!response.ok) {
+    if (response.status === 401 && token) {
+      reportApiUnauthorized(token);
+    }
     throw new ApiError(
       response.status,
       json?.error?.code ?? 'unknown',

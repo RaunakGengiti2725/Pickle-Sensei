@@ -98,9 +98,12 @@ async function post(
   body?: unknown,
 ): Promise<Record<string, unknown>> {
   let response: Response;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
     response = await fetchFn(`${session.apiBaseUrl}${path}`, {
       method: 'POST',
+      signal: controller.signal,
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
@@ -114,6 +117,8 @@ async function post(
       'Account deletion is temporarily offline. Nothing was deleted — please try again.',
       true,
     );
+  } finally {
+    clearTimeout(timeout);
   }
   let payload: unknown = null;
   try {

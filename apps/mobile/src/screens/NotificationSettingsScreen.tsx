@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ScrollView,
   StatusBar,
@@ -79,11 +79,17 @@ export function NotificationSettingsScreen() {
     useNavigation<NativeStackNavigationProp<RootStackParams>>();
   const prefs = useNotificationStore(s => s.prefs);
   const permission = useNotificationStore(s => s.permission);
+  const persistFailed = useNotificationStore(s => s.persistFailed);
+  const scheduleFailed = useNotificationStore(s => s.scheduleFailed);
   const setPrefs = useNotificationStore(s => s.setPrefs);
   const refreshPermission = useNotificationStore(s => s.refreshPermission);
+  const syncNow = useNotificationStore(s => s.syncNow);
   const requestPermissionAndEnable = useNotificationStore(
     s => s.requestPermissionAndEnable,
   );
+  const [requesting, setRequesting] = useState(false);
+  const [requestFailed, setRequestFailed] = useState(false);
+  const [settingsOpenFailed, setSettingsOpenFailed] = useState(false);
 
   // Returning from the system settings sheet must re-read the permission,
   // otherwise the recovery banner would report a stale state.
@@ -94,7 +100,13 @@ export function NotificationSettingsScreen() {
   );
 
   const permissionDenied = permission === 'denied';
-  const active = prefs.enabled && !permissionDenied;
+  const permissionUnknown = permission === 'unknown';
+  const active = prefs.enabled && permission === 'granted';
+  const masterCaption = active
+    ? 'Scheduled from your real practice history'
+    : permissionUnknown
+      ? 'Paused — notification permission couldn’t be checked'
+      : 'Paused until notifications are allowed';
 
   const patch = (change: Partial<Omit<NotificationPrefs, 'version'>>) =>
     void setPrefs(change);
@@ -111,8 +123,30 @@ export function NotificationSettingsScreen() {
   const openSystemSettings = () => {
     const { getScheduler } =
       require('../notifications/service') as typeof import('../notifications/service');
-    void getScheduler().openSystemSettings();
+    setSettingsOpenFailed(false);
+    getScheduler()
+      .openSystemSettings()
+      .catch(() => setSettingsOpenFailed(true));
   };
+
+  const turnOnReminders = async () => {
+    if (requesting) return;
+    setRequesting(true);
+    setRequestFailed(false);
+    try {
+      const enabled = await requestPermissionAndEnable();
+      if (!enabled) {
+        setRequestFailed(
+          useNotificationStore.getState().permission !== 'denied',
+        );
+      }
+    } finally {
+      setRequesting(false);
+    }
+  };
+
+  const recheckPermission = () =>
+    void refreshPermission().then(() => syncNow());
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
@@ -148,10 +182,63 @@ export function NotificationSettingsScreen() {
                 onPress={openSystemSettings}
               />
             </View>
+            {settingsOpenFailed ? (
+              <Text
+                accessibilityRole="alert"
+                style={[type.caption, styles.deniedFootnote]}
+              >
+                Couldn’t open Settings from here. Open the Settings app →
+                Notifications → Pickle Sensei to allow them.
+              </Text>
+            ) : null}
           </Card>
         ) : null}
 
-        {!prefs.enabled ? (
+        {prefs.enabled && permissionUnknown ? (
+          <Card style={styles.deniedCard}>
+            <View style={styles.deniedHeader}>
+              <View style={styles.deniedIcon}>
+                <Icon name="bell" size={20} color={color.warn} />
+              </View>
+              <Text style={[type.h3, styles.deniedTitle]}>
+                Couldn’t check notification permission
+              </Text>
+            </View>
+            <Text style={[type.body, styles.deniedBody]}>
+              Reminders are paused until the app can confirm notifications are
+              allowed. They resume as soon as a check succeeds.
+            </Text>
+            <View style={styles.deniedAction}>
+              <Button
+                label="Check again"
+                variant="secondary"
+                onPress={recheckPermission}
+              />
+            </View>
+          </Card>
+        ) : null}
+
+        {persistFailed ? (
+          <View accessibilityRole="alert" style={styles.issueRow}>
+            <Icon name="shield" size={16} color={color.bad} />
+            <Text style={[type.caption, styles.issueCopy]}>
+              This change couldn’t be saved on this phone — it will reset when
+              the app restarts. Change any setting to retry.
+            </Text>
+          </View>
+        ) : null}
+
+        {scheduleFailed ? (
+          <View accessibilityRole="alert" style={styles.issueRow}>
+            <Icon name="bell" size={16} color={color.bad} />
+            <Text style={[type.caption, styles.issueCopy]}>
+              Reminders couldn’t be scheduled on this phone. They retry the next
+              time you open the app, or change any setting to retry now.
+            </Text>
+          </View>
+        ) : null}
+
+        {!prefs.enabled && !permissionDenied ? (
           <Card tone="dark" style={styles.enableCard}>
             <View style={styles.enableIcon}>
               <Icon name="bell" size={24} color={color.volt} />
@@ -172,25 +259,49 @@ export function NotificationSettingsScreen() {
               <Button
                 label="Turn on reminders"
                 variant="volt"
-                onPress={() => void requestPermissionAndEnable()}
+                disabled={requesting}
+                onPress={() => void turnOnReminders()}
               />
             </View>
+            {requestFailed ? (
+              <>
+                <Text
+                  accessibilityRole="alert"
+                  style={[type.caption, styles.enableError]}
+                >
+                  Reminders weren’t turned on — the system didn’t confirm
+                  permission. Try again, or allow notifications in Settings.
+                </Text>
+                <View style={styles.enableSecondaryAction}>
+                  <Button
+                    label="Open system settings"
+                    variant="secondary"
+                    onPress={openSystemSettings}
+                  />
+                </View>
+                {settingsOpenFailed ? (
+                  <Text
+                    accessibilityRole="alert"
+                    style={[type.caption, styles.enableError]}
+                  >
+                    Couldn’t open Settings from here. Open the Settings app →
+                    Notifications → Pickle Sensei to allow them.
+                  </Text>
+                ) : null}
+              </>
+            ) : null}
             <Text style={[type.caption, styles.enableFootnote]}>
               Off by default. You can change or disable any of it here, anytime.
             </Text>
           </Card>
-        ) : (
+        ) : prefs.enabled ? (
           <>
             <SectionTitle title="Reminders" />
             <Card style={styles.groupCard}>
               <ReminderRow
                 icon="bell"
                 label="All reminders"
-                caption={
-                  active
-                    ? 'Scheduled from your real practice history'
-                    : 'Paused until notifications are allowed'
-                }
+                caption={masterCaption}
                 value={prefs.enabled}
                 onChange={next => patch({ enabled: next })}
                 last
@@ -304,7 +415,7 @@ export function NotificationSettingsScreen() {
               />
             </Card>
           </>
-        )}
+        ) : null}
 
         <View style={styles.privacyNote}>
           <Icon name="shield" size={16} color={color.inkSoft} />
@@ -342,6 +453,17 @@ const styles = StyleSheet.create({
   deniedTitle: { color: color.warn, flex: 1 },
   deniedBody: { color: color.ink, marginTop: space.sm },
   deniedAction: { marginTop: space.md },
+  deniedFootnote: { color: color.bad, marginTop: space.sm },
+  issueRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: space.sm,
+    borderRadius: radius.md,
+    backgroundColor: color.badSoft,
+    padding: space.md,
+    marginTop: space.lg,
+  },
+  issueCopy: { color: color.bad, flex: 1 },
   enableCard: { marginTop: space.lg, padding: space.lg },
   enableIcon: {
     width: 52,
@@ -355,6 +477,8 @@ const styles = StyleSheet.create({
   enableBenefits: { marginTop: space.sm, gap: 4 },
   enableBenefit: { color: color.onDarkMuted },
   enableAction: { marginTop: space.lg },
+  enableError: { color: color.onDark, marginTop: space.sm },
+  enableSecondaryAction: { marginTop: space.sm },
   enableFootnote: {
     color: color.onDarkFaint,
     marginTop: space.sm,

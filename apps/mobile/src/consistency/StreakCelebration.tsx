@@ -29,7 +29,8 @@ import Animated, {
 import { Button, useReducedMotion } from '../design/components';
 import { color, radius, space, type } from '../design/tokens';
 import { badgeArtFor, MilestoneBadge, RARITY_PALETTE } from './MilestoneBadge';
-import { RARITY_LABEL } from './milestones';
+import { specialistTitle } from './engine';
+import { RARITY_LABEL, VOLUME_ACHIEVEMENTS } from './milestones';
 import { useConsistencyStore } from './store';
 import type { ConsistencyCelebration } from './store';
 import { plural } from '../util/plural';
@@ -319,17 +320,23 @@ function CelebrationStage(props: { celebration: ConsistencyCelebration }) {
     spotlight,
   ]);
 
+  const title =
+    celebration.kind === 'volume' &&
+    celebration.achievementId === VOLUME_ACHIEVEMENTS.specialist.id &&
+    celebration.detail
+      ? specialistTitle(celebration.detail)
+      : celebration.title;
+
   useEffect(() => {
     AccessibilityInfo.announceForAccessibility(
       celebration.kind === 'streak'
-        ? `Milestone unlocked: ${celebration.title}. ${
-            celebration.value
-          } ${plural(celebration.value, 'day')} of training. Reward: ${
-            celebration.reward
-          }.`
-        : `Achievement unlocked: ${celebration.title}. ${celebration.reward}.`,
+        ? `Milestone unlocked: ${title}. ${celebration.value} ${plural(
+            celebration.value,
+            'day',
+          )} of training. Reward: ${celebration.reward}.`
+        : `Achievement unlocked: ${title}. ${celebration.reward}.`,
     );
-  }, [celebration]);
+  }, [celebration, title]);
 
   const backdropStyle = useAnimatedStyle(() => ({ opacity: backdrop.value }));
   const spotlightStyle = useAnimatedStyle(() => ({
@@ -379,6 +386,7 @@ function CelebrationStage(props: { celebration: ConsistencyCelebration }) {
     <View style={styles.root} testID="streak-celebration">
       <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]}>
         <Pressable
+          accessibilityRole="button"
           accessibilityLabel="Dismiss milestone celebration"
           onPress={dismiss}
           style={styles.backdrop}
@@ -505,7 +513,7 @@ function CelebrationStage(props: { celebration: ConsistencyCelebration }) {
         </View>
 
         <Animated.View style={[styles.copyBlock, headlineStyle]}>
-          <Text style={[type.h1, styles.headline]}>{celebration.title}</Text>
+          <Text style={[type.h1, styles.headline]}>{title}</Text>
           <Text style={[type.body, styles.blurb]}>{celebration.blurb}</Text>
           <Text style={[type.caption, styles.streakLine]}>{streakLine}</Text>
         </Animated.View>

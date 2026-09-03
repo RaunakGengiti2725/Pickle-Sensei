@@ -46,6 +46,7 @@ const RETRY_MAX_MS = 5 * 60_000;
 let generation = 0;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let removeAppStateListener: (() => void) | null = null;
+let refreshNow: (() => void) | null = null;
 
 /** Stops all future work synchronously; an in-flight refresh's result is
  * dropped when it lands. */
@@ -55,6 +56,18 @@ export function stopSessionKeeper(): void {
   timer = null;
   removeAppStateListener?.();
   removeAppStateListener = null;
+  refreshNow = null;
+}
+
+/**
+ * Rotates the bearer right away — for an API route that rejected the current
+ * access token ahead of its recorded expiry (clock skew, or a revoked
+ * bearer). A refresh already in flight is left alone; the outcome flows
+ * through the keeper's own `onRotated` / `onRevoked` exactly as a scheduled
+ * rotation would. No-op when no keeper is running.
+ */
+export function refreshSessionNow(): void {
+  refreshNow?.();
 }
 
 export function retryDelayMs(attempt: number): number {
@@ -127,6 +140,10 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
     }
   });
   removeAppStateListener = () => subscription.remove();
+  // A completed refresh reschedules itself (success → ahead of the new
+  // expiry, transient failure → backoff), so the pending timer is left to
+  // `schedule` to replace.
+  refreshNow = () => void refresh();
 
   if (bearerExpiresAtMs === null) {
     void refresh();

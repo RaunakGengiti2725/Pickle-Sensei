@@ -132,6 +132,18 @@ export async function redisWindowIncr(key: string, windowSeconds: number): Promi
   return Number.isFinite(count) ? count : null;
 }
 
+/** Read a fixed-window counter WITHOUT touching L1: rate-limit buckets are
+ * shared across isolates, so a warmed local copy would hide increments made
+ * elsewhere. Returns 0 for a missing key and null when Redis is unavailable. */
+export async function redisWindowGet(key: string): Promise<number | null> {
+  const results = await redisPipeline([["GET", key]]);
+  if (!results) return null;
+  const raw = results[0]?.result;
+  if (raw === null || raw === undefined) return 0;
+  const count = Number(raw);
+  return Number.isFinite(count) ? count : null;
+}
+
 export async function sha256Hex(input: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");

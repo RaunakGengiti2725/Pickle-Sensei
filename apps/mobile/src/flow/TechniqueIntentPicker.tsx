@@ -67,25 +67,54 @@ export function TechniqueIntentPicker(props: {
     () => (voiceResolution ? projectVoiceResolution(voiceResolution) : null),
     [voiceResolution],
   );
+  const selectedTechnique =
+    SELECTABLE_TECHNIQUES_V1.find(
+      technique => technique.canonical === props.value?.canonical,
+    ) ?? null;
+  const narrowedOptions =
+    resolution?.status === 'ambiguous' ? resolution.options : null;
+  const selectionInNarrowed =
+    narrowedOptions !== null &&
+    selectedTechnique !== null &&
+    narrowedOptions.some(
+      option => option.canonical === selectedTechnique.canonical,
+    );
   const visibleTechniques: readonly SelectableTechnique[] =
-    resolution?.status === 'ambiguous'
-      ? resolution.options
-      : SELECTABLE_TECHNIQUES_V1;
+    narrowedOptions === null
+      ? SELECTABLE_TECHNIQUES_V1
+      : selectedTechnique !== null && !selectionInNarrowed
+        ? [...narrowedOptions, selectedTechnique]
+        : narrowedOptions;
 
-  const select = (technique: SelectableTechnique, source: 'tap' | 'voice') => {
+  const selectByTap = (technique: SelectableTechnique) => {
     props.onChange({
       version: TECHNIQUE_INTENT_VERSION,
-      source,
+      source: 'tap',
       canonical: technique.canonical,
       legacySlug: technique.legacySlug,
-      confidence: source === 'tap' ? 1 : 0.95,
-      ...(source === 'voice' ? { rawUserText: text.trim() } : {}),
+      confidence: 1,
+    });
+  };
+
+  const selectByVoice = (
+    technique: SelectableTechnique,
+    confidence: number,
+    rawUserText: string,
+  ) => {
+    props.onChange({
+      version: TECHNIQUE_INTENT_VERSION,
+      source: 'voice',
+      canonical: technique.canonical,
+      legacySlug: technique.legacySlug,
+      confidence,
+      rawUserText: rawUserText.trim(),
     });
   };
 
   const onSubmitText = () => {
     if (!resolution) return;
-    if (resolution.status === 'resolved') select(resolution.technique, 'voice');
+    if (resolution.status === 'resolved')
+      selectByVoice(resolution.technique, resolution.confidence, text);
     else if (resolution.status === 'auto') props.onChange(autoDetectIntent());
   };
 
@@ -103,14 +132,14 @@ export function TechniqueIntentPicker(props: {
               ? projectVoiceResolution(resolveVoiceTechniqueIntent(value))
               : null;
           if (resolved?.status === 'resolved')
-            select(resolved.technique, 'voice');
+            selectByVoice(resolved.technique, resolved.confidence, value);
         }}
         onSubmitEditing={onSubmitText}
         autoCorrect={false}
         returnKeyType="done"
         style={[styles.intentField, props.dark && styles.intentFieldDark]}
       />
-      {resolution?.status === 'ambiguous' ? (
+      {resolution?.status === 'ambiguous' && !selectionInNarrowed ? (
         <Text
           style={[type.caption, styles.hint, props.dark && styles.hintDark]}
         >
@@ -139,7 +168,7 @@ export function TechniqueIntentPicker(props: {
               accessibilityRole="radio"
               accessibilityLabel={technique.displayName}
               accessibilityState={{ selected }}
-              onPress={() => select(technique, 'tap')}
+              onPress={() => selectByTap(technique)}
               style={[
                 styles.chip,
                 props.dark && styles.chipDark,

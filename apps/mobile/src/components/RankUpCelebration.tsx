@@ -357,6 +357,7 @@ function CelebrationStage(props: { celebration: RankCelebration }) {
     <View style={styles.root} testID="rank-up-celebration">
       <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]}>
         <Pressable
+          accessibilityRole="button"
           accessibilityLabel="Dismiss rank celebration"
           onPress={dismiss}
           style={styles.backdrop}

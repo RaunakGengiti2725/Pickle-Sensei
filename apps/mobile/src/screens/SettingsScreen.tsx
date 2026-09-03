@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  Alert,
   Linking,
   Modal,
   Platform,
@@ -36,6 +37,27 @@ import { DUPR_ESTIMATE_NOTE } from '../progress/duprEstimate';
 import { rateAppFromSettings } from '../review/appStoreReview';
 import { useWalkthroughStore } from '../walkthrough/walkthroughStore';
 import type { RootStackParams } from '../navigation/params';
+
+async function openLegalPage(label: string, url: string): Promise<void> {
+  try {
+    await Linking.openURL(url);
+  } catch {
+    Alert.alert(
+      `${label} could not be opened`,
+      `Your phone could not open the page. You can read it in a browser at ${url}`,
+    );
+  }
+}
+
+async function rateApp(): Promise<void> {
+  const outcome = await rateAppFromSettings();
+  if (outcome === 'unavailable') {
+    Alert.alert(
+      'Rating unavailable right now',
+      'The App Store rating sheet could not be opened on this device. You can rate Pickle Sensei from its App Store page instead.',
+    );
+  }
+}
 
 const GENDER_LABELS: Record<Gender, string> = {
   female: 'Female',
@@ -443,7 +465,7 @@ export function SettingsScreen() {
               label="Rate Pickle Sensei"
               value="App Store"
               preserveCase
-              onPress={() => void rateAppFromSettings()}
+              onPress={() => void rateApp()}
             />
           ) : null}
           {/* Replays the first-run tour on demand; the device's one-time
@@ -476,7 +498,9 @@ export function SettingsScreen() {
               icon="shield"
               label="Privacy policy"
               value="View"
-              onPress={() => void Linking.openURL(legalPrivacyUrl)}
+              onPress={() =>
+                void openLegalPage('Privacy policy', legalPrivacyUrl)
+              }
               last={!legalTermsUrl}
             />
           ) : null}
@@ -485,7 +509,7 @@ export function SettingsScreen() {
               icon="library"
               label="Terms of use"
               value="View"
-              onPress={() => void Linking.openURL(legalTermsUrl)}
+              onPress={() => void openLegalPage('Terms of use', legalTermsUrl)}
               last
             />
           ) : null}

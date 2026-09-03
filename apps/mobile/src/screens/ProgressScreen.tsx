@@ -274,22 +274,39 @@ export function ProgressScreen() {
   )!;
   const selectedStartDay = practice.buckets[0]?.key ?? '9999-12-31';
   const selectedEndDay = practice.buckets.at(-1)?.key ?? '0000-01-01';
-  const selectedFacts = facts.filter(fact => {
-    const day = dayKey(fact.capturedAt, dayFormatter);
-    return day >= selectedStartDay && day <= selectedEndDay;
-  });
-  const selectedSeries = canonical?.series.filter(
-    point => point.day >= selectedStartDay && point.day <= selectedEndDay,
+  const factDays = useMemo(
+    () => facts.map(fact => dayKey(fact.capturedAt, dayFormatter)),
+    [dayFormatter, facts],
   );
-  const allScored = facts.filter(
-    fact => fact.resultKind === 'scored' && fact.overallScore !== null,
+  const selectedFacts = useMemo(
+    () =>
+      facts.filter((_, index) => {
+        const day = factDays[index]!;
+        return day >= selectedStartDay && day <= selectedEndDay;
+      }),
+    [factDays, facts, selectedEndDay, selectedStartDay],
   );
-  const latestLocal = allScored[0] ?? null;
-  const latestSynced = canonical?.series.reduce<
-    CanonicalProgress['series'][number] | null
-  >(
-    (latest, point) => (!latest || point.day > latest.day ? point : latest),
-    null,
+  const selectedSeries = useMemo(
+    () =>
+      canonical?.series.filter(
+        point => point.day >= selectedStartDay && point.day <= selectedEndDay,
+      ),
+    [canonical, selectedEndDay, selectedStartDay],
+  );
+  const latestLocal = useMemo(
+    () =>
+      facts.find(
+        fact => fact.resultKind === 'scored' && fact.overallScore !== null,
+      ) ?? null,
+    [facts],
+  );
+  const latestSynced = useMemo(
+    () =>
+      canonical?.series.reduce<CanonicalProgress['series'][number] | null>(
+        (latest, point) => (!latest || point.day > latest.day ? point : latest),
+        null,
+      ),
+    [canonical],
   );
   const latestScore =
     latestLocal?.overallScore ?? latestSynced?.avgScore ?? null;
@@ -345,13 +362,17 @@ export function ProgressScreen() {
     }).filter((item): item is NonNullable<typeof item> => Boolean(item));
   }, [selectedFacts, selectedSeries]);
 
-  const eligibleRecentCaptures = captures
-    .filter(
-      capture =>
-        capture.evidenceStatus === 'valid' &&
-        capture.clip?.captureMode === 'automatic_pose_trigger',
-    )
-    .slice(0, 4);
+  const eligibleRecentCaptures = useMemo(
+    () =>
+      captures
+        .filter(
+          capture =>
+            capture.evidenceStatus === 'valid' &&
+            capture.clip?.captureMode === 'automatic_pose_trigger',
+        )
+        .slice(0, 4),
+    [captures],
+  );
   const previousCaptureCount =
     practice.captureCount - practice.priorPeriodDelta.captureCount;
   const comparisonCopy =
@@ -1117,7 +1138,7 @@ const styles = StyleSheet.create({
   },
   rangeSlot: { width: 64 },
   rangeOption: {
-    minHeight: 38,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.pill,

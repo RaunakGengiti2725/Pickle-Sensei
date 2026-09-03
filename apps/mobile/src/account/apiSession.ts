@@ -66,3 +66,26 @@ export function subscribeToApiSession(
 ): () => void {
   return useApiSessionStore.subscribe(state => listener(state.session));
 }
+
+type ApiUnauthorizedListener = (session: ApiSession) => void;
+
+let unauthorizedListener: ApiUnauthorizedListener | null = null;
+
+/** Installed by the auth store; receives the session whose bearer the API
+ * rejected so it can re-establish or end the signed-in state. */
+export function setApiUnauthorizedListener(
+  listener: ApiUnauthorizedListener | null,
+): void {
+  unauthorizedListener = listener;
+}
+
+/**
+ * API clients call this after a 401. Only a rejection of the bearer that is
+ * still current counts; late responses for an already replaced or cleared
+ * session are ignored so one expiry cannot tear down its successor.
+ */
+export function reportApiUnauthorized(bearerToken: string): void {
+  const session = getApiSession();
+  if (!session || session.bearerToken !== bearerToken) return;
+  unauthorizedListener?.(session);
+}

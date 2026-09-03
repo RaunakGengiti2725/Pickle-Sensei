@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Linking, View } from 'react-native';
+import { Alert, Linking, View } from 'react-native';
 import {
   NavigationContainer,
   DefaultTheme,
@@ -59,6 +59,17 @@ function CoachActionPortal() {
   return <View />;
 }
 
+async function openLegalPage(label: string, url: string): Promise<void> {
+  try {
+    await Linking.openURL(url);
+  } catch {
+    Alert.alert(
+      `${label} could not be opened`,
+      `Your phone could not open the page. You can read it in a browser at ${url}`,
+    );
+  }
+}
+
 function PaywallRoute({
   navigation,
 }: NativeStackScreenProps<RootStackParams, 'Paywall'>) {
@@ -70,10 +81,16 @@ function PaywallRoute({
       onClose={() => navigation.goBack()}
       onPurchased={() => navigation.goBack()}
       {...(legalTermsUrl
-        ? { onOpenTerms: () => void Linking.openURL(legalTermsUrl) }
+        ? {
+            onOpenTerms: () =>
+              void openLegalPage('Terms of use', legalTermsUrl),
+          }
         : {})}
       {...(legalPrivacyUrl
-        ? { onOpenPrivacy: () => void Linking.openURL(legalPrivacyUrl) }
+        ? {
+            onOpenPrivacy: () =>
+              void openLegalPage('Privacy policy', legalPrivacyUrl),
+          }
         : {})}
     />
   );

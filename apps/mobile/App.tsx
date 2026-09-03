@@ -7,6 +7,7 @@ import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { WelcomeScreen } from './src/screens/WelcomeScreen';
 import { SignInScreen } from './src/screens/SignInScreen';
 import { SplashScreen } from './src/screens/SplashScreen';
+import { ErrorState, LoadingState } from './src/design/components';
 import { color } from './src/design/tokens';
 import { useAppStore } from './src/state/appStore';
 import { useAuthStore } from './src/auth/authStore';
@@ -45,6 +46,61 @@ stabilitySlo.setContext({
 });
 stabilitySlo.record({ kind: 'session_started' });
 
+/** Stable, stack-body-free fingerprint of a caught render error. */
+function crashFingerprint(error: unknown): string {
+  const message =
+    error instanceof Error
+      ? `${error.name}:${error.message}:${(error.stack ?? '').split('\n')[1]?.trim() ?? ''}`
+      : String(error);
+  let hash = 2166136261;
+  for (let i = 0; i < message.length; i += 1) {
+    hash ^= message.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+/**
+ * Last line of defense: a render/effect throw anywhere below unmounts the
+ * whole tree in Release and terminates the process. Catch it, record a
+ * non-fatal crash for the stability SLO, and offer an honest retry that
+ * remounts the gate instead of leaving a dead app.
+ */
+export class RootErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { caught: boolean }
+> {
+  state = { caught: false };
+
+  static getDerivedStateFromError() {
+    return { caught: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    stabilitySlo.record({
+      kind: 'crash',
+      fatal: false,
+      fingerprint: crashFingerprint(error),
+    });
+  }
+
+  private readonly retry = () => this.setState({ caught: false });
+
+  render() {
+    if (this.state.caught) {
+      return (
+        <ErrorState
+          dark
+          title="Something went wrong"
+          detail="Pickle Sensei hit an unexpected problem on this screen. Try again to reload it."
+          onRetry={this.retry}
+        />
+      );
+    }
+    return this.props.children;
+  }
+}
+
 /**
  * Launch → onboarding (pre-auth) → account (Apple/Google) → app. The
  * questionnaire runs BEFORE the login flow and the primary CTA always leads
@@ -61,6 +117,7 @@ function Gate() {
   const appHydrated = useAppStore(s => s.hydrated);
   const appOwnerKey = useAppStore(s => s.ownerKey);
   const profile = useAppStore(s => s.profile);
+  const hydrateError = useAppStore(s => s.hydrateError);
   const hydrateApp = useAppStore(s => s.hydrate);
   const authHydrated = useAuthStore(s => s.hydrated);
   const session = useAuthStore(s => s.session);
@@ -132,8 +189,16 @@ function Gate() {
   }, [mainAppVisible, maybeShowWalkthrough]);
 
   // Rendered under the splash so the first screen is already painted by the
-  // time the overlay clears — the handoff is a fade, not a swap.
-  const content = !ready ? null : !session ? (
+  // time the overlay clears — the handoff is a fade, not a swap. Every later
+  // owner change (sign-in, sign-out, guest) re-hydrates with the splash gone,
+  // so the not-ready state must paint a real loading affordance, never a
+  // bare surface.
+  const content = !ready ? (
+    <LoadingState
+      dark
+      label={session ? 'Loading your account' : 'Getting things ready'}
+    />
+  ) : !session ? (
     preAuthStage === 'signin' ? (
       <SignInScreen onBack={() => setPreAuthStage('welcome')} />
     ) : preAuthStage === 'onboarding' ? (
@@ -148,6 +213,13 @@ function Gate() {
         onSignIn={() => setPreAuthStage('signin')}
       />
     )
+  ) : !profile && hydrateError ? (
+    <ErrorState
+      dark
+      title="Your coaching profile couldn’t load"
+      detail={hydrateError}
+      onRetry={() => void hydrateApp()}
+    />
   ) : !profile ? (
     <OnboardingScreen />
   ) : (
@@ -178,7 +250,9 @@ export default function App() {
     <SafeAreaProvider>
       <QueryClientProvider client={queryClient}>
         <StatusBar barStyle="dark-content" />
-        <Gate />
+        <RootErrorBoundary>
+          <Gate />
+        </RootErrorBoundary>
       </QueryClientProvider>
     </SafeAreaProvider>
   );

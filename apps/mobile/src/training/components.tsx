@@ -192,42 +192,52 @@ export function PlanDrillCard(props: {
           <Icon name="arrow" size={18} color={color.inkSoft} />
         </PressableScale>
       ) : null}
-      <PressableScale
-        accessibilityLabel={
-          complete
-            ? `${drill.title} completion logged`
-            : `Confirm completion of ${drill.title}`
-        }
-        disabled={Boolean(complete) || props.busy || target === null}
-        onPress={props.onConfirmComplete}
-        style={[
-          styles.completionButton,
-          complete && styles.completionButtonDone,
-        ]}
-      >
-        <Icon
-          name={complete ? 'check' : 'plus'}
-          size={18}
-          color={complete ? color.good : color.onDark}
-        />
-        <Text
-          style={[
-            type.bodyBold,
-            { color: complete ? color.good : color.onDark },
-          ]}
-        >
-          {complete
-            ? complete.qualifiesForStreak
-              ? 'Completed · streak credit earned'
-              : 'Completion logged'
-            : `I completed ${target ?? 'this prescription'}`}
+      {complete || target !== null ? (
+        <>
+          <PressableScale
+            accessibilityLabel={
+              complete
+                ? `${drill.title} completion logged`
+                : `Confirm completion of ${drill.title}`
+            }
+            disabled={Boolean(complete) || props.busy}
+            onPress={props.onConfirmComplete}
+            style={[
+              styles.completionButton,
+              complete && styles.completionButtonDone,
+            ]}
+          >
+            <Icon
+              name={complete ? 'check' : 'plus'}
+              size={18}
+              color={complete ? color.good : color.onDark}
+            />
+            <Text
+              style={[
+                type.bodyBold,
+                { color: complete ? color.good : color.onDark },
+              ]}
+            >
+              {complete
+                ? complete.qualifiesForStreak
+                  ? 'Completed · streak credit earned'
+                  : 'Completion logged'
+                : `I completed ${target}`}
+            </Text>
+          </PressableScale>
+          <Text style={[type.caption, styles.evidenceNote]}>
+            {complete
+              ? `Logged ${new Date(complete.completedAt).toLocaleDateString()}`
+              : 'Tap only after doing the prescribed work. The server records your confirmation as practice evidence.'}
+          </Text>
+        </>
+      ) : (
+        <Text style={[type.caption, styles.evidenceNote]}>
+          No sets, reps, or time were prescribed for this drill, so there is
+          nothing to log yet. Save it to revisit once a prescription is
+          attached.
         </Text>
-      </PressableScale>
-      <Text style={[type.caption, styles.evidenceNote]}>
-        {complete
-          ? `Logged ${new Date(complete.completedAt).toLocaleDateString()}`
-          : 'Tap only after doing the prescribed work. The server records your confirmation as practice evidence.'}
-      </Text>
+      )}
     </Card>
   );
 }

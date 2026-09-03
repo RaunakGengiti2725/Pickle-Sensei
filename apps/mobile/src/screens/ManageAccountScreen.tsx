@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Easing,
   Keyboard,
@@ -84,6 +85,10 @@ const DELETION_WANTED_OPTIONS: ReadonlyArray<{
 
 const SURVEY_QUESTION_COUNT = 2;
 
+/** The 36 pt header glyph buttons keep their compact look; the slop brings
+ * the touch target to the 44 pt minimum without changing the layout. */
+const HEADER_BUTTON_HIT_SLOP = 4;
+
 type DeleteAccountStep =
   | { phase: 'why' }
   | { phase: 'kept' }
@@ -157,6 +162,7 @@ function DialogHeader(props: {
           <PressableScale
             accessibilityLabel="Back to the previous question"
             disabled={props.disabled}
+            hitSlop={HEADER_BUTTON_HIT_SLOP}
             onPress={props.onBack}
             style={styles.headerButton}
           >
@@ -193,6 +199,7 @@ function DialogHeader(props: {
         <PressableScale
           accessibilityLabel={props.closeLabel}
           disabled={props.disabled}
+          hitSlop={HEADER_BUTTON_HIT_SLOP}
           onPress={props.onClose}
           style={styles.headerButton}
         >
@@ -254,6 +261,10 @@ function DeleteAccountDialog(props: {
   const [survey, setSurvey] = useState<AccountDeletionSurvey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Bumped every time the dialog closes: an async step that started in an
+  // earlier presentation must not mutate the state of a later (or closed)
+  // one, so every continuation checks it before touching state.
+  const presentationRef = useRef(0);
   const directionRef = useRef<PageDirection>('none');
   const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const entrance = useRef(new Animated.Value(0)).current;
@@ -267,6 +278,7 @@ function DeleteAccountDialog(props: {
 
   useEffect(() => {
     if (!props.visible) {
+      presentationRef.current += 1;
       stopCountdown();
       setStep({ phase: 'why' });
       setReason(null);
@@ -342,6 +354,7 @@ function DeleteAccountDialog(props: {
   };
 
   const beginRequest = async () => {
+    const presentation = presentationRef.current;
     setError(null);
     setStep({ phase: 'requesting' });
     try {
@@ -349,6 +362,7 @@ function DeleteAccountDialog(props: {
         getApiSession(),
         survey,
       );
+      if (presentation !== presentationRef.current) return;
       const secondsLeft = Math.ceil(DELETE_ARM_DELAY_MS / 1000);
       setStep({ phase: 'armed', challenge, secondsLeft });
       timerRef.current = setInterval(() => {
@@ -362,6 +376,7 @@ function DeleteAccountDialog(props: {
         });
       }, 1_000);
     } catch (e) {
+      if (presentation !== presentationRef.current) return;
       setStep({ phase: 'review' });
       setError(
         e instanceof AccountDeletionError
@@ -372,13 +387,21 @@ function DeleteAccountDialog(props: {
   };
 
   const confirmDeletion = async (challenge: string) => {
+    const presentation = presentationRef.current;
     setError(null);
     setStep({ phase: 'deleting', challenge });
     try {
       await confirmAccountDeletion(getApiSession(), challenge);
       props.onDeleted();
     } catch (e) {
-      setStep({ phase: 'armed', challenge, secondsLeft: 0 });
+      if (presentation !== presentationRef.current) return;
+      const canRetrySameChallenge =
+        e instanceof AccountDeletionError ? e.retryable : true;
+      setStep(
+        canRetrySameChallenge
+          ? { phase: 'armed', challenge, secondsLeft: 0 }
+          : { phase: 'review' },
+      );
       setError(
         e instanceof AccountDeletionError
           ? e.message
@@ -636,7 +659,9 @@ function DeleteAccountDialog(props: {
         style={styles.modalRoot}
       >
         <Pressable
+          accessibilityRole="button"
           accessibilityLabel="Cancel account deletion"
+          disabled={busy}
           onPress={busy ? undefined : props.onCancel}
           style={StyleSheet.absoluteFill}
         />
@@ -760,7 +785,15 @@ export function ManageAccountScreen() {
           // The server account is gone; unlike a plain sign-out this also
           // purges the deleted owner's local rows and fully disconnects the
           // provider SDK so nothing can silently restore a dead account.
-          void completeAccountDeletion();
+          void completeAccountDeletion().then(() => {
+            const cleanup = useAuthStore.getState().deletionCleanup;
+            if (cleanup?.localPurge === 'failed') {
+              Alert.alert(
+                'Account deleted',
+                'Your account and synced data were deleted. Some data saved on this phone could not be removed — delete the app to clear it.',
+              );
+            }
+          });
         }}
       />
     </SafeAreaView>
@@ -934,7 +967,7 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
   },
   textLink: {
-    minHeight: 40,
+    minHeight: 44,
     alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',

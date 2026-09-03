@@ -8,6 +8,7 @@ import type { AnalysisRecord } from '@pickle/swing-domain';
 import type { LocalDb } from './db';
 import { assertCapturedClip, type CapturedClip } from '../camera/capture';
 import { getActiveDataOwner, requireWritableDataOwner } from './accountScope';
+import { OUTBOX_MAX_ATTEMPTS } from './sync';
 import type { ScoredCheckpointFact } from '../library/libraryFocus';
 
 /**
@@ -835,6 +836,45 @@ export async function hasShotSyncReceipt(
     [owner, shotId],
   );
   return rows.length > 0;
+}
+
+export type ShotOutboxStatus =
+  | { state: 'absent' }
+  | {
+      state: 'queued' | 'rejected' | 'exhausted';
+      attempts: number;
+      lastError: string | null;
+    };
+
+/**
+ * Durable state of a shot's outbox row. `rejected` rows were declined by the
+ * server at least once but stay inside the retry budget; `exhausted` rows
+ * have spent it and are excluded from every future drain (see sync.ts).
+ */
+export async function getShotOutboxStatus(
+  db: LocalDb,
+  shotId: string,
+): Promise<ShotOutboxStatus> {
+  const owner = getActiveDataOwner();
+  const { rows } = await db.execute(
+    `SELECT attempts, last_error FROM outbox
+     WHERE owner_key = ? AND kind = 'shot.sync'
+       AND json_extract(payload, '$.id') = ?
+     ORDER BY id DESC LIMIT 1`,
+    [owner, shotId],
+  );
+  const row = rows[0];
+  if (!row) return { state: 'absent' };
+  const attempts = Number(row['attempts'] ?? 0);
+  const lastError =
+    typeof row['last_error'] === 'string' && row['last_error'].length > 0
+      ? row['last_error']
+      : null;
+  if (attempts >= OUTBOX_MAX_ATTEMPTS) {
+    return { state: 'exhausted', attempts, lastError };
+  }
+  if (attempts > 0) return { state: 'rejected', attempts, lastError };
+  return { state: 'queued', attempts, lastError };
 }
 
 export async function getKv(db: LocalDb, key: string): Promise<string | null> {
