@@ -1,5 +1,6 @@
 // Public legal documents served by the API function (no auth):
 //
+//   GET /support — customer support and troubleshooting information.
 //   GET /privacy — the privacy policy the App Store listing and the in-app
 //                  Privacy links point at.
 //   GET /terms   — service and subscription terms the paywall links to.
@@ -19,6 +20,72 @@ const LAST_UPDATED = "September 2, 2026";
 const SUPPORT_EMAIL = "picklesenseidev@gmail.com";
 const LEGAL_OWNER = "Raunak Gengiti";
 const CONTACT_ADDRESS = "6737 Elegante Way, San Diego, California 92130, United States";
+
+export const SUPPORT_TEXT = `PICKLE SENSEI SUPPORT
+Last updated: ${LAST_UPDATED}
+
+Pickle Sensei is supported by ${LEGAL_OWNER}.
+
+CONTACT
+
+For account access, purchases, technical problems, privacy requests, or other
+questions, email ${SUPPORT_EMAIL}.
+
+Please include the app version shown in Settings and a short description of
+what happened. Do not email passwords, Apple or Google sign in codes, payment
+card details, or private court videos.
+
+
+ACCOUNT ACCESS
+
+Pickle Sensei uses Sign in with Apple or Sign in with Google. It does not use
+a separate Pickle Sensei password. If sign in fails, confirm that the device
+has internet access and that the selected provider account is available on
+the device, then try again.
+
+
+PURCHASES
+
+Open Settings, then Membership, to view access or restore purchases. Purchases
+and refunds are processed by Apple. A subscription must be managed or canceled
+in Apple Account settings. Deleting the app or deleting a Pickle Sensei account
+does not cancel an Apple subscription.
+
+
+CAMERA AND ANALYSIS
+
+For live analysis, allow camera access, place the iPhone in portrait at about
+waist height, tap record, step into the guide, and perform one pickleball
+stroke. The player should remain visible from head to feet. The reviewer may
+tap Stop and Analyze after the stroke. If the app cannot validate the movement,
+it explains that no score was produced and a free rating is not used.
+
+For an existing clip, open Coach, choose Import Video, and select a short video
+that clearly shows one player performing one stroke.
+
+Camera video and body pose processing stay on the device. Raw court video is
+not uploaded to Pickle Sensei servers.
+
+
+ACCOUNT DELETION AND PRIVACY
+
+To permanently delete a synced account, open Settings, Account, Manage account,
+then Delete account. The exit survey is optional and may be skipped. Deleting
+an account does not cancel an Apple subscription.
+
+Privacy Policy:
+https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api/privacy
+
+Terms of Use:
+https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api/terms
+
+
+MAILING ADDRESS
+
+${LEGAL_OWNER}
+${CONTACT_ADDRESS}
+${SUPPORT_EMAIL}
+`;
 
 export const PRIVACY_POLICY_TEXT = `PICKLE SENSEI — PRIVACY POLICY
 Last updated: ${LAST_UPDATED}

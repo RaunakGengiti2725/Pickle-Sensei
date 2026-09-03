@@ -90,9 +90,9 @@ Hard rules for the agent filling this in:
 - [ ] `VERIFY:` App record exists (it does: "1.0 Prepare for Submission" is
       visible), bundle ID `com.picklesensei`, SKU fixed at creation (cannot
       change).
-- [ ] `HUMAN:` Copy the numeric **Apple ID** from App Information → General and
-      paste it into `apps/mobile/src/config/runtimeConfig.ts` as
-      `APP_STORE_ID = '<digits>'` **before the release archive is built**. This
+- [x] `VERIFY:` Apple ID `6806918402` is set in
+      `apps/mobile/src/config/runtimeConfig.ts` before the release archive is
+      built. This
       turns Settings → "Rate Pickle Sensei" into a write-review deep link and
       stops the per-analysis prompt once someone rates.
 - [ ] `VERIFY:` Users and Access → Integrations → **App Store Connect API** key
@@ -148,15 +148,12 @@ Hard rules for the agent filling this in:
 
 ### 2.5 Code and configuration changes still needed
 
-- [ ] `HUMAN:` **Support URL.** ASC requires a working Support URL and the app
-      has no website yet. Options, in order of preference: (a) publish the
-      marketing site from `website-brief.md` with a `/support` section listing
-      the email and FAQ; (b) a one-page hosted support page (GitHub Pages,
-      Notion public page, Carrd) titled "Pickle Sensei Support" with the email
-      `picklesenseidev@gmail.com`, a short FAQ, and links to the privacy/terms
-      URLs. Do not use the plain-text privacy URL as the support URL; App Review
-      checks that support pages actually offer support.
-- [ ] `HUMAN:` Set `APP_STORE_ID` (see §2.2).
+- [x] `VERIFY:` **Support URL.** The dedicated public support page is live at
+      `https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api/support`. It
+      includes the real support email, owner and mailing address, account and
+      purchase help, capture troubleshooting, account deletion instructions,
+      and links to the Privacy Policy and Terms of Use.
+- [x] `VERIFY:` `APP_STORE_ID` is set to `6806918402` (see §2.2).
 - [x] Code: `ios/PickleSensei/PrivacyInfo.xcprivacy` mirrors the app's collected
       data types and declares RevenueCat-linked User ID and Purchase History for
       App Functionality + Analytics. `HUMAN:` make the App Store Connect privacy
@@ -650,13 +647,13 @@ videos in `drillMedia.ts`), import video (`importStrokeVideo`), reminders
 
 ### 11.5 URLs, version, copyright
 
-| Field                     | Value                                                                                                                                                                                                                               |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Support URL               | `HUMAN:` the support page from §2.5. Required. Apple: "This URL must lead to actual contact information (legal address, email address, telephone number), as may be required by local law." Include the full protocol (`https://`). |
-| Marketing URL             | `SKIP:` until the marketing site exists; then the site root.                                                                                                                                                                        |
-| Version                   | `ENTER:` `1.0` (must equal `MARKETING_VERSION` in the uploaded build)                                                                                                                                                               |
-| Copyright                 | `ENTER:` `2026 <legal name exactly as it appears on your Apple Developer Program membership>` (e.g. `2026 Raunak Gengiti`). `HUMAN:` confirm the legal name. No © symbol needed.                                                    |
-| Routing App Coverage File | `SKIP:` (navigation apps only)                                                                                                                                                                                                      |
+| Field                     | Value                                                                                                                                                                            |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Support URL               | `ENTER:` `https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api/support`                                                                                                     |
+| Marketing URL             | `SKIP:` until the marketing site exists; then the site root.                                                                                                                     |
+| Version                   | `ENTER:` `1.0` (must equal `MARKETING_VERSION` in the uploaded build)                                                                                                            |
+| Copyright                 | `ENTER:` `2026 <legal name exactly as it appears on your Apple Developer Program membership>` (e.g. `2026 Raunak Gengiti`). `HUMAN:` confirm the legal name. No © symbol needed. |
+| Routing App Coverage File | `SKIP:` (navigation apps only)                                                                                                                                                   |
 
 ### 11.6 In-App Purchases and Subscriptions (attach to this version)
 

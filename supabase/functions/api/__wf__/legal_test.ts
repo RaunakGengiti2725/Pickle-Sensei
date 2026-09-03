@@ -2,7 +2,7 @@
 //   deno test --allow-all --no-check --node-modules-dir=none supabase/functions/api/__wf__/
 
 import { assert, assertMatch, assertStringIncludes } from "jsr:@std/assert@1";
-import { PRIVACY_POLICY_TEXT, TERMS_TEXT } from "../legal.ts";
+import { PRIVACY_POLICY_TEXT, SUPPORT_TEXT, TERMS_TEXT } from "../legal.ts";
 
 const SUPPORT_EMAIL = "picklesenseidev@gmail.com";
 const LEGAL_OWNER = "Raunak Gengiti";
@@ -20,6 +20,24 @@ Deno.test("both documents identify the service and expose the same real support 
     assertStringIncludes(text, CONTACT_ADDRESS);
     assert(!/example\.com|TODO|TBD|lorem|insert (name|address)/i.test(text));
   }
+});
+
+Deno.test("support page provides real contact, troubleshooting, and account deletion help", () => {
+  const text = flat(SUPPORT_TEXT);
+  for (const needle of [
+    SUPPORT_EMAIL,
+    LEGAL_OWNER,
+    CONTACT_ADDRESS,
+    "Sign in with Apple or Sign in with Google",
+    "restore purchases",
+    "Stop and Analyze",
+    "Deleting an account does not cancel an Apple subscription",
+    "/privacy",
+    "/terms",
+  ]) {
+    assertStringIncludes(text, needle);
+  }
+  assert(!/example\.com|TODO|TBD|lorem/i.test(SUPPORT_TEXT));
 });
 
 Deno.test(
@@ -161,7 +179,7 @@ Deno.test("legal text contains no control or bidi characters (served as text/pla
     (cp >= 0x200b && cp <= 0x200f) ||
     (cp >= 0x202a && cp <= 0x202e) ||
     (cp >= 0x2066 && cp <= 0x2069);
-  for (const text of [PRIVACY_POLICY_TEXT, TERMS_TEXT]) {
+  for (const text of [SUPPORT_TEXT, PRIVACY_POLICY_TEXT, TERMS_TEXT]) {
     for (const ch of text) {
       assert(!isBad(ch.codePointAt(0) ?? 0), `bad char U+${ch.codePointAt(0)?.toString(16)}`);
     }

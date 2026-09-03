@@ -43,7 +43,8 @@
 //
 //   Public (no auth):
 //   GET  /healthz               → { ok: true } (monitoring + load tests)
-//   GET  /privacy, /terms       → hosted legal documents (legal.ts; plain
+//   GET  /support, /privacy,
+//        /terms                 → hosted support/legal documents (legal.ts; plain
 //                                text — the gateway sandboxes HTML on
 //                                *.supabase.co)
 //   POST /webhooks/revenuecat   → billing webhook (shared-secret gated;
@@ -88,7 +89,7 @@ import {
   legalTextResponse,
   sanitizeUserText,
 } from "./http.ts";
-import { PRIVACY_POLICY_TEXT, TERMS_TEXT } from "./legal.ts";
+import { PRIVACY_POLICY_TEXT, SUPPORT_TEXT, TERMS_TEXT } from "./legal.ts";
 import {
   ExternalAccountError,
   decryptAppleRefreshToken,
@@ -2811,6 +2812,16 @@ async function handleRequest(request: Request): Promise<Response> {
     );
     if (!rl.allowed) return rateLimitResponse(rl);
     return json(200, { ok: true });
+  }
+  if (request.method === "GET" && url.pathname.endsWith("/support")) {
+    const rl = await enforceRateLimit(
+      "legal",
+      ip,
+      PUBLIC_PAGE_LIMIT.limit,
+      PUBLIC_PAGE_LIMIT.windowSeconds,
+    );
+    if (!rl.allowed) return rateLimitResponse(rl);
+    return legalTextResponse(SUPPORT_TEXT);
   }
   if (request.method === "GET" && url.pathname.endsWith("/privacy")) {
     const rl = await enforceRateLimit(

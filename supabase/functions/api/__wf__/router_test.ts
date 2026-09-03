@@ -48,7 +48,7 @@ function profileResponder() {
 }
 
 Deno.test({
-  name: "public routes: healthz/privacy/terms answer without auth, with hardening headers",
+  name: "public routes: healthz/support/privacy/terms answer without auth, with hardening headers",
   sanitizeOps: false,
   sanitizeResources: false,
   async fn() {
@@ -58,6 +58,11 @@ Deno.test({
     assertEquals(await health.json(), { ok: true });
     assertEquals(health.headers.get("cache-control"), "no-store");
     assertEquals(health.headers.get("x-content-type-options"), "nosniff");
+
+    const support = await fetch(`${API_BASE}/functions/v1/api/support`);
+    assertEquals(support.status, 200);
+    assertEquals(support.headers.get("content-type"), "text/plain; charset=utf-8");
+    assertStringIncludes(await support.text(), "picklesenseidev@gmail.com");
 
     const privacy = await fetch(`${API_BASE}/functions/v1/api/privacy`);
     assertEquals(privacy.status, 200);

@@ -58,9 +58,9 @@ const GOOGLE_WEB_CLIENT_ID: string | null =
 const APP_VERSION = '1.0';
 
 // Numeric Apple app id from App Store Connect (App Information → General →
-// Apple ID). Stays null until the ASC app record exists; setting it turns
-// Settings' "Rate Pickle Sensei" row into a direct write-review deep link.
-const APP_STORE_ID: string | null = null;
+// Apple ID). Settings' "Rate Pickle Sensei" row uses it for the direct
+// write-review deep link.
+const APP_STORE_ID: string | null = '6806918402';
 
 export function getRuntimePublicConfig(): RuntimePublicConfig {
   const revenueCatPublicSdkKey =
