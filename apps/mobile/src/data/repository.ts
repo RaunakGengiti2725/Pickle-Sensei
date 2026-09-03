@@ -578,6 +578,28 @@ export async function setCaptureTargetSeed(
   );
 }
 
+/**
+ * Replaces the stored clip payload after MEASURED evidence was added to it —
+ * today the imported-video pose extraction. Without this, an import's
+ * exoskeleton existed only for the analysis run that measured it: the row
+ * kept the pre-extraction payload, so the Form Review reopened later had no
+ * pose sequence to draw. Only a clip that passed the strict parser reaches
+ * this function (the caller built it from a validated clip plus the native
+ * extraction result); the row's identity columns are not touched.
+ */
+export async function updateCaptureClipPayload(
+  db: LocalDb,
+  captureId: string,
+  clip: CapturedClip,
+): Promise<void> {
+  const owner = requireWritableDataOwner();
+  await db.execute(
+    `UPDATE local_capture SET payload = ?
+     WHERE owner_key = ? AND id = ?`,
+    [JSON.stringify(clip), owner, captureId],
+  );
+}
+
 export async function getCaptureTargetSeed(
   db: LocalDb,
   captureId: string,

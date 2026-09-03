@@ -352,12 +352,16 @@ export type CameraEvent =
   | (CameraEventBase & {
       type: 'session';
       /**
-       * `composing` — camera live, nothing recorded yet (shutter shown);
-       * `recording_started` — the user pressed the shutter and the rolling
-       * spool began; `recording_stopped` — the spool was discarded and the
-       * camera returned to composing (`reason`: user_stopped |
-       * observation_timeout | no_stroke_detected). `observing`/`armed`/
-       * `disarmed` keep their pre-shutter-era meanings.
+       * `composing` — camera live, nothing recorded yet (record shutter
+       * shown); `recording_started` — the rolling spool began (`reason`:
+       * shutter | spool_restart); `recording_stopped` — a spool file was
+       * dropped (`reason`: observation_timeout | no_stroke_detected — replaced
+       * in place, the athlete never sees a gap — or user_stopped — stop with
+       * no swing found, back to composing); `manual_stop_requested` /
+       * `manual_stop_no_motion` — the STOP & ANALYZE button was pressed and,
+       * in the latter case, no swing-like window existed in the retained pose
+       * history. `armed`/`disarmed` describe the BODY TRACKED status only —
+       * the trigger is never gated on it.
        */
       state:
         | 'configured'
@@ -366,6 +370,8 @@ export type CameraEvent =
         | 'observing'
         | 'recording_started'
         | 'recording_stopped'
+        | 'manual_stop_requested'
+        | 'manual_stop_no_motion'
         | 'armed'
         | 'disarmed'
         | 'interrupted'
@@ -390,6 +396,12 @@ export type CameraEvent =
       peakMotionTimestampMs?: number;
       confidence: number;
       detectionModelVersion: string;
+      /**
+       * `manual_stop` — the window came from STOP & ANALYZE's offline pass
+       * over the retained pose history (its `detectionModelVersion` carries
+       * a `/manual-stop-relaxed-1` suffix); absent for the live trigger.
+       */
+      source?: 'manual_stop';
       recognition: StrokeRecognition;
     })
   | (CameraEventBase & {

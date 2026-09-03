@@ -2133,25 +2133,34 @@ async function handleRevenueCatWebhook(request: Request): Promise<Response> {
 
 const DELETE_CONFIRM_MIN_AGE_MS = 3_000;
 
-/** Exit-survey vocabulary — mirrors apps/mobile/src/account/deletion.ts
- * ACCOUNT_DELETION_REASONS verbatim. The database bounds only the length
- * (20260902000000_account_deletion_feedback.sql), so this set is the
- * authority; an unknown reason drops the survey, never the deletion. */
+/** Exit-survey vocabularies — mirror apps/mobile/src/account/deletion.ts
+ * ACCOUNT_DELETION_REASONS / ACCOUNT_DELETION_WANTED verbatim. The database
+ * bounds only the length (20260902000000 + 20260902120000), so these sets
+ * are the authority; an unknown reason drops the survey and an unknown
+ * "wanted" drops just that answer — never the deletion. */
 const DELETION_SURVEY_REASONS = new Set([
   "not_using",
   "not_helpful",
   "scores_inaccurate",
   "technical_issues",
   "too_expensive",
-  "switching",
   "privacy",
   "other",
+]);
+const DELETION_SURVEY_WANTED = new Set([
+  "accuracy",
+  "price",
+  "content",
+  "stability",
+  "switched",
+  "nothing",
 ]);
 const DELETION_SURVEY_DETAILS_MAX = 500;
 const DELETION_SURVEY_PLATFORMS = new Set(["ios", "android"]);
 
 interface DeletionSurvey {
   reason: string;
+  wanted: string | null;
   details: string | null;
   platform: string | null;
   appVersion: string | null;
@@ -2168,6 +2177,7 @@ function parseDeletionSurvey(body: Record<string, unknown>): DeletionSurvey | nu
     console.warn("[api] delete-request: exit survey ignored (unknown reason)");
     return null;
   }
+  const wanted = survey.wanted;
   const details =
     typeof survey.details === "string"
       ? sanitizeUserText(survey.details, DELETION_SURVEY_DETAILS_MAX)
@@ -2177,6 +2187,7 @@ function parseDeletionSurvey(body: Record<string, unknown>): DeletionSurvey | nu
     typeof survey.appVersion === "string" ? sanitizeUserText(survey.appVersion, 64) : "";
   return {
     reason,
+    wanted: typeof wanted === "string" && DELETION_SURVEY_WANTED.has(wanted) ? wanted : null,
     details: details.length > 0 ? details : null,
     platform:
       typeof platform === "string" && DELETION_SURVEY_PLATFORMS.has(platform) ? platform : null,
@@ -2209,6 +2220,7 @@ async function recordDeletionSurvey(authed: AuthedUser, survey: DeletionSurvey):
   const inserted = await authed.db.from("account_deletion_feedback").insert({
     user_id: authed.id,
     reason: survey.reason,
+    wanted: survey.wanted,
     details: survey.details,
     provider: authed.provider,
     platform: survey.platform,

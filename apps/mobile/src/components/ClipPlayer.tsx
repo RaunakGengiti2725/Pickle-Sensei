@@ -26,6 +26,10 @@ interface ClipLoadEvent {
   nativeEvent: { durationMs: number };
 }
 
+interface ClipErrorEvent {
+  nativeEvent: { message?: string };
+}
+
 /** How the video fills its view: 'cover' crops to fill (the replay card
  * default), 'contain' letterboxes so every pixel — and every overlay drawn
  * in video coordinates — stays visible. */
@@ -43,6 +47,7 @@ interface NativeClipPlayerProps {
   onClipProgress?: (event: ClipProgressEvent) => void;
   onClipLoad?: (event: ClipLoadEvent) => void;
   onClipEnd?: () => void;
+  onClipError?: (event: ClipErrorEvent) => void;
 }
 
 const NATIVE_COMPONENT = 'PickleClipPlayerView';
@@ -82,6 +87,8 @@ export function ClipPlayer(props: {
   onProgress?: (positionMs: number) => void;
   onLoad?: (durationMs: number) => void;
   onEnd?: () => void;
+  /** The file could not be opened or decoded; nothing will ever render. */
+  onError?: (message: string) => void;
 }) {
   const resizeMode: ClipResizeMode = props.resizeMode ?? 'cover';
   if (!NativeClipPlayer) {
@@ -109,6 +116,9 @@ export function ClipPlayer(props: {
       onClipProgress={event => props.onProgress?.(event.nativeEvent.positionMs)}
       onClipLoad={event => props.onLoad?.(event.nativeEvent.durationMs)}
       onClipEnd={() => props.onEnd?.()}
+      onClipError={event =>
+        props.onError?.(event.nativeEvent.message ?? 'unreadable')
+      }
     />
   );
 }

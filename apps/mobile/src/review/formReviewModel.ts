@@ -793,11 +793,19 @@ const DIRECTION_PHRASES: Record<FaultDirection, string> = {
   none: 'held its target',
 };
 
+/** The measured-direction phrase alone ("contact came late"). An unknown
+ * direction (unvalidated JSON) reads as off target. */
+export function directionPhrase(direction: FaultDirection): string {
+  const phrase: string | undefined = DIRECTION_PHRASES[direction];
+  return phrase ?? 'was off target';
+}
+
 /** "<Name> scored <round(score)> — <direction phrase>", from the record's
- * own numbers. An unknown direction (unvalidated JSON) reads as off target. */
+ * own numbers. */
 export function stopHeadline(cp: ReviewStopCheckpoint): string {
-  const phrase: string | undefined = DIRECTION_PHRASES[cp.direction];
-  return `${cp.name} scored ${Math.round(cp.score)} — ${phrase ?? 'was off target'}`;
+  return `${cp.name} scored ${Math.round(cp.score)} — ${directionPhrase(
+    cp.direction,
+  )}`;
 }
 
 // ─── Script assembly ────────────────────────────────────────────────────────

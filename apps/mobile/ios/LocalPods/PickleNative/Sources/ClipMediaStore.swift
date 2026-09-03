@@ -39,6 +39,32 @@ enum ClipMediaStore {
     }
   }
 
+  /// Stored capture payloads carry ABSOLUTE `file://` URLs, but iOS relocates
+  /// the app's data container (`…/Containers/Data/Application/<UUID>/…`)
+  /// between installs — on every Xcode build in practice — while keeping the
+  /// files inside it. An older clip, poster or pose sidecar therefore points
+  /// at a path that no longer exists even though the bytes are still here.
+  /// Every native reader resolves through this: the recorded URL when it
+  /// still exists; else the SAME file name inside today's Captures directory
+  /// when that exists (names are UUID-based, so the match is exact); else the
+  /// recorded URL unchanged so the caller fails honestly.
+  static func resolveCaptureURL(fromStoredUri uri: String) -> URL? {
+    guard let stored = fileURL(from: uri) else { return nil }
+    if FileManager.default.fileExists(atPath: stored.path) { return stored }
+    guard
+      stored.deletingLastPathComponent().lastPathComponent == "Captures",
+      let directory = try? capturesDirectory
+    else { return stored }
+    let relocated = directory.appendingPathComponent(stored.lastPathComponent)
+    return FileManager.default.fileExists(atPath: relocated.path) ? relocated : stored
+  }
+
+  static func fileURL(from uri: String) -> URL? {
+    if uri.hasPrefix("file://") { return URL(string: uri) }
+    if uri.hasPrefix("/") { return URL(fileURLWithPath: uri) }
+    return URL(string: uri)
+  }
+
   static func makeObservationURL() throws -> URL {
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("PickleSensei-Observation", isDirectory: true)

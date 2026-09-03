@@ -51,5 +51,7 @@ class ClipPlayerViewManager : SimpleViewManager<ClipPlayerView>() {
       MapBuilder.of("registrationName", "onClipLoad"),
       "onClipEnd",
       MapBuilder.of("registrationName", "onClipEnd"),
+      "onClipError",
+      MapBuilder.of("registrationName", "onClipError"),
     )
 }

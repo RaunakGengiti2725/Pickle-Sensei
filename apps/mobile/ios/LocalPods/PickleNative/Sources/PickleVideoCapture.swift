@@ -134,7 +134,12 @@ final class PickleVideoCapture: RCTEventEmitter, PHPickerViewControllerDelegate 
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
     DispatchQueue.global(qos: .userInitiated).async {
-      guard let url = URL(string: uri), url.isFileURL else {
+      // A sidecar recorded before a rebuild names the OLD container path;
+      // resolve it into today's Captures directory before the storage guard.
+      guard
+        let url = ClipMediaStore.resolveCaptureURL(fromStoredUri: uri),
+        url.isFileURL
+      else {
         reject("file.invalid_uri", "Only file:// URIs can be read.", nil)
         return
       }

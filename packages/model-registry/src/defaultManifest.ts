@@ -72,7 +72,7 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
     {
       ...CODE_PROVIDER_LINEAGE,
       id: "trigger.temporal-heuristic",
-      version: "temporal-stroke-heuristic-2",
+      version: "temporal-stroke-heuristic-4",
       task: "stroke_trigger",
       runtime: "deterministic",
       executionTarget: "on_device",
@@ -80,7 +80,8 @@ export const DEFAULT_MODEL_MANIFEST: ModelManifest = {
       supportedPlatforms: ["ios", "android"],
       supportedStrokes: "all",
       supportedCaptureEnvelope: CAPTURE_ENVELOPE,
-      notes: "Wrist-kinematics clip trigger. Detects THAT motion happened, never names it.",
+      notes:
+        "Wrist-kinematics clip trigger: hip-relative wrist speed in body-heights/s (distance-invariant since v3, walking-proof since v4: quiet onset + path gate). Detects THAT motion happened, never names it.",
     },
     {
       ...CODE_PROVIDER_LINEAGE,

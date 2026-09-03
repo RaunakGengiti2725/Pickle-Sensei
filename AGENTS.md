@@ -149,6 +149,22 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   still preferred — the fallback only covers subscriber reads.
 - `public.billing_entitlements` is written ONLY by the edge function via
   service role. Never add user INSERT/UPDATE policies to it.
+- Free-rating ledger freshness (2026-09-02): `accessStore.canonicalAccess`
+  is a server snapshot, and `GET /v1/me/access` derives `used` from SYNCED
+  scored shots and `reserved` from live permits — so it goes stale the
+  moment a scoring run starts and nothing in the store refreshes it by
+  itself. Two hooks keep it honest: SettingsScreen `useFocusEffect` →
+  `refreshAccess()` on every visit for synced (non-`localOnly`) sessions
+  (skipped while a load is in flight; the old value stays on screen until
+  the new one lands), and AnalyzeScreen re-reads it in its UNMOUNT cleanup
+  once a run called `runCaptureAnalysis` — never while mounted, because
+  `useRatingRouteGate` replaces a mounted screen whose `canStartRating`
+  flips false and would tear down the "last free analysis" prompt. The
+  Settings membership row words "N free ratings left" from
+  `canStartRating` / `freeRatings.availableToReserve`, NOT `remaining`: a
+  scored shot whose permit is still syncing has already spent its rating.
+  Pinned in `__tests__/settingsMembershipRow.test.tsx` and
+  `__tests__/analyzeScreenAccessRefresh.test.tsx`.
 
 ## Typography canon (title roles must match EXACTLY across screens)
 
@@ -304,39 +320,143 @@ Owner-scoped kv namespaces (`profile`, `rank.celebrated`, `notifications`,
 `consistency`) are pinned in `repository.ts OWNER_SCOPED_KV_NAMESPACES` and
 purged together on account deletion — add new namespaces there.
 
-## Auto Analyze camera — record-button flow (iOS, 2026-09-01)
+## Auto Analyze camera — record button, then TRUE auto capture (iOS, 2026-09-02)
 
-`GuidedCaptureViewController.swift` is a camera app, not a wizard: the
-camera opens in `composing` (live preview + exoskeleton, NOTHING recorded),
-the translucent player silhouette (`CaptureSilhouette` imageset in the app's
-`Images.xcassets`, template image tinted white, alpha 0.3 → 0.14 as a body is
-tracked → hidden once locked; mirrored in RN as `assets/capture/silhouette*.png`
-for the Analyze landing preview) shows where to stand, and the ONE control is
-the `CaptureShutterButton` (white ring, volt core → red stop square). Shutter
-→ `startRecordingFromShutter()` starts the rolling spool + 55 s observation
-timer + REC chip; the athlete walks out; readiness copy is prominent; the
-trigger arms itself on a stable full-body read and the swing ends the clip
-(unchanged detector/export chain). Shutter again, the observation timeout, or
-the movie output's hard duration cap all return to `composing` with a
-transient notice via `endRecordingAndCompose` — the camera never closes with
-an error for "I need another go". Tapping the preview to mark a start spot is
-OPTIONAL (crowded courts) and only while composing; the D-027 occupancy lock
-runs once recording starts. Invariants: discard a spool ONLY through
-`CameraEngine.discardActiveRecording()` (decided on the session queue against
-`movieOutput.isRecording`, so the one-shot finish suppression can never
-outlive the recording it was meant for and swallow a later real capture);
-`recordingRequested` (shutter pressed) and `recordingStarted` (delegate
-fired) are separate flags — the trigger needs both; a `recordingAlreadyActive`
-start failure is retried after 150 ms (stop → immediate re-record). The
-silhouette band (head ≈18 %, shoes ≈86 % of the screen) and
-`PoseOverlayView.fixedFramingGuidePath` (y 15–89 %) are sized so a body
-matching the outline spans ≈0.5 of the frame shoulders→ankles, inside the
-readiness evaluator's 0.32–0.88 window. Overlay: heat glows are scaled by
+`GuidedCaptureViewController.swift` is a camera app, not a wizard. It opens
+in `composing` (live preview + exoskeleton, NOTHING recorded; the translucent
+player silhouette — `CaptureSilhouette` imageset, alpha 0.3 → 0.14 as a body
+is tracked → hidden once tracked-ready, mirrored in RN as
+`assets/capture/silhouette*.png` — shows where to stand). The ONE control is
+the `CaptureShutterButton`: record while composing
+(`startRecording(.initial)`: rolling spool + REC chip + 50 s timer, status
+"RECORDING / Step into the outline"), STOP & ANALYZE while recording. Product
+decisions pinned by field tests on 2026-09-02: (1) the athlete presses record
+— an auto-start on camera open was shipped for one build and rejected
+("started recording without me clicking"); (2) there is NO start-spot tap
+(removed; the primary-person rule + D-027 machinery stay inert unless a
+region is set, which nothing does now); (3) DETECTION IS NEVER GATED ON
+FRAMING — a field recording showed a swing going undetected because the
+athlete stood a step too far ("Move a little closer") and the trigger only
+armed on readiness `ready`. Now `considerTrigger` feeds the detector every
+trackable frame once `triggerWarmupMs` (1 s) of the file exists;
+`PoseReadinessEvaluator` only decides the status copy ("A little closer, then
+swing", …) and the BODY TRACKED state (`armed`, presentation + telemetry
+only, dropped after `armedLossFramesToDisarm` consecutive no-person/partial
+frames). STOP & ANALYZE (`captureFromStop`): an offline pass
+`TemporalStrokeDetector.strongestEvent(in:)` with the permissive
+`manualStopConfig` (v4 algorithm, pinned by vision-core tests) runs over the retained 15 s
+pose history — only poses inside the current file, excluding the final
+`manualStopApproachMs` (1.2 s, the walk to the phone) — and the strongest
+swing-like window becomes the stroke (`pendingStrokeIsManual`: provenance
+`<liveVersion>/manual-stop-relaxed-1` on BOTH trigger and evidence, no
+completion telemetry, `completionFinalize` at the stop); with no such window
+`stopRecordingWithoutCapture` discards through the engine's suppression and
+composes again with "No swing found — tap record and swing again".
+`CaptureEvidenceAccumulator` retention is 15 s to match. While recording,
+nothing returns the athlete to setup except their own stop: the 50 s
+observation timer restarts the spool in place via
+`flipCameraRestartingSpool(to: same position)` (engine-suppressed finish,
+REC timer untouched, detector reset so no event straddles files) and the
+movie output's 60 s hard cap does the same through `startRecording(.restart)`.
+Invariants: discard a spool ONLY through the engine's own suppression paths
+(`discardActiveRecording`, decided on the session queue against
+`movieOutput.isRecording`); `recordingRequested` (shutter) and
+`recordingStarted` (delegate fired) are separate flags — the trigger needs
+both; `startRecording` clears `discardRecordingOnFinish`; a
+`recordingAlreadyActive` start failure is retried after 150 ms. JS
+`CameraEvent.session` carries `recording_started(reason: shutter |
+spool_restart)`, `recording_stopped(reason)`, `manual_stop_requested`,
+`manual_stop_no_motion`; `stroke_detected` carries `source: 'manual_stop'`
+for the offline pass. Analyze landing copy: "Tap record. Swing once.";
+`ANALYZE_STEPS` 02 "Tap record to start" (the zero-handholding audit requires
+a "start" step whose detail mentions tap + walk).
+
+TOUCH OWNERSHIP (the camera once shipped "frozen" because of this): the
+preview carries a zoom `UIPinchGestureRecognizer`. UIKit exempts only its
+stock controls (UIButton, UISwitch, …) from a parent view's recognizers; our
+chrome is custom `UIControl`s, so without protection a recognizer claims
+every touch and CANCELS the control's touches — no button fires. Two layers
+keep every button alive and both must stay: the recognizers have
+`cancelsTouchesInView = false` and a delegate
+(`gestureRecognizer(_:shouldReceive:)`) that refuses touches beginning on
+any `UIControl` or chrome surface; and every custom control overrides
+`gestureRecognizerShouldBegin` to veto ancestor recognizers (UISlider's own
+trick). Never add a recognizer to the camera view without the delegate, and
+never replace the custom controls with plain `UIView`s + tap recognizers.
+
+PERFORMANCE + AUTO-CAPTURE RELIABILITY (2026-09-02, after "super laggy /
+not capturing"): `PoseOverlayView` is Core Animation ONLY — shape layers for
+bones/joints/limb heat/trails and one radial `CAGradientLayer` per joint glow,
+updated in a single `CATransaction` per pose frame. Never reintroduce
+`draw(_:)`/`setNeedsDisplay` rendering there: the old CPU path
+re-rasterized the full-screen 3× bitmap with ~90 radial gradients per frame
+and saturated the main thread. The controller feeds the overlay the RAW pose
+every frame (`update(pose:readinessState:jointCoverage:timestampMs:)`) so the
+exoskeleton snaps onto the body the instant Vision sees it, even on frames
+the readiness evaluator rejects; arming still goes through the evaluator.
+`updateCapturePresentation` runs per frame — labels/accessibility only
+change when the copy changed (`copyChanged`), the ISO formatter is a static,
+glass views set `shadowPath`. THREAD OWNERSHIP: the detector, readiness
+evaluator, evidence accumulator and every target-acquisition variable belong
+to `visionQueue`; main-thread code mutates them ONLY via `onVisionQueue {}`
+(`spotMarked` is the main-thread mirror), `finishSuccess` reads target
+telemetry via `visionQueue.sync` (never called from the vision queue). The
+occupancy hunt's second inference is throttled to ~10 Hz
+(`acquisitionScanIntervalMs`). Missed-capture fixes: a person-less frame no
+longer resets the detector (its ≤250 ms sample-gap rule already neutralizes
+gaps), and an armed capture tolerates `armedLossFramesToDisarm` (15 ≈ 0.5 s)
+consecutive `noPerson`/`fullBodyRequired` frames before disarming — a
+follow-through that clips the frame edge used to throw the stroke away. The
+observation timer is 50 s, 10 s under the engine's 60 s hard movie cap.
+`TemporalStrokeDetector` is v4 (`temporal-stroke-heuristic-4`, also in
+`packages/model-registry` defaultManifest; `swift test` in
+`native/vision-core` pins it — 31 detector tests). Wrist speed is
+HIP-RELATIVE ((wristΔ − hipMidΔ)/dt) in BODY-HEIGHTS/second (shoulder→ankle
+span, EMA-smoothed, hip×2.2 / last-known / 0.5 fallbacks; a frame without a
+visible hip yields NO speed sample, never absolute speed) so detection is
+invariant to distance, to walking (v3 fired on a walking athlete: body
+translation + arm swing crossed the trigger) and to camera bumps. "100 %
+sure it is a swing" is three gates, all required: QUIET ONSET — a candidate
+opens only if a run of ≥ `minQuietBeforeMs` (350 ms) at ≤ `quietWristSpeed`
+(0.45 bh/s) ended within `maxOnsetToTriggerMs` (1.2 s) of the crossing of
+`triggerWristSpeed` (1.15 bh/s; walking arm-swing is never quiet that long);
+CLOSE — ≤ `endWristSpeed` (0.5) continuously for `settledWindowMs` (160 ms)
+after `minStrokeMs` from the crossing; PATH — the swinging wrist travelled ≥
+`minWristPathBodyHeights` (0.3) relative to the hips, else silent drop. The
+emitted window is `startMs` = last quiet sample (onset, so it contains the
+ready position + backswing) … `endMs` = last settled sample (contains the
+tail) — deliberately, because the JS `GeometricPhaseSegmenter` rejects any
+window whose smoothed peak is < 2× its median speed ("no distinct stroke
+peak … idle movement" = the "Nothing was rated" screen) and v3's
+trigger-crossing→first-slow-sample windows were mostly fast. `manualStopConfig`
+(stop button's offline pass) is the same algorithm at trigger 0.8 / quiet
+250 ms / path 0.25. `PoseReadinessEvaluator` arms after 450 ms of stillness
+(was 700) with center travel ≤ 0.055 — presentation only.
+
+Chrome is OUR OWN, never UIKit's: no `UIVisualEffectView` materials, no
+`UIButton.Configuration`, no SF Symbols. `CaptureGlassView` (surfaceDark at
+60 % + hairline, continuous corners), `CaptureGlyphButton` (close / flip
+glyphs drawn as 1.8-pt round-cap paths in the icons.tsx 24-box language),
+`CaptureTextChip` (Manrope small caps: zoom presets, AUTO FRAME toggle),
+`CaptureShutterButton` (chalk ring, volt radial core → flame stop square), all
+in `GuidedCaptureViewController.swift`; colors come from
+`CaptureChromePalette` (token values). Layout is three zones that CANNOT
+overlap: top bar (close · zoom presets centered at default-high priority,
+pushed off the neighbours on narrow phones · REC chip at the right), a
+FIXED-HEIGHT (68 pt, one-line shrink-to-fit) left-aligned status card (state
+dot + kicker + instruction), and the bottom row (AUTO FRAME when supported ·
+STOP · flip, "Tap to stop and analyze" under the stop). The GUIDE BAND —
+silhouette + `PoseOverlayView.guideRect` brackets — is derived in
+`viewDidLayoutSubviews` from the laid-out card bottom and shutter top
+(`guideBand()`), never from screen percentages, so on a 6.1" phone it spans
+≈26–82 % and a body matching the outline is ≈0.4 of the frame
+shoulders→ankles (inside the readiness evaluator's 0.32–0.88 window). Keep
+every status string short enough for one line at 17 pt / 24 pt prominent
+(≈34 / 26 characters) — longer copy shrinks. Overlay: heat glows are scaled by
 `heatOpacity` (0.55) and drawn UNDER the exoskeleton (bones + joint nuclei,
 normal blend with a dark contour) — the heat marks motion, it never paints
-the athlete over. JS `CameraEvent.session` gained `composing` /
-`recording_started` / `recording_stopped(reason)`. Android's
-`GuidedCaptureActivity` still runs the older tap-to-start flow (not shipping).
+the athlete over. Android's `GuidedCaptureActivity` still runs the older
+tap-to-start flow (not shipping).
 
 ## iOS camera overlays (coordinate-space invariant)
 
@@ -391,21 +511,106 @@ rule; `facingSign` mirrors the feature extractor). `fixList` / `strengthList`
 feed `src/review/FixList.tsx` (What to fix, priority first) and the Result
 insight; `recommendedDrillsModel.ts` + `RecommendedDrills.tsx` fetch
 `GET /v1/catalog/drills?family=` and label the match honestly
-(`DRILL_MATCH_NOTE`). `screens/FormReviewScreen.tsx` (route `FormReview:
-{ analysisId }`) plays the clip through `ClipPlayer resizeMode="contain"`
-(+ `rate` for ¼×/½× — both props exist on iOS + Android players and the
-bridge `.m`) and draws `FormReviewOverlay` (react-native-svg) in the
-letterboxed `containRect` — landmarks are normalized to the FULL video frame,
-so the overlay rect MUST be the contain rect, never the stage. Auto-pause:
+(`DRILL_MATCH_NOTE`). The replay PLAYER is `src/review/FormReviewPlayer.tsx`
+(props `analysis, clip, review, sequence, script, initialStop?,
+stageHeight?, fill?`), hosted by BOTH `screens/FormReviewScreen.tsx` (route
+`FormReview: { analysisId, phase? }`, a thin loader: evidence + sidecar hash
+check + script, `fill` — no ScrollView) and the Result guide's page 2.
+LAYOUT (2026-09-02, second pass — user feedback: "things overlapping…
+cluttered"; the earlier "controls on the video" pass answered "I have to
+scroll down to unpause", and BOTH constraints hold because the hosts pin the
+player in a non-scrolling flex column): NOTHING IS DRAWN OVER THE BODY. The
+stage carries only the video, `FormReviewOverlay` and the arrow + its volt
+label (plus the rare partial-evidence caption); under it, as fixed-height
+SIBLINGS in this order: the STOP CARD (testID `form-review-stop-card`: micro
+row `<verdict dot + word> · <PHASE TITLE>` left / `STOP n OF m` right, the
+measured headline in `type.caption` muted, the cue in `type.body` with
+`minHeight` = 3 lines so the stage never resizes between stops — every cue
+is ≤ 120 chars; the verdict word reads `PRIORITY FIX` when
+`analysis.priorityFix.checkpoint` leads the stop, else FIX / WATCH / STRONG
+tinted flame / volt / mint), the TIMELINE row (4 pt neutral band with the
+played part in `onDarkMuted`, 10 pt verdict-tinted stop markers — the shown
+one ringed `onDark` — a 14 pt knob, and the clock `0.00s` inline at the
+right), and ONE SYMMETRIC TRANSPORT row centered around a 56 pt volt
+play/pause: speed chip · prev · play · next · AUTO, the four outer chips all
+44 pt `inkElevated` circles (AUTO fills volt when on). The card stays visible
+while playing (it no longer covers anything). No phase chip, no clock chip,
+no scrim, no phase-colored band, no "COACHING CUE" label, no legend. Tapping
+the stage still toggles play/pause. `fill` makes the stage `flex: 1` (the
+parent decides the height; `containRect` letterboxes inside). It plays the
+clip through `ClipPlayer resizeMode="contain"` (+ `rate` for ¼×/½× — both
+props exist on iOS + Android players and the bridge `.m`) and draws
+`FormReviewOverlay` (react-native-svg) in the letterboxed `containRect` —
+landmarks are normalized to the FULL video frame, so the overlay rect MUST be
+the contain rect, never the stage. Auto-pause:
 `nextAutoPause` fires once per stop per pass (visited set; scrubs re-arm
 stops ahead of the new position) and seeks exactly to `stop.atMs` so frame
 and skeleton agree. No frame within `POSE_FRAME_TOLERANCE_MS` → nothing is
 drawn (never interpolated). Evidence: `strokeResultData.ts` adds `review`
 (`width/height` + `poseSequence` ref) beside `clip`; `poseSidecar.ts` reads +
 sha256-checks + `parsePoseSequence` exactly like `runCaptureAnalysis`.
-ResultScreen injects `FormReviewCard` (`reviewSlot`) and FixList → set card →
-drills (`fixSlot`) into `StrokeResult`; the old "Measured priority" card is
-gone (the priority fault is FixList's first card).
+CAPTURE URIs ARE ABSOLUTE `file://` URLS INTO THE APP CONTAINER
+(`ClipMediaStore` writes `uri` / `posterUri` / sidecar `uri` as
+`absoluteString`) and iOS relocates that container between installs — on
+every Xcode build in practice — while keeping the files. Symptom (2026-09-02):
+a clip that played yesterday renders a silent BLACK stage today AND its
+sidecar reads "No verified pose sequence" (the old path fails the
+Captures-root guard). Fix: every native reader resolves through
+`ClipMediaStore.resolveCaptureURL(fromStoredUri:)` (recorded URL if it
+exists → same UUID file name inside TODAY's Captures dir → else unchanged so
+the caller fails honestly): `PickleClipPlayerView.sourceUri` and
+`PickleVideoCapture.readTextFile`. A clip that STILL cannot open emits
+`onClipError` (iOS `.failed` status / Android `setOnErrorListener`; Android
+keeps emitting `onClipEnd` too) → `ClipPlayer onError` →
+`FormReviewPlayer` unmounts the black layer and shows the "clip file is gone"
+caption (`replayStageCaption(clip, sequence, clipUnreadable)`); the JS clock
+drives the pose-only replay. The RN `Image` poster fallback still uses the
+raw URI (only matters on builds without the native player). Never store or
+compare container-absolute paths as identity; if you add a reader, resolve
+first.
+IMPORTED clips: `AnalyzeScreen` persists the extracted pose sequence back
+onto the capture row (`updateCaptureClipPayload`) right after
+`extractImportedPoseSequence`, so the review of an import replays its
+exoskeleton on every later visit — before this the row kept the
+pre-extraction payload and the review drew nothing.
+
+RESULT = A 4-PAGE GUIDE (2026-09-02, `screens/ResultScreen.tsx`, pinned by
+`__tests__/resultGuide.test.tsx`; NO PAGE SCROLLS on a 6.1" phone — user
+feedback): dark shell (`surfaceDark`, the route's `contentStyle` matches so
+nothing flashes light), top row close · segmented progress · "N OF M ·
+LABEL", pinned footer (primary Next with a descriptive label, Back/Done
+links). `GuideShell scroll={false}` gives a page a fixed flex column. Pages,
+each evidence-gated and SKIPPED when its evidence is absent: **Score** (ring,
+DUPR line, ONE `selectInsight` sentence, THIS SET card) → **The problem**
+(with replay evidence the page IS `FormReviewPlayer fill` and NOTHING else —
+no kicker, no h1, no sub line, no "Full screen" link (2026-09-02: the page
+headline only repeated the player's stop card and cost the video its height;
+the full-screen route rendered the same player at the same size). It opens
+frozen on the stop whose `checkpoints` contain the priority fix's `key`
+(phase match is the fallback), so the card reads `PRIORITY FIX · <PHASE>` +
+the fault's headline + cue on arrival. The kicker + h1 fault name + "Scored N
+— direction" sub + ≤2 `FixList` cards render ONLY when there is no clip AND
+no sidecar) → **Drills** (`RecommendedDrills dark` with per-drill Save →
+`useTrainingStore().setDrillSaved`; empty/error → "Browse library") →
+**Next** ("Ready for another swing?", ONE recap card `result-guide-summary`:
+three tiles — `7.1` + `/10` caption / `SCORE`, `strengthList(analysis, ∞)`
+count / `HELD`, `fixList(analysis, ∞)` count / `TO FIX` — numerals in the
+card `type.score` 30/34 role, then the rows Priority fix `name — direction`
+(or "Every checkpoint held") and Strongest `name · score`; the footer "Try it
+again" re-arm + Back · Done). There is NO "See full breakdown" link any more
+(product decision 2026-09-02: the last page is a quick recap to move on
+from). The ENTIRE former result surface still lives in `ResultBreakdownSheet`
+(`StrokeResult hideCtaRow` + `FormReviewCard` + full `FixList` + stroke map +
+provenance + `TrainingPlanSection` + `AnalysisFeedbackPrompt`, light sheet),
+rendered by the route `ResultDetails { analysisId }`
+(`screens/ResultDetailsScreen.tsx`, `ScreenHeader "Full breakdown"`, loads
+through the shared `useStrokeResultEvidence`) — which the guide no longer
+navigates to, so it is currently reachable from nowhere in the app — and
+inline by the abstained / legacy ONE-page case (the honest ledger) with Try
+again / Done. `DaySecuredBanner` stays at shell level (one-shot ceremony). Nothing
+new is said anywhere — every page reads the same pure selectors as before;
+keep it that way and keep the audits (`coachLockAudit`,
+`resultEvidenceAudit`, `zeroHandholdingCopyAudit`…) green.
 
 ## Practice set (same-sitting re-analysis)
 
@@ -561,20 +766,25 @@ Debug for fast-refresh development. TestFlight: `apps/mobile/ios/fastlane`
   confirm button stays disabled ~5s, which must exceed the server's 3s
   challenge min-age. Only synced (non-guest) sessions show the Manage account
   row/link. Pinned by `__tests__/manageAccountScreen.test.tsx`.
-- Exit survey (2026-09-02): the delete link first opens a one-question
-  bottom sheet ("What's making you leave?" — 8 single-select reasons +
-  optional ≤500-char comment) inside the same `DeleteAccountSheet`, then the
-  unchanged confirmation. It is ALWAYS skippable (Skip + close both reach /
-  keep the account) — never gate deletion on it. Answers travel in the
+- Exit survey (2026-09-02): the delete link opens a CENTERED pop-up
+  (`DeleteAccountDialog`, same file) that steps Q1 "What's making you
+  leave?" (7 single-select reasons) → Q2 "What would have kept you?" (6
+  options + optional ≤500-char comment) → the unchanged confirmation.
+  Header = back / "QUESTION n OF 2" segmented progress / close; pages slide
+  in from the side they came from. Every page is skippable (Q1 "Skip the
+  survey" sends nothing; Q2 "Skip this question" keeps Q1) and close always
+  keeps the account — never gate deletion on it. Answers travel in the
   step-1 body (`POST /v1/me/delete-request { survey }`) so they are stored
-  BEFORE the account exists no more; the server drops an unknown reason but
-  never the deletion. Vocabulary lives in `ACCOUNT_DELETION_REASONS`
-  (`deletion.ts`) and the edge fn's `DELETION_SURVEY_REASONS` — change both
-  together. Table `public.account_deletion_feedback`
-  (`20260902000000_account_deletion_feedback.sql`) is the ONE user row that
-  outlives deletion: FK `ON DELETE SET NULL` anonymizes it (`user_id` null
-  ⇒ actually deleted; non-null ⇒ requested but kept), insert-only from
-  clients (no SELECT), append-only via its own trigger (the generic
+  BEFORE the account exists no more; the server drops an unknown reason (or
+  just an unknown `wanted`) but never the deletion. Vocabularies live in
+  `ACCOUNT_DELETION_REASONS` / `ACCOUNT_DELETION_WANTED` (`deletion.ts`) and
+  the edge fn's `DELETION_SURVEY_REASONS` / `DELETION_SURVEY_WANTED` —
+  change both sides together. Table `public.account_deletion_feedback`
+  (`20260902000000_account_deletion_feedback.sql`, `wanted` column added by
+  `20260902120000_…_wanted.sql`) is the ONE user row that outlives
+  deletion: FK `ON DELETE SET NULL` anonymizes it (`user_id` null ⇒ actually
+  deleted; non-null ⇒ requested but kept), insert-only from clients (no
+  SELECT), append-only via its own trigger (the generic
   `reject_ledger_mutation` would block the SET NULL and break deletion).
   Server stamps churn context (provider, platform, app_version,
   account_age_days, was_premium, scored_count). Disclosed in the privacy

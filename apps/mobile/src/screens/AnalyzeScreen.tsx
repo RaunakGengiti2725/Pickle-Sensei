@@ -43,6 +43,7 @@ import { TargetSelector, type TargetSelection } from '../camera/TargetSelector';
 import { getDb } from '../data/db';
 import {
   savePendingCapture,
+  updateCaptureClipPayload,
   setCaptureTargetSeed,
   setDeclaredStroke,
 } from '../data/repository';
@@ -146,12 +147,14 @@ const CAPTURE_SILHOUETTE = require('../../assets/capture/silhouette.png');
 // aspect and the brackets enclose it with a small margin — the same
 // "corners + outline read as one guide" composition the live camera draws
 // (PoseOverlayView.fixedFramingGuidePath around the silhouette frame).
-const PREVIEW_HEIGHT = 312;
-const SILHOUETTE_HEIGHT = 184;
+const PREVIEW_HEIGHT = 336;
+const SILHOUETTE_HEIGHT = 168;
 const SILHOUETTE_WIDTH = Math.round((SILHOUETTE_HEIGHT * 130) / 240);
 const FRAME_WIDTH = SILHOUETTE_WIDTH + 2 * space.xl;
 const FRAME_HEIGHT = SILHOUETTE_HEIGHT + 2 * space.sm;
-const FRAME_TOP = 52;
+// The brackets start under the status card, exactly as the live camera lays
+// its guide band out between the status card and the shutter row.
+const FRAME_TOP = 74;
 const BRACKET_STROKE = 2.5;
 /** Mirrors the camera's cornerPath: min(28, 0.18 x the shorter side). */
 const BRACKET_LEG = Math.min(28, Math.min(FRAME_WIDTH, FRAME_HEIGHT) * 0.18);
@@ -179,10 +182,11 @@ function cornerBracketPath(
 }
 
 /**
- * Decorative mock of the live camera's setup state: framing brackets around
- * the translucent player outline, the status pill the camera shows while
- * composing, and the record shutter (white ring, volt core). One accessible
- * element — nothing inside is interactive.
+ * Decorative mock of the live camera's setup state, in the camera's own
+ * chrome language: the left-aligned glass status card (dot + kicker + one
+ * instruction), framing brackets around the translucent player outline in
+ * the band below it, and the record shutter (chalk ring, volt core). One
+ * accessible element — nothing inside is interactive.
  */
 function CameraMockPreview() {
   return (
@@ -190,7 +194,7 @@ function CameraMockPreview() {
       style={styles.preview}
       accessible
       accessibilityRole="image"
-      accessibilityLabel="Camera preview: line up with the player outline and tap record"
+      accessibilityLabel="Camera preview: line up with the player outline, tap record and swing"
     >
       <View style={styles.previewFrame}>
         <Svg
@@ -219,23 +223,19 @@ function CameraMockPreview() {
           style={styles.previewSilhouette}
         />
       </View>
-      <View style={styles.previewStatusRow}>
-        <View style={styles.previewStatus}>
-          <Text style={[type.micro, { color: color.mint }]}>SET UP</Text>
+      <View style={styles.previewStatus}>
+        <View style={styles.previewStatusKicker}>
           <View style={styles.previewStatusDot} />
-          <Text style={[type.caption, { color: color.onDark }]}>
-            Line up with the outline
-          </Text>
+          <Text style={[type.micro, { color: color.mint }]}>SET UP</Text>
         </View>
+        <Text style={[type.caption, styles.previewStatusDetail]}>
+          Match the outline, then tap record
+        </Text>
       </View>
       <View style={styles.previewShutterRow}>
         <View style={styles.previewShutterRing}>
           <View style={styles.previewShutterCore} />
         </View>
-      </View>
-      <View style={styles.previewBadge}>
-        <View style={styles.previewDot} />
-        <Text style={[type.micro, { color: color.onDark }]}>AUTO CAPTURE</Text>
       </View>
     </View>
   );
@@ -245,9 +245,10 @@ function CameraMockPreview() {
  * The guided-capture walkthrough, as data so the zero-handholding protocol
  * (docs/USABILITY_ZERO_HANDHOLDING.md) can assert every funnel task the
  * user must perform unaided has an on-screen instruction. Order matters:
- * it is the order the user acts in — prop the phone, tap record, line up
- * with the outline until Ready, swing once (the stroke ends the clip itself;
- * tapping a starting spot is optional and only matters with others on court).
+ * it is the order the user acts in — prop the phone, tap record, walk out
+ * and set up until the copy reads Ready, swing once (the swing ends the clip
+ * itself; the stop button is the fallback that analyzes the strongest swing
+ * already recorded). There is no start spot to tap.
  */
 export const ANALYZE_STEPS: ReadonlyArray<{
   index: string;
@@ -267,21 +268,21 @@ export const ANALYZE_STEPS: ReadonlyArray<{
     icon: 'camera',
     title: 'Tap record to start',
     detail:
-      'Tap the record button, then walk out and line your body up with the outline. Others on court? Tap your spot first.',
+      'Tap the record button, then walk out and line your body up with the outline — the skeleton locks on as soon as you are in view.',
   },
   {
     index: '03',
     icon: 'spark',
-    title: 'Wait for Ready',
+    title: 'Set up until it reads Ready',
     detail:
-      'Big on-screen copy tells you to step in, move closer or hold still — readable from the court.',
+      'Big on-screen copy tells you to step in, move closer or set your feet — readable from the court. A swing counts even before it says Ready.',
   },
   {
     index: '04',
     icon: 'court',
     title: 'Make one natural stroke',
     detail:
-      'Your swing ends the recording by itself. The clip keeps two seconds before and 1.5 seconds after the motion.',
+      'Your swing is captured automatically and ends the recording by itself — two seconds before, 1.5 after. Missed? Tap stop and the strongest swing in the last 15 seconds is analyzed.',
   },
 ];
 
@@ -588,6 +589,22 @@ export function AnalyzeScreen() {
   const operationActive = useRef(false);
   const scoringActive = useRef(false);
   const autoLaunchStarted = useRef(false);
+  // Every scoring run reserves a permit that is then consumed or released,
+  // so the access snapshot the rest of the app reads (Settings membership
+  // row, tab-bar rating gate, Paywall allowance) is stale the moment a run
+  // starts. It is re-read from the server once this screen is GONE — never
+  // while it is mounted: the route gate replaces a screen whose
+  // canStartRating flips false, and the "last free analysis" prompt has to
+  // finish on top of the saved score first.
+  const ratingLedgerTouched = useRef(false);
+  useEffect(
+    () => () => {
+      const access = useAccessStore.getState();
+      if (!ratingLedgerTouched.current || access.status === 'idle') return;
+      void access.refreshAccess();
+    },
+    [],
+  );
   // Honest progress surface for the scoring flow (parallel to `phase`, so
   // every existing message/transition stays byte-identical). Non-null only
   // while scoreCapture is in flight.
@@ -761,8 +778,6 @@ export function AnalyzeScreen() {
               clip,
               targetSeed?.point ?? null,
             );
-            // A NEW clip object for this run only — the saved capture row
-            // keeps the original import payload untouched.
             analysisClip = {
               ...clip,
               poseSequence: extraction.poseSequence,
@@ -770,6 +785,16 @@ export function AnalyzeScreen() {
                 ? { posterUri: extraction.posterUri }
                 : {}),
             };
+            // The measured pose sequence is evidence ABOUT this clip, so it
+            // is persisted with the capture row: the Form Review opened
+            // from Progress days later replays the import's exoskeleton
+            // instead of finding a payload that predates the extraction.
+            // A persistence hiccup never fails the analysis in hand.
+            try {
+              await updateCaptureClipPayload(getDb(), captureId, analysisClip);
+            } catch {
+              // The run continues on the in-memory clip.
+            }
           } catch (error) {
             const message = importedPoseExtractionFailureMessage(error);
             usabilityFunnel.log('error_shown', message);
@@ -798,6 +823,7 @@ export function AnalyzeScreen() {
           practiceSet = null;
         }
         const sessionId = practiceSet?.sessionId ?? null;
+        ratingLedgerTouched.current = true;
         const outcome = await runCaptureAnalysis({
           db: getDb(),
           captureId,
@@ -1369,8 +1395,9 @@ export function AnalyzeScreen() {
           Tap record.{`\n`}Swing once.
         </Text>
         <Text style={[type.body, styles.heroCopy]}>
-          Prop the phone side-on at waist height. Match the outline, swing
-          naturally — the camera stops itself when your stroke is complete.
+          Prop the phone side-on at waist height. Tap record, match the outline
+          and swing naturally — your stroke is captured by itself, or tap stop
+          to analyze what you have.
         </Text>
 
         <Text style={[type.micro, styles.declareEyebrow]}>
@@ -1537,30 +1564,28 @@ const styles = StyleSheet.create({
     tintColor: color.onDark,
     opacity: 0.32,
   },
-  previewStatusRow: {
+  // The camera's status card: left-aligned glass, dot + kicker, one line.
+  previewStatus: {
     position: 'absolute',
     top: 12,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  previewStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.sm,
+    left: 12,
+    right: 12,
     paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    backgroundColor: color.overlayDeep,
+    paddingVertical: 10,
+    gap: 3,
+    borderRadius: radius.md,
+    backgroundColor: color.overlayStrong,
     borderWidth: 1,
     borderColor: color.onDarkTint,
   },
+  previewStatusKicker: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   previewStatusDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: color.onDarkSubtle,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: color.mint,
   },
+  previewStatusDetail: { color: color.onDark },
   previewShutterRow: {
     position: 'absolute',
     bottom: 14,
@@ -1581,24 +1606,6 @@ const styles = StyleSheet.create({
     width: SHUTTER_CORE,
     height: SHUTTER_CORE,
     borderRadius: SHUTTER_CORE / 2,
-    backgroundColor: color.volt,
-  },
-  previewBadge: {
-    position: 'absolute',
-    left: 14,
-    bottom: 14 + (SHUTTER_RING - 26) / 2,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    backgroundColor: color.overlayDeep,
-  },
-  previewDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
     backgroundColor: color.volt,
   },
   steps: {

@@ -9,40 +9,314 @@ struct GuidedCaptureFailure: LocalizedError {
   var errorDescription: String? { message }
 }
 
-/// The one control every camera user already knows: a white ring with a
-/// solid core. Idle it reads "record" (volt core); while recording the core
-/// morphs into the red stop square, exactly like the system camera. Press
-/// feedback is an immediate 0.94 scale so the control feels heard.
+// ─── Camera chrome: the app's own visual language, not UIKit's ──────────────
+//
+// Every control on the camera is drawn here from the design tokens
+// (apps/mobile/src/design/tokens.ts) and the stroke-icon language of
+// design/icons.tsx: dark "glass" surfaces (surfaceDark at ~60 % with a
+// hairline, continuous corners) instead of system blur materials, Manrope
+// instead of SF, 1.8-pt round-capped glyphs instead of SF Symbols. Nothing
+// here uses UIButton.Configuration or UIVisualEffectView.
+
+enum CaptureChromePalette {
+  static let surfaceDark = UIColor(red: 6 / 255, green: 19 / 255, blue: 14 / 255, alpha: 1)
+  static let onDark = UIColor(red: 248 / 255, green: 250 / 255, blue: 245 / 255, alpha: 1)
+  static let onDarkMuted = UIColor(red: 165 / 255, green: 177 / 255, blue: 170 / 255, alpha: 1)
+  static let mint = UIColor(red: 83 / 255, green: 217 / 255, blue: 155 / 255, alpha: 1)
+  static let volt = UIColor(red: 215 / 255, green: 250 / 255, blue: 69 / 255, alpha: 1)
+  static let flame = UIColor(red: 255 / 255, green: 155 / 255, blue: 66 / 255, alpha: 1)
+  static let onVolt = UIColor(red: 20 / 255, green: 32 / 255, blue: 20 / 255, alpha: 1)
+  /// Glass fill + hairline shared by every floating surface on the camera.
+  static let glassFill = surfaceDark.withAlphaComponent(0.6)
+  static let glassHairline = onDark.withAlphaComponent(0.13)
+
+  static func manrope(_ weight: String, _ size: CGFloat) -> UIFont {
+    UIFont(name: "Manrope-\(weight)", size: size)
+      ?? UIFont.systemFont(ofSize: size, weight: weight == "Bold" ? .bold : .semibold)
+  }
+}
+
+/// A floating surface: the dark card the rest of the app uses, translucent so
+/// the court stays visible behind it. Continuous corners, hairline, soft
+/// shadow. Not a blur material on purpose.
+final class CaptureGlassView: UIView {
+  init(cornerRadius: CGFloat) {
+    super.init(frame: .zero)
+    backgroundColor = CaptureChromePalette.glassFill
+    layer.cornerRadius = cornerRadius
+    layer.cornerCurve = .continuous
+    layer.borderWidth = 1
+    layer.borderColor = CaptureChromePalette.glassHairline.cgColor
+    layer.shadowColor = UIColor.black.cgColor
+    layer.shadowOpacity = 0.22
+    layer.shadowRadius = 14
+    layer.shadowOffset = CGSize(width: 0, height: 6)
+    translatesAutoresizingMaskIntoConstraints = false
+  }
+
+  required init?(coder: NSCoder) { nil }
+
+  /// An explicit shadow path keeps Core Animation from re-deriving the shadow
+  /// from the composited contents every time a label inside changes (an
+  /// offscreen pass per frame on the status card otherwise).
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: layer.cornerRadius).cgPath
+  }
+}
+
+/// Press feedback shared by the chrome: an immediate 0.94 scale so a control
+/// feels heard, released with a slightly slower ease-out.
+private func installPressScale(on control: UIControl) {
+  control.addTarget(control, action: #selector(UIControl.capturePressBegan), for: [.touchDown, .touchDragEnter])
+  control.addTarget(
+    control,
+    action: #selector(UIControl.capturePressEnded),
+    for: [.touchUpInside, .touchUpOutside, .touchCancel, .touchDragExit]
+  )
+}
+
+extension UIControl {
+  @objc fileprivate func capturePressBegan() {
+    UIView.animate(withDuration: 0.12, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+      self.transform = CGAffineTransform(scaleX: 0.94, y: 0.94)
+    }
+  }
+
+  @objc fileprivate func capturePressEnded() {
+    UIView.animate(withDuration: 0.16, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+      self.transform = .identity
+    }
+  }
+}
+
+/// Stroke glyphs in the icons.tsx language (24-unit box, 1.8 stroke, round
+/// caps/joins), scaled to the requested point size.
+enum CaptureGlyph {
+  case close
+  case flip
+
+  func path(size: CGFloat) -> UIBezierPath {
+    let scale = size / 24
+    let path = UIBezierPath()
+    switch self {
+    case .close:
+      path.move(to: CGPoint(x: 6, y: 6))
+      path.addLine(to: CGPoint(x: 18, y: 18))
+      path.move(to: CGPoint(x: 18, y: 6))
+      path.addLine(to: CGPoint(x: 6, y: 18))
+    case .flip:
+      // Lens with two counter-rotating arrows — the camera-swap idea drawn
+      // in our own stroke language.
+      let center = CGPoint(x: 12, y: 12)
+      path.append(UIBezierPath(arcCenter: center, radius: 3.2, startAngle: 0, endAngle: .pi * 2, clockwise: true))
+      let radius: CGFloat = 8.6
+      let top = UIBezierPath(
+        arcCenter: center, radius: radius,
+        startAngle: .pi * 1.12, endAngle: .pi * 1.86, clockwise: true
+      )
+      path.append(top)
+      let topEnd = CGPoint(x: center.x + radius * cos(.pi * 1.86), y: center.y + radius * sin(.pi * 1.86))
+      path.move(to: CGPoint(x: topEnd.x - 3.6, y: topEnd.y - 1.2))
+      path.addLine(to: topEnd)
+      path.addLine(to: CGPoint(x: topEnd.x - 1.4, y: topEnd.y + 3.4))
+      let bottom = UIBezierPath(
+        arcCenter: center, radius: radius,
+        startAngle: .pi * 0.12, endAngle: .pi * 0.86, clockwise: true
+      )
+      path.append(bottom)
+      let bottomEnd = CGPoint(x: center.x + radius * cos(.pi * 0.86), y: center.y + radius * sin(.pi * 0.86))
+      path.move(to: CGPoint(x: bottomEnd.x + 3.6, y: bottomEnd.y + 1.2))
+      path.addLine(to: bottomEnd)
+      path.addLine(to: CGPoint(x: bottomEnd.x + 1.4, y: bottomEnd.y - 3.4))
+    }
+    path.apply(CGAffineTransform(scaleX: scale, y: scale))
+    return path
+  }
+}
+
+/// Round glass button carrying one stroke glyph (close, flip). 48-pt target.
+final class CaptureGlyphButton: UIControl {
+  static let diameter: CGFloat = 48
+  private let glass = CaptureGlassView(cornerRadius: CaptureGlyphButton.diameter / 2)
+  private let glyphLayer = CAShapeLayer()
+  private let glyphSize: CGFloat = 22
+
+  init(glyph: CaptureGlyph, accessibilityLabel: String, accessibilityHint: String) {
+    super.init(frame: .zero)
+    isAccessibilityElement = true
+    accessibilityTraits = .button
+    self.accessibilityLabel = accessibilityLabel
+    self.accessibilityHint = accessibilityHint
+    translatesAutoresizingMaskIntoConstraints = false
+    glass.isUserInteractionEnabled = false
+    addSubview(glass)
+    glyphLayer.path = glyph.path(size: glyphSize).cgPath
+    glyphLayer.fillColor = UIColor.clear.cgColor
+    glyphLayer.strokeColor = CaptureChromePalette.onDark.cgColor
+    glyphLayer.lineWidth = 1.8
+    glyphLayer.lineCap = .round
+    glyphLayer.lineJoin = .round
+    layer.addSublayer(glyphLayer)
+    installPressScale(on: self)
+    NSLayoutConstraint.activate([
+      glass.leadingAnchor.constraint(equalTo: leadingAnchor),
+      glass.trailingAnchor.constraint(equalTo: trailingAnchor),
+      glass.topAnchor.constraint(equalTo: topAnchor),
+      glass.bottomAnchor.constraint(equalTo: bottomAnchor),
+      widthAnchor.constraint(equalToConstant: Self.diameter),
+      heightAnchor.constraint(equalToConstant: Self.diameter),
+    ])
+  }
+
+  required init?(coder: NSCoder) { nil }
+
+  /// Touches that begin on this control belong to it: no recognizer owned by
+  /// an ancestor (the preview's zoom pinch) may begin from
+  /// them — the same protection UIKit gives UISlider's thumb. Without it a
+  /// parent tap recognizer claims the tap and cancels the control's touches.
+  override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+    gestureRecognizer.view === self
+  }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    CATransaction.begin()
+    CATransaction.setDisableActions(true)
+    glyphLayer.frame = CGRect(
+      x: (bounds.width - glyphSize) / 2, y: (bounds.height - glyphSize) / 2,
+      width: glyphSize, height: glyphSize
+    )
+    CATransaction.commit()
+  }
+
+  override var isEnabled: Bool {
+    didSet { alpha = isEnabled ? 1 : 0.42 }
+  }
+}
+
+/// Text chip in Manrope small caps — zoom presets and the AUTO FRAME toggle.
+/// `isOn` swaps to the volt accent; nothing else changes shape.
+final class CaptureTextChip: UIControl {
+  private let label = UILabel()
+  private let fill = UIView()
+  private let baseAlpha: CGFloat
+
+  var isOn = false {
+    didSet { render() }
+  }
+
+  var text: String {
+    get { label.text ?? "" }
+    set { label.text = newValue }
+  }
+
+  init(text: String, glass: Bool, minWidth: CGFloat = 40, height: CGFloat = 36) {
+    baseAlpha = glass ? 1 : 0
+    super.init(frame: .zero)
+    isAccessibilityElement = true
+    accessibilityTraits = .button
+    translatesAutoresizingMaskIntoConstraints = false
+    fill.isUserInteractionEnabled = false
+    fill.layer.cornerRadius = height / 2
+    fill.layer.cornerCurve = .continuous
+    if glass {
+      fill.backgroundColor = CaptureChromePalette.glassFill
+      fill.layer.borderWidth = 1
+      fill.layer.borderColor = CaptureChromePalette.glassHairline.cgColor
+    }
+    fill.translatesAutoresizingMaskIntoConstraints = false
+    addSubview(fill)
+    label.font = CaptureChromePalette.manrope("SemiBold", 13)
+    label.textAlignment = .center
+    label.text = text
+    label.translatesAutoresizingMaskIntoConstraints = false
+    label.isUserInteractionEnabled = false
+    addSubview(label)
+    installPressScale(on: self)
+    NSLayoutConstraint.activate([
+      fill.leadingAnchor.constraint(equalTo: leadingAnchor),
+      fill.trailingAnchor.constraint(equalTo: trailingAnchor),
+      fill.topAnchor.constraint(equalTo: topAnchor),
+      fill.bottomAnchor.constraint(equalTo: bottomAnchor),
+      label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+      label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+      label.centerYAnchor.constraint(equalTo: centerYAnchor),
+      heightAnchor.constraint(equalToConstant: height),
+      widthAnchor.constraint(greaterThanOrEqualToConstant: minWidth),
+    ])
+    render()
+  }
+
+  required init?(coder: NSCoder) { nil }
+
+  /// Touches that begin on this control belong to it: no recognizer owned by
+  /// an ancestor (the preview's zoom pinch) may begin from
+  /// them — the same protection UIKit gives UISlider's thumb. Without it a
+  /// parent tap recognizer claims the tap and cancels the control's touches.
+  override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+    gestureRecognizer.view === self
+  }
+
+  private func render() {
+    label.textColor = isOn ? CaptureChromePalette.volt : CaptureChromePalette.onDark.withAlphaComponent(0.82)
+    label.font = CaptureChromePalette.manrope(isOn ? "Bold" : "SemiBold", 13)
+    if baseAlpha == 0 {
+      fill.backgroundColor = isOn ? CaptureChromePalette.onDark.withAlphaComponent(0.14) : .clear
+    } else {
+      fill.layer.borderColor = (isOn ? CaptureChromePalette.volt.withAlphaComponent(0.7) : CaptureChromePalette.glassHairline).cgColor
+    }
+    accessibilityValue = isOn ? "On" : "Off"
+  }
+
+  override var isEnabled: Bool {
+    didSet { alpha = isEnabled ? 1 : 0.42 }
+  }
+}
+
+/// The one control every camera user already knows: a ring with a solid
+/// core. Idle it reads "record" (volt core); while recording the core morphs
+/// into a stop square in the brand's flame. Press feedback is an immediate
+/// 0.94 scale so the control feels heard.
 final class CaptureShutterButton: UIControl {
-  private static let ringDiameter: CGFloat = 78
-  private static let coreDiameter: CGFloat = 62
+  static let ringDiameter: CGFloat = 78
+  private static let coreDiameter: CGFloat = 60
   private static let stopDiameter: CGFloat = 30
-  private static let volt = UIColor(red: 215 / 255, green: 250 / 255, blue: 69 / 255, alpha: 1)
-  private static let recordRed = UIColor(red: 1, green: 69 / 255, blue: 58 / 255, alpha: 1)
 
   private let ring = CALayer()
-  private let core = CALayer()
+  private let core = CAGradientLayer()
   private(set) var isRecording = false
 
   override init(frame: CGRect) {
     super.init(frame: frame)
     isAccessibilityElement = true
     accessibilityTraits = .button
-    ring.borderColor = UIColor.white.withAlphaComponent(0.96).cgColor
-    ring.borderWidth = 4
+    ring.borderColor = CaptureChromePalette.onDark.withAlphaComponent(0.96).cgColor
+    ring.borderWidth = 3
     ring.shadowColor = UIColor.black.cgColor
-    ring.shadowOpacity = 0.28
-    ring.shadowRadius = 8
-    ring.shadowOffset = CGSize(width: 0, height: 2)
-    core.backgroundColor = Self.volt.cgColor
+    ring.shadowOpacity = 0.3
+    ring.shadowRadius = 10
+    ring.shadowOffset = CGSize(width: 0, height: 4)
+    // A faint top-light on the core so it reads as a physical button, not a
+    // flat disc; the gradient stays within the brand volt.
+    core.type = .radial
+    core.startPoint = CGPoint(x: 0.35, y: 0.3)
+    core.endPoint = CGPoint(x: 1, y: 1)
     layer.addSublayer(ring)
     layer.addSublayer(core)
     setRecording(false, animated: false)
-    addTarget(self, action: #selector(pressBegan), for: [.touchDown, .touchDragEnter])
-    addTarget(self, action: #selector(pressEnded), for: [.touchUpInside, .touchUpOutside, .touchCancel, .touchDragExit])
+    installPressScale(on: self)
   }
 
   required init?(coder: NSCoder) { nil }
+
+  /// Touches that begin on this control belong to it: no recognizer owned by
+  /// an ancestor (the preview's zoom pinch) may begin from them — the same
+  /// protection UIKit gives UISlider's thumb. Without it a parent recognizer
+  /// could claim the touch and cancel the control's own.
+  override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+    gestureRecognizer.view === self
+  }
 
   override var intrinsicContentSize: CGSize {
     CGSize(width: Self.ringDiameter, height: Self.ringDiameter)
@@ -56,6 +330,7 @@ final class CaptureShutterButton: UIControl {
     ring.bounds = CGRect(x: 0, y: 0, width: Self.ringDiameter, height: Self.ringDiameter)
     ring.position = center
     ring.cornerRadius = Self.ringDiameter / 2
+    ring.shadowPath = UIBezierPath(ovalIn: ring.bounds).cgPath
     core.position = center
     CATransaction.commit()
   }
@@ -68,17 +343,22 @@ final class CaptureShutterButton: UIControl {
   /// with a short spring instead of swapping.
   func setRecording(_ recording: Bool, animated: Bool) {
     isRecording = recording
-    accessibilityLabel = recording ? "Stop recording" : "Start recording"
+    accessibilityLabel = recording ? "Stop and analyze" : "Start recording"
     accessibilityHint = recording
-      ? "Discards this attempt and returns to setup"
+      ? "Stops the recording and analyzes the strongest swing in it"
       : "Starts recording; the stroke is captured automatically when you swing"
     let diameter = recording ? Self.stopDiameter : Self.coreDiameter
     let cornerRadius = recording ? 8 : Self.coreDiameter / 2
-    let color = recording ? Self.recordRed : Self.volt
+    let base = recording ? CaptureChromePalette.flame : CaptureChromePalette.volt
     let apply = {
       self.core.bounds = CGRect(x: 0, y: 0, width: diameter, height: diameter)
       self.core.cornerRadius = cornerRadius
-      self.core.backgroundColor = color.cgColor
+      self.core.colors = [
+        base.lighter(by: 0.18).cgColor,
+        base.cgColor,
+        base.darker(by: 0.08).cgColor,
+      ]
+      self.core.locations = [0, 0.55, 1]
     }
     guard animated, !UIAccessibility.isReduceMotionEnabled else {
       CATransaction.begin()
@@ -93,17 +373,23 @@ final class CaptureShutterButton: UIControl {
     apply()
     CATransaction.commit()
   }
+}
 
-  @objc private func pressBegan() {
-    UIView.animate(withDuration: 0.12, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
-      self.transform = CGAffineTransform(scaleX: 0.94, y: 0.94)
-    }
-  }
+private extension UIColor {
+  func lighter(by amount: CGFloat) -> UIColor { blended(toward: .white, amount) }
+  func darker(by amount: CGFloat) -> UIColor { blended(toward: .black, amount) }
 
-  @objc private func pressEnded() {
-    UIView.animate(withDuration: 0.16, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
-      self.transform = .identity
-    }
+  private func blended(toward other: UIColor, _ amount: CGFloat) -> UIColor {
+    var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+    var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+    getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
+    other.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+    return UIColor(
+      red: r1 + (r2 - r1) * amount,
+      green: g1 + (g2 - g1) * amount,
+      blue: b1 + (b2 - b1) * amount,
+      alpha: a1
+    )
   }
 }
 
@@ -111,16 +397,25 @@ final class CaptureShutterButton: UIControl {
 /// rendering, temporal detection, and movie spooling remain native. React
 /// Native receives only low-frequency structured state and the completed clip.
 ///
-/// Flow (2026-09-01 redesign — one familiar control):
-///   composing  → the camera runs but records NOTHING; the translucent
-///                silhouette guide shows where to stand; the shutter is live.
-///   recording  → the shutter starts the rolling spool; the athlete walks to
-///                the outline; readiness copy is large enough to read from the
-///                court; the trigger arms itself on a stable full-body read.
+/// Flow (2026-09-02 — record button, then TRUE auto capture):
+///   composing  → the camera is live but records NOTHING; the translucent
+///                silhouette shows where to stand; the shutter is the record
+///                control. (The athlete decides when recording starts — an
+///                auto-start on open was tried and rejected in the field.)
+///   recording  → the shutter started the rolling spool; the athlete walks to
+///                the outline; readiness copy (large enough to read from the
+///                court) is framing ADVICE only — the detector sees every
+///                trackable frame and fires on the swing wherever the body
+///                stands. "BODY TRACKED" is a status, not a gate. There is no
+///                start-spot tap.
 ///   capturing  → the swing was detected; the clip window is finalized.
-/// Stopping a recording (shutter again) or an observation timeout discards
-/// the spool and returns to composing — the camera never closes with an
-/// error for the ordinary "I need another go" case.
+/// The shutter while recording is STOP & ANALYZE: an offline pass over the
+/// retained pose history finds the strongest swing-like window (permissive
+/// trigger) and finalizes the recording around it; with no such window the
+/// recording stops and the camera returns to composing with a notice — no
+/// clip is invented. Observation timeouts and the movie output's hard cap
+/// restart the spool silently while recording; nothing returns the athlete
+/// to setup except their own stop.
 final class GuidedCaptureViewController: UIViewController {
   typealias EventHandler = ([String: Any]) -> Void
   typealias Completion = (Result<[String: Any], GuidedCaptureFailure>) -> Void
@@ -136,7 +431,19 @@ final class GuidedCaptureViewController: UIViewController {
 
   private static let preRollMs = 2_000
   private static let postRollMs = 1_500
-  private static let observationTimeoutSeconds: TimeInterval = 55
+  /// The live trigger waits this long after a spool (re)starts before it may
+  /// fire, so a swing already under way when the file began — one the clip
+  /// could not contain — is never half-captured. The export's pre-roll clamps
+  /// to the file start; this is the only warm-up.
+  private static let triggerWarmupMs = 1_000
+  /// STOP & ANALYZE excludes the final stretch before the stop: that is the
+  /// athlete walking up to the phone, not the swing. The pass itself is
+  /// `TemporalStrokeDetector.strongestEvent(in:)` with its permissive
+  /// `manualStopConfig` (pinned by vision-core tests).
+  private static let manualStopApproachMs = 1_200
+  /// Kept 10 s under CameraEngine's 60 s hard movie cap so a late stroke can
+  /// never be lost to the cap while the timer waits on a busy main thread.
+  private static let observationTimeoutSeconds: TimeInterval = 50
 
   /// D-029: movement-completion strategy. Read ONCE per session at init;
   /// default is FIXED (`postRollMs` after the detector's movement end — the
@@ -180,6 +487,8 @@ final class GuidedCaptureViewController: UIViewController {
   }
   private var targetAcquisition: TargetAcquisition = .choosingRegion
   private var startRegion: CGPoint?          // normalized capture space
+  private var lastAcquisitionScanMs = Int.min
+  private static let acquisitionScanIntervalMs = 100
   private static let startRegionRadius: CGFloat = 0.17
   private var occupancyStreak = 0
   private var occupantTorso: CGPoint?
@@ -208,45 +517,65 @@ final class GuidedCaptureViewController: UIViewController {
   private var lockInstrumentLock: (torso: CGPoint, source: String, timestampMs: Int)?
   private static let targetLockAlgorithmVersion = "target-lock-live-v1"
   private let targetRing = CAShapeLayer()
-  private let selectionHaptic = UIImpactFeedbackGenerator(style: .medium)
-  private let evidenceAccumulator = CaptureEvidenceAccumulator()
-  private let visionQueue = DispatchQueue(label: "pickle.guided-capture.vision", qos: .userInitiated)
+  /// Retention matches `poseHistoryWindowMs`: STOP & ANALYZE summarizes a
+  /// motion window that can be 10+ s old, and the default 4 s would have
+  /// left it without evidence.
+  private let evidenceAccumulator = CaptureEvidenceAccumulator(retentionMs: 15_000)
+  /// Pose inference IS the product's latency: the queue runs at the highest
+  /// QoS so the exoskeleton and trigger see every frame Vision can deliver.
+  private let visionQueue = DispatchQueue(label: "pickle.guided-capture.vision", qos: .userInteractive)
   private let stateLock = NSLock()
 
   private let overlayView = PoseOverlayView()
   /// Translucent alignment guide (the app's player silhouette, template
-  /// image tinted white). Where to stand and how big to be in frame — sized
-  /// so a body matching it lands inside the readiness evaluator's height
-  /// window. Fades as the live exoskeleton takes over, hidden once locked.
+  /// image tinted white). Where to stand and how big to be in frame — laid
+  /// out in the GUIDE BAND between the status card and the shutter row (see
+  /// viewDidLayoutSubviews), so it can never sit under any chrome. Fades as
+  /// the live exoskeleton takes over, hidden once locked.
   private let silhouetteView = UIImageView()
-  private let statusContainer = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
-  private let statusStack = UIStackView()
+  /// Status card: state dot + kicker on the first row, the instruction on
+  /// the second. Fixed height so the guide band below it never jitters as
+  /// copy changes.
+  private let statusContainer = CaptureGlassView(cornerRadius: 22)
+  private let statusDot = UIView()
   private let statusLabel = UILabel()
   private let detailLabel = UILabel()
-  private let closeButton = UIButton(type: .system)
+  private static let statusCardHeight: CGFloat = 68
+  private let closeButton = CaptureGlyphButton(
+    glyph: .close,
+    accessibilityLabel: "Close camera",
+    accessibilityHint: "Stops any recording and closes the camera"
+  )
   private let lockHaptic = UIImpactFeedbackGenerator(style: .light)
   private let captureHaptic = UINotificationFeedbackGenerator()
   private var previewLayer: AVCaptureVideoPreviewLayer!
 
-  // ── Camera chrome (shutter / REC chip / zoom / flip / Center Stage) ───────
+  // ── Camera chrome (shutter / REC chip / zoom / flip / auto-frame) ────────
+  // Top bar: close · zoom presets (REC chip while recording) · —
+  // Guide band: brackets + silhouette, derived from the layout above/below.
+  // Bottom row: AUTO FRAME chip (when supported) · shutter · flip.
   private let shutterButton = CaptureShutterButton()
   private let shutterHint = UILabel()
-  private let recChip = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
+  private let recChip = CaptureGlassView(cornerRadius: 18)
   private let recDot = UIView()
   private let recTimerLabel = UILabel()
   private var recTimer: Timer?
   private var recordingStartedAt: Date?
-  private let flipButton = UIButton(type: .system)
-  private let centerStageButton = UIButton(type: .system)
-  private let zoomContainer = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
+  private let flipButton = CaptureGlyphButton(
+    glyph: .flip,
+    accessibilityLabel: "Flip camera",
+    accessibilityHint: "Switches between the rear and front cameras"
+  )
+  private let centerStageButton = CaptureTextChip(text: "AUTO FRAME", glass: true, minWidth: 96, height: 40)
+  private let zoomContainer = CaptureGlassView(cornerRadius: 22)
   private let zoomStack = UIStackView()
-  private var zoomPresetButtons: [UIButton] = []
+  private var zoomPresetButtons: [CaptureTextChip] = []
   private var lastZoomState: CameraEngine.ZoomState?
   private var pinchBaseDisplayZoom: CGFloat = 1
   private let controlHaptic = UIImpactFeedbackGenerator(style: .light)
-  private static let controlMint = UIColor(red: 83 / 255, green: 217 / 255, blue: 155 / 255, alpha: 1)
-  private static let controlVolt = UIColor(red: 215 / 255, green: 250 / 255, blue: 69 / 255, alpha: 1)
-  private static let recordRed = UIColor(red: 1, green: 69 / 255, blue: 58 / 255, alpha: 1)
+  private static let controlMint = CaptureChromePalette.mint
+  private static let controlVolt = CaptureChromePalette.volt
+  private static let recordRed = CaptureChromePalette.flame
 
   private var observationURL: URL?
   private var observationTimer: Timer?
@@ -258,13 +587,24 @@ final class GuidedCaptureViewController: UIViewController {
   private static let poseHistoryWindowMs = 15_000
   private var pendingStroke: StrokeEvent?
   private var pendingCaptureEvidence: CaptureEvidenceAccumulator.Summary?
+  /// The pending stroke came from STOP & ANALYZE's offline pass, not the live
+  /// trigger: no completion instrument ran for it and its provenance says so.
+  /// Guarded by `stateLock`.
+  private var pendingStrokeIsManual = false
   private var armed = false
+  /// Consecutive armed frames without a full body (vision queue only).
+  private var armedLossStreak = 0
+  /// ≈0.5 s at the ~30 fps Vision sustains: long enough to ride out a
+  /// follow-through that clips the frame edge, short enough that a player who
+  /// walked off is re-gated by readiness before the next attempt.
+  private static let armedLossFramesToDisarm = 15
   private var recordingStarted = false
-  /// True from the shutter press until the spool finishes (success, user stop
-  /// or timeout). Guarded by `stateLock` — the frame callback reads it.
+  /// True from the shutter press until the capture finishes or the athlete
+  /// stops. Guarded by `stateLock` — the frame callback reads it.
   private var recordingRequested = false
-  /// Set when a stop/timeout should DISCARD the finished spool and return to
-  /// composing instead of treating the finish as a capture.
+  /// A finished spool that must be DISCARDED rather than read as a capture
+  /// (stop with no swing found). Restarts go through the engine's own
+  /// suppression; this is the second fence for an in-flight finish.
   private var discardRecordingOnFinish = false
   private var processingClip = false
   private var terminal = false
@@ -318,7 +658,9 @@ final class GuidedCaptureViewController: UIViewController {
     super.viewDidLayoutSubviews()
     previewLayer.frame = view.bounds
     overlayView.frame = view.bounds
-    silhouetteView.frame = Self.silhouetteFrame(in: view.bounds)
+    let band = guideBand()
+    silhouetteView.frame = band.insetBy(dx: view.bounds.width * 0.08, dy: 0)
+    overlayView.guideRect = band.insetBy(dx: view.bounds.width * 0.06, dy: 0)
   }
 
   deinit {
@@ -337,20 +679,27 @@ final class GuidedCaptureViewController: UIViewController {
 
   // ── Layout ────────────────────────────────────────────────────────────────
 
-  /// The silhouette occupies the same vertical band the framing brackets
-  /// enclose (PoseOverlayView.fixedFramingGuidePath): head near 18% of the
-  /// screen, shoes near 86%. A body matching it spans ≈0.5 of the frame from
-  /// shoulders to ankles — the middle of the readiness evaluator's
-  /// 0.32…0.88 window, with room for the swing.
-  private static func silhouetteFrame(in bounds: CGRect) -> CGRect {
-    let height = bounds.height * 0.68
-    let width = bounds.width * 0.86
-    return CGRect(
-      x: bounds.midX - width / 2,
-      y: bounds.height * 0.86 - height,
-      width: width,
-      height: height
-    )
+  /// The GUIDE BAND: the vertical space between the status card and the
+  /// shutter row, measured from the laid-out chrome so the silhouette and
+  /// framing brackets can never sit under a control. On a 6.1" phone this is
+  /// ≈26 %…82 % of the screen; a body matching the silhouette then spans
+  /// ≈0.4 of the frame shoulders→ankles — inside the readiness evaluator's
+  /// 0.32…0.88 window with room for the swing.
+  private func guideBand() -> CGRect {
+    let bounds = view.bounds
+    let statusBottom = statusContainer.frame.maxY > 0
+      ? statusContainer.frame.maxY
+      : view.safeAreaInsets.top + 8 + CaptureGlyphButton.diameter + 10 + Self.statusCardHeight
+    let shutterTop = shutterButton.frame.minY > 0
+      ? shutterButton.frame.minY
+      : bounds.height - view.safeAreaInsets.bottom - 24 - CaptureShutterButton.ringDiameter
+    let top = statusBottom + 14
+    let bottom = shutterTop - 18
+    guard bottom > top + 120 else {
+      // Degenerate layout (not laid out yet, or a tiny window): a safe band.
+      return CGRect(x: 0, y: bounds.height * 0.24, width: bounds.width, height: bounds.height * 0.56)
+    }
+    return CGRect(x: 0, y: top, width: bounds.width, height: bottom - top)
   }
 
   private func configureView() {
@@ -370,45 +719,39 @@ final class GuidedCaptureViewController: UIViewController {
     overlayView.translatesAutoresizingMaskIntoConstraints = false
     view.addSubview(overlayView)
 
-    statusContainer.layer.cornerRadius = 22
-    statusContainer.layer.cornerCurve = .continuous
-    statusContainer.layer.borderWidth = 1
-    statusContainer.layer.borderColor = UIColor.white.withAlphaComponent(0.14).cgColor
-    statusContainer.clipsToBounds = true
-    statusContainer.translatesAutoresizingMaskIntoConstraints = false
-    statusContainer.contentView.layoutMargins = UIEdgeInsets(top: 11, left: 16, bottom: 11, right: 16)
+    // Status card — left-aligned, editorial: dot + kicker, then the instruction.
     statusContainer.isAccessibilityElement = true
     statusContainer.accessibilityTraits = [.staticText, .updatesFrequently]
     view.addSubview(statusContainer)
 
-    statusLabel.font = Self.scaledFont(name: "Manrope-SemiBold", size: 11, textStyle: .caption1)
-    statusLabel.adjustsFontForContentSizeCategory = true
+    statusDot.backgroundColor = Self.controlMint
+    statusDot.layer.cornerRadius = 4
+    statusDot.translatesAutoresizingMaskIntoConstraints = false
+    statusContainer.addSubview(statusDot)
+
+    statusLabel.font = CaptureChromePalette.manrope("SemiBold", 11)
     statusLabel.textColor = Self.controlMint
-    statusLabel.textAlignment = .center
-    statusLabel.numberOfLines = 2
+    statusLabel.textAlignment = .left
+    statusLabel.numberOfLines = 1
+    statusLabel.adjustsFontSizeToFitWidth = true
+    statusLabel.minimumScaleFactor = 0.8
     statusLabel.text = "STARTING CAMERA"
     statusLabel.translatesAutoresizingMaskIntoConstraints = false
+    statusContainer.addSubview(statusLabel)
 
-    detailLabel.font = Self.scaledFont(name: "Manrope-SemiBold", size: 17, textStyle: .headline)
-    detailLabel.adjustsFontForContentSizeCategory = true
-    detailLabel.textColor = .white
-    detailLabel.textAlignment = .center
-    detailLabel.numberOfLines = 0
+    // One line, shrinking to fit: the card keeps one height in every state
+    // so the guide band below it never moves.
+    detailLabel.font = CaptureChromePalette.manrope("SemiBold", 17)
+    detailLabel.textColor = CaptureChromePalette.onDark
+    detailLabel.textAlignment = .left
+    detailLabel.numberOfLines = 1
+    detailLabel.adjustsFontSizeToFitWidth = true
+    detailLabel.minimumScaleFactor = 0.7
+    detailLabel.lineBreakMode = .byTruncatingTail
     detailLabel.text = "Starting on-device body tracking…"
     detailLabel.translatesAutoresizingMaskIntoConstraints = false
+    statusContainer.addSubview(detailLabel)
 
-    statusStack.axis = .vertical
-    statusStack.alignment = .fill
-    statusStack.spacing = 3
-    statusStack.translatesAutoresizingMaskIntoConstraints = false
-    statusStack.addArrangedSubview(statusLabel)
-    statusStack.addArrangedSubview(detailLabel)
-    statusContainer.contentView.addSubview(statusStack)
-
-    closeButton.configuration = Self.capsuleConfig(symbol: "xmark")
-    closeButton.accessibilityLabel = "Close camera"
-    closeButton.accessibilityHint = "Stops any recording and closes the camera"
-    closeButton.translatesAutoresizingMaskIntoConstraints = false
     closeButton.addTarget(self, action: #selector(closePressed), for: .touchUpInside)
     view.addSubview(closeButton)
 
@@ -418,34 +761,51 @@ final class GuidedCaptureViewController: UIViewController {
     targetRing.opacity = 0
     view.layer.addSublayer(targetRing)
 
-    let tap = UITapGestureRecognizer(target: self, action: #selector(handleTargetTap(_:)))
-    view.addGestureRecognizer(tap)
-
+    // The preview owns ONE gesture: pinch-to-zoom. (The start-spot tap was
+    // removed with the record button — auto capture has nothing to tap.)
+    // UIKit exempts just its own stock controls from a parent view's
+    // recognizers; our chrome is custom UIControls, so the delegate refuses
+    // touches that begin on a control or a chrome surface, and
+    // cancelsTouchesInView=false guarantees a recognized gesture can never
+    // take a touch away from a view underneath it.
     let pinch = UIPinchGestureRecognizer(target: self, action: #selector(handleZoomPinch(_:)))
+    pinch.cancelsTouchesInView = false
+    pinch.delegate = self
     view.addGestureRecognizer(pinch)
 
     configureCameraControls()
 
+    let safe = view.safeAreaLayoutGuide
     NSLayoutConstraint.activate([
       overlayView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
       overlayView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
       overlayView.topAnchor.constraint(equalTo: view.topAnchor),
       overlayView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-      closeButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 18),
-      closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 14),
-      closeButton.widthAnchor.constraint(equalToConstant: 48),
-      closeButton.heightAnchor.constraint(equalToConstant: 48),
+      // Top bar row.
+      closeButton.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 16),
+      closeButton.topAnchor.constraint(equalTo: safe.topAnchor, constant: 8),
 
-      statusContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-      statusContainer.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 78),
-      statusContainer.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
-      statusContainer.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
+      // Status card spans the width under the top bar; fixed height keeps the
+      // guide band stable while the copy changes.
+      statusContainer.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 16),
+      statusContainer.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -16),
+      statusContainer.topAnchor.constraint(equalTo: closeButton.bottomAnchor, constant: 10),
+      statusContainer.heightAnchor.constraint(equalToConstant: Self.statusCardHeight),
 
-      statusStack.leadingAnchor.constraint(equalTo: statusContainer.contentView.layoutMarginsGuide.leadingAnchor),
-      statusStack.trailingAnchor.constraint(equalTo: statusContainer.contentView.layoutMarginsGuide.trailingAnchor),
-      statusStack.topAnchor.constraint(equalTo: statusContainer.contentView.layoutMarginsGuide.topAnchor),
-      statusStack.bottomAnchor.constraint(equalTo: statusContainer.contentView.layoutMarginsGuide.bottomAnchor),
+      statusDot.leadingAnchor.constraint(equalTo: statusContainer.leadingAnchor, constant: 16),
+      statusDot.centerYAnchor.constraint(equalTo: statusLabel.centerYAnchor),
+      statusDot.widthAnchor.constraint(equalToConstant: 8),
+      statusDot.heightAnchor.constraint(equalToConstant: 8),
+
+      statusLabel.leadingAnchor.constraint(equalTo: statusDot.trailingAnchor, constant: 8),
+      statusLabel.trailingAnchor.constraint(equalTo: statusContainer.trailingAnchor, constant: -16),
+      statusLabel.topAnchor.constraint(equalTo: statusContainer.topAnchor, constant: 12),
+
+      detailLabel.leadingAnchor.constraint(equalTo: statusContainer.leadingAnchor, constant: 16),
+      detailLabel.trailingAnchor.constraint(equalTo: statusContainer.trailingAnchor, constant: -16),
+      detailLabel.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 4),
+      detailLabel.bottomAnchor.constraint(lessThanOrEqualTo: statusContainer.bottomAnchor, constant: -8),
     ])
 
     updateCapturePresentation(
@@ -479,32 +839,20 @@ final class GuidedCaptureViewController: UIViewController {
 
   // ── Camera controls: build / render / interact ────────────────────────────
 
-  private static func capsuleConfig(symbol: String, pointSize: CGFloat = 17) -> UIButton.Configuration {
-    var config = UIButton.Configuration.filled()
-    config.baseBackgroundColor = UIColor.black.withAlphaComponent(0.5)
-    config.baseForegroundColor = .white
-    config.cornerStyle = .capsule
-    config.contentInsets = .zero
-    config.image = UIImage(
-      systemName: symbol,
-      withConfiguration: UIImage.SymbolConfiguration(pointSize: pointSize, weight: .semibold)
-    )
-    return config
-  }
-
   private func configureCameraControls() {
-    // Bottom row, system-camera layout: Center Stage · SHUTTER · flip.
+    // Bottom row: AUTO FRAME chip (when the camera supports it) · SHUTTER
+    // (record, then stop & analyze) · flip. Top bar: close · zoom presets ·
+    // REC chip while recording. Everything is our own glass + glyph language.
     shutterButton.translatesAutoresizingMaskIntoConstraints = false
     shutterButton.isEnabled = false
     shutterButton.addTarget(self, action: #selector(shutterPressed), for: .touchUpInside)
     view.addSubview(shutterButton)
 
-    shutterHint.font = Self.scaledFont(name: "Manrope-Medium", size: 12, textStyle: .caption1)
-    shutterHint.adjustsFontForContentSizeCategory = true
-    shutterHint.textColor = UIColor.white.withAlphaComponent(0.78)
+    shutterHint.font = CaptureChromePalette.manrope("Medium", 12)
+    shutterHint.textColor = CaptureChromePalette.onDark.withAlphaComponent(0.78)
     shutterHint.textAlignment = .center
     shutterHint.numberOfLines = 1
-    shutterHint.text = "Others on court? Tap where you’ll stand."
+    shutterHint.text = "Tap to start recording"
     shutterHint.layer.shadowColor = UIColor.black.cgColor
     shutterHint.layer.shadowOpacity = 0.6
     shutterHint.layer.shadowRadius = 4
@@ -513,101 +861,89 @@ final class GuidedCaptureViewController: UIViewController {
     shutterHint.translatesAutoresizingMaskIntoConstraints = false
     view.addSubview(shutterHint)
 
-    flipButton.configuration = Self.capsuleConfig(symbol: "arrow.triangle.2.circlepath.camera")
-    flipButton.accessibilityLabel = "Flip camera"
-    flipButton.accessibilityHint = "Switches between the rear and front cameras"
-    flipButton.translatesAutoresizingMaskIntoConstraints = false
     flipButton.addTarget(self, action: #selector(flipPressed), for: .touchUpInside)
     view.addSubview(flipButton)
 
-    centerStageButton.configuration = Self.capsuleConfig(symbol: "person.and.background.dotted")
-    centerStageButton.accessibilityLabel = "Center Stage"
-    centerStageButton.accessibilityHint = "Automatically keeps you framed, like FaceTime"
-    centerStageButton.translatesAutoresizingMaskIntoConstraints = false
+    centerStageButton.accessibilityLabel = "Auto frame"
+    centerStageButton.accessibilityHint = "Automatically keeps you framed while you move"
     centerStageButton.addTarget(self, action: #selector(centerStagePressed), for: .touchUpInside)
     centerStageButton.isHidden = true
     view.addSubview(centerStageButton)
 
-    zoomContainer.layer.cornerRadius = 22
-    zoomContainer.layer.cornerCurve = .continuous
-    zoomContainer.clipsToBounds = true
-    zoomContainer.layer.borderWidth = 1
-    zoomContainer.layer.borderColor = UIColor.white.withAlphaComponent(0.14).cgColor
-    zoomContainer.translatesAutoresizingMaskIntoConstraints = false
+    zoomContainer.clipsToBounds = false
     view.addSubview(zoomContainer)
 
     zoomStack.axis = .horizontal
     zoomStack.alignment = .center
-    zoomStack.spacing = 4
+    zoomStack.spacing = 2
     zoomStack.translatesAutoresizingMaskIntoConstraints = false
-    zoomContainer.contentView.addSubview(zoomStack)
+    zoomContainer.addSubview(zoomStack)
 
-    // REC chip: universal "this is recording" signal + elapsed time.
-    recChip.layer.cornerRadius = 16
-    recChip.layer.cornerCurve = .continuous
-    recChip.clipsToBounds = true
-    recChip.layer.borderWidth = 1
-    recChip.layer.borderColor = UIColor.white.withAlphaComponent(0.14).cgColor
+    // REC chip: the universal "this is recording" signal + elapsed time, in
+    // the brand's flame and Manrope figures.
     recChip.alpha = 0
     recChip.isAccessibilityElement = true
     recChip.accessibilityLabel = "Recording"
-    recChip.translatesAutoresizingMaskIntoConstraints = false
     view.addSubview(recChip)
 
     recDot.backgroundColor = Self.recordRed
     recDot.layer.cornerRadius = 5
     recDot.translatesAutoresizingMaskIntoConstraints = false
-    recChip.contentView.addSubview(recDot)
+    recChip.addSubview(recDot)
 
-    recTimerLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 14, weight: .semibold)
-    recTimerLabel.textColor = .white
+    recTimerLabel.font = CaptureChromePalette.manrope("Bold", 14)
+    recTimerLabel.textColor = CaptureChromePalette.onDark
     recTimerLabel.text = "0:00"
     recTimerLabel.translatesAutoresizingMaskIntoConstraints = false
-    recChip.contentView.addSubview(recTimerLabel)
+    recChip.addSubview(recTimerLabel)
 
+    let safe = view.safeAreaLayoutGuide
     NSLayoutConstraint.activate([
       shutterButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-      shutterButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -30),
-      shutterButton.widthAnchor.constraint(equalToConstant: 78),
-      shutterButton.heightAnchor.constraint(equalToConstant: 78),
+      shutterButton.bottomAnchor.constraint(equalTo: safe.bottomAnchor, constant: -24),
+      shutterButton.widthAnchor.constraint(equalToConstant: CaptureShutterButton.ringDiameter),
+      shutterButton.heightAnchor.constraint(equalToConstant: CaptureShutterButton.ringDiameter),
 
       shutterHint.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-      shutterHint.topAnchor.constraint(equalTo: shutterButton.bottomAnchor, constant: 6),
+      shutterHint.topAnchor.constraint(equalTo: shutterButton.bottomAnchor, constant: 4),
       shutterHint.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 24),
       shutterHint.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -24),
 
       flipButton.centerYAnchor.constraint(equalTo: shutterButton.centerYAnchor),
-      flipButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -30),
-      flipButton.widthAnchor.constraint(equalToConstant: 52),
-      flipButton.heightAnchor.constraint(equalToConstant: 52),
+      flipButton.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -28),
 
       centerStageButton.centerYAnchor.constraint(equalTo: shutterButton.centerYAnchor),
-      centerStageButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 30),
-      centerStageButton.widthAnchor.constraint(equalToConstant: 52),
-      centerStageButton.heightAnchor.constraint(equalToConstant: 52),
+      centerStageButton.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 24),
 
-      zoomContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-      zoomContainer.bottomAnchor.constraint(equalTo: shutterButton.topAnchor, constant: -22),
+      // Zoom presets share the top bar with the close button (left) and the
+      // REC chip (right): centered when there is room, otherwise pushed off
+      // whichever neighbour they would overlap (narrow phones).
+      zoomContainer.leadingAnchor.constraint(greaterThanOrEqualTo: closeButton.trailingAnchor, constant: 8),
+      zoomContainer.trailingAnchor.constraint(lessThanOrEqualTo: recChip.leadingAnchor, constant: -8),
+      zoomContainer.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
       zoomContainer.heightAnchor.constraint(equalToConstant: 44),
 
-      zoomStack.leadingAnchor.constraint(equalTo: zoomContainer.contentView.leadingAnchor, constant: 6),
-      zoomStack.trailingAnchor.constraint(equalTo: zoomContainer.contentView.trailingAnchor, constant: -6),
-      zoomStack.topAnchor.constraint(equalTo: zoomContainer.contentView.topAnchor),
-      zoomStack.bottomAnchor.constraint(equalTo: zoomContainer.contentView.bottomAnchor),
+      zoomStack.leadingAnchor.constraint(equalTo: zoomContainer.leadingAnchor, constant: 4),
+      zoomStack.trailingAnchor.constraint(equalTo: zoomContainer.trailingAnchor, constant: -4),
+      zoomStack.topAnchor.constraint(equalTo: zoomContainer.topAnchor),
+      zoomStack.bottomAnchor.constraint(equalTo: zoomContainer.bottomAnchor),
 
-      recChip.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+      recChip.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -16),
       recChip.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
-      recChip.heightAnchor.constraint(equalToConstant: 32),
+      recChip.heightAnchor.constraint(equalToConstant: 36),
 
-      recDot.leadingAnchor.constraint(equalTo: recChip.contentView.leadingAnchor, constant: 12),
-      recDot.centerYAnchor.constraint(equalTo: recChip.contentView.centerYAnchor),
+      recDot.leadingAnchor.constraint(equalTo: recChip.leadingAnchor, constant: 14),
+      recDot.centerYAnchor.constraint(equalTo: recChip.centerYAnchor),
       recDot.widthAnchor.constraint(equalToConstant: 10),
       recDot.heightAnchor.constraint(equalToConstant: 10),
 
       recTimerLabel.leadingAnchor.constraint(equalTo: recDot.trailingAnchor, constant: 8),
-      recTimerLabel.trailingAnchor.constraint(equalTo: recChip.contentView.trailingAnchor, constant: -14),
-      recTimerLabel.centerYAnchor.constraint(equalTo: recChip.contentView.centerYAnchor),
+      recTimerLabel.trailingAnchor.constraint(equalTo: recChip.trailingAnchor, constant: -16),
+      recTimerLabel.centerYAnchor.constraint(equalTo: recChip.centerYAnchor),
     ])
+    let zoomCentered = zoomContainer.centerXAnchor.constraint(equalTo: view.centerXAnchor)
+    zoomCentered.priority = .defaultHigh
+    zoomCentered.isActive = true
   }
 
   private static let zoomPresets: [CGFloat] = [0.5, 1, 2, 3]
@@ -615,18 +951,14 @@ final class GuidedCaptureViewController: UIViewController {
   private func renderZoomState(_ state: CameraEngine.ZoomState) {
     lastZoomState = state
 
-    // Center Stage: rendered wherever the hardware supports it; volt when on.
+    // Auto frame (Center Stage): rendered wherever the hardware supports it;
+    // volt when on.
     centerStageButton.isHidden = !state.centerStageSupported
-    var centerStageConfig = centerStageButton.configuration
-    centerStageConfig?.baseForegroundColor = state.centerStageEnabled ? Self.controlVolt : .white
-    centerStageConfig?.baseBackgroundColor = state.centerStageEnabled
-      ? UIColor.black.withAlphaComponent(0.78)
-      : UIColor.black.withAlphaComponent(0.5)
-    centerStageButton.configuration = centerStageConfig
-    centerStageButton.accessibilityValue = state.centerStageEnabled ? "On" : "Off"
+    centerStageButton.isOn = state.centerStageEnabled
 
-    // Zoom cluster: presets inside the device's real range. Hidden while
-    // Center Stage owns framing (manual zoom is suspended by the system).
+    // Zoom presets inside the device's real range. Hidden only while auto
+    // frame owns framing (manual zoom is suspended by the system); recording
+    // is always on, so they stay available beside the REC chip.
     zoomPresetButtons.forEach { $0.removeFromSuperview() }
     zoomPresetButtons = []
     let presets = Self.zoomPresets.filter {
@@ -634,32 +966,22 @@ final class GuidedCaptureViewController: UIViewController {
     }
     let active = Self.nearestPreset(in: presets, to: state.displayZoom)
     for preset in presets {
-      var config = UIButton.Configuration.filled()
       let isActive = preset == active
-      config.baseBackgroundColor = isActive ? UIColor.white.withAlphaComponent(0.22) : .clear
-      config.baseForegroundColor = isActive ? Self.controlVolt : UIColor.white.withAlphaComponent(0.82)
-      config.cornerStyle = .capsule
-      config.contentInsets = NSDirectionalEdgeInsets(top: 8, leading: 11, bottom: 8, trailing: 11)
       let title = isActive
         ? String(format: abs(state.displayZoom.rounded() - state.displayZoom) < 0.05 ? "%.0f×" : "%.1f×", state.displayZoom)
         : Self.presetLabel(preset)
-      config.attributedTitle = AttributedString(
-        title,
-        attributes: AttributeContainer([
-          .font: UIFont.monospacedDigitSystemFont(ofSize: 13, weight: isActive ? .bold : .semibold),
-        ])
-      )
-      let button = UIButton(configuration: config)
-      button.accessibilityLabel = "Zoom \(Self.presetLabel(preset))"
-      button.addAction(
+      let chip = CaptureTextChip(text: title, glass: false, minWidth: 44, height: 36)
+      chip.isOn = isActive
+      chip.accessibilityLabel = "Zoom \(Self.presetLabel(preset))"
+      chip.addAction(
         UIAction { [weak self] _ in
           self?.controlHaptic.impactOccurred(intensity: 0.5)
           self?.engine.setDisplayZoom(preset, animated: true)
         },
         for: .touchUpInside
       )
-      zoomStack.addArrangedSubview(button)
-      zoomPresetButtons.append(button)
+      zoomStack.addArrangedSubview(chip)
+      zoomPresetButtons.append(chip)
     }
     zoomContainer.isHidden = presets.count < 2 || state.centerStageEnabled
     applyControlAvailability()
@@ -673,7 +995,7 @@ final class GuidedCaptureViewController: UIViewController {
     presets.min(by: { abs($0 - value) < abs($1 - value) })
   }
 
-  /// Framing controls stay ON SCREEN the whole session. They only become
+  /// Framing controls stay available the whole session. They only become
   /// inert (dimmed) for the few seconds a detected stroke's clip is being
   /// finalized — a lens or framing change mid-write would corrupt the
   /// evidence file itself.
@@ -691,16 +1013,14 @@ final class GuidedCaptureViewController: UIViewController {
 
   private func applyControlAvailability() {
     let allowed = controlsCurrentlyAllowed
-    for control in [flipButton, centerStageButton] {
-      control.isEnabled = allowed
-      control.alpha = allowed ? 1 : 0.45
-    }
+    flipButton.isEnabled = allowed
+    centerStageButton.isEnabled = allowed
     zoomContainer.alpha = allowed ? 1 : 0.45
     zoomContainer.isUserInteractionEnabled = allowed
     zoomPresetButtons.forEach { $0.isEnabled = allowed }
     // The shutter is live from the first camera frame until the stroke is
-    // caught; it is the record control while composing and the stop control
-    // while recording.
+    // caught: the record control while composing, STOP & ANALYZE while
+    // recording, inert once a stroke is being finalized.
     switch presentedCaptureStage {
     case .composing, .positioning, .bodyLocked:
       shutterButton.isEnabled = true
@@ -708,6 +1028,11 @@ final class GuidedCaptureViewController: UIViewController {
       shutterButton.isEnabled = false
     }
     let hintVisible = presentedCaptureStage == .composing
+      || presentedCaptureStage == .positioning
+      || presentedCaptureStage == .bodyLocked
+    shutterHint.text = presentedCaptureStage == .composing
+      ? "Tap to start recording"
+      : "Tap to stop and analyze"
     UIView.animate(withDuration: 0.2, delay: 0, options: [.beginFromCurrentState]) {
       self.shutterHint.alpha = hintVisible ? 1 : 0
     }
@@ -772,6 +1097,15 @@ final class GuidedCaptureViewController: UIViewController {
     return recordingRequested
   }
 
+  /// THREADING: the detector, readiness evaluator, evidence accumulator and
+  /// every target-acquisition variable are owned by `visionQueue` (they are
+  /// mutated per frame there). Main-thread code never touches them directly;
+  /// it enqueues the mutation so it serializes with frame processing instead
+  /// of racing a Swift dictionary/array mid-update.
+  private func onVisionQueue(_ work: @escaping () -> Void) {
+    visionQueue.async(execute: work)
+  }
+
   private func resetAcquisitionForCameraChange() {
     assert(Thread.isMainThread)
     stateLock.lock()
@@ -779,32 +1113,34 @@ final class GuidedCaptureViewController: UIViewController {
     poseHistory = []
     stateLock.unlock()
 
-    targetAcquisition = .choosingRegion
-    startRegion = nil
-    occupancyStreak = 0
-    occupantTorso = nil
-    gestureBest = [:]
-    gestureStreaks = [:]
-    ambiguousSinceMs = nil
-    targetSeed = nil
-    targetSeedSource = "start_region_occupancy"
-    lockInstrumentFirstFrameMs = nil
-    lockInstrumentLastFrameMs = nil
-    lockInstrumentAmbiguousEnteredMs = nil
-    lockInstrumentLock = nil
     targetRing.opacity = 0
-
-    detector.reset()
-    readiness.reset()
-    evidenceAccumulator.reset()
-    poseProvider.resetPrimaryPersonAnchor()
+    onVisionQueue { [self] in
+      targetAcquisition = .choosingRegion
+      startRegion = nil
+      occupancyStreak = 0
+      occupantTorso = nil
+      gestureBest = [:]
+      gestureStreaks = [:]
+      ambiguousSinceMs = nil
+      targetSeed = nil
+      targetSeedSource = "start_region_occupancy"
+      lockInstrumentFirstFrameMs = nil
+      lockInstrumentLastFrameMs = nil
+      lockInstrumentAmbiguousEnteredMs = nil
+      lockInstrumentLock = nil
+      armedLossStreak = 0
+      detector.reset()
+      readiness.reset()
+      evidenceAccumulator.reset()
+      poseProvider.resetPrimaryPersonAnchor()
+    }
 
     emit(type: "target", values: ["state": "reset", "reason": "camera_flipped"])
     if isRecordingRequested {
       updateCapturePresentation(
         stage: .positioning,
         title: "RECORDING",
-        detail: "Walk into the outline",
+        detail: "Step into the outline",
         overlayState: .positioning,
         prominent: true
       )
@@ -844,23 +1180,21 @@ final class GuidedCaptureViewController: UIViewController {
     stateLock.unlock()
     guard !alreadyLive else { return }
     lockHaptic.prepare()
-    selectionHaptic.prepare()
     emit(type: "session", values: ["state": "composing"])
     presentComposing(snapshot: nil)
   }
 
-  // ── Recording lifecycle (shutter) ─────────────────────────────────────────
+  // ── Recording lifecycle (shutter → rolling spool → auto capture) ──────────
 
-  @objc private func shutterPressed() {
-    guard !terminal else { return }
-    if isRecordingRequested {
-      stopRecordingFromShutter()
-    } else if presentedCaptureStage == .composing {
-      startRecordingFromShutter()
-    }
+  private enum RecordingStart {
+    /// The shutter was pressed: fresh history, REC timer from zero, copy.
+    case initial
+    /// The rolling spool was replaced (timeout or the movie output's hard
+    /// cap) with nothing detected: silent, the athlete never sees a gap.
+    case restart
   }
 
-  private func startRecordingFromShutter() {
+  private func startRecording(_ kind: RecordingStart) {
     assert(Thread.isMainThread)
     do {
       let url = try ClipMediaStore.makeObservationURL()
@@ -869,41 +1203,38 @@ final class GuidedCaptureViewController: UIViewController {
       recordingStarted = false
       recordingRequested = true
       discardRecordingOnFinish = false
-      armed = false
-      poseHistory = []
-      stateLock.unlock()
-      detector.reset()
-      evidenceAccumulator.reset()
-      transientNotice = nil
-      if startRegion != nil {
-        // A tapped start spot resumes its occupancy hunt now that the user
-        // is walking out to it.
-        targetAcquisition = .waitingForOccupant
-        occupancyStreak = 0
-        lockInstrumentFirstFrameMs = nil
-        lockInstrumentLastFrameMs = nil
+      pendingStrokeIsManual = false
+      completionFinalize = nil
+      if kind == .initial {
+        armed = false
+        poseHistory = []
       }
-      recordingStartedAt = Date()
+      stateLock.unlock()
+      onVisionQueue { [self] in
+        detector.reset()
+        armedLossStreak = 0
+        if kind == .initial { evidenceAccumulator.reset() }
+      }
       engine.startContinuousRecording(to: url)
+      scheduleObservationTimer()
+      emit(type: "session", values: [
+        "state": "recording_started",
+        "reason": kind == .initial ? "shutter" : "spool_restart",
+      ])
+      guard kind == .initial else { return }
+      transientNotice = nil
+      recordingStartedAt = Date()
       captureHaptic.prepare()
       controlHaptic.impactOccurred(intensity: 0.8)
       shutterButton.setRecording(true, animated: true)
       showRecChip(true)
-      observationTimer?.invalidate()
-      observationTimer = Timer.scheduledTimer(
-        withTimeInterval: Self.observationTimeoutSeconds,
-        repeats: false
-      ) { [weak self] _ in
-        self?.observationTimedOut()
-      }
-      emit(type: "session", values: ["state": "recording_started"])
       updateCapturePresentation(
         stage: .positioning,
         title: "RECORDING",
-        detail: "Walk into the outline",
+        detail: "Step into the outline",
         overlayState: .positioning,
         prominent: true,
-        announcement: "Recording. Walk to your spot; the stroke is captured automatically when you swing."
+        announcement: "Recording. Walk to your spot and swing; the stroke is captured automatically. Tap stop to analyze what you have."
       )
     } catch {
       finishFailure(
@@ -914,57 +1245,193 @@ final class GuidedCaptureViewController: UIViewController {
     }
   }
 
-  /// Shutter pressed while recording: discard the spool and go back to
-  /// setup. Not a failure — the user simply wants another go.
-  private func stopRecordingFromShutter() {
-    assert(Thread.isMainThread)
-    stateLock.lock()
-    let canStop = pendingStroke == nil && !processingClip && recordingRequested
-    if canStop { discardRecordingOnFinish = true }
-    stateLock.unlock()
-    guard canStop else { return }
-    controlHaptic.impactOccurred(intensity: 0.6)
-    emit(type: "session", values: ["state": "recording_stopped", "reason": "user_stopped"])
-    endRecordingAndCompose(notice: "Recording stopped — tap record when you’re set")
+  private func scheduleObservationTimer() {
+    observationTimer?.invalidate()
+    observationTimer = Timer.scheduledTimer(
+      withTimeInterval: Self.observationTimeoutSeconds,
+      repeats: false
+    ) { [weak self] _ in
+      self?.observationTimedOut()
+    }
   }
 
+  /// Rolling spool: nothing was detected in this file, so it is replaced by a
+  /// fresh one under the movie output's hard cap — same camera, no callback
+  /// for the discarded file, REC timer untouched. The detector restarts so no
+  /// event can straddle two files; the pose history is kept (STOP & ANALYZE
+  /// only considers poses inside the current file).
   private func observationTimedOut() {
     assert(Thread.isMainThread)
     stateLock.lock()
-    let canReset = pendingStroke == nil && !processingClip && recordingRequested && !terminal
-    if canReset { discardRecordingOnFinish = true }
+    let canRestart = pendingStroke == nil && !processingClip && recordingRequested && !terminal
     stateLock.unlock()
-    guard canReset else { return }
+    guard canRestart else { return }
     emit(type: "session", values: ["state": "recording_stopped", "reason": "observation_timeout"])
-    endRecordingAndCompose(notice: "No stroke seen in \(Int(Self.observationTimeoutSeconds))s — tap record to try again")
+    do {
+      let url = try ClipMediaStore.makeObservationURL()
+      stateLock.lock()
+      observationURL = url
+      recordingStarted = false
+      stateLock.unlock()
+      onVisionQueue { [self] in
+        detector.reset()
+        armedLossStreak = 0
+      }
+      engine.flipCameraRestartingSpool(to: lastZoomState?.position ?? .back, nextRecordingURL: url)
+      scheduleObservationTimer()
+      emit(type: "session", values: ["state": "recording_started", "reason": "spool_restart"])
+    } catch {
+      finishFailure(
+        code: "camera.storage_failed",
+        message: "A private recording file could not be created.",
+        abstention: "storage_failure"
+      )
+    }
   }
 
-  /// Shared tail for user stop + timeout: the engine stops and discards the
-  /// active spool without a finish callback (decided against the movie
-  /// output's real state — see CameraEngine.discardActiveRecording), then
-  /// the controller composes again. `discardRecordingOnFinish` stays armed
-  /// as a second guard in case a finish is already in flight; the next
-  /// shutter press clears it.
-  private func endRecordingAndCompose(notice: String) {
+  @objc private func shutterPressed() {
+    guard !terminal else { return }
+    if isRecordingRequested {
+      captureFromStop()
+    } else if presentedCaptureStage == .composing {
+      startRecording(.initial)
+    }
+  }
+
+  /// STOP & ANALYZE. The live trigger can miss a swing the athlete knows
+  /// happened (a soft dink, a body partly clipped by the frame edge), so the
+  /// stop button never just discards: an offline pass runs the same detector
+  /// over the retained pose history with a permissive trigger, the strongest
+  /// motion window it finds becomes the stroke, and the recording is
+  /// finalized around it. If nothing in the history moved like a swing, the
+  /// recording stops and the camera returns to composing with a notice — the
+  /// athlete asked to stop, and no clip is invented.
+  private func captureFromStop() {
+    assert(Thread.isMainThread)
+    stateLock.lock()
+    let canStop = pendingStroke == nil && !processingClip && recordingRequested && recordingStarted
+    let history = poseHistory
+    stateLock.unlock()
+    guard canStop else { return }
+    controlHaptic.impactOccurred(intensity: 0.8)
+    let fileStartMs = engine.currentRecordingFirstFrameTimestampMs
+    let stopMs = engine.currentRecordingLastFrameTimestampMs ?? history.last?.timestampMs
+    emit(type: "session", values: ["state": "manual_stop_requested"])
+
+    onVisionQueue { [self] in
+      let version = Self.manualStopModelVersion(detector.modelVersion)
+      guard let stopMs,
+            let event = Self.manualStopEvent(history: history, fileStartMs: fileStartMs, stopMs: stopMs),
+            let evidence = evidenceAccumulator.summary(
+              startMs: event.startMs,
+              endMs: event.endMs,
+              poseSource: "apple_vision_body_pose",
+              poseModelVersion: poseProvider.modelVersion,
+              triggerAlgorithmVersion: version
+            )
+      else {
+        emit(type: "session", values: ["state": "manual_stop_no_motion"])
+        DispatchQueue.main.async { [weak self] in
+          self?.stopRecordingWithoutCapture(notice: "No swing found — tap record and swing again")
+        }
+        return
+      }
+      stateLock.lock()
+      guard pendingStroke == nil, !terminal, recordingRequested else {
+        stateLock.unlock()
+        return
+      }
+      pendingStroke = event
+      pendingCaptureEvidence = evidence
+      pendingStrokeIsManual = true
+      // The user decided the end: finalize at the stop, the export's post-roll
+      // clamps to the last recorded frame.
+      completionFinalize = CompletionFinalize(atMs: stopMs, requestedEndMs: event.endMs)
+      stateLock.unlock()
+
+      var strokePayload: [String: Any] = [
+        "startTimestampMs": event.startMs,
+        "endTimestampMs": event.endMs,
+        "confidence": event.confidence,
+        "detectionModelVersion": version,
+        "source": "manual_stop",
+        "recognition": [
+          "status": event.recognition.status.rawValue,
+          "reason": event.recognition.reason ?? "validated_classifier_unavailable",
+        ],
+      ]
+      if let peakMotionMs = event.peakMotionMs {
+        strokePayload["peakMotionTimestampMs"] = peakMotionMs
+      }
+      emit(type: "stroke_detected", values: strokePayload)
+      DispatchQueue.main.async { [weak self] in
+        guard let self else { return }
+        self.observationTimer?.invalidate()
+        self.observationTimer = nil
+        self.updateCapturePresentation(
+          stage: .capturing,
+          title: "SWING FOUND",
+          detail: "Saving the swing",
+          overlayState: .capturing,
+          announcement: "Swing found. Saving."
+        )
+        self.closeButton.isEnabled = false
+        self.closeButton.alpha = 0.55
+      }
+      engine.stopContinuousRecording()
+    }
+  }
+
+  /// Provenance for a stop-button window: the live detector's version plus
+  /// the pass that produced it, so an analysis can never be mistaken for a
+  /// live-trigger capture.
+  private static func manualStopModelVersion(_ liveVersion: String) -> String {
+    "\(liveVersion)/manual-stop-relaxed-1"
+  }
+
+  /// Offline pass over the retained history: only poses inside the current
+  /// file (a rolling restart may have replaced it) and older than the
+  /// approach window count. The strongest event wins; nil when nothing moved
+  /// like a swing.
+  private static func manualStopEvent(history: [PoseFrame], fileStartMs: Int?, stopMs: Int) -> StrokeEvent? {
+    let cutoff = stopMs - manualStopApproachMs
+    let lowerBound = fileStartMs ?? Int.min
+    let usable = history.filter { $0.timestampMs >= lowerBound && $0.timestampMs <= cutoff }
+    guard usable.count >= 8 else { return nil }
+    return TemporalStrokeDetector.strongestEvent(in: usable)
+  }
+
+  /// Stop pressed with no swing in the history: the spool is discarded
+  /// through the engine's own suppression (decided on the session queue
+  /// against the movie output's real state) and the camera composes again
+  /// with a notice. Not a failure — the athlete simply gets another go.
+  private func stopRecordingWithoutCapture(notice: String) {
+    assert(Thread.isMainThread)
+    stateLock.lock()
+    let canStop = pendingStroke == nil && !processingClip && recordingRequested && !terminal
+    if canStop {
+      recordingRequested = false
+      recordingStarted = false
+      armed = false
+      poseHistory = []
+      observationURL = nil
+      discardRecordingOnFinish = true
+    }
+    stateLock.unlock()
+    guard canStop else { return }
     observationTimer?.invalidate()
     observationTimer = nil
-    stateLock.lock()
-    recordingRequested = false
-    recordingStarted = false
-    armed = false
-    poseHistory = []
-    observationURL = nil
-    stateLock.unlock()
-    // The movie output creates the spool file only once recording actually
-    // starts, so a discard against the engine's real state is all the cleanup
-    // this path needs — nothing to remove when the start never landed.
     engine.discardActiveRecording()
-    detector.reset()
-    evidenceAccumulator.reset()
-    if startRegion != nil { targetAcquisition = .choosingRegion }
+    onVisionQueue { [self] in
+      detector.reset()
+      evidenceAccumulator.reset()
+      armedLossStreak = 0
+    }
+    emit(type: "session", values: ["state": "recording_stopped", "reason": "user_stopped"])
+    controlHaptic.impactOccurred(intensity: 0.6)
     shutterButton.setRecording(false, animated: true)
     showRecChip(false)
-    transientNotice = (notice, Date().addingTimeInterval(3.5))
+    transientNotice = (notice, Date().addingTimeInterval(4))
     presentComposing(snapshot: lastComposingSnapshot)
   }
 
@@ -1034,7 +1501,12 @@ final class GuidedCaptureViewController: UIViewController {
         self.stateLock.unlock()
       }
       do {
-        if recording, self.targetAcquisition != .locked, self.startRegion != nil {
+        if recording, self.targetAcquisition != .locked, self.startRegion != nil,
+           timestampMs - self.lastAcquisitionScanMs >= Self.acquisitionScanIntervalMs {
+          // The occupancy hunt is a SECOND full-body inference; at every frame
+          // it halved the pose rate the trigger sees. ~10 Hz is plenty to lock
+          // a person standing on a spot.
+          self.lastAcquisitionScanMs = timestampMs
           self.considerTargetAcquisition(pixelBuffer: pixelBuffer, timestampMs: timestampMs)
         }
         let pose = try self.poseProvider.extractPose(pixelBuffer: pixelBuffer, timestampMs: timestampMs)
@@ -1047,7 +1519,7 @@ final class GuidedCaptureViewController: UIViewController {
           }
           self.retainPose(pose)
         }
-        self.handleReadiness(snapshot)
+        self.handleReadiness(snapshot, pose: pose)
         if recording, self.startRegion == nil || self.targetAcquisition == .locked {
           // D-029: the completion monitor mirrors the trigger's wrist-motion
           // series, so it ingests exactly the poses the trigger sees.
@@ -1055,10 +1527,13 @@ final class GuidedCaptureViewController: UIViewController {
           self.considerTrigger(pose: pose, readiness: snapshot)
         }
       } catch {
+        // No person this frame (motion blur mid-swing is the common cause).
+        // The detector is NOT reset: its ≤250 ms sample-gap rule already
+        // ignores speeds across a gap, so a stroke in progress survives a
+        // dropped frame instead of being silently discarded.
         let snapshot = self.readiness.ingestMissing(timestampMs: timestampMs)
         if recording { self.evidenceAccumulator.ingestMissing(timestampMs: timestampMs) }
-        self.detector.reset()
-        self.handleReadiness(snapshot)
+        self.handleReadiness(snapshot, pose: nil)
       }
     }
   }
@@ -1159,40 +1634,57 @@ final class GuidedCaptureViewController: UIViewController {
     readiness snapshot: PoseReadinessEvaluator.Snapshot
   ) {
     stateLock.lock()
-    let alreadyArmed = armed
+    let wasTracked = armed
     let isTerminal = terminal
     let hasPending = pendingStroke != nil
     let recordingIsActive = recordingStarted && recordingRequested
     stateLock.unlock()
     guard !isTerminal, !hasPending, recordingIsActive else { return }
 
-    let hasPreRoll: Bool
-    if let first = engine.currentRecordingFirstFrameTimestampMs {
-      hasPreRoll = pose.timestampMs - first >= Self.preRollMs
+    // BODY TRACKED is presentation + telemetry, NOT a gate. The previous
+    // design armed the trigger only after readiness said `ready` (full body
+    // inside the margins, 0.32–0.88 tall, 450 ms still) and reset the
+    // detector on every other frame — so an athlete standing a step too far
+    // ("Move a little closer") could swing all day and nothing was ever
+    // detected. Now the detector sees every trackable frame; readiness only
+    // decides what the status card says.
+    if snapshot.isReady {
+      armedLossStreak = 0
+      if !wasTracked {
+        stateLock.lock()
+        armed = true
+        stateLock.unlock()
+        DispatchQueue.main.async { [weak self] in
+          self?.presentBodyLocked(jointCoverage: snapshot.jointCoverage)
+        }
+        emit(type: "session", values: ["state": "armed"])
+      }
+    } else if wasTracked, snapshot.state == .noPerson || snapshot.state == .fullBodyRequired {
+      // A swing routinely pushes a knee or ankle past the frame edge for a
+      // few frames (follow-through). Tolerate a short loss; drop the lock
+      // only once the athlete has really left (≈half a second).
+      armedLossStreak += 1
+      if armedLossStreak >= Self.armedLossFramesToDisarm {
+        armedLossStreak = 0
+        stateLock.lock()
+        armed = false
+        stateLock.unlock()
+        DispatchQueue.main.async { [weak self] in self?.presentPositioning(snapshot: snapshot) }
+        emit(type: "session", values: ["state": "disarmed", "reason": snapshot.state.rawValue])
+      }
     } else {
-      hasPreRoll = false
+      armedLossStreak = 0
     }
 
-    if !alreadyArmed {
-      guard snapshot.isReady, hasPreRoll else {
-        detector.reset()
-        return
-      }
-      stateLock.lock()
-      armed = true
-      stateLock.unlock()
-      DispatchQueue.main.async { [weak self] in
-        self?.presentBodyLocked(jointCoverage: snapshot.jointCoverage)
-      }
-      emit(type: "session", values: ["state": "armed"])
-    } else if snapshot.state == .noPerson || snapshot.state == .fullBodyRequired {
-      detector.reset()
-      stateLock.lock()
-      armed = false
-      stateLock.unlock()
-      DispatchQueue.main.async { [weak self] in self?.presentPositioning(snapshot: snapshot) }
-      emit(type: "session", values: ["state": "disarmed", "reason": snapshot.state.rawValue])
-      return
+    // Warm-up: a swing already under way when this file began could not be
+    // exported whole, so the trigger waits `triggerWarmupMs` after the first
+    // recorded frame (the detector keeps ingesting so its speed history is
+    // continuous when the gate opens).
+    let warmedUp: Bool
+    if let first = engine.currentRecordingFirstFrameTimestampMs {
+      warmedUp = pose.timestampMs - first >= Self.triggerWarmupMs
+    } else {
+      warmedUp = false
     }
 
     // NO CONFIDENCE GATE HERE, BY CONSTRUCTION. `StrokeEvent.confidence` is
@@ -1204,7 +1696,8 @@ final class GuidedCaptureViewController: UIViewController {
     // peak wrist speed, not a calibrated probability, so the real quality
     // controls are the detector's own `triggerWristSpeed` / `minStrokeMs` /
     // `maxStrokeMs` thresholds. Re-adding a gate here needs calibration data.
-    guard let event = detector.ingest(pose: pose, paddle: nil) else { return }
+    let detected = detector.ingest(pose: pose, paddle: nil)
+    guard warmedUp, let event = detected else { return }
     guard let captureEvidence = evidenceAccumulator.summary(
       startMs: event.startMs,
       endMs: event.endMs,
@@ -1226,6 +1719,7 @@ final class GuidedCaptureViewController: UIViewController {
     }
     pendingStroke = event
     pendingCaptureEvidence = captureEvidence
+    pendingStrokeIsManual = false
     stateLock.unlock()
     // D-029: arm the completion instrument at the bench's anchor (the
     // trigger's peak-motion timestamp) for BOTH strategies.
@@ -1256,7 +1750,7 @@ final class GuidedCaptureViewController: UIViewController {
       self.updateCapturePresentation(
         stage: .capturing,
         title: "MOTION CAPTURED",
-        detail: "Hold — recording the final frames",
+        detail: "Hold — saving the swing",
         overlayState: .capturing,
         announcement: "Motion captured. Hold position while the final frames are recorded."
       )
@@ -1265,11 +1759,22 @@ final class GuidedCaptureViewController: UIViewController {
     }
   }
 
-  private func handleReadiness(_ snapshot: PoseReadinessEvaluator.Snapshot) {
+  /// `pose` is the raw measured frame (nil when Vision found nobody). The
+  /// overlay draws it directly so the exoskeleton locks onto the body the
+  /// instant it is observed — including frames the readiness evaluator
+  /// rejects for low whole-frame confidence, which used to blank the body.
+  /// Arming still goes through the evaluator's verdict only.
+  private func handleReadiness(_ snapshot: PoseReadinessEvaluator.Snapshot, pose: PoseFrame?) {
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
-      self.overlayView.update(snapshot: snapshot)
+      self.overlayView.update(
+        pose: pose,
+        readinessState: snapshot.state,
+        jointCoverage: snapshot.jointCoverage,
+        timestampMs: snapshot.timestampMs
+      )
 
+      self.lastComposingSnapshot = snapshot
       self.stateLock.lock()
       let currentlyArmed = self.armed
       let recording = self.recordingRequested
@@ -1343,26 +1848,20 @@ final class GuidedCaptureViewController: UIViewController {
       )
     case .success(let artifact):
       guard let event, let captureEvidence else {
-        // The movie output hit its hard duration cap without a stroke: an
-        // honest "nothing detected" — back to setup, not an error screen.
+        // The movie output hit its hard duration cap without a stroke. The
+        // recording is automatic, so this is not a state the athlete should
+        // ever notice: the file is dropped and a fresh spool starts at once.
         ClipMediaStore.removeIfPresent(artifact.url)
         emit(type: "session", values: ["state": "recording_stopped", "reason": "no_stroke_detected"])
         DispatchQueue.main.async { [weak self] in
           guard let self else { return }
           self.stateLock.lock()
-          self.recordingRequested = false
+          let stillWanted = self.recordingRequested && !self.terminal
           self.recordingStarted = false
-          self.armed = false
-          self.poseHistory = []
           self.observationURL = nil
           self.stateLock.unlock()
-          self.observationTimer?.invalidate()
-          self.observationTimer = nil
-          self.detector.reset()
-          self.shutterButton.setRecording(false, animated: true)
-          self.showRecChip(false)
-          self.transientNotice = ("No complete stroke was detected — tap record to try again", Date().addingTimeInterval(3.5))
-          self.presentComposing(snapshot: self.lastComposingSnapshot)
+          guard stillWanted else { return }
+          self.startRecording(.restart)
         }
         return
       }
@@ -1374,7 +1873,7 @@ final class GuidedCaptureViewController: UIViewController {
         self?.updateCapturePresentation(
           stage: .saving,
           title: "SAVING CAPTURE",
-          detail: "Preparing your clip on this device",
+          detail: "Preparing your clip",
           overlayState: .saving,
           announcement: "Saving capture."
         )
@@ -1383,6 +1882,7 @@ final class GuidedCaptureViewController: UIViewController {
       stateLock.lock()
       let retainedPoseHistory = poseHistory
       let finalize = completionFinalize
+      let manualStop = pendingStrokeIsManual
       stateLock.unlock()
       // D-029 instrumentation: the exported window end. FIXED keeps the
       // shipped `postRollMs` verbatim — including when the finalize record is
@@ -1404,14 +1904,21 @@ final class GuidedCaptureViewController: UIViewController {
       // (engine-initiated stop), the honest finalize moment is the last
       // recorded frame, clamped to the movement end so the telemetry can
       // never claim a finalize before the movement completed.
-      let completionTelemetry = completionMonitor.telemetry(
-        strategy: completionStrategy,
-        finalizeMs: finalize?.atMs ?? max(artifact.lastFrameTimestampMs, event.endMs)
-      )
+      // STOP & ANALYZE: the user decided the end, no completion instrument
+      // ran, and the provenance names the offline pass — never the live
+      // trigger's version.
+      let completionTelemetry: StrokeCompletionMonitor.Telemetry? = manualStop
+        ? nil
+        : completionMonitor.telemetry(
+          strategy: completionStrategy,
+          finalizeMs: finalize?.atMs ?? max(artifact.lastFrameTimestampMs, event.endMs)
+        )
       ClipMediaStore.exportStrokeWindow(
         artifact: artifact,
         event: event,
-        detectionModelVersion: detector.modelVersion,
+        detectionModelVersion: manualStop
+          ? Self.manualStopModelVersion(detector.modelVersion)
+          : detector.modelVersion,
         captureEvidence: Self.captureEvidencePayload(captureEvidence),
         completionTelemetry: completionTelemetry,
         poseHistory: retainedPoseHistory,
@@ -1434,15 +1941,20 @@ final class GuidedCaptureViewController: UIViewController {
 
   private func finishSuccess(_ payload: [String: Any]) {
     var payload = payload
-    if let targetSeed {
-      payload["targetSeed"] = [
-        "x": Double(targetSeed.x),
-        "y": Double(targetSeed.y),
-        "source": targetSeedSource,
-      ]
-    }
-    if let targetLock = targetLockTelemetryPayload() {
-      payload["targetLock"] = targetLock
+    // Target state belongs to the vision queue; read it there. This runs on
+    // the export completion thread, never on the vision queue itself, so the
+    // synchronous hop cannot deadlock.
+    visionQueue.sync {
+      if let targetSeed {
+        payload["targetSeed"] = [
+          "x": Double(targetSeed.x),
+          "y": Double(targetSeed.y),
+          "source": targetSeedSource,
+        ]
+      }
+      if let targetLock = targetLockTelemetryPayload() {
+        payload["targetLock"] = targetLock
+      }
     }
     stateLock.lock()
     guard !terminal else {
@@ -1483,67 +1995,14 @@ final class GuidedCaptureViewController: UIViewController {
     }
   }
 
+  private static let isoFormatter = ISO8601DateFormatter()
+
   private func emit(type: String, values: [String: Any]) {
     var payload = values
     payload["type"] = type
     payload["captureId"] = captureId
-    payload["emittedAtIso"] = ISO8601DateFormatter().string(from: Date())
+    payload["emittedAtIso"] = Self.isoFormatter.string(from: Date())
     onEvent?(payload)
-  }
-
-  /// Optional start-spot tap while composing (re-tapping moves the spot).
-  /// Ignored once recording has started: identity is then decided by the
-  /// occupancy flow (with a spot) or the primary-person rule (without).
-  @objc private func handleTargetTap(_ recognizer: UITapGestureRecognizer) {
-    stateLock.lock()
-    let alreadyCapturing = pendingStroke != nil || terminal
-    let recording = recordingRequested
-    stateLock.unlock()
-    guard !alreadyCapturing, !recording, presentedCaptureStage == .composing else { return }
-    let viewPoint = recognizer.location(in: view)
-    // Ignore taps on the chrome so a missed shutter press never sets a spot.
-    for control in [shutterButton, flipButton, centerStageButton, zoomContainer, closeButton, statusContainer] as [UIView] {
-      if !control.isHidden, control.alpha > 0.05, control.frame.insetBy(dx: -8, dy: -8).contains(viewPoint) { return }
-    }
-    // The start region is compared against pose torso midpoints, which live
-    // in NORMALIZED-IMAGE space (top-left origin, rotation applied). The
-    // preview layer's captureDevicePointConverted returns the UNROTATED
-    // sensor space — a different space that skewed the region for every
-    // off-center tap — so the tap is mapped through the displayed picture
-    // rect instead, landing in the exact space the occupancy math uses.
-    let imagePoint = previewLayer.normalizedImagePoint(fromLayerPoint: viewPoint)
-    guard imagePoint.x.isFinite, imagePoint.y.isFinite else { return }
-    startRegion = CGPoint(
-      x: min(1, max(0, imagePoint.x)),
-      y: min(1, max(0, imagePoint.y))
-    )
-    targetAcquisition = .choosingRegion
-    occupancyStreak = 0
-    gestureBest = [:]
-    gestureStreaks = [:]
-    ambiguousSinceMs = nil
-    lockInstrumentFirstFrameMs = nil
-    lockInstrumentLastFrameMs = nil
-    lockInstrumentAmbiguousEnteredMs = nil
-    lockInstrumentLock = nil
-    selectionHaptic.impactOccurred()
-
-    // Persistent region marker (does not fade — the user is walking away and
-    // needs the target zone to stay visible from the court).
-    targetRing.path = UIBezierPath(
-      arcCenter: viewPoint, radius: 44, startAngle: 0, endAngle: .pi * 2, clockwise: true
-    ).cgPath
-    targetRing.lineDashPattern = [10, 8]
-    targetRing.opacity = 0.9
-
-    emit(type: "target", values: [
-      "state": "region_selected",
-      "x": String(format: "%.4f", startRegion!.x),
-      "y": String(format: "%.4f", startRegion!.y),
-    ])
-    shutterHint.text = "Starting spot set — tap record"
-    transientNotice = ("Spot set. Tap record, then walk to it", Date().addingTimeInterval(3.5))
-    presentComposing(snapshot: lastComposingSnapshot)
   }
 
   /// Torso midpoint of a pose frame in normalized capture space.
@@ -1727,12 +2186,12 @@ final class GuidedCaptureViewController: UIViewController {
   // ── Presentation ──────────────────────────────────────────────────────────
 
   /// Setup state: no recording. Copy tells the user what the camera sees and
-  /// that the shutter is the next step; a transient notice (stop/timeout/
-  /// spot set) takes precedence until it expires.
+  /// that the shutter is the next step; a transient notice (stop with no
+  /// swing found) takes precedence until it expires.
   private func presentComposing(snapshot: PoseReadinessEvaluator.Snapshot?) {
     assert(Thread.isMainThread)
     if let snapshot { lastComposingSnapshot = snapshot }
-    let effective = snapshot ?? lastComposingSnapshot
+    let personVisible = (snapshot ?? lastComposingSnapshot).map { $0.state != .noPerson } ?? false
     if let notice = transientNotice, notice.until > Date() {
       updateCapturePresentation(
         stage: .composing,
@@ -1743,28 +2202,32 @@ final class GuidedCaptureViewController: UIViewController {
       return
     }
     transientNotice = nil
-    let personVisible = effective.map { $0.state != .noPerson } ?? false
-    let spotSet = startRegion != nil
     updateCapturePresentation(
       stage: .composing,
       title: personVisible ? "SET UP · BODY TRACKED" : "SET UP",
-      detail: spotSet
-        ? "Tap record, then walk to your spot"
-        : personVisible
-          ? "Tap record, then take your position"
-          : "Line up with the outline, then tap record",
+      detail: personVisible ? "Tap record, then take your spot" : "Match the outline, then tap record",
       overlayState: .positioning
     )
   }
 
+  /// Recording, body not yet tracked: the readiness message is framing ADVICE
+  /// (detection runs regardless). A transient notice (stop pressed with no
+  /// swing in the history) takes precedence until it expires.
   private func presentPositioning(snapshot: PoseReadinessEvaluator.Snapshot) {
     let coveragePercent = Self.coveragePercent(snapshot.jointCoverage)
+    let detail: String
+    if let notice = transientNotice, notice.until > Date() {
+      detail = notice.text
+    } else {
+      transientNotice = nil
+      detail = snapshot.state == .noPerson ? "Step into the outline" : Self.message(for: snapshot.state)
+    }
     updateCapturePresentation(
       stage: .positioning,
       title: snapshot.state == .noPerson
         ? "RECORDING"
         : "RECORDING · \(coveragePercent)% KEY JOINTS",
-      detail: snapshot.state == .noPerson ? "Walk into the outline" : Self.message(for: snapshot.state),
+      detail: detail,
       overlayState: .positioning,
       prominent: true
     )
@@ -1774,11 +2237,11 @@ final class GuidedCaptureViewController: UIViewController {
     let coveragePercent = Self.coveragePercent(jointCoverage)
     updateCapturePresentation(
       stage: .bodyLocked,
-      title: "BODY LOCKED · \(coveragePercent)% KEY JOINTS",
+      title: "BODY TRACKED · \(coveragePercent)% KEY JOINTS",
       detail: "Swing when ready",
       overlayState: .locked,
       prominent: true,
-      announcement: "Body locked. Swing naturally; capture starts from your movement."
+      announcement: "Body tracked. Swing naturally; the stroke is captured from your movement."
     )
   }
 
@@ -1797,10 +2260,9 @@ final class GuidedCaptureViewController: UIViewController {
       overlayState: overlayState,
       announcement: announcement
     )
-    // Distance-readable: the athlete may be 15–25 feet from the phone.
-    detailLabel.font = prominent
-      ? Self.scaledFont(name: "Manrope-Bold", size: 26, textStyle: .title1)
-      : Self.scaledFont(name: "Manrope-SemiBold", size: 17, textStyle: .headline)
+    // Distance-readable: the athlete may be 15–25 feet from the phone. One
+    // line at 24 pt (shrinking to fit) keeps the card's fixed height honest.
+    detailLabel.font = CaptureChromePalette.manrope(prominent ? "Bold" : "SemiBold", prominent ? 24 : 17)
   }
 
   private func updateCapturePresentation(
@@ -1817,9 +2279,13 @@ final class GuidedCaptureViewController: UIViewController {
     overlayView.setCaptureState(overlayState)
     if stageChanged {
       updateControlVisibility()
-      detailLabel.font = Self.scaledFont(name: "Manrope-SemiBold", size: 17, textStyle: .headline)
+      detailLabel.font = CaptureChromePalette.manrope("SemiBold", 17)
     }
     updateSilhouette(stage: stage)
+    // This runs once per pose frame; the labels only re-measure when the
+    // copy actually changed (UILabel re-lays out on every assignment).
+    let copyChanged = title != statusLabel.text || detail != detailLabel.text
+    guard stageChanged || copyChanged else { return }
 
     if stageChanged {
       switch stage {
@@ -1833,6 +2299,9 @@ final class GuidedCaptureViewController: UIViewController {
       }
     }
 
+    // State color: mint while setting up, flame while recording, volt once
+    // the body is locked / the swing is caught, chalk while saving. Carried
+    // by both the kicker and the status dot.
     let titleColor: UIColor
     switch stage {
     case .starting, .composing:
@@ -1842,17 +2311,18 @@ final class GuidedCaptureViewController: UIViewController {
     case .bodyLocked, .capturing:
       titleColor = Self.controlVolt
     case .saving:
-      titleColor = UIColor(red: 248 / 255, green: 250 / 255, blue: 245 / 255, alpha: 1)
+      titleColor = CaptureChromePalette.onDark
     }
 
     let applyText = {
       self.statusLabel.text = title
       self.statusLabel.textColor = titleColor
+      self.statusDot.backgroundColor = titleColor
       self.detailLabel.text = detail
     }
     if stageChanged, hadPresentedStage, !UIAccessibility.isReduceMotionEnabled {
       UIView.transition(
-        with: statusStack,
+        with: statusContainer,
         duration: 0.18,
         options: [.transitionCrossDissolve, .beginFromCurrentState, .allowUserInteraction],
         animations: applyText
@@ -1894,23 +2364,16 @@ final class GuidedCaptureViewController: UIViewController {
     Int((min(1, max(0, coverage)) * 100).rounded())
   }
 
-  private static func scaledFont(
-    name: String,
-    size: CGFloat,
-    textStyle: UIFont.TextStyle
-  ) -> UIFont {
-    let base = UIFont(name: name, size: size) ?? UIFont.systemFont(ofSize: size, weight: .semibold)
-    return UIFontMetrics(forTextStyle: textStyle).scaledFont(for: base)
-  }
-
+  /// Framing advice while recording. Detection is live in every one of these
+  /// states, so the copy never implies a swing would not count.
   private static func message(for state: PoseReadinessEvaluator.State) -> String {
     switch state {
-    case .noPerson: return "Step fully into frame"
-    case .fullBodyRequired: return "Keep your full body visible"
-    case .moveCloser: return "Move a little closer"
-    case .moveFarther: return "Move a little farther back"
-    case .holdStill: return "Hold still for a moment"
-    case .ready: return "Ready — swing when comfortable"
+    case .noPerson: return "Step into the outline"
+    case .fullBodyRequired: return "Keep your whole body in view"
+    case .moveCloser: return "A little closer, then swing"
+    case .moveFarther: return "A little farther back, then swing"
+    case .holdStill: return "Set your feet, then swing"
+    case .ready: return "Swing when ready"
     }
   }
 
@@ -1941,5 +2404,39 @@ final class GuidedCaptureViewController: UIViewController {
         ] as [String: Any]
       },
     ]
+  }
+}
+
+// ─── Touch ownership: controls first, preview second ─────────────────────────
+
+extension GuidedCaptureViewController: UIGestureRecognizerDelegate {
+  /// Every floating surface a touch may begin on. A touch inside any of them
+  /// (or inside any UIControl) belongs to that view, never to the preview
+  /// gestures — the shutter, close, flip, zoom and auto-frame controls must
+  /// always receive their own taps.
+  private var chromeSurfaces: [UIView] {
+    [statusContainer, zoomContainer, recChip]
+  }
+
+  func gestureRecognizer(
+    _ gestureRecognizer: UIGestureRecognizer,
+    shouldReceive touch: UITouch
+  ) -> Bool {
+    var candidate: UIView? = touch.view
+    while let current = candidate, current !== view {
+      if current is UIControl { return false }
+      if chromeSurfaces.contains(where: { $0 === current }) { return false }
+      candidate = current.superview
+    }
+    return true
+  }
+
+  /// Tap and pinch coexist: a pinch that starts as two taps must not block
+  /// either recognizer from finishing.
+  func gestureRecognizer(
+    _ gestureRecognizer: UIGestureRecognizer,
+    shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+  ) -> Bool {
+    true
   }
 }

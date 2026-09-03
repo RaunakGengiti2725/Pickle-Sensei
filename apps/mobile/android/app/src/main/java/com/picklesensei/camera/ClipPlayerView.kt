@@ -121,9 +121,11 @@ class ClipPlayerView(context: Context) : FrameLayout(context) {
         progressHandler.removeCallbacks(progressTick)
         emit("onClipEnd") {}
       }
-      mediaPlayer.setOnErrorListener { _, _, _ ->
-        // A frame that cannot decode is reported as an ended clip; the JS
-        // side keeps its measured-timeline fallback. Never a crash.
+      mediaPlayer.setOnErrorListener { _, what, extra ->
+        // A clip that cannot open or decode is reported as such (the JS side
+        // says so instead of showing a black surface) and as an ended clip so
+        // its measured-timeline fallback still settles. Never a crash.
+        emit("onClipError") { putString("message", "MediaPlayer error $what/$extra") }
         emit("onClipEnd") {}
         true
       }

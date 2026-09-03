@@ -1,10 +1,16 @@
 /**
- * FORM REVIEW screen — mounted-flow pins for the flagship replay: the stop
- * card names the worst measured checkpoint of the stop under the playhead,
- * prev/next move between measured stops, auto-pause freezes on a checkpoint
- * moment exactly once per pass, the re-analyze CTA re-arms the guided camera
- * with the same intent, and a stroke whose clip file is gone still renders
- * its pose-only stage without inventing a frame.
+ * FORM REVIEW screen — mounted-flow pins for the flagship replay: the
+ * coaching caption names the worst measured checkpoint of the stop under the
+ * playhead, prev/next move between measured stops, auto-pause freezes on a
+ * checkpoint moment exactly once per pass, the re-analyze CTA re-arms the
+ * guided camera with the same intent, and a stroke whose clip file is gone
+ * still renders its pose-only stage without inventing a frame.
+ *
+ * Layout pins (Photos-app style, 2026-09-03): every control — timeline,
+ * previous/play/next, speed, AUTO-pause — sits ON the video in a bottom bar;
+ * the caption floats above it and hides while playing; a tap on the stage
+ * toggles playback; the page is a fixed column (header · player filling ·
+ * pinned CTAs) with no ScrollView.
  */
 jest.mock('../src/data/db', () => ({ getDb: jest.fn(() => ({})) }));
 
@@ -61,7 +67,7 @@ jest.mock('react-native-svg', () => {
 });
 
 import React from 'react';
-import { Text } from 'react-native';
+import { ScrollView, StyleSheet, Text } from 'react-native';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import type {
   CheckpointKey,
@@ -300,6 +306,20 @@ async function press(renderer: ReactTestRenderer, testID: string) {
   });
 }
 
+/** First HOST node carrying the testID (the rendered View, not a wrapper). */
+function hostByTestId(renderer: ReactTestRenderer, testID: string) {
+  return renderer.root.findAll(
+    node => typeof node.type === 'string' && node.props.testID === testID,
+  );
+}
+
+function flatStyle(node: { props: { style?: unknown } }) {
+  return (StyleSheet.flatten(node.props.style as never) ?? {}) as Record<
+    string,
+    unknown
+  >;
+}
+
 async function layoutStage(renderer: ReactTestRenderer) {
   const [stage] = renderer.root.findAll(
     node =>
@@ -345,28 +365,42 @@ describe('FormReviewScreen', () => {
     let copy = allText(renderer);
     expect(copy).toContain('Form review');
     // The ready stop owns ready_position (85) and athletic_base (72): the
-    // worst of the two leads the card.
-    expect(copy).toContain('Ready stance');
-    expect(copy).toContain('Athletic base scored 72 — was narrow');
-    expect(copy).toContain('WATCH');
+    // worst of the two leads the stop card UNDER the stage — verdict · phase,
+    // the counter, the measured headline and the cue. Nothing is drawn over
+    // the body.
+    expect(hostByTestId(renderer, 'form-review-stop-card')).toHaveLength(1);
+    expect(copy).toContain('WATCH · READY STANCE');
     expect(copy).toContain('STOP 1 OF 6');
-    expect(copy).toContain('COACHING CUE');
+    expect(copy).toContain('Athletic base scored 72 — was narrow');
     expect(copy).toContain('Widen your base');
-    // Legend names every measured phase — never color alone.
-    for (const label of [
-      'READY STANCE',
-      'PREPARATION',
-      'ACCELERATION',
-      'CONTACT',
-      'FOLLOW-THROUGH',
-      'RECOVERY',
+    // Only the SHOWN stop's phase is named (no legend of every phase
+    // competes with the video); the old "title · checkpoint · n / 100" meta
+    // line and the COACHING CUE label are gone.
+    expect(copy).not.toContain('FOLLOW-THROUGH');
+    expect(copy).not.toContain('RECOVERY');
+    expect(copy).not.toContain('72 / 100');
+    expect(copy).not.toContain('COACHING CUE');
+    // The timeline and ONE transport row sit under the card.
+    expect(hostByTestId(renderer, 'form-review-timeline')).toHaveLength(1);
+    for (const control of [
+      'form-review-prev-stop',
+      'form-review-play',
+      'form-review-next-stop',
+      'form-review-speed',
+      'form-review-autopause',
     ]) {
-      expect(copy).toContain(label);
+      byTestId(renderer, control);
     }
+    expect(
+      byTestId(renderer, 'form-review-autopause').props.accessibilityRole,
+    ).toBe('switch');
+    expect(copy).toContain('AUTO');
+    expect(copy).not.toContain('AUTO-PAUSE');
 
     await press(renderer, 'form-review-next-stop');
     copy = allText(renderer);
     expect(copy).toContain('STOP 2 OF 6');
+    expect(copy).toContain('PREPARATION');
     expect(copy).toContain('Preparation scored 88 — held its target');
     expect(copy).toContain('STRONG');
 
@@ -442,14 +476,21 @@ describe('FormReviewScreen', () => {
     expect(copy).toContain('STOP 2 OF 6');
 
     // Auto-pause off: playback runs straight through the accelerate stop.
+    // The compact AUTO pill carries its state as a switch, not as words.
+    expect(
+      byTestId(renderer, 'form-review-autopause').props.accessibilityState,
+    ).toMatchObject({ checked: true });
     await press(renderer, 'form-review-autopause');
+    expect(
+      byTestId(renderer, 'form-review-autopause').props.accessibilityState,
+    ).toMatchObject({ checked: false });
     await press(renderer, 'form-review-play');
     await act(async () => {
       jest.advanceTimersByTime(700);
     });
     copy = allText(renderer);
     expect(copy).not.toContain('1.70s');
-    expect(copy).toContain('AUTO-PAUSE OFF');
+    expect(copy).toContain('AUTO');
     expect(
       byTestId(renderer, 'form-review-play').props.accessibilityLabel,
     ).toBe('Pause replay');
@@ -462,6 +503,46 @@ describe('FormReviewScreen', () => {
     expect(allText(renderer)).toContain('¼×');
     await press(renderer, 'form-review-speed');
     expect(allText(renderer)).toContain('1×');
+  });
+
+  it('a tap on the stage toggles playback like Photos; the stop card stays readable while playing', async () => {
+    const renderer = await renderScreen();
+    const stage = byTestId(renderer, 'form-review-stage');
+    expect(stage.props.accessibilityLabel).toContain('Ready stance');
+    expect(hostByTestId(renderer, 'form-review-stop-card')).toHaveLength(1);
+
+    await press(renderer, 'form-review-stage');
+    expect(
+      byTestId(renderer, 'form-review-play').props.accessibilityLabel,
+    ).toBe('Pause replay');
+    // Playing: the card lives UNDER the stage, so it never has to get out
+    // of the body's way — it stays mounted, visible and readable by screen
+    // readers, and the controls stay with it.
+    const cardPlaying = hostByTestId(renderer, 'form-review-stop-card')[0]!;
+    expect(cardPlaying.props.accessibilityElementsHidden).toBeUndefined();
+    expect(cardPlaying.props.accessibilityLabel).toContain('Athletic base');
+    expect(allText(renderer)).toContain('Widen your base');
+    byTestId(renderer, 'form-review-play');
+    expect(hostByTestId(renderer, 'form-review-timeline')).toHaveLength(1);
+
+    await press(renderer, 'form-review-stage');
+    expect(
+      byTestId(renderer, 'form-review-play').props.accessibilityLabel,
+    ).toBe('Play replay');
+    expect(hostByTestId(renderer, 'form-review-stop-card')).toHaveLength(1);
+  });
+
+  it('fills the page: no ScrollView, the player and its stage are flex columns, CTAs stay pinned', async () => {
+    const renderer = await renderScreen();
+    expect(renderer.root.findAllByType(ScrollView)).toHaveLength(0);
+    const [player] = hostByTestId(renderer, 'form-review-player');
+    expect(flatStyle(player!)).toMatchObject({ flex: 1 });
+    const [stage] = hostByTestId(renderer, 'form-review-stage');
+    const stageStyle = flatStyle(stage!);
+    expect(stageStyle).toMatchObject({ flex: 1 });
+    expect(stageStyle.height).toBeUndefined();
+    byTestId(renderer, 'form-review-reanalyze');
+    byTestId(renderer, 'form-review-back');
   });
 
   it('re-analyze arms the same-intent handoff and opens the guided camera', async () => {

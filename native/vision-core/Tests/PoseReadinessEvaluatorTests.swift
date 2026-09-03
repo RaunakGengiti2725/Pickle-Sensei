@@ -16,24 +16,61 @@ final class PoseReadinessEvaluatorTests: XCTestCase {
     XCTAssertTrue(snapshot.missingJoints.contains("left_ankle"))
   }
 
-  func testRealStablePoseMustPersistBeforeReady() {
+  /// Retuned window: 450 ms of stable evidence (was 700 ms).
+  func testRealStablePoseMustPersistForTheStillnessWindowBeforeReady() {
     let evaluator = PoseReadinessEvaluator()
     XCTAssertEqual(evaluator.ingest(pose: pose(timestampMs: 0)).state, .holdStill)
-    XCTAssertEqual(evaluator.ingest(pose: pose(timestampMs: 350)).state, .holdStill)
-    let ready = evaluator.ingest(pose: pose(timestampMs: 700))
+    XCTAssertEqual(evaluator.ingest(pose: pose(timestampMs: 225)).state, .holdStill)
+    let almost = evaluator.ingest(pose: pose(timestampMs: 440))
+    XCTAssertEqual(almost.state, .holdStill)
+    XCTAssertEqual(almost.stableForMs, 0)
+    let ready = evaluator.ingest(pose: pose(timestampMs: 450))
     XCTAssertEqual(ready.state, .ready)
-    XCTAssertGreaterThanOrEqual(ready.stableForMs, 700)
+    XCTAssertGreaterThanOrEqual(ready.stableForMs, 450)
+  }
+
+  func testDefaultStillnessWindowIs450Ms() {
+    XCTAssertEqual(PoseReadinessEvaluator.Config().stableDurationMs, 450)
+    XCTAssertEqual(PoseReadinessEvaluator.Config().maximumCenterTravel, 0.055, accuracy: 1e-12)
   }
 
   func testMotionRestartsStabilityEvidence() {
     let evaluator = PoseReadinessEvaluator()
     _ = evaluator.ingest(pose: pose(timestampMs: 0))
-    _ = evaluator.ingest(pose: pose(timestampMs: 350))
-    XCTAssertEqual(evaluator.ingest(pose: pose(timestampMs: 700)).state, .ready)
+    _ = evaluator.ingest(pose: pose(timestampMs: 225))
+    XCTAssertEqual(evaluator.ingest(pose: pose(timestampMs: 450)).state, .ready)
 
-    let moved = evaluator.ingest(pose: pose(timestampMs: 800, xOffset: 0.14))
+    let moved = evaluator.ingest(pose: pose(timestampMs: 550, xOffset: 0.14))
     XCTAssertEqual(moved.state, .holdStill)
     XCTAssertEqual(moved.stableForMs, 0)
+  }
+
+  /// Retuned tolerance: centre travel up to 0.055 of the frame (was 0.045) is
+  /// still "still", so breathing / paddle-tapping sway does not restart the
+  /// window; a real step does.
+  func testNaturalSwayWithinTravelToleranceKeepsStabilityEvidence() {
+    let evaluator = PoseReadinessEvaluator()
+    XCTAssertEqual(evaluator.ingest(pose: pose(timestampMs: 0)).state, .holdStill)
+    XCTAssertEqual(evaluator.ingest(pose: pose(timestampMs: 150, xOffset: 0.05)).state, .holdStill)
+    XCTAssertEqual(evaluator.ingest(pose: pose(timestampMs: 300)).state, .holdStill)
+    let ready = evaluator.ingest(pose: pose(timestampMs: 450, xOffset: 0.05))
+    XCTAssertEqual(ready.state, .ready)
+    XCTAssertGreaterThanOrEqual(ready.stableForMs, 450)
+  }
+
+  func testStepBeyondTravelToleranceRestartsStabilityWindow() {
+    let evaluator = PoseReadinessEvaluator()
+    _ = evaluator.ingest(pose: pose(timestampMs: 0))
+    _ = evaluator.ingest(pose: pose(timestampMs: 150))
+    let stepped = evaluator.ingest(pose: pose(timestampMs: 300, xOffset: 0.06))
+    XCTAssertEqual(stepped.state, .holdStill)
+    XCTAssertEqual(stepped.stableForMs, 0)
+    // Only 150 ms of evidence since the restart: still not ready.
+    let later = evaluator.ingest(pose: pose(timestampMs: 450, xOffset: 0.06))
+    XCTAssertEqual(later.state, .holdStill)
+    // Holding the new position for the full window is.
+    _ = evaluator.ingest(pose: pose(timestampMs: 600, xOffset: 0.06))
+    XCTAssertEqual(evaluator.ingest(pose: pose(timestampMs: 750, xOffset: 0.06)).state, .ready)
   }
 
   private func pose(

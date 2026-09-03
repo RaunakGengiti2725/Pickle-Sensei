@@ -49,11 +49,15 @@ enum CaptureCompletionStrategyStore {
 /// real live captures. Under the flagged `adaptive` strategy the same decision
 /// finalizes the recording.
 ///
-/// SERIES — mirrors `TemporalStrokeDetector.ingest` (what `peakMotionMs` is
-/// computed from): per frame, each wrist with visibility ≥ 0.35 is compared
-/// against its own prior observation (elapsed > 0 and ≤ 250 ms), speed is
-/// normalized-image units/second, the fastest wrist wins the frame, and frames
-/// with pose confidence < 0.5 are skipped. The live capture passes no paddle
+/// SERIES — mirrors the sampling of `TemporalStrokeDetector.ingest` (what
+/// `peakMotionMs` is computed from): per frame, each wrist with visibility
+/// ≥ 0.35 is compared against its own prior observation (elapsed > 0 and
+/// ≤ 250 ms), the fastest wrist wins the frame, and frames with pose
+/// confidence < 0.5 are skipped. UNITS DIFFER by design: this instrument keeps
+/// ABSOLUTE normalized-image units/second (its D-029 telemetry schema v1 is
+/// frozen and its decisions are relative to its own peak), while the detector
+/// measures HIP-RELATIVE wrist speed in body-heights/second
+/// (temporal-stroke-heuristic-4) for distance and walking invariance. The live capture passes no paddle
 /// frames, so the paddle-preference branch of the detector has no live
 /// counterpart. Known bounded divergence, disclosed: the detector clears its
 /// wrist priors on `reset()` (disarm/pose-loss) while this monitor relies on

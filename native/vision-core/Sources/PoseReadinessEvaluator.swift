@@ -4,6 +4,13 @@ import Foundation
 /// after a real pose has complete, visible joints, usable scale/margins, and a
 /// stable center for a sustained period. Missing inference always clears the
 /// stability window; there is no timer-only or fixture path to readiness.
+///
+/// Retune (with temporal-stroke-heuristic-3): the stillness window dropped
+/// from 700 ms to 450 ms so the shutter arms sooner — 450 ms of a stable
+/// centre still cannot be satisfied mid-walk, which is what the gate exists to
+/// prevent — and the centre-travel tolerance widened from 0.045 to 0.055 of
+/// the frame so breathing, weight shifts and paddle-tapping no longer restart
+/// the window endlessly. Everything else is unchanged.
 public final class PoseReadinessEvaluator {
   public enum State: String, Sendable {
     case noPerson = "no_person"
@@ -21,7 +28,13 @@ public final class PoseReadinessEvaluator {
     public var maximumBodyHeight: Double
     public var maximumBodyWidth: Double
     public var frameMargin: Double
+    /// How long the framed body must hold a stable centre and scale before
+    /// `ready`. 450 ms (was 700): arms sooner while still rejecting a walking
+    /// athlete, whose centre cannot stay within `maximumCenterTravel` that long.
     public var stableDurationMs: Int
+    /// Largest centre displacement (normalized-image units, any pair of
+    /// samples in the window) that still counts as still. 0.055 (was 0.045):
+    /// natural sway and paddle-tapping fit; a step does not.
     public var maximumCenterTravel: Double
     public var maximumScaleChange: Double
 
@@ -32,8 +45,8 @@ public final class PoseReadinessEvaluator {
       maximumBodyHeight: Double = 0.88,
       maximumBodyWidth: Double = 0.80,
       frameMargin: Double = 0.025,
-      stableDurationMs: Int = 700,
-      maximumCenterTravel: Double = 0.045,
+      stableDurationMs: Int = 450,
+      maximumCenterTravel: Double = 0.055,
       maximumScaleChange: Double = 0.08
     ) {
       self.minimumJointVisibility = minimumJointVisibility

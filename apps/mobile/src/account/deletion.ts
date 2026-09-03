@@ -24,27 +24,43 @@ export type AccountDeletionFetch = (
   init?: RequestInit,
 ) => Promise<Response>;
 
-/** Exit-survey vocabulary. Mirrors supabase/functions/api/index.ts
- * DELETION_SURVEY_REASONS verbatim — the server drops a reason it does not
+/** Exit-survey vocabularies. Each mirrors its server set in
+ * supabase/functions/api/index.ts (DELETION_SURVEY_REASONS /
+ * DELETION_SURVEY_WANTED) verbatim — the server drops a value it does not
  * know (never the deletion), so add to BOTH lists together. */
+
+/** Question 1 — "What's making you leave?" */
 export const ACCOUNT_DELETION_REASONS = [
   'not_using',
   'not_helpful',
   'scores_inaccurate',
   'technical_issues',
   'too_expensive',
-  'switching',
   'privacy',
   'other',
 ] as const;
 
 export type AccountDeletionReason = (typeof ACCOUNT_DELETION_REASONS)[number];
 
+/** Question 2 — "What would have kept you?" */
+export const ACCOUNT_DELETION_WANTED = [
+  'accuracy',
+  'price',
+  'content',
+  'stability',
+  'switched',
+  'nothing',
+] as const;
+
+export type AccountDeletionWanted = (typeof ACCOUNT_DELETION_WANTED)[number];
+
 /** Free-text cap shared with the server's sanitizer (DELETION_SURVEY_DETAILS_MAX). */
 export const ACCOUNT_DELETION_DETAILS_MAX = 500;
 
 export interface AccountDeletionSurvey {
   reason: AccountDeletionReason;
+  /** Question 2; null when it was skipped. */
+  wanted: AccountDeletionWanted | null;
   /** Optional comment; the caller passes null (not "") when nothing was typed. */
   details: string | null;
   platform: 'ios' | 'android' | null;

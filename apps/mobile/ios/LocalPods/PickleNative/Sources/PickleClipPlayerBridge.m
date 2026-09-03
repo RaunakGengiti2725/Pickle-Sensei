@@ -10,5 +10,6 @@ RCT_EXPORT_VIEW_PROPERTY(rate, double)
 RCT_EXPORT_VIEW_PROPERTY(onClipProgress, RCTDirectEventBlock)
 RCT_EXPORT_VIEW_PROPERTY(onClipLoad, RCTDirectEventBlock)
 RCT_EXPORT_VIEW_PROPERTY(onClipEnd, RCTDirectEventBlock)
+RCT_EXPORT_VIEW_PROPERTY(onClipError, RCTDirectEventBlock)
 
 @end

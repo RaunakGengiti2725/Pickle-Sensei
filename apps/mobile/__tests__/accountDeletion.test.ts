@@ -8,6 +8,7 @@ import type { ApiSession } from '../src/account/apiSession';
 import {
   ACCOUNT_DELETION_DETAILS_MAX,
   ACCOUNT_DELETION_REASONS,
+  ACCOUNT_DELETION_WANTED,
   AccountDeletionError,
   confirmAccountDeletion,
   requestAccountDeletion,
@@ -55,11 +56,12 @@ describe('account deletion client', () => {
     });
   });
 
-  it('step 1 carries the exit survey verbatim under body.survey', async () => {
+  it('step 1 carries the two-question exit survey verbatim under body.survey', async () => {
     const fetchFn = jest.fn(async (_input: string, init?: RequestInit) => {
       expect(JSON.parse(String(init?.body))).toEqual({
         survey: {
           reason: 'scores_inaccurate',
+          wanted: 'accuracy',
           details: 'Backhand reads kept calling my drive a dink.',
           platform: 'ios',
           appVersion: '1.0',
@@ -75,6 +77,7 @@ describe('account deletion client', () => {
       session,
       {
         reason: 'scores_inaccurate',
+        wanted: 'accuracy',
         details: 'Backhand reads kept calling my drive a dink.',
         platform: 'ios',
         appVersion: '1.0',
@@ -84,16 +87,23 @@ describe('account deletion client', () => {
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 
-  it('pins the survey vocabulary the server accepts (index.ts DELETION_SURVEY_REASONS)', () => {
+  it('pins the survey vocabularies the server accepts (index.ts DELETION_SURVEY_*)', () => {
     expect([...ACCOUNT_DELETION_REASONS]).toEqual([
       'not_using',
       'not_helpful',
       'scores_inaccurate',
       'technical_issues',
       'too_expensive',
-      'switching',
       'privacy',
       'other',
+    ]);
+    expect([...ACCOUNT_DELETION_WANTED]).toEqual([
+      'accuracy',
+      'price',
+      'content',
+      'stability',
+      'switched',
+      'nothing',
     ]);
     expect(ACCOUNT_DELETION_DETAILS_MAX).toBe(500);
   });

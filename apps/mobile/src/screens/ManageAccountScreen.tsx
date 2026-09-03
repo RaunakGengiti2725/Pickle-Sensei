@@ -29,7 +29,7 @@ import {
 } from '../design/components';
 import { Icon } from '../design/icons';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
-import { color, radius, space, type } from '../design/tokens';
+import { color, radius, shadow, space, type } from '../design/tokens';
 import { useAuthStore, type AuthProvider } from '../auth/authStore';
 import { getApiSession } from '../account/apiSession';
 import {
@@ -37,6 +37,7 @@ import {
   AccountDeletionError,
   type AccountDeletionReason,
   type AccountDeletionSurvey,
+  type AccountDeletionWanted,
   confirmAccountDeletion,
   requestAccountDeletion,
 } from '../account/deletion';
@@ -53,8 +54,8 @@ const PROVIDER_LABELS: Record<AuthProvider, string> = {
  * between delete-request and delete-confirm; also honest UX friction. */
 const DELETE_ARM_DELAY_MS = 5_000;
 
-/** Exit-survey choices, in display order. Values are the wire vocabulary
- * (deletion.ts ACCOUNT_DELETION_REASONS); "Something else" stays last. */
+/** Exit survey, question 1 — display order; values are the wire vocabulary
+ * (deletion.ts ACCOUNT_DELETION_REASONS). "Something else" stays last. */
 const DELETION_REASON_OPTIONS: ReadonlyArray<{
   value: AccountDeletionReason;
   label: string;
@@ -64,23 +65,46 @@ const DELETION_REASON_OPTIONS: ReadonlyArray<{
   { value: 'scores_inaccurate', label: 'The technique reads felt off' },
   { value: 'technical_issues', label: 'Bugs, crashes, or camera trouble' },
   { value: 'too_expensive', label: "It's too expensive" },
-  { value: 'switching', label: "I'm using another app or a coach" },
   { value: 'privacy', label: 'Privacy or data concerns' },
   { value: 'other', label: 'Something else' },
 ];
 
+/** Exit survey, question 2 (deletion.ts ACCOUNT_DELETION_WANTED). */
+const DELETION_WANTED_OPTIONS: ReadonlyArray<{
+  value: AccountDeletionWanted;
+  label: string;
+}> = [
+  { value: 'accuracy', label: 'More accurate technique reads' },
+  { value: 'price', label: 'A lower price or a free tier' },
+  { value: 'content', label: 'More drills and coaching guidance' },
+  { value: 'stability', label: 'Fewer bugs and smoother capture' },
+  { value: 'switched', label: "Nothing — I've found another app or a coach" },
+  { value: 'nothing', label: "Nothing — I just don't need it anymore" },
+];
+
+const SURVEY_QUESTION_COUNT = 2;
+
 type DeleteAccountStep =
-  | { phase: 'survey' }
+  | { phase: 'why' }
+  | { phase: 'kept' }
   | { phase: 'review' }
   | { phase: 'requesting' }
   | { phase: 'armed'; challenge: string; secondsLeft: number }
   | { phase: 'deleting'; challenge: string };
 
-/** Content of one sheet step: fades/rises in on mount (200ms ease-out; reduced
- * motion renders at rest) so a step change never just snaps. */
-function StepReveal(props: { children: React.ReactNode }) {
+type PageDirection = 'forward' | 'back' | 'none';
+
+/** One page of the dialog: slides in from the side it came from (forward =
+ * from the right, back = from the left) with a fade, 220ms ease-out, so a
+ * page change never just snaps. Reduced motion renders at rest. */
+function PageReveal(props: {
+  direction: PageDirection;
+  children: React.ReactNode;
+}) {
   const reduced = useReducedMotion();
   const progress = useRef(new Animated.Value(reduced ? 1 : 0)).current;
+  const offset =
+    props.direction === 'forward' ? 24 : props.direction === 'back' ? -24 : 0;
   useEffect(() => {
     if (reduced) {
       progress.setValue(1);
@@ -88,7 +112,7 @@ function StepReveal(props: { children: React.ReactNode }) {
     }
     Animated.timing(progress, {
       toValue: 1,
-      duration: 200,
+      duration: 220,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
@@ -96,12 +120,15 @@ function StepReveal(props: { children: React.ReactNode }) {
   return (
     <Animated.View
       style={[
-        styles.stepReveal,
+        styles.page,
         {
           opacity: progress,
           transform: [
             {
-              translateY: Animated.multiply(Animated.subtract(1, progress), 8),
+              translateX: Animated.multiply(
+                Animated.subtract(1, progress),
+                offset,
+              ),
             },
           ],
         },
@@ -112,7 +139,71 @@ function StepReveal(props: { children: React.ReactNode }) {
   );
 }
 
-function ReasonRow(props: {
+/** Dialog chrome: back (when there is somewhere to go back to), the
+ * "QUESTION n OF 2" marker with a two-segment progress bar while the survey
+ * runs, and close — the same three-slot header the stepper references use. */
+function DialogHeader(props: {
+  question: number | null;
+  onBack?: () => void;
+  onClose: () => void;
+  closeLabel: string;
+  disabled?: boolean;
+}) {
+  const answered = props.question ?? 0;
+  return (
+    <View style={styles.header}>
+      <View style={styles.headerSlot}>
+        {props.onBack ? (
+          <PressableScale
+            accessibilityLabel="Back to the previous question"
+            disabled={props.disabled}
+            onPress={props.onBack}
+            style={styles.headerButton}
+          >
+            <Icon name="back" size={18} color={color.ink} />
+          </PressableScale>
+        ) : null}
+      </View>
+      {props.question !== null ? (
+        <View
+          accessible
+          accessibilityRole="progressbar"
+          accessibilityLabel={`Question ${props.question} of ${SURVEY_QUESTION_COUNT}`}
+          style={styles.progressWrap}
+        >
+          <Text style={[type.micro, { color: color.inkSoft }]}>
+            {`QUESTION ${props.question} OF ${SURVEY_QUESTION_COUNT}`}
+          </Text>
+          <View style={styles.progressTrack}>
+            {Array.from({ length: SURVEY_QUESTION_COUNT }, (_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.progressSegment,
+                  index < answered && styles.progressSegmentDone,
+                ]}
+              />
+            ))}
+          </View>
+        </View>
+      ) : (
+        <View style={styles.progressWrap} />
+      )}
+      <View style={[styles.headerSlot, { alignItems: 'flex-end' }]}>
+        <PressableScale
+          accessibilityLabel={props.closeLabel}
+          disabled={props.disabled}
+          onPress={props.onClose}
+          style={styles.headerButton}
+        >
+          <Icon name="close" size={18} color={color.ink} />
+        </PressableScale>
+      </View>
+    </View>
+  );
+}
+
+function ChoiceRow(props: {
   label: string;
   selected: boolean;
   onPress: () => void;
@@ -123,7 +214,7 @@ function ReasonRow(props: {
       accessibilityLabel={props.label}
       accessibilityState={{ selected: props.selected }}
       onPress={props.onPress}
-      style={[styles.reasonRow, props.selected && styles.reasonRowSelected]}
+      style={[styles.choiceRow, props.selected && styles.choiceRowSelected]}
     >
       <Text style={[type.body, { color: color.ink, flex: 1 }]}>
         {props.label}
@@ -138,28 +229,32 @@ function ReasonRow(props: {
 }
 
 /**
- * Exit survey, then two-step, server-verified account deletion (App Review
- * 5.1.1(v)). The survey is one optional question — always skippable, so it
- * never stands between a player and deletion — and its answer rides along
- * with step 1 (requestAccountDeletion) so it is stored before the account
- * ceases to exist. Step 1 mints a challenge; step 2 confirms it after a
- * mandatory pause. Nothing is deleted until the second explicit tap succeeds
+ * Centered pop-up: a two-question exit survey, then the two-step,
+ * server-verified account deletion (App Review 5.1.1(v)).
+ *
+ * Question 1 asks why, question 2 what would have kept them (+ an optional
+ * comment). Both are skippable — the survey never stands between a player
+ * and deletion — and whatever was answered rides along with step 1
+ * (requestAccountDeletion) so it is stored before the account ceases to
+ * exist. Step 1 mints a challenge; step 2 confirms it after a mandatory
+ * pause. Nothing is deleted until the second explicit tap succeeds
  * server-side.
  */
-function DeleteAccountSheet(props: {
+function DeleteAccountDialog(props: {
   visible: boolean;
   onCancel: () => void;
   onDeleted: () => void;
 }) {
   const insets = useReliableSafeAreaInsets();
   const reduced = useReducedMotion();
-  const [step, setStep] = useState<DeleteAccountStep>({ phase: 'survey' });
+  const [step, setStep] = useState<DeleteAccountStep>({ phase: 'why' });
   const [reason, setReason] = useState<AccountDeletionReason | null>(null);
+  const [wanted, setWanted] = useState<AccountDeletionWanted | null>(null);
   const [details, setDetails] = useState('');
   const [survey, setSurvey] = useState<AccountDeletionSurvey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const detailsRef = useRef<React.ComponentRef<typeof TextInput>>(null);
+  const directionRef = useRef<PageDirection>('none');
   const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const entrance = useRef(new Animated.Value(0)).current;
 
@@ -173,19 +268,21 @@ function DeleteAccountSheet(props: {
   useEffect(() => {
     if (!props.visible) {
       stopCountdown();
-      setStep({ phase: 'survey' });
+      setStep({ phase: 'why' });
       setReason(null);
+      setWanted(null);
       setDetails('');
       setSurvey(null);
       setError(null);
+      directionRef.current = 'none';
       entrance.setValue(0);
     } else if (reduced) {
       entrance.setValue(1);
     } else {
-      // The scrim fades (Modal); the sheet itself rises into place.
+      // The scrim fades (Modal); the card itself settles in from 96%.
       Animated.timing(entrance, {
         toValue: 1,
-        duration: 260,
+        duration: 220,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }).start();
@@ -193,27 +290,11 @@ function DeleteAccountSheet(props: {
     return stopCountdown;
   }, [entrance, props.visible, reduced]);
 
-  const canContinueSurvey = reason !== null || details.trim().length > 0;
-
-  /** Leaves the survey for the confirmation. `answered` false = Skip: nothing
-   * is sent. Typed details with no reason picked count as "Something else"
-   * rather than being thrown away. */
-  const leaveSurvey = (answered: boolean) => {
+  /** Page change with motion: the card re-lays out smoothly (LayoutAnimation)
+   * while the new page slides in from the side it came from. */
+  const goTo = (next: DeleteAccountStep, direction: PageDirection) => {
     Keyboard.dismiss();
-    const trimmed = details.trim();
-    setSurvey(
-      answered && (reason !== null || trimmed.length > 0)
-        ? {
-            reason: reason ?? 'other',
-            details: trimmed.length > 0 ? trimmed : null,
-            platform:
-              Platform.OS === 'ios' || Platform.OS === 'android'
-                ? Platform.OS
-                : null,
-            appVersion: getRuntimePublicConfig().appVersion,
-          }
-        : null,
-    );
+    directionRef.current = direction;
     if (!reduced) {
       LayoutAnimation.configureNext(
         LayoutAnimation.create(
@@ -223,7 +304,41 @@ function DeleteAccountSheet(props: {
         ),
       );
     }
-    setStep({ phase: 'review' });
+    setStep(next);
+  };
+
+  const buildSurvey = (
+    keptAnswer: AccountDeletionWanted | null,
+    comment: string,
+  ): AccountDeletionSurvey | null => {
+    if (reason === null) return null;
+    const trimmed = comment.trim();
+    return {
+      reason,
+      wanted: keptAnswer,
+      details: trimmed.length > 0 ? trimmed : null,
+      platform:
+        Platform.OS === 'ios' || Platform.OS === 'android' ? Platform.OS : null,
+      appVersion: getRuntimePublicConfig().appVersion,
+    };
+  };
+
+  /** Question 1 → question 2 (needs a reason). */
+  const nextQuestion = () => goTo({ phase: 'kept' }, 'forward');
+  /** Skip on question 1 = skip the whole survey: nothing is sent. */
+  const skipSurvey = () => {
+    setSurvey(null);
+    goTo({ phase: 'review' }, 'forward');
+  };
+  /** Question 2 answered (an option, a comment, or both). */
+  const finishSurvey = () => {
+    setSurvey(buildSurvey(wanted, details));
+    goTo({ phase: 'review' }, 'forward');
+  };
+  /** Skip on question 2 keeps question 1's answer and records nothing else. */
+  const skipQuestionTwo = () => {
+    setSurvey(buildSurvey(null, ''));
+    goTo({ phase: 'review' }, 'forward');
   };
 
   const beginRequest = async () => {
@@ -273,183 +388,241 @@ function DeleteAccountSheet(props: {
   };
 
   const busy = step.phase === 'requesting' || step.phase === 'deleting';
-  const surveying = step.phase === 'survey';
+  const scrollDetailsIntoView = () => {
+    // The comment field is the last thing on the page; bring it above the
+    // keyboard once the avoiding view has made room.
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+  };
 
-  const surveyStep = (
-    <StepReveal key="survey">
-      <ScrollView
-        ref={scrollRef}
-        contentContainerStyle={styles.sheetBody}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.surveyHeader}>
-          <Text style={[type.micro, { color: color.court }]}>
-            BEFORE YOU GO
-          </Text>
-          <Text style={[type.h1, styles.surveyTitle]}>
-            What's making you leave?
-          </Text>
-          <Text style={[type.body, styles.surveySub]}>
-            One tap helps us build a better coach. Nothing you share here stays
-            tied to you after deletion.
-          </Text>
-        </View>
-        <View accessibilityRole="radiogroup">
-          {DELETION_REASON_OPTIONS.map(option => (
-            <ReasonRow
-              key={option.value}
-              label={option.label}
-              selected={reason === option.value}
-              onPress={() => {
-                setReason(option.value);
-                // "Something else" is only useful with words — open the field.
-                if (option.value === 'other') detailsRef.current?.focus();
-              }}
-            />
-          ))}
-        </View>
-        <TextInput
-          ref={detailsRef}
-          accessibilityLabel="Anything else you want us to know"
-          accessibilityHint="Optional"
-          multiline
-          maxLength={ACCOUNT_DELETION_DETAILS_MAX}
-          placeholder={
-            reason === 'other'
-              ? 'Tell us what happened'
-              : 'Anything else you want us to know? (optional)'
-          }
-          placeholderTextColor={color.inkSoft}
-          returnKeyType="done"
-          submitBehavior="blurAndSubmit"
-          value={details}
-          onChangeText={setDetails}
-          onFocus={() => {
-            // The field is the last thing in the sheet; bring it above the
-            // keyboard once the avoiding view has made room.
-            setTimeout(
-              () => scrollRef.current?.scrollToEnd({ animated: true }),
-              80,
-            );
-          }}
-          style={styles.detailsInput}
-        />
-        <Text style={[type.micro, styles.detailsCounter]}>
-          {`${details.length}/${ACCOUNT_DELETION_DETAILS_MAX}`}
-        </Text>
-      </ScrollView>
-      <View style={styles.sheetFooter}>
-        <Button
-          label="Continue"
-          variant="dark"
-          disabled={!canContinueSurvey}
-          onPress={() => leaveSurvey(true)}
-        />
-        <PressableScale
-          accessibilityLabel="Skip the survey"
-          onPress={() => leaveSurvey(false)}
-          style={styles.skipLink}
+  let header: React.ReactNode;
+  let page: React.ReactNode;
+  if (step.phase === 'why') {
+    header = (
+      <DialogHeader
+        question={1}
+        onClose={props.onCancel}
+        closeLabel="Close and keep my account"
+      />
+    );
+    page = (
+      <PageReveal key="why" direction={directionRef.current}>
+        <ScrollView
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={[type.bodyBold, { color: color.inkSoft }]}>Skip</Text>
-        </PressableScale>
-      </View>
-    </StepReveal>
-  );
-
-  const confirmStep = (
-    <StepReveal key="confirm">
-      <ScrollView
-        contentContainerStyle={styles.sheetBody}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.sheetIcon}>
-          <Icon name="shield" size={22} color={color.bad} />
+          <Text style={[type.h1, styles.title]}>What's making you leave?</Text>
+          <Text style={[type.body, styles.sub]}>
+            Pick the closest one. Nothing you share here stays tied to you after
+            deletion.
+          </Text>
+          <View accessibilityRole="radiogroup">
+            {DELETION_REASON_OPTIONS.map(option => (
+              <ChoiceRow
+                key={option.value}
+                label={option.label}
+                selected={reason === option.value}
+                onPress={() => setReason(option.value)}
+              />
+            ))}
+          </View>
+        </ScrollView>
+        <View style={styles.footer}>
+          <Button
+            label="Next"
+            variant="dark"
+            disabled={reason === null}
+            onPress={nextQuestion}
+          />
+          <PressableScale
+            accessibilityLabel="Skip the survey"
+            onPress={skipSurvey}
+            style={styles.textLink}
+          >
+            <Text style={[type.bodyBold, { color: color.inkSoft }]}>
+              Skip the survey
+            </Text>
+          </PressableScale>
         </View>
-        <Text
-          style={[
-            type.h1,
-            { color: color.ink, textAlign: 'center', marginTop: space.lg },
-          ]}
+      </PageReveal>
+    );
+  } else if (step.phase === 'kept') {
+    header = (
+      <DialogHeader
+        question={2}
+        onBack={() => goTo({ phase: 'why' }, 'back')}
+        onClose={props.onCancel}
+        closeLabel="Close and keep my account"
+      />
+    );
+    page = (
+      <PageReveal key="kept" direction={directionRef.current}>
+        <ScrollView
+          ref={scrollRef}
+          contentContainerStyle={styles.body}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          Delete your account?
-        </Text>
-        <Text
-          style={[
-            type.body,
-            {
-              color: color.inkSoft,
-              textAlign: 'center',
-              marginTop: space.sm,
-            },
-          ]}
+          <Text style={[type.h1, styles.title]}>What would have kept you?</Text>
+          <Text style={[type.body, styles.sub]}>
+            Pick one, and add anything you want us to know.
+          </Text>
+          <View accessibilityRole="radiogroup">
+            {DELETION_WANTED_OPTIONS.map(option => (
+              <ChoiceRow
+                key={option.value}
+                label={option.label}
+                selected={wanted === option.value}
+                onPress={() => setWanted(option.value)}
+              />
+            ))}
+          </View>
+          <TextInput
+            accessibilityLabel="Anything else you want us to know"
+            accessibilityHint="Optional"
+            multiline
+            maxLength={ACCOUNT_DELETION_DETAILS_MAX}
+            placeholder={
+              reason === 'other'
+                ? 'Tell us what happened'
+                : 'Anything else? (optional)'
+            }
+            placeholderTextColor={color.inkSoft}
+            returnKeyType="done"
+            submitBehavior="blurAndSubmit"
+            value={details}
+            onChangeText={setDetails}
+            onFocus={scrollDetailsIntoView}
+            style={styles.detailsInput}
+          />
+          <Text style={[type.micro, styles.detailsCounter]}>
+            {`${details.length}/${ACCOUNT_DELETION_DETAILS_MAX}`}
+          </Text>
+        </ScrollView>
+        <View style={styles.footer}>
+          <Button
+            label="Continue"
+            variant="dark"
+            disabled={wanted === null && details.trim().length === 0}
+            onPress={finishSurvey}
+          />
+          <PressableScale
+            accessibilityLabel="Skip this question"
+            onPress={skipQuestionTwo}
+            style={styles.textLink}
+          >
+            <Text style={[type.bodyBold, { color: color.inkSoft }]}>
+              Skip this question
+            </Text>
+          </PressableScale>
+        </View>
+      </PageReveal>
+    );
+  } else {
+    header = (
+      <DialogHeader
+        question={null}
+        onClose={props.onCancel}
+        closeLabel="Close account deletion confirmation"
+        disabled={busy}
+      />
+    );
+    page = (
+      <PageReveal key="confirm" direction={directionRef.current}>
+        <ScrollView
+          contentContainerStyle={styles.body}
+          showsVerticalScrollIndicator={false}
         >
-          This permanently deletes your account and all synced data — your
-          profile, analysis history, progress, and membership records. This
-          cannot be undone. Clips saved on this phone stay on this phone until
-          you delete the app.
-        </Text>
-        {error ? (
+          <View style={styles.shield}>
+            <Icon name="shield" size={22} color={color.bad} />
+          </View>
           <Text
             style={[
-              type.caption,
+              type.h1,
+              { color: color.ink, textAlign: 'center', marginTop: space.lg },
+            ]}
+          >
+            Delete your account?
+          </Text>
+          <Text
+            style={[
+              type.body,
               {
-                color: color.bad,
+                color: color.inkSoft,
                 textAlign: 'center',
-                marginTop: space.md,
+                marginTop: space.sm,
               },
             ]}
           >
-            {error}
+            This permanently deletes your account and all synced data — your
+            profile, analysis history, progress, and membership records. This
+            cannot be undone. Clips saved on this phone stay on this phone until
+            you delete the app.
           </Text>
-        ) : null}
-      </ScrollView>
-      <View style={[styles.sheetFooter, { gap: 10 }]}>
-        <Button
-          label="Keep my account"
-          variant="dark"
-          disabled={busy}
-          onPress={props.onCancel}
-        />
-        {step.phase === 'review' || step.phase === 'requesting' ? (
+          {error ? (
+            <Text
+              style={[
+                type.caption,
+                {
+                  color: color.bad,
+                  textAlign: 'center',
+                  marginTop: space.md,
+                },
+              ]}
+            >
+              {error}
+            </Text>
+          ) : null}
+        </ScrollView>
+        <View style={[styles.footer, { gap: 10 }]}>
           <Button
-            label={
-              step.phase === 'requesting' ? 'Requesting…' : 'Continue to delete'
-            }
-            variant="danger"
+            label="Keep my account"
+            variant="dark"
             disabled={busy}
-            onPress={() => void beginRequest()}
+            onPress={props.onCancel}
           />
-        ) : (
-          <Button
-            label={
-              step.phase === 'deleting'
-                ? 'Deleting…'
-                : step.phase === 'armed' && step.secondsLeft > 0
-                  ? `Permanently delete (${step.secondsLeft})`
-                  : 'Permanently delete'
-            }
-            variant="danger"
-            disabled={
-              step.phase === 'deleting' ||
-              (step.phase === 'armed' && step.secondsLeft > 0)
-            }
-            onPress={() => {
-              if (step.phase === 'armed') {
-                void confirmDeletion(step.challenge);
+          {step.phase === 'review' || step.phase === 'requesting' ? (
+            <Button
+              label={
+                step.phase === 'requesting'
+                  ? 'Requesting…'
+                  : 'Continue to delete'
               }
-            }}
-          />
-        )}
-        {busy ? (
-          <ActivityIndicator
-            color={color.bad}
-            style={{ marginTop: space.xs }}
-          />
-        ) : null}
-      </View>
-    </StepReveal>
-  );
+              variant="danger"
+              disabled={busy}
+              onPress={() => void beginRequest()}
+            />
+          ) : (
+            <Button
+              label={
+                step.phase === 'deleting'
+                  ? 'Deleting…'
+                  : step.phase === 'armed' && step.secondsLeft > 0
+                    ? `Permanently delete (${step.secondsLeft})`
+                    : 'Permanently delete'
+              }
+              variant="danger"
+              disabled={
+                step.phase === 'deleting' ||
+                (step.phase === 'armed' && step.secondsLeft > 0)
+              }
+              onPress={() => {
+                if (step.phase === 'armed') {
+                  void confirmDeletion(step.challenge);
+                }
+              }}
+            />
+          )}
+          {busy ? (
+            <ActivityIndicator
+              color={color.bad}
+              style={{ marginTop: space.xs }}
+            />
+          ) : null}
+        </View>
+      </PageReveal>
+    );
+  }
 
   return (
     <Modal
@@ -460,46 +633,44 @@ function DeleteAccountSheet(props: {
     >
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={[styles.modalRoot, { paddingTop: insets.top + space.xl }]}
+        style={styles.modalRoot}
       >
         <Pressable
           accessibilityLabel="Cancel account deletion"
           onPress={busy ? undefined : props.onCancel}
           style={StyleSheet.absoluteFill}
         />
-        <Animated.View
-          accessibilityViewIsModal
+        <View
+          pointerEvents="box-none"
           style={[
-            styles.sheet,
-            { paddingBottom: insets.bottom + space.md },
+            styles.modalFrame,
             {
-              opacity: entrance,
-              transform: [
-                {
-                  translateY: Animated.multiply(
-                    Animated.subtract(1, entrance),
-                    32,
-                  ),
-                },
-              ],
+              paddingTop: insets.top + space.md,
+              paddingBottom: insets.bottom + space.md,
             },
           ]}
         >
-          <PressableScale
-            accessibilityLabel={
-              surveying
-                ? 'Close and keep my account'
-                : 'Close account deletion confirmation'
-            }
-            containerStyle={styles.sheetCloseContainer}
-            disabled={busy}
-            onPress={props.onCancel}
-            style={styles.sheetClose}
+          <Animated.View
+            accessibilityViewIsModal
+            style={[
+              styles.card,
+              {
+                opacity: entrance,
+                transform: [
+                  {
+                    scale: Animated.add(
+                      0.96,
+                      Animated.multiply(entrance, 0.04),
+                    ),
+                  },
+                ],
+              },
+            ]}
           >
-            <Icon name="close" size={20} color={color.ink} />
-          </PressableScale>
-          {surveying ? surveyStep : confirmStep}
-        </Animated.View>
+            {header}
+            {page}
+          </Animated.View>
+        </View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -581,7 +752,7 @@ export function ManageAccountScreen() {
         ) : null}
       </ScrollView>
 
-      <DeleteAccountSheet
+      <DeleteAccountDialog
         visible={confirmingDeletion}
         onCancel={() => setConfirmingDeletion(false)}
         onDeleted={() => {
@@ -638,84 +809,96 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
     marginTop: space.xxl,
   },
-  // Bottom sheet: the scrim fills the screen; the sheet hugs its content and
-  // SHRINKS (never overflows) when the content or the keyboard is taller
-  // than the room left under the top inset — the step body scrolls, the
-  // footer stays put.
-  modalRoot: {
+  // Centered pop-up. The scrim fills the screen; the frame keeps the card
+  // inside the safe areas (the keyboard-avoiding view owns paddingBottom,
+  // so the insets live here). The card hugs its content and SHRINKS — never
+  // overflows — when a page or the keyboard is taller than the room left:
+  // the page body scrolls, the header and footer stay put.
+  modalRoot: { flex: 1, backgroundColor: color.overlayStrong },
+  modalFrame: {
     flex: 1,
-    backgroundColor: color.overlayStrong,
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: space.md,
   },
-  sheet: {
+  card: {
+    width: '100%',
+    maxWidth: 380,
     flexShrink: 1,
     backgroundColor: color.surface,
-    borderTopLeftRadius: radius.xl,
-    borderTopRightRadius: radius.xl,
-    paddingTop: space.lg,
-    position: 'relative',
-  },
-  stepReveal: { flexShrink: 1 },
-  sheetBody: {
-    paddingHorizontal: space.lg,
-    paddingBottom: space.md,
-  },
-  sheetFooter: {
-    flexShrink: 0,
-    paddingHorizontal: space.lg,
+    borderRadius: radius.xl,
     paddingTop: space.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: color.line,
+    paddingBottom: space.md,
+    ...shadow.floating,
   },
-  sheetCloseContainer: {
-    position: 'absolute',
-    right: 14,
-    top: 14,
-    width: 44,
-    zIndex: 2,
+  page: { flexShrink: 1 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: space.md,
+    minHeight: 36,
   },
-  sheetClose: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  headerSlot: { width: 36, justifyContent: 'center' },
+  headerButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: color.surfaceElevated,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: color.line,
   },
-  sheetIcon: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: color.badSoft,
+  progressWrap: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    alignSelf: 'center',
-    marginTop: space.lg,
+    paddingHorizontal: space.sm,
   },
-  // Survey title block: kicker → h1 → body sub (the pre-auth/onboarding
-  // title rhythm, left-aligned). Right padding keeps it clear of the close
-  // button.
-  surveyHeader: { paddingRight: 44, marginBottom: space.lg },
-  surveyTitle: { color: color.ink, marginTop: space.sm },
-  surveySub: { color: color.inkSoft, marginTop: space.sm, maxWidth: 340 },
+  progressTrack: {
+    flexDirection: 'row',
+    gap: space.xs,
+    width: '100%',
+    maxWidth: 132,
+    marginTop: 6,
+  },
+  progressSegment: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: color.line,
+  },
+  progressSegmentDone: { backgroundColor: color.court },
+  body: {
+    paddingHorizontal: space.lg,
+    paddingTop: space.md,
+    paddingBottom: space.md,
+  },
+  footer: {
+    flexShrink: 0,
+    paddingHorizontal: space.lg,
+    paddingTop: space.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: color.line,
+  },
+  title: { color: color.ink },
+  sub: { color: color.inkSoft, marginTop: space.sm, marginBottom: space.md },
   // Same input family as onboarding's ChoiceCard/nameInput (elevated
   // surface, hairline border, court fill when selected), sized as a compact
-  // single-line row so eight options still read as one quick question.
-  reasonRow: {
+  // single-line row so a question reads as one quick pick.
+  choiceRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 56,
+    minHeight: 52,
     borderWidth: 1,
     borderColor: color.line,
     borderRadius: radius.md,
     paddingHorizontal: space.md,
-    paddingVertical: 12,
-    marginBottom: space.sm,
+    paddingVertical: 10,
+    marginBottom: 6,
     backgroundColor: color.surfaceElevated,
   },
-  reasonRowSelected: {
+  choiceRowSelected: {
     borderColor: color.court,
     backgroundColor: color.courtSoft,
   },
@@ -733,15 +916,15 @@ const styles = StyleSheet.create({
   detailsInput: {
     ...type.body,
     color: color.ink,
-    minHeight: 96,
+    minHeight: 76,
     textAlignVertical: 'top',
     borderWidth: 1,
     borderColor: color.line,
     borderRadius: radius.md,
     paddingHorizontal: space.md,
-    paddingTop: 14,
-    paddingBottom: 14,
-    marginTop: space.sm,
+    paddingTop: 12,
+    paddingBottom: 12,
+    marginTop: 6,
     backgroundColor: color.surfaceElevated,
   },
   detailsCounter: {
@@ -750,12 +933,22 @@ const styles = StyleSheet.create({
     marginTop: space.xs,
     fontVariant: ['tabular-nums'],
   },
-  skipLink: {
-    minHeight: 44,
+  textLink: {
+    minHeight: 40,
     alignSelf: 'center',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: space.lg,
     marginTop: space.xs,
+  },
+  shield: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: color.badSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginTop: space.sm,
   },
 });

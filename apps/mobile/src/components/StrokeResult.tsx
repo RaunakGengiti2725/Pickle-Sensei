@@ -82,6 +82,13 @@ export interface StrokeResultProps {
   fixSlot?: React.ReactNode;
   /** Optional sections (e.g. validated training) between rows and the CTAs. */
   children?: React.ReactNode;
+  /**
+   * Omit the §1.6 CTA row. The Result guide pins TRY AGAIN / Done in its own
+   * footer and embeds this surface as the "Full breakdown", so the row would
+   * otherwise render twice. `onTryAgain` / `onDone` stay required so every
+   * host still wires the loop (brief §2).
+   */
+  hideCtaRow?: boolean;
 }
 
 /** Phase colors from the existing palette only — never color-only (legend). */
@@ -626,21 +633,23 @@ export function StrokeResult(props: StrokeResultProps) {
       {props.children}
 
       {/* §1.6 — CTA row: TRY AGAIN primary, Done secondary (brief §2 loop). */}
-      <View style={styles.ctaRow}>
-        <Button
-          label="Try again"
-          variant="volt"
-          icon="camera"
-          onPress={props.onTryAgain}
-          testID="stroke-result-try-again"
-        />
-        <Button
-          label="Done"
-          variant="ghost"
-          onPress={props.onDone}
-          testID="stroke-result-done"
-        />
-      </View>
+      {props.hideCtaRow ? null : (
+        <View style={styles.ctaRow}>
+          <Button
+            label="Try again"
+            variant="volt"
+            icon="camera"
+            onPress={props.onTryAgain}
+            testID="stroke-result-try-again"
+          />
+          <Button
+            label="Done"
+            variant="ghost"
+            onPress={props.onDone}
+            testID="stroke-result-done"
+          />
+        </View>
+      )}
     </View>
   );
 }

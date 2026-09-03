@@ -10,10 +10,11 @@ import TestRenderer, { act } from 'react-test-renderer';
  * ones, and the full two-step server-verified flow (request → armed
  * countdown → confirm → local purge) still runs from here.
  *
- * The tap now opens a one-question exit survey first. It is ALWAYS
- * skippable (the survey must never obstruct deletion), Continue needs an
- * answer, and whatever was answered travels with the step-1 request so it
- * is stored before the account is gone.
+ * The tap now opens a centered two-question exit survey first (why →
+ * what would have kept you + optional comment). Every page is skippable
+ * (the survey must never obstruct deletion), Next/Continue need an answer,
+ * Back keeps answers, and whatever was answered travels with the step-1
+ * request so it is stored before the account is gone.
  */
 
 jest.mock('../src/config/authConfig', () => ({
@@ -109,6 +110,13 @@ function sheetButton(renderer: TestRenderer.ReactTestRenderer, label: string) {
   return matches[0]!;
 }
 
+/** The survey's single-select rows, in render order. */
+function radios(renderer: TestRenderer.ReactTestRenderer) {
+  return renderer.root
+    .findAllByType(PressableScale)
+    .filter(node => node.props.accessibilityRole === 'radio');
+}
+
 describe('ManageAccountScreen', () => {
   beforeEach(() => {
     mockGoBack.mockClear();
@@ -138,40 +146,83 @@ describe('ManageAccountScreen', () => {
     act(() => renderer.unmount());
   });
 
-  it('opens the exit survey first: Continue needs an answer, Skip never does', async () => {
+  it('opens question 1 centered: Next needs an answer, Skip never does', async () => {
     const renderer = renderScreen();
     await act(async () => {
       pressable(renderer, 'Delete account')[0]!.props.onPress();
     });
     const copy = allText(renderer);
     expect(copy).toContain("What's making you leave?");
+    expect(copy).toContain('QUESTION 1 OF 2');
     expect(copy).not.toContain('Delete your account?');
     // Every reason is a radio in the pinned order, "Something else" last.
-    const radios = renderer.root
-      .findAllByType(PressableScale)
-      .filter(node => node.props.accessibilityRole === 'radio');
-    expect(radios.map(node => node.props.accessibilityLabel)).toEqual([
-      "I don't use it enough",
-      "It hasn't improved my game",
-      'The technique reads felt off',
-      'Bugs, crashes, or camera trouble',
-      "It's too expensive",
-      "I'm using another app or a coach",
-      'Privacy or data concerns',
-      'Something else',
-    ]);
-    // Nothing chosen → Continue is disabled; Skip is always live.
-    expect(sheetButton(renderer, 'Continue').props.disabled).toBe(true);
+    expect(radios(renderer).map(node => node.props.accessibilityLabel)).toEqual(
+      [
+        "I don't use it enough",
+        "It hasn't improved my game",
+        'The technique reads felt off',
+        'Bugs, crashes, or camera trouble',
+        "It's too expensive",
+        'Privacy or data concerns',
+        'Something else',
+      ],
+    );
+    // Nothing chosen → Next is disabled; Skip is always live; no Back yet.
+    expect(sheetButton(renderer, 'Next').props.disabled).toBe(true);
     expect(pressable(renderer, 'Skip the survey').length).toBeGreaterThan(0);
+    expect(pressable(renderer, 'Back to the previous question')).toHaveLength(
+      0,
+    );
 
     await act(async () => {
-      radios[4]!.props.onPress();
+      radios(renderer)[4]!.props.onPress();
     });
-    expect(sheetButton(renderer, 'Continue').props.disabled).toBe(false);
+    expect(sheetButton(renderer, 'Next').props.disabled).toBe(false);
     act(() => renderer.unmount());
   });
 
-  it('sends the chosen reason and comment with the step-1 request', async () => {
+  it('question 2 asks what would have kept them, Back keeps the first answer', async () => {
+    const renderer = renderScreen();
+    await act(async () => {
+      pressable(renderer, 'Delete account')[0]!.props.onPress();
+    });
+    await act(async () => {
+      pressable(renderer, "It's too expensive")[0]!.props.onPress();
+    });
+    await act(async () => {
+      sheetButton(renderer, 'Next').props.onPress();
+    });
+    const copy = allText(renderer);
+    expect(copy).toContain('What would have kept you?');
+    expect(copy).toContain('QUESTION 2 OF 2');
+    expect(radios(renderer).map(node => node.props.accessibilityLabel)).toEqual(
+      [
+        'More accurate technique reads',
+        'A lower price or a free tier',
+        'More drills and coaching guidance',
+        'Fewer bugs and smoother capture',
+        "Nothing — I've found another app or a coach",
+        "Nothing — I just don't need it anymore",
+      ],
+    );
+    // Only the second page carries the comment field.
+    expect(renderer.root.findByType(TextInput).props.maxLength).toBe(500);
+    expect(sheetButton(renderer, 'Continue').props.disabled).toBe(true);
+    expect(pressable(renderer, 'Skip this question').length).toBeGreaterThan(0);
+
+    await act(async () => {
+      pressable(renderer, 'Back to the previous question')[0]!.props.onPress();
+    });
+    expect(allText(renderer)).toContain("What's making you leave?");
+    const expensive = radios(renderer).find(
+      node => node.props.accessibilityLabel === "It's too expensive",
+    );
+    expect(expensive?.props.accessibilityState).toEqual({ selected: true });
+    expect(sheetButton(renderer, 'Next').props.disabled).toBe(false);
+    act(() => renderer.unmount());
+  });
+
+  it('sends both answers and the comment with the step-1 request', async () => {
     mockRequestAccountDeletion.mockResolvedValue({
       challenge: 'challenge-1',
       expiresAt: '2026-08-31T00:00:00.000Z',
@@ -183,10 +234,16 @@ describe('ManageAccountScreen', () => {
     await act(async () => {
       pressable(renderer, "It's too expensive")[0]!.props.onPress();
     });
-    const field = renderer.root.findByType(TextInput);
-    expect(field.props.maxLength).toBe(500);
     await act(async () => {
-      field.props.onChangeText('  $60 a year is steep for a rec player.  ');
+      sheetButton(renderer, 'Next').props.onPress();
+    });
+    await act(async () => {
+      pressable(renderer, 'A lower price or a free tier')[0]!.props.onPress();
+    });
+    await act(async () => {
+      renderer.root
+        .findByType(TextInput)
+        .props.onChangeText('  $60 a year is steep for a rec player.  ');
     });
     expect(allText(renderer)).toContain('/500');
 
@@ -202,6 +259,7 @@ describe('ManageAccountScreen', () => {
     });
     expect(mockRequestAccountDeletion).toHaveBeenCalledWith(null, {
       reason: 'too_expensive',
+      wanted: 'price',
       details: '$60 a year is steep for a rec player.',
       platform: 'ios',
       appVersion: '1.0',
@@ -209,7 +267,7 @@ describe('ManageAccountScreen', () => {
     act(() => renderer.unmount());
   });
 
-  it('files a typed comment with no reason picked under "other"', async () => {
+  it('a comment alone answers question 2', async () => {
     mockRequestAccountDeletion.mockResolvedValue({
       challenge: 'challenge-1',
       expiresAt: '2026-08-31T00:00:00.000Z',
@@ -217,6 +275,12 @@ describe('ManageAccountScreen', () => {
     const renderer = renderScreen();
     await act(async () => {
       pressable(renderer, 'Delete account')[0]!.props.onPress();
+    });
+    await act(async () => {
+      pressable(renderer, 'Something else')[0]!.props.onPress();
+    });
+    await act(async () => {
+      sheetButton(renderer, 'Next').props.onPress();
     });
     await act(async () => {
       renderer.root.findByType(TextInput).props.onChangeText('Moving abroad');
@@ -231,12 +295,16 @@ describe('ManageAccountScreen', () => {
     });
     expect(mockRequestAccountDeletion).toHaveBeenCalledWith(
       null,
-      expect.objectContaining({ reason: 'other', details: 'Moving abroad' }),
+      expect.objectContaining({
+        reason: 'other',
+        wanted: null,
+        details: 'Moving abroad',
+      }),
     );
     act(() => renderer.unmount());
   });
 
-  it('Skip reaches the confirmation and sends no survey at all', async () => {
+  it('skipping question 2 still sends question 1', async () => {
     mockRequestAccountDeletion.mockResolvedValue({
       challenge: 'challenge-1',
       expiresAt: '2026-08-31T00:00:00.000Z',
@@ -245,8 +313,44 @@ describe('ManageAccountScreen', () => {
     await act(async () => {
       pressable(renderer, 'Delete account')[0]!.props.onPress();
     });
-    // Even a half-filled survey is discarded by Skip — skipping means
-    // skipping.
+    await act(async () => {
+      pressable(renderer, 'Privacy or data concerns')[0]!.props.onPress();
+    });
+    await act(async () => {
+      sheetButton(renderer, 'Next').props.onPress();
+    });
+    // Half-filled page 2 is discarded by its Skip — skipping means skipping.
+    await act(async () => {
+      renderer.root.findByType(TextInput).props.onChangeText('draft…');
+    });
+    await act(async () => {
+      pressable(renderer, 'Skip this question')[0]!.props.onPress();
+    });
+    expect(allText(renderer)).toContain('Delete your account?');
+    await act(async () => {
+      sheetButton(renderer, 'Continue to delete').props.onPress();
+    });
+    expect(mockRequestAccountDeletion).toHaveBeenCalledWith(
+      null,
+      expect.objectContaining({
+        reason: 'privacy',
+        wanted: null,
+        details: null,
+      }),
+    );
+    act(() => renderer.unmount());
+  });
+
+  it('Skip on question 1 reaches the confirmation and sends no survey at all', async () => {
+    mockRequestAccountDeletion.mockResolvedValue({
+      challenge: 'challenge-1',
+      expiresAt: '2026-08-31T00:00:00.000Z',
+    });
+    const renderer = renderScreen();
+    await act(async () => {
+      pressable(renderer, 'Delete account')[0]!.props.onPress();
+    });
+    // Even a picked reason is discarded by Skip — skipping means skipping.
     await act(async () => {
       pressable(renderer, 'Privacy or data concerns')[0]!.props.onPress();
     });
@@ -254,6 +358,7 @@ describe('ManageAccountScreen', () => {
       pressable(renderer, 'Skip the survey')[0]!.props.onPress();
     });
     expect(allText(renderer)).toContain('Delete your account?');
+    expect(allText(renderer)).not.toContain('QUESTION');
     await act(async () => {
       sheetButton(renderer, 'Continue to delete').props.onPress();
     });
@@ -270,16 +375,20 @@ describe('ManageAccountScreen', () => {
       pressable(renderer, "I don't use it enough")[0]!.props.onPress();
     });
     await act(async () => {
+      sheetButton(renderer, 'Next').props.onPress();
+    });
+    await act(async () => {
       pressable(renderer, 'Close and keep my account')[0]!.props.onPress();
     });
-    expect(allText(renderer)).not.toContain("What's making you leave?");
+    expect(allText(renderer)).not.toContain('What would have kept you?');
     expect(mockRequestAccountDeletion).not.toHaveBeenCalled();
 
     await act(async () => {
       pressable(renderer, 'Delete account')[0]!.props.onPress();
     });
-    // Back at the survey, fresh: no reason carried over.
-    expect(sheetButton(renderer, 'Continue').props.disabled).toBe(true);
+    // Back at question 1, fresh: no reason carried over.
+    expect(allText(renderer)).toContain("What's making you leave?");
+    expect(sheetButton(renderer, 'Next').props.disabled).toBe(true);
     act(() => renderer.unmount());
   });
 

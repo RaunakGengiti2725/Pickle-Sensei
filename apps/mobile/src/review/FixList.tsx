@@ -16,6 +16,11 @@ import { fixList, strengthList } from './formReviewModel';
  * scored (applicable, finite score, band below green). A clean stroke
  * renders NOTHING — no fix is invented so the section has something to say.
  * The strengths line names only green checkpoints with their real scores.
+ *
+ * Two renderings share the one card: the full list (section header, three
+ * items, strengths) on the light breakdown, and the `compact` dark variant
+ * on the Result guide's "The problem" page (fewer items, no header, no
+ * strengths — the page's title and the replay carry that framing).
  */
 
 const FIX_LIMIT = 3;
@@ -38,27 +43,43 @@ export function FixList(props: {
   analysis: ShotAnalysis;
   /** When given, each item offers to open the form review at its phase. */
   onOpenInReview?: (phase: PhaseKey) => void;
+  /** Items to show (engine priority first, then worst-first). Default 3. */
+  limit?: number;
+  /** Dark-surface card tones (Result guide). Default light. */
+  dark?: boolean;
+  /** No section header and no strengths card — items only. */
+  compact?: boolean;
 }) {
-  const items = fixList(props.analysis, FIX_LIMIT);
+  const items = fixList(props.analysis, props.limit ?? FIX_LIMIT);
   if (items.length === 0) return null;
-  const strengths = strengthList(props.analysis, STRENGTH_LIMIT);
+  const strengths = props.compact
+    ? []
+    : strengthList(props.analysis, STRENGTH_LIMIT);
   const scored = scoredCheckpointCount(props.analysis);
   const onOpen = props.onOpenInReview;
+  const dark = props.dark === true;
+  const ink = dark ? color.onDark : color.ink;
+  const inkSoft = dark ? color.onDarkMuted : color.inkSoft;
+  const accent = dark ? color.volt : color.court;
 
   return (
     <View testID="fix-list">
-      <SectionTitle
-        title="What to fix"
-        right={
-          <Text style={[type.caption, { color: color.inkSoft }]}>
-            {items.length} of {scored} checkpoints
-          </Text>
-        }
-      />
+      {props.compact ? null : (
+        <SectionTitle
+          title="What to fix"
+          dark={dark}
+          right={
+            <Text style={[type.caption, { color: inkSoft }]}>
+              {items.length} of {scored} checkpoints
+            </Text>
+          }
+        />
+      )}
       <View style={styles.list}>
         {items.map((item, index) => (
           <Card
             key={item.key}
+            tone={dark ? 'dark' : 'light'}
             style={styles.item}
             testID={`fix-item-${item.key}`}
           >
@@ -68,14 +89,24 @@ export function FixList(props: {
                   {String(index + 1).padStart(2, '0')}
                 </Text>
               </View>
-              <Text style={[type.h3, styles.itemName]} numberOfLines={2}>
+              <Text
+                style={[type.h3, styles.itemName, { color: ink }]}
+                numberOfLines={2}
+              >
                 {item.name}
               </Text>
               {item.isPriority ? (
                 // The engine's own priorityFix checkpoint — a recorded field,
                 // not a UI ranking.
-                <View style={styles.priorityTag}>
-                  <Text style={[type.micro, { color: color.bad }]}>
+                <View
+                  style={[styles.priorityTag, dark && styles.priorityTagDark]}
+                >
+                  <Text
+                    style={[
+                      type.micro,
+                      { color: dark ? color.flame : color.bad },
+                    ]}
+                  >
                     PRIORITY
                   </Text>
                 </View>
@@ -94,22 +125,26 @@ export function FixList(props: {
                 </Text>
               </View>
             </View>
-            <Text style={[type.bodyBold, styles.headline]}>
+            <Text style={[type.bodyBold, styles.headline, { color: ink }]}>
               {item.headline}
             </Text>
-            <Text style={[type.micro, styles.cueLabel]}>COACHING CUE</Text>
-            <Text style={[type.body, styles.cue]}>{item.cue}</Text>
+            <Text style={[type.micro, styles.cueLabel, { color: accent }]}>
+              COACHING CUE
+            </Text>
+            <Text style={[type.body, styles.cue, { color: inkSoft }]}>
+              {item.cue}
+            </Text>
             {onOpen ? (
               <PressableScale
                 accessibilityLabel={`See ${item.name.toLowerCase()} in your form review`}
                 onPress={() => onOpen(item.phase)}
-                style={styles.reviewRow}
+                style={[styles.reviewRow, dark && styles.reviewRowDark]}
                 testID={`fix-item-${item.key}-review`}
               >
-                <Text style={[type.caption, { color: color.court }]}>
+                <Text style={[type.caption, { color: accent }]}>
                   See it in your form review
                 </Text>
-                <Icon name="chevron" size={16} color={color.court} />
+                <Icon name="chevron" size={16} color={accent} />
               </PressableScale>
             ) : null}
           </Card>
@@ -141,7 +176,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  itemName: { color: color.ink, flex: 1 },
+  itemName: { flex: 1 },
   scorePill: {
     minWidth: 36,
     paddingHorizontal: 9,
@@ -155,9 +190,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     backgroundColor: color.badSoft,
   },
-  headline: { color: color.ink, marginTop: space.md },
-  cueLabel: { color: color.court, marginTop: space.md },
-  cue: { color: color.inkSoft, marginTop: space.xs },
+  priorityTagDark: { backgroundColor: color.onDarkTint },
+  headline: { marginTop: space.md },
+  cueLabel: { marginTop: space.md },
+  cue: { marginTop: space.xs },
   reviewRow: {
     minHeight: 44,
     marginTop: space.sm,
@@ -167,6 +203,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: color.line,
   },
+  reviewRowDark: { borderTopColor: color.lineDark },
   keepCard: { marginTop: space.sm, padding: space.md },
   keepCopy: { color: color.inkSoft },
 });

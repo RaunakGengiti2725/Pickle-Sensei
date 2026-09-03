@@ -177,9 +177,9 @@ values ('00000000-0000-4000-8000-00000000000a',
 -- owner INSERT — with context columns — and is write-only from a client
 -- session: there is no SELECT grant, so even the owner cannot read it back.
 insert into public.account_deletion_feedback
-  (user_id, reason, details, provider, platform, app_version,
+  (user_id, reason, wanted, details, provider, platform, app_version,
    account_age_days, was_premium, scored_count)
-values ('00000000-0000-4000-8000-00000000000a', 'too_expensive',
+values ('00000000-0000-4000-8000-00000000000a', 'too_expensive', 'price',
         'Steep for a rec player.', 'google', 'ios', '1.0', 12, false, 1);
 do $$
 begin
@@ -396,7 +396,7 @@ begin
   end if;
   if not exists (select 1 from public.account_deletion_feedback
                  where user_id is null
-                   and reason = 'too_expensive'
+                   and reason = 'too_expensive' and wanted = 'price'
                    and details = 'Steep for a rec player.'
                    and provider = 'google' and account_age_days = 12) then
     raise exception 'D4: the anonymized exit survey must survive account deletion';
