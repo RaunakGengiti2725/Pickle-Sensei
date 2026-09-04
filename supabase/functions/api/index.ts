@@ -6,8 +6,8 @@
 //   TOKEN (OIDC)>, exchanges it with Supabase Auth, and returns a durable
 //   Supabase session { accessToken, refreshToken, expiresAt } beside the
 //   account. Every other endpoint takes Authorization: Bearer <Supabase
-//   ACCESS TOKEN> (a provider ID token is still accepted there transitionally
-//   for app builds that predate the session contract — see authenticate()).
+//   ACCESS TOKEN> and nothing else — a provider ID token there is a 401 that
+//   never reaches Supabase Auth (see authenticate()).
 //     → 401/403 { error: { message } }   (app maps to rejected)
 //     → 5xx     { error: { message } }   (app maps to retryable unavailable)
 //
@@ -298,12 +298,10 @@ interface AuthedUser {
   db: ReturnType<typeof createClient>;
 }
 
-/** Cached, verified session material keyed by SHA-256 of the bearer. For a
- * provider ID token the exchange with Supabase Auth (signInWithIdToken)
- * verifies it cryptographically and mints a Supabase session; for a Supabase
- * access token getUser() verifies it and confirms its session still exists.
- * Either way that is the expensive, auth-service-bound step. Caching the
- * VERIFIED result for a few minutes (never past either token's own expiry)
+/** Cached, verified session material keyed by SHA-256 of the bearer (a
+ * Supabase access token): getUser() verifies it and confirms its session
+ * still exists — the expensive, auth-service-bound step. Caching the
+ * VERIFIED result for a few minutes (never past the token's own expiry)
  * removes an auth round trip from every request, which is the difference
  * between Supabase Auth seeing every API call and seeing ~one call per user
  * per ten minutes. */
@@ -345,18 +343,12 @@ function bearerOf(request: Request): string {
 
 const authCacheKey = async (token: string): Promise<string> => `auth:${await sha256Hex(token)}`;
 
-async function readAuthCache(
-  cacheKey: string,
-  provider: "google" | "apple" | null,
-): Promise<AuthedUser | null> {
+async function readAuthCache(cacheKey: string): Promise<AuthedUser | null> {
   const cachedRaw = await cacheGet(cacheKey);
   if (!cachedRaw) return null;
   try {
     const cached = JSON.parse(cachedRaw) as CachedAuthSession;
-    if (
-      (provider === null || cached.provider === provider) &&
-      cached.expiresAtMs > Date.now() + 5_000
-    ) {
+    if (cached.expiresAtMs > Date.now() + 5_000) {
       return {
         id: cached.userId,
         email: cached.email,
@@ -465,58 +457,33 @@ async function authenticateProviderToken(request: Request): Promise<
 }
 
 /** Authenticate the bearer and return a client that acts as that user under
- * RLS. Two bearer kinds are accepted:
+ * RLS. The ONLY bearer accepted here is a Supabase ACCESS token issued by
+ * `POST /v1/account/bootstrap` or `POST /v1/auth/refresh` (the contract
+ * since 2026-09-01): verified with getUser(), which also fails once the
+ * session behind it was logged out or the account deleted, then cached.
  *
- *  - a Supabase ACCESS token issued by bootstrap or /v1/auth/refresh (the
- *    contract since 2026-09-01): verified with getUser(), which also fails
- *    once the session behind it was logged out or the account deleted;
- *  - transitionally, a Google/Apple ID token, for app builds that predate
- *    the session contract and still bear the provider token on every call.
- *    Remove this branch once no such build is in the field. */
+ * A Google/Apple ID token is refused with 401 on every route but bootstrap
+ * — `authenticateProviderToken` is the one place the provider exchange
+ * happens. Accepting it here would mint a fresh Supabase session on every
+ * cache miss that no logout could ever revoke. */
 async function authenticate(request: Request): Promise<AuthedUser | Response> {
   const token = bearerOf(request);
   if (!token) return errorJson(401, "Missing bearer token.");
 
   const payload = decodeJwtPayload(token);
-  const provider = providerForIssuer(payload?.iss);
-  const supabaseIssued = typeof payload?.iss === "string" && payload.iss.endsWith("/auth/v1");
-  if (!provider && !supabaseIssued) {
-    return errorJson(401, "Bearer token is not a session token or a Google/Apple ID token.");
-  }
-  if (bearerExpired(payload)) {
+  if (bearerExpired(payload)) return errorJson(401, "The bearer token has expired.");
+  if (providerForIssuer(payload?.iss)) {
     return errorJson(
       401,
-      provider ? "The identity token has expired." : "The session token has expired.",
+      "Identity tokens are accepted only by POST /v1/account/bootstrap. Bear the session token.",
     );
   }
+  const supabaseIssued = typeof payload?.iss === "string" && payload.iss.endsWith("/auth/v1");
+  if (!supabaseIssued) return errorJson(401, "Bearer token is not a session token.");
 
   const cacheKey = await authCacheKey(token);
-  const cached = await readAuthCache(cacheKey, provider);
+  const cached = await readAuthCache(cacheKey);
   if (cached) return cached;
-
-  if (provider) {
-    const signIn = await anonAuthClient().auth.signInWithIdToken({ provider, token });
-    if (signIn.error || !signIn.data.user || !signIn.data.session) {
-      return errorJson(401, "The identity token could not be verified.");
-    }
-    await writeAuthCache(
-      cacheKey,
-      {
-        userId: signIn.data.user.id,
-        email: signIn.data.user.email ?? null,
-        provider,
-        accessToken: signIn.data.session.access_token,
-      },
-      payload?.exp,
-      signIn.data.session.expires_at,
-    );
-    return {
-      id: signIn.data.user.id,
-      email: signIn.data.user.email ?? null,
-      provider,
-      db: userScopedClient(signIn.data.session.access_token),
-    };
-  }
 
   const verified = await anonAuthClient().auth.getUser(token);
   if (verified.error || !verified.data.user) {

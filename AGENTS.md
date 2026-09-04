@@ -55,11 +55,16 @@ refreshToken, expiresAt}` beside the account. Every other route takes the
   rotates it (per-IP budget, 401 counts as an auth failure);
   `POST /v1/auth/logout` revokes THIS device's session (`scope=local` — other
   devices stay signed in) and drops the bearer from the auth cache.
-  `authenticate()` still accepts a raw provider ID token TRANSITIONALLY for
-  app builds that predate the contract — remove that branch once none are in
-  the field. Deploy the edge fn BEFORE shipping the app build (an old server
-  returns no `session`; the app then bears the provider token for that run
-  and has nothing to persist — i.e. the pre-fix behaviour, not a crash).
+  `authenticate()` accepts ONLY that access token: a Google/Apple ID token
+  on any route but bootstrap is a 401 and never reaches Supabase Auth (the
+  transitional raw-provider-token branch was removed 2026-09-04 — no public
+  build predates the contract; every cache miss on it minted an orphan
+  Supabase session that logout could never revoke). Pinned by
+  `__wf__/xc_adjudication_auth.test.ts`; the `__wf__` harnesses bootstrap
+  once per load and bear the issued session token by default. Deploy the
+  edge fn BEFORE shipping the app build (an old server returns no `session`;
+  the app then bears the provider token for that run and has nothing to
+  persist — i.e. the pre-fix behaviour, not a crash).
 - Mobile: `src/account/sessionVault.ts` keeps `{provider, canonical id,
 refreshToken, email, displayName}` in the device Keychain/Keystore via
   `react-native-keychain` (`AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`; needs

@@ -42,7 +42,13 @@ URL), never "the code looks right".
   authenticated user; public routes are exactly `GET /healthz`, `/privacy`,
   `/terms`, `/support`, `POST /webhooks/revenuecat`.
 - Bearer semantics: Supabase ACCESS token (bootstrap/refresh/logout
-  contract). A new route that accepts a raw provider ID token is a Bug.
+  contract). `POST /v1/account/bootstrap` is the ONLY route that spends a
+  Google/Apple ID token (`authenticateProviderToken` →
+  `signInWithIdToken`); `authenticate()` answers 401 to a provider-issued
+  bearer — the transitional acceptance branch was removed 2026-09-04
+  (XC-SEC-2; pinned by `__wf__/xc_adjudication_auth.test.ts`). Any route or
+  helper that accepts a raw provider ID token, or calls `signInWithIdToken`
+  outside bootstrap, is a Bug.
 - 5xx bodies stay generic; free text goes through `sanitizeUserText`; new
   routes get a `rateLimit.ts` budget. Service-role client only for
   billing/audit/external-credential rows.
