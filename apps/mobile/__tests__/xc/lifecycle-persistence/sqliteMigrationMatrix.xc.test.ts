@@ -840,10 +840,12 @@ const EXPECTED_CAPTURE_COLUMNS = [
 
 // ─── Known deviations ────────────────────────────────────────────────────────
 
-const KNOWN_DEVIATIONS = {
-  'XC-LP-5':
-    "db.ts LOCAL_MIGRATIONS runs `DELETE FROM outbox WHERE kind = 'shot.sync' AND json_extract(payload, '$.source') <> 'real'` on EVERY launch; one outbox row whose payload is not valid JSON makes json_extract raise `malformed JSON`, so getDb() throws on every launch, every store's hydrate() fails, authStore signs the durable session out (XC-LP-1) and the player's intact local_shot rows are unreachable until reinstall — no in-app repair path exists",
-} as const;
+/** Empty on purpose: XC-LP-5 (a torn outbox payload made `json_extract`
+ * raise `malformed JSON` inside LOCAL_MIGRATIONS, so getDb() threw on every
+ * launch) is fixed — the fixture-cleanup DELETE now evaluates `json_extract`
+ * only for rows whose payload passes `json_valid()`, and the torn row is left
+ * for the sync worker's own per-row failure handling. */
+const KNOWN_DEVIATIONS = {} as const;
 type DeviationId = keyof typeof KNOWN_DEVIATIONS;
 
 // ─── Scenario ────────────────────────────────────────────────────────────────
@@ -976,15 +978,9 @@ async function runScenario(scenario: MigrationScenario): Promise<MatrixRow> {
   observed['coldStatements'] = mockSqlite.statements.length;
   invariants['coldLaunchOpens'] = handle !== null;
 
-  const expectThrow =
-    scenario.schema === 'garbage' ||
-    readonlyApplied ||
-    (scenario.fault === 'malformed-outbox-payload' && shape.hasTables);
+  const expectThrow = scenario.schema === 'garbage' || readonlyApplied;
   if (!invariants['coldLaunchOpens']) {
-    if (scenario.fault === 'malformed-outbox-payload' && shape.hasTables) {
-      knownDeviations.push('XC-LP-5:coldLaunchOpens');
-      invariants['coldLaunchOpens'] = true;
-    } else if (scenario.schema === 'garbage' || readonlyApplied) {
+    if (scenario.schema === 'garbage' || readonlyApplied) {
       // Not a database / not writable: nothing the app could have done. The
       // contract we check is that it fails the same way every time and the
       // fix-27 retry path does not cache the dead handle.
@@ -1272,29 +1268,6 @@ async function runScenario(scenario: MigrationScenario): Promise<MatrixRow> {
       await third.execute('SELECT 1');
       warm.close();
     }
-  } else if (
-    scenario.fault === 'malformed-outbox-payload' &&
-    shape.hasTables &&
-    fs.existsSync(file)
-  ) {
-    // External repair (what the app cannot do): remove the torn row, then
-    // prove every shot was still there underneath.
-    const repair = new sqlite.DatabaseSync(file);
-    repair
-      .prepare(`DELETE FROM outbox WHERE payload = ?`)
-      .run('{"id":"torn-write","source":"re');
-    repair.close();
-    let repaired: LocalDb | null = null;
-    try {
-      repaired = getDb();
-    } catch (error) {
-      observed['repairError'] = errorText(error);
-    }
-    invariants['repairedLaunchOpens'] = repaired !== null;
-    if (repaired) {
-      await checkData(repaired, 'repaired');
-      repaired.close();
-    }
   }
 
   if (readonlyApplied) fs.chmodSync(file, 0o644);
@@ -1511,6 +1484,66 @@ if (sqlite === null) {
         expect(failuresOf(batch)).toEqual([]);
       });
     }
+
+    it('XC-LP-5 pin: an outbox row whose payload is not JSON never makes getDb() throw, and local data stays reachable', async () => {
+      const dir = scenarioDir('lp5-not-json-outbox-payload');
+      const file = path.join(dir, DB_FILE);
+      const seedDb = new sqlite.DatabaseSync(file);
+      createSchema(seedDb, 'v2-current');
+      seedDb
+        .prepare(
+          `INSERT INTO local_shot (owner_key,id,session_id,shot_type,captured_at,overall_score,confidence,result_kind,source,favorite,payload)
+           VALUES (?, 'kept-shot', NULL, 'forehand_drive', '2026-01-01T00:00:00.000Z', 71, 0.9, 'scored', 'real', 0, '{}')`,
+        )
+        .run(GUEST_DATA_OWNER);
+      seedDb
+        .prepare(
+          `INSERT INTO outbox (owner_key, kind, payload) VALUES (?, 'shot.sync', 'not json')`,
+        )
+        .run(GUEST_DATA_OWNER);
+      seedDb
+        .prepare(
+          `INSERT INTO outbox (owner_key, kind, payload) VALUES (?, 'shot.sync', '{"id":"fixture","source":"fixture"}')`,
+        )
+        .run(GUEST_DATA_OWNER);
+      seedDb.close();
+
+      mockSqlite.dir = dir;
+      mockSqlite.opens = 0;
+      mockSqlite.statements = [];
+      const getDb = loadGetDb();
+      let handle: LocalDb | null = null;
+      let coldError: string | null = null;
+      try {
+        handle = getDb();
+      } catch (error) {
+        coldError = errorText(error);
+      }
+      expect(coldError).toBeNull();
+      expect(handle).not.toBeNull();
+      if (!handle) return;
+
+      const { rows: outbox } = await handle.execute(
+        `SELECT payload FROM outbox ORDER BY id`,
+      );
+      // The fixture row is still cleaned up; the torn row is left in place
+      // (the sync worker records a per-row failure for it) — never a throw.
+      expect(outbox.map(r => String(r['payload']))).toEqual(['not json']);
+
+      setActiveDataOwner(GUEST_DATA_OWNER);
+      const listed = await listShots(handle, 1000);
+      expect(listed.map(s => s.id)).toEqual(['kept-shot']);
+
+      handle.close();
+      const warm = getDb();
+      expect(mockSqlite.opens).toBe(2);
+      const { rows: warmOutbox } = await warm.execute(
+        `SELECT payload FROM outbox ORDER BY id`,
+      );
+      expect(warmOutbox.map(r => String(r['payload']))).toEqual(['not json']);
+      warm.close();
+      fs.rmSync(dir, { recursive: true, force: true });
+    });
 
     it('every triaged deviation is still reproduced (remove it from KNOWN_DEVIATIONS once fixed)', () => {
       if (only) return;

@@ -487,8 +487,9 @@ function expectedProfile(scenario: AuthScenario) {
   const legacyValue =
     KV_LEGACY_SESSION_VARIANTS[scenario.kvLegacySession] ?? null;
   const legacyTruthy = legacyValue !== null && legacyValue !== '';
-  // A SQLite statement the auth store issues BEFORE it consults the Keychain
-  // fails: the store's outer catch lands signed-out (see finding XC-LP-1).
+  // A SQLite statement the auth store issues before any database-dependent
+  // branch (legacy kv wipe, local-mode read) fails. The vault restore must not
+  // depend on it: noImplicitSignOut is asserted strictly for these rows too.
   const dbFatal =
     scenario.db === 'open-throws' ||
     scenario.db === 'all-throw' ||
@@ -515,8 +516,6 @@ function expectedProfile(scenario: AuthScenario) {
  * of them is still reproduced, so a fix flips the row back to strict.
  */
 const KNOWN_DEVIATIONS = {
-  'XC-LP-1':
-    'SQLite failure before the Keychain read (open, legacy/local-mode kv read, legacy kv wipe) signs a valid durable session out for this launch',
   'XC-LP-2':
     'Vault record with a non-UUID canonicalAppUserId passes parsePersistedSession, throws in canonicalDataOwner, lands signed-out and is never discarded',
 } as const;
@@ -527,7 +526,6 @@ function classifyDeviation(
   invariant: string,
   exp: ReturnType<typeof expectedProfile>,
 ): DeviationId | null {
-  if (invariant === 'noImplicitSignOut' && exp.dbFatal) return 'XC-LP-1';
   if (
     invariant === 'unusableRecordDiscarded' &&
     VAULT_ACCEPTED_NON_UUID.has(scenario.vault)

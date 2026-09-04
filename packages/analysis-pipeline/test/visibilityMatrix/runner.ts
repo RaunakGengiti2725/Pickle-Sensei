@@ -23,11 +23,11 @@ import type { ScenarioCase } from "./scenarios.js";
 
 /**
  * Runs one synthesized case through the SAME stages the shipping app runs
- * (apps/mobile/src/analysis/runCaptureAnalysis.ts → analyzeCapture with the
- * on-device provider bundle from apps/mobile/src/vision/providers.ts) and,
- * beside it, through the committed pose-quality gates the app does NOT call
- * today (evaluateCaptureQuality → evaluatePreAnalysisGate), so the matrix
- * can show where the gates and the scoring path disagree.
+ * (apps/mobile/src/analysis/runCaptureAnalysis.ts: evaluateCaptureQuality →
+ * evaluatePreAnalysisGate → analyzeCapture with the on-device provider bundle
+ * from apps/mobile/src/vision/providers.ts). A stream the gate rejects is
+ * reported as a `failed` outcome carrying the gate's first reason as
+ * `capture.not_analyzable.<reason>`, exactly like the phone's abstention.
  */
 
 export type FusionOutcome =
@@ -125,10 +125,35 @@ const TRIGGER_MODEL = {
 
 let counter = 0;
 
+function gateFor(sequence: PoseSequence, scenario: ScenarioCase): PreAnalysisGateDecision {
+  return evaluatePreAnalysisGate({
+    frame: null,
+    pose: sequence,
+    poseQuality: evaluateCaptureQuality(sequence),
+    stroke: {
+      windowStartMs: scenario.window.startMs,
+      windowEndMs: scenario.window.endMs,
+      handedness: scenario.handedness,
+    },
+  });
+}
+
 async function runFusion(
   sequence: PoseSequence,
   scenario: ScenarioCase,
 ): Promise<{ outcome: FusionOutcome; record: CaptureAnalysisRecord | null }> {
+  const gate = gateFor(sequence, scenario);
+  if (!gate.analyzable) {
+    return {
+      outcome: {
+        kind: "failed",
+        failureKind: "low_confidence",
+        code: `capture.not_analyzable.${gate.reasons[0]}`,
+        message: `Pre-analysis gate: ${gate.reasons.join(", ")}`,
+      },
+      record: null,
+    };
+  }
   const result = await analyzeCapture(
     shippingProviders(),
     {
@@ -349,9 +374,7 @@ export async function runCase(scenario: ScenarioCase): Promise<CaseResult> {
   const startedAt = performance.now();
   const qualityReport = evaluateCaptureQuality(scenario.sequence);
   const quality = summarizeQuality(qualityReport);
-  const preGate = summarizeGate(
-    evaluatePreAnalysisGate({ frame: null, pose: scenario.sequence, poseQuality: qualityReport }),
-  );
+  const preGate = summarizeGate(gateFor(scenario.sequence, scenario));
   const [degraded, reference] = await Promise.all([
     runFusion(scenario.sequence, scenario),
     runFusion(scenario.reference, scenario),

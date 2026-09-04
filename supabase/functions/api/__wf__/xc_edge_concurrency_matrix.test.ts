@@ -584,15 +584,14 @@ Deno.test("xc S2b: duplicate refresh with the SAME refresh token — exactly one
   for (const i of report.invariants) assert(i.holds, `${i.name}: ${i.detail}`);
 });
 
-Deno.test("xc S2c REPRO (defect): a TRANSIENT GoTrue refresh failure (429 / network error) is answered 401 — the code the app treats as 'refresh token revoked → sign out'", async () => {
+Deno.test("xc S2c: a TRANSIENT GoTrue refresh failure (429 / network error / 502) is answered 429 or 503 — never 401, the code the app treats as 'refresh token revoked → sign out'", async () => {
   // Contract (AGENTS.md "Auth sessions"): "The ONE implicit sign-out is the
-  // server refusing the refresh token (401/403)"; sessionLifecycle.ts:89-91
-  // throws a NON-retryable SessionRefreshError on 401/403 and sessionKeeper.ts
-  // :120-122 then calls onRevoked() (sign-out). refreshSessionRoute
-  // (index.ts:548-568) maps every upstream failure whose status is < 500 to
-  // 401 — including 429 rate limiting and status 0 (AuthRetryableFetchError on
-  // a network failure inside supabase-js). Expected: 503 (serviceUnavailable)
-  // so the app retries with backoff and stays signed in.
+  // server refusing the refresh token (401/403)"; sessionLifecycle.ts throws
+  // a NON-retryable SessionRefreshError on 401/403 and sessionKeeper.ts then
+  // calls onRevoked() (sign-out). refreshSessionRoute must therefore answer
+  // every transient upstream outcome with a retryable status: GoTrue 429 →
+  // 429 + Retry-After, network failure (status undefined / 0) → 503, 5xx →
+  // 503, so the app retries with backoff and stays signed in.
   const report = await scenario(
     "s2c_refresh_transient_upstream_failure",
     "xc S2c",
@@ -634,22 +633,28 @@ Deno.test("xc S2c REPRO (defect): a TRANSIENT GoTrue refresh failure (429 / netw
         },
       ];
       const observed: Record<string, number> = {};
+      const retryAfter: Record<string, string | null> = {};
       for (const [k, c] of cases.entries()) {
         h.fake.overrides.refresh = c.force;
+        let raw: Response | null = null;
         const res = await timed(
           rows,
           0,
           k,
           `refresh.${c.name}`,
-          () =>
-            h.handler(
+          async () => {
+            raw = await h.handler(
               edgeRequest("POST", "/v1/auth/refresh", {
                 ip: ip(0, 10 + k),
                 body: { refreshToken: boot.refreshToken },
               }),
-            ),
+            );
+            return raw;
+          },
         );
         observed[c.name] = res.status;
+        retryAfter[c.name] = (raw as Response | null)?.headers.get("Retry-After") ??
+          null;
       }
       h.fake.overrides.refresh = undefined;
       // the refresh token is still perfectly valid upstream:
@@ -668,18 +673,25 @@ Deno.test("xc S2c REPRO (defect): a TRANSIENT GoTrue refresh failure (429 / netw
       );
       inputs.user = sub;
       observations.statusByUpstreamFailure = observed;
+      observations.retryAfterByUpstreamFailure = retryAfter;
       observations.refreshStillValidUpstream = real.status;
       inv(
         invariants,
-        "OBSERVED: GoTrue 429 → edge 401 (contract expects 5xx/retryable)",
-        observed.gotrue_429 === 401,
-        `→ ${observed.gotrue_429}`,
+        "GoTrue 429 → edge 429 with Retry-After (retryable, never 401)",
+        observed.gotrue_429 === 429 && retryAfter.gotrue_429 !== null,
+        `→ ${observed.gotrue_429} Retry-After=${retryAfter.gotrue_429}`,
       );
       inv(
         invariants,
-        "OBSERVED: GoTrue network failure → edge 401 (contract expects 5xx/retryable)",
-        observed.gotrue_network_failure === 401,
+        "GoTrue network failure → edge 503 (retryable, never 401)",
+        observed.gotrue_network_failure === 503,
         `→ ${observed.gotrue_network_failure}`,
+      );
+      inv(
+        invariants,
+        "no transient upstream failure is answered 401/403",
+        Object.values(observed).every((s) => s !== 401 && s !== 403),
+        JSON.stringify(observed),
       );
       inv(
         invariants,

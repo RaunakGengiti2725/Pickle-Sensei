@@ -82,14 +82,15 @@ describe("player visibility matrix", () => {
       expect(summary.outcomes.scored ?? 0, id).toBe(0);
       expect(summary.outcomes.failed, id).toBe(SEEDS);
     }
+    // The pre-analysis gate abstains upstream of fusion, carrying its reason.
     expect(scenario(value, "no_player_no_frames").failureCodes).toEqual({
-      "fusion.empty_pose_sequence": SEEDS,
+      "capture.not_analyzable.no_person_found": SEEDS,
     });
     expect(scenario(value, "no_player_no_frames").preGateReasons).toEqual({
       no_person_found: SEEDS,
     });
     expect(scenario(value, "arms_missing_both").failureCodes).toEqual({
-      "phase.wrist_not_tracked": SEEDS,
+      "capture.not_analyzable.body_not_fully_visible": SEEDS,
     });
   });
 
@@ -100,8 +101,11 @@ describe("player visibility matrix", () => {
       expect(scenario(value, id).poseQualityRejects, id).toBe(SEEDS);
     }
     expect(scenario(value, "partial_body_upper_only").failureCodes).toEqual({
-      "features.torso_not_measured": SEEDS,
+      "capture.not_analyzable.body_not_fully_visible": SEEDS,
     });
+    expect(scenario(value, "partial_body_upper_only").preGateReasons.body_not_fully_visible).toBe(
+      SEEDS,
+    );
   });
 
   it("legs missing, legs cropped, too close: the pose-quality gate rejects and no seed presents as normal", async () => {
