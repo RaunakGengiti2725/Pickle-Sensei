@@ -1,0 +1,529 @@
+{
+  "description": "Deterministic source mutants for the analysis pipeline + scoring chain. Every edit is an exact-string replacement that must match `count` times (default 1) in `file`; the harness refuses to run a mutant whose anchor drifted. Categories: segmentation_offbyone, swapped_stroke_class, inverted_confidence, dropped_abstention.",
+  "testPackages": [
+    "@pickle/scoring",
+    "@pickle/analysis-pipeline",
+    "@pickle/vision-geometry",
+    "@pickle/swing-lab",
+    "@pickle/evaluation"
+  ],
+  "pinTests": [
+    "packages/analysis-pipeline/test/mutationPins.test.ts",
+    "packages/vision-geometry/test/mutationPins.test.ts",
+    "packages/swing-lab/test/mutationPins.test.ts"
+  ],
+  "mutants": [
+    {
+      "id": "CONTROL",
+      "category": "control",
+      "package": "@pickle/evaluation",
+      "file": "packages/evaluation/src/regression/benches.ts",
+      "description": "No edit. Verifies the /tmp worktree reproduces green unit tests and a clean bench:compare (exit 0) before any mutant is judged.",
+      "edits": []
+    },
+
+    {
+      "id": "SEG-01",
+      "category": "segmentation_offbyone",
+      "package": "@pickle/swing-lab",
+      "file": "packages/swing-lab/src/strokeEvents.ts",
+      "description": "Smoothing window slice(index-1, index+2) -> slice(index-1, index+1): the 3-sample moving average silently loses its trailing sample (v1 detector AND v2 wrist relaxation, 2 sites).",
+      "edits": [
+        {
+          "find": "const window = sorted.slice(Math.max(0, index - 1), index + 2);",
+          "replace": "const window = sorted.slice(Math.max(0, index - 1), index + 1);",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "id": "SEG-02",
+      "category": "segmentation_offbyone",
+      "package": "@pickle/swing-lab",
+      "file": "packages/swing-lab/src/strokeEvents.ts",
+      "description": "Event start-boundary walk `>= boundary` -> `> boundary`: a sample exactly on the 25% boundary is excluded from the event window (start shrinks by one sample).",
+      "edits": [
+        {
+          "find": "smoothed[startIndex - 1]!.value >= boundary &&",
+          "replace": "smoothed[startIndex - 1]!.value > boundary &&"
+        }
+      ]
+    },
+    {
+      "id": "SEG-03",
+      "category": "segmentation_offbyone",
+      "package": "@pickle/swing-lab",
+      "file": "packages/swing-lab/src/strokeEvents.ts",
+      "description": "End-boundary walk bound `endIndex < smoothed.length - 1` -> `length - 2`: the window can never reach the final sample (v1 + v2 relaxation, 2 sites).",
+      "edits": [
+        {
+          "find": "endIndex < smoothed.length - 1 &&",
+          "replace": "endIndex < smoothed.length - 2 &&",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "id": "SEG-04",
+      "category": "segmentation_offbyone",
+      "package": "@pickle/swing-lab",
+      "file": "packages/swing-lab/src/strokeEvents.ts",
+      "description": "Boundary reach cap `<= maxBoundaryReachMs` -> `<` on the v1 start walk only: a sample exactly at the 1200 ms reach limit is dropped.",
+      "edits": [
+        {
+          "find": "      smoothed[startIndex - 1]!.value >= boundary &&\n      peakMs - smoothed[startIndex - 1]!.timestampMs <= EVENT_GATES.maxBoundaryReachMs",
+          "replace": "      smoothed[startIndex - 1]!.value >= boundary &&\n      peakMs - smoothed[startIndex - 1]!.timestampMs < EVENT_GATES.maxBoundaryReachMs"
+        }
+      ]
+    },
+    {
+      "id": "SEG-05",
+      "category": "segmentation_offbyone",
+      "package": "@pickle/swing-lab",
+      "file": "packages/swing-lab/src/strokeEvents.ts",
+      "description": "Contact-in-event containment loses its ±60 ms tolerance and becomes strictly exclusive (`>= start-60 && <= end+60` -> `> start && < end`) in selectTargetEvent v1 and v2 (2 sites).",
+      "edits": [
+        {
+          "find": "contactMs >= event.startMs - 60 && contactMs <= event.endMs + 60",
+          "replace": "contactMs > event.startMs && contactMs < event.endMs",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "id": "SEG-06",
+      "category": "segmentation_offbyone",
+      "package": "@pickle/swing-lab",
+      "file": "packages/swing-lab/src/strokeEvents.ts",
+      "description": "Local-maximum test `value > smoothed[index+1]` -> `>=`: plateau samples produce duplicate peaks / spurious events.",
+      "edits": [
+        {
+          "find": "if (value >= smoothed[index - 1]!.value && value > smoothed[index + 1]!.value) {",
+          "replace": "if (value >= smoothed[index - 1]!.value && value >= smoothed[index + 1]!.value) {"
+        }
+      ]
+    },
+    {
+      "id": "PHT-01",
+      "category": "dropped_abstention",
+      "package": "@pickle/swing-lab",
+      "file": "packages/swing-lab/src/phaseTemporal.ts",
+      "description": "Anchor-free phase segmentation drops the PHASE_PEAK_NOT_PROMINENT abstention (apex < 2x local median never abstains).",
+      "edits": [
+        {
+          "find": "if (medianValue > 0 && apexSample.value < 2 * medianValue) {",
+          "replace": "if (medianValue > 0 && apexSample.value < 0 * medianValue) {"
+        }
+      ]
+    },
+    {
+      "id": "PHT-02",
+      "category": "segmentation_offbyone",
+      "package": "@pickle/swing-lab",
+      "file": "packages/swing-lab/src/phaseTemporal.ts",
+      "description": "Anchor-free in-event sample filter becomes exclusive at the event end (`<= endMs` -> `< endMs`): the boundary sample is dropped from the in-event peak search.",
+      "edits": [
+        {
+          "find": "sample.timestampMs >= input.event.startMs && sample.timestampMs <= input.event.endMs,\n  );\n  if (inEvent.length < 4) {",
+          "replace": "sample.timestampMs >= input.event.startMs && sample.timestampMs < input.event.endMs,\n  );\n  if (inEvent.length < 4) {"
+        }
+      ]
+    },
+
+    {
+      "id": "PHS-01",
+      "category": "segmentation_offbyone",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/phaseSegmenter.ts",
+      "description": "Geometric phase segmenter stroke-window filter `<= stroke.endMs` -> `< stroke.endMs`: the last frame of the stroke window is excluded.",
+      "edits": [
+        {
+          "find": "(frame) => frame.timestampMs >= stroke.startMs && frame.timestampMs <= stroke.endMs,",
+          "replace": "(frame) => frame.timestampMs >= stroke.startMs && frame.timestampMs < stroke.endMs,"
+        }
+      ]
+    },
+    {
+      "id": "PHS-02",
+      "category": "dropped_abstention",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/phaseSegmenter.ts",
+      "description": "Geometric phase segmenter no longer abstains on < 6 measured pose frames.",
+      "edits": [
+        {
+          "find": "if (windowFrames.length < 6) {",
+          "replace": "if (windowFrames.length < 0) {"
+        }
+      ]
+    },
+    {
+      "id": "PHS-03",
+      "category": "dropped_abstention",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/phaseSegmenter.ts",
+      "description": "Geometric phase segmenter no longer abstains when the peak wrist speed is not above 2x the quiet baseline.",
+      "edits": [
+        {
+          "find": "if (peak.value < Math.max(quietSpeed * 2, 1e-6)) {",
+          "replace": "if (peak.value < 0) {"
+        }
+      ]
+    },
+    {
+      "id": "PHS-04",
+      "category": "segmentation_offbyone",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/phaseSegmenter.ts",
+      "description": "prepareStart backward walk `index >= 0` -> `index > 0`: sample 0 can never be examined, so the preparation phase may start one sample late.",
+      "edits": [
+        {
+          "find": "for (let index = accelerateStart - 1; index >= 0; index -= 1) {",
+          "replace": "for (let index = accelerateStart - 1; index > 0; index -= 1) {"
+        }
+      ]
+    },
+
+    {
+      "id": "CLS-01",
+      "category": "swapped_stroke_class",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/strokeHeuristicLite.ts",
+      "description": "FOREHAND/BACKHAND side labels swapped at the commit site.",
+      "edits": [
+        {
+          "find": "const side = sameSide ? \"FOREHAND\" : \"BACKHAND\";",
+          "replace": "const side = sameSide ? \"BACKHAND\" : \"FOREHAND\";"
+        }
+      ]
+    },
+    {
+      "id": "CLS-02",
+      "category": "swapped_stroke_class",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/strokeHeuristicLite.ts",
+      "description": "Strong OVERHEAD commit (point + skeleton agree) emits the SERVE leaf instead.",
+      "edits": [
+        {
+          "find": "// Point and skeleton agree — the strong OVERHEAD claim.\n      return {\n        taxonomyVersion: STROKE_TAXONOMY_V3.version,\n        classifierVersion: STROKE_HEURISTIC_VERSION,\n        label: \"OVERHEAD\",\n        leaf: \"OVERHEAD\",",
+          "replace": "// Point and skeleton agree — the strong OVERHEAD claim.\n      return {\n        taxonomyVersion: STROKE_TAXONOMY_V3.version,\n        classifierVersion: STROKE_HEURISTIC_VERSION,\n        label: \"SERVE\",\n        leaf: \"SERVE\","
+        }
+      ]
+    },
+    {
+      "id": "CLS-03",
+      "category": "swapped_stroke_class",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/strokeHeuristicLite.ts",
+      "description": "Declared handedness inverted before the side decision (dominantRight computed from \"left\").",
+      "edits": [
+        {
+          "find": "const dominantRight = input.handedness === \"right\";",
+          "replace": "const dominantRight = input.handedness === \"left\";"
+        }
+      ]
+    },
+    {
+      "id": "CLS-04",
+      "category": "inverted_confidence",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/strokeHeuristicLite.ts",
+      "description": "UNKNOWN abstention carries confidence 0.9 instead of 0.2 (abstention looks certain downstream).",
+      "edits": [
+        {
+          "find": "label: \"UNKNOWN\",\n    leaf: \"UNKNOWN\",\n    taxonomyDepth: 1,\n    confidence: 0.2,",
+          "replace": "label: \"UNKNOWN\",\n    leaf: \"UNKNOWN\",\n    taxonomyDepth: 1,\n    confidence: 0.9,"
+        }
+      ]
+    },
+    {
+      "id": "CLS-05",
+      "category": "inverted_confidence",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/strokeHeuristicLite.ts",
+      "description": "Side confidence decreases with side margin instead of increasing (larger margin -> lower confidence).",
+      "edits": [
+        {
+          "find": "const sideConfidence = clamp(0.45 + sideMargin * 0.5, 0.45, sideConfidenceCap);",
+          "replace": "const sideConfidence = clamp(sideConfidenceCap - sideMargin * 0.5, 0.45, sideConfidenceCap);"
+        }
+      ]
+    },
+    {
+      "id": "CLS-06",
+      "category": "dropped_abstention",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/strokeHeuristicLite.ts",
+      "description": "Low side-margin abstention removed (contact point on the body midline is still committed to a side).",
+      "edits": [
+        {
+          "find": "if (sideMargin < SIDE_MARGIN_FLOOR) {",
+          "replace": "if (sideMargin < 0) {"
+        }
+      ]
+    },
+    {
+      "id": "CLS-07",
+      "category": "dropped_abstention",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/strokeHeuristicLite.ts",
+      "description": "Degraded-trust side abstention removed (degraded contact evidence with a small margin still commits).",
+      "edits": [
+        {
+          "find": "if (sideTrustDegraded && sideMargin < SIDE_MARGIN_DEGRADED_BAND) {",
+          "replace": "if (sideTrustDegraded && sideMargin < 0) {"
+        }
+      ]
+    },
+    {
+      "id": "CLS-08",
+      "category": "dropped_abstention",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/strokeHeuristicLite.ts",
+      "description": "No-swing-energy abstention removed (a window with no meaningful wrist/paddle speed is still classified).",
+      "edits": [
+        {
+          "find": "if (windowSamples.length >= MIN_WINDOW_SPEED_SAMPLES && windowPeak < NON_SWING_SPEED_FLOOR) {",
+          "replace": "if (windowSamples.length >= MIN_WINDOW_SPEED_SAMPLES && windowPeak < 0) {"
+        }
+      ]
+    },
+    {
+      "id": "CLS-09",
+      "category": "dropped_abstention",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/strokeHeuristicLite.ts",
+      "description": "Handedness-contradiction abstention can never fire (decisive requires measuredFrames < 0).",
+      "edits": [
+        {
+          "find": "const decisive =\n      wristInfo.measuredFrames >= MIN_TRAVEL_SAMPLE_FRAMES &&",
+          "replace": "const decisive =\n      wristInfo.measuredFrames < 0 &&"
+        }
+      ]
+    },
+
+    {
+      "id": "CON-01",
+      "category": "inverted_confidence",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/offlineStroke.ts",
+      "description": "Contact-fusion confidence uses (1 - coherence): more coherent evidence -> lower confidence.",
+      "edits": [
+        {
+          "find": "0.55 * clamp01(coherence) +",
+          "replace": "0.55 * (1 - clamp01(coherence)) +"
+        }
+      ]
+    },
+    {
+      "id": "CON-02",
+      "category": "dropped_abstention",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/offlineStroke.ts",
+      "description": "Multimodal-contact abstention disabled (runner-up mode must exceed 99x the top mode to abstain).",
+      "edits": [
+        {
+          "find": "runnerUp.density >= FUSION.modeComparableRatio * top.density &&",
+          "replace": "runnerUp.density > 99 * top.density &&"
+        }
+      ]
+    },
+    {
+      "id": "CON-03",
+      "category": "inverted_confidence",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/offlineStroke.ts",
+      "description": "Unconfirmed-ball confidence cap raised from 0.7 to 0.95 (uncorroborated contact reported as near-certain).",
+      "edits": [
+        {
+          "find": "if (!ballConfirmed) confidence = Math.min(confidence, 0.7);",
+          "replace": "if (!ballConfirmed) confidence = Math.min(confidence, 0.95);"
+        }
+      ]
+    },
+    {
+      "id": "CON-04",
+      "category": "dropped_abstention",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/offlineStroke.ts",
+      "description": "Weak-evidence abstention removed (reliability-weighted mass below minTotalMass still estimates a contact).",
+      "edits": [
+        {
+          "find": "if (totalMass < FUSION.minTotalMass) {",
+          "replace": "if (totalMass < 0) {"
+        }
+      ]
+    },
+    {
+      "id": "CON-05",
+      "category": "dropped_abstention",
+      "package": "@pickle/vision-geometry",
+      "file": "packages/vision-geometry/src/offlineStroke.ts",
+      "description": "Fused-contact-far-from-motion-peak abstention removed (divergence limit 700 ms -> 1e9 ms).",
+      "edits": [
+        {
+          "find": "Math.abs(estimatedContactMs - input.window.peakMotionMs) > FUSION.maxPeakDivergenceMs",
+          "replace": "Math.abs(estimatedContactMs - input.window.peakMotionMs) > 1e9"
+        }
+      ]
+    },
+
+    {
+      "id": "SCO-01",
+      "category": "inverted_confidence",
+      "package": "@pickle/scoring",
+      "file": "packages/scoring/src/engine.ts",
+      "description": "Abstain comparison inverted: abstain when analysisConfidence > minAnalysisConfidence.",
+      "edits": [
+        {
+          "find": "analysisConfidence < config.minAnalysisConfidence\n      ? \"abstain\"",
+          "replace": "analysisConfidence > config.minAnalysisConfidence\n      ? \"abstain\""
+        }
+      ]
+    },
+    {
+      "id": "SCO-02",
+      "category": "dropped_abstention",
+      "package": "@pickle/scoring",
+      "file": "packages/scoring/src/engine.ts",
+      "description": "Scoring never abstains: the abstain branch yields lower_confidence instead.",
+      "edits": [
+        {
+          "find": "analysisConfidence < config.minAnalysisConfidence\n      ? \"abstain\"",
+          "replace": "analysisConfidence < config.minAnalysisConfidence\n      ? \"lower_confidence\""
+        }
+      ]
+    },
+    {
+      "id": "SCO-03",
+      "category": "inverted_confidence",
+      "package": "@pickle/scoring",
+      "file": "packages/scoring/src/engine.ts",
+      "description": "Unobserved checkpoints excluded from the analysis-confidence denominator (confidence inflates when the paddle is never seen).",
+      "edits": [
+        {
+          "find": "if (!cfg || !result) continue;\n    confNumerator += cfg.weight * result.confidence;",
+          "replace": "if (!cfg || !result || !result.observed) continue;\n    confNumerator += cfg.weight * result.confidence;"
+        }
+      ]
+    },
+    {
+      "id": "SCO-04",
+      "category": "segmentation_offbyone",
+      "package": "@pickle/scoring",
+      "file": "packages/scoring/src/engine.ts",
+      "description": "Band boundary off-by-one: score exactly 80 becomes yellow instead of green.",
+      "edits": [
+        {
+          "find": "if (score >= 80) return \"green\";",
+          "replace": "if (score > 80) return \"green\";"
+        }
+      ]
+    },
+    {
+      "id": "SCO-05",
+      "category": "dropped_abstention",
+      "package": "@pickle/scoring",
+      "file": "packages/scoring/src/engine.ts",
+      "description": "Checkpoint scores leak through an abstained presentation (score is no longer nulled on abstain).",
+      "edits": [
+        {
+          "find": "score: presentation === \"abstain\" ? null : r.score,",
+          "replace": "score: r.score,"
+        }
+      ]
+    },
+    {
+      "id": "SCO-06",
+      "category": "inverted_confidence",
+      "package": "@pickle/scoring",
+      "file": "packages/scoring/src/engine.ts",
+      "description": "Per-metric measurement confidence inverted (c = 1 - confidence) inside checkpoint scoring.",
+      "edits": [
+        {
+          "find": "const c = measurement.confidence;",
+          "replace": "const c = 1 - measurement.confidence;"
+        }
+      ]
+    },
+
+    {
+      "id": "GATE-01",
+      "category": "dropped_abstention",
+      "package": "@pickle/analysis-pipeline",
+      "file": "packages/analysis-pipeline/src/preAnalysisGate.ts",
+      "description": "Pre-analysis gate always reports analyzable regardless of accumulated reasons.",
+      "edits": [
+        {
+          "find": "return { analyzable: reasons.length === 0, reasons, notEvaluated };",
+          "replace": "return { analyzable: true, reasons, notEvaluated };"
+        }
+      ]
+    },
+    {
+      "id": "GATE-02",
+      "category": "dropped_abstention",
+      "package": "@pickle/analysis-pipeline",
+      "file": "packages/analysis-pipeline/src/preAnalysisGate.ts",
+      "description": "Empty pose frame list no longer yields no_person_found.",
+      "edits": [
+        {
+          "find": "} else if (input.pose.frames.length === 0) {",
+          "replace": "} else if (input.pose.frames.length < 0) {"
+        }
+      ]
+    },
+
+    {
+      "id": "AC-01",
+      "category": "dropped_abstention",
+      "package": "@pickle/analysis-pipeline",
+      "file": "packages/analysis-pipeline/src/analyzeCapture.ts",
+      "description": "analyzeCapture reports resultKind \"scored\" even when the scorer abstained.",
+      "edits": [
+        {
+          "find": "resultKind: scored.value.presentation === \"abstain\" ? \"low_confidence\" : \"scored\",",
+          "replace": "resultKind: \"scored\","
+        }
+      ]
+    },
+    {
+      "id": "AC-02",
+      "category": "dropped_abstention",
+      "package": "@pickle/analysis-pipeline",
+      "file": "packages/analysis-pipeline/src/strokeAutoResolution.ts",
+      "description": "resolvePredictedProfile no longer abstains below the 0.5 auto-resolution confidence floor.",
+      "edits": [
+        {
+          "find": "if (prediction.confidence < AUTO_RESOLUTION_MIN_CONFIDENCE) {\n    return { kind: \"abstain\", reason: \"auto_stroke_confidence_below_floor\" };",
+          "replace": "if (prediction.confidence < 0) {\n    return { kind: \"abstain\", reason: \"auto_stroke_confidence_below_floor\" };"
+        }
+      ]
+    },
+    {
+      "id": "AC-03",
+      "category": "swapped_stroke_class",
+      "package": "@pickle/analysis-pipeline",
+      "file": "packages/analysis-pipeline/src/analyzeCapture.ts",
+      "description": "Depth-2 side resolution routes FOREHAND to backhand_drive and BACKHAND to forehand_drive.",
+      "edits": [
+        {
+          "find": "shotType = predictedProfile.side === \"FOREHAND\" ? \"forehand_drive\" : \"backhand_drive\";",
+          "replace": "shotType = predictedProfile.side === \"FOREHAND\" ? \"backhand_drive\" : \"forehand_drive\";"
+        }
+      ]
+    },
+    {
+      "id": "AC-04",
+      "category": "dropped_abstention",
+      "package": "@pickle/analysis-pipeline",
+      "file": "packages/analysis-pipeline/src/analyzeCapture.ts",
+      "description": "Auto-detect prediction confidence threshold lowered from 0.8 to 0 (any prediction is accepted).",
+      "edits": [
+        {
+          "find": "export const PREDICTION_CONFIDENCE_THRESHOLD = 0.8;",
+          "replace": "export const PREDICTION_CONFIDENCE_THRESHOLD = 0;"
+        }
+      ]
+    }
+  ]
+}
