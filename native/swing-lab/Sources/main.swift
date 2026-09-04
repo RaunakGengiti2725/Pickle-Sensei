@@ -103,6 +103,56 @@ struct UprightVideoReader {
   }
 }
 
+/// Frame timing measured from the presentation timestamps the reader actually
+/// delivered. `AVAssetTrack.nominalFrameRate` and `AVAsset.duration` are
+/// container claims; for some containers (the committed fragmented AV1 CI clip)
+/// AVFoundation reports both at half the decoded cadence. Downstream code
+/// sizes its gap thresholds from `video.fps` and its clip end from
+/// `durationMs`, so the artifacts must describe the decoded frames.
+struct DecodedTiming {
+  private(set) var timestampsMs: [Int] = []
+
+  mutating func record(_ timestampMs: Int) {
+    timestampsMs.append(timestampMs)
+  }
+
+  var frameCount: Int { timestampsMs.count }
+  var firstPtsMs: Int? { timestampsMs.min() }
+  var lastPtsMs: Int? { timestampsMs.max() }
+
+  /// Median inter-frame interval; nil with fewer than two frames.
+  var medianFrameMs: Int? {
+    let sorted = timestampsMs.sorted()
+    guard sorted.count >= 2 else { return nil }
+    let deltas = zip(sorted, sorted.dropFirst()).map { $0.1 - $0.0 }.sorted()
+    let middle = deltas.count / 2
+    return deltas.count % 2 == 0 ? (deltas[middle - 1] + deltas[middle]) / 2 : deltas[middle]
+  }
+
+  /// Mean cadence over the decoded span, (n - 1) / (last - first); nil when
+  /// fewer than two distinct timestamps were decoded.
+  var fps: Double? {
+    guard let first = firstPtsMs, let last = lastPtsMs, last > first, frameCount >= 2 else { return nil }
+    return Double(frameCount - 1) * 1000 / Double(last - first)
+  }
+
+  /// End of the last decoded frame: its PTS plus one median frame interval.
+  var durationMs: Int? {
+    guard let last = lastPtsMs, let frame = medianFrameMs else { return nil }
+    return last + frame
+  }
+}
+
+/// Relative disagreement between a container claim and a decoded measurement.
+func relativeError(_ claimed: Double, _ measured: Double) -> Double {
+  guard measured != 0 else { return claimed == 0 ? 0 : .infinity }
+  return abs(claimed - measured) / abs(measured)
+}
+
+func roundedFps(_ fps: Double) -> Double {
+  (fps * 1000).rounded() / 1000
+}
+
 // MARK: - extract
 
 func runExtract(videoPath: String, outDir: String) async throws {
@@ -134,6 +184,7 @@ func runExtract(videoPath: String, outDir: String) async throws {
   var framesSeen = 0
   var poseMisses = 0
   var lastTimestampMs = Int.min
+  var decoded = DecodedTiming()
 
   // SCENE VALIDITY: a coarse luma histogram per frame; large chi-square
   // distance between consecutive frames = shot boundary. Analysis must never
@@ -145,6 +196,7 @@ func runExtract(videoPath: String, outDir: String) async throws {
 
   while let frame = readerBox.next() {
     framesSeen += 1
+    decoded.record(frame.timestampMs)
     if let histogram = lumaHistogram(frame.buffer) {
       if let previous = previousHistogram {
         var distance = 0.0
@@ -193,14 +245,29 @@ func runExtract(videoPath: String, outDir: String) async throws {
     }
   }
 
-  let effectiveFps: Double
-  if frames.count >= 2,
-     let first = frames.first?["t"] as? Int,
-     let last = frames.last?["t"] as? Int,
-     last > first {
-    effectiveFps = Double(frames.count - 1) * 1000 / Double(last - first)
+  // Video timing comes from the decoded frames; the container's claims are
+  // only the fallback when fewer than two frames were decoded, and are kept
+  // in extract-meta.json under `container` so disagreements stay visible.
+  let videoFps: Double
+  let videoDurationMs: Int
+  let timingSource: String
+  if let measuredFps = decoded.fps, let measuredDurationMs = decoded.durationMs {
+    videoFps = roundedFps(measuredFps)
+    videoDurationMs = measuredDurationMs
+    timingSource = "decoded_pts"
+    let fpsError = relativeError(readerBox.fps, measuredFps)
+    let durationError = relativeError(Double(readerBox.durationMs), Double(measuredDurationMs))
+    if fpsError > 0.10 || durationError > 0.10 {
+      let warning = "extract: container timing disagrees with decoded frames: "
+        + "nominalFrameRate \(readerBox.fps) vs decoded \(videoFps) fps, "
+        + "duration \(readerBox.durationMs) ms vs decoded \(measuredDurationMs) ms; "
+        + "artifacts carry the decoded values\n"
+      FileHandle.standardError.write(Data(warning.utf8))
+    }
   } else {
-    effectiveFps = readerBox.fps
+    videoFps = readerBox.fps
+    videoDurationMs = readerBox.durationMs
+    timingSource = "container"
   }
 
   let poseWire: [String: Any] = [
@@ -208,7 +275,7 @@ func runExtract(videoPath: String, outDir: String) async throws {
     "format": "pickle.pose-sequence.v1",
     "coordinateSystem": "normalized_image_top_left",
     "poseModelVersion": pose.modelVersion,
-    "video": ["w": readerBox.width, "h": readerBox.height, "fps": readerBox.fps > 0 ? readerBox.fps : effectiveFps],
+    "video": ["w": readerBox.width, "h": readerBox.height, "fps": videoFps],
     "frames": frames,
   ]
   // Segment the clip into shots from the detected cuts.
@@ -218,7 +285,7 @@ func runExtract(videoPath: String, outDir: String) async throws {
     segments.append(["startMs": segmentStart, "endMs": cut])
     segmentStart = cut
   }
-  segments.append(["startMs": segmentStart, "endMs": readerBox.durationMs])
+  segments.append(["startMs": segmentStart, "endMs": videoDurationMs])
   try writeJSON(
     [
       "schemaVersion": 1,
@@ -234,7 +301,7 @@ func runExtract(videoPath: String, outDir: String) async throws {
     [
       "schemaVersion": 1,
       "poseModelVersion": pose.modelVersion,
-      "video": ["w": readerBox.width, "h": readerBox.height, "fps": readerBox.fps > 0 ? readerBox.fps : effectiveFps],
+      "video": ["w": readerBox.width, "h": readerBox.height, "fps": videoFps],
       "frames": peopleFrames,
     ],
     to: "\(outDir)/people.json"
@@ -272,10 +339,16 @@ func runExtract(videoPath: String, outDir: String) async throws {
     to: "\(outDir)/ball.json"
   )
 
+  var decodedJSON: [String: Any] = ["frames": decoded.frameCount]
+  if let first = decoded.firstPtsMs { decodedJSON["firstPtsMs"] = first }
+  if let last = decoded.lastPtsMs { decodedJSON["lastPtsMs"] = last }
+  if let frame = decoded.medianFrameMs { decodedJSON["medianFrameMs"] = frame }
   try writeJSON(
     [
       "video": ["path": videoPath, "w": readerBox.width, "h": readerBox.height,
-                "nominalFps": readerBox.fps, "durationMs": readerBox.durationMs],
+                "nominalFps": videoFps, "durationMs": videoDurationMs, "timingSource": timingSource],
+      "container": ["nominalFps": readerBox.fps, "durationMs": readerBox.durationMs],
+      "decoded": decodedJSON,
       "framesSeen": framesSeen,
       "framesWithPose": frames.count,
       "poseMisses": poseMisses,
