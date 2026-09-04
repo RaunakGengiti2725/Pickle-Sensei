@@ -77,6 +77,7 @@ const STRESS_LANES = envInt("STRESS_LANES", 0); // 0 → seeded 8..32
 const STRESS_STRICT = envInt("STRESS_STRICT", 0) === 1;
 
 const GENERAL_USER_LIMIT = 240; // index.ts GENERAL_USER_LIMIT
+const GENERAL_USER_WINDOW_S = 60; // index.ts GENERAL_USER_WINDOW_SECONDS
 
 function outDir(): string {
   const env = Deno.env.get("STRESS_OUT_DIR");
@@ -1577,6 +1578,11 @@ const rateLimitAtomic: Scenario = async (ctx, _lanes) => {
   const burst = GENERAL_USER_LIMIT + over; // bootstrap already spent 1 of the budget
   ctx.observations.burst = burst;
   const readsBefore = bookmarks.reads;
+  // rateLimit.ts uses ALIGNED fixed windows (floor(now / windowSeconds)), so a
+  // burst that crosses a bucket boundary legitimately gets a fresh budget.
+  const bucketAt = () =>
+    Math.floor(Date.now() / (GENERAL_USER_WINDOW_S * 1000));
+  const startBucket = bucketAt();
   const gets = await Promise.all(
     Array.from(
       { length: burst },
@@ -1590,16 +1596,25 @@ const rateLimitAtomic: Scenario = async (ctx, _lanes) => {
           )),
     ),
   );
+  const endBucket = bucketAt();
+  const rolled = endBucket !== startBucket;
+  ctx.observations.windowRollover = rolled;
   const ok = gets.filter((g) => g.status === 200).length;
   const limited = gets.filter((g) => g.status === 429);
   const expectedOk = GENERAL_USER_LIMIT - 1;
+  // Exact when the burst stayed inside one aligned window; across a boundary
+  // at most one extra full window may be granted, and nothing may go uncounted.
+  const admissionOk = rolled
+    ? ok >= expectedOk && ok <= expectedOk + GENERAL_USER_LIMIT &&
+      ok + limited.length === burst
+    : ok === expectedOk && limited.length === burst - expectedOk;
   inv(
     ctx,
-    "rate_limit: exactly the remaining general budget is admitted, the rest 429",
-    ok === expectedOk && limited.length === burst - expectedOk,
+    "rate_limit: exactly the remaining general budget is admitted, the rest 429 (one extra aligned window allowed if the burst crosses a boundary)",
+    admissionOk,
     `200=${ok} 429=${limited.length} other=${
       burst - ok - limited.length
-    } (budget ${GENERAL_USER_LIMIT}, 1 spent by bootstrap)`,
+    } (budget ${GENERAL_USER_LIMIT}, 1 spent by bootstrap, window rollover=${rolled})`,
   );
   inv(
     ctx,
