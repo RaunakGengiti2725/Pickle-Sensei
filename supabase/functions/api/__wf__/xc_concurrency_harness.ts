@@ -58,8 +58,7 @@ export class Prng {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   }
   int(minInclusive: number, maxInclusive: number): number {
-    return minInclusive +
-      Math.floor(this.next() * (maxInclusive - minInclusive + 1));
+    return minInclusive + Math.floor(this.next() * (maxInclusive - minInclusive + 1));
   }
   uuid(): string {
     const hex = () => this.int(0, 15).toString(16);
@@ -153,10 +152,7 @@ export class FakeSupabase {
   sessions = new Map<string, FakeSession>();
   accessIndex = new Map<string, string>();
   refreshIndex = new Map<string, string>();
-  users = new Map<
-    string,
-    { id: string; email: string; provider: "google" | "apple" }
-  >();
+  users = new Map<string, { id: string; email: string; provider: "google" | "apple" }>();
   tables: Record<string, Array<Record<string, unknown>>> = {
     profiles: [],
     shots: [],
@@ -237,29 +233,21 @@ export class FakeSupabase {
     }
   }
 
-  mintSession(
-    userId: string,
-    provider: "google" | "apple",
-    sessionId?: string,
-  ): FakeSession {
+  mintSession(userId: string, provider: "google" | "apple", sessionId?: string): FakeSession {
     this.mint += 1;
     const sid = sessionId ?? `sess-${this.mint}-${this.prng.uuid()}`;
     const exp = Math.floor(Date.now() / 1000) + 3600;
-    const accessToken = `${
-      b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }))
-    }.${
-      b64url(
-        JSON.stringify({
-          iss: `${SUPABASE_URL}/auth/v1`,
-          sub: userId,
-          aud: "authenticated",
-          role: "authenticated",
-          session_id: sid,
-          exp,
-          jti: `${this.mint}-${this.prng.uuid()}`,
-        }),
-      )
-    }.sig`;
+    const accessToken = `${b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }))}.${b64url(
+      JSON.stringify({
+        iss: `${SUPABASE_URL}/auth/v1`,
+        sub: userId,
+        aud: "authenticated",
+        role: "authenticated",
+        session_id: sid,
+        exp,
+        jti: `${this.mint}-${this.prng.uuid()}`,
+      }),
+    )}.sig`;
     const refreshToken = `rt-${this.mint}-${this.prng.uuid()}`;
     const existing = this.sessions.get(sid);
     const session: FakeSession = existing ?? {
@@ -308,9 +296,7 @@ export class FakeSupabase {
   }
 
   /** Resolve the acting principal of a PostgREST call from its bearer. */
-  principal(
-    headers: Headers,
-  ): { role: "service" | "user" | "anon"; userId: string | null } {
+  principal(headers: Headers): { role: "service" | "user" | "anon"; userId: string | null } {
     const auth = headers.get("authorization") ?? "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
     if (token === SERVICE_ROLE_KEY) return { role: "service", userId: null };
@@ -330,20 +316,15 @@ export class FakeSupabase {
       (s) => s.user_id === userId && s.result_kind === "scored",
     ).length;
     const user = this.users.get(userId);
-    const ledger = user
-      ? this.identityLedger.get(`${user.provider}:${userId}`) ?? 0
-      : 0;
+    const ledger = user ? (this.identityLedger.get(`${user.provider}:${userId}`) ?? 0) : 0;
     return Math.max(own, ledger);
   }
 
   private premium(userId: string): boolean {
-    const row = this.tables.billing_entitlements.find((b) =>
-      b.user_id === userId
-    );
+    const row = this.tables.billing_entitlements.find((b) => b.user_id === userId);
     if (!row) return false;
     const exp = row.expires_at as string | null;
-    return Boolean(row.premium) &&
-      (exp === null || new Date(exp).getTime() > Date.now());
+    return Boolean(row.premium) && (exp === null || new Date(exp).getTime() > Date.now());
   }
 
   private reservedCount(userId: string): number {
@@ -363,7 +344,10 @@ export class FakeSupabase {
     const prev = this.locks.get(userId) ?? Promise.resolve();
     let release!: () => void;
     const mine = new Promise<void>((resolve) => (release = resolve));
-    this.locks.set(userId, prev.then(() => mine));
+    this.locks.set(
+      userId,
+      prev.then(() => mine),
+    );
     await prev;
     try {
       return fn();
@@ -408,10 +392,7 @@ export class FakeSupabase {
       const reserved = this.reservedCount(userId);
       const remaining = 2 - Math.min(scored, 2);
       if (!premium && remaining <= reserved) {
-        this.log(
-          "rpc.reserve",
-          `user=${userId} idempotency=${key} → paywall_required`,
-        );
+        this.log("rpc.reserve", `user=${userId} idempotency=${key} → paywall_required`);
         return [{ result: "access.paywall_required" }];
       }
       const row: PermitRow = {
@@ -422,21 +403,13 @@ export class FakeSupabase {
         outcome: null,
         created_at: new Date().toISOString(),
       };
-      this.tables.analysis_permits.push(
-        row as unknown as Record<string, unknown>,
-      );
-      this.log(
-        "rpc.reserve",
-        `user=${userId} idempotency=${key} → accepted ${row.id}`,
-      );
+      this.tables.analysis_permits.push(row as unknown as Record<string, unknown>);
+      this.log("rpc.reserve", `user=${userId} idempotency=${key} → accepted ${row.id}`);
       return [view(row as unknown as Record<string, unknown>)];
     });
   }
 
-  async applySyncedShot(
-    userId: string | null,
-    shot: Record<string, unknown>,
-  ): Promise<string> {
+  async applySyncedShot(userId: string | null, shot: Record<string, unknown>): Promise<string> {
     this.count("rpc.apply_synced_shot");
     if (!userId) return "auth.required";
     const id = String(shot.id);
@@ -454,16 +427,10 @@ export class FakeSupabase {
       );
       if (!permit) return "access.permit_not_found";
       if (permit.status !== "reserved") {
-        this.log(
-          "rpc.apply",
-          `user=${userId} shot=${id} → permit_not_reserved (${permit.status})`,
-        );
+        this.log("rpc.apply", `user=${userId} shot=${id} → permit_not_reserved (${permit.status})`);
         return "access.permit_not_reserved";
       }
-      if (
-        new Date(permit.created_at as string).getTime() <=
-          Date.now() - 24 * 3600 * 1000
-      ) {
+      if (new Date(permit.created_at as string).getTime() <= Date.now() - 24 * 3600 * 1000) {
         permit.status = "released";
         permit.outcome = "expired";
         return "access.permit_expired";
@@ -478,9 +445,7 @@ export class FakeSupabase {
       }
       if (
         sessionId !== null &&
-        !this.tables.sessions.some((s) =>
-          s.id === sessionId && s.user_id === userId
-        )
+        !this.tables.sessions.some((s) => s.id === sessionId && s.user_id === userId)
       ) {
         return "shot.session_not_found";
       }
@@ -503,10 +468,7 @@ export class FakeSupabase {
         const user = this.users.get(userId);
         if (user) {
           const k = `${user.provider}:${userId}`;
-          this.identityLedger.set(
-            k,
-            Math.max(this.identityLedger.get(k) ?? 0, 0) + 1,
-          );
+          this.identityLedger.set(k, Math.max(this.identityLedger.get(k) ?? 0, 0) + 1);
         }
       }
       permit.status = resultKind === "scored" ? "finalized" : "released";
@@ -524,10 +486,7 @@ export class FakeSupabase {
   ): Array<Record<string, unknown>> {
     let out = rows;
     for (const [col, raw] of params.entries()) {
-      if (
-        ["select", "order", "limit", "offset", "on_conflict", "columns"]
-          .includes(col)
-      ) continue;
+      if (["select", "order", "limit", "offset", "on_conflict", "columns"].includes(col)) continue;
       if (raw.startsWith("eq.")) {
         const v = raw.slice(3);
         out = out.filter((r) => String(r[col]) === v);
@@ -542,9 +501,7 @@ export class FakeSupabase {
       } else if (raw === "is.null") {
         out = out.filter((r) => r[col] === null || r[col] === undefined);
       } else {
-        throw new Error(
-          `xc harness: unsupported PostgREST filter ${col}=${raw}`,
-        );
+        throw new Error(`xc harness: unsupported PostgREST filter ${col}=${raw}`);
       }
     }
     return out;
@@ -565,11 +522,7 @@ export class FakeSupabase {
 
   async handleFetch(request: Request, rawBody: string): Promise<Response> {
     const url = new URL(request.url);
-    const jsonResponse = (
-      status: number,
-      body: unknown,
-      extra: Record<string, string> = {},
-    ) =>
+    const jsonResponse = (status: number, body: unknown, extra: Record<string, string> = {}) =>
       new Response(JSON.stringify(body), {
         status,
         headers: { "Content-Type": "application/json", ...extra },
@@ -607,9 +560,7 @@ export class FakeSupabase {
         if (grant === "id_token") {
           this.count("gotrue.token.id_token");
           await this.latency();
-          const idToken = typeof body.id_token === "string"
-            ? body.id_token
-            : "";
+          const idToken = typeof body.id_token === "string" ? body.id_token : "";
           const payload = jwtPayload(idToken);
           const sub = typeof payload?.sub === "string" ? payload.sub : "";
           const provider = body.provider === "apple" ? "apple" : "google";
@@ -621,10 +572,7 @@ export class FakeSupabase {
           }
           this.ensureUser(sub, provider);
           const session = this.mintSession(sub, provider);
-          this.log(
-            "gotrue.id_token",
-            `user=${sub} session=${session.sessionId}`,
-          );
+          this.log("gotrue.id_token", `user=${sub} session=${session.sessionId}`);
           return jsonResponse(200, this.sessionJson(session));
         }
         if (grant === "refresh_token") {
@@ -637,9 +585,7 @@ export class FakeSupabase {
             }
             return forced;
           }
-          const rt = typeof body.refresh_token === "string"
-            ? body.refresh_token
-            : "";
+          const rt = typeof body.refresh_token === "string" ? body.refresh_token : "";
           const sid = this.refreshIndex.get(rt);
           const session = sid ? this.sessions.get(sid) : undefined;
           if (!session || session.revoked) {
@@ -647,22 +593,15 @@ export class FakeSupabase {
             return jsonResponse(400, {
               error: "invalid_grant",
               error_code: "refresh_token_not_found",
-              error_description:
-                "Invalid Refresh Token: Refresh Token Not Found",
+              error_description: "Invalid Refresh Token: Refresh Token Not Found",
             });
           }
           if (session.usedRefreshTokens.has(rt)) {
             if (this.refreshPolicy === "rotate-reuse-window") {
-              this.log(
-                "gotrue.refresh",
-                `rt=${rt.slice(0, 12)} → reuse-window (same session)`,
-              );
+              this.log("gotrue.refresh", `rt=${rt.slice(0, 12)} → reuse-window (same session)`);
               return jsonResponse(200, this.sessionJson(session));
             }
-            this.log(
-              "gotrue.refresh",
-              `rt=${rt.slice(0, 12)} → 400 already used`,
-            );
+            this.log("gotrue.refresh", `rt=${rt.slice(0, 12)} → 400 already used`);
             return jsonResponse(400, {
               error: "invalid_grant",
               error_code: "refresh_token_already_used",
@@ -670,11 +609,7 @@ export class FakeSupabase {
             });
           }
           // rotate: the SAME session gets a new access + refresh pair
-          const rotated = this.mintSession(
-            session.userId,
-            session.provider,
-            session.sessionId,
-          );
+          const rotated = this.mintSession(session.userId, session.provider, session.sessionId);
           this.log("gotrue.refresh", `rt=${rt.slice(0, 12)} → rotated`);
           return jsonResponse(200, this.sessionJson(rotated));
         }
@@ -691,10 +626,7 @@ export class FakeSupabase {
         // answered from its session table; the bytes are still in flight.
         const extra = this.overrides.getUserDelayMs?.(bearer) ?? 0;
         if (!session || session.revoked) {
-          this.log(
-            "gotrue.get_user",
-            `bearer=${bearer.slice(-10)} → 403 session_not_found`,
-          );
+          this.log("gotrue.get_user", `bearer=${bearer.slice(-10)} → 403 session_not_found`);
           if (extra > 0) await sleep(extra);
           return jsonResponse(403, {
             code: 403,
@@ -702,10 +634,7 @@ export class FakeSupabase {
             msg: "Session from session_id claim in JWT does not exist",
           });
         }
-        this.log(
-          "gotrue.get_user",
-          `bearer=${bearer.slice(-10)} → 200 user=${session.userId}`,
-        );
+        this.log("gotrue.get_user", `bearer=${bearer.slice(-10)} → 200 user=${session.userId}`);
         if (extra > 0) await sleep(extra);
         return jsonResponse(200, this.userJson(session.userId));
       }
@@ -723,9 +652,7 @@ export class FakeSupabase {
           session.revoked = true;
           this.log(
             "gotrue.logout",
-            `session=${session.sessionId} revoked (scope=${
-              url.searchParams.get("scope")
-            })`,
+            `session=${session.sessionId} revoked (scope=${url.searchParams.get("scope")})`,
           );
         } else {
           this.log("gotrue.logout", `bearer=${bearer.slice(-10)} unknown`);
@@ -753,17 +680,11 @@ export class FakeSupabase {
         }
         if (fn === "reserve_analysis_permit") {
           const key = String(body.p_idempotency_key ?? "");
-          return jsonResponse(
-            200,
-            await this.reserveAnalysisPermit(who.userId, key),
-          );
+          return jsonResponse(200, await this.reserveAnalysisPermit(who.userId, key));
         }
         if (fn === "apply_synced_shot") {
           const shot = isRecord(body.shot) ? body.shot : {};
-          return jsonResponse(
-            200,
-            await this.applySyncedShot(who.userId, shot),
-          );
+          return jsonResponse(200, await this.applySyncedShot(who.userId, shot));
         }
         return jsonResponse(404, {
           code: "PGRST202",
@@ -799,28 +720,20 @@ export class FakeSupabase {
       }
       if (request.method === "POST") {
         const prefer = request.headers.get("prefer") ?? "";
-        const incoming: Array<Record<string, unknown>> =
-          Array.isArray(body._array)
-            ? (body._array as Array<Record<string, unknown>>)
-            : [body];
+        const incoming: Array<Record<string, unknown>> = Array.isArray(body._array)
+          ? (body._array as Array<Record<string, unknown>>)
+          : [body];
         const conflictCol = url.searchParams.get("on_conflict");
         for (const row of incoming) {
-          if (
-            who.role === "user" && row.user_id !== undefined &&
-            row.user_id !== who.userId
-          ) {
+          if (who.role === "user" && row.user_id !== undefined && row.user_id !== who.userId) {
             return jsonResponse(403, {
               code: "42501",
               message: "rls: new row violates policy",
             });
           }
           const existing = conflictCol
-            ? this.tables[table].find((r) =>
-              r[conflictCol] === row[conflictCol]
-            )
-            : this.tables[table].find((r) =>
-              r.id !== undefined && r.id === row.id
-            );
+            ? this.tables[table].find((r) => r[conflictCol] === row[conflictCol])
+            : this.tables[table].find((r) => r.id !== undefined && r.id === row.id);
           if (existing) {
             if (prefer.includes("resolution=ignore-duplicates")) {
               this.log(
@@ -831,10 +744,7 @@ export class FakeSupabase {
             }
             if (prefer.includes("resolution=merge-duplicates")) {
               Object.assign(existing, row);
-              this.log(
-                `rest.upsert.${table}`,
-                `merged ${String(row[conflictCol ?? "id"])}`,
-              );
+              this.log(`rest.upsert.${table}`, `merged ${String(row[conflictCol ?? "id"])}`);
               continue;
             }
             return jsonResponse(409, {
@@ -843,10 +753,7 @@ export class FakeSupabase {
             });
           }
           this.tables[table].push({ ...row });
-          this.log(
-            `rest.insert.${table}`,
-            `${String(row[conflictCol ?? "id"] ?? "")}`.trim(),
-          );
+          this.log(`rest.insert.${table}`, `${String(row[conflictCol ?? "id"] ?? "")}`.trim());
         }
         return prefer.includes("return=representation")
           ? jsonResponse(201, incoming)
@@ -862,21 +769,15 @@ export class FakeSupabase {
       }
       if (request.method === "DELETE") {
         const rows = new Set(
-          this.filterRows(
-            this.rlsScope(table, this.tables[table], who),
-            url.searchParams,
-          ),
+          this.filterRows(this.rlsScope(table, this.tables[table], who), url.searchParams),
         );
         this.tables[table] = this.tables[table].filter((r) => !rows.has(r));
         return new Response(null, { status: 204 });
       }
     }
-    return new Response(
-      `xc harness: unexpected fetch ${request.method} ${request.url}`,
-      {
-        status: 599,
-      },
-    );
+    return new Response(`xc harness: unexpected fetch ${request.method} ${request.url}`, {
+      status: 599,
+    });
   }
 }
 
@@ -904,10 +805,7 @@ export async function loadXcHarness(): Promise<XcHarness> {
   const fake = new FakeSupabase(1, 0);
   const upstreamCalls: XcHarness["upstreamCalls"] = [];
   const t0 = performance.now();
-  globalThis.fetch = (async (
-    input: RequestInfo | URL,
-    init?: RequestInit,
-  ): Promise<Response> => {
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const request = new Request(input, init);
     const rawBody = await request.text().catch(() => "");
     upstreamCalls.push({
@@ -921,9 +819,7 @@ export async function loadXcHarness(): Promise<XcHarness> {
   let handler: XcHarness["handler"] | null = null;
   const realServe = Deno.serve;
   (Deno as unknown as { serve: unknown }).serve = (...args: unknown[]) => {
-    const fn = args.find((arg) => typeof arg === "function") as
-      | XcHarness["handler"]
-      | undefined;
+    const fn = args.find((arg) => typeof arg === "function") as XcHarness["handler"] | undefined;
     if (!fn) throw new Error("Deno.serve called without a handler");
     handler = fn;
     return { finished: Promise.resolve(), shutdown: () => Promise.resolve() };
@@ -968,18 +864,15 @@ export function webhookRequest(
   event: Record<string, unknown>,
   options: { ip?: string; authorization?: string } = {},
 ): Request {
-  return new Request(
-    "http://edge.xc.test/functions/v1/api/webhooks/revenuecat",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: options.authorization ?? WEBHOOK_SECRET,
-        "x-forwarded-for": options.ip ?? "203.0.113.77",
-      },
-      body: JSON.stringify({ api_version: "1.0", event }),
+  return new Request("http://edge.xc.test/functions/v1/api/webhooks/revenuecat", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: options.authorization ?? WEBHOOK_SECRET,
+      "x-forwarded-for": options.ip ?? "203.0.113.77",
     },
-  );
+    body: JSON.stringify({ api_version: "1.0", event }),
+  });
 }
 
 export const VERSION_VECTOR = {
@@ -1018,9 +911,7 @@ export function syncShotPayload(
   };
 }
 
-export async function readJson(
-  response: Response,
-): Promise<Record<string, unknown>> {
+export async function readJson(response: Response): Promise<Record<string, unknown>> {
   const text = await response.text();
   if (!text) return {};
   try {
@@ -1036,14 +927,12 @@ export async function bootstrap(
   h: XcHarness,
   sub: string,
   ip: string,
-): Promise<
-  {
-    status: number;
-    accessToken: string;
-    refreshToken: string;
-    body: Record<string, unknown>;
-  }
-> {
+): Promise<{
+  status: number;
+  accessToken: string;
+  refreshToken: string;
+  body: Record<string, unknown>;
+}> {
   const response = await h.handler(
     edgeRequest("POST", "/v1/account/bootstrap", {
       token: fakeGoogleIdToken(sub),
@@ -1089,10 +978,8 @@ export interface ScenarioReport {
 export function outDir(): string {
   const env = Deno.env.get("XC_OUT_DIR");
   if (env) return env.endsWith("/") ? env : `${env}/`;
-  return new URL(
-    "../../../../artifacts/xc-matrix-concurrency-edge/latest/",
-    import.meta.url,
-  ).pathname;
+  return new URL("../../../../artifacts/xc-matrix-concurrency-edge/latest/", import.meta.url)
+    .pathname;
 }
 
 export async function writeReport(report: ScenarioReport): Promise<string> {
@@ -1103,9 +990,7 @@ export async function writeReport(report: ScenarioReport): Promise<string> {
   return path;
 }
 
-export function histogram(
-  values: Array<string | number>,
-): Record<string, number> {
+export function histogram(values: Array<string | number>): Record<string, number> {
   const out: Record<string, number> = {};
   for (const v of values) out[String(v)] = (out[String(v)] ?? 0) + 1;
   return out;
