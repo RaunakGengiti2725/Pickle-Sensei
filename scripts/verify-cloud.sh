@@ -21,7 +21,8 @@
 #   edge       Supabase edge fn: deno task test (__wf__) + deno check of the
 #              standalone modules (index.ts has known pre-existing type errors)
 #   rls        ./supabase/tests/run_rls_tests.sh (throwaway Postgres 16, Docker)
-#   security   scripts/security-scan.sh (secret/dependency scan) when present
+#   security   scripts/security-scan.sh (secret scan) when present; redacted
+#              per-finding detail in security.log + JSON reports in security/
 #   admin      pnpm --filter @pickle/admin-web build (Vite production build)
 #   e2e        admin-web Playwright smoke (Chromium) against a self-started
 #              @pickle/api + vite; the authenticated panel test runs when
@@ -61,7 +62,7 @@ START_SERVICES=0
 FRESH_DEPS=0
 
 usage() {
-  sed -n '2,47p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,48p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 while [ $# -gt 0 ]; do
@@ -100,7 +101,23 @@ ARTIFACTS="${VERIFY_ARTIFACTS:-artifacts/verify-cloud/$STAMP}"
 mkdir -p "$ARTIFACTS"
 SUMMARY="$ARTIFACTS/summary.json"
 GIT_SHA="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
-GIT_DIRTY="$(git status --porcelain 2>/dev/null | grep -qv '^?? artifacts/' && echo true || echo false)"
+
+# true when any tracked change or any untracked path outside artifacts/ exists.
+# Walks the captured porcelain output in-process: an early-exiting pipe reader
+# (grep -q) SIGPIPEs git, which pipefail turns into a false "clean".
+git_dirty() {
+  local status line
+  status="$(git status --porcelain 2>/dev/null)" || { echo false; return; }
+  while IFS= read -r line; do
+    case "$line" in
+      '') ;;
+      '?? artifacts/'*) ;;
+      *) echo true; return ;;
+    esac
+  done <<<"$status"
+  echo false
+}
+GIT_DIRTY="$(git_dirty)"
 
 declare -a RESULT_NAMES=() RESULT_STATUS=() RESULT_SECONDS=() RESULT_NOTES=()
 FAILED=0
@@ -244,7 +261,11 @@ stage_security() {
     echo "scripts/security-scan.sh not present in this checkout"
     exit 75
   fi
-  scripts/security-scan.sh
+  # Redacted JSON reports (gitleaks-{tree,history}.json) next to the stage log so
+  # the uploaded CI artifact alone identifies what to remove/rotate/allowlist.
+  local report_dir="$ARTIFACTS/security"
+  case "$report_dir" in /*) ;; *) report_dir="$REPO_ROOT/$report_dir" ;; esac
+  scripts/security-scan.sh --report-dir "$report_dir"
 }
 
 stage_admin() { pnpm --filter @pickle/admin-web build; }

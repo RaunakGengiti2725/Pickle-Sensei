@@ -8,7 +8,8 @@
 #   scripts/security-scan.sh --report-dir out/   # also write JSON reports (redacted)
 #
 # Policy lives in .gitleaks.toml (default rules + repo-specific allowlists, each
-# with a justification). Findings are ALWAYS redacted in output and reports.
+# with a justification). Every finding is printed with its RuleID, File, Line
+# and Fingerprint; secret values are ALWAYS redacted in output and reports.
 #
 # Exit codes: 0 = no findings, 1 = findings (or gitleaks error), 2 = setup failure.
 #
@@ -51,7 +52,6 @@ SCAN_TREE=1
 SCAN_HISTORY=1
 LOG_OPTS=""
 REPORT_DIR=""
-VERBOSE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --tree) SCAN_HISTORY=0 ;;
@@ -66,7 +66,7 @@ while [ $# -gt 0 ]; do
       REPORT_DIR="$2"
       shift
       ;;
-    --verbose | -v) VERBOSE=1 ;;
+    --verbose | -v) ;; # per-finding detail is always printed; kept for existing callers
     --help | -h) usage 0 ;;
     *) die "unknown argument: $1 (see --help)" ;;
   esac
@@ -163,8 +163,7 @@ if [ -n "$REPORT_DIR" ]; then
   REPORT_DIR="$(cd "$REPORT_DIR" && pwd)"
 fi
 
-COMMON_ARGS=(--no-banner --exit-code 1 --redact=100 --config "$CONFIG")
-[ "$VERBOSE" = 1 ] && COMMON_ARGS+=(--verbose)
+COMMON_ARGS=(--no-banner --exit-code 1 --redact=100 --verbose --config "$CONFIG")
 
 run_scan() {
   # $1 = label, $2 = gitleaks subcommand, remaining = extra args
