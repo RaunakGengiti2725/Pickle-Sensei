@@ -12,6 +12,7 @@ import {
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { enforceRateLimit, peekRateLimit, rateLimitResponse } from "../rateLimit.ts";
 import { redisConfigured, redisWindowGet } from "../cache.ts";
+import { loadHarness, SUPABASE_URL, userRequest } from "./routesHarness.ts";
 
 const WINDOW = 300;
 
@@ -84,3 +85,65 @@ Deno.test("scopes and ids are isolated", async () => {
   assertStrictEquals((await peekRateLimit("authfail", freshId(), 1, WINDOW)).allowed, true);
   assertStrictEquals((await peekRateLimit("ip", id, 1, WINDOW)).allowed, true);
 });
+
+// End to end through the real handler: a DEFINITIVE credential refusal (Auth
+// answers 401 for the bearer) is charged to the per-IP auth-failure budget, so
+// a brute-force source is locked out on the 31st attempt (AUTH_FAILURE_LIMIT
+// 30/300s). Pins the lockout that the outage fix must not loosen.
+Deno.test(
+  "31 requests with a genuinely invalid bearer from one IP: 30 × 401 then 429 on the 31st",
+  async () => {
+    const h = await loadHarness();
+    const ip = "10.5.0.31";
+    const b64url = (value: string): string =>
+      btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const forgedBearer = (): string =>
+      `${b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }))}.${
+        b64url(
+          JSON.stringify({
+            iss: `${SUPABASE_URL}/auth/v1`,
+            sub: crypto.randomUUID(),
+            role: "authenticated",
+            exp: Math.floor(Date.now() / 1000) + 3600,
+            jti: crypto.randomUUID(),
+          }),
+        )
+      }.forged-signature`;
+
+    const harnessFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(`${SUPABASE_URL}/auth/v1/user`)) {
+        return new Response(
+          JSON.stringify({
+            code: 401,
+            error_code: "bad_jwt",
+            msg: "invalid JWT: unable to parse or verify signature",
+          }),
+          { status: 401, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return await harnessFetch(input, init);
+    }) as typeof fetch;
+    try {
+      const statuses: number[] = [];
+      for (let attempt = 0; attempt < 31; attempt += 1) {
+        const response = await h.handler(
+          userRequest("GET", "/v1/me", { token: forgedBearer(), ip }),
+        );
+        statuses.push(response.status);
+        if (attempt === 30) {
+          assertEquals(response.headers.has("Retry-After"), true);
+          const body = await response.json();
+          assertEquals(body.error.code, "rate_limited");
+        } else {
+          await response.body?.cancel();
+        }
+      }
+      assertEquals(statuses.slice(0, 30), Array(30).fill(401), JSON.stringify(statuses));
+      assertEquals(statuses[30], 429, JSON.stringify(statuses));
+    } finally {
+      globalThis.fetch = harnessFetch;
+    }
+  },
+);
