@@ -90,6 +90,45 @@ function memorySet(key: string, value: string, ttlSeconds: number): void {
   memory.set(key, { value, expiresAtMs: Date.now() + ttlSeconds * 1_000 });
 }
 
+// ─── Invalidation generations ────────────────────────────────────────────────
+//
+// A derived payload (rank/progress) is built from a DB read and then cached.
+// If an invalidating write (accepted shot sync → cacheDel) lands BETWEEN that
+// read and the cacheSet, an unconditional cacheSet would re-cache the stale
+// payload for the full TTL. Builders therefore capture the key's generation
+// before reading and write through cacheSetIfCurrent, which refuses the write
+// when the generation moved. Generations live in this isolate: they close the
+// race between a build and an invalidation handled by the same isolate. The
+// cross-isolate L1 gap is a separate, documented limit (cache.test.ts) and is
+// bounded by the 60 s TTL exactly as before.
+
+const GENERATION_MAX_ENTRIES = 5_000;
+const generations = new Map<string, number>();
+let generationCounter = 0;
+/** Generation reported for keys with no entry. It is a value that has never
+ * been handed out before whenever entries were evicted, so a build that
+ * captured an evicted key's generation can only ever see a MISMATCH (a
+ * harmless cache miss), never a false match. */
+let generationFloor = 0;
+
+function bumpGeneration(key: string): void {
+  if (!generations.has(key) && generations.size >= GENERATION_MAX_ENTRIES) {
+    let toDrop = Math.ceil(GENERATION_MAX_ENTRIES / 3);
+    for (const k of generations.keys()) {
+      if (toDrop-- <= 0) break;
+      generations.delete(k);
+    }
+    generationFloor = ++generationCounter;
+  }
+  generations.set(key, ++generationCounter);
+}
+
+/** Current invalidation generation of `key` (synchronous, never changes it).
+ * Capture it BEFORE the DB read that produces a cached payload. */
+export function cacheGeneration(key: string): number {
+  return generations.get(key) ?? generationFloor;
+}
+
 // ─── Public cache API ────────────────────────────────────────────────────────
 
 export async function cacheGet(key: string): Promise<string | null> {
@@ -114,9 +153,32 @@ export async function cacheSet(key: string, value: string, ttlSeconds: number): 
   await redisPipeline([["SET", key, value, "EX", Math.ceil(ttlSeconds)]]);
 }
 
+/** Store `value` only if `key` was not invalidated (cacheDel) since
+ * `generation` was captured. Returns whether the write happened. */
+export async function cacheSetIfCurrent(
+  key: string,
+  value: string,
+  ttlSeconds: number,
+  generation: number,
+): Promise<boolean> {
+  if (cacheGeneration(key) !== generation) return false;
+  await cacheSet(key, value, ttlSeconds);
+  if (cacheGeneration(key) !== generation) {
+    // Invalidated while the L2 write was in flight: our SET may have landed
+    // after the DEL, so repeat the invalidation.
+    memory.delete(key);
+    await redisPipeline([["DEL", key]]);
+    return false;
+  }
+  return true;
+}
+
 export async function cacheDel(...keys: string[]): Promise<void> {
   if (keys.length === 0) return;
-  for (const key of keys) memory.delete(key);
+  for (const key of keys) {
+    bumpGeneration(key);
+    memory.delete(key);
+  }
   await redisPipeline([["DEL", ...keys]]);
 }
 

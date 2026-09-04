@@ -261,7 +261,11 @@ export async function exchangeAppleAuthorizationCode(
 }
 
 /** Apple's revoke endpoint is idempotent: it returns 200 for a token that was
- * revoked previously, so a later Supabase failure can safely be retried. */
+ * revoked previously, so a later Supabase failure can safely be retried.
+ * A 400/401 (`invalid_grant`, `invalid_client`, …) is Apple refusing THIS
+ * token/client and will refuse it identically on every retry; it surfaces as
+ * `invalid_grant` so callers can tell it from a transient 429/5xx/network
+ * failure (`unavailable`). */
 export async function revokeAppleRefreshToken(
   refreshToken: string,
   config: AppleServerConfiguration,
@@ -275,12 +279,25 @@ export async function revokeAppleRefreshToken(
   );
   if (!response.ok) {
     const code = await appleErrorCode(response);
+    const refused = response.status === 400 || response.status === 401;
     throw new ExternalAccountError(
-      "unavailable",
+      refused ? "invalid_grant" : "unavailable",
       "apple",
       `Apple token revocation failed (${response.status}${code ? ` ${code}` : ""}).`,
     );
   }
+}
+
+/** True when retrying the Apple revocation can never succeed: the stored
+ * credential cannot be decrypted (rotated `APPLE_TOKEN_ENCRYPTION_KEY`,
+ * corrupt ciphertext) or Apple refused the token/client outright. Network,
+ * 429 and 5xx failures — and a misconfigured server — are NOT permanent. */
+export function isPermanentAppleRevocationFailure(error: unknown): boolean {
+  return (
+    error instanceof ExternalAccountError &&
+    error.provider === "apple" &&
+    (error.kind === "invalid_grant" || error.kind === "invalid_response")
+  );
 }
 
 async function encryptionKey(encodedKey: string, usage: KeyUsage[]): Promise<CryptoKey> {

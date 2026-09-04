@@ -80,7 +80,14 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { drillCatalogEntry, searchDrillCatalog } from "./drills.ts";
 import { drillInstructionalMedia } from "./drillMedia.ts";
-import { cacheDel, cacheGet, cacheSet, sha256Hex } from "./cache.ts";
+import {
+  cacheDel,
+  cacheGeneration,
+  cacheGet,
+  cacheSet,
+  cacheSetIfCurrent,
+  sha256Hex,
+} from "./cache.ts";
 import { enforceRateLimit, peekRateLimit, rateLimitResponse } from "./rateLimit.ts";
 import {
   JSON_SECURITY_HEADERS,
@@ -98,6 +105,7 @@ import { PRIVACY_POLICY_TEXT, SUPPORT_TEXT, TERMS_TEXT } from "./legal.ts";
 import {
   ExternalAccountError,
   decryptAppleRefreshToken,
+  isPermanentAppleRevocationFailure,
   deleteRevenueCatCustomer,
   encryptAppleRefreshToken,
   exchangeAppleAuthorizationCode,
@@ -546,8 +554,11 @@ async function authenticate(request: Request): Promise<AuthedUser | Response> {
 }
 
 /** POST /v1/auth/refresh — rotate { refreshToken } into a fresh Supabase
- * session. 401 means the refresh token was revoked or already rotated away:
- * the app must sign in again. Anything else is transient for the app. */
+ * session. 401 means GoTrue REFUSED the refresh token (revoked or already
+ * rotated away): the app must sign in again. Anything else is transient for
+ * the app — including a refresh that never reached GoTrue: supabase-js
+ * reports a transport failure as an AuthRetryableFetchError with status 0
+ * (no status at all in older builds), which is not a refusal. */
 async function refreshSessionRoute(request: Request): Promise<Response> {
   const body = await readBody(request);
   const refreshToken = body.refreshToken;
@@ -559,8 +570,15 @@ async function refreshSessionRoute(request: Request): Promise<Response> {
   });
   if (refreshed.error || !refreshed.data.session) {
     const status = refreshed.error?.status;
-    if (status !== undefined && status >= 500) {
-      return serviceUnavailable("Session refresh", refreshed.error?.message);
+    const refusedByGoTrue =
+      typeof status === "number" && status >= 400 && status < 500 && status !== 429;
+    if (!refusedByGoTrue) {
+      return serviceUnavailable(
+        "Session refresh",
+        refreshed.error
+          ? `${refreshed.error.name} ${status ?? "-"}: ${refreshed.error.message}`
+          : "no session",
+      );
     }
     return errorJson(401, "The session could not be refreshed. Sign in again.");
   }
@@ -1746,6 +1764,9 @@ async function getProgress(authed: AuthedUser): Promise<Response> {
 }
 
 async function buildProgress(authed: AuthedUser, cacheKey: string): Promise<Response> {
+  // Captured BEFORE the reads: an accepted sync that lands mid-build bumps it
+  // and the conditional write below then drops this pre-sync payload.
+  const generation = cacheGeneration(cacheKey);
   const [seriesQ, daysQ] = await Promise.all([
     readAllRows((from, to) =>
       authed.db
@@ -1788,7 +1809,7 @@ async function buildProgress(authed: AuthedUser, cacheKey: string): Promise<Resp
     new Date().toISOString().slice(0, 10),
   );
   const payload = { series, improving: [], needsAttention: [], streak };
-  await cacheSet(cacheKey, JSON.stringify(payload), 60);
+  await cacheSetIfCurrent(cacheKey, JSON.stringify(payload), 60, generation);
   return json(200, payload);
 }
 
@@ -1855,6 +1876,7 @@ async function getPlayerRank(authed: AuthedUser): Promise<Response> {
 }
 
 async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Response> {
+  const generation = cacheGeneration(cacheKey);
   const [techniquesQ, stateQ] = await Promise.all([
     authed.db
       .from("player_technique_rating")
@@ -1885,7 +1907,7 @@ async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Re
   if (techniqueRows.length === 0) {
     // No scored evidence → honestly unranked, never a fabricated Bronze.
     const empty = { rank: null };
-    await cacheSet(cacheKey, JSON.stringify(empty), 60);
+    await cacheSetIfCurrent(cacheKey, JSON.stringify(empty), 60, generation);
     return json(200, empty);
   }
 
@@ -1951,7 +1973,7 @@ async function buildPlayerRank(authed: AuthedUser, cacheKey: string): Promise<Re
       techniques,
     },
   };
-  await cacheSet(cacheKey, JSON.stringify(payload), 60);
+  await cacheSetIfCurrent(cacheKey, JSON.stringify(payload), 60, generation);
   return json(200, payload);
 }
 
@@ -2504,6 +2526,7 @@ async function deleteExternalAccounts(
       if (!config) {
         return serviceUnavailable("Account deletion", "Apple server secrets unavailable");
       }
+      let revoked = true;
       try {
         const refreshToken = await decryptAppleRefreshToken(
           external.apple_refresh_token_encrypted,
@@ -2513,19 +2536,39 @@ async function deleteExternalAccounts(
         await revokeAppleRefreshToken(refreshToken, config);
       } catch (error) {
         const detail = error instanceof ExternalAccountError ? error.message : error;
-        return serviceUnavailable("Account deletion", detail);
+        // Transient (network / Apple 429 / 5xx / server misconfiguration):
+        // fail closed so the retry still owns the token. Permanent (rotated
+        // encryption key, Apple invalid_grant / invalid_client): retrying can
+        // never revoke it, and Apple requires deletion to be fulfilled anyway
+        // — fall through to the same manual-disconnect outcome as a legacy
+        // account with no stored token.
+        if (!isPermanentAppleRevocationFailure(error)) {
+          return serviceUnavailable("Account deletion", detail);
+        }
+        revoked = false;
+        console.warn(`[api] Apple revocation token unusable for ${authed.id}: ${detail}`);
       }
+      // Checkpoint before RevenueCat: a revoked token is done; an unusable one
+      // is dropped (with its capture pair — the row's CHECK constraint keeps
+      // them null together) so a later retry does not re-run an attempt that
+      // cannot succeed and the ciphertext does not outlive the account.
+      const now = new Date().toISOString();
       const marked = await adminDb
         .from("account_external_credentials")
-        .update({
-          apple_revoked_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
+        .update(
+          revoked
+            ? { apple_revoked_at: now, updated_at: now }
+            : {
+                apple_refresh_token_encrypted: null,
+                apple_token_captured_at: null,
+                updated_at: now,
+              },
+        )
         .eq("user_id", authed.id);
       if (marked.error) {
         return serviceUnavailable("Account deletion", marked.error.message);
       }
-      appleOutcome = "revoked";
+      appleOutcome = revoked ? "revoked" : "manual_action_required";
     } else {
       // Accounts created by an older app build have no stored Apple refresh
       // token. Apple explicitly says deletion must still be fulfilled; the
