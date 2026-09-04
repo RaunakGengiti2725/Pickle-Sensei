@@ -310,7 +310,13 @@ describe('attack-fix7-A3 uniqueness / liveness / re-arm / budget (claims 3-5)', 
           syncShots: async s => rejectAll(SESSION_NOT_FOUND_REJECTION)(s),
         },
         localSession: true,
-        expectAttempts: 8,
+        // Ported from the sibling candidate, which charged this refusal to
+        // the shot (attempts 8). On this base the refusal is attributed to
+        // the missing set, which is queued again (sessionRows 1) while the
+        // shot parks uncharged at 7 — pinned unchanged by B0 P11 on
+        // 7bd9d7af. The re-arm itself is bounded by the persisted
+        // `sync_set_state.rearms` column (A3.6 / B2), not by this counter.
+        expectAttempts: 7,
         expectState: 'orphaned',
         expectSessionRows: 1,
       },

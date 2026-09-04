@@ -13,7 +13,11 @@
 import { AppState } from 'react-native';
 import type { LocalDb } from '../src/data/db';
 import { ApiError, api, API_REQUEST_TIMEOUT_MS } from '../src/data/api';
-import { drainOutbox, isPermanentSyncFailure } from '../src/data/sync';
+import {
+  OUTBOX_MAX_ATTEMPTS,
+  drainOutbox,
+  isPermanentSyncFailure,
+} from '../src/data/sync';
 import {
   clearSyncRuntime,
   configureSyncRuntime,
@@ -41,10 +45,51 @@ function fakeDb() {
   }
   const outbox: OutboxRow[] = [];
   let nextId = 1;
+  const setState = new Map<string, number>();
   const db: LocalDb = {
     async execute(sql: string, params: unknown[] = []) {
       if (sql === 'BEGIN IMMEDIATE' || sql === 'COMMIT' || sql === 'ROLLBACK') {
         return { rows: [] };
+      }
+      // fix8 drain statements: the fresh per-row read the shot pass takes
+      // under the lease, the per-set re-arm state, and one-shot quarantine.
+      {
+        const flat = sql.trim().replace(/\s+/g, ' ');
+        if (flat.startsWith('SELECT id, attempts, last_error FROM outbox')) {
+          const ids = new Set(params.slice(1).map(Number));
+          return {
+            rows: outbox
+              .filter(r => r.owner_key === String(params[0]) && ids.has(r.id))
+              .map(r => ({
+                id: r.id,
+                attempts: r.attempts,
+                last_error: r.last_error,
+              })),
+          };
+        }
+        if (flat.startsWith('SELECT rearms FROM sync_set_state')) {
+          const rearms = setState.get(`${params[0]}\u0000${params[1]}`);
+          return { rows: rearms === undefined ? [] : [{ rearms }] };
+        }
+        if (flat.startsWith('INSERT INTO sync_set_state')) {
+          const key = `${params[0]}\u0000${params[1]}`;
+          setState.set(key, (setState.get(key) ?? 0) + 1);
+          return { rows: [] };
+        }
+        if (flat.startsWith('DELETE FROM sync_set_state')) {
+          setState.delete(`${params[0]}\u0000${params[1]}`);
+          return { rows: [] };
+        }
+        if (flat.startsWith('UPDATE outbox SET attempts = max(attempts + 1,')) {
+          const row = outbox.find(
+            r => r.owner_key === params[1] && r.id === params[2],
+          );
+          if (row) {
+            row.attempts = Math.max(row.attempts + 1, 8);
+            row.last_error = String(params[0]);
+          }
+          return { rows: [] };
+        }
       }
       if (sql.includes('INSERT OR REPLACE INTO sync_receipt')) {
         return { rows: [] };
@@ -244,8 +289,11 @@ describe('Gate 11 — drop during upload / expired auth keep rows durable', () =
       ...noopSessionTransport,
     });
     expect(result).toMatchObject({ synced: 1, failed: 1, remaining: 1 });
+    // The corrupt row is quarantined ONCE — charged straight to the budget
+    // with the parse error so no later drain re-reads it (fix8 S1).
     const corrupt = outbox.find(row => row.id === 999);
-    expect(corrupt?.attempts).toBe(1);
+    expect(corrupt?.attempts).toBe(OUTBOX_MAX_ATTEMPTS);
+    expect(corrupt?.last_error).toMatch(/JSON|payload/);
   });
 });
 

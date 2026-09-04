@@ -183,10 +183,22 @@ describe('attack round 7 probes (real SQLite)', () => {
     await saveAnalysis(db, realAnalysis({ id: shotId(1) }), PERMIT_ID);
     const t = acceptAllTransport();
     const r1 = await drainOutbox(db, t);
+    // On 7bd9d7af this probe measured `failed: 1`: the exhausted corrupt
+    // row was re-read and re-charged by every session pass (break B7-1 /
+    // S1). fix8 re-pins the corrected semantics: a row at the attempt
+    // budget is never read again, so it costs the drain nothing (failed 0),
+    // never feeds the owner's backoff, and stays in the outbox (remaining 1).
     expect({ r1, receipt: await hasShotSyncReceipt(db, shotId(1)) }).toEqual({
-      r1: { synced: 1, failed: 1, remaining: 1 },
+      r1: { synced: 1, failed: 0, remaining: 1 },
       receipt: true,
     });
+    const corrupt = await db.execute(
+      `SELECT attempts, last_error FROM outbox WHERE owner_key = ? AND kind = 'session.create'`,
+      [OWNER],
+    );
+    expect(corrupt.rows).toEqual([
+      { attempts: OUTBOX_MAX_ATTEMPTS, last_error: 'SyntaxError: old build' },
+    ]);
   });
 
   it('P2: a corrupt shot.sync payload and a corrupt session.create payload never break saveAnalysis, retire, or hasLiveSessionCreate (json_valid guard)', async () => {

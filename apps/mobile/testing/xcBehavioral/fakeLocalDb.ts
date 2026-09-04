@@ -51,6 +51,7 @@ export interface FakeLocalDb {
 }
 
 const PARKED_PREFIX = 'shot.session_orphaned:';
+const RELEASED_PREFIX = 'shot.session_released:';
 
 function payloadField(row: OutboxRow, field: string): unknown {
   try {
@@ -83,7 +84,12 @@ function pageAcceptsBudget(
     return row.kind === 'session.create';
   }
   if (sql.includes(`OR last_error LIKE '${PARKED_PREFIX}%'`)) {
-    return row.last_error !== null && row.last_error.startsWith(PARKED_PREFIX);
+    return (
+      row.last_error !== null &&
+      (row.last_error.startsWith(PARKED_PREFIX) ||
+        (sql.includes(`OR last_error LIKE '${RELEASED_PREFIX}%'`) &&
+          row.last_error.startsWith(RELEASED_PREFIX)))
+    );
   }
   return false;
 }
@@ -97,6 +103,8 @@ export function createFakeLocalDb(): FakeLocalDb {
   const sessions: FakeLocalDb['sessions'] = [];
   const captures: FakeLocalDb['captures'] = [];
   const analysisRecords: FakeLocalDb['analysisRecords'] = [];
+  // sync_set_state: `${owner}\u0000${sessionId}` -> rearms.
+  const setState = new Map<string, number>();
   const pendingFaults: Array<{ needle: string; error: Error }> = [];
   let nextOutboxId = 1;
   let depth = 0;
@@ -108,6 +116,7 @@ export function createFakeLocalDb(): FakeLocalDb {
     kv: Map<string, string>;
     shots: FakeLocalDb['shots'];
     sessions: FakeLocalDb['sessions'];
+    setState: Map<string, number>;
   } | null = null;
   const restore = <T>(target: T[], source: T[]) => {
     target.length = 0;
@@ -131,6 +140,7 @@ export function createFakeLocalDb(): FakeLocalDb {
             kv: new Map(kv),
             shots: shots.map(s => ({ ...s })),
             sessions: sessions.map(s => ({ ...s })),
+            setState: new Map(setState),
           };
         }
         return { rows: [] };
@@ -144,6 +154,8 @@ export function createFakeLocalDb(): FakeLocalDb {
           for (const [k, v] of snapshot.kv) kv.set(k, v);
           restore(shots, snapshot.shots);
           restore(sessions, snapshot.sessions);
+          setState.clear();
+          for (const [k, v] of snapshot.setState) setState.set(k, v);
         }
         if (depth === 0) snapshot = null;
         return { rows: [] };
@@ -200,6 +212,43 @@ export function createFakeLocalDb(): FakeLocalDb {
           attempts: 0,
           last_error: null,
         });
+        return { rows: [] };
+      }
+      if (sql.startsWith('SELECT id, attempts, last_error FROM outbox')) {
+        // Shot pass: the rows as they are NOW, in the turn that offers them.
+        const ids = new Set(params.slice(1).map(Number));
+        return {
+          rows: outbox
+            .filter(r => r.owner_key === String(params[0]) && ids.has(r.id))
+            .map(r => ({
+              id: r.id,
+              attempts: r.attempts,
+              last_error: r.last_error,
+            })),
+        };
+      }
+      if (sql.startsWith('SELECT last_error FROM outbox')) {
+        // exhaustedSessionCreateVerdict: the refused set's verdict, if any.
+        const hit = outbox.find(
+          r =>
+            r.owner_key === params[0] &&
+            r.attempts >= Number(params[1]) &&
+            r.kind === 'session.create' &&
+            payloadField(r, 'id') === params[2],
+        );
+        return { rows: hit ? [{ last_error: hit.last_error }] : [] };
+      }
+      if (sql.startsWith('SELECT rearms FROM sync_set_state')) {
+        const rearms = setState.get(`${params[0]}\u0000${params[1]}`);
+        return { rows: rearms === undefined ? [] : [{ rearms }] };
+      }
+      if (sql.startsWith('INSERT INTO sync_set_state')) {
+        const key = `${params[0]}\u0000${params[1]}`;
+        setState.set(key, (setState.get(key) ?? 0) + 1);
+        return { rows: [] };
+      }
+      if (sql.startsWith('DELETE FROM sync_set_state')) {
+        setState.delete(`${params[0]}\u0000${params[1]}`);
         return { rows: [] };
       }
       if (sql.startsWith('SELECT id, kind, payload')) {
@@ -279,19 +328,33 @@ export function createFakeLocalDb(): FakeLocalDb {
           }
           return { rows: [] };
         }
-        if (sql.includes('SET attempts = 0, last_error = NULL')) {
-          // releaseParkedShotsOfSession: parked shots of `$.sessionId`.
+        if (sql.includes('SET last_error = CASE WHEN attempts < ?')) {
+          // retireAcceptedSessionCreate: parked shots of `$.sessionId` become
+          // deliverable; a shot at the cap is released for one more offer.
           for (const r of outbox) {
             if (
-              r.owner_key === params[0] &&
+              r.owner_key === params[2] &&
               r.kind === 'shot.sync' &&
               r.last_error !== null &&
               r.last_error.startsWith(PARKED_PREFIX) &&
-              payloadField(r, 'sessionId') === params[1]
+              payloadField(r, 'sessionId') === params[3]
             ) {
-              r.attempts = 0;
-              r.last_error = null;
+              r.last_error =
+                r.attempts < Number(params[0]) ? null : String(params[1]);
             }
+          }
+          return { rows: [] };
+        }
+        if (sql.includes('SET attempts = max(attempts + 1,')) {
+          // quarantineRow: a row that can never become a request is charged
+          // to the cap at once.
+          const cap = Number(/max\(attempts \+ 1, (\d+)\)/.exec(sql)?.[1]);
+          const row = outbox.find(
+            r => r.owner_key === params[1] && r.id === params[2],
+          );
+          if (row) {
+            row.attempts = Math.max(row.attempts + 1, cap);
+            row.last_error = String(params[0]);
           }
           return { rows: [] };
         }
@@ -441,6 +504,7 @@ export function createFakeLocalDb(): FakeLocalDb {
       sessions.length = 0;
       captures.length = 0;
       analysisRecords.length = 0;
+      setState.clear();
       pendingFaults.length = 0;
       depth = 0;
       snapshot = null;

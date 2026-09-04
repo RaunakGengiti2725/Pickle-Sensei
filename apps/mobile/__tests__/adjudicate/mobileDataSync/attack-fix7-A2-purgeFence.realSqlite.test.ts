@@ -236,7 +236,14 @@ describe('attack-fix7-A2 purge / owner fence (claim 2)', () => {
     shotCalls[0]!.d.resolve(acceptAll(shotCalls[0]!.shots));
     const staleResult = await stale;
     await save;
-    expect(staleResult).toEqual({ synced: 1, failed: 0, remaining: 0 });
+    // Adversary's measurement on 7bd9d7af's sibling: `remaining: 0`, because
+    // the save queued behind the whole stale drain (the L1 break) and its
+    // rows were not there yet when the drain counted. fix8 re-pins the
+    // corrected semantics: the save commits during the stale drain's network
+    // wait, and the final count is a plain read of the owner key — the new
+    // incarnation's two rows (set Y create + shot 2), untouched by the
+    // fenced stale drain (B0 P9 pins the same count on this base).
+    expect(staleResult).toEqual({ synced: 1, failed: 0, remaining: 2 });
     expect(await hasShotSyncReceipt(db, shotId(1))).toBe(false);
     expect((await getShotOutboxStatus(db, shotId(2))).state).toBe('queued');
     // The new incarnation drains normally.
@@ -267,9 +274,15 @@ describe('attack-fix7-A2 purge / owner fence (claim 2)', () => {
     setActiveDataOwner(OWNER_B);
     const saveB = saveShot(db, 2, SET_Y); // waits for A's drain
     const tb = manualTransport();
-    const drainB = drainOutbox(db, tb.transport); // waits too
+    const drainB = drainOutbox(db, tb.transport);
     await ticks(50);
-    expect(tb.sessionCalls).toHaveLength(0);
+    // Adversary's measurement on 7bd9d7af: `toHaveLength(0)` — B's drain
+    // (and B's save) waited behind A's drain for as long as A's shot batch
+    // was out on the network. fix8 (L1) re-pins the corrected semantics:
+    // the lease is released during A's network await, so B's save commits
+    // and B's drain reaches the server while A's batch is still pending.
+    // The receipt oracle below is the adversary's, unchanged.
+    expect(tb.sessionCalls).toHaveLength(1);
     ta.shotCalls[0]!.d.resolve(acceptAll(ta.shotCalls[0]!.shots));
     const ra = await drainA;
     await saveB;

@@ -23,6 +23,20 @@ import type { LocalDb } from './db';
  * connections would only be over-serialized — never interleaved.
  */
 let connectionQueue: Promise<void> = Promise.resolve();
+let waiting = 0;
+let peakWaiting = 0;
+
+/** Turns queued but not yet started, and the largest such count observed
+ * since the last reset. A network round trip never holds a turn, so the peak
+ * is bounded by how many callers issue statements concurrently — never by
+ * how long the server takes to answer. */
+export function leaseWaiters(): { pending: number; peak: number } {
+  return { pending: waiting, peak: peakWaiting };
+}
+
+export function resetLeaseWaiterPeak(): void {
+  peakWaiting = waiting;
+}
 
 async function runTransactionNow<T>(
   db: LocalDb,
@@ -67,7 +81,12 @@ const connectionTurn: ConnectionTurn = {
 export function runExclusive<T>(
   operation: (turn: ConnectionTurn) => Promise<T>,
 ): Promise<T> {
-  const turn = connectionQueue.then(() => operation(connectionTurn));
+  waiting += 1;
+  peakWaiting = Math.max(peakWaiting, waiting);
+  const turn = connectionQueue.then(() => {
+    waiting -= 1;
+    return operation(connectionTurn);
+  });
   connectionQueue = turn.then(
     () => undefined,
     () => undefined,
@@ -85,4 +104,17 @@ export function runInTransaction<T>(
   operation: () => Promise<T>,
 ): Promise<T> {
   return runExclusive(turn => turn.transaction(db, operation));
+}
+
+/**
+ * Runs one autocommit statement as its own exclusive turn, so a write issued
+ * while another caller's transaction is open can neither join it nor be
+ * rolled back with it.
+ */
+export function runStatement(
+  db: LocalDb,
+  sql: string,
+  params: unknown[] = [],
+): Promise<{ rows: Record<string, unknown>[] }> {
+  return runExclusive(() => db.execute(sql, params));
 }

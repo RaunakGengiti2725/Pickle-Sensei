@@ -115,7 +115,8 @@ function siteFor(request: RecordedRequest): CallSite {
 
 type QueueRow = 'session' | 'finalize' | 'shotA' | 'shotB' | 'trial';
 const VOID_ROWS: QueueRow[] = ['session', 'finalize'];
-const BATCH_ROWS: QueueRow[] = ['shotA', 'shotB', 'trial'];
+const SHOT_ROWS: QueueRow[] = ['shotA', 'shotB'];
+const BATCH_ROWS: QueueRow[] = [...SHOT_ROWS, 'trial'];
 const ALL_ROWS: QueueRow[] = [...VOID_ROWS, ...BATCH_ROWS];
 
 interface OutboxExpectation {
@@ -125,6 +126,8 @@ interface OutboxExpectation {
   kept: Array<[QueueRow, number]>;
   /** Receipt entity ids expected, in order. */
   receipts: string[];
+  /** Kept rows whose `last_error` must match (the reason a row was held). */
+  lastError?: Array<[QueueRow, RegExp]>;
 }
 
 const kept = (rows: QueueRow[], attempts: number): Array<[QueueRow, number]> =>
@@ -137,7 +140,17 @@ function expectationFor(judgedAs: OutboxClass): OutboxExpectation {
     case 'ok':
       return { deleted: ALL_ROWS, kept: [], receipts: [SHOT_A, SHOT_B] };
     case 'client_error':
-      return { deleted: [], kept: kept(ALL_ROWS, 1), receipts: [] };
+      // The void rows and the trial batch are refused and charged. The shots
+      // belong to the set whose `session.create` was just refused with
+      // budget left: they are held uncharged (no `/v1/shots:sync` call — the
+      // server would answer `shot.session_not_found`) with the reason on the
+      // row, until the set is asked for again (fix8 S1/V1).
+      return {
+        deleted: [],
+        kept: [...kept([...VOID_ROWS, 'trial'], 1), ...kept(SHOT_ROWS, 0)],
+        receipts: [],
+        lastError: SHOT_ROWS.map(row => [row, /^shot\.session_not_found: /]),
+      };
     case 'unauthorized':
     case 'timeout_408':
     case 'rate_limited':
@@ -194,8 +207,10 @@ function selected(scenarioId: string): boolean {
   );
 }
 
-function seedQueue() {
+function seedQueue(shots: { setless: boolean } = { setless: false }) {
   const fake = createFakeOutboxDb();
+  const shot = (id: string) =>
+    shots.setless ? { ...analysis(id), sessionId: null } : analysis(id);
   const ids = {
     session: fake.push(
       'session.create',
@@ -203,8 +218,8 @@ function seedQueue() {
       OWNER,
     ),
     finalize: fake.push('session.finalize', { id: SESSION_ID }, OWNER),
-    shotA: fake.push('shot.sync', analysis(SHOT_A), OWNER),
-    shotB: fake.push('shot.sync', analysis(SHOT_B), OWNER),
+    shotA: fake.push('shot.sync', shot(SHOT_A), OWNER),
+    shotB: fake.push('shot.sync', shot(SHOT_B), OWNER),
     trial: fake.push(
       'evaluation.trial',
       { trialId: TRIAL_ID, capturedAt: '2026-08-26T18:00:00.000Z' },
@@ -270,6 +285,11 @@ function judgeOutbox(
     }
     if (row.attempts !== attempts)
       violations.push(`${name}_attempts_${row.attempts}_expected_${attempts}`);
+  }
+  for (const [name, pattern] of expectation.lastError ?? []) {
+    const row = remaining.get(ids[name]);
+    if (row && !pattern.test(String(row.last_error ?? '')))
+      violations.push(`${name}_last_error_${JSON.stringify(row.last_error)}`);
   }
   const receiptIds = fake.receipts.map(receipt => receipt.entityId);
   if (receiptIds.join(',') !== expectation.receipts.join(','))
@@ -367,6 +387,19 @@ describe('drainOutbox × every deterministic response class (real transport, rea
         if (judgedAs === 'unauthorized') {
           // One 401 per request; the void rows and both batches each report once.
           expect(row.unauthorizedReports).toBe(row.requests.length);
+        }
+        if (judgedAs === 'client_error') {
+          // The shots above are held behind their refused set, so the same
+          // response is also judged on shots that belong to no set: the
+          // `/v1/shots:sync` refusal itself is charged once per row.
+          const setless = await runScenario(
+            { ...scenario, id: `${scenario.id}__setless_shots` },
+            request => scenario.build(siteFor(request)),
+            { deleted: [], kept: kept(ALL_ROWS, 1), receipts: [] },
+            seedQueue({ setless: true }),
+          );
+          expect(setless.violations).toEqual([]);
+          expect(setless.requests).toContain('POST /v1/shots:sync');
         }
       },
       scenario.deadlineMs + 5_000,

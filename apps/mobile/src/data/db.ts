@@ -103,6 +103,17 @@ const LOCAL_MIGRATIONS: string[] = [
   `DELETE FROM local_session
    WHERE id NOT IN (SELECT DISTINCT session_id FROM local_shot WHERE session_id IS NOT NULL)
      AND (completed = 0 OR summary LIKE '%fixture%')`,
+  // Per practice set sync bookkeeping the outbox rows themselves cannot
+  // carry: how many times the set's `session.create` was re-armed without a
+  // new read joining it (sync.ts SESSION_REARM_LIMIT). Rows are owner
+  // scoped, absent for sets that were never re-armed, and deleted when a new
+  // read is saved into the set.
+  `CREATE TABLE IF NOT EXISTS sync_set_state (
+     owner_key TEXT NOT NULL,
+     session_id TEXT NOT NULL,
+     rearms INTEGER NOT NULL DEFAULT 0,
+     PRIMARY KEY (owner_key, session_id)
+   )`,
 ];
 
 function tableInfo(db: DB, table: string): Record<string, unknown>[] {

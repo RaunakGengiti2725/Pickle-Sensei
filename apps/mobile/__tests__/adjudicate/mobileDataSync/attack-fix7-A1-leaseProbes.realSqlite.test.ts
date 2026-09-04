@@ -187,6 +187,20 @@ describe('attack-fix7-A1 lease (claim 1)', () => {
       await ticks(500);
     }
     await save.promise;
+    // Port plumbing (fix8): once the save no longer waits on the network the
+    // loop above settles nothing, and the manual transport never answers on
+    // its own — let the drain's outstanding calls fail transiently so it
+    // can finish. The assertion below is the adversary's, unchanged.
+    let outstanding = roundTripsWaited;
+    for (let i = 0; i < 100 && !drain.settled(); i += 1) {
+      while (outstanding < sessionCalls.length) {
+        sessionCalls[outstanding]!.reject(
+          new ApiError(503, 'server.unavailable', 'down'),
+        );
+        outstanding += 1;
+      }
+      await ticks(200);
+    }
     await drain.promise;
 
     // OBSERVED on candidate: settledWhileNetworkPending=false,
@@ -346,9 +360,20 @@ describe('attack-fix7-A1 lease (claim 1)', () => {
         ),
       ),
     );
-    await ticks(300);
+    // Adversary's measurement on 7bd9d7af: lease_waiters_max = 25 — every
+    // save queued behind the drain for as long as its first network call was
+    // pending (`expect(pending).toBe(25)` after 300 ticks). fix8 (L1)
+    // re-pins the corrected semantics: the lease is released during the
+    // network await, so all 25 saves commit while `sessionCalls[0]` is
+    // still unresolved, and the drain then finishes on its own rows.
+    for (let i = 0; i < 200 && waiters.some(w => !w.settled()); i += 1) {
+      await ticks(300);
+    }
     const pending = waiters.filter(w => !w.settled()).length;
-    expect(pending).toBe(25); // lease_waiters_max measured = 25
+    expect({ pending, networkStillPending: sessionCalls.length }).toEqual({
+      pending: 0,
+      networkStillPending: 1,
+    });
     sessionCalls[0]!.resolve();
     await ticks(300);
     shotCalls[0]!.d.resolve(acceptAll(shotCalls[0]!.shots));

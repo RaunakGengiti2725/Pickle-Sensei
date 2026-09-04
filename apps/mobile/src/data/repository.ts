@@ -6,7 +6,7 @@ import {
 } from '@pickle/shared-types';
 import type { AnalysisRecord } from '@pickle/swing-domain';
 import type { LocalDb } from './db';
-import { runInTransaction } from './transaction';
+import { runInTransaction, runStatement } from './transaction';
 import { assertCapturedClip, type CapturedClip } from '../camera/capture';
 import {
   getActiveDataOwner,
@@ -17,7 +17,9 @@ import {
   OUTBOX_MAX_ATTEMPTS,
   enqueueSessionCreate,
   isSessionOrphanedVerdict,
+  isSessionReleasedMarker,
   rearmExhaustedSessionCreate,
+  resetSessionSyncState,
 } from './sync';
 import type { ScoredCheckpointFact } from '../library/libraryFocus';
 
@@ -92,6 +94,7 @@ const OWNER_SCOPED_TABLES = [
   'local_analysis_record',
   'outbox',
   'sync_receipt',
+  'sync_set_state',
 ] as const;
 
 /** Every owner-scoped kv namespace (`<namespace>:<owner>`). Must stay in
@@ -199,6 +202,9 @@ export async function saveAnalysis(
       } else {
         await rearmExhaustedSessionCreate(db, owner, session.id);
       }
+      // A new read joining the set is the one event that renews the set's
+      // re-arm budget (sync.ts SESSION_REARM_LIMIT).
+      await resetSessionSyncState(db, owner, session.id);
     }
     await db.execute(
       `INSERT OR REPLACE INTO local_shot
@@ -243,7 +249,8 @@ export async function saveLocalOnlyAnalysis(
     );
   }
   const owner = requireWritableDataOwner();
-  await db.execute(
+  await runStatement(
+    db,
     `INSERT OR REPLACE INTO local_shot
      (owner_key, id, session_id, shot_type, captured_at, overall_score, confidence, result_kind, source, payload)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -483,7 +490,8 @@ export async function savePendingCapture(
   declaredStroke: ShotTypeSlug | null = null,
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await db.execute(
+  await runStatement(
+    db,
     `INSERT INTO local_capture
       (owner_key, id, uri, shot_type, declared_stroke, captured_at, duration_ms, fps, width, height, status, payload)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_model', ?)`,
@@ -527,7 +535,8 @@ export async function saveAnalysisRecord(
   record: AnalysisRecord,
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await db.execute(
+  await runStatement(
+    db,
     `INSERT INTO local_analysis_record
       (owner_key, id, capture_id, created_at, engine_version, scoring_model_version, record)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -576,7 +585,8 @@ export async function setDeclaredStroke(
   declaredStroke: ShotTypeSlug,
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await db.execute(
+  await runStatement(
+    db,
     `UPDATE local_capture SET declared_stroke = ?
      WHERE owner_key = ? AND id = ?`,
     [declaredStroke, owner, captureId],
@@ -617,7 +627,8 @@ export async function setCaptureTargetSeed(
   seed: CaptureTargetSeed,
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await db.execute(
+  await runStatement(
+    db,
     `UPDATE local_capture SET target_seed = ?
      WHERE owner_key = ? AND id = ?`,
     [JSON.stringify(seed), owner, captureId],
@@ -639,7 +650,8 @@ export async function updateCaptureClipPayload(
   clip: CapturedClip,
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await db.execute(
+  await runStatement(
+    db,
     `UPDATE local_capture SET payload = ?
      WHERE owner_key = ? AND id = ?`,
     [JSON.stringify(clip), owner, captureId],
@@ -672,7 +684,8 @@ export async function markCaptureAnalyzed(
   captureId: string,
 ): Promise<void> {
   const owner = requireWritableDataOwner();
-  await db.execute(
+  await runStatement(
+    db,
     `UPDATE local_capture SET status = 'analyzed'
      WHERE owner_key = ? AND id = ?`,
     [owner, captureId],
@@ -888,7 +901,9 @@ export type ShotOutboxStatus =
  * `orphaned` rows are PARKED, not finished: shots whose practice set the
  * server does not know yet (its session.create row was refused, or none
  * exists on this device); a drain offers them again as soon as a
- * session.create for that set is accepted.
+ * session.create for that set is accepted. A shot released from that park
+ * at the attempt cap (SESSION_RELEASED_MARKER) is `queued` for its one
+ * further offer whatever its count says.
  */
 export async function getShotOutboxStatus(
   db: LocalDb,
@@ -917,6 +932,9 @@ export async function getShotOutboxStatus(
   if (isSessionOrphanedVerdict(lastError)) {
     return { state: 'orphaned', attempts, lastError };
   }
+  if (isSessionReleasedMarker(lastError)) {
+    return { state: 'queued', attempts, lastError };
+  }
   if (attempts >= OUTBOX_MAX_ATTEMPTS) {
     return { state: 'exhausted', attempts, lastError };
   }
@@ -936,8 +954,9 @@ export async function setKv(
   key: string,
   value: string,
 ): Promise<void> {
-  await db.execute(`INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)`, [
-    key,
-    value,
-  ]);
+  await runStatement(
+    db,
+    `INSERT OR REPLACE INTO kv (key, value) VALUES (?, ?)`,
+    [key, value],
+  );
 }

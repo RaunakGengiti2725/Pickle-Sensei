@@ -195,7 +195,11 @@ describe('attack-fix7-A4 compat / ordering / receipts / copy (claim 6)', () => {
     // The dead set is never re-asked, the parked and exhausted shots never
     // offered, the corrupt row charged 8 times then silent.
     expect(t.calls).toEqual([]);
-    expect(failedPerDrain).toEqual([1, 1, 1, 1, 1, 1, 1, 1, 0, 0]);
+    // Adversary's measurement on the sibling: `[1, 1, 1, 1, 1, 1, 1, 1, 0, 0]`
+    // (the corrupt row charged once per drain for eight drains). fix8 (S1)
+    // re-pins the corrected semantics: a row that can never become a request
+    // is quarantined in the one drain that met it and never read again.
+    expect(failedPerDrain).toEqual([1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     expect((await getShotOutboxStatus(db, shotId(1))).state).toBe('orphaned');
     expect((await getShotOutboxStatus(db, shotId(2))).state).toBe('exhausted');
 
@@ -226,21 +230,31 @@ describe('attack-fix7-A4 compat / ordering / receipts / copy (claim 6)', () => {
     // so no new shot can join it: the only re-arm trigger is gone.
     const accepting = recording({});
     for (let i = 0; i < 20; i += 1) await drainOutbox(db, accepting.transport);
-    // Expected (claim 6, ResultScreen orphaned copy): the set is asked for
-    // again and the read is sent automatically once accepted.
-    // OBSERVED: zero network calls in 20 drains; the read is orphaned for
-    // good while its copy promises an automatic resend — the truthful state
-    // for this row is the terminal `exhausted` wording or a copy that names
-    // the real trigger (a new read in the same set).
+    // Adversary's expectation (claim 6, ResultScreen orphaned copy as it
+    // read on 7bd9d7af): the set is asked for again and the read is sent
+    // automatically once accepted. OBSERVED: zero network calls in 20
+    // drains while the copy promised an automatic resend.
+    // fix8 (O1) resolves the break on the COPY side, not the engine side:
+    // A3.7 (this adversary) and B0 P6 pin that a refused set is never
+    // re-asked by a drain on its own (exactly OUTBOX_MAX_ATTEMPTS
+    // createSession calls per read saved, the parked row byte-identical
+    // across 20 drains), which no drain-count cadence can satisfy together
+    // with the original expectation here. So the engine keeps the parked
+    // read on this device, uncharged and unchanged, and the ResultScreen
+    // copy now names the one real trigger — a new read saved into the set
+    // (pinned in c3-orphanedResultSurface.test.tsx); A4.2 pins that this
+    // trigger delivers the parked read.
+    const after = await getShotOutboxStatus(db, shotId(1));
     expect({
       calls: accepting.calls,
-      state: (await getShotOutboxStatus(db, shotId(1))).state,
+      state: after.state,
       receipt: await hasShotSyncReceipt(db, shotId(1)),
     }).toEqual({
-      calls: [`create:${SET_X}`, `shots:${shotId(1)}`],
-      state: 'absent',
-      receipt: true,
+      calls: [],
+      state: 'orphaned',
+      receipt: false,
     });
+    expect(after).toEqual(status);
   });
 
   it('A4.4 probe — ordering within one drain: every session row (create + finalize, incl. the re-armed one) before any shot; unparked shots ride the same drain', async () => {

@@ -299,9 +299,16 @@ describe('ATTACK fix3 probes (real SQLite)', () => {
     // the page or throws out of the drain.
     expect(first).toEqual({ synced: 3, failed: 5, remaining: 5 });
     const rows = await outboxRows(db, OWNER);
-    expect(rows.map(r => r.attempts)).toEqual([1, 1, 1, 1, 1]);
+    // fix8 (S1) re-pins the corrected semantics: a row that can never become
+    // a request is quarantined in ONE step — charged straight to the attempt
+    // cap with a truthful `last_error` — instead of costing the owner one
+    // failed attempt (and one backoff step) per drain for eight drains.
+    expect(rows.map(r => r.attempts)).toEqual([8, 8, 8, 8, 8]);
     expect(rows.every(r => r.last_error !== null)).toBe(true);
-    for (let i = 1; i < OUTBOX_MAX_ATTEMPTS; i++) await drainOutbox(db, server);
+    // Once quarantined the rows are never read again: later drains cost 0.
+    for (let i = 1; i < OUTBOX_MAX_ATTEMPTS; i++) {
+      expect(await drainOutbox(db, server)).toMatchObject({ failed: 0 });
+    }
     const settled = await outboxRows(db, OWNER);
     expect(settled.every(r => r.attempts === OUTBOX_MAX_ATTEMPTS)).toBe(true);
     // And a fresh healthy shot behind them still syncs.
@@ -330,7 +337,14 @@ describe('ATTACK fix3 probes (real SQLite)', () => {
     expect(result).toEqual({ synced: 1, failed: 2, remaining: 2 });
     expect(await hasShotSyncReceipt(db, shotId(0xa00))).toBe(true);
     const rows = await outboxRows(db, OWNER);
-    expect(rows.every(r => r.attempts === 1)).toBe(true);
+    // fix8 (S1): both corrupt rows are quarantined at the attempt cap in the
+    // one drain that met them (was `attempts === 1`, one charge per drain).
+    expect(rows.every(r => r.attempts === OUTBOX_MAX_ATTEMPTS)).toBe(true);
+    expect(await drainOutbox(db, server)).toEqual({
+      synced: 0,
+      failed: 0,
+      remaining: 2,
+    });
   });
 
   it('account switch after a drain started: the in-flight drain stays bound to its starting owner', async () => {

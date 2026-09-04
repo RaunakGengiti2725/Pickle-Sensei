@@ -1612,7 +1612,7 @@ function TrainingPlanSection(props: {
               syncEvidence.lastError
                 ? ` (last response: ${syncEvidence.lastError})`
                 : ''
-            }. Sync is paused until the set is accepted, then this read is sent again automatically. It stays on this device; capture a new read to build training now.`}
+            }. Sync is paused until the set is accepted; the set is asked for again when a new read is saved into it, and once it is accepted this read is sent again automatically. It stays on this device; capture a new read to build training now.`}
           </Text>
           <View style={styles.trainingAction}>
             <Button

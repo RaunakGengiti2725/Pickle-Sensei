@@ -214,6 +214,7 @@ export function fakeDb() {
   const outbox: OutboxRow[] = [];
   const receipts: Array<{ owner: string; entityId: string }> = [];
   let nextId = 1;
+  const setState = new Map<string, number>();
   let inTransaction = false;
   const db: LocalDb = {
     async execute(sql: string, params: unknown[] = []) {
@@ -226,6 +227,46 @@ export function fakeDb() {
       if (statement === 'COMMIT' || statement === 'ROLLBACK') {
         inTransaction = false;
         return { rows: [] };
+      }
+      // fix8 drain statements: the fresh per-row read the shot pass takes
+      // under the lease, the per-set re-arm state, and one-shot quarantine.
+      {
+        const flat = statement.trim().replace(/\s+/g, ' ');
+        if (flat.startsWith('SELECT id, attempts, last_error FROM outbox')) {
+          const ids = new Set(params.slice(1).map(Number));
+          return {
+            rows: outbox
+              .filter(r => r.owner_key === String(params[0]) && ids.has(r.id))
+              .map(r => ({
+                id: r.id,
+                attempts: r.attempts,
+                last_error: r.last_error,
+              })),
+          };
+        }
+        if (flat.startsWith('SELECT rearms FROM sync_set_state')) {
+          const rearms = setState.get(`${params[0]}\u0000${params[1]}`);
+          return { rows: rearms === undefined ? [] : [{ rearms }] };
+        }
+        if (flat.startsWith('INSERT INTO sync_set_state')) {
+          const key = `${params[0]}\u0000${params[1]}`;
+          setState.set(key, (setState.get(key) ?? 0) + 1);
+          return { rows: [] };
+        }
+        if (flat.startsWith('DELETE FROM sync_set_state')) {
+          setState.delete(`${params[0]}\u0000${params[1]}`);
+          return { rows: [] };
+        }
+        if (flat.startsWith('UPDATE outbox SET attempts = max(attempts + 1,')) {
+          const row = outbox.find(
+            r => r.owner_key === params[1] && r.id === params[2],
+          );
+          if (row) {
+            row.attempts = Math.max(row.attempts + 1, 8);
+            row.last_error = String(params[0]);
+          }
+          return { rows: [] };
+        }
       }
       if (statement.includes('INSERT OR REPLACE INTO sync_receipt')) {
         receipts.push({
