@@ -6,6 +6,7 @@ import {
 } from '@pickle/shared-types';
 import type { AnalysisRecord } from '@pickle/swing-domain';
 import type { LocalDb } from './db';
+import { withLocalTransaction } from './localTransaction';
 import { assertCapturedClip, type CapturedClip } from '../camera/capture';
 import { getActiveDataOwner, requireWritableDataOwner } from './accountScope';
 import { OUTBOX_MAX_ATTEMPTS } from './sync';
@@ -73,22 +74,13 @@ export interface CaptureHistoryEntry extends PendingCapture {
   status: 'awaiting_model' | 'analyzed';
 }
 
-async function inTransaction(
+/** Every write scope here shares the ONE connection `getDb()` hands out, so
+ * it goes through the same queue as the drain's receipt transaction. */
+function inTransaction(
   db: LocalDb,
   operation: () => Promise<void>,
 ): Promise<void> {
-  await db.execute('BEGIN IMMEDIATE');
-  try {
-    await operation();
-    await db.execute('COMMIT');
-  } catch (error) {
-    try {
-      await db.execute('ROLLBACK');
-    } catch {
-      // Preserve the original persistence error.
-    }
-    throw error;
-  }
+  return withLocalTransaction(db, operation);
 }
 
 /** Every owner-partitioned local table. Kept in one place so account
@@ -850,6 +842,12 @@ export type ShotOutboxStatus =
  * Durable state of a shot's outbox row. `rejected` rows were declined by the
  * server at least once but stay inside the retry budget; `exhausted` rows
  * have spent it and are excluded from every future drain (see sync.ts).
+ *
+ * A shot whose practice set's `session.create` row has spent the budget can
+ * never sync either (`apply_synced_shot` answers `shot.session_not_found`,
+ * a transient code, on every replay), so its status is its parent's: the
+ * exhausted `session.create` row is the row read for it, and the attempts
+ * and last response reported are the practice set's own.
  */
 export async function getShotOutboxStatus(
   db: LocalDb,
@@ -857,10 +855,26 @@ export async function getShotOutboxStatus(
 ): Promise<ShotOutboxStatus> {
   const owner = getActiveDataOwner();
   const { rows } = await db.execute(
+    // `json_valid` first: without it one corrupt sibling row makes SQLite
+    // raise "malformed JSON" for this whole statement, so a healthy shot
+    // could not read its own status.
+    // The row read is the shot's own `shot.sync` row, or its practice set's
+    // `session.create` row when that one has spent the budget.
     `SELECT attempts, last_error FROM outbox
-     WHERE owner_key = ? AND kind = 'shot.sync'
-       AND json_extract(payload, '$.id') = ?
-     ORDER BY id DESC LIMIT 1`,
+     WHERE owner_key = ? AND json_valid(payload)
+       AND (kind = 'shot.sync'
+         OR (kind = 'session.create' AND attempts >= ${OUTBOX_MAX_ATTEMPTS}))
+       AND json_extract(payload, '$.id') IN (
+         WITH target(id) AS (SELECT ?)
+         SELECT id FROM target WHERE outbox.kind = 'shot.sync'
+         UNION ALL
+         SELECT json_extract(shot.payload, '$.sessionId')
+         FROM outbox shot, target
+         WHERE outbox.kind = 'session.create'
+           AND shot.owner_key = outbox.owner_key AND shot.kind = 'shot.sync'
+           AND json_valid(shot.payload)
+           AND json_extract(shot.payload, '$.id') = target.id)
+     ORDER BY kind = 'session.create' DESC, id DESC LIMIT 1`,
     [owner, shotId],
   );
   const row = rows[0];

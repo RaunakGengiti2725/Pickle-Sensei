@@ -65,7 +65,8 @@ const LOCAL_MIGRATIONS: string[] = [
      payload TEXT NOT NULL,
      attempts INTEGER NOT NULL DEFAULT 0,
      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-     last_error TEXT
+     last_error TEXT,
+     tried_seq INTEGER
    )`,
   `CREATE TABLE IF NOT EXISTS sync_receipt (
      owner_key TEXT NOT NULL,
@@ -92,7 +93,13 @@ const LOCAL_MIGRATIONS: string[] = [
   // Fixture reads existed in early development builds. They are removed once,
   // before any product query runs, so old simulator/device data cannot leak
   // into history, scores, trends, session summaries, or sync.
-  `DELETE FROM outbox WHERE kind = 'shot.sync' AND json_extract(payload, '$.source') <> 'real'`,
+  // `json_extract` raises "malformed JSON" for the WHOLE statement as soon as
+  // it visits one non-JSON payload, so the guard is what keeps a single
+  // corrupt row (a truncated write, a restored backup) from failing every
+  // launch and taking the local store with it. A corrupt row is not a fixture
+  // read: it stays queued and the drain records it as a failed row.
+  `DELETE FROM outbox WHERE kind = 'shot.sync' AND json_valid(payload)
+     AND json_extract(payload, '$.source') <> 'real'`,
   `DELETE FROM local_shot WHERE source <> 'real'`,
   `DELETE FROM local_session
    WHERE id NOT IN (SELECT DISTINCT session_id FROM local_shot WHERE session_id IS NOT NULL)
@@ -221,6 +228,11 @@ function ensureAccountScopedSchema(db: DB): void {
       db.executeSync(
         `ALTER TABLE outbox ADD COLUMN owner_key TEXT NOT NULL DEFAULT '${GUEST_DATA_OWNER}'`,
       );
+    }
+    // Drain order: the sequence number of the row's last failed send (NULL
+    // until it has been tried) — see sync.ts recordRowFailure.
+    if (!hasColumn(db, 'outbox', 'tried_seq')) {
+      db.executeSync('ALTER TABLE outbox ADD COLUMN tried_seq INTEGER');
     }
     db.executeSync(
       'CREATE INDEX IF NOT EXISTS idx_local_shot_owner_time ON local_shot (owner_key, captured_at DESC)',
