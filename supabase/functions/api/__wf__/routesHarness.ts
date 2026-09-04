@@ -375,7 +375,11 @@ export function captureConsole(): { lines: string[]; restore: () => void } {
   const originalError = console.error;
   const originalWarn = console.warn;
   const record = (...args: unknown[]) => {
-    lines.push(args.map((arg) => (arg instanceof Error ? `${arg.name}: ${arg.message}` : String(arg))).join(" "));
+    lines.push(
+      args
+        .map((arg) => (arg instanceof Error ? `${arg.name}: ${arg.message}` : String(arg)))
+        .join(" "),
+    );
   };
   console.error = record;
   console.warn = record;

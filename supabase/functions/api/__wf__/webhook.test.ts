@@ -226,7 +226,10 @@ Deno.test(
       );
       assertEquals(store.entitlements.size, 0);
       assertEquals(store.webhookEvents.size, 0, "a failed delivery leaves no idempotency row");
-      assertEquals(h.callsTo("/rest/v1/webhook_events").filter((c) => c.method === "POST").length, 0);
+      assertEquals(
+        h.callsTo("/rest/v1/webhook_events").filter((c) => c.method === "POST").length,
+        0,
+      );
       assert(
         log.lines.some((line) => line.includes(TRANSIENT_DB.message)),
         "operators get the database detail in the function log",
@@ -262,7 +265,9 @@ Deno.test(
       assertEquals(await res.json(), { received: true, verified: false });
       assertEquals(store.entitlements.size, 0);
       assertEquals(store.webhookEvents.has("evt-fk"), true, "audit row preserves the event");
-      assert(log.lines.some((line) => line.includes("23503") || line.includes(FK_VIOLATION.message)));
+      assert(
+        log.lines.some((line) => line.includes("23503") || line.includes(FK_VIOLATION.message)),
+      );
 
       // The audit row means the replay is a duplicate: no second RevenueCat read.
       const replay = await h.handler(
@@ -347,7 +352,10 @@ for (const status of [401, 403, 429, 500]) {
         const diagnostic = log.lines.find(
           (line) => /revenuecat/i.test(line) && line.includes(String(status)),
         );
-        assert(diagnostic, `expected a RevenueCat ${status} diagnostic, got ${JSON.stringify(log.lines)}`);
+        assert(
+          diagnostic,
+          `expected a RevenueCat ${status} diagnostic, got ${JSON.stringify(log.lines)}`,
+        );
         assertStringIncludes(diagnostic, "7225", "RevenueCat's own error code is included");
         for (const line of log.lines) {
           assertEquals(line.includes(rcKey()), false, `secret leaked into log: ${line}`);
@@ -424,8 +432,14 @@ Deno.test(
     );
     assertEquals(viaAlias.status, 200);
     assertEquals(await viaAlias.json(), { received: true, verified: true });
-    assertEquals(h.callsTo(RC_URL).map((c) => c.url), [`${RC_URL}${HEX_USER_ID}`]);
-    assertEquals(store.entitlementUpserts.map((r) => r.user_id), [HEX_USER_ID]);
+    assertEquals(
+      h.callsTo(RC_URL).map((c) => c.url),
+      [`${RC_URL}${HEX_USER_ID}`],
+    );
+    assertEquals(
+      store.entitlementUpserts.map((r) => r.user_id),
+      [HEX_USER_ID],
+    );
 
     const other = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff";
     const viaTransfer = await h.handler(
