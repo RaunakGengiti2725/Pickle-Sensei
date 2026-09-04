@@ -1,0 +1,19 @@
+{
+  "name": "@pickle/ux-audit",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Linux render harness: react-native-web + Chromium matrix (font scale x viewport) for pre-auth screens. Layout evidence only — not Apple runtime truth.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "run": "node run.mjs",
+    "audit": "node build.mjs && node run.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "playwright-core": "1.62.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native-web": "0.21.2"
+  }
+}

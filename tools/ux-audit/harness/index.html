@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pickle Sensei UX audit harness</title>
+    <style>
+      @font-face {
+        font-family: "Manrope_400Regular";
+        src: url("/apps/mobile/assets/fonts/Manrope_400Regular.ttf") format("truetype");
+        font-weight: 400;
+      }
+      @font-face {
+        font-family: "Manrope_500Medium";
+        src: url("/apps/mobile/assets/fonts/Manrope_500Medium.ttf") format("truetype");
+        font-weight: 500;
+      }
+      @font-face {
+        font-family: "Manrope_600SemiBold";
+        src: url("/apps/mobile/assets/fonts/Manrope_600SemiBold.ttf") format("truetype");
+        font-weight: 600;
+      }
+      @font-face {
+        font-family: "Manrope_700Bold";
+        src: url("/apps/mobile/assets/fonts/Manrope_700Bold.ttf") format("truetype");
+        font-weight: 700;
+      }
+      html,
+      body,
+      #root {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0b1713;
+      }
+      /* iOS system font fallback approximation for unstyled text. */
+      body {
+        font-family: -apple-system, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Force the four faces to load before the first render. -->
+    <div
+      id="ux-font-preload"
+      aria-hidden="true"
+      style="position: absolute; left: -9999px; top: -9999px"
+    >
+      <span style="font-family: &quot;Manrope_400Regular&quot;">a</span>
+      <span style="font-family: &quot;Manrope_500Medium&quot;">a</span>
+      <span style="font-family: &quot;Manrope_600SemiBold&quot;">a</span>
+      <span style="font-family: &quot;Manrope_700Bold&quot;">a</span>
+    </div>
+    <script src="/tools/ux-audit/dist/bundle.js"></script>
+  </body>
+</html>
