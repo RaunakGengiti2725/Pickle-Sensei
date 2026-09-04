@@ -305,6 +305,28 @@ Deno.test(
   },
 );
 
+Deno.test(
+  "billing sync: RevenueCat 401 → 502 billing_unavailable plus a diagnostic naming the status",
+  async () => {
+    const h = await loadHarness();
+    h.revenueCatStatus = 401;
+    h.rpcs["access_state"] = ACCESS_ROW;
+    const res = await h.handler(
+      userRequest("POST", "/v1/billing/sync", { ip: "198.51.100.19" }),
+    );
+    assertEquals(res.status, 502);
+    assertEquals((await res.json()).error.code, "billing_unavailable");
+    // A rotated or revoked key must be diagnosable from the function logs
+    // instead of reading as an unexplained provider outage.
+    const diagnostic = h.logLines.find((line) => /revenuecat/i.test(line) && line.includes("401"));
+    assert(diagnostic, `no diagnostic naming HTTP 401: ${JSON.stringify(h.logLines)}`);
+    const rcKey = Deno.env.get("REVENUECAT_SECRET_API_KEY") ?? "";
+    assert(rcKey.length > 0);
+    for (const line of h.logLines) assert(!line.includes(rcKey), "a log line leaked the RC key");
+    assertEquals(h.callsTo("/rest/v1/billing_entitlements").length, 0);
+  },
+);
+
 Deno.test("billing sync: per-user budget 10/min → 11th call is 429 with Retry-After", async () => {
   const h = await loadHarness();
   h.subscriber = activeSubscriber();

@@ -10,6 +10,12 @@ export interface RecordedCall {
   body: unknown;
 }
 
+export interface PostgrestFailure {
+  status: number;
+  code: string;
+  message: string;
+}
+
 export interface Harness {
   handler: (request: Request) => Promise<Response>;
   realFetch: typeof fetch;
@@ -17,10 +23,24 @@ export interface Harness {
   calls: RecordedCall[];
   /** Subscriber JSON RevenueCat returns (null → HTTP 500 from RevenueCat). */
   subscriber: Record<string, unknown> | null;
+  /** Non-null → RevenueCat answers this status with an API error body instead
+   * of a subscriber (401/403 invalid key, 429 rate limited). */
+  revenueCatStatus: number | null;
   /** Rows returned for PostgREST GET by table name. */
   tables: Record<string, unknown[]>;
   /** Rows returned for PostgREST RPC POST by function name. */
   rpcs: Record<string, unknown>;
+  /** Rows the fake actually PERSISTED, keyed by primary key: the webhook's
+   * idempotency and partial-persistence behaviour is only observable when
+   * writes are read back (a write-only fake hides both). */
+  webhookEvents: Map<string, Record<string, unknown>>;
+  entitlements: Map<string, Record<string, unknown>>;
+  /** PostgREST error for the Nth (0-based) billing_entitlements upsert. */
+  failEntitlementUpsert: (n: number) => PostgrestFailure | null;
+  /** PostgREST error for every webhook_events insert. */
+  failWebhookEventInsert: PostgrestFailure | null;
+  /** console.error/console.warn lines emitted by the handler. */
+  logLines: string[];
   /** Test-only copy of the generated AES key used by the lazy edge config. */
   appleTokenEncryptionKey: string;
   reset(): void;
@@ -114,14 +134,26 @@ export async function loadHarness(): Promise<Harness> {
     realServe,
     calls: [],
     subscriber: {},
+    revenueCatStatus: null,
     tables: {},
     rpcs: {},
+    webhookEvents: new Map(),
+    entitlements: new Map(),
+    failEntitlementUpsert: () => null,
+    failWebhookEventInsert: null,
+    logLines: [],
     appleTokenEncryptionKey,
     reset() {
       state.calls = [];
       state.subscriber = {};
+      state.revenueCatStatus = null;
       state.tables = {};
       state.rpcs = {};
+      state.webhookEvents.clear();
+      state.entitlements.clear();
+      state.failEntitlementUpsert = () => null;
+      state.failWebhookEventInsert = null;
+      state.logLines = [];
     },
     callsTo(fragment: string) {
       return state.calls.filter((call) => call.url.includes(fragment));
@@ -133,6 +165,39 @@ export async function loadHarness(): Promise<Harness> {
       status,
       headers: { "Content-Type": "application/json" },
     });
+
+  const postgrestError = (failure: PostgrestFailure): Response =>
+    jsonResponse(failure.status, {
+      code: failure.code,
+      message: failure.message,
+      details: null,
+      hint: null,
+    });
+
+  /** maybeSingle() over an empty result: PostgREST answers 406/PGRST116 and
+   * the client folds it into { data: null, error: null }. */
+  const noRows = (): Response =>
+    jsonResponse(406, {
+      code: "PGRST116",
+      message: "0 rows",
+      details: null,
+      hint: null,
+    });
+
+  const captureLog = (original: (...args: unknown[]) => void) =>
+    (...args: unknown[]) => {
+      state.logLines.push(args.map((arg) => String(arg)).join(" "));
+      original(...args);
+    };
+  console.error = captureLog(console.error.bind(console));
+  console.warn = captureLog(console.warn.bind(console));
+
+  let entitlementUpserts = 0;
+  const resetCounters = state.reset;
+  state.reset = () => {
+    entitlementUpserts = 0;
+    resetCounters();
+  };
 
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const request = new Request(input, init);
@@ -151,6 +216,13 @@ export async function loadHarness(): Promise<Harness> {
     state.calls.push({ url, method: request.method, headers, body });
 
     if (url.startsWith(RC_URL)) {
+      if (state.revenueCatStatus !== null) {
+        // RevenueCat's documented error envelope; the key is never echoed.
+        return jsonResponse(state.revenueCatStatus, {
+          code: 7225,
+          message: "Invalid API key.",
+        });
+      }
       if (!state.subscriber) {
         return new Response("upstream error", { status: 500 });
       }
@@ -203,6 +275,36 @@ export async function loadHarness(): Promise<Harness> {
     }
     if (url.startsWith(`${SUPABASE_URL}/rest/v1/`)) {
       const table = new URL(url).pathname.slice("/rest/v1/".length);
+      if (table === "webhook_events") {
+        if (request.method === "GET") {
+          const filter = new URL(url).searchParams.get("id") ?? "";
+          const row = state.webhookEvents.get(
+            filter.startsWith("eq.") ? filter.slice(3) : filter,
+          );
+          if ((headers["accept"] ?? "").includes("application/vnd.pgrst.object+json")) {
+            return row ? jsonResponse(200, { id: row.id }) : noRows();
+          }
+          return jsonResponse(200, row ? [{ id: row.id }] : []);
+        }
+        if (request.method === "POST") {
+          if (state.failWebhookEventInsert) {
+            return postgrestError(state.failWebhookEventInsert);
+          }
+          const row = isRecord(body) ? body : {};
+          const id = String(row.id);
+          // ignoreDuplicates: the first writer wins, later ones are no-ops.
+          if (!state.webhookEvents.has(id)) state.webhookEvents.set(id, row);
+          return new Response(null, { status: 201 });
+        }
+      }
+      if (table === "billing_entitlements" && request.method === "POST") {
+        const row = isRecord(body) ? body : {};
+        const failure = state.failEntitlementUpsert(entitlementUpserts);
+        entitlementUpserts += 1;
+        if (failure) return postgrestError(failure);
+        state.entitlements.set(String(row.user_id), row);
+        return new Response(null, { status: 201 });
+      }
       if (table.startsWith("rpc/")) {
         const fn = table.slice("rpc/".length);
         if (!(fn in state.rpcs)) {
