@@ -8,8 +8,43 @@ Machine-readable Linux regression summaries written by
 ## baseline.json
 
 `baseline.json` is the accepted reference that `bench:compare` is run against.
-It is a verbatim runner output — never edited by hand. Provenance of the
-committed document:
+It is a verbatim runner output — never edited by hand.
+
+### Current document (regenerated with the EVAL-BENCH-01 runner fix)
+
+Regenerated because the fix changed the descriptive text of two benches
+(`benches[].command` and `benches[].inputs` for `event_recall` and
+`completion_bench`: their reports now go to an explicit `<scratch>` path
+instead of a timestamped file under `datasets/**`). No metric moved:
+`bench:compare <previous baseline> <this document>` reported
+`unchanged=104 informational=96`, 0 improvements, 0 regressions, exit 0, and
+all 200 metric values plus every `benches[].metrics` / `labels` map are
+byte-identical to the previous document.
+
+- Measured code: `devin/fix-EVAL-BENCH-01-bench-runner` at
+  `dfc05f6486bf0ad0ad7547eacafaee33dad97e99` (`provenance.gitDirty: false`,
+  `provenance.gitBranch: "devin/fix-EVAL-BENCH-01-bench-runner"`), fresh
+  `pnpm install --frozen-lockfile`. Benches still measure the same
+  `packages/swing-lab`, `packages/vision-geometry` and `datasets/**` inputs
+  as the previous baseline (`provenance.datasetsTreeSha` unchanged).
+- Exact command (cwd = repo root, clean tree):
+
+  ```sh
+  pnpm -s --filter @pickle/evaluation bench:regression --out-dir /tmp/acc-baseline --run-id baseline
+  cp /tmp/acc-baseline/baseline.json datasets/reports/regression/baseline.json
+  ```
+
+  Exit code 0. Runner-reported `totalWallClockMs: 1876`. Per-bench wall
+  clocks (ms): stroke_heuristic 61, contact_replay 46, event_bounds_e13 12,
+  event_recall 236, completion_bench 227, ownership_dual_frame 65,
+  ball_hard_slice 981, phase_gold_d3_05 220, coach_gates 0. All nine
+  `status: "ok"`; 200 metric keys.
+- Environment: Ubuntu 22.04, Node v22.12.0 (`runner.node`), pnpm 9.15.1.
+  The repository declares `"node": ">=20 <21"`; comparing against a summary
+  produced on another Node version prints the `runner.node` CONFOUND warning
+  (informational; the metrics are a pure replay of committed artifacts).
+
+### Previous document (superseded, kept for the record)
 
 - Measured code: `origin/main` at `7c034aa00ea3c4ff0e63c3b84b548cec8d62c96f`
   ("Create mac-smoke-test.yml"), checked out as a detached `git worktree` with
@@ -68,11 +103,16 @@ committed document:
 
 Only regenerate from a clean checkout of the commit being accepted as the new
 reference, and commit the new document alongside the change that intentionally
-moved a metric:
+moved a metric (or, as with the EVAL-BENCH-01 fix, changed a bench's
+`command` / `inputs` text — say so here and prove with `bench:compare` that no
+metric moved). Write the summary outside the repository and copy it in, so the
+tree the runner sees is clean (deleting the old baseline first would itself
+mark the tree dirty):
 
 ```sh
 git status --porcelain --untracked-files=no   # must be empty
 git ls-files --others --exclude-standard datasets | grep -v '^datasets/reports/'  # must be empty
-rm datasets/reports/regression/baseline.json  # the runner refuses to overwrite
-pnpm --filter @pickle/evaluation bench:regression --run-id baseline
+pnpm -s --filter @pickle/evaluation bench:regression --out-dir /tmp/baseline --run-id baseline
+pnpm -s --filter @pickle/evaluation bench:compare datasets/reports/regression/baseline.json /tmp/baseline/baseline.json
+cp /tmp/baseline/baseline.json datasets/reports/regression/baseline.json
 ```
