@@ -4,9 +4,10 @@ import { getActiveDataOwner } from '../data/accountScope';
 import type { LocalDb } from '../data/db';
 import { getAnalysis, getPendingCapture, listShots } from '../data/repository';
 import type { StrokeResultClip } from './StrokeResult';
-import type {
-  AttemptRef,
-  StrokeResultEvidenceRecord,
+import {
+  asStrokeResultEvidenceRecord,
+  type AttemptRef,
+  type StrokeResultEvidenceRecord,
 } from './strokeResultModel';
 
 /**
@@ -63,14 +64,18 @@ export async function loadAnalysisRecordById(
   );
   const payload = rows[0]?.['record'];
   if (typeof payload !== 'string' || payload.length === 0) return null;
+  let parsed: unknown;
   try {
-    // Stored records are heterogeneous (pre-strokeIntent rows exist); the
-    // evidence shape types every envelope field as optional, and a corrupt
-    // row is skipped — never repaired into a fake analysis.
-    return JSON.parse(payload) as StrokeResultEvidenceRecord;
+    parsed = JSON.parse(payload);
   } catch {
     return null;
   }
+  // Stored records are heterogeneous (pre-strokeIntent rows exist); the
+  // evidence shape types every envelope field as optional, so a valid row
+  // only needs the fields it carries to hold their declared types. A row
+  // that fails that check — syntax OR shape — is skipped, never repaired
+  // into a fake analysis.
+  return asStrokeResultEvidenceRecord(parsed);
 }
 
 /** This session's attempts (for §2 chips). Grouping NEVER crosses sessions:

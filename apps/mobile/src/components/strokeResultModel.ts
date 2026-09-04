@@ -90,6 +90,214 @@ export interface StrokeResultEvidenceRecord {
   captureEnvelope?: EnvelopeVerdict | null;
 }
 
+// ─── Stored-record validation ───────────────────────────────────────────────
+
+type UnknownRecord = Record<string, unknown>;
+
+function isPlainObject(value: unknown): value is UnknownRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+function isBoolean(value: unknown): value is boolean {
+  return typeof value === 'boolean';
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(isString);
+}
+
+/** Absent (`undefined`) fields pass; present ones must satisfy the guard. */
+function optional(value: unknown, guard: (value: unknown) => boolean): boolean {
+  return value === undefined || guard(value);
+}
+
+function nullable(guard: (value: unknown) => boolean) {
+  return (value: unknown): boolean => value === null || guard(value);
+}
+
+function isStrokeIntentShape(value: unknown): boolean {
+  if (!isPlainObject(value) || !isString(value['resolutionBasis'])) {
+    return false;
+  }
+  const predicted = value['predictedStroke'];
+  if (
+    !optional(
+      predicted,
+      nullable(
+        candidate =>
+          isPlainObject(candidate) &&
+          isString(candidate['label']) &&
+          optional(candidate['leaf'], nullable(isString)),
+      ),
+    )
+  ) {
+    return false;
+  }
+  return (
+    optional(value['declaredStroke'], nullable(isString)) &&
+    optional(value['resolvedProfileId'], nullable(isString)) &&
+    optional(value['resolvedProfileVersion'], nullable(isString)) &&
+    optional(
+      value['disagreement'],
+      nullable(
+        candidate =>
+          isPlainObject(candidate) &&
+          isString(candidate['declared']) &&
+          isString(candidate['predictedLabel']),
+      ),
+    )
+  );
+}
+
+/**
+ * The ShotAnalysis fields the Result surface reads from a stored
+ * `record.result`. The stroke window and shot type are dereferenced
+ * unconditionally, so they must be present; every other field is checked
+ * only when the row carries it (older rows may lack later additions).
+ */
+function isShotAnalysisShape(value: unknown): boolean {
+  if (!isPlainObject(value) || !isString(value['shotType'])) return false;
+  const timestamps = value['timestamps'];
+  if (
+    !isPlainObject(timestamps) ||
+    !isFiniteNumber(timestamps['startMs']) ||
+    !isFiniteNumber(timestamps['endMs']) ||
+    !optional(timestamps['contactMs'], nullable(isFiniteNumber))
+  ) {
+    return false;
+  }
+  return (
+    optional(value['id'], isString) &&
+    optional(value['sessionId'], nullable(isString)) &&
+    optional(value['capturedAtIso'], isString) &&
+    optional(value['phases'], Array.isArray) &&
+    optional(value['checkpoints'], Array.isArray) &&
+    optional(
+      value['measurements'],
+      candidate =>
+        Array.isArray(candidate) &&
+        candidate.every(
+          measurement =>
+            isPlainObject(measurement) &&
+            isString(measurement['metricKey']) &&
+            isFiniteNumber(measurement['value']) &&
+            isString(measurement['unit']),
+        ),
+    ) &&
+    optional(value['overallScore'], nullable(isFiniteNumber)) &&
+    optional(value['analysisConfidence'], isFiniteNumber) &&
+    optional(value['resultKind'], isString) &&
+    optional(value['guidance'], nullable(isString)) &&
+    optional(
+      value['priorityFix'],
+      nullable(
+        candidate =>
+          isPlainObject(candidate) && isString(candidate['checkpoint']),
+      ),
+    )
+  );
+}
+
+function isUncertaintyShape(value: unknown): boolean {
+  return (
+    isPlainObject(value) &&
+    optional(value['analysisConfidence'], isFiniteNumber) &&
+    optional(value['presentation'], isString) &&
+    optional(value['limitingFactors'], isStringArray)
+  );
+}
+
+function isContactEstimateShape(value: unknown): boolean {
+  if (!isPlainObject(value)) return false;
+  switch (value['status']) {
+    case 'estimated':
+      return (
+        isFiniteNumber(value['estimatedContactMs']) &&
+        isFiniteNumber(value['confidence']) &&
+        isBoolean(value['ballConfirmed']) &&
+        isBoolean(value['paddleConfirmed'])
+      );
+    case 'abstained':
+      return isString(value['reason']);
+    default:
+      return false;
+  }
+}
+
+function isTemporalPhasesV2Shape(value: unknown): boolean {
+  if (!isPlainObject(value)) return false;
+  switch (value['status']) {
+    case 'abstained':
+      return isString(value['reason']);
+    case 'segmented': {
+      const b = value['boundaries'];
+      return (
+        isPlainObject(b) &&
+        (b['source'] === 'paddle' || b['source'] === 'wrist') &&
+        optional(
+          b['anchorBasis'],
+          basis => basis === 'contact_estimate' || basis === 'event_peak',
+        ) &&
+        optional(b['confidence'], isFiniteNumber) &&
+        nullable(isFiniteNumber)(b['preparationStartMs']) &&
+        isFiniteNumber(b['accelerationStartMs']) &&
+        nullable(isFiniteNumber)(b['contactMs']) &&
+        optional(b['motionPeakMs'], isFiniteNumber) &&
+        isFiniteNumber(b['followThroughEndMs']) &&
+        nullable(isFiniteNumber)(b['recoveryEndMs'])
+      );
+    }
+    default:
+      return false;
+  }
+}
+
+function isEnvelopeVerdictShape(value: unknown): boolean {
+  return (
+    isPlainObject(value) &&
+    isString(value['overall']) &&
+    optional(value['thresholdsVersion'], isString) &&
+    optional(value['provisional'], isBoolean) &&
+    optional(value['dimensions'], Array.isArray) &&
+    optional(value['overallWithCoverage'], isString) &&
+    optional(value['notMeasured'], Array.isArray)
+  );
+}
+
+/**
+ * Structural check for a parsed `local_analysis_record` row. Rows are
+ * heterogeneous (pre-strokeIntent rows exist and later engines add fields),
+ * so every envelope field is optional — but a field that IS present must
+ * hold its declared type, and the parsed value must be a record object at
+ * all. Anything else is a corrupt row: the caller skips it (null) so the
+ * surface shows its honest "not established" fallbacks. Nothing is coerced,
+ * defaulted or repaired — the same object comes back, merely proven to be
+ * what the type says it is.
+ */
+export function asStrokeResultEvidenceRecord(
+  value: unknown,
+): StrokeResultEvidenceRecord | null {
+  if (!isPlainObject(value) || !isString(value['id'])) return null;
+  const wellTyped =
+    optional(value['captureId'], isString) &&
+    optional(value['createdAtIso'], isString) &&
+    optional(value['strokeIntent'], nullable(isStrokeIntentShape)) &&
+    optional(value['result'], nullable(isShotAnalysisShape)) &&
+    optional(value['uncertainty'], nullable(isUncertaintyShape)) &&
+    optional(value['contact'], nullable(isContactEstimateShape)) &&
+    optional(value['temporalPhasesV2'], nullable(isTemporalPhasesV2Shape)) &&
+    optional(value['captureEnvelope'], nullable(isEnvelopeVerdictShape));
+  return wellTyped ? (value as unknown as StrokeResultEvidenceRecord) : null;
+}
+
 export function humanizeToken(value: string): string {
   return value.replace(/_/g, ' ').trim();
 }
