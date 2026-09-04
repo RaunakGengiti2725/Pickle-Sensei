@@ -61,7 +61,8 @@ const dbPremium = (row: Row | undefined): boolean => {
   if (!row) return false;
   const exp = row.expires_at;
   return (
-    row.premium === true && (exp === null || exp === undefined || Date.parse(String(exp)) > Date.now())
+    row.premium === true &&
+    (exp === null || exp === undefined || Date.parse(String(exp)) > Date.now())
   );
 };
 
@@ -118,7 +119,10 @@ Deno.test(
       const stored = sim.entitlementRows.get(TEST_USER_ID);
       assert(stored, "durable row exists");
       assertEquals(stored.premium, true, "row flag is the webhook's (stale verdict dropped)");
-      assert(Date.parse(String(stored.expires_at)) < Date.now(), "…but the row's expires_at has passed");
+      assert(
+        Date.parse(String(stored.expires_at)) < Date.now(),
+        "…but the row's expires_at has passed",
+      );
       assertEquals(sim.entitlementWrites.length, 1, "the sync's older verdict was dropped");
 
       // What GET /v1/me/access says right now for the same persisted row.
@@ -170,7 +174,11 @@ Deno.test(
       assertEquals(first.status, 200);
       const wedged = sim.entitlementRows.get(TEST_USER_ID);
       assert(wedged);
-      assertEquals(Date.parse(String(wedged.verified_at)), farFuture, "candidate stores RC's clock as-is");
+      assertEquals(
+        Date.parse(String(wedged.verified_at)),
+        farFuture,
+        "candidate stores RC's clock as-is",
+      );
 
       // Reality moves on: the subscription lapses and RevenueCat says so with
       // a sane request_date_ms (now).
@@ -180,7 +188,11 @@ Deno.test(
         times: 2,
       });
       const expiration = await sim.h.handler(
-        webhookRequest({ id: "atk5-far-future-expiration", type: "EXPIRATION", app_user_id: TEST_USER_ID }),
+        webhookRequest({
+          id: "atk5-far-future-expiration",
+          type: "EXPIRATION",
+          app_user_id: TEST_USER_ID,
+        }),
       );
       assertEquals(expiration.status, 200, "the webhook is acked as processed");
       sim.h.rpcs["access_state"] = accessRowFor(sim.entitlementRows.get(TEST_USER_ID));
@@ -202,7 +214,11 @@ Deno.test(
           `key (clamp/fallback to the pre-request local clock). repro: RC answers request_date_ms=now+100y once, ` +
           `then EXPIRATION webhook + POST /v1/billing/sync with request_date_ms=now`,
       );
-      assertEquals(body.billing.premium, false, "sync must not keep granting premium from the wedged row");
+      assertEquals(
+        body.billing.premium,
+        false,
+        "sync must not keep granting premium from the wedged row",
+      );
     } finally {
       sim.restore();
     }
@@ -245,7 +261,11 @@ Deno.test(
       assertEquals(later[0].body, { received: true, duplicate: true });
 
       assertEquals(sim.rcCalls(), 1, "only the original subject was verified");
-      assertEquals(sim.h.callsTo(rcFor(OTHER_USER_ID)).length, 0, "the forged subject never reached RC");
+      assertEquals(
+        sim.h.callsTo(rcFor(OTHER_USER_ID)).length,
+        0,
+        "the forged subject never reached RC",
+      );
       assertEquals(sim.entitlementRows.has(OTHER_USER_ID), false, "no row for the forged subject");
       assertEquals(sim.auditRows.size, 1);
       const audit = sim.auditRows.get("atk5-same-id");
@@ -269,36 +289,41 @@ Deno.test(
   async () => {
     const sim = await simulate();
     try {
-      await withEnv({ WEBHOOK_DUPLICATE_WAIT_MS: "200", WEBHOOK_DUPLICATE_POLL_MS: "10" }, async () => {
-        sim.faults.push({
-          match: (m, u) => m === "GET" && u === rcFor(TEST_USER_ID),
-          delayMs: 200,
-          subscriber: activeSubscriber(),
-          times: 1,
-        });
-        const event = { id: "atk5-exact-bound", type: "RENEWAL", app_user_id: TEST_USER_ID };
-        const owner = sim.h.handler(webhookRequest(event));
-        await sleep(5);
-        const loser = sim.h.handler(webhookRequest(event));
-        const [o, l] = await drain([await owner, await loser]);
-        assertEquals(o.status, 200);
-        assertEquals(o.body, { received: true, verified: true });
-        if (l.status === 200) {
-          assertEquals(l.body, { received: true, duplicate: true });
-        } else {
-          assertEquals(l.status, 503, `loser: ${JSON.stringify(l)}`);
-          assertEquals(l.retryAfter, "30");
-          assertEquals(l.body, {
-            error: { message: "Webhook event processing is temporarily unavailable. Please try again." },
+      await withEnv(
+        { WEBHOOK_DUPLICATE_WAIT_MS: "200", WEBHOOK_DUPLICATE_POLL_MS: "10" },
+        async () => {
+          sim.faults.push({
+            match: (m, u) => m === "GET" && u === rcFor(TEST_USER_ID),
+            delayMs: 200,
+            subscriber: activeSubscriber(),
+            times: 1,
           });
-        }
-        assertEquals(sim.rcCalls(), 1);
-        assertEquals(sim.entitlementUpserts(), 1);
-        const redelivery = await drain([await sim.h.handler(webhookRequest(event))]);
-        assertEquals(redelivery[0].body, { received: true, duplicate: true });
-        assertEquals(sim.rcCalls(), 1);
-        assertEquals(sim.auditRows.size, 1);
-      });
+          const event = { id: "atk5-exact-bound", type: "RENEWAL", app_user_id: TEST_USER_ID };
+          const owner = sim.h.handler(webhookRequest(event));
+          await sleep(5);
+          const loser = sim.h.handler(webhookRequest(event));
+          const [o, l] = await drain([await owner, await loser]);
+          assertEquals(o.status, 200);
+          assertEquals(o.body, { received: true, verified: true });
+          if (l.status === 200) {
+            assertEquals(l.body, { received: true, duplicate: true });
+          } else {
+            assertEquals(l.status, 503, `loser: ${JSON.stringify(l)}`);
+            assertEquals(l.retryAfter, "30");
+            assertEquals(l.body, {
+              error: {
+                message: "Webhook event processing is temporarily unavailable. Please try again.",
+              },
+            });
+          }
+          assertEquals(sim.rcCalls(), 1);
+          assertEquals(sim.entitlementUpserts(), 1);
+          const redelivery = await drain([await sim.h.handler(webhookRequest(event))]);
+          assertEquals(redelivery[0].body, { received: true, duplicate: true });
+          assertEquals(sim.rcCalls(), 1);
+          assertEquals(sim.auditRows.size, 1);
+        },
+      );
     } finally {
       sim.restore();
     }
@@ -310,35 +335,46 @@ Deno.test(
   async () => {
     const sim = await simulate();
     try {
-      await withEnv({ WEBHOOK_DUPLICATE_WAIT_MS: "400", WEBHOOK_DUPLICATE_POLL_MS: "10" }, async () => {
-        sim.faults.push({
-          match: (m, u) => m === "GET" && u === rcFor(TEST_USER_ID),
-          delayMs: 100,
-          subscriber: activeSubscriber(),
-          times: 2,
-        });
-        sim.faults.push({
-          match: (m, u) => m === "POST" && u.startsWith(ENTITLEMENTS_URL),
-          ...dbUnavailable,
-          times: 1,
-        });
-        const event = { id: "atk5-crash-before-persist", type: "RENEWAL", app_user_id: TEST_USER_ID };
-        const owner = sim.h.handler(webhookRequest(event));
-        await sleep(5);
-        const loser = sim.h.handler(webhookRequest(event));
-        const [o, l] = await drain([await owner, await loser]);
-        assertEquals(o.status, 503, `owner: ${JSON.stringify(o)}`);
-        assertEquals(l.status, 503, `loser must not ack an unpersisted verdict: ${JSON.stringify(l)}`);
-        assert(l.body.duplicate === undefined);
-        assertEquals(sim.auditRows.size, 0, "reservation released");
-        assertEquals(sim.entitlementWrites.length, 0);
+      await withEnv(
+        { WEBHOOK_DUPLICATE_WAIT_MS: "400", WEBHOOK_DUPLICATE_POLL_MS: "10" },
+        async () => {
+          sim.faults.push({
+            match: (m, u) => m === "GET" && u === rcFor(TEST_USER_ID),
+            delayMs: 100,
+            subscriber: activeSubscriber(),
+            times: 2,
+          });
+          sim.faults.push({
+            match: (m, u) => m === "POST" && u.startsWith(ENTITLEMENTS_URL),
+            ...dbUnavailable,
+            times: 1,
+          });
+          const event = {
+            id: "atk5-crash-before-persist",
+            type: "RENEWAL",
+            app_user_id: TEST_USER_ID,
+          };
+          const owner = sim.h.handler(webhookRequest(event));
+          await sleep(5);
+          const loser = sim.h.handler(webhookRequest(event));
+          const [o, l] = await drain([await owner, await loser]);
+          assertEquals(o.status, 503, `owner: ${JSON.stringify(o)}`);
+          assertEquals(
+            l.status,
+            503,
+            `loser must not ack an unpersisted verdict: ${JSON.stringify(l)}`,
+          );
+          assert(l.body.duplicate === undefined);
+          assertEquals(sim.auditRows.size, 0, "reservation released");
+          assertEquals(sim.entitlementWrites.length, 0);
 
-        const redelivery = await drain([await sim.h.handler(webhookRequest(event))]);
-        assertEquals(redelivery[0].body, { received: true, verified: true });
-        assertEquals(sim.rcCalls(), 2, "one RC call per attempt");
-        assertEquals(sim.entitlementWrites.length, 1);
-        assertEquals(sim.auditRows.size, 1);
-      });
+          const redelivery = await drain([await sim.h.handler(webhookRequest(event))]);
+          assertEquals(redelivery[0].body, { received: true, verified: true });
+          assertEquals(sim.rcCalls(), 2, "one RC call per attempt");
+          assertEquals(sim.entitlementWrites.length, 1);
+          assertEquals(sim.auditRows.size, 1);
+        },
+      );
     } finally {
       sim.restore();
     }
@@ -350,42 +386,57 @@ Deno.test(
   async () => {
     const sim = await simulate();
     try {
-      await withEnv({ WEBHOOK_DUPLICATE_WAIT_MS: "150", WEBHOOK_DUPLICATE_POLL_MS: "10" }, async () => {
-        sim.faults.push({
-          match: (m, u) => m === "GET" && u === rcFor(TEST_USER_ID),
-          subscriber: activeSubscriber(),
-          times: 3,
-        });
-        sim.faults.push({
-          match: (m, u) => m === "PATCH" && u.startsWith(EVENTS_URL),
-          ...dbUnavailable,
-          times: 1,
-        });
-        const event = { id: "atk5-crash-before-complete", type: "RENEWAL", app_user_id: TEST_USER_ID };
-        const [o] = await drain([await sim.h.handler(webhookRequest(event))]);
-        assertEquals(o.status, 503);
-        assertEquals(o.retryAfter, "30");
-        assertEquals(sim.entitlementWrites.length, 1, "verdict IS durable");
-        const row = sim.auditRows.get(event.id);
-        assert(row);
-        assertEquals(row.processed_at, null, "still in flight");
+      await withEnv(
+        { WEBHOOK_DUPLICATE_WAIT_MS: "150", WEBHOOK_DUPLICATE_POLL_MS: "10" },
+        async () => {
+          sim.faults.push({
+            match: (m, u) => m === "GET" && u === rcFor(TEST_USER_ID),
+            subscriber: activeSubscriber(),
+            times: 3,
+          });
+          sim.faults.push({
+            match: (m, u) => m === "PATCH" && u.startsWith(EVENTS_URL),
+            ...dbUnavailable,
+            times: 1,
+          });
+          const event = {
+            id: "atk5-crash-before-complete",
+            type: "RENEWAL",
+            app_user_id: TEST_USER_ID,
+          };
+          const [o] = await drain([await sim.h.handler(webhookRequest(event))]);
+          assertEquals(o.status, 503);
+          assertEquals(o.retryAfter, "30");
+          assertEquals(sim.entitlementWrites.length, 1, "verdict IS durable");
+          const row = sim.auditRows.get(event.id);
+          assert(row);
+          assertEquals(row.processed_at, null, "still in flight");
 
-        const [inLease] = await drain([await sim.h.handler(webhookRequest(event))]);
-        assertEquals(inLease.status, 503, `redelivery inside the lease: ${JSON.stringify(inLease)}`);
-        assertEquals(inLease.retryAfter, "30");
-        assertEquals(sim.rcCalls(), 1, "no re-verification while the lease is honoured");
-        assertEquals(sim.auditUpserts(), 2);
-        assertEquals(sim.auditRows.size, 1, "no second audit row");
+          const [inLease] = await drain([await sim.h.handler(webhookRequest(event))]);
+          assertEquals(
+            inLease.status,
+            503,
+            `redelivery inside the lease: ${JSON.stringify(inLease)}`,
+          );
+          assertEquals(inLease.retryAfter, "30");
+          assertEquals(sim.rcCalls(), 1, "no re-verification while the lease is honoured");
+          assertEquals(sim.auditUpserts(), 2);
+          assertEquals(sim.auditRows.size, 1, "no second audit row");
 
-        // lease lapses (isolate that owned it is gone)
-        row.claimed_at = new Date(Date.now() - 6 * 60_000).toISOString();
-        const [afterLease] = await drain([await sim.h.handler(webhookRequest(event))]);
-        assertEquals(afterLease.body, { received: true, verified: true });
-        assertEquals(sim.rcCalls(), 2, "exactly one re-verification after reclaim");
-        assertEquals(sim.entitlementWrites.length, 2, "same truth re-persisted (equal/newer request_date)");
-        assertEquals(sim.auditRows.size, 1);
-        assert(sim.auditRows.get(event.id)?.processed_at, "finally marked processed");
-      });
+          // lease lapses (isolate that owned it is gone)
+          row.claimed_at = new Date(Date.now() - 6 * 60_000).toISOString();
+          const [afterLease] = await drain([await sim.h.handler(webhookRequest(event))]);
+          assertEquals(afterLease.body, { received: true, verified: true });
+          assertEquals(sim.rcCalls(), 2, "exactly one re-verification after reclaim");
+          assertEquals(
+            sim.entitlementWrites.length,
+            2,
+            "same truth re-persisted (equal/newer request_date)",
+          );
+          assertEquals(sim.auditRows.size, 1);
+          assert(sim.auditRows.get(event.id)?.processed_at, "finally marked processed");
+        },
+      );
     } finally {
       sim.restore();
     }
@@ -438,31 +489,37 @@ Deno.test(
   async () => {
     const sim = await simulate();
     try {
-      await withEnv({ WEBHOOK_DUPLICATE_WAIT_MS: "150", WEBHOOK_DUPLICATE_POLL_MS: "10" }, async () => {
-        sim.faults.push({
-          match: (m, u) => m === "GET" && u === rcFor(TEST_USER_ID),
-          delayMs: 60,
-          subscriber: activeSubscriber(),
-          times: 1,
-        });
-        sim.faults.push({
-          match: (m, u) => m === "GET" && u.startsWith(EVENTS_URL),
-          ...dbUnavailable,
-          times: 1,
-        });
-        const event = { id: "atk5-poll-retry", type: "RENEWAL", app_user_id: TEST_USER_ID };
-        const owner = sim.h.handler(webhookRequest(event));
-        await sleep(5);
-        const t0 = Date.now();
-        const loser = sim.h.handler(webhookRequest(event));
-        const [o, l] = await drain([await owner, await loser]);
-        const elapsed = Date.now() - t0;
-        assertEquals(o.body, { received: true, verified: true });
-        assertEquals(l.body, { received: true, duplicate: true });
-        assert(elapsed >= 900, `postgrest-js retried the 503 GET after ~1 s (elapsed ${elapsed} ms)`);
-        assertEquals(sim.rcCalls(), 1);
-        assertEquals(sim.auditPatches(), 1, "no reclaim PATCH");
-      });
+      await withEnv(
+        { WEBHOOK_DUPLICATE_WAIT_MS: "150", WEBHOOK_DUPLICATE_POLL_MS: "10" },
+        async () => {
+          sim.faults.push({
+            match: (m, u) => m === "GET" && u === rcFor(TEST_USER_ID),
+            delayMs: 60,
+            subscriber: activeSubscriber(),
+            times: 1,
+          });
+          sim.faults.push({
+            match: (m, u) => m === "GET" && u.startsWith(EVENTS_URL),
+            ...dbUnavailable,
+            times: 1,
+          });
+          const event = { id: "atk5-poll-retry", type: "RENEWAL", app_user_id: TEST_USER_ID };
+          const owner = sim.h.handler(webhookRequest(event));
+          await sleep(5);
+          const t0 = Date.now();
+          const loser = sim.h.handler(webhookRequest(event));
+          const [o, l] = await drain([await owner, await loser]);
+          const elapsed = Date.now() - t0;
+          assertEquals(o.body, { received: true, verified: true });
+          assertEquals(l.body, { received: true, duplicate: true });
+          assert(
+            elapsed >= 900,
+            `postgrest-js retried the 503 GET after ~1 s (elapsed ${elapsed} ms)`,
+          );
+          assertEquals(sim.rcCalls(), 1);
+          assertEquals(sim.auditPatches(), 1, "no reclaim PATCH");
+        },
+      );
     } finally {
       sim.restore();
     }
@@ -527,7 +584,10 @@ Deno.test(
       const write = sim.entitlementWrites.at(-1);
       assert(write);
       const verifiedAt = Date.parse(String(write.verified_at));
-      assert(verifiedAt >= before && verifiedAt <= Date.now(), "string value ignored → local fallback");
+      assert(
+        verifiedAt >= before && verifiedAt <= Date.now(),
+        "string value ignored → local fallback",
+      );
       assertEquals(sim.entitlementWrites.length, variants.length + 1);
     } finally {
       sim.restore();
@@ -595,7 +655,11 @@ Deno.test(
       });
       sim.h.rpcs["access_state"] = accessRowFor(undefined);
       const hook = sim.h.handler(
-        webhookRequest({ id: "atk5-hook-first-lands-last", type: "RENEWAL", app_user_id: TEST_USER_ID }),
+        webhookRequest({
+          id: "atk5-hook-first-lands-last",
+          type: "RENEWAL",
+          app_user_id: TEST_USER_ID,
+        }),
       );
       await sleep(20);
       const syncRes = await sim.h.handler(
