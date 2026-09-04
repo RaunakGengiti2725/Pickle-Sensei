@@ -155,7 +155,16 @@ for (const [label, runId] of [
 }
 
 // ─────────────────── B. corrupt / huge comparator input ───────────────────
-const cand = readJson<Summary>(join("/tmp/attack-pass3/s5/run", "cand.json"));
+// Fresh full candidate for this commit (reuses S5's if it is still around).
+const candPath = existsSync(join(ensureOutDir(), "s5/run/cand.json"))
+  ? join(ensureOutDir(), "s5/run/cand.json")
+  : join(outDir, "run/cand.json");
+if (!existsSync(candPath)) {
+  const gen = cli(["run", "--out-dir", join(outDir, "run"), "--run-id", "cand"]);
+  if (gen.exitCode !== 0)
+    throw new Error(`candidate generation failed (${gen.exitCode}): ${gen.stderr}`);
+}
+const cand = readJson<Summary>(candPath);
 const guardedKey = Object.entries(tolerances.metrics).find(
   ([key, tol]) => tol.direction !== "informational" && typeof baseline.metrics[key] === "number",
 )![0];
