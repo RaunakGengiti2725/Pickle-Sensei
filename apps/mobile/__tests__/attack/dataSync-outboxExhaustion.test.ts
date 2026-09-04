@@ -233,7 +233,7 @@ describe('S1 — whole-batch ApiError(413 payload.too_large) on 50 valid rows', 
     });
   });
 
-  test('interleaving: a fresh valid row queued between failing drains is exhausted with the rest, never synced alone', async () => {
+  test('interleaving: a row queued mid-outage keeps its own attempts and syncs after the heal; the 49 exhausted rows never do', async () => {
     const random = mulberry32(SEED + 1);
     await queueShots(49, random);
     let mode: 'fail' | 'accept' = 'fail';
