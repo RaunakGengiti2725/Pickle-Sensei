@@ -266,8 +266,9 @@ function overlapCount(rows: LaneRow[]): number {
       rows.some(
         (b) => b !== a && a.serverStartMs < b.serverEndMs && b.serverStartMs < a.serverEndMs,
       )
-    )
+    ) {
       n++;
+    }
   }
   return n;
 }

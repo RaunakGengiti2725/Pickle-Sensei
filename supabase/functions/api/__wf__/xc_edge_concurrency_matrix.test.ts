@@ -221,7 +221,12 @@ Deno.test(
           const probe = await Promise.all(
             tokens.map((token, i) =>
               timed(rows, r, i, "me.access", () =>
-                h.handler(edgeRequest("GET", "/v1/me/access", { token, ip: ip(r, i) })),
+                h.handler(
+                  edgeRequest("GET", "/v1/me/access", {
+                    token,
+                    ip: ip(r, i),
+                  }),
+                ),
               ),
             ),
           );
@@ -316,7 +321,9 @@ Deno.test(
         inv(invariants, "no 5xx", no5xx(rows).length === 0, `${no5xx(rows).length} 5xx`);
       },
     );
-    for (const i of report.invariants) assert(i.holds, `${i.name}: ${i.detail}`);
+    for (const i of report.invariants) {
+      assert(i.holds, `${i.name}: ${i.detail}`);
+    }
   },
 );
 
@@ -415,7 +422,9 @@ Deno.test(
         inv(invariants, "no 5xx", no5xx(rows).length === 0, `${no5xx(rows).length} 5xx`);
       },
     );
-    for (const i of report.invariants) assert(i.holds, `${i.name}: ${i.detail}`);
+    for (const i of report.invariants) {
+      assert(i.holds, `${i.name}: ${i.detail}`);
+    }
   },
 );
 
@@ -499,7 +508,9 @@ Deno.test(
         inv(invariants, "no 5xx", no5xx(rows).length === 0, `${no5xx(rows).length} 5xx`);
       },
     );
-    for (const i of report.invariants) assert(i.holds, `${i.name}: ${i.detail}`);
+    for (const i of report.invariants) {
+      assert(i.holds, `${i.name}: ${i.detail}`);
+    }
   },
 );
 
@@ -605,7 +616,9 @@ Deno.test(
         );
       },
     );
-    for (const i of report.invariants) assert(i.holds, `${i.name}: ${i.detail}`);
+    for (const i of report.invariants) {
+      assert(i.holds, `${i.name}: ${i.detail}`);
+    }
   },
 );
 
@@ -728,7 +741,9 @@ Deno.test(
         inv(invariants, "no 5xx", no5xx(rows).length === 0, `${no5xx(rows).length} 5xx`);
       },
     );
-    for (const i of report.invariants) assert(i.holds, `${i.name}: ${i.detail}`);
+    for (const i of report.invariants) {
+      assert(i.holds, `${i.name}: ${i.detail}`);
+    }
   },
 );
 
@@ -840,7 +855,9 @@ Deno.test(
         observations.rounds = XC_ROUNDS;
       },
     );
-    for (const i of report.invariants) assert(i.holds, `${i.name}: ${i.detail}`);
+    for (const i of report.invariants) {
+      assert(i.holds, `${i.name}: ${i.detail}`);
+    }
   },
 );
 
@@ -990,7 +1007,9 @@ Deno.test(
         inv(invariants, "no 5xx", no5xx(rows).length === 0, `${no5xx(rows).length} 5xx`);
       },
     );
-    for (const i of report.invariants) assert(i.holds, `${i.name}: ${i.detail}`);
+    for (const i of report.invariants) {
+      assert(i.holds, `${i.name}: ${i.detail}`);
+    }
   },
 );
 
@@ -1097,7 +1116,9 @@ Deno.test(
         inv(invariants, "no 5xx", no5xx(rows).length === 0, `${no5xx(rows).length} 5xx`);
       },
     );
-    for (const i of report.invariants) assert(i.holds, `${i.name}: ${i.detail}`);
+    for (const i of report.invariants) {
+      assert(i.holds, `${i.name}: ${i.detail}`);
+    }
     // Losers' verdict — pinned separately in S5b.
   },
 );
@@ -1168,8 +1189,9 @@ Deno.test(
           );
           const roundCodes: string[] = [];
           for (const res of results) {
-            for (const x of (res.body.rejected ?? []) as Array<{ code: string }>)
+            for (const x of (res.body.rejected ?? []) as Array<{ code: string }>) {
               roundCodes.push(x.code);
+            }
           }
           codes.push(...roundCodes);
           if (roundCodes.length > 0) roundsWithLosers += 1;
@@ -1204,7 +1226,9 @@ Deno.test(
         );
       },
     );
-    for (const i of report.invariants) assert(i.holds, `${i.name}: ${i.detail}`);
+    for (const i of report.invariants) {
+      assert(i.holds, `${i.name}: ${i.detail}`);
+    }
   },
 );
 
@@ -1312,7 +1336,9 @@ Deno.test(
         inv(invariants, "no 5xx", no5xx(rows).length === 0, `${no5xx(rows).length} 5xx`);
       },
     );
-    for (const i of report.invariants) assert(i.holds, `${i.name}: ${i.detail}`);
+    for (const i of report.invariants) {
+      assert(i.holds, `${i.name}: ${i.detail}`);
+    }
   },
 );
 
@@ -1442,7 +1468,9 @@ Deno.test(
         inv(invariants, "no 5xx", no5xx(rows).length === 0, `${no5xx(rows).length} 5xx`);
       },
     );
-    for (const i of report.invariants) assert(i.holds, `${i.name}: ${i.detail}`);
+    for (const i of report.invariants) {
+      assert(i.holds, `${i.name}: ${i.detail}`);
+    }
   },
 );
 
@@ -1476,7 +1504,9 @@ Deno.test(
         );
       },
     );
-    for (const i of report.invariants) assert(i.holds, `${i.name}: ${i.detail}`);
+    for (const i of report.invariants) {
+      assert(i.holds, `${i.name}: ${i.detail}`);
+    }
   },
 );
 
@@ -1488,8 +1518,9 @@ Deno.test("xc: write matrix.json", async () => {
   const dir = outDir();
   const files: string[] = [];
   for await (const entry of Deno.readDir(dir)) {
-    if (entry.isFile && entry.name.startsWith("s") && entry.name.endsWith(".json"))
+    if (entry.isFile && entry.name.startsWith("s") && entry.name.endsWith(".json")) {
       files.push(entry.name);
+    }
   }
   files.sort();
   const matrix = [];

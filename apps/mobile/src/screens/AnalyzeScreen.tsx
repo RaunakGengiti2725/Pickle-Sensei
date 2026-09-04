@@ -878,6 +878,9 @@ export function AnalyzeScreen() {
         } catch {
           practiceSet = null;
         }
+        // The player may have left while the planner read was pending; a run
+        // started now would spend a rating nobody is waiting on.
+        if (abandoned.current) return;
         const sessionId = practiceSet?.sessionId ?? null;
         ratingLedgerTouched.current = true;
         const analysisRun = runCaptureAnalysis({

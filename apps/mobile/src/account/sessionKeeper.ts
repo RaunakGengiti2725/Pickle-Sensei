@@ -39,6 +39,14 @@ export interface SessionKeeperInput {
 const REFRESH_LEAD_MS = 60_000;
 /** On foreground, a bearer with less life than this is refreshed at once. */
 const FOREGROUND_LEAD_MS = 5 * 60_000;
+/**
+ * Floor between two successful rotations. A bearer whose reported expiry is
+ * already inside the refresh lead (or in the past, when the phone clock lags
+ * the server's) would otherwise re-arm at MIN_DELAY_MS and hammer the refresh
+ * route once a second; the server still honours the bearer by its own clock,
+ * and a route that does reject it calls `refreshSessionNow()`.
+ */
+export const MIN_ROTATION_GAP_MS = 30_000;
 const MIN_DELAY_MS = 1_000;
 const RETRY_BASE_MS = 5_000;
 const RETRY_MAX_MS = 5 * 60_000;
@@ -97,8 +105,9 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
     );
   };
 
-  const scheduleAheadOfExpiry = () => {
-    schedule((bearerExpiresAtMs ?? now()) - now() - REFRESH_LEAD_MS);
+  const scheduleAheadOfExpiry = (floorMs: number) => {
+    const untilExpiry = (bearerExpiresAtMs ?? now()) - now();
+    schedule(Math.max(untilExpiry - REFRESH_LEAD_MS, floorMs));
   };
 
   const refresh = async () => {
@@ -114,7 +123,7 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
       bearerExpiresAtMs = tokens.bearerExpiresAtMs;
       failedAttempts = 0;
       await input.onRotated(tokens);
-      if (live()) scheduleAheadOfExpiry();
+      if (live()) scheduleAheadOfExpiry(MIN_ROTATION_GAP_MS);
     } catch (error) {
       if (!live()) return;
       if (error instanceof SessionRefreshError && !error.retryable) {
@@ -148,6 +157,6 @@ export function startSessionKeeper(input: SessionKeeperInput): void {
   if (bearerExpiresAtMs === null) {
     void refresh();
   } else {
-    scheduleAheadOfExpiry();
+    scheduleAheadOfExpiry(MIN_DELAY_MS);
   }
 }

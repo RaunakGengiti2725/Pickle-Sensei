@@ -80,7 +80,10 @@ refreshToken, email, displayName}` in the device Keychain/Keystore via
   Google alike, no provider SDK): the user is signed in from the record, the
   refresh token is exchanged (launch waits ≤ 8s, then proceeds signed-in with
   local data while the refresh continues), and `sessionKeeper.ts` rotates
-  the bearer 60s before expiry, retries transient failures with backoff, and
+  the bearer 60s before expiry (never sooner than 30s after the previous
+  rotation — a short-lived or clock-skewed `expiresAt` must not become a
+  once-a-second refresh storm; `__tests__/sessionKeeperShortLife.test.ts`),
+  retries transient failures with backoff, and
   re-checks on every foreground (timers don't fire while suspended). The ONE
   implicit sign-out is the server refusing the refresh token (401/403). The
   legacy Google silent-restore flag is only a fallback for devices that
