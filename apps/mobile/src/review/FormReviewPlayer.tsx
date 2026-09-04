@@ -11,6 +11,7 @@ import {
   Text,
   View,
   useWindowDimensions,
+  type AccessibilityActionEvent,
   type GestureResponderEvent,
   type LayoutChangeEvent,
 } from 'react-native';
@@ -112,6 +113,13 @@ const TRACK_HEIGHT = 32;
 const TRACK_BAND_HEIGHT = 4;
 const STOP_MARKER = 10;
 const PLAYHEAD_KNOB = 14;
+/** VoiceOver swipe-up/down moves the playhead by 1/20th of the timeline
+ * (the same step as the Result scrubber). */
+const SCRUB_STEPS = 20;
+const SCRUB_ACTIONS = [
+  { name: 'increment' as const },
+  { name: 'decrement' as const },
+];
 /** The cue reserves three body lines (every cue is ≤ 120 characters) so the
  * stage never resizes when the shown stop changes. */
 const CUE_MIN_HEIGHT = type.body.lineHeight * 3;
@@ -327,6 +335,21 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
   const endScrub = () => {
     scrubbingRef.current = false;
   };
+  /** Screen-reader adjust: one step along the clip, clamped to its extent. */
+  const onTimelineAccessibilityAction = (event: AccessibilityActionEvent) => {
+    if (durationMs <= 0) return;
+    const step = durationMs / SCRUB_STEPS;
+    switch (event.nativeEvent.actionName) {
+      case 'increment':
+        jumpTo(Math.min(durationMs, playheadRef.current + step), null);
+        return;
+      case 'decrement':
+        jumpTo(Math.max(0, playheadRef.current - step), null);
+        return;
+      default:
+        return;
+    }
+  };
 
   // ── Derived frame state ────────────────────────────────────────────────
   const videoSize = useMemo(() => {
@@ -525,8 +548,17 @@ export function FormReviewPlayer(props: FormReviewPlayerProps) {
       <View style={styles.timelineRow}>
         <View
           accessible
+          accessibilityRole="adjustable"
           accessibilityLabel="Review timeline"
-          accessibilityHint="Drag to move through the clip; dots mark measured checkpoints"
+          accessibilityHint="Drag, or swipe up and down, to move through the clip; dots mark measured checkpoints"
+          accessibilityValue={{
+            min: 0,
+            max: Math.round(durationMs),
+            now: Math.round(playheadMs),
+            text: formatClock(playheadMs),
+          }}
+          accessibilityActions={SCRUB_ACTIONS}
+          onAccessibilityAction={onTimelineAccessibilityAction}
           onLayout={event => setTrackWidth(event.nativeEvent.layout.width)}
           onStartShouldSetResponder={() => true}
           onMoveShouldSetResponder={() => true}
