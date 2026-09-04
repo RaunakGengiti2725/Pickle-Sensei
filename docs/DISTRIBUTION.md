@@ -93,7 +93,12 @@ key passed via `-authenticationKey…` xcargs. The export step re-signs with the
 a replacement profile because an expired profile still owns the canonical
 name. Cloud-managed signing at export is deliberately not used because it
 requires an Admin ASC key, and this repo's key is App Manager on purpose.
-First upload (build 1.0/1) shipped 2026-08-30 this way.
+Build history (internal TestFlight, no git tags — see `docs/RELEASE_OPERATIONS.md`
+§1): build 1.0/1 shipped 2026-08-30 this way; build 1.0/3 was validated and
+attached to version 1.0 on 2026-09-03 (`docs/APP_STORE_SUBMISSION.md` §1 is the
+single source for the current build; `infra/release/release-manifest.json`
+`versionScheme.lastShippedBuildNumber` mirrors it and `pnpm release:check`
+asserts they agree).
 
 `beta` uploads to **internal testing only** (`distribute_external: false`);
 external TestFlight distribution requires App Review and a conscious

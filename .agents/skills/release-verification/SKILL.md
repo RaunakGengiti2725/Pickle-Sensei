@@ -16,15 +16,33 @@ and `docs/RELEASE_PLAN_V1.md` for operations).
 1. Confirm the release candidate commit (`git rev-parse HEAD`) is pushed and
    is what the PR/branch under review contains.
 2. Linux — everything, not just the PR tier:
+
    ```bash
    set -o pipefail
    scripts/verify-cloud.sh --tier full 2>&1 | tee /tmp/verify-full.log; echo "exit=${PIPESTATUS[0]}"
    ```
-   Adds `admin` (Vite production build of `apps/admin-web`) and `release`
-   (`node tools/release/check-release-manifest.mjs`: `infra/release/release-manifest.json`
-   agrees with the committed iOS version/build numbers, monitoring lines from
-   RELEASE_PLAN_V1 §6 present, every irreversible action flagged
-   `requiresHumanAuthorization`, no real staging/prod origin committed early).
+
+   Adds `admin` (Vite production build of `apps/admin-web`) and `release`,
+   which runs BOTH Linux release gates and fails if either fails:
+   - `node tools/release/check-release-manifest.mjs` (`pnpm release:check`):
+     `infra/release/release-manifest.json` agrees with the committed iOS
+     version/build floor, `versionScheme.lastShippedBuildNumber` matches
+     `docs/APP_STORE_SUBMISSION.md` §1, `environments.production.apiOrigin`
+     and `appStoreId` equal `API_BASE_URL` / `APP_STORE_ID` in
+     `apps/mobile/src/config/runtimeConfig.ts`, monitoring lines from
+     RELEASE_PLAN_V1 §6 present, every irreversible action flagged
+     `requiresHumanAuthorization`.
+   - `(cd apps/mobile && npm run check:distribution)`: iOS distribution
+     preconditions (pbxproj identity, usage strings, ATS, privacy manifest,
+     lockfiles, credential-free lanes).
+
+   Release-stage evidence is `artifacts/verify-cloud/<run>/release.log` plus
+   the `release` row of `summary.json`; to re-run just this stage:
+
+   ```bash
+   scripts/verify-cloud.sh --only release; echo "exit=$?"
+   ```
+
 3. Apple — the real app build + launch + Vision path on the M4 runner
    (see `macos-verification`):
    ```bash
@@ -77,4 +95,7 @@ sentence "No release action was performed."
   go-ahead in the session and are performed by the human unless told
   otherwise.
 - Enabling Family Sharing, Made for Kids, or external TestFlight testing.
-- Editing `release-manifest.json` origins to "make the check pass".
+- Editing `release-manifest.json` origins, `appStoreId`, or
+  `lastShippedBuildNumber` to "make the check pass" — the manifest mirrors
+  `runtimeConfig.ts` and `docs/APP_STORE_SUBMISSION.md` §1; fix the source
+  of truth or the dossier, never the mirror alone.

@@ -27,15 +27,29 @@ One scheme across iOS, Android, and backend images; the release manifest
   - PATCH: fix-forward releases with no behavior change beyond the fix.
   - Current: `1.0` (two-component form is accepted for the pre-release line;
     the first tagged release normalizes to `1.0.0`).
-- **Build number** — iOS `CURRENT_PROJECT_VERSION`, Android `versionCode`:
-  a monotonically increasing integer, never reused, never reset when the
-  marketing version changes. TestFlight uploads bump it via
-  `latest_testflight_build_number + 1` in the `beta` lane (already wired);
+- **Build number** — assigned by fastlane, not by the committed project. The
+  `beta` and `release` lanes archive with
+  `CURRENT_PROJECT_VERSION = latest_testflight_build_number + 1` (xcargs), so
+  the shipped number is monotonically increasing across App Store Connect,
+  never reused, never reset when the marketing version changes. The committed
+  iOS `CURRENT_PROJECT_VERSION` / Android `versionCode` (`1`) is a **floor**
+  that never ships through those lanes; the manifest records it as
+  `versionScheme.buildNumber` and records the last build actually uploaded as
+  `versionScheme.lastShippedBuildNumber` (currently `3`, from
+  `docs/APP_STORE_SUBMISSION.md` §1). `pnpm release:check` asserts the floor
+  matches both projects, that it is `<= lastShippedBuildNumber`, and that
+  §1 of the dossier records that build. Bump `lastShippedBuildNumber` (and
+  the dossier) after every upload. A manual `fastlane ios build` without
+  `build_number` archives the committed floor — never upload such an archive.
   Android bumps are manual until an Android pipeline exists.
-- **Git tags** — every store-submitted or TestFlight-external build is built
-  from a tag `v<MAJOR.MINOR.PATCH>-build.<BUILD>` on an audited SHA (the RC
-  record pins the SHA; the tag must match it). Internal TestFlight builds
-  record the SHA in the build notes but do not require a tag.
+- **Git tags** — the only shipping state so far is **internal TestFlight**
+  (builds 1 and 3 of 1.0); internal builds record the SHA in the build notes
+  and do **not** require a tag, so the repository has no release tags yet
+  (`git ls-remote --tags origin` is empty by design). Every store-submitted or
+  TestFlight-external build is built from a tag
+  `v<MAJOR.MINOR.PATCH>-build.<BUILD>` on an audited SHA (the RC record pins
+  the SHA; the tag must match it); the first such tag is created by the
+  release owner at that GO decision, not before.
 - **Backend images** — tagged with the git SHA (existing convention,
   RELEASE_PLAN_V1 §2). The release manifest records which image SHA pairs
   with which mobile version.
@@ -45,29 +59,38 @@ One scheme across iOS, Android, and backend images; the release manifest
 Three environments; no shared state between them. Encoded in the manifest
 under `environments`.
 
-| Aspect              | development                                                            | staging                                     | production                                              |
-| ------------------- | ---------------------------------------------------------------------- | ------------------------------------------- | ------------------------------------------------------- |
-| API origin          | local / none (`apiBaseUrl` null)                                       | staging origin (TBD, not yet provisioned)   | production origin (TBD, not yet provisioned)            |
-| Database            | local docker-compose Postgres                                          | staging DB, migration rehearsals here first | production DB, forward-fix only (§4 of RELEASE_PLAN_V1) |
-| Media bucket        | local / none                                                           | staging bucket                              | production bucket                                       |
-| Mobile build config | `runtimeConfig.ts` defaults (all null → explicit not-configured state) | staging values injected at build time       | production values injected at build time                |
-| Consent records     | synthetic only                                                         | synthetic + team accounts                   | real user consent — protected, append-only              |
+| Aspect              | development                                                            | staging                                     | production                                                              |
+| ------------------- | ---------------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------- |
+| API origin          | local / none (`apiBaseUrl` null)                                       | staging origin (TBD, not yet provisioned)   | `https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api` (committed) |
+| Database            | local docker-compose Postgres                                          | staging DB, migration rehearsals here first | production DB, forward-fix only (§4 of RELEASE_PLAN_V1)                 |
+| Media bucket        | local / none                                                           | staging bucket (TBD)                        | none — video never leaves the device                                    |
+| Mobile build config | `runtimeConfig.ts` with `API_BASE_URL` nulled locally (not-configured) | staging values injected at build time       | committed public values in `runtimeConfig.ts`                           |
+| Consent records     | synthetic only                                                         | synthetic + team accounts                   | real user consent — protected, append-only                              |
 
 Rules:
 
-- `apps/mobile/src/config/runtimeConfig.ts` values are intentionally null in
-  the repo. A staging or production build sets them at build time; a build
-  whose `apiBaseUrl` is null talks to no backend. Never commit real origins
-  or keys; the manifest holds only environment _names_ and expectations, not
-  secrets.
+- `apps/mobile/src/config/runtimeConfig.ts` commits the **public**
+  production configuration: `API_BASE_URL` (the Supabase Edge Function
+  origin above), `APP_STORE_ID` (`6806918402`), RevenueCat public SDK keys
+  and OAuth client ids. None of these are secrets; the shipping build is the
+  default build. Secrets (service-role keys, App Store Connect API keys,
+  RevenueCat secret key, Apple `.p8`) are never committed — they live in
+  Supabase secrets or on the build Mac as env vars (§4).
+- The manifest `environments.production.apiOrigin` and top-level
+  `appStoreId` MUST equal the committed `API_BASE_URL` / `APP_STORE_ID`;
+  `pnpm release:check` reads `runtimeConfig.ts` and fails if `API_BASE_URL`
+  is null, if the two origins differ, or if the App Store ids differ.
+- A build whose `apiBaseUrl` is null talks to no backend (explicit
+  not-configured state, used for local-first development); such a build is
+  never uploaded.
 - A binary built with staging config must never be promoted to production
   distribution; rebuild from the tag with production config instead.
 - Feature-flag state per environment must match the RC record on every
   deploy (flag-drift check, RELEASE_PLAN_V1 §6 — encoded as a monitoring
   hook in the manifest).
-- Staging and production origins/buckets are not yet provisioned —
-  BLOCKED_EXTERNAL; the manifest marks them `"tbd"` and `release:check`
-  asserts no production URL is committed prematurely.
+- Staging is not yet provisioned — BLOCKED_EXTERNAL; the manifest marks its
+  origin/bucket `"tbd"` and `release:check` accepts `"tbd"` or an https
+  origin distinct from production.
 
 ## 3. Privacy disclosures (App Store) & usage descriptions
 
@@ -84,20 +107,29 @@ Usage descriptions shipped in `apps/mobile/ios/PickleSensei/Info.plist`
 Android parallels live in the app manifest (CAMERA / RECORD_AUDIO; imports
 use the system picker).
 
-App Privacy ("nutrition label") answers for App Store Connect — DRAFT, to be
-confirmed by a human before submission (the questionnaire is submitted in
-App Store Connect, not in this repo):
+App Privacy ("nutrition label") answers for App Store Connect — the
+authoritative row-by-row questionnaire is `docs/APP_STORE_SUBMISSION.md`
+(the questionnaire itself is submitted in App Store Connect, not in this
+repo):
 
-- Default local-first build (`apiBaseUrl` null): **no data collected** —
-  consistent with `PrivacyInfo.xcprivacy` (`NSPrivacyCollectedDataTypes`
-  empty, `NSPrivacyTracking` false). Video, pose data, and results stay on
-  device.
-- If a release build enables a backend (accounts/sync): the questionnaire
-  and `PrivacyInfo.xcprivacy` MUST be updated before submission to disclose,
-  at minimum: contact info (email — account), user content (video/photos —
-  only with explicit cloud-sync consent), identifiers (user ID), usage data
-  (consent-gated analytics). Updating these disclosures is a release-blocking
-  step in the manifest (`privacy_disclosure_sync`), not an afterthought.
+- The default build **enables the backend** (`apiBaseUrl` is the committed
+  production origin, §2), so the app collects account, coaching-profile,
+  analysis-result and membership data. `PrivacyInfo.xcprivacy` declares the
+  **11 collected data types** that the questionnaire discloses (email, name,
+  user ID, fitness, other data types, other user content, browsing history,
+  purchase history, other usage data, product interaction, advertising
+  data), each linked to the user, none used for tracking, with
+  `NSPrivacyTracking` false. That list is pinned by
+  `apps/mobile/__tests__/wf/fix-9-privacyManifestCollectedData.test.ts`,
+  which fails if a category is added, removed, or marked as tracking without
+  updating the test (and therefore the questionnaire).
+- Video, camera frames, pose landmarks and imported clips are **not**
+  collected — they never leave the device (no storage bucket, no upload
+  endpoint).
+- Any change to what the backend collects MUST update the questionnaire,
+  `PrivacyInfo.xcprivacy` and the pinning test together before submission.
+  This is a release-blocking step in the manifest (`privacy_disclosure_sync`),
+  not an afterthought.
 - Tracking (ATT): none. No ad SDKs, no cross-context tracking
   (`docs/PRIVACY.md` prohibitions). If that ever changes it is a MAJOR
   product decision, not a release-ops toggle.
@@ -133,13 +165,13 @@ Mechanics in `docs/DISTRIBUTION.md` and `apps/mobile/ios/fastlane/Fastfile`
 (`beta` lane: bump build number → archive → upload, internal-only). Pipeline
 stages and their authorization levels:
 
-| Step                                                  | Reversible?                                      | Authorization                                                               |
-| ----------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------- |
-| Linux static checks (`check:distribution`, tsc, jest) | yes                                              | none (automated)                                                            |
-| Mac archive + signing (`fastlane ios build`)          | yes (local artifact)                             | build operator                                                              |
-| TestFlight **internal** upload (`fastlane ios beta`)  | mostly (builds expire; ≤ ~10 team testers)       | release owner                                                               |
-| TestFlight **external** distribution                  | NO — goes through App Review, reaches real users | HUMAN AUTHORIZATION REQUIRED (explicit GO, D-number in `docs/DECISIONS.md`) |
-| App Store submission / phased release                 | NO — a shipped binary cannot be un-shipped       | HUMAN AUTHORIZATION REQUIRED (GO per RELEASE_PLAN_V1 §7)                    |
+| Step                                                                                                                                 | Reversible?                                      | Authorization                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ | --------------------------------------------------------------------------- |
+| Linux static checks (`release:check` + `check:distribution` via `scripts/verify-cloud.sh --only release`; tsc, jest via `--tier pr`) | yes                                              | none (automated)                                                            |
+| Mac archive + signing (`fastlane ios build`)                                                                                         | yes (local artifact)                             | build operator                                                              |
+| TestFlight **internal** upload (`fastlane ios beta`)                                                                                 | mostly (builds expire; ≤ ~10 team testers)       | release owner                                                               |
+| TestFlight **external** distribution                                                                                                 | NO — goes through App Review, reaches real users | HUMAN AUTHORIZATION REQUIRED (explicit GO, D-number in `docs/DECISIONS.md`) |
+| App Store submission / phased release                                                                                                | NO — a shipped binary cannot be un-shipped       | HUMAN AUTHORIZATION REQUIRED (GO per RELEASE_PLAN_V1 §7)                    |
 
 The `beta` lane is deliberately `distribute_external: false`; changing that
 flag is itself an irreversible-class change and must not be made without the

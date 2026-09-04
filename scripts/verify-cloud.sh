@@ -26,7 +26,9 @@
 #   e2e        admin-web Playwright smoke (Chromium) against a self-started
 #              @pickle/api + vite; the authenticated panel test runs when
 #              DATABASE_URL is reachable (db stage migrates/seeds it first)
-#   release    node tools/release/check-release-manifest.mjs when present
+#   release    node tools/release/check-release-manifest.mjs when present, then
+#              apps/mobile `npm run check:distribution` (iOS distribution
+#              preconditions); either failing fails the stage
 #
 # Policy: a SKIPPED stage is never reported as passed. Skips are explicit
 # (--skip / --only) and appear in the summary; the exit code is non-zero if any
@@ -276,7 +278,9 @@ stage_release() {
     echo "tools/release/check-release-manifest.mjs not present"
     exit 75
   fi
+  need npm
   node tools/release/check-release-manifest.mjs
+  (cd apps/mobile && npm run check:distribution)
 }
 
 # -------------------------------------------------------------------- main ----

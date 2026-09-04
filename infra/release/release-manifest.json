@@ -1,13 +1,16 @@
 {
   "$comment": "Release operations manifest (i32-release-operations). Single source of truth for version scheme, environment separation, monitoring hooks, and rollback hooks. Companion prose: docs/RELEASE_OPERATIONS.md; staged-rollout plan: docs/RELEASE_PLAN_V1.md. Validated by `pnpm release:check` (tools/release/check-release-manifest.mjs). This file DEFINES operations; it executes nothing. Every entry with requiresHumanAuthorization=true is an irreversible action that must not be performed without an explicit human GO decision recorded in docs/DECISIONS.md.",
   "schemaVersion": 1,
+  "appStoreId": "6806918402",
   "versionScheme": {
     "marketingVersion": "1.0",
     "buildNumber": 1,
+    "lastShippedBuildNumber": 3,
     "rules": {
       "marketingVersion": "MAJOR.MINOR.PATCH; MUST equal iOS MARKETING_VERSION, Android versionName, and APP_VERSION in apps/mobile/src/config/runtimeConfig.ts",
-      "buildNumber": "monotonically increasing integer across all releases; MUST equal iOS CURRENT_PROJECT_VERSION and Android versionCode; never reused or reset",
-      "gitTag": "store-submitted and TestFlight-external builds are built only from tag v<version>-build.<build> on the audited RC SHA",
+      "buildNumber": "committed floor: MUST equal iOS CURRENT_PROJECT_VERSION and Android versionCode and MUST be <= lastShippedBuildNumber. The build number that ships is assigned by fastlane (`beta`/`release` lanes: latest_testflight_build_number + 1, applied via CURRENT_PROJECT_VERSION xcargs), so it is monotonically increasing across App Store Connect, never reused or reset, and never read from the committed value",
+      "lastShippedBuildNumber": "last build uploaded to TestFlight for marketingVersion, per docs/APP_STORE_SUBMISSION.md §1 (Build 3, 2026-09-03); update it whenever a build is uploaded",
+      "gitTag": "internal TestFlight builds (the only shipping state so far: builds 1 and 3 of 1.0) record the SHA in the build notes and do NOT require a tag; store-submitted and TestFlight-external builds are built only from tag v<version>-build.<build> on the audited RC SHA. No such tag exists yet because no external/store build has been made",
       "backendImages": "services/api and services/media-worker images tagged with the git SHA of the release"
     }
   },
@@ -16,7 +19,7 @@
       "apiOrigin": null,
       "database": "local docker-compose Postgres",
       "mediaBucket": null,
-      "mobileConfig": "runtimeConfig.ts defaults (all null; explicit not-configured state)",
+      "mobileConfig": "runtimeConfig.ts with API_BASE_URL set to null locally (explicit not-configured state; talks to no backend)",
       "realUserData": false
     },
     "staging": {
@@ -27,13 +30,13 @@
       "realUserData": false
     },
     "production": {
-      "apiOrigin": "tbd",
-      "database": "production DB; forward-fix only (RELEASE_PLAN_V1 \u00a74)",
-      "mediaBucket": "tbd",
-      "mobileConfig": "production values injected at build time; never committed",
+      "apiOrigin": "https://ucqnaiwqwjtgvlduiuib.supabase.co/functions/v1/api",
+      "database": "production DB (Supabase project ucqnaiwqwjtgvlduiuib); forward-fix only (RELEASE_PLAN_V1 \u00a74)",
+      "mediaBucket": null,
+      "mobileConfig": "public production values (API origin, App Store id, RevenueCat public SDK keys, OAuth client ids) are committed in runtimeConfig.ts; secrets are never committed",
       "realUserData": true
     },
-    "$comment": "staging/production origins and buckets are not yet provisioned (BLOCKED_EXTERNAL). 'tbd' is asserted by release:check so a real production URL cannot land here silently."
+    "$comment": "The production origin is public, non-secret configuration committed in apps/mobile/src/config/runtimeConfig.ts (API_BASE_URL); release:check asserts it equals production.apiOrigin and that APP_STORE_ID equals appStoreId. mediaBucket is null because no storage bucket exists: video never leaves the device (docs/APP_STORE_SUBMISSION.md). Staging is not provisioned (BLOCKED_EXTERNAL); its 'tbd' is accepted until a distinct https origin is recorded."
   },
   "releaseBlockingSteps": [
     {
@@ -43,7 +46,7 @@
     },
     {
       "id": "privacy_disclosure_sync",
-      "description": "If a build enables a backend (apiBaseUrl set), App Store Connect privacy questionnaire and PrivacyInfo.xcprivacy NSPrivacyCollectedDataTypes MUST be updated to disclose the collected data before submission",
+      "description": "The default build enables the backend (apiBaseUrl set); App Store Connect privacy questionnaire, PrivacyInfo.xcprivacy NSPrivacyCollectedDataTypes (11 types, pinned by apps/mobile/__tests__/wf/fix-9-privacyManifestCollectedData.test.ts) and docs/APP_STORE_SUBMISSION.md MUST be updated together before any submission that changes what is collected",
       "source": "docs/RELEASE_OPERATIONS.md \u00a73"
     },
     {

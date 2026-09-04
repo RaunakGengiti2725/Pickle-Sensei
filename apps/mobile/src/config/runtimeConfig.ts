@@ -3,11 +3,13 @@ import { Platform } from 'react-native';
 /**
  * Public, build-time runtime configuration.
  *
- * These values are intentionally checked in and null by default. They are not
- * secrets. A release build must supply the public API origin, the appropriate
- * RevenueCat public SDK key, and its OAuth client IDs before synced accounts
- * or purchases can start. Leaving a value null produces an explicit
- * not-configured state; the app never substitutes a demo server or identity.
+ * These values are intentionally checked in. They are not secrets: the
+ * production API origin, App Store id, RevenueCat public SDK keys, and OAuth
+ * client IDs are public configuration, and the default build is the shipping
+ * build. `pnpm release:check` asserts API_BASE_URL and APP_STORE_ID agree with
+ * infra/release/release-manifest.json. Setting a value to null (local-first
+ * development) produces an explicit not-configured state; the app never
+ * substitutes a demo server or identity.
  */
 export interface RuntimePublicConfig {
   apiBaseUrl: string | null;
