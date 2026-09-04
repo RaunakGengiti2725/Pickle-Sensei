@@ -611,4 +611,67 @@ export const MUTANTS: Mutant[] = [
     replace: `  const entitlements = ["premium", ...billing.activeEntitlements.filter((name) => name !== "premium")];`,
     expect: "survived",
   },
+
+  // ── adversarial variants of the XCM-08/09/10 pins (attack-fix-a1b2c248) ──
+  // `expect` below is the prediction against the permanent suite at a1b2c248
+  // (webhook_billing_invariants.test.ts included).
+  {
+    id: "SEC-10-rate-limit-only-after-secret",
+    category: "secret",
+    file: "index.ts",
+    description:
+      "The per-IP webhook budget only counts deliveries that already carry the right secret — wrong-secret guesses are never rate limited (pre-auth budget gone, authenticated budget intact).",
+    find: `    const rl = await enforceRateLimit(
+      "webhook",
+      ip,
+      WEBHOOK_LIMIT.limit,
+      WEBHOOK_LIMIT.windowSeconds,
+    );
+    if (!rl.allowed) return rateLimitResponse(rl);
+    return handleRevenueCatWebhook(request);`,
+    replace: `    const webhookSecret = Deno.env.get("REVENUECAT_WEBHOOK_AUTH") ?? "";
+    if (
+      webhookSecret &&
+      constantTimeEqual(request.headers.get("Authorization") ?? "", webhookSecret)
+    ) {
+      const rl = await enforceRateLimit(
+        "webhook",
+        ip,
+        WEBHOOK_LIMIT.limit,
+        WEBHOOK_LIMIT.windowSeconds,
+      );
+      if (!rl.allowed) return rateLimitResponse(rl);
+    }
+    return handleRevenueCatWebhook(request);`,
+    expect: "survived",
+  },
+  {
+    id: "BODY-15-rc-4xx-as-empty",
+    category: "body",
+    file: "index.ts",
+    description:
+      "A 4xx RevenueCat response (401 rotated key, 403, 404, 429) is folded as 'no entitlements' (premium:false persisted) instead of retry; only 5xx stays unavailable.",
+    find: `    } else {
+      await rcResponse.text().catch(() => undefined);
+    }`,
+    replace: `    } else {
+      await rcResponse.text().catch(() => undefined);
+      if (rcResponse.status < 500) subscriber = {};
+    }`,
+    expect: "survived",
+  },
+  {
+    id: "BODY-16-no-rc-key-as-empty",
+    category: "body",
+    file: "index.ts",
+    description:
+      "Without any RevenueCat API key the webhook verdict is 'no entitlements' (premium revoked and persisted) instead of 503 unavailable.",
+    find: `  if (!rcKey) return null;
+`,
+    replace: `  if (!rcKey) {
+    return { premium: false, productKey: null, expiresAt: null, activeEntitlements: [] };
+  }
+`,
+    expect: "survived",
+  },
 ];
