@@ -73,6 +73,15 @@ paths = ['''(?:^|/)services/api/test/.*\.test\.ts$''']
 regexes = ['''[a-z0-9-]*secret-0123456789''']
 
 [[allowlists]]
+# first-party-intake tests sign synthetic consent-ledger exports with labeled
+# fixture keys ("SYNTHETIC-TEST-FIXTURE.<name>-signing-key"); the prefix is the
+# package's mandatory marker for fake consent data (README) and grants nothing.
+description = "labeled SYNTHETIC-TEST-FIXTURE HMAC keys in first-party-intake tests"
+targetRules = ["generic-api-key"]
+paths = ['''(?:^|/)packages/first-party-intake/test/.*\.test\.ts$''']
+regexes = ['''SYNTHETIC-TEST-FIXTURE\.[a-z0-9.-]*signing-key''']
+
+[[allowlists]]
 # Deno edge-function tests stub REVENUECAT_SECRET_API_KEY with the literal
 # "sk_test_revenuecat" and assert it is forwarded; it is not a Stripe or
 # RevenueCat key.
