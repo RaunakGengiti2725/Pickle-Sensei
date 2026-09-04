@@ -1,0 +1,507 @@
+{
+  "head": "4d812e1aa699014cc0521fd92fde66908043aaa8",
+  "seed": 20260904,
+  "generated": {
+    "seed": 20260904,
+    "appStoreId": "3721446512",
+    "teamId": "45AJC9U4ZK"
+  },
+  "command": "node tools/release/attack/run-attacks.mjs",
+  "scenarios": [
+    {
+      "id": "s01_fastfile_hardcoded_password",
+      "assigned": true,
+      "title": "Fastfile gains `FASTLANE_PASSWORD=x`",
+      "invariant": "check:distribution rejects hardcoded Fastlane credentials",
+      "expect": {
+        "releaseCheck": "pass",
+        "distributionCheck": "fail"
+      },
+      "verdict": "HELD",
+      "durationMs": 44,
+      "releaseCheck": {
+        "exitCode": 0,
+        "failLines": []
+      },
+      "distributionCheck": {
+        "exitCode": 1,
+        "failLines": ["FAIL fastlane: no hardcoded credentials"]
+      }
+    },
+    {
+      "id": "s02_pbxproj_device_family_1_2_one_config",
+      "assigned": true,
+      "title": "One pbxproj configuration sets TARGETED_DEVICE_FAMILY = \"1,2\";",
+      "invariant": "check:distribution enforces the iPhone-only v1 pin",
+      "expect": {
+        "releaseCheck": "pass",
+        "distributionCheck": "fail"
+      },
+      "verdict": "HELD",
+      "durationMs": 44,
+      "releaseCheck": {
+        "exitCode": 0,
+        "failLines": []
+      },
+      "distributionCheck": {
+        "exitCode": 1,
+        "failLines": ["FAIL pbxproj: iPhone-only (TARGETED_DEVICE_FAMILY = 1; v1 launch decision)"]
+      }
+    },
+    {
+      "id": "s03_manifest_duplicate_silent_failure_rate_P1",
+      "assigned": true,
+      "title": "Duplicate monitoringHooks entry silent_failure_rate with severity P1",
+      "invariant": "release:check keeps silent_failure_rate at P0 (every() spans duplicates)",
+      "expect": {
+        "releaseCheck": "fail",
+        "distributionCheck": "pass"
+      },
+      "verdict": "HELD",
+      "durationMs": 43,
+      "releaseCheck": {
+        "exitCode": 1,
+        "failLines": ["FAIL monitoringHooks: consent integrity and silent-failure lines are P0"]
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "s03b_manifest_duplicate_silent_failure_rate_P0",
+      "assigned": false,
+      "title": "Duplicate monitoringHooks entry silent_failure_rate with severity P0 (p13 extension)",
+      "invariant": "monitoringHooks ids are unique (a duplicate is a corrupt manifest)",
+      "expect": {
+        "releaseCheck": "fail",
+        "distributionCheck": "pass"
+      },
+      "verdict": "BROKEN",
+      "durationMs": 43,
+      "releaseCheck": {
+        "exitCode": 0,
+        "failLines": []
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "s03c_manifest_duplicate_rollback_and_irreversible_ids",
+      "assigned": false,
+      "title": "Duplicate rollbackHooks id and duplicate irreversibleActions id (p13 extension)",
+      "invariant": "rollbackHooks / irreversibleActions ids are unique",
+      "expect": {
+        "releaseCheck": "fail",
+        "distributionCheck": "pass"
+      },
+      "verdict": "BROKEN",
+      "durationMs": 42,
+      "releaseCheck": {
+        "exitCode": 0,
+        "failLines": []
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "s04_build_2_everywhere_except_manifest",
+      "assigned": true,
+      "title": "versionCode and CURRENT_PROJECT_VERSION bumped to 2, manifest still 1",
+      "invariant": "release:check catches version-triple drift; check:distribution does not consult the manifest (by design)",
+      "expect": {
+        "releaseCheck": "fail",
+        "distributionCheck": "pass"
+      },
+      "verdict": "HELD",
+      "durationMs": 43,
+      "releaseCheck": {
+        "exitCode": 1,
+        "failLines": [
+          "FAIL pbxproj: CURRENT_PROJECT_VERSION = 1",
+          "FAIL build.gradle: versionCode 1"
+        ]
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "s05_runtime_app_store_id_changed",
+      "assigned": true,
+      "title": "runtimeConfig APP_STORE_ID changed to a different digit string (seed 20260904)",
+      "invariant": "APP_STORE_ID must stay 6806918402 (dossier §1 / knowledge); a release gate must pin it",
+      "expect": {
+        "releaseCheck": "fail",
+        "distributionCheck": "any"
+      },
+      "verdict": "BROKEN",
+      "durationMs": 40,
+      "releaseCheck": {
+        "exitCode": 0,
+        "failLines": []
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "s05b_runtime_app_store_id_null",
+      "assigned": false,
+      "title": "runtimeConfig APP_STORE_ID reverted to null",
+      "invariant": "dossier §2.6 marks APP_STORE_ID as set; reverting it silently would break rate-us / store links",
+      "expect": {
+        "releaseCheck": "fail",
+        "distributionCheck": "any"
+      },
+      "verdict": "BROKEN",
+      "durationMs": 40,
+      "releaseCheck": {
+        "exitCode": 0,
+        "failLines": []
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "s06_appfile_team_mismatch",
+      "assigned": true,
+      "title": "Appfile team_id changed to 45AJC9U4ZK (seed 20260904)",
+      "invariant": "check:distribution rejects Appfile team != DEVELOPMENT_TEAM",
+      "expect": {
+        "releaseCheck": "pass",
+        "distributionCheck": "fail"
+      },
+      "verdict": "HELD",
+      "durationMs": 40,
+      "releaseCheck": {
+        "exitCode": 0,
+        "failLines": []
+      },
+      "distributionCheck": {
+        "exitCode": 1,
+        "failLines": ["FAIL fastlane: Appfile team matches DEVELOPMENT_TEAM in project.pbxproj"]
+      }
+    },
+    {
+      "id": "s07_release_config_build_3_only",
+      "assigned": true,
+      "title": "Only the Release configuration CURRENT_PROJECT_VERSION set to 3 (dossier build 3)",
+      "invariant": "manifest buildNumber MUST equal CURRENT_PROJECT_VERSION (RELEASE_OPERATIONS §1); Debug/Release must agree",
+      "expect": {
+        "releaseCheck": "fail",
+        "distributionCheck": "any"
+      },
+      "verdict": "BROKEN",
+      "durationMs": 41,
+      "releaseCheck": {
+        "exitCode": 0,
+        "failLines": []
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "x01_release_config_marketing_1_1_only",
+      "assigned": false,
+      "title": "Only the Release configuration MARKETING_VERSION set to 1.1",
+      "invariant": "manifest marketingVersion MUST equal MARKETING_VERSION in every configuration",
+      "expect": {
+        "releaseCheck": "fail",
+        "distributionCheck": "any"
+      },
+      "verdict": "BROKEN",
+      "durationMs": 42,
+      "releaseCheck": {
+        "exitCode": 0,
+        "failLines": []
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "x02_pbxproj_team_changed_in_one_config",
+      "assigned": false,
+      "title": "DEVELOPMENT_TEAM changed to 45AJC9U4ZK in one configuration only",
+      "invariant": "check:distribution rejects any configuration signed by a foreign team",
+      "expect": {
+        "releaseCheck": "pass",
+        "distributionCheck": "fail"
+      },
+      "verdict": "BROKEN",
+      "durationMs": 40,
+      "releaseCheck": {
+        "exitCode": 0,
+        "failLines": []
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "x03_pbxproj_device_family_2_one_config",
+      "assigned": false,
+      "title": "One configuration sets TARGETED_DEVICE_FAMILY = 2; (iPad-only)",
+      "invariant": "iPhone-only pin must hold for every configuration, not just one",
+      "expect": {
+        "releaseCheck": "pass",
+        "distributionCheck": "fail"
+      },
+      "verdict": "BROKEN",
+      "durationMs": 42,
+      "releaseCheck": {
+        "exitCode": 0,
+        "failLines": []
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "x04_fastfile_distribute_external_true_keeps_comment",
+      "assigned": false,
+      "title": "distribute_external flipped to true while the old value survives in a comment",
+      "invariant": "check:distribution rejects external TestFlight distribution",
+      "expect": {
+        "releaseCheck": "pass",
+        "distributionCheck": "fail"
+      },
+      "verdict": "BROKEN",
+      "durationMs": 43,
+      "releaseCheck": {
+        "exitCode": 0,
+        "failLines": []
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "x05_fastfile_base64_key_content",
+      "assigned": false,
+      "title": "Fastfile embeds a base64 ASC private key via key_content/is_key_content_base64",
+      "invariant": "check:distribution rejects hardcoded credentials of any encoding",
+      "expect": {
+        "releaseCheck": "pass",
+        "distributionCheck": "fail"
+      },
+      "verdict": "BROKEN",
+      "durationMs": 40,
+      "releaseCheck": {
+        "exitCode": 0,
+        "failLines": []
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "x06_manifest_severity_lowercase",
+      "assigned": false,
+      "title": "monitoringHooks severity \"p0\" (case drift)",
+      "invariant": "severity must be exactly P0 or P1",
+      "expect": {
+        "releaseCheck": "fail",
+        "distributionCheck": "pass"
+      },
+      "verdict": "HELD",
+      "durationMs": 43,
+      "releaseCheck": {
+        "exitCode": 1,
+        "failLines": [
+          "FAIL monitoringHooks: silent_failure_rate has signal, alarm, severity",
+          "FAIL monitoringHooks: consent integrity and silent-failure lines are P0"
+        ]
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "x07_manifest_production_origin_provisioned",
+      "assigned": false,
+      "title": "production apiOrigin set to a real https origin instead of \"tbd\"",
+      "invariant": "staging/production origins stay tbd until a human provisions them",
+      "expect": {
+        "releaseCheck": "fail",
+        "distributionCheck": "pass"
+      },
+      "verdict": "HELD",
+      "durationMs": 42,
+      "releaseCheck": {
+        "exitCode": 1,
+        "failLines": [
+          "FAIL environments: production origin/bucket still \"tbd\" (BLOCKED_EXTERNAL — no real URL committed)"
+        ]
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "x08_manifest_build_number_string",
+      "assigned": false,
+      "title": "manifest buildNumber \"1\" (string)",
+      "invariant": "buildNumber must be an integer >= 1",
+      "expect": {
+        "releaseCheck": "fail",
+        "distributionCheck": "pass"
+      },
+      "verdict": "HELD",
+      "durationMs": 43,
+      "releaseCheck": {
+        "exitCode": 1,
+        "failLines": ["FAIL manifest: buildNumber is a positive integer"]
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "x09_manifest_staging_real_user_data",
+      "assigned": false,
+      "title": "staging realUserData flipped to true",
+      "invariant": "only production may carry real user data",
+      "expect": {
+        "releaseCheck": "fail",
+        "distributionCheck": "pass"
+      },
+      "verdict": "HELD",
+      "durationMs": 41,
+      "releaseCheck": {
+        "exitCode": 1,
+        "failLines": ["FAIL environments: only production carries real user data"]
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "x10_manifest_irreversible_no_human_auth",
+      "assigned": false,
+      "title": "an irreversibleAction drops requiresHumanAuthorization",
+      "invariant": "every irreversible action requires human authorization",
+      "expect": {
+        "releaseCheck": "fail",
+        "distributionCheck": "pass"
+      },
+      "verdict": "HELD",
+      "durationMs": 42,
+      "releaseCheck": {
+        "exitCode": 1,
+        "failLines": [
+          "FAIL irreversibleActions: app_store_submission requiresHumanAuthorization === true"
+        ]
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "x11_appfile_apple_id",
+      "assigned": false,
+      "title": "Appfile gains apple_id(\"someone@example.com\")",
+      "invariant": "Appfile must not carry an Apple ID / password",
+      "expect": {
+        "releaseCheck": "pass",
+        "distributionCheck": "fail"
+      },
+      "verdict": "HELD",
+      "durationMs": 42,
+      "releaseCheck": {
+        "exitCode": 0,
+        "failLines": []
+      },
+      "distributionCheck": {
+        "exitCode": 1,
+        "failLines": ["FAIL fastlane: Appfile identifies app + team without secrets"]
+      }
+    },
+    {
+      "id": "x12_pbxproj_bundle_id_one_config",
+      "assigned": false,
+      "title": "PRODUCT_BUNDLE_IDENTIFIER changed in one configuration only",
+      "invariant": "bundle id com.picklesensei must hold in every configuration",
+      "expect": {
+        "releaseCheck": "pass",
+        "distributionCheck": "fail"
+      },
+      "verdict": "BROKEN",
+      "durationMs": 43,
+      "releaseCheck": {
+        "exitCode": 0,
+        "failLines": []
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "x13_manifest_unicode_lookalike_hook_id",
+      "assigned": false,
+      "title": "silent_failure_rate renamed with a Cyrillic 'а' (U+0430) lookalike",
+      "invariant": "required monitoring ids are matched byte-exactly",
+      "expect": {
+        "releaseCheck": "fail",
+        "distributionCheck": "pass"
+      },
+      "verdict": "HELD",
+      "durationMs": 42,
+      "releaseCheck": {
+        "exitCode": 1,
+        "failLines": ["FAIL monitoringHooks: silent_failure_rate present"]
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    },
+    {
+      "id": "x14_manifest_huge_hook_list",
+      "assigned": false,
+      "title": "manifest padded with 20,000 extra well-formed monitoring hooks (huge input)",
+      "invariant": "checker still terminates and still passes a well-formed manifest",
+      "expect": {
+        "releaseCheck": "pass",
+        "distributionCheck": "pass"
+      },
+      "verdict": "HELD",
+      "durationMs": 132,
+      "releaseCheck": {
+        "exitCode": 0,
+        "failLines": []
+      },
+      "distributionCheck": {
+        "exitCode": 0,
+        "failLines": []
+      }
+    }
+  ],
+  "totals": {
+    "executed": 24,
+    "held": 13,
+    "broken": 11
+  }
+}
