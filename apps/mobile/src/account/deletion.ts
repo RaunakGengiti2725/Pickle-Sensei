@@ -1,4 +1,4 @@
-import type { ApiSession } from './apiSession';
+import { type ApiSession, reportApiUnauthorized } from './apiSession';
 
 /**
  * Client for the backend's two-step account deletion
@@ -18,6 +18,12 @@ import type { ApiSession } from './apiSession';
  * the account (and the bearer) cease to exist; the server keeps it
  * anonymized after deletion. It is always skippable — the survey must never
  * stand between a player and deleting their account.
+ *
+ * A confirm whose response is lost in transit is AMBIGUOUS: the server may
+ * already have deleted the account (it also drops the bearer from its auth
+ * cache, so every later call answers 401). Its error therefore never claims
+ * that nothing was deleted, and every 401 is reported to the auth store
+ * through reportApiUnauthorized like every other API client does.
  */
 
 export type AccountDeletionFetch = (
@@ -70,6 +76,8 @@ export interface AccountDeletionSurvey {
 
 export class AccountDeletionError extends Error {
   constructor(
+    /** `deletion.unavailable` = the request never got an answer (offline,
+     * timeout). For step 2 that leaves the outcome unknown server-side. */
     readonly code:
       | 'deletion.not_configured'
       | 'deletion.session_expired'
@@ -97,11 +105,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+const REQUEST_UNAVAILABLE_MESSAGE =
+  'Account deletion is temporarily offline. Nothing was deleted — please try again.';
+/** Step 2 went out but no answer came back: the account may or may not be
+ * gone, so the copy promises neither. Retrying the same challenge settles it
+ * (200 → deleted; 401 → already deleted; anything else → still there). */
+const CONFIRM_UNAVAILABLE_MESSAGE =
+  'The connection dropped before the server answered, so your account may or may not have been deleted. Tap Permanently delete again to finish.';
+
 async function post(
   session: ApiSession,
   fetchFn: AccountDeletionFetch,
   path: string,
-  body?: unknown,
+  body: unknown,
+  unavailableMessage: string,
 ): Promise<Record<string, unknown>> {
   let response: Response;
   const controller = new AbortController();
@@ -120,7 +137,7 @@ async function post(
   } catch {
     throw new AccountDeletionError(
       'deletion.unavailable',
-      'Account deletion is temporarily offline. Nothing was deleted — please try again.',
+      unavailableMessage,
       true,
     );
   } finally {
@@ -133,6 +150,7 @@ async function post(
     // Non-JSON error bodies fall through to the status checks below.
   }
   if (response.status === 401) {
+    reportApiUnauthorized(session.bearerToken);
     throw new AccountDeletionError(
       'deletion.session_expired',
       'Your sign-in has expired. Sign in again, then delete your account.',
@@ -181,6 +199,7 @@ export async function requestAccountDeletion(
     fetchFn,
     '/v1/me/delete-request',
     survey ? { survey } : undefined,
+    REQUEST_UNAVAILABLE_MESSAGE,
   );
   const challenge = payload['challenge'];
   const expiresAt = payload['expiresAt'];
@@ -207,9 +226,13 @@ export async function confirmAccountDeletion(
       false,
     );
   }
-  const payload = await post(session, fetchFn, '/v1/me/delete-confirm', {
-    challenge,
-  });
+  const payload = await post(
+    session,
+    fetchFn,
+    '/v1/me/delete-confirm',
+    { challenge },
+    CONFIRM_UNAVAILABLE_MESSAGE,
+  );
   if (payload['deleted'] !== true) {
     throw new AccountDeletionError(
       'deletion.rejected',

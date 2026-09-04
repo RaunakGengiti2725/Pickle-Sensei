@@ -36,7 +36,7 @@ import {
 } from '../design/MascotMoment';
 import { useReliableSafeAreaInsets } from '../design/safeArea';
 import { color, radius, shadow, space, type } from '../design/tokens';
-import { showBrandNotice } from '../design/BrandNotice';
+import { type BrandNotice, showBrandNotice } from '../design/BrandNotice';
 import { useAuthStore, type AuthProvider } from '../auth/authStore';
 import { getApiSession } from '../account/apiSession';
 import {
@@ -301,7 +301,10 @@ function ChoiceRow(props: {
 function DeleteAccountDialog(props: {
   visible: boolean;
   onCancel: () => void;
-  onDeleted: (result: AccountDeletionResult) => void;
+  /** `null` when the server never confirmed directly: a confirm on this
+   * challenge got no answer and the retry was refused with 401, which only
+   * happens once the account (and with it the bearer) is gone. */
+  onDeleted: (result: AccountDeletionResult | null) => void;
 }) {
   const insets = useReliableSafeAreaInsets();
   const reduced = useReducedMotion();
@@ -316,6 +319,11 @@ function DeleteAccountDialog(props: {
   // earlier presentation must not mutate the state of a later (or closed)
   // one, so every continuation checks it before touching state.
   const presentationRef = useRef(0);
+  // Challenge whose confirm went out but never got an answer. The server
+  // may already have deleted the account; a 401 on the SAME challenge is
+  // then "already deleted", not "sign in again" (there is nothing left to
+  // sign in to).
+  const unansweredConfirmRef = useRef<string | null>(null);
   const directionRef = useRef<PageDirection>('none');
   const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const entrance = useRef(new Animated.Value(0)).current;
@@ -330,6 +338,7 @@ function DeleteAccountDialog(props: {
   useEffect(() => {
     if (!props.visible) {
       presentationRef.current += 1;
+      unansweredConfirmRef.current = null;
       stopCountdown();
       setStep({ phase: 'why' });
       setReason(null);
@@ -446,6 +455,18 @@ function DeleteAccountDialog(props: {
       props.onDeleted(result);
     } catch (e) {
       if (presentation !== presentationRef.current) return;
+      if (e instanceof AccountDeletionError) {
+        if (
+          e.code === 'deletion.session_expired' &&
+          unansweredConfirmRef.current === challenge
+        ) {
+          props.onDeleted(null);
+          return;
+        }
+        if (e.code === 'deletion.unavailable') {
+          unansweredConfirmRef.current = challenge;
+        }
+      }
       const canRetrySameChallenge =
         e instanceof AccountDeletionError ? e.retryable : true;
       setStep(
@@ -817,6 +838,51 @@ function DetailRow(props: { label: string; value: string; last?: boolean }) {
   );
 }
 
+const LOCAL_CLEANUP_DETAIL =
+  'Your account and synced data were deleted. Some data saved on this phone could not be removed — delete the app to clear it.';
+const APPLE_STEP_DETAIL =
+  'This older account had no Apple revocation token. To disconnect it manually, open iPhone Settings → your name → Sign in with Apple → Pickle Sensei → Stop Using Apple ID.';
+const APPLE_STEP_UNVERIFIED_DETAIL =
+  'The deletion confirmation never reached this phone, so the Apple sign-in link could not be checked. If Pickle Sensei still appears under iPhone Settings → your name → Sign in with Apple, choose Stop Using Apple ID.';
+
+/**
+ * The one notice shown after the account is gone. BrandNotice holds a single
+ * notice at a time and the session that could re-show anything no longer
+ * exists, so every fact the user still has to act on rides in this one
+ * message: a failed local purge AND the manual Apple revocation step are
+ * independent and are surfaced together when both apply.
+ */
+function postDeletionNotice(input: {
+  localPurgeFailed: boolean;
+  appleStep: 'none' | 'required' | 'unverified';
+}): BrandNotice | null {
+  const appleDetail =
+    input.appleStep === 'required'
+      ? APPLE_STEP_DETAIL
+      : input.appleStep === 'unverified'
+        ? APPLE_STEP_UNVERIFIED_DETAIL
+        : null;
+  if (input.localPurgeFailed) {
+    return {
+      title: 'Account deleted',
+      detail: appleDetail
+        ? `${LOCAL_CLEANUP_DETAIL} ${appleDetail}`
+        : LOCAL_CLEANUP_DETAIL,
+      tone: 'danger',
+      eyebrow: 'LOCAL CLEANUP NEEDED',
+    };
+  }
+  if (appleDetail) {
+    return {
+      title: 'Account deleted',
+      detail: appleDetail,
+      tone: 'neutral',
+      eyebrow: 'ONE APPLE STEP',
+    };
+  }
+  return null;
+}
+
 /**
  * Synced-account management. Deletion lives at the bottom of this screen as
  * a quiet text link (still one obvious hop from Settings — App Review
@@ -885,30 +951,27 @@ export function ManageAccountScreen() {
         onCancel={() => setConfirmingDeletion(false)}
         onDeleted={result => {
           setConfirmingDeletion(false);
+          // Read before the teardown below clears the session.
+          const deletedProvider = session?.provider;
+          const appleStep =
+            result === null
+              ? deletedProvider === 'apple'
+                ? 'unverified'
+                : 'none'
+              : result?.appleAuthorizationRevocation ===
+                  'manual_action_required'
+                ? 'required'
+                : 'none';
           // The server account is gone; unlike a plain sign-out this also
           // purges the deleted owner's local rows and fully disconnects the
           // provider SDK so nothing can silently restore a dead account.
           void completeAccountDeletion().then(() => {
             const cleanup = useAuthStore.getState().deletionCleanup;
-            if (cleanup?.localPurge === 'failed') {
-              showBrandNotice({
-                title: 'Account deleted',
-                detail:
-                  'Your account and synced data were deleted. Some data saved on this phone could not be removed — delete the app to clear it.',
-                tone: 'danger',
-                eyebrow: 'LOCAL CLEANUP NEEDED',
-              });
-            } else if (
-              result?.appleAuthorizationRevocation === 'manual_action_required'
-            ) {
-              showBrandNotice({
-                title: 'Account deleted',
-                detail:
-                  'This older account had no Apple revocation token. To disconnect it manually, open iPhone Settings → your name → Sign in with Apple → Pickle Sensei → Stop Using Apple ID.',
-                tone: 'neutral',
-                eyebrow: 'ONE APPLE STEP',
-              });
-            }
+            const notice = postDeletionNotice({
+              localPurgeFailed: cleanup?.localPurge === 'failed',
+              appleStep,
+            });
+            if (notice) showBrandNotice(notice);
           });
         }}
       />
