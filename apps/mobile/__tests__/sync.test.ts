@@ -82,6 +82,11 @@ function fakeDb() {
           ],
         };
       }
+      if (sql.includes('FROM local_session')) {
+        // This harness holds no practice-set rows: a stranded shot has no
+        // local set to re-queue its session.create from.
+        return { rows: [] };
+      }
       throw new Error(`fakeDb: unhandled sql ${sql}`);
     },
     close() {},
@@ -228,12 +233,14 @@ describe('drainOutbox', () => {
     });
   });
 
-  it('does not spend the retry budget on a shot whose practice-set session has not synced yet', async () => {
-    // The practice set's session.create row is queued moments AFTER its
-    // first scored shot (the set is committed once a score exists). If a
-    // drain slips between the two writes, the server rejects the shot as
-    // session_not_found — an ordering artifact, not a permanent failure, so
-    // the row keeps its full attempt budget for the next pass.
+  it('spends one attempt per offer on a shot whose practice set has NO session.create row on this device (bounded, not retried forever)', async () => {
+    // A set's session row and session.create entry now commit in the same
+    // transaction as the shot that references it, so a shot with no
+    // session.create row anywhere is a stranded row from an older build. The
+    // server keeps answering session_not_found for it; with no local set to
+    // re-queue either, every offer counts against the budget (after which
+    // the shot is parked until a session row for the set appears) instead
+    // of being re-sent on every drain with attempts pinned at 0.
     const { db, push, outbox } = fakeDb();
     push('shot.sync', {
       ...permittedAnalysis,
@@ -255,9 +262,11 @@ describe('drainOutbox', () => {
     });
     expect(result).toMatchObject({ synced: 0, failed: 1, remaining: 1 });
     expect(outbox[0]).toMatchObject({
-      attempts: 0,
+      attempts: 1,
       last_error: `${SESSION_NOT_FOUND_REJECTION}: Session not found or not yours.`,
     });
+    // No session.create row was invented: there is no local set to copy.
+    expect(outbox).toHaveLength(1);
   });
 
   it('fails closed when a legacy outbox row has no permit', async () => {

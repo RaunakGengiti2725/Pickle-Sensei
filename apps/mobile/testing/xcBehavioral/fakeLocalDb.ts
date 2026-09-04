@@ -147,8 +147,10 @@ export function createFakeLocalDb(): FakeLocalDb {
         return { rows: [] };
       }
       if (sql.startsWith('SELECT id, kind, payload')) {
-        // sync.ts selectOutboxPage: one pass's live rows after the cursor.
+        // sync.ts selectOutboxPage (live rows of one pass after the cursor)
+        // and selectParkedSessions (parked shot rows after the cursor).
         // params: [owner, OUTBOX_MAX_ATTEMPTS, cursor, parked-marker LIKE].
+        const parkedPage = sql.includes('last_error LIKE ?');
         const exhaustedKind = /OR kind = '([a-z.]+)'\)/.exec(sql)?.[1] ?? null;
         const kindEquals = /AND kind = '([a-z.]+)'/.exec(sql)?.[1] ?? null;
         const kindNotIn = /kind NOT IN \(([^)]+)\)/.exec(sql)?.[1];
@@ -161,29 +163,18 @@ export function createFakeLocalDb(): FakeLocalDb {
             .filter(
               r =>
                 r.owner_key === String(params[0]) &&
-                (r.attempts < Number(params[1]) || r.kind === exhaustedKind) &&
+                (parkedPage
+                  ? r.attempts <= Number(params[1])
+                  : r.attempts < Number(params[1]) ||
+                    r.kind === exhaustedKind) &&
                 r.id > Number(params[2]) &&
                 (kindEquals === null || r.kind === kindEquals) &&
                 !excludedKinds.includes(r.kind) &&
-                !(r.last_error ?? '').startsWith(parkedPrefix),
+                (r.last_error ?? '').startsWith(parkedPrefix) === parkedPage,
             )
             .sort((a, b) => a.id - b.id)
             .slice(0, 50)
             .map(r => ({ ...r })),
-        };
-      }
-      if (sql.startsWith('SELECT DISTINCT json_extract(payload')) {
-        // sync.ts selectParkedSessions.
-        const prefix = String(params[1]).replace(/%$/, '');
-        const sessionIds = new Set<string>();
-        for (const r of outbox) {
-          if (r.owner_key !== params[0] || r.kind !== 'shot.sync') continue;
-          if (!(r.last_error ?? '').startsWith(prefix)) continue;
-          const sessionId = parsePayload(r.payload)?.['sessionId'];
-          if (typeof sessionId === 'string') sessionIds.add(sessionId);
-        }
-        return {
-          rows: Array.from(sessionIds, session_id => ({ session_id })),
         };
       }
       if (sql.startsWith('SELECT 1 FROM outbox')) {

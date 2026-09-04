@@ -241,26 +241,46 @@ async function recordRowFailure(
   }
 }
 
-/** Practice sets with at least one parked shot — one read per drain. */
+/**
+ * Practice sets with at least one parked shot, paged like the passes above.
+ * Parking never lifts a row past the attempt budget (the budget is spent
+ * before the marker lands; a set refused by the server parks without
+ * counting), so `attempts <= budget` names every parked row.
+ */
 async function selectParkedSessions(
   db: LocalDb,
   owner: string,
 ): Promise<Set<string>> {
-  const { rows } = await db.execute(
-    `SELECT DISTINCT json_extract(payload, '$.sessionId') AS session_id
-     FROM outbox
-     WHERE owner_key = ? AND kind = 'shot.sync' AND json_valid(payload)
-       AND last_error LIKE ?`,
-    [owner, `${SESSION_ORPHANED_VERDICT}:%`],
-  );
   const sessions = new Set<string>();
-  for (const row of rows) {
-    const sessionId = row['session_id'];
-    if (typeof sessionId === 'string' && sessionId.length > 0) {
-      sessions.add(sessionId);
+  const marker = `${SESSION_ORPHANED_VERDICT}:`;
+  let cursor = 0;
+  for (;;) {
+    const { rows } = await db.execute(
+      `SELECT id, kind, payload, attempts, last_error FROM outbox
+       WHERE owner_key = ? AND attempts <= ? AND id > ?
+         AND kind = 'shot.sync' AND last_error LIKE ?
+       ORDER BY id ASC LIMIT ${OUTBOX_PAGE_SIZE}`,
+      [owner, OUTBOX_MAX_ATTEMPTS, cursor, `${marker}%`],
+    );
+    for (const row of rows) {
+      if (row['kind'] !== 'shot.sync') continue;
+      if (!String(row['last_error'] ?? '').startsWith(marker)) continue;
+      try {
+        const sessionId = (
+          JSON.parse(String(row['payload'])) as { sessionId?: unknown }
+        ).sessionId;
+        if (typeof sessionId === 'string' && sessionId.length > 0) {
+          sessions.add(sessionId);
+        }
+      } catch {
+        // Only a parsed shot is ever parked; a corrupt row names no set.
+      }
     }
+    const last = rows[rows.length - 1];
+    const next = last ? Number(last['id']) : NaN;
+    if (rows.length < OUTBOX_PAGE_SIZE || !(next > cursor)) return sessions;
+    cursor = next;
   }
-  return sessions;
 }
 
 /** True when a `session.create` row (live or exhausted) names `sessionId`. */
