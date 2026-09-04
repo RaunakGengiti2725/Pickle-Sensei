@@ -60,6 +60,22 @@ function staleSessionState(): Partial<ConsentState> {
   return getApiSession() ? { busy: false } : SIGNED_OUT_STATE;
 }
 
+/**
+ * Every hydrate/mutation takes a monotonically increasing request id; only
+ * the newest request may write ledger fields when it settles, so a slower
+ * older response (success or failure) can never overwrite a newer one.
+ */
+let latestRequestId = 0;
+
+function nextRequestId(): number {
+  latestRequestId += 1;
+  return latestRequestId;
+}
+
+function isNewestRequest(requestId: number): boolean {
+  return requestId === latestRequestId;
+}
+
 function applyStatus(
   status: ConsentStatus,
 ): Pick<ConsentState, 'availability' | 'modelTrainingActive' | 'lastActionAt'> {
@@ -79,6 +95,7 @@ export const useConsentStore = create<ConsentState>((set, get) => ({
   error: null,
 
   hydrate: async fetchFn => {
+    const requestId = nextRequestId();
     const session = getApiSession();
     if (!session) {
       set(SIGNED_OUT_STATE);
@@ -91,12 +108,14 @@ export const useConsentStore = create<ConsentState>((set, get) => ({
         set(staleSessionState());
         return;
       }
+      if (!isNewestRequest(requestId)) return;
       set(applyStatus(status));
     } catch (error) {
       if (!isCurrentSession(session)) {
         set(staleSessionState());
         return;
       }
+      if (!isNewestRequest(requestId)) return;
       set({
         availability: 'unavailable',
         modelTrainingActive: false,
@@ -111,6 +130,7 @@ export const useConsentStore = create<ConsentState>((set, get) => ({
   setModelTrainingConsent: async (granted, fetchFn) => {
     const session = getApiSession();
     if (!session) {
+      nextRequestId();
       set({
         ...SIGNED_OUT_STATE,
         error: 'Sign in to change this setting. Nothing was changed.',
@@ -118,6 +138,7 @@ export const useConsentStore = create<ConsentState>((set, get) => ({
       return;
     }
     if (get().busy) return;
+    const requestId = nextRequestId();
     set({ busy: true, error: null });
     try {
       const status = granted
@@ -125,6 +146,12 @@ export const useConsentStore = create<ConsentState>((set, get) => ({
         : await withdrawModelTrainingConsent(session, deviceLabel(), fetchFn);
       if (!isCurrentSession(session)) {
         set(staleSessionState());
+        return;
+      }
+      // A newer status request already describes the ledger; only release
+      // the toggle this mutation locked.
+      if (!isNewestRequest(requestId)) {
+        set({ busy: false });
         return;
       }
       set({ busy: false, ...applyStatus(status) });

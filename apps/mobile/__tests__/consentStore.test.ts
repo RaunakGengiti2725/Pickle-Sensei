@@ -136,6 +136,32 @@ describe('consentStore', () => {
     expect(state.busy).toBe(false);
   });
 
+  it('a status response requested before a grant never overwrites the grant', async () => {
+    establishApiSession(session);
+    let resolveStatus: (response: Response) => void = () => {};
+    const staleStatusFetch: ConsentFetch = jest.fn(
+      () =>
+        new Promise<Response>(resolve => {
+          resolveStatus = resolve;
+        }),
+    );
+    const inFlightStatus = useConsentStore.getState().hydrate(staleStatusFetch);
+
+    const grantFetch = jest.fn(() =>
+      Promise.resolve(jsonResponse(statusBody(true))),
+    );
+    await useConsentStore.getState().setModelTrainingConsent(true, grantFetch);
+    expect(useConsentStore.getState().modelTrainingActive).toBe(true);
+
+    resolveStatus(jsonResponse(statusBody(false)));
+    await inFlightStatus;
+
+    const state = useConsentStore.getState();
+    expect(state.availability).toBe('ready');
+    expect(state.modelTrainingActive).toBe(true);
+    expect(state.error).toBeNull();
+  });
+
   it('surfaces an invalid server response instead of guessing state', async () => {
     establishApiSession(session);
     const fetchFn = jest.fn(() =>
