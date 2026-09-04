@@ -1805,6 +1805,89 @@ begin
 end $$;
 reset role;
 
+-- ──────── M: the terminal lock must also hold against DELETE + re-INSERT ────
+--
+-- 20260904140200_permit_status_transitions only guards UPDATE. The owner still
+-- holds DELETE (analysis_permits_delete_own, 20260829140000) and INSERT on
+-- every column including id/status/outcome, so "reopen" is one statement pair
+-- away: delete the finalized row, re-insert the same permit id as reserved,
+-- hand it to apply_synced_shot() again. DB-03's acceptance ("a permit never
+-- leaves a terminal status and its outcome is fixed"; "apply_synced_shot with
+-- a reopened permit is impossible to construct") requires the same identity to
+-- stay finalized/scored whatever the owner does to the row.
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000102';
+
+-- M1: the permit the RPC finalized in L3 (lena-key-3) is deleted and re-minted
+-- under the SAME id by its owner; it must still read finalized/scored and must
+-- still be unusable for a second scored shot.
+do $$
+declare v text; p uuid;
+begin
+  select id into p from public.analysis_permits where idempotency_key = 'lena-key-3';
+  begin
+    delete from public.analysis_permits where id = p;
+    insert into public.analysis_permits (id, user_id, idempotency_key)
+    values (p, '00000000-0000-4000-8000-000000000102', 'lena-key-3-reopened');
+  exception when insufficient_privilege then null;
+  end;
+  if not exists (select 1 from public.analysis_permits
+                 where id = p and status = 'finalized' and outcome = 'scored') then
+    raise exception
+      'M1: owner DELETE + re-INSERT reopened finalized permit % (now %/%); a terminal permit must never leave finalized/scored',
+      p,
+      (select status from public.analysis_permits where id = p),
+      coalesce((select outcome from public.analysis_permits where id = p), 'null');
+  end if;
+  v := public.apply_synced_shot(jsonb_build_object(
+    'id', '00000000-0000-4000-8000-000000001023',
+    'analysisPermitId', p,
+    'resultKind', 'scored',
+    'shotType', 'drive', 'cameraView', 'side',
+    'capturedAt', '2026-08-31T10:02:00Z',
+    'startMs', 0, 'contactMs', 500, 'endMs', 1000,
+    'overallScore', 7.1, 'confidence', 0.9,
+    'versionVector', jsonb_build_object(
+      'appVersion', '1.0.0', 'modelBundleVersion', 'bundle-1',
+      'poseModelVersion', 'pose-1', 'paddleModelVersion', 'paddle-1',
+      'strokeDetectorVersion', 'stroke-1', 'phaseModelVersion', 'phase-1',
+      'scoringModelVersion', 'scoring-1', 'shotConfigVersion', 'config-1')
+  ));
+  if v <> 'access.permit_not_reserved' then
+    raise exception 'M1: a re-minted permit id must not be consumable again (got %)', v;
+  end if;
+  if (select count(*) from public.shots
+      where user_id = '00000000-0000-4000-8000-000000000102'
+        and result_kind = 'scored') <> 1 then
+    raise exception 'M1: one permit id must yield exactly one scored shot';
+  end if;
+end $$;
+
+-- M2: the outcome of a terminal permit is fixed — the owner must not be able
+-- to rewrite finalized/scored (lena-key-1) into released/cancelled by deleting
+-- the row and re-inserting the same id with the new status/outcome.
+do $$
+declare p uuid;
+begin
+  select id into p from public.analysis_permits where idempotency_key = 'lena-key-1';
+  begin
+    delete from public.analysis_permits where id = p;
+    insert into public.analysis_permits (id, user_id, idempotency_key, status, outcome)
+    values (p, '00000000-0000-4000-8000-000000000102', 'lena-key-1-rewritten',
+            'released', 'cancelled');
+  exception when insufficient_privilege then null;
+  end;
+  if not exists (select 1 from public.analysis_permits
+                 where id = p and status = 'finalized' and outcome = 'scored') then
+    raise exception
+      'M2: owner DELETE + re-INSERT rewrote terminal permit % to %/%; a terminal outcome is fixed',
+      p,
+      (select status from public.analysis_permits where id = p),
+      coalesce((select outcome from public.analysis_permits where id = p), 'null');
+  end if;
+end $$;
+reset role;
+
 rollback;
 
 \echo SECURITY REGRESSION MATRIX: ALL CASES PASSED
