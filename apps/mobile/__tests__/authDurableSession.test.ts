@@ -406,6 +406,53 @@ describe('relaunch (hydrate) with a persisted session', () => {
     expect(mockKv.get('auth.last-provider')).toBe('');
   });
 
+  it('a refresh whose expiry is already past (device clock ahead of the server) restores the session once — no per-second refresh + Keychain write loop, no sign-out', async () => {
+    jest.useFakeTimers();
+    try {
+      seedVault('refresh-1', 'apple');
+      let rotations = 0;
+      const fetchMock = installRoutes({
+        '/v1/auth/refresh': () => {
+          rotations += 1;
+          return response({
+            session: {
+              accessToken: `access-${rotations + 1}`,
+              refreshToken: `refresh-${rotations + 1}`,
+              expiresAt: Math.floor(Date.now() / 1000) - 3600,
+            },
+          });
+        },
+      });
+      const keychainWrites = jest.spyOn(Keychain, 'setGenericPassword');
+
+      const hydrating = useAuthStore.getState().hydrate();
+      await jest.advanceTimersByTimeAsync(0);
+      await hydrating;
+
+      expect(useAuthStore.getState().session?.canonicalAppUserId).toBe(
+        canonicalId,
+      );
+      expect(getApiSession()?.bearerToken).toBe('access-2');
+      expect(vaultRecord()).toMatchObject({ refreshToken: 'refresh-2' });
+
+      await jest.advanceTimersByTimeAsync(30_000);
+
+      // Launch exchange + at most one rescheduled attempt in 30 s, each
+      // persisting its rotated refresh token exactly once.
+      expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(2);
+      expect(keychainWrites.mock.calls.length).toBeLessThanOrEqual(2);
+      expect(useAuthStore.getState().session?.canonicalAppUserId).toBe(
+        canonicalId,
+      );
+      expect(useAuthStore.getState().error).toBeNull();
+      expect(getActiveDataOwner()).toBe(canonicalId);
+      expect(vaultRecord()).not.toBeNull();
+      keychainWrites.mockRestore();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('discards a malformed Keychain record instead of trusting it', async () => {
     __keychainStore.set(SESSION_VAULT_SERVICE, {
       username: 'session',
