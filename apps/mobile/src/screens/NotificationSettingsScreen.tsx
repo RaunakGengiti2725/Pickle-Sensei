@@ -74,6 +74,8 @@ export function NotificationSettingsScreen() {
   const permission = useNotificationStore(s => s.permission);
   const persistFailed = useNotificationStore(s => s.persistFailed);
   const scheduleFailed = useNotificationStore(s => s.scheduleFailed);
+  const readFailed = useNotificationStore(s => s.readFailed);
+  const hydrate = useNotificationStore(s => s.hydrate);
   const setPrefs = useNotificationStore(s => s.setPrefs);
   const refreshPermission = useNotificationStore(s => s.refreshPermission);
   const syncNow = useNotificationStore(s => s.syncNow);
@@ -140,6 +142,47 @@ export function NotificationSettingsScreen() {
 
   const recheckPermission = () =>
     void refreshPermission().then(() => syncNow());
+
+  if (readFailed) {
+    // The saved preferences could not be read: showing the controls would
+    // present defaults as this account's choices, and any touch would write
+    // them over the still-valid saved row.
+    return (
+      <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>
+        <StatusBar barStyle="dark-content" />
+        <ScreenHeader
+          title="Notifications"
+          onBack={() => navigation.goBack()}
+        />
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+        >
+          <Card style={styles.deniedCard}>
+            <View style={styles.deniedHeader}>
+              <View style={styles.deniedIcon}>
+                <Icon name="bell" size={20} color={color.warn} />
+              </View>
+              <Text style={[type.h3, styles.deniedTitle]}>
+                Couldn’t load your reminder settings
+              </Text>
+            </View>
+            <Text style={[type.body, styles.deniedBody]}>
+              Your saved reminders are untouched on this phone. Nothing can be
+              changed here until they load.
+            </Text>
+            <View style={styles.deniedAction}>
+              <Button
+                label="Try again"
+                variant="secondary"
+                onPress={() => void hydrate()}
+              />
+            </View>
+          </Card>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.screen}>

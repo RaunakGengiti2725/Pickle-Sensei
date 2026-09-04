@@ -27,6 +27,15 @@ import {
  *
  * A signed-out process gets everything cancelled — reminders never outlive
  * the account context that asked for them.
+ *
+ * Two invariants make the async paths safe:
+ * - The in-memory state describes exactly ONE owner. Observing a different
+ *   active owner invalidates it (unhydrated, default prefs) and a write made
+ *   before that owner's durable row has been read is held and rebased onto it,
+ *   so no account can inherit another account's opt-in or reminder time.
+ * - Scheduler passes are sequenced. Only the newest pass may touch the OS
+ *   queue or the scheduling flags, so a sync that resumes after an await can
+ *   never apply prefs the user has since changed nor mask a newer failure.
  */
 
 export interface NotificationStoreDeps {
@@ -50,6 +59,9 @@ interface NotificationState {
   /** The last reconcile against the OS scheduler failed; what is queued may
    *  not match the preferences until the next successful sync. */
   scheduleFailed: boolean;
+  /** The durable preferences could not be read; defaults are NOT the truth
+   *  for this owner, so nothing is presented or written until a read lands. */
+  readFailed: boolean;
   hydrate: (deps?: NotificationStoreDeps) => Promise<void>;
   refreshPermission: (deps?: NotificationStoreDeps) => Promise<void>;
   /** System prompt → on grant, flips the master switch on and schedules. */
@@ -120,6 +132,18 @@ function parsePendingOnboardingChoice(
   }
 }
 
+/** Newest hydrate pass; older passes must not commit anything. */
+let hydratePass = 0;
+/** Hydrates that have not settled yet; one of them will adopt a held write. */
+let hydratesInFlight = 0;
+/** Newest scheduler pass; older passes must not touch the queue or flags. */
+let schedulerPass = 0;
+/** A write made before its owner's durable row was read, rebased on hydrate. */
+let deferredWrite: {
+  owner: string;
+  patch: Partial<Omit<NotificationPrefs, 'version'>>;
+} | null = null;
+
 async function persistPrefs(
   owner: string,
   prefs: NotificationPrefs,
@@ -138,56 +162,91 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   permission: 'unknown',
   persistFailed: false,
   scheduleFailed: false,
+  readFailed: false,
 
   hydrate: async deps => {
     const owner = deps?.expectedOwnerKey ?? getActiveDataOwner();
     if (getActiveDataOwner() !== owner) return;
-    const scheduler = deps?.scheduler ?? getScheduler();
-    if (owner === SIGNED_OUT_DATA_OWNER) {
-      // No readable owner: nothing may stay scheduled.
-      await scheduler.cancelAllPlanned().catch(() => {});
-      if (getActiveDataOwner() !== owner) return;
+    const pass = ++hydratePass;
+    const live = () => pass === hydratePass && getActiveDataOwner() === owner;
+    if (get().ownerKey !== owner) {
+      // The state describes another owner: it stops being the truth for this
+      // process the moment the switch is observed, not when the read lands.
       set({
-        hydrated: true,
-        ownerKey: owner,
+        hydrated: false,
+        ownerKey: null,
         prefs: { ...DEFAULT_NOTIFICATION_PREFS },
         permission: get().permission,
         persistFailed: false,
         scheduleFailed: false,
+        readFailed: false,
       });
-      return;
     }
-    let prefs: NotificationPrefs;
+    if (deferredWrite && deferredWrite.owner !== owner) deferredWrite = null;
+    hydratesInFlight += 1;
     try {
-      const db = getDb();
-      const raw = await getKv(db, notificationPrefsKeyForOwner(owner));
-      prefs = parseNotificationPrefs(raw);
-      const pendingRaw = await getKv(
-        db,
-        PENDING_NOTIFICATION_ONBOARDING_KV_KEY,
-      );
+      const scheduler = deps?.scheduler ?? getScheduler();
+      if (owner === SIGNED_OUT_DATA_OWNER) {
+        // No readable owner: nothing may stay scheduled.
+        await scheduler.cancelAllPlanned().catch(() => {});
+        if (!live()) return;
+        set({
+          hydrated: true,
+          ownerKey: owner,
+          prefs: { ...DEFAULT_NOTIFICATION_PREFS },
+          permission: get().permission,
+          persistFailed: false,
+          scheduleFailed: false,
+          readFailed: false,
+        });
+        return;
+      }
+
+      let raw: string | null;
+      let pendingRaw: string | null;
+      try {
+        const db = getDb();
+        raw = await getKv(db, notificationPrefsKeyForOwner(owner));
+        pendingRaw = await getKv(db, PENDING_NOTIFICATION_ONBOARDING_KV_KEY);
+      } catch {
+        // The read failed: defaults are not this owner's preferences. Staying
+        // unhydrated keeps the saved row intact until a read succeeds.
+        if (!live()) return;
+        set({ readFailed: true });
+        return;
+      }
+      if (!live()) return;
+      let prefs = parseNotificationPrefs(raw);
       const pending = parsePendingOnboardingChoice(pendingRaw);
-      if (getActiveDataOwner() !== owner) return;
       if (pending) {
         if (!raw) {
-          prefs = {
-            ...prefs,
-            enabled: pending.enabled,
-            promptDismissed: true,
-          };
-          await persistPrefs(owner, prefs);
-          if (getActiveDataOwner() !== owner) return;
+          prefs = { ...prefs, enabled: pending.enabled, promptDismissed: true };
         }
-        await setKv(db, PENDING_NOTIFICATION_ONBOARDING_KV_KEY, '');
+        try {
+          if (!raw) await persistPrefs(owner, prefs);
+          await setKv(getDb(), PENDING_NOTIFICATION_ONBOARDING_KV_KEY, '');
+          if (!live()) return;
+          set({ persistFailed: false });
+        } catch {
+          if (!live()) return;
+          set({ persistFailed: true });
+        }
       }
-    } catch {
-      prefs = { ...DEFAULT_NOTIFICATION_PREFS };
+      if (!live()) return;
+      set({ hydrated: true, ownerKey: owner, prefs, readFailed: false });
+      await get().refreshPermission(deps);
+      if (!live() || get().ownerKey !== owner) return;
+      const held = deferredWrite?.owner === owner ? deferredWrite.patch : null;
+      deferredWrite = null;
+      if (held) {
+        // Rebased on this owner's real prefs, then persisted and scheduled.
+        await get().setPrefs(held, deps);
+        return;
+      }
+      await get().syncNow(deps);
+    } finally {
+      hydratesInFlight -= 1;
     }
-    if (getActiveDataOwner() !== owner) return;
-    set({ hydrated: true, ownerKey: owner, prefs });
-    await get().refreshPermission(deps);
-    if (getActiveDataOwner() !== owner || get().ownerKey !== owner) return;
-    await get().syncNow(deps);
   },
 
   refreshPermission: async deps => {
@@ -246,8 +305,25 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   setPrefs: async (patch, deps) => {
     const owner = getActiveDataOwner();
     if (owner === SIGNED_OUT_DATA_OWNER) return;
+    const { hydrated, ownerKey } = get();
+    if (!hydrated || ownerKey !== owner) {
+      // This owner's durable row has not been read yet: the in-memory prefs
+      // belong to nobody, so hold the patch for the hydrate that rebases it
+      // instead of writing another owner's values under this owner's key.
+      deferredWrite = {
+        owner,
+        patch: {
+          ...(deferredWrite?.owner === owner ? deferredWrite.patch : {}),
+          ...patch,
+        },
+      };
+      // A hydrate already in flight will adopt it; otherwise read now so the
+      // choice still lands on this owner's real preferences.
+      if (hydratesInFlight === 0) await get().hydrate(deps);
+      return;
+    }
     const prefs: NotificationPrefs = { ...get().prefs, ...patch, version: 1 };
-    set({ prefs, ownerKey: owner });
+    set({ prefs });
     try {
       await persistPrefs(owner, prefs);
       set({ persistFailed: false });
@@ -267,6 +343,8 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   syncNow: async deps => {
     const scheduler = deps?.scheduler ?? getScheduler();
     const owner = getActiveDataOwner();
+    const pass = ++schedulerPass;
+    const newest = () => pass === schedulerPass;
     const { ownerKey, prefs, permission } = get();
     try {
       if (
@@ -276,17 +354,24 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         permission !== 'granted'
       ) {
         await scheduler.cancelAllPlanned();
+        if (!newest()) return;
         set({ scheduleFailed: false });
         return;
       }
       const loadContext = deps?.loadContext ?? defaultLoadContext;
       const plan = buildNotificationPlan(prefs, await loadContext());
-      if (getActiveDataOwner() !== owner || get().ownerKey !== owner) return;
+      // A newer pass has already reconciled the OS queue against newer
+      // preferences; this plan is stale and may neither be applied nor
+      // report success over the newer pass's result.
+      if (!newest() || getActiveDataOwner() !== owner) return;
+      if (get().ownerKey !== owner) return;
       await scheduler.applyPlan(plan);
+      if (!newest()) return;
       set({ scheduleFailed: false });
     } catch {
       // Scheduling is best-effort by design: a failed sync never breaks the
       // app, and the next foreground pass retries with fresh facts.
+      if (!newest()) return;
       set({ scheduleFailed: true });
     }
   },

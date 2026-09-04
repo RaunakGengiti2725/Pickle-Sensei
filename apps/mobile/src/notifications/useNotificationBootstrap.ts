@@ -24,8 +24,15 @@ export function useNotificationBootstrap(ownerKey: string | null): void {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextState => {
       if (nextState !== 'active') return;
+      const { hydrated, readFailed } = useNotificationStore.getState();
+      // A read that failed left no preferences to sync: retry it instead,
+      // which is also what re-arms the schedule once the read succeeds.
+      if (readFailed || !hydrated) {
+        if (ownerKey) void hydrate({ expectedOwnerKey: ownerKey });
+        return;
+      }
       void refreshPermission().then(() => syncNow());
     });
     return () => subscription.remove();
-  }, [refreshPermission, syncNow]);
+  }, [hydrate, ownerKey, refreshPermission, syncNow]);
 }

@@ -353,4 +353,49 @@ describe('N3 — failed kv read during hydrate', () => {
     );
     expect(hydratedWithDefaults).toBe(false);
   });
+
+  it('a later successful hydrate restores the saved prefs and re-arms the plan', async () => {
+    setActiveDataOwner(ownerA);
+    const saved = seedPrefs(ownerA, {
+      enabled: true,
+      promptDismissed: true,
+      practiceReminderMinutes: 19 * 60,
+    });
+    const scheduler = new RecordingScheduler();
+    mockSelectFailuresLeft = 1;
+    await useNotificationStore
+      .getState()
+      .hydrate({ scheduler, loadContext: async () => context });
+    await useNotificationStore
+      .getState()
+      .dismissPrompt({ scheduler, loadContext: async () => context });
+    scheduler.ops = [];
+
+    // The transient failure is over.
+    await useNotificationStore
+      .getState()
+      .hydrate({ scheduler, loadContext: async () => context });
+
+    const state = useNotificationStore.getState();
+    expect(state.hydrated).toBe(true);
+    expect(state.readFailed).toBe(false);
+    expect(state.prefs.enabled).toBe(saved.enabled);
+    expect(state.prefs.practiceReminderMinutes).toBe(
+      saved.practiceReminderMinutes,
+    );
+    expect(durablePrefs(ownerA)).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        practiceReminderMinutes: saved.practiceReminderMinutes,
+      }),
+    );
+    const last = scheduler.ops.at(-1);
+    expect(last?.kind).toBe('apply');
+    const practice =
+      last?.kind === 'apply'
+        ? last.plan.find(item => item.id === 'ps.reminder.practice')
+        : undefined;
+    expect(practice).toBeDefined();
+    expect(new Date(practice!.timestampMs).getHours()).toBe(19);
+  });
 });
