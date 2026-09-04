@@ -278,13 +278,15 @@ describe('AchievementsShowcase button ledger', () => {
     const buttons = badgeButtons(renderer);
     expect(buttons).toHaveLength(10);
     const labels = buttons.map(node => node.props.accessibilityLabel as string);
+    // Engine day keys are calendar days: the oracle formats them in UTC so it
+    // names the same day in every device zone.
     const mar8 = new Date('2026-03-08T12:00:00Z').toLocaleDateString(
       undefined,
-      { month: 'short', day: 'numeric' },
+      { month: 'short', day: 'numeric', timeZone: 'UTC' },
     );
     const mar10 = new Date('2026-03-10T12:00:00Z').toLocaleDateString(
       undefined,
-      { month: 'short', day: 'numeric' },
+      { month: 'short', day: 'numeric', timeZone: 'UTC' },
     );
     expect(labels).toContain(`First Spark. Earned ${mar8}`);
     expect(labels).toContain(`Kindling. Earned ${mar10}`);
