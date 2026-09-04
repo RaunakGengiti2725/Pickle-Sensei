@@ -60,10 +60,13 @@ export interface CampaignReport {
     finishedAt: string;
     seedBase: number;
     iterations: number;
+    /** Seeds whose rows are in the report (== iterations unless aborted). */
+    completedSeeds: number;
     workers: number;
     node: string;
     minLen: number;
     maxLen: number;
+    aborted?: string;
   };
   totals: {
     sequences: number;
@@ -201,14 +204,28 @@ export async function runSeedBoth(
   rows.push(pureRow);
 
   if (ctx) {
-    let db: DbSequenceResult;
+    let dbRow: SeedRow | undefined;
+    let phase = "run";
     try {
-      db = await runDbSequence(ctx, seed);
+      const db: DbSequenceResult = await runDbSequence(ctx, seed);
+      let dbReplay: boolean | null = null;
+      phase = "replay";
+      if (opts.replay) dbReplay = dbTraceKey(await runDbSequence(ctx, seed)) === dbTraceKey(db);
+      dbRow = rowFromDb(db, dbReplay);
+      if (db.status === "BROKEN") {
+        phase = "minimize";
+        dbRow.minimized = await minimizeDbSeed(ctx, seed);
+        phase = "flake";
+        let failed = 0;
+        for (let k = 0; k < opts.flakeRuns; k++)
+          if ((await runDbSequence(ctx, seed)).status === "BROKEN") failed++;
+        dbRow.flakeRate = { runs: opts.flakeRuns, failed };
+      }
     } catch (error) {
-      // An exception escaping the sequence runner is itself a finding: record
-      // it as a BROKEN row instead of aborting the campaign.
+      // An exception escaping the sequence runner (in any phase) is itself a
+      // finding: record it as a BROKEN row instead of aborting the campaign.
       const { length } = generateDbSequence(seed);
-      rows.push({
+      dbRow ??= {
         seed,
         lens: "db",
         status: "BROKEN",
@@ -216,31 +233,20 @@ export async function runSeedBoth(
         executedSteps: 0,
         durationMs: 0,
         replayIdentical: null,
-        failures: [
-          {
-            step: -1,
-            kind: "harness",
-            invariant: "HARNESS",
-            detail: (error instanceof Error ? (error.stack ?? error.message) : String(error)).slice(
-              0,
-              600,
-            ),
-          },
-        ],
+        failures: [],
         observations: {},
         kinds: {},
+      };
+      dbRow.status = "BROKEN";
+      dbRow.failures.push({
+        step: -1,
+        kind: `harness:${phase}`,
+        invariant: "HARNESS",
+        detail: (error instanceof Error ? (error.stack ?? error.message) : String(error)).slice(
+          0,
+          600,
+        ),
       });
-      return rows;
-    }
-    let dbReplay: boolean | null = null;
-    if (opts.replay) dbReplay = dbTraceKey(await runDbSequence(ctx, seed)) === dbTraceKey(db);
-    const dbRow = rowFromDb(db, dbReplay);
-    if (db.status === "BROKEN") {
-      dbRow.minimized = await minimizeDbSeed(ctx, seed);
-      let failed = 0;
-      for (let k = 0; k < opts.flakeRuns; k++)
-        if ((await runDbSequence(ctx, seed)).status === "BROKEN") failed++;
-      dbRow.flakeRate = { runs: opts.flakeRuns, failed };
     }
     rows.push(dbRow);
   }
@@ -332,10 +338,13 @@ async function main(): Promise<void> {
       }
     }
   };
+  let aborted: string | undefined;
   try {
     await Promise.all(contexts.map((ctx) => worker(ctx)));
+  } catch (error) {
+    aborted = error instanceof Error ? (error.stack ?? error.message) : String(error);
   } finally {
-    for (const ctx of contexts) await ctx.pool.end();
+    for (const ctx of contexts) await ctx.pool.end().catch(() => undefined);
   }
   rows.sort((a, b) => a.seed - b.seed || a.lens.localeCompare(b.lens));
   const report: CampaignReport = {
@@ -344,10 +353,12 @@ async function main(): Promise<void> {
       finishedAt: new Date().toISOString(),
       seedBase,
       iterations,
+      completedSeeds: done,
       workers,
       node: process.version,
       minLen: 5,
       maxLen: 60,
+      ...(aborted === undefined ? {} : { aborted }),
     },
     totals: summarize(rows),
     rows,
@@ -358,6 +369,10 @@ async function main(): Promise<void> {
     `[stress] done: ${report.totals.sequences} sequences, ${report.totals.steps} steps, ` +
       `${report.totals.broken} broken, ${report.totals.replayMismatches} replay mismatches -> ${out}`,
   );
+  if (aborted !== undefined) {
+    console.error(`[stress] ABORTED after ${done}/${iterations} seeds: ${aborted}`);
+    process.exit(2);
+  }
   process.exit(report.totals.broken === 0 && report.totals.replayMismatches === 0 ? 0 : 1);
 }
 

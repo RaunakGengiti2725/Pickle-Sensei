@@ -1177,11 +1177,17 @@ export async function runDbSequence(
             }
             if (victimPoolErrors > 0) observe(`${action.kind}:pool_error_events`);
           }
-          model.schemaMigrationsTableExists = true;
           // M6: whatever was recorded is consistent and re-running completes.
-          const { rows: recorded } = await pool.query<{ name: string; checksum: string }>(
-            "SELECT name, checksum FROM schema_migrations",
-          );
+          // (A runner killed right after taking the lock may not have created
+          // schema_migrations yet on a fresh database.)
+          model.schemaMigrationsTableExists = await tableExists(pool, "schema_migrations");
+          const recorded = model.schemaMigrationsTableExists
+            ? (
+                await pool.query<{ name: string; checksum: string }>(
+                  "SELECT name, checksum FROM schema_migrations",
+                )
+              ).rows
+            : [];
           for (const row of recorded) {
             const sql = model.dir.get(row.name);
             if (sql === undefined || checksumOf(sql) !== row.checksum)
@@ -1202,6 +1208,7 @@ export async function runDbSequence(
           );
           if (!resume.ok) fail(i, action.kind, "M6", `resume failed: ${classifyError(resume.e)}`);
           else {
+            model.schemaMigrationsTableExists = true;
             const union = new Set([...recorded.map((r) => r.name), ...resume.v.applied]);
             const expectedUnion = new Set([...model.applied.keys(), ...predicted.applied]);
             if (JSON.stringify([...union].sort()) !== JSON.stringify([...expectedUnion].sort()))
