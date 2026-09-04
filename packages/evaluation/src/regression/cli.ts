@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { compareSummaries, formatCompareReport } from "./compare.js";
 import { REPO_ROOT } from "./benches.js";
-import { DEFAULT_REPORT_DIR, runRegression } from "./run.js";
+import { DEFAULT_REPORT_DIR, RunInterruptedError, runRegression } from "./run.js";
 import { validateRegressionSummary, type RegressionSummary } from "./summarySchema.js";
 import { validateToleranceConfig, type ToleranceConfig } from "./tolerances.js";
 
@@ -11,8 +11,9 @@ import { validateToleranceConfig, type ToleranceConfig } from "./tolerances.js";
  * pnpm --filter @pickle/evaluation bench:compare <baseline.json> <candidate.json> [--tolerances <path>] [--json]
  *
  * Exit codes — run: 0 all benches ok, 1 a bench failed (summary still written),
- * 2 usage / setup error.  compare: 0 no regressions beyond tolerance,
- * 1 regressions, 2 usage or invalid input, 3 non-comparable documents.
+ * 2 usage / setup error, 128+signal when interrupted by SIGINT/SIGTERM (children
+ * killed, scratch removed, no summary).  compare: 0 no regressions beyond
+ * tolerance, 1 regressions, 2 usage or invalid input, 3 non-comparable documents.
  */
 export const DEFAULT_TOLERANCES_PATH = "packages/evaluation/regression.tolerances.json";
 
@@ -79,7 +80,33 @@ function flagString(flags: Map<string, string | true>, name: string): string | u
   return typeof value === "string" ? value : undefined;
 }
 
-export function main(argv: string[]): number {
+async function runCommand(flags: Map<string, string | true>): Promise<number> {
+  try {
+    const only = flagString(flags, "only")
+      ?.split(",")
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0);
+    const runId = flagString(flags, "run-id");
+    const outDir = flagString(flags, "out-dir");
+    const result = await runRegression({
+      outDir: outDir ? resolveUserPath(outDir) : DEFAULT_REPORT_DIR,
+      ...(only ? { only } : {}),
+      ...(runId ? { runId } : {}),
+    });
+    return result.exitCode;
+  } catch (error) {
+    if (error instanceof RunInterruptedError) {
+      console.error(error.message);
+      return error.exitCode;
+    }
+    console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
+    return 2;
+  }
+}
+
+/** `run` resolves asynchronously (it awaits subprocess benches); `compare`
+ *  and usage errors return synchronously. */
+export function main(argv: string[]): number | Promise<number> {
   let parsed: ParsedArgs;
   try {
     parsed = parseArgs(argv);
@@ -95,23 +122,7 @@ export function main(argv: string[]): number {
       console.error(`unexpected arguments: ${rest.join(" ")}\n${USAGE}`);
       return 2;
     }
-    try {
-      const only = flagString(parsed.flags, "only")
-        ?.split(",")
-        .map((id) => id.trim())
-        .filter((id) => id.length > 0);
-      const runId = flagString(parsed.flags, "run-id");
-      const outDir = flagString(parsed.flags, "out-dir");
-      const result = runRegression({
-        outDir: outDir ? resolveUserPath(outDir) : DEFAULT_REPORT_DIR,
-        ...(only ? { only } : {}),
-        ...(runId ? { runId } : {}),
-      });
-      return result.exitCode;
-    } catch (error) {
-      console.error(error instanceof Error ? (error.stack ?? error.message) : String(error));
-      return 2;
-    }
+    return runCommand(parsed.flags);
   }
 
   if (command === "compare") {
@@ -146,5 +157,7 @@ export function main(argv: string[]): number {
 
 const isMain = process.argv[1]?.endsWith("cli.ts") === true;
 if (isMain) {
-  process.exitCode = main(process.argv.slice(2));
+  void Promise.resolve(main(process.argv.slice(2))).then((code) => {
+    process.exitCode = code;
+  });
 }

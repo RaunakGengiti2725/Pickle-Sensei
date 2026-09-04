@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   existsSync,
@@ -9,7 +9,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { constants as osConstants, tmpdir } from "node:os";
 import { isAbsolute, join, relative } from "node:path";
 import {
   REPO_ROOT,
@@ -133,19 +133,60 @@ export function untrackedDatasetInputs(root: string = REPO_ROOT): string[] {
     .sort();
 }
 
-export function isTreeDirty(root: string = REPO_ROOT): boolean {
-  return (
-    git(["status", "--porcelain", "--untracked-files=no"], root).length > 0 ||
-    untrackedDatasetInputs(root).length > 0
-  );
+/** The two ways a working tree can fail to be identified by `gitSha` +
+ *  `datasetsTreeSha`; each list holds repo-relative paths. */
+export interface TreeDirt {
+  /** Tracked paths with uncommitted modifications (staged or not). */
+  trackedChanges: string[];
+  /** Untracked files under `datasets/` outside the output subtrees. */
+  untrackedDatasetInputs: string[];
 }
 
-export function collectProvenance(): RegressionProvenance {
+export function describeTreeDirt(root: string = REPO_ROOT): TreeDirt {
+  return {
+    trackedChanges: git(["diff", "--name-only", "HEAD", "--"], root)
+      .split("\n")
+      .filter((line) => line.length > 0)
+      .sort(),
+    untrackedDatasetInputs: untrackedDatasetInputs(root),
+  };
+}
+
+export function isTreeDirty(root: string = REPO_ROOT): boolean {
+  const dirt = describeTreeDirt(root);
+  return dirt.trackedChanges.length > 0 || dirt.untrackedDatasetInputs.length > 0;
+}
+
+const MAX_LISTED_DIRTY_PATHS = 20;
+
+function listPaths(paths: string[]): string {
+  const shown = paths.slice(0, MAX_LISTED_DIRTY_PATHS).join(", ");
+  const hidden = paths.length - MAX_LISTED_DIRTY_PATHS;
+  return hidden > 0 ? `${shown}, … ${hidden} more` : shown;
+}
+
+/** One caveat per kind of dirt actually present, naming the paths. */
+export function dirtyTreeCaveats(dirt: TreeDirt): string[] {
+  const caveats: string[] = [];
+  if (dirt.trackedChanges.length > 0) {
+    caveats.push(
+      `Working tree had uncommitted tracked changes (${dirt.trackedChanges.length}: ${listPaths(dirt.trackedChanges)}): gitSha does not fully identify the measured code.`,
+    );
+  }
+  if (dirt.untrackedDatasetInputs.length > 0) {
+    caveats.push(
+      `Working tree had untracked dataset inputs (${dirt.untrackedDatasetInputs.length}: ${listPaths(dirt.untrackedDatasetInputs)}): bench loaders enumerate these directories, so datasetsTreeSha does not fully identify the measured inputs.`,
+    );
+  }
+  return caveats;
+}
+
+export function collectProvenance(dirt: TreeDirt = describeTreeDirt()): RegressionProvenance {
   const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
   return {
     gitSha: git(["rev-parse", "HEAD"]),
     gitBranch: branch === "HEAD" ? null : branch,
-    gitDirty: isTreeDirty(),
+    gitDirty: dirt.trackedChanges.length > 0 || dirt.untrackedDatasetInputs.length > 0,
     datasetsTreeSha: datasetsInputTreeSha(),
     datasetReleases: collectDatasetReleases(),
     modelVersions: collectModelVersions(),
@@ -153,19 +194,76 @@ export function collectProvenance(): RegressionProvenance {
   };
 }
 
-export function runSubprocess(spec: SubprocessSpec): SubprocessResult {
-  const result = spawnSync(TSX_BIN, [spec.script, ...spec.args], {
-    cwd: spec.cwd,
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-    env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+export const HANDLED_SIGNALS = ["SIGINT", "SIGTERM"] as const;
+export type HandledSignal = (typeof HANDLED_SIGNALS)[number];
+
+/** Thrown out of `runRegression` when the runner received SIGINT/SIGTERM:
+ *  the children are gone, the scratch dir is removed, no summary is written. */
+export class RunInterruptedError extends Error {
+  readonly signal: HandledSignal;
+  constructor(signal: HandledSignal) {
+    super(`regression run interrupted by ${signal}`);
+    this.name = "RunInterruptedError";
+    this.signal = signal;
+  }
+  /** Shell convention: 128 + signal number (130 for SIGINT, 143 for SIGTERM). */
+  get exitCode(): number {
+    return 128 + osConstants.signals[this.signal];
+  }
+}
+
+/**
+ * Sends `signal` to the child's whole process group. `runSubprocess` spawns
+ * every child as a group leader (`detached: true`), so the group covers the
+ * node process `tsx` spawns underneath itself — killing only `child.pid`
+ * would orphan that grandchild, which is the one running the bench script.
+ */
+export function killProcessGroup(child: ChildProcess, signal: HandledSignal): void {
+  if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return;
+  try {
+    process.kill(-child.pid, signal);
+  } catch (error) {
+    // The group can vanish between the liveness check above and the kill.
+    if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) throw error;
+  }
+}
+
+/**
+ * Runs a `tsx` script asynchronously so the runner's event loop keeps
+ * turning while the child works: that is what lets a SIGINT/SIGTERM handler
+ * run while a bench is still executing (with `spawnSync` the signal is only
+ * seen once the child exits on its own). While the child is alive it is a
+ * member of `live`, which the signal handler walks to kill process groups.
+ */
+export function runSubprocess(
+  spec: SubprocessSpec,
+  live: Set<ChildProcess> = new Set(),
+): Promise<SubprocessResult> {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(TSX_BIN, [spec.script, ...spec.args], {
+      cwd: spec.cwd,
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+    });
+    live.add(child);
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+    child.on("error", (error) => {
+      live.delete(child);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      live.delete(child);
+      resolvePromise({
+        exitCode: code ?? -1,
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8"),
+      });
+    });
   });
-  if (result.error) throw result.error;
-  return {
-    exitCode: result.status ?? -1,
-    stdout: result.stdout,
-    stderr: result.stderr,
-  };
 }
 
 /** UTC timestamp safe for filenames: 2026-09-04T02-03-04.567Z */
@@ -194,10 +292,10 @@ function errorText(error: unknown): string {
  * subprocess the bench spawned (null when it spawned none); in-process
  * benches always record `exitCode: null`.
  */
-export function executeBench(
+export async function executeBench(
   definition: BenchDefinition,
   lastSubprocessExit: () => number | null,
-): BenchRecord {
+): Promise<BenchRecord> {
   const started = process.hrtime.bigint();
   const base = {
     id: definition.id,
@@ -209,7 +307,7 @@ export function executeBench(
     caveats: definition.caveats,
   };
   try {
-    const output = definition.run();
+    const output = await definition.run();
     const wallClockMs = Number((process.hrtime.bigint() - started) / 1_000_000n);
     return {
       ...base,
@@ -234,7 +332,13 @@ export function executeBench(
   }
 }
 
-export function runRegression(options: RunOptions = {}): RunResult {
+/**
+ * Runs the selected benches and writes one summary. Rejects with
+ * `RunInterruptedError` when SIGINT/SIGTERM arrives mid-run: every live child
+ * process group is killed, the scratch dir is removed and no summary is
+ * written, so an interrupted run leaves nothing behind.
+ */
+export async function runRegression(options: RunOptions = {}): Promise<RunResult> {
   const log = options.log ?? ((line: string) => process.stdout.write(`${line}\n`));
   const runId = assertValidRunId(options.runId ?? timestampRunId());
   const outDir = options.outDir
@@ -247,19 +351,31 @@ export function runRegression(options: RunOptions = {}): RunResult {
 
   const scratchDir = mkdtempSync(join(tmpdir(), "pickle-regression-"));
   const startedAll = process.hrtime.bigint();
-  const provenance = collectProvenance();
+  const dirt = describeTreeDirt();
+  const provenance = collectProvenance(dirt);
   log(
     `regression run ${runId} @ ${provenance.gitSha.slice(0, 12)}${provenance.gitDirty ? " (dirty tree)" : ""}`,
   );
 
+  const liveChildren = new Set<ChildProcess>();
+  let interruptedBy: HandledSignal | null = null;
+  const onSignal = (signal: HandledSignal): void => {
+    interruptedBy ??= signal;
+    for (const child of liveChildren) killProcessGroup(child, signal);
+  };
+  const throwIfInterrupted = (): void => {
+    if (interruptedBy !== null) throw new RunInterruptedError(interruptedBy);
+  };
+
   let lastExit: number | null = null;
-  const tracked = (spec: SubprocessSpec): SubprocessResult => {
-    const result = runSubprocess(spec);
+  const tracked = async (spec: SubprocessSpec): Promise<SubprocessResult> => {
+    const result = await runSubprocess(spec, liveChildren);
     lastExit = result.exitCode;
     return result;
   };
 
   const benches: BenchRecord[] = [];
+  for (const signal of HANDLED_SIGNALS) process.on(signal, onSignal);
   try {
     let definitions = benchDefinitions(tracked, scratchDir);
     if (options.only && options.only.length > 0) {
@@ -272,8 +388,10 @@ export function runRegression(options: RunOptions = {}): RunResult {
       definitions = definitions.filter((definition) => wanted.has(definition.id));
     }
     for (const definition of definitions) {
+      throwIfInterrupted();
       lastExit = null;
-      const record = executeBench(definition, () => lastExit);
+      const record = await executeBench(definition, () => lastExit);
+      throwIfInterrupted();
       benches.push(record);
       const metricCount = Object.keys(record.metrics).length;
       log(
@@ -281,6 +399,7 @@ export function runRegression(options: RunOptions = {}): RunResult {
       );
     }
   } finally {
+    for (const signal of HANDLED_SIGNALS) process.off(signal, onSignal);
     rmSync(scratchDir, { recursive: true, force: true });
   }
 
@@ -299,11 +418,7 @@ export function runRegression(options: RunOptions = {}): RunResult {
       "All benches replay COMMITTED artifacts on Linux (Apple-Vision pose captured earlier on macOS, oracle ball, no paddle track). They are proxies for the on-device pipeline, never Mac/device results.",
       "Gold counts are small (single-digit to low tens per bench); treat every delta as a per-case finding, not a rate estimate.",
       "Abstentions are first-class outcomes. A metric value of null means 'not measurable in this run', never zero.",
-      ...(provenance.gitDirty
-        ? [
-            "Working tree had uncommitted tracked changes: gitSha does not fully identify the measured code.",
-          ]
-        : []),
+      ...dirtyTreeCaveats(dirt),
       ...(options.only && options.only.length > 0
         ? [
             `Partial run: only ${options.only.join(", ")} executed; not comparable to a full baseline.`,

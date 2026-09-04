@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -91,7 +91,7 @@ export interface BenchDefinition {
   cwd: string;
   inputs: string[];
   caveats: string[];
-  run: () => BenchOutput;
+  run: () => BenchOutput | Promise<BenchOutput>;
 }
 
 /** Subprocess result handed to a bench's parser. */
@@ -100,6 +100,8 @@ export interface SubprocessResult {
   stdout: string;
   stderr: string;
 }
+
+export type SubprocessRunner = (spec: SubprocessSpec) => Promise<SubprocessResult>;
 
 export const CONTACT_STRICT_MS = 66;
 export const CONTACT_ACCEPT_MS = 132;
@@ -233,11 +235,13 @@ const LINUX_PROXY_CAVEAT =
 /**
  * Deterministic, Linux-runnable benches that already exist in the repository.
  * Each in-process bench calls an exported function and never writes to disk;
- * each subprocess bench is a `tsx` script whose own output file is either
- * redirected to `scratchDir` or consumed and removed by the runner.
+ * each subprocess bench is a `tsx` script whose report is written to an
+ * explicit path inside `scratchDir` (owned and removed by the runner), so a
+ * bench never touches the committed `datasets/` tree and two runs never see
+ * each other's files.
  */
 export function benchDefinitions(
-  runSubprocess: (spec: SubprocessSpec) => SubprocessResult,
+  runSubprocess: SubprocessRunner,
   scratchDir: string,
 ): BenchDefinition[] {
   const swingLabScript = (script: string, args: string[] = []): SubprocessSpec => ({
@@ -248,8 +252,8 @@ export function benchDefinitions(
   const describe = (spec: SubprocessSpec): string =>
     ["tsx", spec.script, ...spec.args.map((arg) => arg.replace(scratchDir, "<scratch>"))].join(" ");
 
-  const runAndRequireOk = (spec: SubprocessSpec): SubprocessResult => {
-    const result = runSubprocess(spec);
+  const runAndRequireOk = async (spec: SubprocessSpec): Promise<SubprocessResult> => {
+    const result = await runSubprocess(spec);
     if (result.exitCode !== 0) {
       throw new BenchDataError(
         `${describe(spec)} exited ${result.exitCode}\n${result.stderr.trim().split("\n").slice(-20).join("\n")}`,
@@ -258,27 +262,22 @@ export function benchDefinitions(
     return result;
   };
 
-  /** Run a script that writes exactly one new timestamped file into a
-   *  committed directory, read that file, and remove it (the summary is the
-   *  only artifact this runner leaves behind). */
-  const runCapturingNewFile = (spec: SubprocessSpec, outDir: string): unknown => {
-    const absOutDir = join(REPO_ROOT, outDir);
-    const before = new Set(existsSync(absOutDir) ? readdirSync(absOutDir) : []);
-    runAndRequireOk(spec);
-    const created = readdirSync(absOutDir).filter((name) => !before.has(name));
-    if (created.length !== 1) {
+  /** Run a script told to write its JSON report to `outPath` (inside the
+   *  scratch dir) and parse that report. */
+  const runWritingReport = async (spec: SubprocessSpec, outPath: string): Promise<unknown> => {
+    await runAndRequireOk(spec);
+    if (!existsSync(outPath)) {
       throw new BenchDataError(
-        `${describe(spec)}: expected exactly one new file in ${outDir}, found ${created.length}: ${created.join(", ")}`,
+        `${describe(spec)}: exited 0 but did not write ${outPath.replace(scratchDir, "<scratch>")}`,
       );
     }
-    const path = join(absOutDir, created[0]!);
-    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-    unlinkSync(path);
-    return parsed;
+    return JSON.parse(readFileSync(outPath, "utf8"));
   };
 
-  const eventRecallSpec = swingLabScript("src/eventRecallBench.ts");
-  const completionSpec = swingLabScript("src/eventCompletionBench.ts");
+  const eventRecallOut = join(scratchDir, "event-recall.json");
+  const eventRecallSpec = swingLabScript("src/eventRecallBench.ts", [eventRecallOut]);
+  const completionOut = join(scratchDir, "completion-bench.json");
+  const completionSpec = swingLabScript("src/eventCompletionBench.ts", [completionOut]);
   const ballHardSliceOut = join(scratchDir, "ball-hard-slice.json");
   const ballHardSliceSpec = swingLabScript("src/ballHardSliceEval.ts", [ballHardSliceOut]);
   const phaseSpec: SubprocessSpec = {
@@ -419,15 +418,14 @@ export function benchDefinitions(
       inputs: [
         "datasets/corpus/bundles/*/annotation/*events*.json (gold target events, held-out excluded)",
         "datasets/corpus/bundles/*/runs-wave-a/ + committed run artifacts (wrist series)",
-        "datasets/experiments/wave-e/ (bench writes event-recall-<ts>.json here; consumed and removed by this runner)",
       ],
       caveats: [
         LINUX_PROXY_CAVEAT,
         "unmatchedProposals is an upper bound on false proposals (windows are not exhaustively labeled), not a verdict.",
       ],
-      run: () => {
+      run: async () => {
         const report = asRecord(
-          runCapturingNewFile(eventRecallSpec, "datasets/experiments/wave-e"),
+          await runWritingReport(eventRecallSpec, eventRecallOut),
           "event-recall report",
         );
         const summary = asRecord(report.summary, "event-recall summary");
@@ -466,16 +464,15 @@ export function benchDefinitions(
       inputs: [
         "datasets/corpus/bundles/*/annotation/ (event + phase labels incl. event-bounds-wave-a.json)",
         "datasets/corpus/bundles/*/runs-wave-a/ (wrist speed series)",
-        "datasets/completion-bench/ (bench writes completion-bench-<ts>.json here; consumed and removed by this runner)",
       ],
       caveats: [
         LINUX_PROXY_CAVEAT,
         "Per-event table is the honest unit; n is small and no reliability claim is made.",
         "FIXED is the shipped constant policy and serves as the reference; ADAPTIVE is the candidate policy under test.",
       ],
-      run: () => {
+      run: async () => {
         const report = asRecord(
-          runCapturingNewFile(completionSpec, "datasets/completion-bench"),
+          await runWritingReport(completionSpec, completionOut),
           "completion report",
         );
         const summary = asRecord(report.summary, "completion summary");
@@ -551,10 +548,9 @@ export function benchDefinitions(
         "OCCLUDED / NOT_VISIBLE buckets score abstention (correct behaviour) and violations, not hits.",
         "UNCERTAIN_EXCLUDED labels are reported but excluded from slice quality.",
       ],
-      run: () => {
-        runAndRequireOk(ballHardSliceSpec);
+      run: async () => {
         const report = asRecord(
-          JSON.parse(readFileSync(ballHardSliceOut, "utf8")),
+          await runWritingReport(ballHardSliceSpec, ballHardSliceOut),
           "ball hard-slice report",
         );
         const metrics: Record<string, number | null> = {};
@@ -598,8 +594,8 @@ export function benchDefinitions(
         LINUX_PROXY_CAVEAT,
         "Counts are segmented-vs-abstained only; boundary timing error is not measured by this script.",
       ],
-      run: () => {
-        const result = runAndRequireOk(phaseSpec);
+      run: async () => {
+        const result = await runAndRequireOk(phaseSpec);
         const lines = result.stdout.trim().split("\n");
         const last = lines[lines.length - 1] ?? "";
         const parsed = asRecord(JSON.parse(last), "phase gold summary line");
